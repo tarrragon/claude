@@ -1066,7 +1066,7 @@ class TestMergeSuccessorAnnotation:
     scan_links.load_extract_merge_declarations 驗證，不依賴 hook-completeness-
     check.py 的 transitive pyyaml 依賴是否安裝於執行環境（scan_links.py 自身
     仍是純標準庫實作，測試環境是否裝 pyyaml 不應決定這裡的邏輯測試能不能
-    跑）。動態載入鏈本身與真實 hook-completeness-check.py 的整合另以 dry-run
+    跑）。動態載入鏈本身與真實 hook-registration-coverage-check.py 的整合另以 dry-run
     驗證，記錄於對應 ticket 的 Solution 章節。
     """
 

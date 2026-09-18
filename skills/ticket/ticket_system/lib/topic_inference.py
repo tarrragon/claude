@@ -34,6 +34,30 @@ MIN_CLUSTER_PATH_DEPTH = 3
 HUB_TOPIC_COVERAGE_THRESHOLD = 3
 
 
+class _NoTopicSentinel:
+    """`--no-topic`（明示不指派主題）的回傳型別。
+
+    與「使用者未指定主題」的 `None` 分屬不同型別，呼叫端才能區分兩者：
+    兩者若同以 `None` 表達，明示的否定在回傳值上與沉默完全一致，呼叫端
+    只能一律往下跑 S1／S2 自動推導，使旗標僅在推導本來就落空（即它不
+    改變任何結果）時才「生效」。
+
+    定為 falsy：既有呼叫端多以 `if topic:` 判斷「是否有主題可指派」，
+    明示不指派在該語意下與無主題同義，falsy 使這些判斷不需逐處改寫。
+    """
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __repr__(self) -> str:
+        return "NO_TOPIC"
+
+
+NO_TOPIC = _NoTopicSentinel()
+
+
 def build_topic_file_clusters() -> dict:
     """從已指派票反推「主題 -> where.files 路徑集合」，供判準 S2 比對。
 
@@ -189,11 +213,15 @@ def validate_topic_selection(args: argparse.Namespace) -> tuple:
       自由輸入新名稱（自由輸入會讓同一主題產生多個拼寫變體，使清單失去
       分組能力）。本函式只驗證名稱非空白，不寫入清單。
     - 兩者同時指定視為參數衝突，直接拒絕。
+    - `--no-topic` 單獨給定時回傳 `NO_TOPIC` 哨兵而非 `None`：呼叫端據此
+      略過 S1／S2 自動推導。回傳 `None` 會使明示不指派與未指定不可區分，
+      旗標在推導命中時失效（見 `_NoTopicSentinel` docstring）。
     - 皆未指定時回傳 (None, None, None)：未指派主題不阻擋建票，由呼叫端
       在報告階段明確表示「未指派」狀態。
 
     Returns:
         (topic, error_message, new_topic_to_register)：
+        - topic 為 `NO_TOPIC` 時代表明示不指派，呼叫端不得再啟動自動推導。
         - error_message 非 None 時代表驗證失敗，呼叫端須中止建票，不得
           進入任何持久化步驟（含 append_assignment）。
         - new_topic_to_register 非 None 時代表為新增主題（與 topic 同值），
@@ -211,6 +239,8 @@ def validate_topic_selection(args: argparse.Namespace) -> tuple:
             "--no-topic 與 --topic / --new-topic 不可同時指定："
             "--no-topic 是明示不指派主題，與指定主題互相矛盾"
         ), None
+    if no_topic_arg:
+        return NO_TOPIC, None, None
 
     if topic_arg and new_topic_arg:
         return None, (

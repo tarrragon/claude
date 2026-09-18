@@ -8,7 +8,6 @@
     "compositional-writing": 832,
     "continuous-learning": 793,
     "dart-provider-architecture": 401,
-    "dart-style-guardian": 260,
     "data-extraction": 363,
     "doc": 460,
     "doc-flow": 253,
@@ -21,8 +20,8 @@
     "startup-check": 279,
     "tdd": 630,
     "tech-debt-capture": 318,
-    "ux-design-evaluation": 989,
     "worktree": 283,
     "wrap-decision": 350
-  }
+  },
+  "note": "移除 ux-design-evaluation 與 dart-style-guardian 兩筆（原凍結值 989 與 260）：兩者 description 已收斂至門檻內，凍結值留著會替回退預先簽名。其餘各筆未動。"
 }

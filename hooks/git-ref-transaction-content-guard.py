@@ -184,6 +184,23 @@ def _first_parent(commit_sha: str, project_root: Path) -> Optional[str]:
     return out.strip()
 
 
+def _merge_in_progress(project_root: Path) -> bool:
+    """判斷 repo 目前是否處於合併中（`MERGE_HEAD` 可解析）。
+
+    偵測時機：本函式在 `main()` 呼叫一次，於 `prepared` 階段執行——此時
+    git 已完成合併計算並寫入 index、建立 `MERGE_HEAD`，但尚未更新
+    `refs/heads/*`（見檔頭「已知邊界」與本票背景）。`MERGE_HEAD` 只在
+    `git merge` 啟動合併時建立，`commit-tree` + `update-ref` 隔離索引提交
+    路徑與一般 `git commit` 皆不會建立此檔，故此判準不會誤判非合併路徑。
+    `git merge --squash` 不建立 `MERGE_HEAD`（其結果為單 parent commit，
+    與逐檔直接提交同視為需受 branch-verify 檢查，不豁免）。
+    """
+    ok, _ = run_git_command(
+        ["rev-parse", "-q", "--verify", "MERGE_HEAD"], cwd=str(project_root)
+    )
+    return ok
+
+
 def _changed_files(pre_rev: str, new_rev: str, project_root: Path) -> List[str]:
     ok, out = run_git_command(
         ["diff", "--name-only", pre_rev, new_rev], cwd=str(project_root)
@@ -256,7 +273,9 @@ def _build_commit_scan_file(
     return StagedFile(rel_path, pre_text, post_text, added_text)
 
 
-def _scan_new_commit(commit_sha: str, project_root: Path, logger) -> List[Finding]:
+def _scan_new_commit(
+    commit_sha: str, project_root: Path, logger, is_merge_commit: bool = False
+) -> List[Finding]:
     parent = _first_parent(commit_sha, project_root)
     pre_rev = parent if parent is not None else _EMPTY_TREE_SHA
     changed = _changed_files(pre_rev, commit_sha, project_root)
@@ -267,7 +286,9 @@ def _scan_new_commit(commit_sha: str, project_root: Path, logger) -> List[Findin
         _build_commit_scan_file(p, pre_rev, commit_sha, project_root, rename_map)
         for p in changed
     ]
-    return _run_all_checks(staged_files, project_root, logger)
+    return _run_all_checks(
+        staged_files, project_root, logger, is_merge_commit=is_merge_commit
+    )
 
 
 def main() -> int:
@@ -296,17 +317,21 @@ def main() -> int:
         logger.debug("本次 transaction 無新 commit（純 ref 重新指向），放行")
         return EXIT_ALLOW
 
+    is_merge = _merge_in_progress(project_root)
+
     findings: List[Finding] = []
     for commit_sha in sorted(new_commit_shas):
-        findings.extend(_scan_new_commit(commit_sha, project_root, logger))
+        findings.extend(
+            _scan_new_commit(commit_sha, project_root, logger, is_merge_commit=is_merge)
+        )
 
     deny_findings = [f for f in findings if f.severity == "deny"]
     warn_findings = [f for f in findings if f.severity == "warn"]
 
     if deny_findings:
         logger.warning(
-            "ref transaction 被阻擋：deny=%d warn=%d new_commits=%d",
-            len(deny_findings), len(warn_findings), len(new_commit_shas),
+            "ref transaction 被阻擋：deny=%d warn=%d new_commits=%d is_merge=%s",
+            len(deny_findings), len(warn_findings), len(new_commit_shas), is_merge,
         )
         header = (
             "[git-ref-transaction-content-guard] ref 寫入被阻擋：新提交內容經"
@@ -315,6 +340,19 @@ def main() -> int:
             "故由本 reference-transaction 原生 hook 補上）。\n"
             "請修正後重新提交：\n"
         )
+        if is_merge:
+            # merge 情境下 git 已在本次 ref 寫入被擋前完成合併計算，寫入
+            # index 並建立 MERGE_HEAD——本次 deny 只中止 ref 更新，不會撤銷
+            # 這兩者，終端上除本訊息外不會有其他提示（規則 4：Hook 失敗必須
+            # 可見）。branch-verify 本身已對 merge 事件豁免（見
+            # lib/commit_content_guards.py 的 is_merge_commit），能走到這裡
+            # 代表是其他 guard（rule8 等內容正確性檢查）攔下，需先清理殘局
+            # 才能重試。
+            header += (
+                "\n[merge 殘局提醒] 本次 ref 寫入源自進行中的合併，index 與 "
+                "MERGE_HEAD 已寫入但不會隨本次 deny 自動撤銷。請先執行 "
+                "`git merge --abort` 清理後，再依上列訊息修正內容並重新合併。\n"
+            )
         sys.stderr.write(_build_deny_message(deny_findings, header) + "\n")
         return EXIT_BLOCK
 

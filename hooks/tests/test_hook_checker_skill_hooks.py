@@ -5,7 +5,7 @@
 
 1. `scan_skill_hooks` 遞迴掃描 skill hooks/ 子目錄
 2. `extract_registered_skill_hooks` 從 settings.json 取出 skill hook 註冊
-3. 兩者集合相減判斷未註冊 skill hook（hook-completeness-check 主流程語意）
+3. 兩者集合相減判斷未註冊 skill hook（hook-registration-coverage-check 主流程語意）
 4. 主層 hook 與 skill hook 命名空間獨立（同檔名不相互混淆）
 """
 
@@ -150,7 +150,7 @@ class TestExtractRegisteredSkillHooks:
 
 
 class TestUnregisteredSkillHookDetection:
-    """模擬 hook-completeness-check 主流程之集合相減語意."""
+    """模擬 hook-registration-coverage-check 主流程之集合相減語意."""
 
     def test_registered_skill_hook_passes(self, tmp_path):
         skills_dir = tmp_path / "skills"

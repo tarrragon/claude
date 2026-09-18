@@ -58,7 +58,7 @@ Write / MultiEdit，目標為 `.claude/settings.json` 或 `.claude/hooks/**/*.py
 （`importlib.import_module(name)`）等邊界情境，假陽性風險高於
 frontmatter-yaml-syntax-guard（該檢查是確定性的 YAML 語法解析，近零假
 陽性）；PEP 723 名稱—匯入名稱對照表（如 pyyaml -> yaml）亦僅涵蓋已知
-案例，非完整 PyPI 名稱解析。採 warning-only 沿用 hook-completeness-check
+案例，非完整 PyPI 名稱解析。採 warning-only 沿用 hook-registration-coverage-check
 同款「存量漂移盤點」慣例，把判斷留給人工複核。
 
 Exit Codes:

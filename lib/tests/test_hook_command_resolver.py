@@ -8,7 +8,7 @@ hook_command_resolver 模組單元測試
 3. resolve_hook_script_path：.py/.sh 兩種副檔名、runner 前綴、尾端引數、
    絕對/相對路徑、非本機腳本、畸形字串降級（不拋例外）
 
-Source: 收斂 hook-completeness-check.py 與 hook_output_validator.py 的
+Source: 收斂 hook-registration-coverage-check.py 與 hook_output_validator.py 的
 重複命令字串解析實作。
 """
 

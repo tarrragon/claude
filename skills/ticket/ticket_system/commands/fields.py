@@ -47,6 +47,7 @@ from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
 )
+from ticket_system.commands.track_set_acceptance import _strip_checkbox_prefix
 
 
 DICT_FIELD_SUBKEY: Dict[str, str] = {
@@ -637,7 +638,10 @@ def execute_add_acceptance(args: argparse.Namespace, version: str) -> int:
             return 2
 
         acceptance = ticket.get("acceptance") or []
-        new_item = f"[ ] {args.value}"
+        # value 語意是「條目文字」，正規前綴由這裡補上；呼叫者若自帶
+        # [ ]/[x] 開頭（如複製票面既有字面）會先被剝除一次再補正規前綴，
+        # 避免雙前綴。剝除函式與 set-acceptance --add/--edit 共用同一份。
+        new_item = f"[ ] {_strip_checkbox_prefix(args.value)}"
         acceptance.append(new_item)
         ticket["acceptance"] = acceptance
 

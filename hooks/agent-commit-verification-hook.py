@@ -501,6 +501,11 @@ def build_feature_branch_message(
         lines.append(f"  建議: git checkout main && git merge {branch} --no-edit")
         lines.append("")
 
+    lines.append(
+        "若合併仍被擋下（fatal: ref updates aborted by hook）："
+        "先執行 git merge --abort 清理 MERGE_HEAD 殘局，再依 stderr 訊息修正"
+        "後重試（合併本身已對 branch-verify 豁免，仍被擋通常是其他內容 guard）。"
+    )
     lines.append(MSG_SEPARATOR)
     return "\n".join(lines)
 
@@ -532,6 +537,11 @@ def build_pm_action_summary(
     if has_unmerged_worktrees or has_unmerged_branches:
         branch_hint = f" {unmerged_branch_name}" if unmerged_branch_name else " <branch>"
         lines.append(f"{step}. 合併到 main: git checkout main && git merge{branch_hint} --no-edit")
+        step += 1
+        lines.append(
+            f"{step}. 若上一步被擋下（fatal: ref updates aborted by hook）："
+            "git merge --abort 清理殘局後依 stderr 訊息修正重試"
+        )
         step += 1
 
     lines.append(f"{step}. 驗證: npm test")

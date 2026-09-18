@@ -333,7 +333,7 @@ uv run --with pytest python -m pytest .claude/lib/tests/ -v
 | 發現 local 層已有 hook 註冊 | 移至 `settings.json`，從 local 移除 |
 | hook relocate | 更新 `settings.json` 的路徑；掃所有 settings 檔清理舊註冊 |
 
-**強制層**：`hook-completeness-check.py`（SessionStart）偵測三類問題並發出 WARNING——(1) 幽靈註冊（檔不存在）、(2) 跨檔重複註冊、(3) `settings.local.json` 內含任何 hook 註冊（latent ghost 預防，即使當下合法）。
+**強制層**：`hook-registration-coverage-check.py`（SessionStart）偵測三類問題並發出 WARNING——(1) 幽靈註冊（檔不存在）、(2) 跨檔重複註冊、(3) `settings.local.json` 內含任何 hook 註冊（latent ghost 預防，即使當下合法）。
 
 ### Hook 維護與擴充流程
 

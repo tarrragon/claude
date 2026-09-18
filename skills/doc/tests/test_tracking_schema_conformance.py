@@ -30,8 +30,10 @@ from doc_system.core.tracking_schema import (
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 PROPOSALS_TRACKING_PATH = PROJECT_ROOT / "docs" / "proposals-tracking.yaml"
 TRACEABILITY_PATH = PROJECT_ROOT / "docs" / "traceability.yaml"
-EVT_BALANCE_DIR = PROJECT_ROOT / "docs" / "events" / "balance"
-UC_01_PATH_CANDIDATES = list((PROJECT_ROOT / "docs" / "usecases").glob("UC-01-*.md"))
+EVT_ROOT_DIR = PROJECT_ROOT / "docs" / "events"
+UC_PATHS = sorted((PROJECT_ROOT / "docs" / "usecases").glob("UC-*.md"))
+# 已完成結構化 flow 回填、必須受 FlowStep 契約檢查的 UC。
+REQUIRED_UC_IDS = frozenset({"UC-01", "UC-02", "UC-03", "UC-04", "UC-05", "UC-06"})
 
 
 class TestSchemaConstantsWellFormed:
@@ -252,14 +254,35 @@ class TestGraphTypeTablesWellFormed:
         )
 
 
+def _discover_evt_files() -> list[Path]:
+    """掃描 docs/events/ 下所有子目錄的 EVT-*.md，不假設任何 domain 名稱。
+
+    依 reference-stability-rules 規則 8（框架禁引用專案層級識別符）：本檔會
+    sync 至各消費專案，domain 名稱（如 balance、corpus）僅存在於本專案，不
+    可寫死於框架測試中。
+    """
+    if not EVT_ROOT_DIR.is_dir():
+        return []
+    return sorted(EVT_ROOT_DIR.glob("*/EVT-*.md"))
+
+
 class TestGraphTypeTablesRealEvtConformance:
-    """以 UC-01 回填的首批真實 EVT 資料驗證 EVT 節點常數。"""
+    """以真實 EVT 資料驗證 EVT 節點常數，EVT 目錄由檔案系統掃描推導。
+
+    決策：EVT 目錄不存在，或存在但無任何 EVT-*.md 檔時一律 skip（而非
+    fail）。理由：EVT 屬 B 層 proposed 節點（tracking_schema.GRAPH_LAYER_
+    PROPOSED），非每個消費專案在導入本框架當下就已回填 EVT 資料——與
+    TestTraceabilityRealFileConformance 對「按需建立檔」採 skip 語意一致。
+    fail 語意保留給「目錄存在、有檔案，但內容不符 schema」的真實違規。
+    """
 
     @pytest.fixture(scope="class")
     def evt_entries(self):
-        assert EVT_BALANCE_DIR.is_dir(), f"真實 EVT 目錄不存在：{EVT_BALANCE_DIR}"
-        files = sorted(EVT_BALANCE_DIR.glob("EVT-BALANCE-*.md"))
-        assert files, "docs/events/balance/ 下無 EVT-BALANCE-*.md"
+        files = _discover_evt_files()
+        if not files:
+            pytest.skip(
+                f"{EVT_ROOT_DIR} 下尚無任何 EVT-*.md（EVT 為按需回填的 B 層節點）"
+            )
         return [(f, parse_frontmatter(str(f))) for f in files]
 
     def test_at_least_five_real_evt_files(self, evt_entries):
@@ -280,47 +303,114 @@ class TestGraphTypeTablesRealEvtConformance:
             assert fm["category"] in EVT_CATEGORIES, f"{path.name}: category={fm['category']} 值域外"
 
 
+def _flowstep_field_violations(step: dict) -> list[str]:
+    """回傳單一 FlowStep 違反必填欄位與 traverses 型別契約的描述；合規時回傳空清單。
+
+    traverses 必須是字串清單，空清單合法（純畫面步驟）；字串、None 等非清單值
+    一律視為違規——單一字串若被當成可迭代物，會被逐字元誤讀為多個 domain 名。
+    """
+    violations = []
+    missing = FLOWSTEP_REQUIRED_FIELDS - set(step.keys())
+    if missing:
+        violations.append(f"缺少必填欄位：{sorted(missing)}")
+    if "traverses" in step:
+        traverses = step["traverses"]
+        if not isinstance(traverses, list):
+            violations.append(f"traverses 必須是清單，實際為 {type(traverses).__name__}")
+        elif not all(isinstance(name, str) for name in traverses):
+            violations.append(f"traverses 的元素必須全為字串：{traverses}")
+    return violations
+
+
+def _compliant_flowstep(**overrides) -> dict:
+    """建立一個全部必填欄位齊備的 FlowStep，供正向對照測試覆寫單一欄位。"""
+    step = {
+        "id": "sample-step",
+        "name": "範例步驟",
+        "next": [],
+        "branch_from": None,
+        "return_to": None,
+        "emits": [],
+        "consumes": [],
+        "traverses": ["SampleDomain"],
+    }
+    step.update(overrides)
+    return step
+
+
+class TestFlowStepFieldViolationsDiscrimination:
+    """_flowstep_field_violations 的鑑別力：已知該被攔下的輸入必須被攔下。"""
+
+    def test_compliant_step_has_no_violation(self):
+        assert _flowstep_field_violations(_compliant_flowstep()) == []
+
+    def test_empty_traverses_is_accepted(self):
+        assert _flowstep_field_violations(_compliant_flowstep(traverses=[])) == []
+
+    def test_missing_traverses_is_rejected(self):
+        step = _compliant_flowstep()
+        del step["traverses"]
+        violations = _flowstep_field_violations(step)
+        assert any("traverses" in v for v in violations), violations
+
+    def test_string_traverses_is_rejected(self):
+        violations = _flowstep_field_violations(_compliant_flowstep(traverses="SampleDomain"))
+        assert any("必須是清單" in v for v in violations), violations
+
+    def test_non_string_element_is_rejected(self):
+        violations = _flowstep_field_violations(_compliant_flowstep(traverses=["SampleDomain", 1]))
+        assert any("元素必須全為字串" in v for v in violations), violations
+
+
 class TestGraphTypeTablesRealFlowStepConformance:
-    """以 UC-01 結構化 flow 區塊驗證 FlowStep 節點常數與 B 層語意邊。"""
+    """以 docs/usecases/ 下每份 UC 的結構化 flow 區塊驗證 FlowStep 節點常數與 B 層語意邊。"""
 
     @pytest.fixture(scope="class")
-    def flow_steps(self):
-        assert UC_01_PATH_CANDIDATES, "docs/usecases/ 下找不到 UC-01-*.md"
-        uc_text = UC_01_PATH_CANDIDATES[0].read_text(encoding="utf-8")
-        return _extract_flow_block(uc_text)
+    def flows(self):
+        found_uc_ids = {"-".join(path.name.split("-")[:2]) for path in UC_PATHS}
+        missing_uc_ids = REQUIRED_UC_IDS - found_uc_ids
+        assert not missing_uc_ids, f"docs/usecases/ 下找不到：{sorted(missing_uc_ids)}"
+        return [(path.name, _extract_flow_block(path.read_text(encoding="utf-8"))) for path in UC_PATHS]
 
-    def test_every_flowstep_id_matches_id_pattern(self, flow_steps):
+    def test_every_flowstep_id_matches_id_pattern(self, flows):
         pattern = re.compile(GRAPH_NODE_TYPES["FlowStep"]["id_pattern"])
-        for step in flow_steps:
-            assert pattern.match(step["id"]), f"FlowStep id={step['id']} 不符 id_pattern"
+        for uc_name, flow_steps in flows:
+            for step in flow_steps:
+                assert pattern.match(step["id"]), f"{uc_name}: FlowStep id={step['id']} 不符 id_pattern"
 
-    def test_every_flowstep_has_required_fields(self, flow_steps):
-        for step in flow_steps:
-            missing = FLOWSTEP_REQUIRED_FIELDS - set(step.keys())
-            assert not missing, f"FlowStep {step['id']} 缺少必填欄位：{missing}"
+    def test_every_flowstep_satisfies_field_contract(self, flows):
+        """必填欄位齊備，且 traverses 為字串清單（空清單合法）。"""
+        for uc_name, flow_steps in flows:
+            for step in flow_steps:
+                violations = _flowstep_field_violations(step)
+                assert not violations, f"{uc_name}: FlowStep {step.get('id')} {violations}"
 
-    def test_emits_and_consumes_reference_existing_evt_ids(self, flow_steps):
+    def test_emits_and_consumes_reference_existing_evt_ids(self, flows):
         """emission / consumption 語意邊：FlowStep.emits / consumes 須指向真實存在的 EVT id。"""
-        real_evt_ids = {
-            parse_frontmatter(str(f))["id"]
-            for f in EVT_BALANCE_DIR.glob("EVT-BALANCE-*.md")
-        }
+        evt_files = _discover_evt_files()
+        if not evt_files:
+            pytest.skip(
+                f"{EVT_ROOT_DIR} 下尚無任何 EVT-*.md，無法比對 FlowStep 引用"
+            )
+        real_evt_ids = {parse_frontmatter(str(f))["id"] for f in evt_files}
         assert real_evt_ids, "無法從檔名衍生真實 EVT id 集合"
-        for step in flow_steps:
-            for evt_id in step.get("emits", []) or []:
-                assert evt_id in real_evt_ids, f"FlowStep {step['id']}.emits 引用不存在的 {evt_id}"
-            for evt_id in step.get("consumes", []) or []:
-                assert evt_id in real_evt_ids, f"FlowStep {step['id']}.consumes 引用不存在的 {evt_id}"
+        for uc_name, flow_steps in flows:
+            for step in flow_steps:
+                for evt_id in step.get("emits", []) or []:
+                    assert evt_id in real_evt_ids, f"{uc_name}: FlowStep {step['id']}.emits 引用不存在的 {evt_id}"
+                for evt_id in step.get("consumes", []) or []:
+                    assert evt_id in real_evt_ids, f"{uc_name}: FlowStep {step['id']}.consumes 引用不存在的 {evt_id}"
 
-    def test_branch_from_and_return_to_reference_existing_flowstep_ids(self, flow_steps):
+    def test_branch_from_and_return_to_reference_existing_flowstep_ids(self, flows):
         """branching / returning 語意邊：branch_from / return_to 須指向本 flow 內存在的 FlowStep id。"""
-        all_ids = {step["id"] for step in flow_steps}
-        for step in flow_steps:
-            if step["branch_from"] is not None:
-                assert step["branch_from"] in all_ids, (
-                    f"FlowStep {step['id']}.branch_from 引用不存在的 {step['branch_from']}"
-                )
-            if step["return_to"] is not None:
-                assert step["return_to"] in all_ids, (
-                    f"FlowStep {step['id']}.return_to 引用不存在的 {step['return_to']}"
-                )
+        for uc_name, flow_steps in flows:
+            all_ids = {step["id"] for step in flow_steps}
+            for step in flow_steps:
+                if step["branch_from"] is not None:
+                    assert step["branch_from"] in all_ids, (
+                        f"{uc_name}: FlowStep {step['id']}.branch_from 引用不存在的 {step['branch_from']}"
+                    )
+                if step["return_to"] is not None:
+                    assert step["return_to"] in all_ids, (
+                        f"{uc_name}: FlowStep {step['id']}.return_to 引用不存在的 {step['return_to']}"
+                    )

@@ -23,7 +23,7 @@ You are the curator for framework issues on the canonical framework repo（`tarr
 
 | 產出類別 | 範圍 |
 |---------|------|
-| 收束 | 讀派發票列明的 ticket 群（Problem Analysis／Solution／NeedsContext 全讀），依「這是現在成立的結論，還是通往結論的過程」逐段判定，產出區段內容至 scratchpad（「當前結論」必有，「問題與方案」「待辦與來源」有內容才建）；「待辦與來源」的階段與狀態為列舉，不寫自由文字——階段 ∈ {可立即執行, 本版, 下版, 待條件}、狀態 ∈ {待裁票, 已裁票, 進行中, 完成, 不執行}，合法值與對應規則以 `references/ticket-intake.md`〈步驟四：區段範本〉為權威；落點依 `framework-issue` skill 的〈步驟二：查重與落點〉——issue 無區段時 `init`、已被他方 init 時逐段 `add --owner <本方識別>`、body 有手寫索引時 `observe`；依〈步驟五：ticket 處置〉的範圍規則對範圍票執行 `ticket track close`（命令與禁詞以該節為權威） |
+| 收束 | 讀派發票列明的 ticket 群（Problem Analysis／Solution／NeedsContext 全讀），依「這是現在成立的結論，還是通往結論的過程」逐段判定，產出區段內容至 scratchpad（「當前結論」必有，「問題與方案」「待辦與來源」有內容才建）；「待辦與來源」的階段與狀態為列舉，不寫自由文字——階段 ∈ {可立即執行, 本版, 下版, 待條件}、狀態 ∈ {待裁票, 已裁票, 進行中, 完成, 不執行}，合法值與對應規則以 `references/ticket-intake.md`〈步驟四：區段範本〉為權威；落點依 `framework-issue` skill 的〈步驟二：查重與落點〉——issue 無區段時 `init`、已被他方 init 時逐段 `add --owner <本方識別>`、body 有手寫索引時 `observe`；依〈步驟五：ticket 處置〉的範圍規則對範圍票執行 `ticket track close`（命令與禁詞以該節為權威）；來源票 `how.strategy` 含未經三問驗證的具體修法時，依 `references/escalation-flow.md`〈修法時點分離〉的第二檔處置與 `references/ticket-intake.md`〈步驟三：時序改狀態〉的修法閘門，改列「待辦與來源」的 `待裁票` 而非寫進「當前結論」 |
 | 區段維護 | 對自己擁有的區段以 `update <comment-id>` 回寫；整合 `check` 主警訊列出的新觀測後更新「當前結論」 |
 | 觀測附加 | 對任何 issue 以 `observe` 附加實測、反證、疑慮；觀測內容第一行寫來源 session 與對照表所在票（首行標記由工具寫入） |
 | 查重判定 | `dedup` 後對命中清單逐一標註重複／切分／引用，寫入派發票 Solution 供 PM 複核；切分時把分工邊界寫入雙方各自「當前結論」末段，不動 body |
@@ -87,7 +87,8 @@ You are the curator for framework issues on the canonical framework repo（`tarr
 
 ---
 
-**Last Updated**: 2026-09-07
+**Last Updated**: 2026-09-11
+**Version**: 2.2.0 — 「收束」允許產出補一句路由：來源票修法未經三問驗證時，依 `escalation-flow.md`〈修法時點分離〉第二檔處置與 `ticket-intake.md`〈步驟三〉修法閘門，改列「待辦與來源」的 `待裁票`。使 curator 的收束路徑指到修法時點分離判準（原路由 0 命中，執行下游動作的人讀不到條文）。
 **Version**: 2.1.0 — 「收束」允許產出補「待辦與來源」階段／狀態為列舉的規則引用；收束自檢清單新增列舉合規檢查項。列舉定義與對應規則權威在 `references/ticket-intake.md`〈步驟四：區段範本〉。
 **Version**: 2.0.0 — 新增收束職責（時序改狀態、五區段、範圍票 close）、owner 識別格式、Write 限 scratchpad、model 改 opus／effort medium；禁止行為新增「貼入時序敘事」「第二次 init」「修改框架檔案」；新增收束自檢清單。規格權威見 tarrragon/claude#81 當前結論區段與 `framework-issue` skill 2.0.0。
 **Version**: 1.0.0 — 初始建立（父票拆分）

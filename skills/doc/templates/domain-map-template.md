@@ -79,6 +79,48 @@ aggregate A  aggregate B（by-id 參照，非直接依賴）
 - domain service 透過 DI 依賴 repository 介面，不持有狀態。policy / event handler 透過 event bus 間接依賴。saga 自身持久化，透過 repository 協調。
 - {其他分層依賴底線}
 
+## 2.5. 通道與協調圖
+
+<!-- 節號為 2.5（小數點插入），不佔用既有 §3-§7 編號，理由見範本版本記錄。
+本節與 §2 依賴圖正交：兩個 domain 在此節相鄰，不代表彼此有資料依賴。
+判準（通道/仲裁器落層、到達類別三分、級別鍵、協調圖與依賴圖正交）已在
+`.claude/methodologies/event-flow-load-arbitration-methodology.md` 定案，
+本節只留填寫欄位與提示，不重述判準本身。 -->
+
+> 判準見《事件流負載仲裁方法論》〈通道與仲裁器〉〈到達類別〉〈級別〉。多個 domain 若競爭同一稀缺通道（連線池、單一 isolate 事件迴圈、畫面提示載體等），即使彼此在 §2 依賴圖無資料依賴，仍需被本節捕捉。
+
+### 2.5.1 通道清單
+
+<!-- 找出本 domain 涉及的每一個「一次只能服務有限請求」的資源。真持有者與仲裁器落層判準見〈通道與仲裁器〉；仲裁器落層禁填任何 domain 名稱。 -->
+
+| 通道 | 真持有者 | 持有層 | 仲裁器落層 | 是否分片 | 分片依據 | 靜態配額代價 | 涉及 domain |
+|---|---|---|---|:---:|---|---|---|
+| {通道名稱} | {真持有者，如資料庫實例；多個池連向同一資料庫時真持有者是資料庫} | {該通道所屬的層} | {落層，禁填 domain 名稱} | {是／否} | {若分片，依什麼分} | {若分片，哪一份閒置時配額不流回誰} | {對此通道發出請求的 domain 清單} |
+
+<!-- 前七欄與 event-flow-arbitration-design skill 的通道清單表逐欄對應，可直接搬入；末欄「涉及 domain」是本範本特有，來源是 2.5.2 協調圖。 -->
+
+### 2.5.2 協調圖
+
+<!-- 畫出哪些 domain 對同一通道發出請求。本圖與 §2 依賴圖正交，判準見〈通道與仲裁器〉「協調圖與依賴圖正交」一列。 -->
+
+```
+{通道 X}
+   ├── {Domain A}
+   └── {Domain B}
+
+{通道 Y}
+   ├── {Domain B}
+   └── {Domain C}
+```
+
+### 2.5.3 到達類別與級別實例
+
+<!-- 逐通道列出實際到達的事件／請求，標到達類別與級別。判準見〈到達類別〉〈級別〉；引用來源為 event catalog（EVT-xxx）或 UC 場景，本節不重新推導判準本身。 -->
+
+| 通道 | 事件/請求 | 到達類別 | 級別 | 引用來源 |
+|---|---|---|---|---|
+| {通道名稱} | {事件/請求名稱} | {等待型/自發型/推送型} | {不可棄/須留痕/可棄} | {EVT-xxx 或 UC-xxx} |
+
 ## 3. Bundle 界定表
 
 <!-- 分類軸：真 domain（aggregate/kernel/VO/read-model）vs 非 domain（cross-cutting/infrastructure，列此僅為覆蓋完整性）。 -->
@@ -151,6 +193,7 @@ Step 5 測試設計逐條列舉為 domain unit test，不靠「剛好出現於 U
 ---
 
 **Last Updated**: YYYY-MM-DD | **Source**: {規劃波 ticket ID}
+**Template Updated**: 2026-09-09 | **Version**: 2.3.0 — §2 依賴方向節之後新增「§2.5 通道與協調圖」（三個子項：通道清單、協調圖、到達類別與級別實例），節號用小數點插入不佔用既有 §3-§7 編號；判準以標題文字引用《事件流負載仲裁方法論》，範本內只留欄位與填寫提示
 **Template Updated**: 2026-07-25 | **Version**: 2.2.0 — §3 Bundle 界定表新增「資料契約文件引用連結」欄，僅 data/infrastructure 列需填，連結至 doc skill data-contract-template 產出文件（PROP-002 In Scope 3，0.2.0-W2-003）
 **Template Updated**: 2026-07-24 | **Version**: 2.1.0 — §3 Bundle 界定表新增「實作狀態」欄，防止未接線概念被誤標已實作（PC-APP-012，0.38.1-W9-003）
 **Template Updated**: 2026-07-23 | **Version**: 2.0.0 — 追加多 aggregate DAG 變體 + command-side bundle 行 + DAG 底線（0.1.0-W2-021）

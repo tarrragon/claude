@@ -1,3 +1,314 @@
+## [2.60.0] - 2026-09-18
+
+### Summary
+feat: FlowStep 新增必填欄位 traverses（某票）; feat: ack-based todo delta 推送，SessionStart 零 gh 呼叫; feat: init/add 自行推導 owner，消滅漏填模式 (+298 more)
+
+Changes: 7 feat, 1 refactor, 25 fix, 257 docs, 8 chore, 2 test, 1 other
+
+- feat: FlowStep 新增必填欄位 traverses（某票）
+- feat: ack-based todo delta 推送，SessionStart 零 gh 呼叫
+- feat: init/add 自行推導 owner，消滅漏填模式
+- feat: 錨定 owner 驗證器前綴並收窄尾碼，同步三處範例文字
+- feat: spec validate Layer 1 新增事件流標定機械檢核
+- feat: rule8 守衛新增專案檔案路徑偵測軌（WARNING-only）
+- feat: worktree 派發 prompt 含 track complete 時提示改用 finish
+- refactor: 外移 SKILL.md 使全檔低於 5000 tokens 門檻
+- fix: 2.11 拉出獨立為第 7 項「同一圖形只承載一個語意」
+- fix: 修正六項判準第 2 項渲染、2.8(2) 讀歪、2.11 部分處置
+- fix: 修 b3 判定 9 處條文讀歪點，升 patch 版 6.6.15
+- fix: 移除 dart-style-guardian-hook 原生元件建議的他專案殘留
+- fix: 修正過度刪除，逐字還原/外移兩處被誤刪內容
+- fix: 校準 dart-style-guardian 的 token 類別名與實際程式碼一致
+- fix: 補齊 7 處範例藏判準的條文缺口（C12/W1/W39-W41/W43/W44）
+- fix: 落檔 W13 測試點粒度用戶裁決，DOC-1 稽核全數完成
+- fix: 落檔 WRAP 評估結論——元件庫範本 11 項條文缺口修補
+- fix: 補齊元件庫範本 slot 契約 C7 條文缺口 + 修正 W14 範例判準
+- fix: test_uc_registry uc05/06/08_09 改用 tmp_path 自建測資
+- fix: CHANGELOG 兩處禁用詞「數據」改為「量測結果」
+- fix: 對齊 hook-logs 日誌根目錄與 ticket 狀態根目錄
+- fix: add／init 整塊處理手寫索引，不再遺留孤兒標題
+- fix: --no-topic 以哨兵短路 S1/S2 自動推導
+- fix: ref 鎖重試條件與鎖齡判讀
+- fix: add-acceptance 補 help 說明並剝除誤帶入的核取方塊前綴
+- fix: 還原 event catalog 到達類別與級別欄（被過期 index 快照回滾）
+- fix: create 一律回報本次存入的驗收條數與逐條內容（part 2/2）
+- fix: create 一律回報本次存入的驗收條數與逐條內容（part 1/2）
+- fix: set-acceptance --add/--edit 剝除誤帶的核取方塊前綴
+- fix: hook 完整性檢查改為陳述量測結果而非結論（2/2：移除舊檔）
+- fix: hook 完整性檢查改為陳述量測結果而非結論（1/2：新增與修改）
+- fix: dispatch-validate 規則 4 補樣板佔位符偵測
+- fix: branch-verify 豁免合併 commit，消解與框架建議指令的互斥並補殘局提醒
+- docs: doc 前置閘門四項條文缺陷修正（tdd 2.10.9）
+- docs: 修正〈判定不拆分 Module〉五項條文缺陷
+- docs: foundation-design 6.7.0 — 待定列改為前半不可獨立取用
+- docs: 新增 PC-GPD-028 壓縮後接手在飛代理人並污染共用器材
+- docs: Step 1 規格層兩項與條文層一項
+- docs: Step 1 刪除 7.2(3-2)② 的二分推理禁令句
+- docs: Step 1 改 7.2(3-2)② 乙寫法的比對與合成規則
+- docs: 射程判定表第二列管轄欄與依據欄補指涉與拆分註記
+- docs: 批次改文 十五張來源票的條文缺陷一次落地
+- docs: 新增 DOC-GPD-010 與 README 索引同步
+- docs: 8.2(3)⑤ 指名句改「哪一語句」，切斷題庫通用結尾的字面通路
+- docs: 8.2(3)⑤ 第一句改為指名條文句，堵住項名列入即算支持
+- docs: 8.2(2) 段首增列前置關、刪 8.2(3) 排除句
+- docs: 8.2(3) 引言增列符合 8.2(4) 文字的排除句
+- docs: 7.2 圖形同一性換軸為兩步判定
+- docs: 界定句補射程限制，不外溢至第 7 項
+- docs: 8.2(3) 增列四款內涵界定與預設值款
+- docs: 射程判定表第五列管轄欄改為條件—值兩分支
+- docs: 7.2 語意判定改判定步驟並併入射程句
+- docs: 2.2 比較對象結論下推為欄位，刪 2.2(3)
+- docs: 8.2(2)(3)(4)/8.5(1)(2) 改寫為兩側封閉描述
+- docs: 建立 project-analysis skill，宣告非本框架專案模式一次
+- docs: 建立協作專案外接資料夾規格與盤點工作項表範本
+- docs: 7.2 補語意同一一般性判準與不傳遞句
+- docs: 新增規則 2.6 協作射程條文
+- docs: 8.2(2) 換色正面定義＋2.8(1) 動作列來源＋版面齊平
+- docs: 補 tdd 條件 2 正向出口排他句
+- docs: 補驗證句受詞＋辨識法反向指引＋計數單位句射程＋第五列誰不得管
+- docs: tdd 條件 2 補回程指標＋分支 (1) 內嵌門檻重比
+- docs: 兜底句升格射程判定表第五列 + 內容角色計數單位與判定順序
+- docs: 落地 ux 第 2/7 項射程補寫（乙-3 B 窄版、乙-4 含解除）
+- docs: 條件 2 三分支前提內嵌＋正向出口＋射程句效力邊界
+- docs: 8.2(2) 換色主問法 + 8.2(3) 明度排除與回指 8.1(1)
+- docs: 落地 ux 八項判準甲類 7 處補句
+- docs: 補 tdd 條件 2 射程限定與判定順序，doc-handoff 前置閘門射程綁回產物
+- docs: 修 doc b6 重測讀歪點三處（DOC-02b/DOC-04b/方法論第四列）
+- docs: foundation-design 補路由——照預設列的權威預設產物出處指向維度與產物表欄名
+- docs: 落檔顏色不作為唯一區分依據判準（第 8 項）
+- docs: 落檔內距與鄰件間距的分界條文（DOC-19a）
+- docs: 修 doc 第 5 批 b5 讀歪點（7/8 題落檔，DOC-19a 轉草稿）
+- docs: FD-17a 補正向句，待建部分權威預設成立時填照預設；待定射程限定為未能判定
+- docs: 落檔八則新判準草稿（風險3/5/6/8/10/11/13/14）
+- docs: 依 某票.1 建議改文與用戶裁示落檔 04a/06a/08b
+- docs: 修 FD-17a／FD-10b 條文讀歪點，升版 6.6.22
+- docs: 落檔剩餘四則讀歪點（用戶裁示定案）
+- docs: UX-09a 判準第 2 項改編號結構落檔
+- docs: 修條文 某票 tdd-1 六題讀歪點（01b/05a/05b/07a/11a/14b）
+- docs: doc skill 補依據 18 項出題附記（4 落檔+3 已有依據+9 草稿轉 NeedsContext）
+- docs: 修 foundation-design FD-05b/FD-10c 條文讀歪點
+- docs: 修 tdd Q8/Q10 讀歪點，餘四題轉草稿
+- docs: 落檔 某票.1 WRAP 裁定改文（TDD-21b/29b）
+- docs: 落檔判準2(a)明顯非按鈕形態最終定義
+- docs: 補依據 tdd 第 4 批出題標記 7 項
+- docs: foundation-design 增列句引文改為所指節原句（6.6.20）
+- docs: 修 FD-21b/FD-22a 兩處條文讀歪點
+- docs: FD-10b 正向定義該版票範圍、FD-14b 拆兩分支括注為順序句
+- docs: 補齊類型 8 與確定性斷言基礎形態兩軸關係
+- docs: FD-05b/FD-13a 最小處置 + 事件流無理由句改指條文
+- docs: 修六項判準第2項讀歪點（UX-09a）
+- docs: WRAP 複核落檔 FD-20a/FD-20b（事件流仲裁判準線改為請求來源競爭）
+- docs: 修 IME 安全清單非 secret 規則表前段無結果的讀歪點
+- docs: 補 foundation-design/test-assertion-design 三則依據
+- docs: 修 ux-design-evaluation b2x 重跑 9 題讀歪點
+- docs: i18n 錯誤碼交界指涉改為指名節段（dart-style-guardian 1.12.1）
+- docs: 補 ux-design-evaluation 依據只在範例內與條文風險
+- docs: ux-design-evaluation 升版 1.11.2 -> 1.11.3
+- docs: step-1 情況二補「提及實作檔不據以判 C」（component-contract-design 3.9.10）
+- docs: 補 version-bootstrap 去重原則射程說明
+- docs: 修正 step-2-path-a 路由錨點（component-contract-design 3.9.9）
+- docs: 落檔階段二三則新判準（F-02/F-05/F-18）與移除 appendix 正例一無依據子句
+- docs: 落檔 F-16/F-18 條文與範例衝突改文
+- docs: 落檔 F-28 何時可選靜默判準（PM 裁定）
+- docs: 補寫 version-bootstrap 第 1 批探針條文問題 P1~P3
+- docs: 補齊 component-contract-design F-01/F-06/F-05半/F-08 部分依據與 某票 P4
+- docs: 補齊 skill-design-guide F-40、F-41 部分依據
+- docs: tdd 補漏列範例部分依據 F-25/26/31/34/36/37
+- docs: 補錯誤碼與使用者可見錯誤訊息交界（某票）
+- docs: 縮減範例至條文可支撐範圍（A-21，階段 2）
+- docs: 範例五改以 where.files 交集判定合併
+- docs: 收斂 GREEN 票粒度「共用狀態→合併」判準（階段 2）
+- docs: 落檔 ux-design-evaluation 階段 2 剩餘 11 則 + E-09 退出路徑格式
+- docs: 落檔階段 2 WRAP 評估五則（C-01b/C-09b/C-13c/C-15/C-11a）
+- docs: tdd 補 D-12a/D-12b 條文依據並修正 SR-1（某票 盤點）
+- docs: 落檔 component-contract-design 巢狀容器/遷移票拆票判準並同步 E-07 內容角色定義
+- docs: test-assertion-design 補 D-24b 條文依據（某票 盤點）
+- docs: 落檔 doc skill 階段 2 六項判定（某票 階段 2 裁決）
+- docs: 補範例查無/部分覆蓋判定的條文依據（13 項落檔）
+- docs: 補 GREEN 粒度/並行安全/地基波依賴/存在判準的條文依據
+- docs: 補階段 1 條文路由（B-03a/B-07/B-22）
+- docs: 補齊元件庫規格範本 4 處範例依據只在範例內的缺口
+- docs: 補 tdd skill 範例依據只在範例內的判定條文
+- docs: CHANGELOG 記錄 1.21.0 兩項處置
+- docs: 補退出路徑判準的跨 skill 路由（A-17b）
+- docs: skill-design-guide 版號同步至 1.21.0
+- docs: O3 修法——判定詞分裁決詞／判準詞，解規則自相衝突
+- docs: 依 PM WRAP 裁決補判準，消除三處推導無條文依據句
+- docs: 發布前檢查清單改用新表欄名（SR-1）
+- docs: 改寫 chained-examples 驗證段機械檢查表頭與規則
+- docs: 查證三處推導無條文依據句標註，皆判定需新判準
+- docs: 依 PM 收尾裁決刪除不合格問句並標註缺引導
+- docs: 第二輪修正 foundation-design 範例驗證段（非撰寫者複核 4/7）
+- docs: 依修補輪數上限刪除兩則複核仍不合格的驗證問句
+- docs: 修補 dart-style-guardian i18n Q2 框架格式名並確認 color Q1 依據句已補齊
+- docs: 修補 foundation-design 範例驗證段依據句可溯性不合格列
+- docs: 補寫 UI 一詞與 version-bootstrap 的分工銜接點
+- docs: CHANGELOG 1.18.0
+- docs: 驗證段依據句可溯性改逐問句逐字引文表
+- docs: 補條文各維度要防的失效（權威出處）
+- docs: 純搬移降低 version-bootstrap SKILL.md 體量至 5000 tokens 以下
+- docs: 統一 foundation-design「無可用判準」與「無可用部分」用詞
+- docs: step-rationale 同步 UI 類判別改為通道判定
+- docs: Step 2 UI 類判別改採呈現通道三分
+- docs: 修正兩則三段鏈式範例的驗證段依據句缺口
+- docs: typography 取整表比照 spacing 方案 D 按值來源分流
+- docs: CHANGELOG 同步 6.6.1（某票 F8 缺引導補文字）
+- docs: 補盤點票驗收條件與完成定義（缺引導 F8）
+- docs: 依 G26 裁決改寫 spacing Non-Standard Values 為按值來源分流
+- docs: 修正 component-contract-design addresses.md 執法工具地址列失實歸屬
+- docs: 補 version-shift-sop.md 契約檔案界定（B9，鎖定點三問）
+- docs: 修補 dart-style-guardian 缺範例、範例改寫與刪除他專案殘留
+- docs: 補齊 foundation-design 缺範例並改寫 examples（某票.7 範圍）
+- docs: 修正 component-contract-design SKILL.md 交界表原生元件直用失實歸屬
+- docs: 外移 version-bootstrap SKILL.md 超標節解消 L2 門檻
+- docs: 修補缺引導 G21-G25/G27 與交界失實歸屬
+- docs: v02-walkthrough 全篇重寫 + 六則缺範例補全（某票.6）
+- docs: 補六處缺引導並解除循環互指（G34-G39）
+- docs: 落檔 G42/B10 WRAP 定稿——契約鎖定點確認
+- docs: 落地 C04/C07 裁決，完成四項原文矛盾統一
+- docs: 落地 C08/C09 矛盾修法（獨立評估者 WRAP 定稿，修改後採用）
+- docs: 補 Step 2.6/Step 3/version-shift-sop 缺引導（G40-G41 + B11）
+- docs: 修補原文矛盾 C05/C06，C04/C07 轉交裁決
+- docs: CHANGELOG 1.6.1 版本紀錄
+- docs: 修補 C10/X3/X4 原文矛盾與計數過期
+- docs: 修正 X1/X2 文字不一致，補齊 C08/C09 矛盾裁決草稿
+- docs: 補未提及控制項不渲染、讀不到程式碼起點待決、不經服務四結局三項缺引導
+- docs: 補畫面票格位編號/覆蓋層/疊加態/非狀態進入情境寫法
+- docs: 依 WRAP 評估與用戶裁決落檔 C10/W37/W38
+- docs: 落檔 某票.33 第 2 階段 12 則缺條文（WRAP 定稿）
+- docs: 補三處缺引導判準（總是/有時集合定義、歸併代表值禁止形式、第2問可見狀態轉換範圍）
+- docs: 修補 C2/C6 範例藏判準，草稿 12 項缺條文待簽核
+- docs: 修補 C11 範例自身矛盾；C10/W37/W38 草稿待簽核
+- docs: 新增 PC-GPD-027 範例驗證段藏判準案例
+- docs: chained-examples 補驗證段依據句可溯性機械檢查
+- docs: 補齊識別信號欄為判準與同時命中並行處置規則
+- docs: 移除三處路由描述中寫死的「五層」
+- docs: 修正三張重切票造成的四處跨檔過期引用
+- docs: 重切 tdd doc-handoff/test-object-catalogue 依讀者任務拆檔並外移版本紀錄
+- docs: 依讀者任務重切 interaction-feedback 與 screen-state-matrix
+- docs: 依讀者任務重切 step-2/step-3
+- docs: 補充拆分指引——補範例後超標依讀者任務重切，不壓縮範例
+- docs: 補齊 component-contract-design 剩餘缺口並對帳位置表
+- docs: 補齊 component-contract-design step-2/3 缺範例位置
+- docs: 補齊 ux-design-evaluation 缺範例與既有範例改寫
+- docs: 新增派發裁示不留未定義行為規則與 error-pattern
+- docs: ux-design-evaluation 補 UC 步驟對應檢查與選取類前置呈現規則
+- docs: 補齊 tdd 的 spec/UC 轉測試缺範例與既有範例改寫
+- docs: 補齊 G01-G09/路徑A組合優先/互動反應表未分組/框架層結構缺引導
+- docs: 補齊六則缺引導 G28-G33
+- docs: 補齊缺範例與元件執行期行為驗證範例
+- docs: 元件庫規格範本補 24 個缺範例位置的三段鏈式範例
+- docs: 補齊 G14/G15 缺引導（類型 3 二選一判準、功能正確性預期值出處）
+- docs: 修補 ux-design-evaluation 四則原文矛盾（C01/C02/C03/C12）
+- docs: 修補三問/分族矛盾與 rules 層過期描述
+- docs: 補齊 tdd 的 spec/UC 轉測試四處缺引導（G10-G13）
+- docs: 元件庫規格範本補齊 G16-G20 缺引導並技術中立化佔位文字
+- docs: chained-examples 補語言專屬 skill 程式碼對照例外條款
+- docs: PC-GPD-025 以參考答案對照量測文件時猜中被計為非缺口
+- docs: ASCII 線框形態補組合樹記法
+- docs: 檢驗問句範例的退出路徑改以層級表述
+- docs: PM 驗收追修 chained-examples 兩處殘留
+- docs: 修正 chained-examples 規格的五項 PM 審查發現
+- docs: 定義三段鏈式範例規格與何處需要範例判準
+- docs: 補全地基波權威的路徑，與同檔其他引用一致
+- docs: 三份新 reference、四份 CHANGELOG、baseline 同步與票面記錄
+- docs: 依探針判定重整相鄰四 skill 的正文路由與交界
+- docs: skill-design-guide 第五輪複驗與處置（1.12.4）
+- docs: README 索引補 PC-GPD-024 一列
+- docs: 新增 PC-GPD-024 變更記錄照計畫寫而非照 diff 寫
+- docs: skill-design-guide 第四輪複驗與處置（1.12.3）
+- docs: skill-design-guide 第三輪複驗與處置（1.12.2）
+- docs: skill-design-guide 1.12.0 複驗與處置（1.12.1）
+- docs: skill-design-guide 補正文與 references 分工、超標診斷、探針審查（1.12.0）
+- docs: 落地 某票 改進設計至條文與引導層
+- docs: 第三輪探針的三項門檻判定與處置（3.0.2）
+- docs: 新增 DOC-GPD-009 對歧義加警告而非改結構
+- docs: README 索引補 DOC-GPD-009 一列
+- docs: 依複驗批次修正 component-contract-design（3.0.1）
+- docs: 重切 component-contract-design 為依步驟有序的結構並重寫內文
+- docs: 落地 framework-issue 修法時點分離條文 + 規則5接縫
+- docs: PC-134 補變體——診斷已在 context 裡仍複製該形態
+- docs: 新增 PC-GPD-023 共用計數器識別符的前向引用競態
+- docs: Layer 2 審查追修，五項皆為規則正本違反自身條文
+- docs: 追溯矩陣與測試對象目錄補互指路由與界線說明
+- docs: 新增 reference-stability-rules 規則 11（行號不作為引用定位符）
+- docs: 新增測試鑑別力規則 E1/E2（明示旗標對照測試、守衛正向對照輸入）
+- docs: PC-GPD-022 由待驗證假說升為 git worktree 形態已確立
+- docs: 新增 PC-GPD-021 與 PC-GPD-022
+- docs: 新增 PC-GPD-020 明示與預設不可區分
+- docs: 併入並行 session 的三點 delta 與第四個實例
+- docs: 撤回，與並行 session 的 PC-GPD-019 為同一教訓且後者較完整
+- docs: 新增 PC-GPD-019 形狀相符終止查證
+- docs: 新增「鄰近性被當成已查證的關係」
+- docs: 檢查清單過濾方向條目拆為唯讀與寫入兩列
+- docs: 修正「與成功回音逐字相同」並補 Action 第 0 項讀 exit code
+- docs: 補第四例——截斷點與他方宣稱吻合時子集升級為偽佐證
+- docs: 新增 PC-GPD-016 與 PC-GPD-017，來自多輪審查本身的兩則形態
+- docs: methodology-index 的方法論列同步七個版本的新增內容
+- docs: 收尾通讀修正——相鄰兩節起首同骨、執行步驟補旁路確認
+- docs: Round 3 outbound 與個案實跑第二批——站內撞義與兩則危險
+- docs: Round 3 個案實跑修正——四個停頓點指向同一形態
+- docs: Round 3 steelman 修正——七項替代結構有五項被反證
+- docs: Round 3 誤用梯度修正——抽出登記與判斷性驗收兩條共用原則
+- docs: skill CHANGELOG 補 1.2.0 條目，與 frontmatter 版本對齊
+- docs: Round 2 cadence 與題目範圍修正——錯引通道列、節範圍、覆蓋缺口
+- docs: Round 2 冷讀修正——反向路由、批次內類別、推回與卸載的區別
+- docs: Round 2 修正的落點目的地——補齊缺格
+- docs: 多輪審查 Round 2 修正——語域對齊、執行者歸屬、三則自造漂移
+- docs: Round 1 修正的周邊檔——反向路由補位與版本雙住址對齊
+- docs: 多輪審查 Round 1 修正——數字閾值補推導、搶佔形態涵蓋五種通道
+- docs: 補 spec CHANGELOG 1.8.0 條目（與 SKILL.md frontmatter 版本對齊）
+- docs: 驗收補正——async-queue 路由句補 skill 名、SKILL.md 範本數與表列對齊
+- docs: 補 CHANGELOG 並更新四個路由句指向新 skill
+- docs: 新建 event-flow-arbitration-design skill
+- docs: spec validate Layer 2 新增維度 5 資源競爭掃描
+- docs: 位置編號引用改語意標題
+- docs: saas-tech-selection event catalog 加到達類別與級別欄
+- docs: domain-map 範本新增「通道與協調圖」節
+- docs: 補 saas-tech-selection 兩維度對事件流負載仲裁方法論的承接位
+- docs: foundation-design 新增事件流仲裁維度
+- docs: Port 回饋契約加反向路由；事件流負載仲裁方法論補測試義務節
+- docs: 新增 DOC-GPD-008 外推通則時例示未回代判準鍵
+- docs: 建立事件流負載仲裁方法論並接線四個消費方
+- docs: 補寫終端回饋訊息的三類測試驗收形態
+- docs: 把驗證器軸錯位模式升級為 framework issue，並收斂本地票範圍
+- docs: 歸屬判準補前提，否則會吞掉全部正確的工作
+- docs: PC-GPD-009 與 015 互指共用骨架，雙向落地
+- docs: 新增 PC-GPD-015 引用了對的權威來源但它回答的不是被問的問題
+- docs: 新增 DOC-GPD-007 範例被讀為契約全集
+- docs: component-contract-design 版號連動 2.2.0
+- docs: 補提示元件通道選擇/類型分化/日誌承接三問
+- docs: 新增 PC-GPD-014 正確結論配錯誤理由當下無症狀
+- docs: 修正根因末段被證偽的斷言，補守衛部分覆蓋機制
+- docs: 修正框架方法論引用專案絕對路徑，升格 INV-FEEDBACK-001 定義
+- docs: 固化元件層回饋日誌為元件庫通用契約條款
+- docs: PC-GPD-009 補換軸邊界宣告與結構性脫鉤
+- docs: PC-GPD-013 判定表補第四欄與 PC-GPD-009 交叉引用
+- docs: PC-GPD-013 補「有內容的鎖處置與空鎖相反」
+- docs: 新增 PC-GPD-013 繞道路徑使共用資源故障失去診斷訊號
+- docs: 新增 DOC-GPD-006 帶條件的決策被壓進表格欄位
+- docs: DOC-GPD-003 補「計數與其列舉同時寫下卻不一致」變體
+- docs: 新增 PC-GPD-012 共識不構成查證
+- docs: 補「載體決定」節，記錄不上移 rules/core 與不開 issue 的理由
+- docs: 新增 PC-GPD-011 過濾產物活得比它的問題久
+- docs: PC-GPD-009 1.2.0 補兩則來源二變體
+- docs: PC-GPD-009 依來源拆兩節，補殘留分佈論證
+- docs: layered-test-strategy 補實機驗證收尾契約三則
+- docs: base SHA 前進後回補三項本地內容
+- chore: sync-pull multi-round-review 2.11.0 與 compositional-writing 1.20.0
+- chore: sync-pull compositional-writing 1.19.0 與 multi-round-review 2.10.0
+- chore: 補齊 component-contract-design 缺範例與既有範例改寫
+- chore: 解決 7 個 skill 的同步衝突，三個補 bump 版號
+- chore: spawn IMP-GPD-001 error-pattern + set blockedBy on 某票
+- chore: complete - Port 回饋契約反向路由 + 事件流仲裁測試義務節
+- chore: 三處重複衝突暫採上游，使 base SHA 得以前進
+- chore: sync-pull 至 canonical 某版本，解三處衝突
+- test: UC 編號擷取改以檔名分段取得，避免字面 UC-00（某票）
+- test: add-acceptance 剝除誤帶核取方塊前綴的迴歸測試
+- other: 某票: 射程判定表第一列收窄為同一容器內的兩個子件
+
+---
+
 ## [2.59.9] - 2026-09-08
 
 ### Summary

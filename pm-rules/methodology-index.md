@@ -34,6 +34,7 @@
 | layered-architecture-quality-checking.md | 分層架構品質檢查 |
 | domain-bundle-mapping-methodology.md | 從 spec FR 反推 DDD domain bundle 邊界（bundle 分類 aggregate/kernel/read-model、依賴方向 DAG、層→測試對應；配合 doc domain-map-template + version-bootstrap Step 2.5） |
 | data-layer-contract-methodology.md | 資料層規格化（三層保護模型：schema 約束即規格 → 契約文件 → 契約對應測試；兩正交二元旗標判準取代 L1/L2/L3；CLI 化升級判準；sqflite migration 技術提示；migration 治理流程判準；契約↔測試對應 traceability 第三軸） |
+| event-flow-load-arbitration-methodology.md | 事件流負載仲裁（多事件流競爭同一稀缺通道時的取捨判準，稀缺資源為參數：到達三分（時機由誰決定、逐跳套用）、級別鍵為丟棄後果由誰承擔、競爭為未消費請求、佔用量為三個不相加的量、卸載依佔用量不依到達率、九格卸載順序表、deadline 傳播、部分降級、跨執行緒與 isolate、離開通道事件的可觀測性、測試義務、旁路的存在與可靠性、登記類條款的消費要件；每條判準附「它回答的問題」；使用者注意力通道為其一個實例化。訪談問句、套用案例與產出物範本在 `event-flow-arbitration-design` skill） |
 
 ## 測試相關
 

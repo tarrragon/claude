@@ -66,6 +66,9 @@ worktree: {path}
 
 修復方式（擇一）：
   1. 先 merge：git checkout main && git merge {branch} --no-edit
+     若被擋下（fatal: ref updates aborted by hook）：git merge --abort 清理
+     MERGE_HEAD 殘局後依 stderr 訊息修正重試（合併本身已對 branch-verify
+     豁免，仍被擋通常是其他內容 guard，如 reference-stability-rule8）
   2. 或 cherry-pick 有價值 commit 後再 remove
   3. 用世界平面固定值驗證交付物已在 main（tool-output-trust 規則 3）：
        git show main:<where.files> | head    # 有內容才代表已落地

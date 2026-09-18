@@ -1,6 +1,6 @@
 """共用模組：解析 settings.json hooks[].hooks[].command 字串。
 
-收斂原本分散於 hook-completeness-check.py 與 hook_output_validator.py 的
+收斂原本分散於 hook-registration-coverage-check.py 與 hook_output_validator.py 的
 兩份重複實作。統一三項曾各自漂移的語意：
 
 - 變數展開形式：`$VAR` 與 `${VAR}` 兩種形式皆支援（原本各只支援其一）
@@ -10,7 +10,7 @@
 
 呼叫端依需求選用不同抽象層級：
 - `resolve_hook_script_path()`：取單一 `Optional[Path]`（適合「這個 hook
-  對應的檔案是否存在/可執行」類檢查，hook-completeness-check.py 用途）
+  對應的檔案是否存在/可執行」類檢查，hook-registration-coverage-check.py 用途）
 - `tokenize_hook_command()`：取完整 argv（適合實際 subprocess 執行，
   hook_output_validator.py 用途）
 

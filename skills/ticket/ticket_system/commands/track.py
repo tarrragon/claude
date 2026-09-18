@@ -990,7 +990,11 @@ def _register_field_write_commands(
     # add-acceptance 操作
     p_add_acc = subparsers.add_parser("add-acceptance", help=TrackMessages.HELP_ADD_ACCEPTANCE)
     p_add_acc.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
-    p_add_acc.add_argument("value", help="驗收條件文字")
+    p_add_acc.add_argument(
+        "value",
+        help="驗收條件文字（會自動補上 [ ] 前綴；若自帶 [ ]/[x] 開頭會被靜默剝除後"
+             "再補正規前綴，避免雙前綴，可直接貼入既有票面字面）",
+    )
     p_add_acc.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_add_acc.add_argument(
         "--force",
@@ -1226,11 +1230,13 @@ def _register_acceptance_commands(
     )
     p_set_acceptance.add_argument(
         "--add", nargs="+", action="append", metavar="TEXT",
-        help="追加驗收條目（可多個，空白分隔各自加引號，或重複旗標），預設未勾選"
+        help="追加驗收條目（可多個，空白分隔各自加引號，或重複旗標），預設未勾選；"
+             "會自動補上 [ ] 前綴，若自帶 [ ]/[x] 開頭會被靜默剝除後再補，避免雙前綴"
     )
     p_set_acceptance.add_argument(
         "--edit", nargs=2, action="append", metavar=("INDEX", "TEXT"),
-        help="覆寫指定 1-based index 的條目文字，保留原勾選狀態（可重複指定多組）"
+        help="覆寫指定 1-based index 的條目文字，保留原勾選狀態（可重複指定多組）；"
+             "TEXT 若自帶 [ ]/[x] 開頭會被靜默剝除後再補正規前綴，避免雙前綴"
     )
     p_set_acceptance.add_argument(
         "--remove", nargs="+", action="append", metavar="INDEX",

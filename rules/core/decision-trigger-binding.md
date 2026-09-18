@@ -17,6 +17,8 @@
 
 時間、量化閾值、外部事件都不是合法 trigger，必須先包裝為 ticket（建監測/追蹤 ticket，本決策標 `blockedBy` 或 `spawned_tickets`）。
 
+**射程**：「限 ticket ID」以被操作 repo 裝有本框架 ticket 系統為前提。協作或接手他人專案、該 repo 無票庫與 CLI 時，通過**防架空閘門（全數通過）**的盤點工作項表編號為合法 trigger（閘門全文與交付前後的狀態權威切換見完整規則的規則 2.6 協作射程）；任一道不通過即回到本規則原條文。
+
 **邊界**：本規則只管延後決策。`.claude/` 框架檔案內「決策已下完、只等條件成立」的條件式操作規範不綁 ticket ID（`.claude/references/reference-stability-rules.md` 規則 8 硬擋），改為明訂動作；屬自指維護閾值者另須指名偵測承擔者且粒度相符。判別方式與處置見完整規則的規則 2.5 條件式操作規範。
 
 ## 寫法替換速查
@@ -47,4 +49,4 @@
 
 ---
 
-**Last Updated**: 2026-08-18 | **Version**: 1.6.0 — 規則 2 加邊界一行 + 路由至新增的規則 2.5（`.claude/` 框架檔案內的條件式操作規範不綁 ticket ID；自指維護閾值另須指名偵測承擔者且粒度相符），解消與 `reference-stability-rules.md` 規則 8 的衝突；速查表與檢查清單各增一列。**Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/decision-trigger-binding-details.md`，本檔保留速查 stub。**Source**: PC-093 / PC-146。
+**Last Updated**: 2026-09-16 | **Version**: 1.7.0 — 規則 2 加射程一行 + 路由至新增的規則 2.6（協作射程：被操作 repo 無本框架 ticket 系統時，通過閘門 G1–G5 的盤點工作項表編號為合法 trigger，閘門任一道不通過即回到原條文）。自動載入層只加此一行，閘門全文、指涉穩定與狀態權威切換表、`quality-baseline.md` 規則 5 終態對應皆在 details。**Version**: 1.6.0 — 規則 2 加邊界一行 + 路由至新增的規則 2.5（`.claude/` 框架檔案內的條件式操作規範不綁 ticket ID；自指維護閾值另須指名偵測承擔者且粒度相符），解消與 `reference-stability-rules.md` 規則 8 的衝突；速查表與檢查清單各增一列。**Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/decision-trigger-binding-details.md`，本檔保留速查 stub。**Source**: PC-093 / PC-146。

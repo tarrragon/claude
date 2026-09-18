@@ -53,6 +53,7 @@ from ticket_system.lib.field_validators import (
     validate_where_files,
 )
 from ticket_system.lib.topic_inference import (
+    NO_TOPIC,
     infer_topic,
     requires_topic_assignment,
     validate_topic_selection,
@@ -556,6 +557,18 @@ def _report_creation_success(
     print(format_msg(CreateMessages.TICKET_LOCATION, ticket_path=ticket_path))
     print(format_msg(CreateMessages.TASK_TYPE_LABEL, task_type=config["ticket_type"]))
 
+    # 一律回報本次實際存入的驗收條數與逐條內容（不限分隔符拆條時），
+    # 呼叫者對照自己輸入的預期條數即可當場發現摺疊（逗號、頓號等任何形態）
+    stored_acceptance = ticket.get("acceptance") or []
+    acceptance_preview = "\n".join(
+        f"   {i + 1}. {item}" for i, item in enumerate(stored_acceptance)
+    )
+    print(format_msg(
+        CreateMessages.ACCEPTANCE_STORED_REPORT,
+        count=len(stored_acceptance),
+        preview=acceptance_preview,
+    ))
+
     used_default_acceptance = config.get("acceptance") is None
     print_create_checklist(
         ticket_id=ticket_id,
@@ -784,9 +797,13 @@ def execute(args: argparse.Namespace) -> int:
         )))
         return 1
 
-    # 判準 S1/S2 自動推導：僅在兩個顯式旗標皆未給時啟動，不改寫顯式選擇
+    # 判準 S1/S2 自動推導：僅在三個顯式旗標皆未給時啟動，不改寫顯式選擇
     # （0.2.1-W3-826 判準；顯式優先是 Never break userspace 的要求）。
-    if topic is None:
+    # --no-topic 以 NO_TOPIC 哨兵表達，在此即短路推導：若改由推導後的
+    # 報告分支攔截，旗標只能在推導本來就落空時生效，命中時反被覆蓋。
+    if topic is NO_TOPIC:
+        topic = None
+    elif topic is None:
         topic, topic_basis = infer_topic(args)
 
     if is_child:

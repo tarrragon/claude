@@ -3,7 +3,7 @@ name: spec
 description: "需求完善度品質閘門。Use for: (1) Phase 1 開始時初始化功能規格骨架 (/spec init), (2) 驗證功能規格的需求完善度 (/spec validate), (3) 判斷需求是否足夠清晰可進入實作。Use when: Phase 1 功能設計代理人在進行功能設計時，作為內部工具使用。不是流程入口——/tdd 管流程編排，/spec 管產出物品質。"
 metadata:
   portable: true
-  version: 1.6.2
+  version: 1.8.0
 
 ---
 
@@ -157,6 +157,7 @@ metadata:
 | Purpose 簡潔性 | 不超過 200 字（Lite）/ 500 字（Full） |
 | API surface 完整性（Full only） | 每個 `### FR-XX:` 段落若提及 HTTP API 行為（`GET`/`POST`/`PUT`/`DELETE`/`endpoint`/`API 回`/`status code` 類訊號），須有對應 `/v1/...` endpoint 路徑定義；缺者列為提醒 |
 | domain-map 覆蓋（規劃波 domain spec） | spec 每個 `### FR-XX:` 須在對應 domain map 的 FR→bundle 覆蓋表歸屬；domain map 缺失、或有未覆蓋 FR，列為提醒 |
+| 事件流標定（可選，`--check-event-flow-labeling`） | spec 每個 `### FR-XX:` 段落若命中事件流訊號詞（清單見下，與 Layer 2 維度 5 共用同一份），須在 domain map「通道與協調圖」節之「到達類別與級別實例」子表找到對應 FR 引用；缺者列為提醒 |
 
 **結構檢查失敗**：輸出缺失清單，不進入 Layer 2。
 
@@ -176,6 +177,14 @@ python3 .claude/skills/spec/scripts/check_domain_coverage.py {spec-file-path} [-
 
 domain map 定位：省略 `--domain-map` 時自動找 spec 同目錄 `domain-map.md`，退化找 `docs/domain-map.md`。輸出：domain map 缺失（提示先走 Step 2.5 產出）、未覆蓋 FR 清單（`FR-NN`，請於 domain map §7 補歸屬）、或「檢核通過」。exit code 0 = 通過、1 = 缺失或有未覆蓋 FR。FR token 展開支援逗號續列（`FR-01,02,03`）與範圍（`FR-13~17`）。
 
+**事件流標定檢核**（可選，動機：Layer 2 維度 5「資源競爭」需要規格逐條標定事件流的到達類別與級別，靠 AI 語意判讀成本高，本檢核先以機械掃描做第一輪篩選）：以同一支 `check_domain_coverage.py` 加 `--check-event-flow-labeling` 執行，掃描 spec 每個 `### FR-XX:` 段落是否命中事件流訊號詞（`事件`、`通知`、`提示`、`背景`、`排程`、`佇列`、`推送`、`webhook`、`isolate`——與上方 Layer 2 維度 5 掃描說明共用同一份清單，程式碼側集中於 `check_domain_coverage.py` 的 `EVENT_FLOW_SIGNAL_WORDS` 常數，避免兩處各自維護而漂移）。命中的 FR 須在 domain map「通道與協調圖」節（**以標題文字定位，不依編號**——章節編號在既有專案可能已被其他內容佔用）之「到達類別與級別實例」子表找到對應 FR 引用，缺者列為提醒。命令：
+
+```bash
+python3 .claude/skills/spec/scripts/check_domain_coverage.py {spec-file-path} [--domain-map {path}] --check-event-flow-labeling  # portability-allow: consumer 共通安裝位置
+```
+
+輸出：命中訊號詞但未見通道標定的 FR 清單（`FR-NN`，請於「通道與協調圖」節之「到達類別與級別實例」子表補上標定），或「檢核通過」。**性質為啟發式提醒**（依訊號詞比對，非語意理解），不構成強制阻擋，僅供撰寫者複核；無事件流訊號的 spec 不受影響（與 Layer 2 維度 5 同形的條件式觸發）。
+
 ### Layer 2：AI 語義推演（深度，需思考）
 
 沿 3 個核心維度掃描規格文件，找出**未被展開的需求假設**。每個維度產出一組「未回答問題」。Full 模式額外提示情境相關問題（不產出清單、不進入迭代）。
@@ -189,8 +198,9 @@ domain map 定位：省略 `--domain-map` 時自動找 spec 同目錄 `domain-ma
 | 3a | 狀態轉換完整性 | 所有狀態和轉換都定義了嗎？有不可達狀態嗎？ | Lite + Full |
 | 3b | 約束條件違反行為 | 每條約束條件的前提被違反時，行為定義了嗎？ | Lite + Full |
 | 4 | 教學一致性 | spec 的設計決策是否與 blog 教學對應模組一致？ | Full only |
+| 5 | 資源競爭 | 本功能發出或接收的每條事件流，到達類別（等待型／自發型／推送型，逐跳）與級別（不可棄／須留痕／可棄）標定了嗎？它與哪些既有事件流共用同一通道？通道進入卸載時，本功能的行為定義了嗎？ | Lite + Full（條件式，見下） |
 
-**Lite 模式只掃描維度 1-3**，降低小型任務的認知負擔。**Full 模式額外掃描維度 4**。
+**Lite 模式只掃描維度 1-3、5**，降低小型任務的認知負擔（維度 5 為條件式觸發，無事件流訊號時不計入）。**Full 模式額外掃描維度 4**。
 
 #### 維度 4 教學一致性掃描說明（Full 模式）
 
@@ -204,6 +214,12 @@ domain map 定位：省略 `--domain-map` 時自動找 spec 同目錄 `domain-ma
 嚴重度：高（API 路徑/response format，影響 SDK 實作）、中（資料模型欄位）、低（行為策略，不影響介面契約）。教學缺口（spec 有但教學無）不算偏移，標記為缺口建議先在 blog 補完。
 
 **降級條款（無教學模組對應表時）**：步驟 1 依賴專案 CLAUDE.md 存在「教學模組對應表」章節才能定位對應教學模組。**Why**：並非所有專案都維護 blog 教學內容（如本專案 flutter_balance），CLAUDE.md 無此表時維度 4 無源可比。**Consequence**：若強行執行，會因找不到對應章節而卡住或產出誤導性的空比對結果，且不應被計入 validate 失敗。**Action**：執行維度 4 前先確認專案 CLAUDE.md 是否含「教學模組對應表」章節；不存在時跳過維度 4，於 validate 輸出標註「維度 4 skipped：無教學模組對應表」，不得視為失敗（不計入未回答問題數、不阻擋迭代上限判定）。
+
+#### 維度 5 資源競爭掃描說明（條件式觸發）
+
+**觸發條件**：spec 內文含事件流訊號詞之一才掃描。訊號詞（一行列舉，供 Layer 1 腳本共用）：事件、通知、提示、背景、排程、佇列、推送、webhook、isolate。無訊號時跳過維度 5，於輸出標註「維度 5 skipped：無事件流訊號」，不計入未回答問題數、不阻擋迭代上限判定（與維度 4 降級條款同形）。
+
+**Why**：現有維度 1-4 都不問「本功能發出或接收的事件流會與誰搶同一通道、卸載時本功能怎麼辦」。未在 spec 階段標定，到達類別與級別會在實作期由工程師憑印象補，違反〈事件流負載仲裁方法論〉〈級別〉一節「級別在邊界標定、仲裁器不推導」的原則。**Consequence**：級別標定延後到實作期，會使同一查詢在不同呼叫情境下被賦予不一致的級別（無業務脈絡可依），且卸載發生時本功能行為未定義，只能臨場決定。**Action**：spec 命中訊號詞時，逐條事件流回答：(1) 到達類別（等待型／自發型／推送型，逐跳判定）與級別（不可棄／須留痕／可棄）是否已標定；(2) 與哪些既有事件流共用同一通道；(3) 通道進入卸載狀態時本功能的行為（依〈讓步與卸載順序〉）是否已定義。三問的判準定義見〈事件流負載仲裁方法論〉的〈到達類別〉、〈級別〉、〈讓步與卸載順序〉三節，本節不重述。
 
 #### 情境相關提問（Full 模式額外提示）
 
@@ -257,6 +273,18 @@ CLAUDE.md 無「教學模組對應表」時（降級條款，見上）：
 維度 4 skipped：無教學模組對應表
 ```
 
+#### 維度 5: 資源競爭（條件式，見上）
+
+spec 含事件流訊號詞時：
+- Q4: {事件流名稱} 的到達類別（等待型／自發型／推送型）與級別（不可棄／須留痕／可棄）標定了嗎？
+- Q5: {事件流名稱} 與哪些既有事件流共用同一通道？通道進入卸載時，本功能的行為定義了嗎？
+
+無事件流訊號時：
+
+```text
+維度 5 skipped：無事件流訊號
+```
+
 ### 建議
 - 必須回答：Q1, Q3（影響 GWT 設計）
 - 建議回答：Q2（影響效能設計）
@@ -299,6 +327,7 @@ Phase 1 中 lavender 如何使用 /spec 的完整流程，詳見該代理人定�
 - references/spec-template-full.md - Full 模板（6 區段）
 - `data-layer-contract-methodology` - data-contract 文件的 A/B 兩區結構定義（`/spec validate` 不適用對象）
 - `../doc/SKILL.md` - data-contract 文件機械驗證的承接者（`doc validate`）<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 -->
+- `事件流負載仲裁方法論` - 維度 5「資源競爭」的判準來源（〈到達類別〉〈級別〉〈讓步與卸載順序〉三節）<!-- portability-allow: 條件式引用，目標方法論未必與本 skill 一同安裝 -->
 
 ---
 

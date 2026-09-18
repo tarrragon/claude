@@ -89,6 +89,8 @@ ticket_refs: []                  # 實作此用例的 ticket
   的主流程步驟不一致——位置編碼在既有語料上已產生誤讀，本規則即為防此重演。
 - 具體 ID 格式（命名慣例、唯一性規則）留待首個 UC 完成結構化回填、取得真實
   結構樣本後再定案，本模板僅提供概念範例，不構成規範。
+- `branch_from` 的值依實際分岔的場景步驟決定，不依替代場景散文標題的編號位置
+  （如「XXa」）判讀：ID 本身不編碼位置，此為其直接推論。
 
 ```yaml
 flow:
@@ -104,10 +106,18 @@ flow:
     implements: []                 # 對應 FR 編號，如 ["FR-01"]，選填
     emits: []                      # 對應 EVT 編號，提案中型別，選填
     consumes: []                   # 對應 EVT 編號，提案中型別，選填
+    traverses: ["{DomainName}"]    # 必填，欄位必存在：本步驟直接觸及的 domain 名清單（0..n）。
+                                  # 純畫面步驟填 []；經依賴邊間接到達的 domain 不列。
 ```
 
 **emits / consumes 說明**：EVT 型別現階段屬提案中，尚未進 validator 必填
 契約。兩欄位選填，待首個真實 EVT 實例出現後再視需要升級為建議填寫。
+
+**traverses 說明**：列出本步驟**直接觸及**的 domain 公開面，對應 domain map
+的「貫穿」。一步可觸及多個 domain，故為清單；不觸及任何 domain 的純畫面步驟
+（畫面狀態屬 layer 而非 domain）填空清單 `[]`，不得省略欄位——省略與空清單
+語意不同，前者是未填，後者是刻意不觸及。經 domain 依賴邊間接到達的 domain
+不列，間接關係由消費端沿依賴邊推導。
 
 **範例（依真實 UC 案例示範，說明性質，非規範化 ID）**：
 
@@ -117,20 +127,24 @@ flow:
     name: "建立項目"
     next: [first-inventory]
     implements: [FR-01]
+    traverses: [Account]
   - id: first-inventory          # 主要成功場景步驟 2
     name: "首次盤點"
     next: [view-net-worth]
     implements: [FR-02]
+    traverses: [Inventory, Account]  # 一步觸及多個 domain
   - id: view-net-worth           # 主要成功場景步驟 3
     name: "檢視淨資產"
     next: [assess-leverage]
     implements: [FR-04, FR-13]
+    traverses: [Valuation]
   - id: reject-invalid-input     # 替代場景：分岔自「首次盤點」步驟，非第一個主流程步驟
     name: "輸入驗證攔截"
     next: []
     branch_from: first-inventory
     return_to: first-inventory
     implements: [FR-24]
+    traverses: []                 # 純畫面步驟：表單驗證提示屬畫面狀態，不觸及 domain
 ```
 
 上例刻意示範常見缺口：替代場景的散文標題編號常暗示分岔自第一個主流程步驟，

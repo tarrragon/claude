@@ -2266,3 +2266,114 @@ class TestDispatchModeReadonlyExemption:
     def test_is_dispatch_mode_readonly_prompt_prefix_without_colon_returns_false(self):
         """僅含關鍵字但非固定格式（缺冒號）應回傳 False（非關鍵字比對邊界守護）。"""
         assert _hook._is_dispatch_mode_readonly_prompt("Dispatch-Mode readonly 請執行") is False
+
+
+# ============================================================================
+# 0.1.0-W3-156: worktree 派發 prompt 誤用 `track complete` 提示（改用 finish）
+# ============================================================================
+
+_has_track_complete = _hook._has_track_complete
+
+
+class TestHasTrackComplete:
+    """_has_track_complete 正則偵測。"""
+
+    @pytest.mark.parametrize("prompt", [
+        "ticket track complete 0.1.0-W3-147 --as parsley-flutter-developer",
+        "/ticket track complete 0.1.0-W3-147",
+        "收尾：ticket track  complete 0.1.0-W3-147",  # 多空白
+        "TICKET TRACK COMPLETE 0.1.0-W3-147",  # 大小寫不敏感
+    ])
+    def test_detects_track_complete(self, prompt):
+        assert _has_track_complete(prompt) is True
+
+    @pytest.mark.parametrize("prompt", [
+        "",
+        "ticket track finish 0.1.0-W3-147 --as parsley-flutter-developer",
+        "ticket track completed 0.1.0-W3-147",  # 非完整字，不誤觸
+        "ticket track append-log 0.1.0-W3-147",
+        "ticket track claim 0.1.0-W3-147",
+    ])
+    def test_does_not_match_finish_or_unrelated(self, prompt):
+        assert _has_track_complete(prompt) is False
+
+
+def _parse_additional_context(capsys) -> str:
+    """從 capsys stdout 解析 hookSpecificOutput.additionalContext；無則回傳 ""。"""
+    out = capsys.readouterr().out.strip()
+    if not out:
+        return ""
+    try:
+        data = json.loads(out)
+    except json.JSONDecodeError:
+        return ""
+    return data.get("hookSpecificOutput", {}).get("additionalContext", "")
+
+
+class TestWorktreeCompleteWarning:
+    """整合：main() 在 worktree 派發 + prompt 含 track complete 時輸出 additionalContext 提示。"""
+
+    def test_actual_w3_147_style_prompt_emits_warning(self, monkeypatch, capsys):
+        """以 0.1.0-W3-147 實際派發樣態（worktree + 收尾段含 track complete）驗證命中。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "isolation": "worktree",
+                "prompt": (
+                    "Ticket: 0.1.0-W3-147\n\n"
+                    "1. 提取 lib/workspace/workspace_repository.dart 的 value types\n\n"
+                    "收尾：填 Completion Info -> ticket track set-exit-status -> "
+                    "ticket track commit -> "
+                    "ticket track complete 0.1.0-W3-147 --as parsley-flutter-developer"
+                ),
+            },
+        )
+        assert exit_code == 0
+        context = _parse_additional_context(capsys)
+        assert context, "worktree + track complete 應輸出 additionalContext 提示"
+        assert "finish" in context
+        assert "agent-dispatch-template.md" in context
+
+    def test_track_finish_prompt_no_warning(self, monkeypatch, capsys):
+        """prompt 已用 track finish（正確用法）→ 不誤報。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "isolation": "worktree",
+                "prompt": (
+                    "Ticket: 0.1.0-W3-147\n\n"
+                    "1. 提取 lib/workspace/workspace_repository.dart 的 value types\n\n"
+                    "收尾：ticket track finish 0.1.0-W3-147 --as parsley-flutter-developer"
+                ),
+            },
+        )
+        assert exit_code == 0
+        context = _parse_additional_context(capsys)
+        assert context == "", "track finish 不應觸發提示"
+
+    def test_non_worktree_dispatch_no_warning_even_with_track_complete(
+        self, monkeypatch, capsys
+    ):
+        """非 worktree 派發（無 isolation）即使 prompt 含 track complete 也不觸發提示。
+
+        此路徑因無 worktree 隔離會被既有邏輯阻擋（exit 2），提示邏輯本就不該
+        在阻擋路徑上輸出——本測試同時確認阻擋行為不變、且不誤發提示。
+        """
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "prompt": (
+                    "實作 lib/workspace/workspace_repository.dart，"
+                    "收尾：ticket track complete 0.1.0-W3-147 --as parsley-flutter-developer"
+                ),
+            },
+        )
+        assert exit_code == 2, "非 worktree 派發應維持既有強制阻擋行為"
+        context = _parse_additional_context(capsys)
+        assert context == "", "非 worktree 派發不應觸發 track complete 提示"

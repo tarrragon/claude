@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Manages framework issues on tarrragon/claude: dedup, create, comment-as-section init/update/observe/check, fix-matrix close, folding tickets into issues. Use for: framework issue, 框架 issue, canonical issue, ticket 收束, 跨 consumer 修復追蹤, curator 派發."
 metadata:
-  version: 2.3.0
+  version: 2.6.0
 ---
 
 # Framework Issue
@@ -71,7 +71,7 @@ exit code：`0` 成功、`3` 降級（gh 未安裝／未登入／Issues 停用�
 
 ## Owner 與派發
 
-區段 owner 是實際執行該工作的 session，他方以 `observe` 附加或 `add` 自己的區段。owner 識別固定為 `<專案目錄 kebab-case>-<session 序號>`（如 `flutter-balance-77`），CLI 對其他形態 exit 3；理由見協定檔〈區段與觀測標記格式〉。
+區段 owner 是實際執行該工作的 session，他方以 `observe` 附加或 `add` 自己的區段。`init`／`add` 預設自行推導 owner（不需指定），推導值為 `<專案目錄 kebab-case>-<session uuid 前 8 碼十六進位>`；`--owner` 降為覆寫確認用途，給值不符或推導失敗一律 exit 3，無靜默降級路徑；理由見協定檔〈owner 識別格式〉。
 
 收束與區段撰寫派 `framework-issue-curator`（opus、effort medium）；一個主題一個 curator 並行，派發票列明範圍內的 ticket ID，curator 只對這些票 close。純 `observe`／`check` 類輕量操作不需派發。
 
@@ -83,7 +83,7 @@ exit code：`0` 成功、`3` 降級（gh 未安裝／未登入／Issues 停用�
 |--------|------|---------|
 | 要 init／add／update／transfer-owner／observe／show／check，或判定查重關係、解讀 check 警訊、查 owner 格式 | `references/comment-as-section-protocol.md` | 〈操作一覽〉〈CLI 語法〉〈區段與觀測標記格式〉〈init 前查重：三種關係處置〉〈check 的三項警訊〉〈增長語意與 close 語意〉〈已知限制〉 |
 | 要用 create／list／link／fix-status／fix-version／close | `references/fix-matrix-commands.md` | 〈create 與 list〉〈link〉〈fix-status〉〈fix-version〉〈close〉〈Graceful Degradation〉 |
-| ticket 執行中辨識到框架問題，決定接不接與怎麼關 | `references/escalation-flow.md` | 〈介入判斷：框架問題 vs 專案問題〉〈兩條路徑〉〈Issue 關閉協定〉〈回報前查重 SOP〉 |
+| ticket 執行中辨識到框架問題，決定接不接與怎麼關；或發現當下要判斷能否直接寫定修法；或收束時要判斷某個修法能否寫進「當前結論」區段 | `references/escalation-flow.md` | 〈介入判斷：框架問題 vs 專案問題〉〈兩條路徑〉〈修法時點分離：發現票何時能寫定修法〉〈Issue 關閉協定〉〈回報前查重 SOP〉 |
 | 要把一群 ticket 收束成 issue，或派 curator 做這件事 | `references/ticket-intake.md` | 〈前提與分工〉〈步驟一：分群〉〈步驟二：查重與落點〉〈步驟三：時序改狀態〉〈步驟四：區段範本〉〈步驟五：ticket 處置〉〈步驟六：驗證與交接〉〈派發 curator〉 |
 | 想看一張 issue 從 dedup 到 check 的完整走查 | `references/worked-example.md` | 〈情境〉〈查重輸出與關係判定〉〈sections.json〉〈init 與索引〉〈ticket close〉〈check 與 owner 更新〉 |
 

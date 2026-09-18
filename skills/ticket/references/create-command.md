@@ -92,6 +92,11 @@ ticket create ... --acceptance "條件A|條件B|條件C"
 #   用反斜線跳脫保留字面，避免被靜默拆條：
 ticket create ... --acceptance "重現實證 -q \| tail 導致 0 行"
 #   未跳脫時，單一 --acceptance 值被拆成多條會印出 [WARNING] 供確認。
+#
+#   建立成功訊息一律回報本次實際存入的驗收條數與逐條內容（不限分隔符拆條
+#   時才印）。--acceptance 不吃逗號分隔（與 --where 等三參數不同），逗號
+#   串接會被整段收下為單一條目；對照輸出的條數與自己輸入的預期條數，
+#   即可當場發現任何摺疊形態（逗號、頓號等），不限已知的分隔符拆條情境。
 
 #   --where：逗號分隔
 ticket create ... --where "file1.py,file2.py"

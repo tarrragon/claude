@@ -177,6 +177,43 @@ line4
 
 **適用邊界**：本條款只影響「不確定輸出結構」時的截斷方向選擇，不改變規則二既有的 TaskOutput / Read 判斷流程圖。
 
+#### 事實修正：不是「逐字相同」，是判別依據被翻轉（2026-09-09 實測）
+
+上文「畫面與呼叫成功時的內容回音逐字相同」**不準確**，此處更正。
+
+實測（`ticket track query` 帶兩個不存在的參數 + 12 行值，唯讀故不改動任何票）：argparse 把多行值原樣列入 `unrecognized arguments:`，總輸出 15 行，`tail -5` 只剩內容尾段、零診斷標記——這部分與上文一致。但 ticket CLI 的 `append-log` **成功**路徑最後一行是：
+
+```
+[verify] ticket md: N lines after write
+```
+
+該行是寫入後重讀檔案行數的 self-verify（opinionated-default 設計），在**尾部**，`tail` 保得住；失敗路徑沒有這一行。所以截斷並未摧毀判別依據，而是把它翻轉：
+
+| | 判別依據 | 位置 | `tail -N` 之後 | 讀者要做什麼 |
+|---|---|---|---|---|
+| 不截斷 | `usage:` + `error:` | 頭 | 被截掉 | 看見即知 |
+| 截斷後 | `[verify] ... lines after write` | 尾 | **保留** | 要先知道它該在，才會注意到它不在 |
+
+**存在訊號會主動撞進視線，缺席訊號必須主動去找。**
+
+這解釋了本節寫滿 Why／最小重現／Action 三項後，同一命令同一機制仍第三次發生：**本節教的是「頭部可能有 error」，截斷之後真正要察覺的卻是「尾部少了一行」——防護方向與失效方向不一致。** 讀者確實看到了完整的尾段，只是尾段裡少的那一行不會自己舉手。
+
+#### Action 第 0 項（優先於上列三項）：寫入類 CLI 讀 exit code，不讀輸出
+
+```bash
+out=$(ticket track append-log <id> --section <S> "$(cat <<'EOF'
+...
+EOF
+)" 2>&1); rc=$?
+echo "rc=$rc"        # 0 才是成功；非 0 一律當失敗，不看 out 的內容
+```
+
+exit code 是整數固定值，**任何截斷、過濾、回吐都改不動它**。上述誤用實測回 `rc=2`。
+
+不以 `[verify]` 行為主判據的理由：它包在 `try` / `except OSError: pass` 內，重讀檔案失敗時靜默不印，屬「幾乎總在」而非「保證總在」；exit code 無此例外。
+
+**這一項同時補上 `tool-output-trust` 規則 3 的一個覆蓋缺口**，值得單獨記一句：該規則要求「關鍵事實用無法腦補的固定值交叉驗證」，但其四個例子（`git rev-parse`／`test -f`／`grep -c`／`git status --porcelain`）**全部是唯讀查證，寫入這一側是空的**。三次事故的共通形態是「以輸出外觀判定自己的寫入是否成功」，而三次的救援都是事後才補做固定值查證（`grep -c` 回 0）。`rc` 只是把同一件事從事後前移到當下。此缺口屬規則 3 的適用範圍問題，不是規則二的子項。
+
 ### 輸出過濾泛化：grep 白名單／`-v` 同樣選擇性移除警告行（第二、三實例）
 
 **Why**：上一節的「截斷方向」條款以 `tail` 為對象，容易被讀成「只有 tail 危險、長輸出才危險」。但共同機制不是 `tail` 這個指令，是「選擇性過濾」本身——任何過濾規則（`tail` 取尾、grep 白名單只留符合詞的行、`grep -v` 濾掉符合詞的行）都是依「內容特徵」挑行，而警告／錯誤行的內容特徵（用詞、長度）通常與正常輸出不同且更短，因此被過濾規則命中並移除的機率系統性偏高，與輸出總長度無關。
@@ -431,6 +468,22 @@ git update-ref HEAD "$COMMIT_SHA" "$OLD_HEAD"
 # 9. 清理臨時 index
 rm -f "$TEMP_INDEX"
 unset GIT_INDEX_FILE
+
+# 10. 收尾：檢查共用 index 是否留下本次提交檔案的過期 entry
+#     （GIT_INDEX_FILE 已於步驟 9 清除，此處讀寫的是共用 index；
+#      判定準則見下方「隔離索引 CAS 的時間維度要件」要件 B）
+for f in <exact-file-1> <exact-file-2>; do
+  INDEX_SHA=$(git show ":$f" 2>/dev/null)
+  OLD_SHA=$(git show "$OLD_HEAD:$f" 2>/dev/null)
+  NEW_SHA=$(git show "HEAD:$f" 2>/dev/null)
+  if [ "$INDEX_SHA" = "$NEW_SHA" ]; then
+    continue                        # 共用 index 已與新 HEAD 一致，無需處理
+  elif [ "$INDEX_SHA" = "$OLD_SHA" ]; then
+    git restore --staged "$f"       # 恰為本次 CAS 取代前的內容，判定過期，重設回新 HEAD
+  else
+    echo "共用 index 中 $f 的內容既非取代前也非取代後，疑似他人在途工作，不清理，改為通知對方"
+  fi
+done
 ```
 
 **適用條件**：
@@ -464,6 +517,67 @@ unset GIT_INDEX_FILE
 **反例**（實證）：commit `a7caabf4f`（2026-08-21，目錄級 where.files 宣告攔截功能提交）示範要件 1 失守的具體樣態——清單來源改用 `git diff --cached --name-only` 讀取共用 index 目前 staged 狀態，即使後續仍以 `GIT_INDEX_FILE` 隔離寫入、產生 tree、建立 commit，仍把另一張並行進行中 ticket 的 metadata 檔案（未在本次任務清單內，當時恰好也 staged 在共用 index）一併提交進去。三個要件中只有第一項出錯，但因清單是整個配方的輸入起點，錯誤會沿全程配方精確複製到最終 commit——其餘兩項做得再確實，也無法補救清單本身已經錯誤。
 
 **要件 1 的工作區維度**：清單來源即使不讀共用 index（例如改讀 `git status --porcelain`），仍可能摻入非本次提交對象的檔案——多 PM session 並行的環境下，`git status --porcelain` 反映的是整個工作區，必然包含他 session 尚在撰寫、未完成的檔案。`has_active_background_agents()` 這類「有無活躍背景代理人」的整批跳過判準只擋「本 session 自己派發、追蹤中的代理人」這一種情境，無法涵蓋「他 session 直接 CLI 操作、未經派發追蹤」或「他 session 已完成派發但尚未輪到自身 turn-end」的情形。完整清單來源獨立性因此需要同時滿足兩維：獨立於共用 index（防夾帶他人已 staged 內容）**且**獨立於工作區其他 session（防誤提交他 session 在途工作）。已驗證實作見 `ticket-md-auto-commit-hook.py` 的 `get_session_claimed_ticket_ids`（以 `.claude/lib/pm_registry.py` 的 session 認領清單為正歸屬判準，歸屬無法判定時保守排除）。
+
+上述三要件涵蓋的是**空間維度**——決定「提交了哪些檔案」的三個環節（清單來源、寫入隔離、範圍自檢）。**基準有多新**是另一個獨立維度，三要件對此無鑑別力，見下方「隔離索引 CAS 的時間維度要件」小節。
+
+### 隔離索引 CAS 的時間維度要件：基準釘選與收尾清理
+
+**與三要件的關係**：上方三要件回答「提交了哪些檔案」（空間維度），本節回答「基準有多新」（時間維度）。兩者互不重疊，任一項缺失都會使配方整體失效。本節與「規則七核對步驟的版本邊界：過期 index 快照」（見下方）同一根因——index 與 HEAD 是兩個獨立前進的平面——但發生在隔離索引 CAS 路徑本身，而該路徑正是被推薦用來取代共用 index、容易讓人誤以為已經免疫此類風險的做法。
+
+#### 要件 A：基準必須釘選為變數，禁止在配方任一步驟寫 HEAD 符號
+
+**失效機制**：配方步驟 3（`read-tree`）與步驟 6（`commit-tree -p`）分屬不同時刻。若兩處都用 `HEAD` 符號而非釘選的 `$OLD_HEAD` 變數，其間若有並行寫入推進了 HEAD，`read-tree` 讀到的樹狀態與 `commit-tree` 記錄的 parent 便分屬兩個不同基準——tree 內容停留在舊 HEAD，parent 卻指向新 HEAD，形成「未包含新內容、卻聲稱以新內容為 parent」的 commit，效果等同靜默回滾新 HEAD 帶入的變更。Bash 工具的 shell 變數不跨呼叫存活（見本檔開頭「持久狀態意識」），配方若拆成多個 Bash 呼叫執行，每次重新解析 `HEAD` 符號的視窗期尤其大。
+
+**為何三要件擋不住**：要件 2（`GIT_INDEX_FILE`）保護的是寫入端不受外部並行寫入干擾，不保護「基準本身是否夠新」；要件 3（tree 層級自檢）若同樣以 `HEAD` 符號比對，比對的是「此刻已推進的新 HEAD」而非「commit 實際採用的基準」，只要自檢時機晚於基準漂移就會通過——新 HEAD 與新 commit 的差集看起來合理，真正遺失的是介於兩者之間、已被跳過的那次推進。
+
+**CAS 舊值是唯一偵測點**：步驟 8 `git update-ref HEAD "$COMMIT_SHA" "$OLD_HEAD"` 帶入的舊值若寫成 `HEAD`，該符號在執行當下自我解析為目前 HEAD，與比較基準恆相等，CAS 檢查形同虛設；寫入釘選的 `$OLD_HEAD` 變數則會在 HEAD 於期間被推進時，因舊值與目前 HEAD 不符而**失敗**，而非覆蓋——這是配方全程唯一能偵測到本情形的環節，其餘步驟即使正確執行也偵測不到。
+
+**實證**（commit `4bd0e2ac`，本專案 2026-09-08）：`read-tree` 與 `commit-tree -p` 分屬兩次 Bash 呼叫，其間並行 session 提交了 `eab601b2`（對某 ticket md 的 `blockedBy` 欄位變更）。`4bd0e2ac` 的 tree 取自舊 HEAD、parent 卻指向新 HEAD，靜默回滾了 `eab601b2` 的變更；由並行代理人以正向 commit `f7bd7fa0` 修復。
+
+**最小重現**（可自行執行驗證，`$D` 為任一臨時 repo；已實測，輸出與註解一致）：
+
+```bash
+printf 'v1\n' > "$D/a.txt"; git -C "$D" add a.txt; git -C "$D" commit -q -m base
+
+# 呼叫 1：read-tree 用 HEAD 符號，此刻解析為 base commit
+TEMP=$(mktemp -u)
+GIT_INDEX_FILE=$TEMP git -C "$D" read-tree HEAD
+
+# 期間，並行 session 推進 HEAD
+printf 'peer\n' > "$D/b.txt"; git -C "$D" add b.txt
+git -C "$D" commit -q -m "peer advances HEAD"
+
+# 呼叫 2：本方繼續作業，parent 同樣用 HEAD 符號（此刻已解析為 peer 的新 HEAD）
+printf 'v2\n' > "$D/a.txt"
+GIT_INDEX_FILE=$TEMP git -C "$D" add a.txt
+TREE=$(GIT_INDEX_FILE=$TEMP git -C "$D" write-tree)
+COMMIT=$(git -C "$D" commit-tree "$TREE" -p HEAD -m "mine, parent=HEAD symbol")
+
+# CAS 舊值同樣用 HEAD 符號，自我解析為新 HEAD，比較恆相等，必然成功
+git -C "$D" update-ref HEAD "$COMMIT" HEAD
+
+git -C "$D" log --oneline                 # peer 的 commit 仍留在歷史中，看似正常
+git -C "$D" show HEAD:b.txt               # fatal: path 'b.txt' exists on disk, but not in 'HEAD' —— 靜默回滾證實
+```
+
+**Action**：配方步驟 1、3、6、8 全部使用 `$OLD_HEAD` 變數，不論配方是否跨多個 Bash 呼叫執行；跨呼叫執行時，`$OLD_HEAD` 須以檔案或明確重述傳遞（shell 變數不跨呼叫存活），不可省略釘選改用符號簡化。
+
+#### 要件 B：CAS 成功後清理共用 index 的過期 entry
+
+**Why**：隔離索引的設計目的是不觸碰共用 index，但這也意味著——CAS 推進 HEAD 之後，共用 index 中任何與本次 commit 重疊的既有 entry，都相對新 HEAD 變成過期快照。機制與「規則七核對步驟的版本邊界」章節相同（index 與 HEAD 是兩個獨立前進的平面），差別在於此處的成因是**自己剛才的 CAS**，而非他方並行提交或 pathspec 提交，因此容易被忽略——直覺上「全程沒碰共用 index」等同「共用 index 不受影響」，但 HEAD 移動本身就足以讓共用 index 中的既有 entry 過期。
+
+**Consequence**：不清理時，下一次任何裸 commit（不論由誰、為何目的觸發）都會把這些過期 entry 寫回歷史，等同再次回滾 CAS 剛推進的內容——`git diff --cached --name-only` 的檔名核對對此無鑑別力，與「版本邊界」章節同一侷限。
+
+**判定準則（三平面比對，非單一問句）**：不可只問「共用 index 是否有新 HEAD 沒有的內容」——CAS 剛推進 HEAD 後，index 中殘留的可能是（a）自己被取代的舊草稿（CAS 之前就已 staged、此後未再變動），也可能是（b）他人在途、尚未進入任何 commit 的獨立工作；兩者都會呈現「index 有新 HEAD 沒有的內容」，若只問這一句會把 (a) 誤判為 (b) 而放著不清，或把 (b) 誤判為 (a) 而清掉他人尚未提交的工作。正確判準改比對三個平面——CAS 自己記錄的舊基準（`$OLD_HEAD`，剛執行過 CAS 因此仍可直接取用，不需另行推斷）、共用 index、新 HEAD：index 內容與新 HEAD 相同 → 已一致，無需處理；index 內容恰與 `$OLD_HEAD` 相同 → 正是本次 CAS 取代前的內容，判定為過期快照；index 內容與兩者皆不同 → 找不到來源可以解釋為何是那個版本，判定為他人在途工作。可執行版本見上方配方步驟 10。
+
+**處置**：
+
+| 判定結果 | 處置 |
+|---------|------|
+| 過期快照（恰與 `$OLD_HEAD` 相同） | `git restore --staged <path>` 重設回新 HEAD |
+| 他人在途工作（與 `$OLD_HEAD`、新 HEAD 皆不同） | 不清理，改為通知對方；`git restore --staged` 會清掉對方尚未提交的暫存內容 |
+
+**實證**：一次 CAS 提交後，共用 index 留下六個檔案的過期 entry（皆為該次提交剛推進的內容），在被裸 commit 觸發前偵測並清除。
 
 ### 規則七核對步驟的粒度邊界：檔案內夾帶
 
@@ -639,6 +753,7 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 ---
 
 **Last Updated**: 2026-09-08
+**Version**: 1.14.0 — 隔離索引 CAS 配方補步驟 10（CAS 成功後檢查共用 index 過期 entry，附三平面比對可執行版本）；三要件章節後新增平行小節「隔離索引 CAS 的時間維度要件：基準釘選與收尾清理」，含要件 A（基準必須釘選 `$OLD_HEAD` 變數，禁用 `HEAD` 符號，附失效機制、為何三要件擋不住、CAS 舊值為唯一偵測點、已實測最小重現）與要件 B（CAS 後清理過期 entry，附三平面判定準則與處置表）；既有三要件表格與內容未變動。實證：commit `4bd0e2ac`（tree 取舊基準、parent 指新基準，靜默回滾 `eab601b2`）、`f7bd7fa0`（正向修復），三者皆已以 `git cat-file -t` 驗證存在。
 **Version**: 1.13.0 — 規則七詳細「隔離索引 CAS」適用條件表與「與規則七主文的關係」段改寫：代理人票務提交（`ticket track commit`）已改為預設路徑，規則七三步降為其 fallback；PM 手動／無票務 CLI 之一般低頻 commit，規則七三步仍為預設不變。與 `bash-tool-usage-rules.md` 規則七、`parallel-dispatch.md`、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步。
 **Last Updated**: 2026-09-04
 **Version**: 1.12.0 — 規則二詳細新增「輸出過濾泛化：grep 白名單／`-v` 同樣選擇性移除警告行（第二、三實例）」小節：泛化上一節「截斷方向」的機制——共同根因非 `tail` 本身而是「選擇性過濾依內容特徵挑行，警告行通常較短且措辭不同」，與輸出長度無關；附第二實例（`ticket create --acceptance` 被 `\|` 拆分、grep 白名單濾掉 `[WARNING]` 行）、第三實例（本條款擴充案自身 acceptance 清單被同機制拆散）與 3 行最小重現（`tail -2` 切掉唯一的 `[Error]` 行）；Action 表補齊 `tail`／grep 白名單／`grep -v` 三種過濾方式的風險與修正。主文速查條目與統一檢查清單同步改寫見 `bash-tool-usage-rules.md` 規則二「輸出過濾方向」。

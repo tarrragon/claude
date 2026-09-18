@@ -240,21 +240,21 @@ def extract_refs(text):
     return refs
 
 
-def _hook_completeness_check_path():
-    """定位 hook-completeness-check.py 原始檔（scan_links.py 自身所在 repo 的
-    .claude/hooks/，與被掃描的 root 參數無關）。
+def _hook_registration_coverage_check_path():
+    """定位 hook-registration-coverage-check.py 原始檔（scan_links.py 自身所在
+    repo 的 .claude/hooks/，與被掃描的 root 參數無關）。
 
     scan_links.py 固定位於 `<repo>/.claude/skills/broken-link-check/`；往上
     兩層即 `<repo>/.claude/`，其下 `hooks/` 是 extract_merge_declarations 的
     權威來源。掃描目標（可能是合成測試樹）由呼叫端另外傳入 hooks_dir 決定，
     與此函式定位的「載入哪個原始檔」無關。
     """
-    return Path(__file__).resolve().parents[2] / "hooks" / "hook-completeness-check.py"
+    return Path(__file__).resolve().parents[2] / "hooks" / "hook-registration-coverage-check.py"
 
 
 @functools.lru_cache(maxsize=1)
 def load_extract_merge_declarations():
-    """動態載入 hook-completeness-check.py 的 extract_merge_declarations。
+    """動態載入 hook-registration-coverage-check.py 的 extract_merge_declarations。
 
     連字號檔名無法用一般 import 陳述式，改以 importlib.util 動態載入。合併型
     遷移的接手者解析必須接此既有索引，不另寫重複實作。
@@ -264,13 +264,13 @@ def load_extract_merge_declarations():
     不因此中斷主掃描——合併接手者標註是輔助資訊，不是 broken 判定的前提；
     掃描器仍須把無法判定接手者的引用計入 broken，而非因輔助資訊缺失而放行。
     """
-    hook_path = _hook_completeness_check_path()
+    hook_path = _hook_registration_coverage_check_path()
     if not hook_path.is_file():
-        sys.stderr.write(f"[WARN] hook-completeness-check.py not found at {hook_path}\n")
+        sys.stderr.write(f"[WARN] hook-registration-coverage-check.py not found at {hook_path}\n")
         return None
     try:
         spec = importlib.util.spec_from_file_location(
-            "hook_completeness_check_for_scan_links", hook_path
+            "hook_registration_coverage_check_for_scan_links", hook_path
         )
         module = importlib.util.module_from_spec(spec)
         hooks_dir_str = str(hook_path.parent)

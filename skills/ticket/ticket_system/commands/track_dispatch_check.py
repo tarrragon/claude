@@ -119,12 +119,23 @@ def _get_prune_logger() -> Optional[Any]:
 
     載入失敗時降級為 None，呼叫端須同時寫 stderr（可觀測性規則 4：不可
     僅靠 hook-logs 單一通道，失敗時不可整段靜默）。
+
+    `project_root` 顯式傳入 `get_ticket_state_root()`（2026-09 補接線）：
+    `setup_hook_logging` 未傳 `project_root` 時委派 `.claude/lib/
+    hook_base.py` 自身的 `get_project_root()`，其 worktree 感知優先序與
+    本模組既有的 `get_ticket_state_root()`（見檔頭 import 註解，
+    `dispatch-active.json` 讀寫已統一走此函式）相反方向——linked
+    worktree 內二者各自解析出不同 root。未對齊時 `--prune` 的實際清理
+    動作寫入主倉庫，日誌卻落在 worktree 自己的 `.claude/hook-logs/`，
+    與 `_get_handoff_gc_logger`（`track_dashboard.py`）同一落差、同一修法。
     """
     try:
         hook_logging = load_claude_lib("hook_logging")
         if hook_logging is None:
             return None
-        return hook_logging.setup_hook_logging(_PRUNE_HOOK_NAME)
+        return hook_logging.setup_hook_logging(
+            _PRUNE_HOOK_NAME, project_root=get_ticket_state_root()
+        )
     except Exception:  # noqa: BLE001 — 日誌基礎設施失敗不可阻擋主流程
         return None
 

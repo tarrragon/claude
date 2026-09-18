@@ -44,6 +44,7 @@
 | 指令 | 用途 |
 |------|------|
 | `/doc-flow` | 五重文件系統管理 |
+| `/project-analysis` | 接手或協作他人專案的分析工序（非本框架專案模式、外接資料夾、工作項表交付） |
 | `/methodology-writing` | 方法論撰寫指南 |
 | `/strategic-compact` | 策略性 Context 壓縮 |
 | `/agent-team` | Agent Teams 協作派發 |
@@ -84,6 +85,7 @@
 
 ---
 
-**Last Updated**: 2026-09-07
+**Last Updated**: 2026-09-16
+**Version**: 1.2.0 — 「文件與流程」新增 `/project-analysis`（接手或協作他人專案的分析工序）
 **Version**: 1.1.0 — 新增「兩支 push 工具的分別」對照表（`/sync-push` 推框架 canonical、全樹 commit-first；`skill-sync push <name>` 推單一 skill 至發佈庫、無全樹前置），修正代理人誤選工具後誤判為並行協調問題
 **Version**: 1.0.0

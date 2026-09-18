@@ -21,6 +21,8 @@
 
 > 延伸自 quality-baseline.md 規則 4（異常可觀測性）。
 
+> **與回饋點設計的關係**：日誌能記到什麼，取決於呼叫發出／受理／結果三個回饋點是否已在設計期定義——回饋點不是日誌事後補得回來的，未先定義時日誌只能記到例外堆疊。寫 driven port 的 catch 區塊前見 [Port 回饋契約](.claude/methodologies/clean-architecture-implementation-methodology.md)。
+
 ---
 
 ## 規則 2：統一日誌工具
@@ -106,8 +108,10 @@
 - CLAUDE.md §6 技術選型 - 專案日誌工具為 `dart:developer developer.log`
 - .claude/rules/core/quality-baseline.md - 規則 4：異常可觀測性
 - .claude/rules/core/quality-common.md - 通用品質基線
+- .claude/methodologies/clean-architecture-implementation-methodology.md - Port 回饋契約：driven port 呼叫的可觀測時刻與回饋點設計期定義
 
 ---
 
-**Last Updated**: 2026-07-13
+**Last Updated**: 2026-09-08
+**Version**: 1.2.0 - 規則 1 補一行路由至〈Port 回饋契約〉：日誌能記到什麼取決於回饋點是否已在設計期定義，回饋點不是日誌事後補得回來的（`DOC-GPD-002` 單向累積形態的反向路由補完之一）
 **Version**: 1.1.0 - 新增規則 5「平台互動程式碼必須自帶日誌」（三輪盲飛教訓）

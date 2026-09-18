@@ -69,7 +69,7 @@ rename 檔案（含純 rename 與 rename 併內容變更）不略過，改以 `g
 | 1 | reference-stability-rule8-guard-hook.py                | `_check_rule8`               | 完整重用（diff_new_hits + filter_marker_exempt + build_block_message） |
 | 2 | uc-reference-validation-hook.py                        | `_check_uc_reference`        | 完整重用（doc_system.core.uc_registry 直接 import，WARN-only 保留原語意） |
 | 3 | file-type-permission-hook.py                           | `_check_file_type_permission`| 無 deny 路徑，no-op（原 hook 本身從不阻擋，記錄於 docstring 供稽核） |
-| 4 | branch-verify-hook.py                                  | `_check_branch_verify`       | 完整重用（is_protected_branch + is_exempt_path_on_protected_branch） |
+| 4 | branch-verify-hook.py                                  | `_check_branch_verify`       | 完整重用（is_protected_branch + is_exempt_path_on_protected_branch）+ is_merge_commit 旗標（`MERGE_HEAD` 存在時豁免，合併是把已審查內容整批帶入保護分支的正規動作） |
 | 5 | error-pattern-flat-gate-hook.py（skills/error-pattern） | `_check_error_pattern_flat`  | 完整重用（`decide()` 純函式，直接以 tool_name="Write" 呼叫） |
 | 6 | framework-rule-edit-skill-trigger-hook.py               | `_check_framework_skill_trigger` | 簡化重用：commit 階段無 transcript 可核實是否已讀 SKILL，降級為固定 WARN（不比照原 hook 的 strict deny），已於函式 docstring 說明限制 |
 | 7 | memory-write-guard-hook.py                              | `_check_memory_write`        | 完整重用（is_memory_path，路徑判斷；memory 目錄本不在專案 git 內，恆為 no-op，保留以防未來路徑定義變動） |
@@ -188,6 +188,19 @@ def _git_show(rev_spec: str, project_root: Path) -> str:
     return output
 
 
+def _merge_in_progress(project_root: Path) -> bool:
+    """判斷是否正在完成一次合併（`MERGE_HEAD` 可解析），語意與
+    git-ref-transaction-content-guard.py 的同名函式一致：手動解衝突後執行
+    `git commit` 落地合併結果時，`MERGE_HEAD` 尚未被 git 清除，可據此判斷
+    即將建立的是合併 commit，供 branch-verify 豁免（見
+    lib.commit_content_guards._check_branch_verify 的 is_merge_commit）。
+    """
+    success, _ = run_git_command(
+        ["rev-parse", "-q", "--verify", "MERGE_HEAD"], cwd=str(project_root)
+    )
+    return success
+
+
 def _get_added_text(
     rel_path: str, project_root: Path, old_path: Optional[str] = None
 ) -> str:
@@ -278,7 +291,9 @@ def main() -> int:
     staged_files = [
         _build_staged_file(p, project_root, rename_map) for p in staged_paths
     ]
-    findings = _run_all_checks(staged_files, project_root, logger)
+    findings = _run_all_checks(
+        staged_files, project_root, logger, is_merge_commit=_merge_in_progress(project_root)
+    )
 
     deny_findings = [f for f in findings if f.severity == "deny"]
     warn_findings = [f for f in findings if f.severity == "warn"]

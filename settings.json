@@ -442,7 +442,7 @@
           },
           {
             "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-completeness-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-registration-coverage-check.py"
           },
           {
             "type": "command",
@@ -587,6 +587,11 @@
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-start-issue-check-hook.py",
             "timeout": 20000
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-start-todo-delta-hook.py",
+            "timeout": 5000
           }
         ]
       },

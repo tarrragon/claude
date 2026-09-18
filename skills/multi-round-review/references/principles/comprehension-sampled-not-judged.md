@@ -108,3 +108,7 @@
 零分歧只證明表達沒有歧義，不證明內容對。這個 frame 與事實查核是兩件事，跑了它不能省掉後者。
 
 限制：一次量測、單篇、單一模型家族；樣本數五是該次用的數字，最佳 N 沒有測。
+
+## 跟相鄰原則的關係
+
+- [thresholds-registered-before-dispatch](thresholds-registered-before-dispatch.md)：本卡的「一份讀錯就是判決」管單輪之內，那張卡管跨輪。兩者擋的是同一個方向——本卡擋用統計門檻放掉 finding，那裡擋用當輪浮現的理由放掉 finding（「三份最終都理解正確」連續五輪被用來判不處置）。

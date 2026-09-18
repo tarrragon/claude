@@ -98,6 +98,18 @@ class TestNativeComponentCheck:
         violations = check_file_for_violations(path)
         assert all(v["category"] != "NativeComponent" for v in violations)
 
+    def test_suggestion_has_no_hardcoded_other_project_names(self, dart_file):
+        """建議文字不得寫死他專案的替代元件名（如 AppCard/AppDialog），
+        應改指向元件庫定義位置。"""
+        path = dart_file("Card(child: child);\n")
+        violations = check_file_for_violations(path)
+        native = [v for v in violations if v["category"] == "NativeComponent"]
+        assert native
+        for v in native:
+            assert "AppCard" not in v["suggestion"]
+            assert "AppDialog" not in v["suggestion"]
+            assert "component-contract-design" in v["suggestion"]
+
 
 class TestScopeFilters:
     @pytest.mark.parametrize(

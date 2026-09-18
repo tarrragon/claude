@@ -521,14 +521,27 @@ def _get_handoff_gc_logger() -> Optional[Any]:
     （既有五處複本收斂點，見該模組 docstring）。找不到 `.claude/lib/` 或
     載入失敗時回傳 None，呼叫端降級為僅寫 stderr（graceful degrade，
     不影響 dashboard 正常輸出）。
+
+    `project_root` 顯式傳入 `get_ticket_state_root()`（2026-09 補接線）：
+    `setup_hook_logging` 未傳 `project_root` 時委派 `.claude/lib/
+    hook_base.py` 自身的 `get_project_root()`，其 worktree 感知優先序與
+    `ticket_system.lib.paths.get_ticket_state_root()` 相反方向——linked
+    worktree 內二者各自解析出不同 root（前者回傳 worktree 自身根目錄，
+    後者回推主倉庫），而 `_auto_gc_stale_handoffs` 的實際歸檔動作已用
+    `get_ticket_state_root()` 統一寫入主倉庫。未對齊時日誌落在 worktree
+    自己的 `.claude/hook-logs/`，與實際歸檔的檔案系統事件分處兩地，
+    是本函式 docstring 早已描述但兩個呼叫點皆未接線的既有落差。
     """
     try:
         from ticket_system.lib.claude_lib_loader import load_claude_lib
+        from ticket_system.lib.paths import get_ticket_state_root
 
         hook_logging = load_claude_lib("hook_logging")
         if hook_logging is None:
             return None
-        return hook_logging.setup_hook_logging("handoff-gc")
+        return hook_logging.setup_hook_logging(
+            "handoff-gc", project_root=get_ticket_state_root()
+        )
     except Exception:
         return None
 

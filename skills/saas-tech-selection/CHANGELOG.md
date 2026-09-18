@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.3.0 — 事件流負載仲裁整合（先前已落地但版號未遞增，本次補記）。event catalog 表在 `references/decision-record-template.md` 與 `references/domain-event-modeling.md` 兩處各補「到達類別（等待型／自發型／推送型）」與「級別（不可棄／須留痕／可棄）」兩欄，判準指向事件流負載仲裁方法論、不在本 skill 複述。三個維度各補一段路由：async-queue（多條事件流競爭同一 worker pool／連線池時誰讓步、誰被丟、丟了怎麼留痕，並補「同一 partition 是否混流不同級別」訪談問題）、capacity-performance（降級預案的「先停哪些請求」順序判準依到達類別 × 級別，並補連線池分池／擴容的觸發條件列）、observability（進入卸載時的額外訊號——仲裁決策的可觀測事件、被丟棄請求的留痕粒度、告警綁狀態變遷而非佔用量高）。訪談流程與產出物範本一律指向 `event-flow-arbitration-design` skill。
+
 **Version**: 1.2.3 — 清理 1 處 language-constraints.md 規則 2 禁用詞基線債務（`低代碼` → 低程式碼），純用語修正，指令內容與判準未改。
 
 **Version**: 1.2.2 — 版本紀錄搬到同目錄的 `CHANGELOG.md`。skill 是 runtime 整份載入的檔案，而沒有任何規則要求任何人讀版本紀錄，留在 SKILL.md 等於每次叫用都付一次無效讀取。SKILL.md 末尾留一行指過去，版號的兩個住址改成「CHANGELOG.md 最上面那一條 + frontmatter 的 metadata.version」。skill 的指令內容一個字都沒改。

@@ -510,6 +510,85 @@ class TestNoTopicExplicitOptOut:
         assert "--no-topic" in out
 
 
+class TestNoTopicOverridesAutoInference:
+    """0.1.0-W3-272：--no-topic 必須在自動推導會命中時也生效。
+
+    既有的 TestNoTopicExplicitOptOut 以不帶 source_ticket 的 fixture 驗證，
+    走不到 S1／S2 命中的路徑；該路徑上旗標真假結果相同，故旗標完全失效時
+    那些案例照樣全綠。本類別的每個案例都建立「不傳旗標即會被自動指派」的
+    前提，使斷言只能由旗標本身滿足。
+    """
+
+    def test_no_topic_blocks_s1_inheritance(self, seeded_repo_root):
+        _capture(_make_args(new_topic="上游主題"))
+        args = _make_args(
+            source_ticket="1.0.1-W1-001",
+            no_topic=True,
+            target="S1 命中時的明示不指派",
+        )
+        out, _, exit_code = _capture(args)
+        assert exit_code == 0
+        assert "1.0.1-W1-002" not in list_assignments()
+        assert "S1" not in out
+
+    def test_no_topic_blocks_s2_file_cluster(self, seeded_repo_root):
+        _capture(_make_args(
+            new_topic="叢集主題",
+            where_files=".claude/hooks/sample-guard-hook.py",
+        ))
+        args = _make_args(
+            where_files=".claude/hooks/sample-guard-hook.py",
+            no_topic=True,
+            target="S2 命中時的明示不指派",
+        )
+        out, _, exit_code = _capture(args)
+        assert exit_code == 0
+        assert "1.0.1-W1-002" not in list_assignments()
+        assert "S2" not in out
+
+    def test_no_topic_reports_explicit_opt_out_when_inference_would_hit(
+        self, seeded_repo_root
+    ):
+        _capture(_make_args(new_topic="上游主題"))
+        args = _make_args(
+            source_ticket="1.0.1-W1-001",
+            no_topic=True,
+            target="S1 命中時的訊息驗證",
+        )
+        out, _, _ = _capture(args)
+        assert "--no-topic 明示不指派" in out
+
+    def test_same_batch_with_and_without_flag_differ(self, seeded_repo_root):
+        """對照組：同批各跑一次傳與不傳 --no-topic，兩者產物必須不同。
+
+        只斷言「傳了之後產物正確」的測試在旗標完全無效時照樣全綠；唯有把
+        未傳旗標的那一次也跑出來並比對差異，斷言才能反映旗標是否有作用。
+        """
+        _capture(_make_args(new_topic="上游主題"))
+
+        # 兩次建票除旗標外逐欄相同（含 target），差異才能唯一歸因於旗標；
+        # allow_duplicate 用來旁路同窗口相似度防護，該防護正是因兩次輸入
+        # 刻意相同而觸發。
+        common = dict(
+            source_ticket="1.0.1-W1-001",
+            target="對照組建票",
+            allow_duplicate=True,
+        )
+
+        out_without, _, rc_without = _capture(_make_args(**common))
+        assert rc_without == 0
+        product_without = list_assignments().get("1.0.1-W1-002")
+
+        out_with, _, rc_with = _capture(_make_args(no_topic=True, **common))
+        assert rc_with == 0, out_with
+        product_with = list_assignments().get("1.0.1-W1-003")
+
+        assert product_without == "上游主題"
+        assert product_with != product_without
+        assert product_with is None
+        assert ("S1" in out_without) and ("S1" not in out_with)
+
+
 class TestUnassignedTopicWarnsInTransition:
     """0.2.1-W3-829：三旗標皆未給且推導未命中時發出 WARNING，但不改 rc。
 

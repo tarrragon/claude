@@ -44,7 +44,9 @@ update-ref 成功後（HEAD 已推進），以 ``_sync_shared_index_after_commit
 """
 from __future__ import annotations
 
+import glob
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -54,6 +56,16 @@ from typing import Dict, List, Optional, Tuple
 _GIT_TIMEOUT = 10
 _MAX_RETRIES = 2
 _RETRY_WAIT_SECONDS = 1
+
+# git 撞鎖時錯誤文字內的鎖檔路徑一律以單引號包住，例如
+# ``fatal: Unable to create '/repo/.git/index.lock': File exists.`` 與
+# ``error: cannot lock ref 'HEAD': Unable to create '/repo/.git/refs/heads/main.lock'``。
+_LOCK_PATH_RE = re.compile(r"'([^']*\.lock)'")
+
+# 鎖存在超過此秒數即判為崩潰殘骸而非並行活鎖。判準來源：活鎖由持鎖行程在
+# 單一 git 操作內建立與釋放，實測約十秒內消失；殘骸的 mtime 停在崩潰時刻，
+# 不會自行前進。兩者錯誤輸出完全同形，唯一可程式化的區別是鎖齡。
+_STALE_LOCK_AGE_SECONDS = 60
 
 
 def _run_git(
@@ -86,6 +98,104 @@ def _run_git(
     return False, result.stdout, result.stderr.strip()
 
 
+def _is_lock_contention(err: str) -> bool:
+    """判斷錯誤文字是否為撞鎖。
+
+    涵蓋三種形態：``index.lock``（共用 index）、``cannot lock ref``
+    （update-ref 撞 ref 鎖）、以及任何被單引號包住的 ``*.lock`` 路徑
+    （``refs/heads/*.lock`` 與 ``HEAD.lock`` 皆屬此類）。原實作只比對
+    ``index.lock`` 子字串，對 update-ref 的錯誤文字恆為 False。
+    """
+    if not err:
+        return False
+    if "index.lock" in err or "cannot lock ref" in err:
+        return True
+    return bool(_LOCK_PATH_RE.search(err))
+
+
+def _lock_paths_from_error(err: str, cwd: Optional[str] = None) -> List[str]:
+    """自錯誤文字取出鎖檔路徑（相對路徑以 ``cwd`` 補齊為絕對路徑）。"""
+    paths = []
+    for path in _LOCK_PATH_RE.findall(err or ""):
+        if not path:
+            continue
+        if not os.path.isabs(path):
+            path = os.path.join(cwd or os.getcwd(), path)
+        paths.append(os.path.normpath(path))
+    return list(dict.fromkeys(paths))
+
+
+def _scan_ref_lock_files(cwd: Optional[str]) -> List[str]:
+    """列出 repo 內現存的 ref 鎖檔（``HEAD.lock`` 與 ``refs/heads/**/*.lock``）。
+
+    僅檢視檔案系統，不呼叫 git——本函式在 update-ref 失敗路徑上使用，額外
+    的 git 呼叫會在該路徑上再次撞同一把鎖。``.git`` 為檔案時（linked
+    worktree）回傳空清單：該情形下鎖位於主倉庫，歸屬判定交由錯誤文字內
+    的絕對路徑處理。
+    """
+    if not cwd:
+        return []
+    git_dir = os.path.join(cwd, ".git")
+    if not os.path.isdir(git_dir):
+        return []
+    candidates = [os.path.join(git_dir, "HEAD.lock")]
+    candidates += glob.glob(
+        os.path.join(git_dir, "refs", "heads", "**", "*.lock"), recursive=True
+    )
+    return [p for p in dict.fromkeys(candidates) if os.path.exists(p)]
+
+
+def _describe_lock_file(path: str) -> Optional[str]:
+    """產出單一鎖檔的診斷字串（mtime／鎖齡／大小／內容）。
+
+    診斷內容是清理責任歸屬的唯一依據：合法的移除判準是「內容可溯源為自己
+    崩潰操作的產物且 mtime 停在該時刻」，故三項缺一不可。
+    """
+    try:
+        stat_result = os.stat(path)
+    except OSError:
+        return None
+    try:
+        with open(path, "rb") as handle:
+            content = handle.read(200).decode("utf-8", "replace").strip()
+    except OSError as exc:  # 讀不到內容仍輸出其餘欄位，不讓診斷整段消失
+        content = f"<無法讀取：{exc}>"
+    mtime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat_result.st_mtime))
+    age = int(time.time() - stat_result.st_mtime)
+    return (
+        f"{path}（mtime {mtime}、已存在 {age} 秒、大小 {stat_result.st_size} bytes、"
+        f"內容 {content!r}）"
+    )
+
+
+def _stale_lock_diagnosis(err: str, cwd: Optional[str]) -> Optional[str]:
+    """撞鎖錯誤中若含持久殘骸鎖，回傳診斷字串；否則回傳 None。
+
+    工具**不移除任何鎖**——殘骸與活鎖的錯誤輸出同形，誤刪活鎖會破壞正在
+    進行的並行操作。此處只負責停止重試並輸出足夠判斷的事實。
+    """
+    now = time.time()
+    stale: List[str] = []
+    candidates = _lock_paths_from_error(err, cwd) + _scan_ref_lock_files(cwd)
+    for path in dict.fromkeys(candidates):
+        try:
+            stat_result = os.stat(path)
+        except OSError:
+            continue  # 鎖已消失即為活鎖的正常結局，不需診斷
+        if now - stat_result.st_mtime < _STALE_LOCK_AGE_SECONDS:
+            continue
+        description = _describe_lock_file(path)
+        if description:
+            stale.append(description)
+    if not stale:
+        return None
+    return (
+        f"[殘骸診斷] 鎖已持續超過 {_STALE_LOCK_AGE_SECONDS} 秒未更新，判為崩潰殘骸而非"
+        "並行活鎖，停止重試。工具不移除任何鎖，須由留下該鎖的執行者依內容溯源後"
+        "自行處置：" + "；".join(stale)
+    )
+
+
 def _run_git_with_lock_retry(
     args: List[str],
     cwd: Optional[str] = None,
@@ -95,14 +205,55 @@ def _run_git_with_lock_retry(
     wait_seconds: int = _RETRY_WAIT_SECONDS,
     input_text: Optional[str] = None,
 ) -> Tuple[bool, str, str]:
-    """遇 index.lock 競爭時等待重試一次（禁止刪除 lock 檔）。"""
+    """遇鎖競爭時等待重試（禁止刪除 lock 檔）。
+
+    重試涵蓋 ``index.lock`` 與 ref 鎖（``refs/heads/*.lock`` / ``HEAD.lock``）。
+    重試前先判讀鎖齡：命中持久殘骸即立即放棄並在錯誤文字後附上診斷，避免把
+    「立刻失敗」換成「永遠重試」。
+    """
     ok, out, err = _run_git(args, cwd=cwd, env=env, timeout=timeout, input_text=input_text)
     attempt = 1
-    while not ok and "index.lock" in err and attempt < max_retries:
+    while not ok and _is_lock_contention(err) and attempt < max_retries:
+        diagnosis = _stale_lock_diagnosis(err, cwd)
+        if diagnosis:
+            return False, out, f"{err}\n{diagnosis}"
         time.sleep(wait_seconds)
         ok, out, err = _run_git(args, cwd=cwd, env=env, timeout=timeout, input_text=input_text)
         attempt += 1
+    if not ok and _is_lock_contention(err):
+        diagnosis = _stale_lock_diagnosis(err, cwd)
+        if diagnosis:
+            err = f"{err}\n{diagnosis}"
     return ok, out, err
+
+
+def _describe_update_ref_failure(
+    err: str, commit_sha: str, cwd: Optional[str], locks_before: set
+) -> str:
+    """組出 update-ref 失敗的錯誤字串：原因 + commit SHA + 鎖殘骸歸屬。
+
+    兩項附加輸出各自對應一個既有失效路徑。commit-tree SHA 未被任何 ref
+    指向，錯誤中不帶它等於讓已完成的工作無法被手動 CAS 接續；鎖殘骸歸屬
+    以「呼叫前不存在、失敗後存在」判定，因為合法的移除判準是可溯源為自己
+    的產物，執行者不知道自己留下了什麼就沒有人有資格清理。
+    """
+    now_locks = set(_scan_ref_lock_files(cwd))
+    now_locks.update(
+        p for p in _lock_paths_from_error(err, cwd) if os.path.exists(p)
+    )
+    residue = sorted(now_locks - locks_before)
+    if residue:
+        descriptions = [d for d in (_describe_lock_file(p) for p in residue) if d]
+        residue_note = "本次 update-ref 留下鎖殘骸（呼叫前不存在），清理責任歸屬本執行者：" + "；".join(
+            descriptions or residue
+        )
+    else:
+        residue_note = "本次 update-ref 未留下鎖殘骸（錯誤涉及的鎖在本次呼叫前即存在，或已自行消失）"
+    reason = err or "HEAD 於提交期間被並行移動"
+    return (
+        f"{reason}\n[已建立的 commit-tree SHA] {commit_sha}"
+        f"（commit 物件已存在但無 ref 指向，可據此手動完成 CAS）\n[鎖殘骸歸屬] {residue_note}"
+    )
 
 
 def _sync_shared_index_after_commit(
@@ -264,6 +415,7 @@ def commit_files_isolated(
                 ),
             }
 
+        locks_before_update_ref = set(_scan_ref_lock_files(cwd))
         ok, _, err = _run_git_with_lock_retry(
             ["git", "update-ref", "HEAD", commit_sha, old_head], cwd=cwd
         )
@@ -271,7 +423,9 @@ def commit_files_isolated(
             return {
                 "status": "failed",
                 "commit_sha": None,
-                "error": err or "HEAD 於提交期間被並行移動",
+                "error": _describe_update_ref_failure(
+                    err, commit_sha, cwd, locks_before_update_ref
+                ),
             }
 
         _sync_shared_index_after_commit(deduped, tree_sha, cwd)

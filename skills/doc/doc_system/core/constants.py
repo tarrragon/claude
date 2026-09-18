@@ -23,3 +23,11 @@ REF_FIELDS = [
 
 # 標題顯示截斷閾值
 TITLE_MAX_DISPLAY_LEN = 27
+
+# test-map 掃描的測試目錄清單（相對 project_root）。
+# 本專案為 Flutter：test/ 為單元/widget 測試，integration_test/ 為裝置測試。
+# 若未來專案改用其他佈局，改此清單即可，不需改 test_map.py 邏輯。
+TEST_SCAN_DIRS = ["test", "integration_test"]
+
+# test-map 檔案掃描辨識的測試檔副檔名（含 dart，涵蓋 Flutter 專案）。
+TEST_FILE_EXTENSIONS = (".dart", ".js", ".ts", ".py", ".test.js", ".spec.js")

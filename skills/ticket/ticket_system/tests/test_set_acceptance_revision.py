@@ -67,6 +67,51 @@ class TestAdd:
         acceptance = _read_acceptance(precondition_tmp_dir, tid)
         assert acceptance == ["[ ] 條件一", "[ ] 條件二", "[ ] 條件三"]
 
+
+class TestAddChecksboxPrefixNormalization:
+    """--add 靜默剝除呼叫者誤帶入文字的核取方塊前綴，不拒絕（0.1.0-W3-208）。"""
+
+    def test_add_with_unchecked_prefix_normalized_to_single(
+        self, tmp_ticket_factory, precondition_tmp_dir
+    ):
+        tid = tmp_ticket_factory(status="in_progress", acceptance=["[x] 條件一"])
+        rc = _call_set_acceptance(tid, add=["[ ] 新條件"])
+        assert rc == 0
+        acceptance = _read_acceptance(precondition_tmp_dir, tid)
+        assert acceptance == ["[x] 條件一", "[ ] 新條件"], (
+            "帶入的 [ ] 前綴應被剝除，不應與既有邏輯補的前綴疊加成雙重前綴"
+        )
+
+    def test_add_with_checked_prefix_normalized_to_unchecked(
+        self, tmp_ticket_factory, precondition_tmp_dir
+    ):
+        tid = tmp_ticket_factory(status="in_progress", acceptance=["[x] 條件一"])
+        rc = _call_set_acceptance(tid, add=["[x] 新條件"])
+        assert rc == 0
+        acceptance = _read_acceptance(precondition_tmp_dir, tid)
+        assert acceptance == ["[x] 條件一", "[ ] 新條件"], (
+            "--add 語意是新增未勾選條目，帶入的 [x] 前綴應被剝除而非保留勾選狀態"
+        )
+
+    def test_add_without_prefix_unchanged(self, tmp_ticket_factory, precondition_tmp_dir):
+        """回歸：不帶前綴的既有呼叫行為不變。"""
+        tid = tmp_ticket_factory(status="in_progress", acceptance=["[x] 條件一"])
+        rc = _call_set_acceptance(tid, add=["新條件"])
+        assert rc == 0
+        acceptance = _read_acceptance(precondition_tmp_dir, tid)
+        assert acceptance == ["[x] 條件一", "[ ] 新條件"]
+
+    def test_add_with_bracket_in_middle_not_stripped(
+        self, tmp_ticket_factory, precondition_tmp_dir
+    ):
+        """文字中段的 [ ] 是內容不是前綴，不得被剝除。"""
+        tid = tmp_ticket_factory(status="in_progress", acceptance=["[x] 條件一"])
+        rc = _call_set_acceptance(tid, add=["確認欄位 [ ] 已勾選"])
+        assert rc == 0
+        acceptance = _read_acceptance(precondition_tmp_dir, tid)
+        assert acceptance == ["[x] 條件一", "[ ] 確認欄位 [ ] 已勾選"]
+
+
 class TestEdit:
     def test_edit_overwrites_text_preserves_checked_state(
         self, tmp_ticket_factory, precondition_tmp_dir
@@ -111,6 +156,36 @@ class TestEdit:
         rc = _call_set_acceptance(tid, edit=[["1", "改甲"], ["1", "改乙"]])
         assert rc == 1
         assert "重複指定" in capsys.readouterr().out
+
+    def test_edit_with_unchecked_prefix_normalized_to_single(
+        self, tmp_ticket_factory, precondition_tmp_dir
+    ):
+        """帶入的 [ ] 前綴應被剝除，不與保留下來的原勾選狀態疊加成雙重前綴。"""
+        tid = tmp_ticket_factory(status="in_progress", acceptance=["[x] 舊文字"])
+        rc = _call_set_acceptance(tid, edit=[["1", "[ ] 新文字"]])
+        assert rc == 0
+        acceptance = _read_acceptance(precondition_tmp_dir, tid)
+        assert acceptance == ["[x] 新文字"]
+
+    def test_edit_with_checked_prefix_normalized_and_state_preserved(
+        self, tmp_ticket_factory, precondition_tmp_dir
+    ):
+        """--edit 保留原勾選狀態，帶入的 [x] 前綴仍應被剝除，不覆寫原狀態。"""
+        tid = tmp_ticket_factory(status="in_progress", acceptance=["[ ] 舊文字"])
+        rc = _call_set_acceptance(tid, edit=[["1", "[x] 新文字"]])
+        assert rc == 0
+        acceptance = _read_acceptance(precondition_tmp_dir, tid)
+        assert acceptance == ["[ ] 新文字"]
+
+    def test_edit_bracket_in_middle_not_stripped(
+        self, tmp_ticket_factory, precondition_tmp_dir
+    ):
+        """文字中段的 [ ] 是內容不是前綴，不得被剝除。"""
+        tid = tmp_ticket_factory(status="in_progress", acceptance=["[ ] 舊文字"])
+        rc = _call_set_acceptance(tid, edit=[["1", "確認欄位 [ ] 已勾選"]])
+        assert rc == 0
+        acceptance = _read_acceptance(precondition_tmp_dir, tid)
+        assert acceptance == ["[ ] 確認欄位 [ ] 已勾選"]
 
 
 class TestRemove:

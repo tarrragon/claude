@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.35.0 — 累積四項先前已落地但版號未遞增的修法，本次補記。(1) `create --no-topic` 改以哨兵短路 S1／S2 自動推導：原本旗標只在報告層生效，上游繼承路徑仍會指派主題，旗標對該路徑等同空操作。(2) ref 鎖重試條件與鎖齡判讀（`lib/git_ops.py`）：區分並行活鎖與崩潰殘骸，殘骸不自行移除而是回報鎖檔內容與鎖齡供溯源，並在 HEAD 於提交期間被並行移動時給出明確訊息。(3) `add-acceptance` 剝除誤帶入的核取方塊前綴並補 help 說明，附迴歸測試。(4) `create` 一律回報本次存入的驗收條數與逐條內容，使「存進去的與打算存的是否相同」不需另外查詢即可核對。另含 `track_dispatch_validate` 合理性檢查的判準調整與 `topic_inference` 的對應更新，測試同步新增。
+
 **Version**: 2.34.0
 **Last Updated**: 2026-09-08
 **Status**: Completed

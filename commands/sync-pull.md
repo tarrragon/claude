@@ -71,7 +71,7 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
      確認 .claude/hooks/ 下所有 hook 都已在 settings.json 登記，
      若有未登記的 hook 請補充到 settings.json 或加入 exclude list」
      ```
-   - 或等待下次 session 啟動，SessionStart hook `hook-completeness-check.py` 會自動報告
+   - 或等待下次 session 啟動，SessionStart hook `hook-registration-coverage-check.py` 會自動報告
 
 8. **Post-pull 框架定制引導**
    - 提示用戶執行 `project-init onboard` 完成框架定制：
@@ -162,8 +162,8 @@ rm -rf .claude/.sync-conflicts/
 ```
 
 ```bash
-./.claude/hooks/hook-completeness-check.py         # 先看命中哪幾筆
-./.claude/hooks/hook-completeness-check.py --fix   # 移除 command 指向不存在檔的註冊
+./.claude/hooks/hook-registration-coverage-check.py         # 先看命中哪幾筆
+./.claude/hooks/hook-registration-coverage-check.py --fix   # 移除 command 指向不存在檔的註冊
 ```
 
 `--fix` 只作用於 `settings.local.json`，且只移除 command 指向不存在檔案的項目。指向的檔案仍存在的註冊不是幽靈，`--fix` 不會動它，這種要自己搬到 `settings.json`：框架 hook 的註冊來源只應有 `settings.json` 一處。`settings.json` 內的幽靈由 sync overlay 自癒，不在 `--fix` 範圍。

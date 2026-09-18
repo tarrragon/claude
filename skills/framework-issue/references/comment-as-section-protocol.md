@@ -30,7 +30,7 @@ framework issue 的一般協作寫法。適用於「問題的分析與方案 con
 
 **`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併寫入，故 `init` 必為「查重 → （無 `--force` 時先掃描既有區段 comment，已有則拒絕）→ 建區段 comment → 取得 id → 讀 body 與既有索引列合併 → PATCH 一次」。body 其後不再由工具改寫，`update` 只動區段 comment。區段 comment 全數建立成功即把 `(issue number, owner, updated_at)` 落地到本地擁有登記檔 `.claude/state/framework-issue-owned.json`（per-worktree、不入版控），不等索引回填；回填失敗時登記仍成立，供 SessionStart 檢查省去搜尋往返。`init` 原本以本次區段清單整段覆寫索引，第二個 session 對已 `init` 過的 issue 再次執行會使第一個 session 的既有區段從 `show` 消失（見 #81 事故）；現改為與既有索引列合併，且預設拒絕已有區段的 issue（避免誤用），`--force` 才會略過拒絕檢查並執行合併。
 
-**`add` 補上「`init` 預設每張 issue 只能跑一次」的缺口**：後續 session 要在同一 issue 新增區段時仍建議用 `add`（不需重新查重），流程為「POST 單一區段 comment → 讀 body → 合併既有索引列與新列 → PATCH 一次」，既有列的 comment id／連結不變；成功後同樣落地擁有登記檔。`init`／`add`／`transfer-owner` 三者共用同一 owner 格式驗證（見下方〈owner 識別格式〉），不合法一律 exit 3 並印格式說明。`add`／`init` 合併索引列時皆以 comment id 去重，並把 body 內未加 `<!-- section-index -->` 標記的手寫索引表視為既有列來源（讀 `parse_index_table` 結果）整段移除後併入合併結果，不再於其後追加第二張表。`add` 成功時比照 `transfer-owner` 逐字印出結果（`區段「<名稱>」已建立 @ <issue-ref>，owner=<值>`），操作者不需另開 comment 即可確認建立結果。
+**`add` 補上「`init` 預設每張 issue 只能跑一次」的缺口**：後續 session 要在同一 issue 新增區段時仍建議用 `add`（不需重新查重），流程為「POST 單一區段 comment → 讀 body → 合併既有索引列與新列 → PATCH 一次」，既有列的 comment id／連結不變；成功後同樣落地擁有登記檔。`init`／`add` 共用同一 owner 格式驗證（見下方〈owner 識別格式〉），`transfer-owner` 另有獨立的跨 consumer 逃生口驗證，不合法一律 exit 3 並印格式說明。`add`／`init` 合併索引列時皆以 comment id 去重，並把 body 內未加 `<!-- section-index -->` 標記的手寫索引表視為既有列來源（讀 `parse_index_table` 結果）整段移除後併入合併結果，不再於其後追加第二張表。`add` 成功時比照 `transfer-owner` 逐字印出結果（`區段「<名稱>」已建立 @ <issue-ref>，owner=<值>`），操作者不需另開 comment 即可確認建立結果。
 
 ## CLI 語法
 
@@ -38,15 +38,16 @@ framework issue 的一般協作寫法。適用於「問題的分析與方案 con
 # init：--dedup-keywords 必填（可多值，每組可含空白，逐一加引號）
 # --sections-file 為 JSON 陣列 [{"name": "區段名", "content": "內容"}, ...]
 # issue 已有區段 comment 時預設拒絕（exit 3）；--force 略過拒絕檢查並與既有索引列合併
+# owner 預設自行推導，不需指定；--owner 僅供覆寫確認，給值須與推導值相符
 python3 .claude/skills/framework-issue/scripts/section_comment.py init <issue-ref> \
-  --owner <session識別> \
   --sections-file <path/to/sections.json> \
   --dedup-keywords "關鍵字組一" "關鍵字組二" \
-  [--force]
+  [--force] [--owner <推導值，僅供覆寫確認>]
 
 # add：對已 init 過的 issue 追加單一區段，content-file 內容不含首行標記
+# owner 預設自行推導，不需指定；--owner 僅供覆寫確認，給值須與推導值相符
 python3 .claude/skills/framework-issue/scripts/section_comment.py add <issue-ref> \
-  --owner <session識別> --name "<區段名>" --content-file <path/to/content.md>
+  --name "<區段名>" --content-file <path/to/content.md> [--owner <推導值，僅供覆寫確認>]
 
 # dedup：唯讀，不需 issue-ref（查整個框架 repo），僅列命中清單
 python3 .claude/skills/framework-issue/scripts/section_comment.py dedup \
@@ -112,7 +113,27 @@ body 的區段索引表格式：
 觀測 comment 不列入索引。
 ```
 
-**owner 識別格式**：`<專案目錄 kebab-case>-<session 序號>`，如 `flutter-balance-77`。值取 `ListAgents` 輸出首行「This session is <name>」的名稱，即其他 session 定址本 session 用的字串；不自行編號、不用代理人名。序號段記錄的是「哪一次 session 寫的」，不是「現在該找誰」：session 結束後該名稱不再可定址，擁有關係實質屬於專案（前綴段），有事以 `observe` 留在 issue 上，不以訊息找 owner。SessionStart 的擁有 issue 檢查在登記檔缺失時以專案目錄名推導前綴粗篩，`flutter_balance-pm` 這類形態會被漏檢。`init`／`add`／`transfer-owner` 三者在 CLI 層即以 `^[a-z0-9]+(-[a-z0-9]+)*-[0-9]+$` 驗證此格式，不合法（如代理人名稱 `framework-issue-curator`、含底線的 `flutter_balance-pm`）一律 exit 3。
+標題與表頭之間可放一段導言（入口宣稱、索引重生指令等）。`init`／`add` 每次重渲染索引時會回讀該導言並寫回原位置——導言若不回讀，`upsert_section` 的整段替換會在下一次執行時把它靜默抹除。issue 原本是無工具標記的手寫索引（標題＋導言＋表格）時，三者整塊處理：列併入工具索引、導言遷至標題與表頭之間、原處的標題與導言一併移除，body 內因此只留一份標題與一張表（`tarrragon/claude#82` 曾出現兩個標題而第一個底下沒有表格，即此處未整塊處理的後果）。
+
+**owner 識別格式**：`init`／`add` 現預設自行推導 owner，格式為
+`<本專案 kebab-case 推導前綴>-<session uuid 前 8 碼十六進位>`（占位形態，
+不寫任何具體 consumer 的字面值）；前綴取本專案主 repo 目錄名 kebab 化
+（同 `_project_owner_prefix()` 邏輯），尾碼取本 session
+`CLAUDE_CODE_SESSION_ID` 環境變數前 8 碼十六進位，不自行編號、不用代理
+人名。`--owner` 降為覆寫確認用途——省略不填即自動組出正確值，給值時須
+與推導值完全相符，不符一律 exit 3 並印診斷（推導值／傳入值／不符欄
+位）；推導失敗（`CLAUDE_CODE_SESSION_ID` 環境變數缺席）時同樣 exit 3
+並印三項診斷（環境變數是否存在、推導出的前綴、該 uuid 是否在
+`pm-registry.json` 中），無任何靜默降級路徑——此為刻意設計：先前允許
+以純格式檢查通過任意傳入值的降級路徑，正是派發者需代填 owner 而導致
+漏填的根源，本版本消滅此路徑，改由 CLI 承擔取值責任。尾碼段記錄的是
+「哪一次 session 寫的」，不是「現在該找誰」：session 結束後該識別不再
+可定址，擁有關係實質屬於專案（前綴段），有事以 `observe` 留在 issue
+上，不以訊息找 owner。SessionStart 的擁有 issue 檢查在登記檔缺失時以
+專案目錄名推導前綴粗篩，`flutter_balance-pm` 這類形態會被漏檢。
+`transfer-owner` 為跨 consumer 移交的逃生口，不受本次改動影響，仍走
+獨立的 `validate_owner_for_transfer`，不錨定本專案前綴、不依賴 session
+id 推導，僅檢查通用形狀。
 
 ### 待辦表欄位與列舉
 
@@ -146,9 +167,12 @@ body 的區段索引表格式：
 
 | 關係 | 判定依據 | 處置 |
 |------|---------|------|
-| 重複 | 同一問題領域、同一層級 | 併入既有 issue，以區段或觀測附加，不建新 issue |
+| 重複，射程不重疊 | 同一問題領域、同一層級，但與既有「當前結論*」區段涵蓋的主題不同 | `add --owner <本方識別>` 帶命名後綴（見 `ticket-intake.md`〈以 add 加進他方已 init 的 issue 時〉），成為新區段 owner，不建新 issue |
+| 重複，射程重疊 | 同一問題領域、同一層級，且與既有「當前結論*」區段處理同一主題 | `observe`，觀測首行指名重疊的既有區段名稱；不建新 issue |
 | 切分 | 同一領域、不同層級（如體系層對單一 skill 層） | 建新 issue，分工邊界寫入雙方各自「當前結論」末段（body 與索引不再改寫，互標不走 body） |
 | 引用 | 僅提及，領域不同 | 單向指向即可，不需互標 |
+
+**射程是否重疊由讀者在 `show` 輸出上直接判定**：比對本方要落的結論與既有「當前結論*」區段各自的主題（後綴或內容），非機械可驗——工具不檢查名稱重複（見下方〈已知限制〉），關係判定者需自行核對。**覆寫條款（優先於上表）**：主題已被同機器活躍的他方 session 認領時，一律只 `observe`，不受本表「重複」判定影響（見 `ticket-intake.md`〈前提與分工〉2：對方認領的主題本方只加 `observe`，不 init、不 close 對方列出的票）。
 
 判定時讀內容不看標題：刻意切分的兩張（如 `#79` 體系層與 `#82` 單一 skill 層）標題會相似，看標題會誤判為重複而去合併，把切分還原成一張大 issue。工具只列命中清單，關係一律由建立者標註，不阻擋 `init` 繼續執行。
 
@@ -181,4 +205,4 @@ fix-matrix 模型的 `close` 另有版本號前置檢查，屬不同機制層次
 | 限制 | 影響 | 現行處置 |
 |------|------|---------|
 | 查重關鍵字集合會過期 | 失效無明確事件觸發，訊號弱於索引過期 | 不為它加 `check`；查重出現誤判時以此為第一個查證方向 |
-| `init --force`／`add` 合併索引時不檢查區段名稱是否與既有列重複 | 同名區段各自成一列（id 不同），索引表本身無法從名稱區分 | 沿用既有命名後綴慣例（見〈以 add 加進他方已 init 的 issue 時〉），不在工具層強制唯一性 |
+| `init --force`／`add` 合併索引時不檢查區段名稱是否與既有列重複 | 同名區段各自成一列（id 不同），索引表本身無法從名稱區分 | 沿用既有命名後綴慣例（見 `ticket-intake.md`〈以 add 加進他方已 init 的 issue 時〉——該小節位於 `ticket-intake.md`，非本檔），不在工具層強制唯一性 |

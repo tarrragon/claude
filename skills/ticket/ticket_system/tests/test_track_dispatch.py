@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from ticket_system.commands import track_dispatch as td_mod
+from ticket_system.commands import track_dispatch_validate as tdv_mod
 
 
 def _write_ticket_md(path: Path, tid: str, where_files=None) -> None:
@@ -535,3 +536,122 @@ def test_dispatch_non_hook_ticket_omits_four_item_reminder(dispatch_ticket, caps
 
     out = capsys.readouterr().out
     assert "liveness 驗證方式" not in out
+
+
+# --- dispatch-validate 規則 4b 樣板偵測（0.1.0-W3-087） -----------------
+#
+# 規則 4 只數 acceptance 條數、不檢查內容是否為未填的建立端樣板，未給
+# --acceptance（或以 --force 建立）產生的預設樣板恰好三條因此恆通過。
+
+
+def test_check_acceptance_placeholder_blocks_unfilled_doc_template():
+    """DOC 型未填樣板三條（其中僅第一條帶大括號）全部被判為未填，規則 4b FAIL。"""
+    acceptance = [
+        "[ ] 文件內容完整：包含標題、背景、正文、結論、附錄等 {N} 部分",
+        "[ ] 格式符合規範：遵守 CLAUDE.md 的文件格式規則",
+        "[ ] 內容無遺漏：所有預期的小節都已填寫（無 TODO 或空白區段）",
+    ]
+
+    ok, msg = tdv_mod.check_acceptance_placeholder(acceptance)
+
+    assert ok is False
+    assert "3 項未填樣板" in msg
+
+
+def test_check_acceptance_placeholder_passes_filled_content():
+    """已填的真實驗收條件（非建立端樣板、不含佔位符 token）通過規則 4b。"""
+    acceptance = [
+        "[ ] gap_report_screen 的空狀態改用共用 EmptyStateWidget",
+        "[ ] flutter test 全數通過（含新增的空狀態 widget test）",
+        "[ ] dart analyze 0 issues",
+    ]
+
+    ok, msg = tdv_mod.check_acceptance_placeholder(acceptance)
+
+    assert ok is True
+
+
+def test_check_acceptance_placeholder_does_not_block_normal_curly_content():
+    """含大括號但非佔位符 token 樣式（如描述設定片段）的正常內容不誤擋。"""
+    acceptance = [
+        "[ ] 設定檔採用 {mode: production} 格式時仍可正確解析",
+        "[ ] 相關測試 100% 通過（uv run pytest）",
+        "[ ] ruff check 0 issues",
+    ]
+
+    ok, msg = tdv_mod.check_acceptance_placeholder(acceptance)
+
+    assert ok is True
+
+
+def test_check_acceptance_placeholder_detects_verbatim_template_without_braces():
+    """DOC 型第 2、3 條樣板不含大括號，仍須靠逐字比對命中（單靠大括號偵測會漏判）。"""
+    acceptance = [
+        "[ ] 格式符合規範：遵守 CLAUDE.md 的文件格式規則",
+    ]
+
+    ok, msg = tdv_mod.check_acceptance_placeholder(acceptance)
+
+    assert ok is False
+    assert "1 項未填樣板" in msg
+
+
+def _fake_ticket_for_validate(body: str, acceptance: list[str]) -> dict:
+    return {
+        "_body": body,
+        "where": {"files": []},
+        "acceptance": acceptance,
+    }
+
+
+def test_dispatch_validate_reports_both_hard_rules_when_simultaneously_violated(monkeypatch):
+    """規則 1（缺 Context Bundle）與規則 4b（未填樣板）同時違反是主要路徑，
+    不是邊角案例——訊息須列出兩者，exit code 仍為 2（硬性失敗）。"""
+    fake_ticket = _fake_ticket_for_validate(
+        body="# Execution Log\n\n## Task Summary\n\n無 Context Bundle 章節\n",
+        acceptance=[
+            "[ ] 文件內容完整：包含標題、背景、正文、結論、附錄等 {N} 部分",
+            "[ ] 格式符合規範：遵守 CLAUDE.md 的文件格式規則",
+            "[ ] 內容無遺漏：所有預期的小節都已填寫（無 TODO 或空白區段）",
+        ],
+    )
+    monkeypatch.setattr(
+        "ticket_system.lib.dispatch_common.load_ticket",
+        lambda version, tid: fake_ticket,
+    )
+    monkeypatch.setattr(
+        tdv_mod, "check_acceptance_uc_alignment", lambda tid: (True, "skip")
+    )
+
+    args = argparse.Namespace(ticket_id="0.0.0-W0-BOTHHARD", version="0.0.0")
+    rc = tdv_mod.execute_dispatch_validate(args, "0.0.0")
+
+    assert rc == 2
+
+
+def test_dispatch_validate_passes_when_acceptance_is_filled(monkeypatch):
+    """已填內容的 ticket（含 Context Bundle）通過規則 4b，不受新檢查誤擋。"""
+    context_bundle_content = "需求摘要與實作細節" * 10  # >= 50 字元
+    fake_ticket = _fake_ticket_for_validate(
+        body=(
+            "# Execution Log\n\n## Task Summary\n\n任務\n\n---\n\n"
+            f"## Context Bundle\n\n{context_bundle_content}\n"
+        ),
+        acceptance=[
+            "[ ] gap_report_screen 的空狀態改用共用 EmptyStateWidget",
+            "[ ] flutter test 全數通過（含新增的空狀態 widget test）",
+            "[ ] dart analyze 0 issues",
+        ],
+    )
+    monkeypatch.setattr(
+        "ticket_system.lib.dispatch_common.load_ticket",
+        lambda version, tid: fake_ticket,
+    )
+    monkeypatch.setattr(
+        tdv_mod, "check_acceptance_uc_alignment", lambda tid: (True, "skip")
+    )
+
+    args = argparse.Namespace(ticket_id="0.0.0-W0-FILLED", version="0.0.0")
+    rc = tdv_mod.execute_dispatch_validate(args, "0.0.0")
+
+    assert rc == 0

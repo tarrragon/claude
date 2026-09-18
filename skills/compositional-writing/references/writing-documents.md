@@ -110,6 +110,8 @@ Given many atomic documents, how does a reader find the right one?
 
 ## Principle 3 — Explicit Intent & Business Logic × Documents: Inverted pyramid, spec vs process
 
+文件被別人照著執行時另有一條：[rule-must-point-at-something-openable](principles/rule-must-point-at-something-openable.md)——那裡給「照這一條工作，第一個動作是打開什麼」這個判準，與三種失效形態各自的修法。
+
 ### Core question
 
 How do you make the point land in the first paragraph — and how do you separate "what the rules are" from "how we got here"?

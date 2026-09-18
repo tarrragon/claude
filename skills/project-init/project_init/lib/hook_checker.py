@@ -1,11 +1,11 @@
-"""Hook 完整性檢查共享邏輯模組.
+"""Hook settings.json 註冊涵蓋率檢查共享邏輯模組.
 
-此模組提取自 hook_verifier.py 與 hook-completeness-check.py 的共享邏輯，
-消除兩者之間約 70-80% 的重複實作。
+此模組提取自 hook_verifier.py 與 hook-registration-coverage-check.py 的共享
+邏輯，消除兩者之間約 70-80% 的重複實作。
 
 兩個使用端：
 - project_init/lib/hook_verifier.py：作為 library 供 project-init onboard 呼叫
-- .claude/hooks/hook-completeness-check.py：作為 SessionStart Hook 執行
+- .claude/hooks/hook-registration-coverage-check.py：作為 SessionStart Hook 執行
 """
 
 import fnmatch

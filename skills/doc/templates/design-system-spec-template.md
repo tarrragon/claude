@@ -206,25 +206,31 @@ related_specs: []
 
 ## 10. 常數配置策略
 
-Design token 的程式碼配置位置依**消費者數量**決定：
+視覺 token（色值、間距、圓角、陰影、字體、元件尺寸）一律集中於 design system 目錄，不看消費者
+數量；視覺 token 以外的常數（純業務常數），程式碼配置位置依**消費者數量**決定：
 
 | 消費者範圍 | 配置位置 | 範例 |
 |-----------|---------|------|
-| 僅 1 個 domain 使用 | `{domain}/constants/` | 某 feature 專屬的 badge 大小 |
-| 跨 2+ domain 或跨層使用 | `core/design_system/`（Dart）或 `core/design-system/`（JS） | 色值、間距、圓角、陰影 |
+| 僅 1 個 domain 使用 | `{domain}/constants/` | 某 domain 專屬的業務列舉值 |
+| 跨 2+ domain 使用 | `core/` 對應子目錄 | 多個 domain 共用的業務常數 |
 
 **強制規則**：
 
-- 所有 design token（色值、間距、圓角、陰影、字體）必須集中於 design system 目錄（Dart 用 `core/design_system/`，JS 用 `core/design-system/`）
+- 所有視覺 design token（色值、間距、圓角、陰影、字體、元件尺寸）必須集中於 design system 目錄
+  （Dart 用 `core/design_system/`，JS 用 `core/design-system/`），不論消費者數量
 - 禁止 design token 散落在各 feature 目錄
-- 禁止跨層 import domain 常數（如 infrastructure 層 import domains/ 的常數）
-- 純業務常數（如預設標籤名稱）不在本規則範圍，可留在所屬 domain
+- 禁止跨層 import domain 常數（如 infrastructure 層 import domains/ 的常數）；「跨層」依
+  `domain-map-template.md`〈分層與依賴方向〉的依賴方向 DAG 判定——presentation 依賴 domain、
+  data 經依賴反轉依賴 domain 皆為該圖已定義的合法邊，不算跨層；infrastructure 不在此依賴鏈中，
+  import domain 常數即為跨層
+- 純業務常數（如預設標籤名稱）不是 design token，不受前兩條集中規則約束；位置依下方判斷決策表
+  第二題決定，跨層 import 禁令仍適用
 
 **判斷決策表**：
 
 | 問題 | 是 | 否 |
 |------|-----|-----|
-| 此常數是否為視覺 token（色值/間距/圓角/陰影/字體）？ | 放 design system 集中目錄 | 繼續下題 |
+| 此常數是否為視覺 token（色值/間距/圓角/陰影/字體/元件尺寸）？ | 放 design system 集中目錄 | 繼續下題 |
 | 此常數是否被 2+ domain 使用？ | 放 `core/` 對應子目錄 | 放所屬 `domain/constants/` |
 
 **正確範例**：

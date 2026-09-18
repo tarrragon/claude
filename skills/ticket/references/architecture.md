@@ -619,4 +619,6 @@ ticket track claim <id>
 
 **禁止**：以顯式路徑（如 `pytest tests/`、`pytest ticket_system/tests`）作為覆核依據。顯式路徑參數會**覆蓋** `testpaths` 設定，僅收集單一目錄下的測試，另一目錄的測試會被靜默漏跑而不觸發任何錯誤或警告——覆核者若只跑其中一個目錄卻在 Test Results 宣稱「測試通過率 100%」，該宣稱在結構上未涵蓋另一半測試。
 
+**禁止**：`uv run --project .claude/hooks pytest`。`.claude/hooks/pyproject.toml` 是另一個獨立 uv 專案（`claude-hooks`，供 `.claude/hooks/` 下的 hook 測試套件使用），其 `dependencies` 僅宣告 `pyyaml`，不含 `filelock`——本 skill 的 `ticket_system/lib/dispatch_tracker.py` 等模組匯入 `filelock` 做跨程序鎖，套用錯的 project 會在 collection 階段即拋 `ImportError`（非本 skill 測試碼有誤，是 project 選錯）。`filelock>=3.12` 僅在本檔上方 `pyproject.toml` 宣告，故覆核 ticket skill 測試務必用本節命令（`--with filelock` 顯式帶入，或至少 `cd .claude/skills/ticket` 後 `uv run pytest` 讀取本地 `pyproject.toml` 的 `dependencies`），不可沿用 `.claude/hooks/` 的測試指令慣例。
+
 `ticket_system/tests/` 與 `tests/` 兩目錄並存的分裂現況、路徑推導細節見 `references/track-command.md`「Python 測試路徑推導」小節。

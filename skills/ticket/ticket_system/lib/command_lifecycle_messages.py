@@ -276,6 +276,12 @@ class CreateMessages:
         "           若原意是多條獨立驗收條件，請改用多次 --acceptance 或以 | 分隔，"
         "例如：--acceptance \"條件一\" --acceptance \"條件二\"，或 --acceptance \"條件一|條件二\"。"
     )
+    # 建票成功後一律回報實際存入的驗收條數與逐條內容：涵蓋所有摺疊形態
+    # （逗號、頓號、分號等），不需針對個別分隔符加偵測器，呼叫者對照自己
+    # 輸入的預期條數即可當場發現摺疊。
+    ACCEPTANCE_STORED_REPORT = (
+        "[INFO] 本次存入 {count} 條驗收條件：\n{preview}"
+    )
     BLOCKED_BY_CHECK = "   [ ] 是否有需要設定的 blockedBy？"
     DECISION_TREE_CHECK = "   [ ] 是否已填寫 decision_tree_path 欄位？"
     DECISION_TREE_DESC = "       （派發驗證必需）"

@@ -62,6 +62,7 @@
 - **saga / process manager**：自身持久化（狀態機）；透過 repository 介面協調多 aggregate。
 - **底線必須用實際 import 鏈驗證，不可憑心智模型宣告**：宣告「A 只依賴 B」前用 grep/codegraph 查 A 的實際 import 集合；共享工具被 2+ 模組消費即為 kernel，須獨立分層（防 `ARCH-BAL-001`：底線與現況漂移）。
 - 描述目標邊界（尚未接線的計畫依賴）時明文標註「目標邊界，非現況」，與現況區隔。
+- **本節的 DAG 只描述資料方向，不涵蓋資源競爭**：互不 import 的兩個 domain 仍可能對同一個稀缺通道（連線池、worker pool、事件迴圈、提示載體）發出請求，該關係在本 DAG 上查不到而看起來像已確認過。判準見事件流負載仲裁方法論〈通道與仲裁器〉，結構載體是 `domain-map-template.md` 的通道與協調圖節，流程見 `event-flow-arbitration-design` skill。本節產出的 DAG 與該節產出的協調圖正交，兩張圖各自獨立、不互相取代。
 
 ---
 
@@ -99,4 +100,5 @@
 
 ---
 
-**Last Updated**: 2026-07-23 | **Version**: 2.0.0 — 延伸支援多 aggregate（by-id 互參、交易一致性邊界）+ command-side 形態（domain service / policy / saga），0.1.0-W2-021（source: W2-018 ANA）。**Source**: 0.1.0-W2-016.4（v1.0.0 初建）。動機案例：flutter_balance W2-014 domain map；W2-016 Round 3 steelman S1/S3 findings。
+**Last Updated**: 2026-09-09 | **Version**: 2.1.0 — §3 依賴方向 DAG 規則補一條邊界：本節的 DAG 只描述資料方向，互不 import 的兩個 domain 仍可能競爭同一稀缺通道，該關係在 DAG 上查不到；判準路由至事件流負載仲裁方法論〈通道與仲裁器〉、結構載體路由至 `domain-map-template.md` 的通道與協調圖節。動機：跨章一致性審查發現該正交關係只活在下游範本，產出依賴圖的權威本身零感知。
+**Version**: 2.0.0 — 延伸支援多 aggregate（by-id 互參、交易一致性邊界）+ command-side 形態（domain service / policy / saga），0.1.0-W2-021（source: W2-018 ANA）。**Source**: 0.1.0-W2-016.4（v1.0.0 初建）。動機案例：flutter_balance W2-014 domain map；W2-016 Round 3 steelman S1/S3 findings。

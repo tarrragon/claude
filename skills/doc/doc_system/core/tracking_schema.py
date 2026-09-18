@@ -191,8 +191,17 @@ EVT_REQUIRED_FIELDS = frozenset({"id", "name", "canonical_name", "category"})
 EVT_CATEGORIES = frozenset({"domain_event", "process_event"})
 
 # FlowStep 於 UC 結構化 flow 區塊內的必填欄位（依首批真實資料實例對齊）。
+#
+# traverses：本步驟直接觸及的 domain 公開面，值為 domain 名字串清單（0..n）。
+# - 欄位必存在；不觸及任何 domain 的純畫面步驟（畫面狀態屬 layer 而非
+#   domain）填空清單 []，不得省略欄位
+# - 只列直接觸及者；經 domain 依賴邊間接到達的 domain 不列
+# - 一個步驟可同時觸及多個 domain（多對多），故為清單而非單值
+# - 語意對應 domain map 的「貫穿」：domain 被幾條 flow 貫穿由消費端依本欄位
+#   聚合，不另存反向欄位
+# - domain 名是否存在於 domain map 不在 schema 層檢查
 FLOWSTEP_REQUIRED_FIELDS = frozenset(
-    {"id", "name", "next", "branch_from", "return_to", "emits", "consumes"}
+    {"id", "name", "next", "branch_from", "return_to", "emits", "consumes", "traverses"}
 )
 
 # 語意邊表：A 層 12 條 + B 層 4 條，欄位齊全：class / 正向欄位（儲存

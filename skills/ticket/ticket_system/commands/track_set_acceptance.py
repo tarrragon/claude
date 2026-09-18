@@ -34,6 +34,7 @@ if __name__ == "__main__":
 
 
 import argparse
+import re
 from pathlib import Path
 
 from ticket_system.lib.file_lock import file_lock
@@ -154,10 +155,25 @@ def _apply_mode_to_list(
     return changed, total
 
 
+# 只比對字串開頭的核取方塊字面（`[ ]` / `[x] ` / `[X]`，含其後空白），
+# 文字中段的 `[ ]` 不命中此樣式（那是內容不是前綴）。
+_CHECKBOX_PREFIX_RE = re.compile(r"^\[(?:[xX]| )\]\s*")
+
+
+def _strip_checkbox_prefix(text: str) -> str:
+    """剝除條目文字開頭的核取方塊字面，僅剝除開頭一次出現。
+
+    --add/--edit 的參數語意是「條目文字」，正規前綴由既有邏輯補上；呼叫者
+    若誤把 `[ ]`/`[x]` 也寫進文字會得到雙重前綴。這裡靜默正規化而非拒絕
+    ——呼叫者意圖無歧義，拒絕只是把工作推回給人。
+    """
+    return _CHECKBOX_PREFIX_RE.sub("", text, count=1)
+
+
 def _apply_add(acceptance_list: list[str], texts: list[str]) -> int:
     """追加新條目，預設未勾選（`[ ] <text>`）。回傳新增數量。"""
     for text in texts:
-        acceptance_list.append(f"[ ] {text}")
+        acceptance_list.append(f"[ ] {_strip_checkbox_prefix(text)}")
     return len(texts)
 
 
@@ -190,7 +206,7 @@ def _apply_edit(acceptance_list: list[str], edits: list[tuple[int, str]]) -> int
     """依 index 覆寫條目文字，保留原勾選狀態。回傳變更數。"""
     for idx, text in edits:
         prefix = "[x]" if acceptance_list[idx - 1].startswith("[x]") else "[ ]"
-        acceptance_list[idx - 1] = f"{prefix} {text}"
+        acceptance_list[idx - 1] = f"{prefix} {_strip_checkbox_prefix(text)}"
     return len(edits)
 
 

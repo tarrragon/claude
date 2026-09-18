@@ -315,6 +315,14 @@ Audit 完成後產出結構化報告——格式比照學術 peer review、但 w
 
 ---
 
+- [recompute-trigger-must-bind-to-the-changing-event](principles/recompute-trigger-must-bind-to-the-changing-event.md)：文件裡放了可被第三方重算的數字（覆蓋率、分佈、成員總數）而它會隨內容變動時讀——那裡給重算的觸發該綁在哪個事件上，以及內部自洽怎麼蓋住外部失準。
+- [review-lacks-outside-in-reader-frames](principles/review-lacks-outside-in-reader-frames.md)：審查框架缺 outside-in 的讀者 frame 時，宣導語氣會通過多輪審查——給讀者定位聲明這個生成端前置步驟。
+- [no-fabricated-experience-or-attribution](principles/no-fabricated-experience-or-attribution.md)：AI 生成內容不虛構經驗與出處——給「判定單位是生成批次不是關鍵字命中」這條，與第三人稱虛構角色為什麼 grep 抓不到。
+- [probe-independence-is-not-transferable](principles/probe-independence-is-not-transferable.md)：譯者拿得到作者意圖時，最該被偵測的那一類歧義會被安靜譯對——給這個條件為什麼不可讓渡，與寫作端該留下的是問句而不是譯文。
+- [term-probe-measures-register-not-invention](principles/term-probe-measures-register-not-invention.md)：一個詞是不是通用術語，用多份獨立定義的收斂度量——給控制詞的必要性與回答的四類讀法。
+- [methodology-multi-pass-embedding](principles/methodology-multi-pass-embedding.md)：方法論的 multi-pass 該 embed 在 pillar 裡——給它與獨立章節的差別。
+
+
 ## 快速啟動
 
 對章節跑 audit 的最小流程：

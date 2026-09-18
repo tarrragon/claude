@@ -278,6 +278,20 @@ class TestValidateTopicSelection:
     def test_all_none_returns_empty_triple(self):
         assert ti.validate_topic_selection(self._args()) == (None, None, None)
 
-    def test_no_topic_alone_returns_empty_triple(self):
-        """--no-topic 不指定主題，驗證層不視為錯誤——它的效果在報告層。"""
-        assert ti.validate_topic_selection(self._args(no_topic=True)) == (None, None, None)
+    def test_no_topic_alone_returns_sentinel(self):
+        """--no-topic 回傳哨兵，與「未指定」的 None 型別不同。
+
+        0.1.0-W3-272：兩者若同以 None 表達，呼叫端無從分辨明示不指派與
+        未指定，只能一律往下跑自動推導，旗標因而在推導命中時失效。
+        """
+        topic, error, new_topic = ti.validate_topic_selection(self._args(no_topic=True))
+        assert topic is ti.NO_TOPIC
+        assert error is None and new_topic is None
+        assert type(topic) is not type(None)
+        assert not topic
+
+    def test_unspecified_and_no_topic_return_different_values(self):
+        unspecified, _, _ = ti.validate_topic_selection(self._args())
+        explicit_opt_out, _, _ = ti.validate_topic_selection(self._args(no_topic=True))
+        assert unspecified is None
+        assert explicit_opt_out is not unspecified

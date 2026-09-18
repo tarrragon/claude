@@ -48,3 +48,5 @@
 
 - [軸是對的而底下有未言明的實作前提](unstated-implementation-premise-under-a-correct-axis.md)：那張是容器選了而沒說，這張是名字取錯。兩者可同時發生，修法順序是先讓前提顯形、再檢查軸名——前提換掉之後原本的軸名可能連帶失效。
 - [壓縮的結論會剝掉推導](./compressed-conclusion-strips-derivation.md)：方向相反。那張是推導被壓掉，這張是推導在、而名字比推導弱。
+
+- [unstated-implementation-premise-under-a-correct-axis](unstated-implementation-premise-under-a-correct-axis.md)：軸名取對了之後還有一層——軸底下有一個從未被當成選擇的實作前提。本卡管名字取錯，那張管容器選了而沒說；對抗性審查對「選了而沒說」這一種結構上打不到，因為每一步推導都對。

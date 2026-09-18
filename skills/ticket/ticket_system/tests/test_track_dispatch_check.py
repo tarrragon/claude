@@ -352,11 +352,20 @@ class TestPruneFlag:
     def test_prune_writes_hook_log_via_real_logger(self, tmp_path, monkeypatch):
         """真實 `setup_hook_logging` 落地：`.claude/hook-logs/
         dispatch-check-prune/` 下應可讀到含清理內容的日誌檔（雙通道驗證，
-        非僅 mock 呼叫次數）。"""
-        import os
+        非僅 mock 呼叫次數）。
+
+        日誌落點依據（0.1.0-W3-273 修復後）：`_get_prune_logger` 顯式傳入
+        `get_ticket_state_root()`，使日誌根目錄與 `dispatch-active.json`
+        的狀態根目錄對齊（原本各自解析、worktree 環境下會分裂成兩個
+        不同目錄）。本測試的 `_run()` 已將 `mod.get_ticket_state_root`
+        monkeypatch 為 `lambda: tmp_path`（供 `dispatch-active.json` 讀寫
+        使用），故對齊後日誌根目錄同為 `tmp_path`，不是
+        `CLAUDE_PROJECT_DIR`（後者僅在未被此 monkeypatch 覆寫時才是
+        `get_ticket_state_root()` 的解析結果，見 `.claude/skills/ticket/
+        conftest.py` 的 `_isolate_project_root`）。
+        """
         from datetime import datetime, timedelta, timezone
 
-        project_root = Path(os.environ["CLAUDE_PROJECT_DIR"])
         old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
         _write_dispatch_file(tmp_path, {
             "dispatches": [
@@ -373,7 +382,7 @@ class TestPruneFlag:
         rc, out, err = _run(tmp_path, monkeypatch, prune=True)
 
         assert rc == 0
-        log_dir = project_root / ".claude" / "hook-logs" / "dispatch-check-prune"
+        log_dir = tmp_path / ".claude" / "hook-logs" / "dispatch-check-prune"
         log_files = sorted(log_dir.glob("dispatch-check-prune-*.log"))
         assert log_files, "應產生 .claude/hook-logs/dispatch-check-prune/dispatch-check-prune-*.log"
         content = log_files[0].read_text(encoding="utf-8")

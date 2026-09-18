@@ -27,6 +27,8 @@ compositional-writing 的核心主張是「寫原子卡片」，但完整文章�
 
 ---
 
+內容裝不進容器時的出口：[content-pressure-resolves-by-expansion-not-compression](principles/content-pressure-resolves-by-expansion-not-compression.md)——那裡給三個合法出口（就地展開 / 外部化成卡 / 換成連結）與選出口之前的前置檢查。
+
 ## 適用範圍
 
 本 reference 適用於下列技術文章類型：
@@ -50,6 +52,8 @@ compositional-writing 的核心主張是「寫原子卡片」，但完整文章�
 3. **往外的連結綁在本篇模型的一個可動項上**——「把其中一項換掉會變成什麼」，而不是「遇到 X 去讀 Y」，也不只是列舉相鄰主題。做不到這一種代表本篇還沒建立帶可動項的模型，而這條推論只適用於模型有兩個以上可動項的教材（單軸的判斷標準篇與術語卡的定義層只有一個可動項，第二種在那裡就是完整的形態）。這一項有兩個獨立的檢查：遮住目的地看讀者預不預測得出那一篇給什麼，以及那一句綁在什麼上；第二種寫法可以通過前者而不滿足後者。
 
 `description` 與第一段決定整篇的形狀，所以它們從要交付的觀念發想，不從假想的讀者問題發想；查閱型內容（排錯記錄、工具筆記、術語卡的定義層）不受這一條約束。三項都靠理解取樣驗，自審對它們有結構上限。
+
+段裡出現讀起來像規則、禁令或教訓的句子時另有一條：[compressed-conclusion-strips-derivation](principles/compressed-conclusion-strips-derivation.md)——那裡給「讀者能照做而不能調整」這個判讀徵兆，與推導被剝掉之後要補回哪一段。
 
 ## 八條核心規則
 
@@ -762,6 +766,22 @@ emoji 在容器窄時斷行：
 判讀層次比修法重要 — 純視覺問題（容器寬度、字體大小、跨瀏覽器）用 CSS 是對的；語意 / 邏輯下游症狀用 CSS 是 false confidence。
 
 ---
+
+## 支撐本檔的原則卡
+
+逐條是「這張卡給什麼、支撐本檔哪一段」。卡是完整版，本檔的規則是它在長篇文章這個情境下的操作化。
+
+- [written-value-replaces-the-readers-check](principles/written-value-replaces-the-readers-check.md)：寫出特定實例的值就取代了讀者本來要做的查證——給判別問句（讀者拿這一句去用，他是去查自己的系統還是直接照抄）與三類不受約束的內容。支撐規則二的 CASE 寫法。
+- [basics-anchor-the-advanced](principles/basics-anchor-the-advanced.md)：深度的分配看讀者手上有什麼、不看主題的表面複雜度——給「難」與「危險」分軸的理由與進階議題的起點測試。支撐規則一的階段分層。
+- [assertion-list-needs-reader-walkthrough](principles/assertion-list-needs-reader-walkthrough.md)：條列式斷言過不了重建測試時展開成讀者位置的走查——給重建測試的執行方式與兩類合規的條列。支撐規則五。
+- [readers-form-their-own-judgments](principles/readers-form-their-own-judgments.md)：評價由讀者自己形成、寫作交付材料——給「準確而溫和的評價同樣違規」這條形態判準與五類邊界。支撐規則三的評估欄位。
+- [verify-by-recognition-not-recitation](principles/verify-by-recognition-not-recitation.md)：教學內容不預設考核情境——給檢核動詞的替換清單與三類合法保留。支撐規則四的事後檢視。
+- [writing-designs-the-reading-process](principles/writing-designs-the-reading-process.md)：節奏、壓力與引導三個設計面——給診斷問句（讀到這行時讀者手上有幾個未解決的指涉）。支撐規則五與規則六。
+- [fill-knowledge-gap-not-center-misconception](principles/fill-knowledge-gap-not-center-misconception.md)：會誤解處補正向知識、不把誤會當敘事中心——給語意判定問句與具體實測敘事的保留邊界。支撐規則六的反例段落。
+- [cross-expertise-scenario-not-analogy](principles/cross-expertise-scenario-not-analogy.md)：向非本領域的專業人士解釋時用情境遞進——給比喻在哪裡崩解，以及決策者熟悉的三個替代維度。支撐規則七。
+- [management-reportable-info-in-technical-content](principles/management-reportable-info-in-technical-content.md)：技術段落旁嵌入可彙報的成本量級、時程與進度指標——給三者各自的寫法粒度。支撐規則三。
+- [operational-how-needs-environment-specific-tooling](principles/operational-how-needs-environment-specific-tooling.md)：操作指引每一步至少帶一條工具路徑——給自測問題（讀者坐在電腦前，下一個動作是打開什麼軟體）。支撐規則二的操作段。
+
 
 ## 與核心原則的映射
 

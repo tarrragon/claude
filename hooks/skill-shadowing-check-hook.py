@@ -129,7 +129,7 @@ _VERSION_PATTERN = re.compile(r"^\*\*Version\*\*:\s*(\S+)", re.MULTILINE)
 
 # 0.2.1-W3-113 H2：.venv/venv/.git/node_modules 為虛擬環境/VCS 產生內容，
 # 跨機必然不同（bin/activate、pyvenv.cfg 內嵌絕對路徑），比照
-# hook-completeness-check.py 的既有排除慣例補齊。
+# hook-registration-coverage-check.py 的既有排除慣例補齊。
 _NOISE_DIR_NAMES = {"__pycache__", ".venv", "venv", ".git", "node_modules"}
 _NOISE_FILE_NAMES = {".DS_Store"}
 _NOISE_FILE_SUFFIXES = (".pyc",)

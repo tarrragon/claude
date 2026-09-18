@@ -83,7 +83,7 @@ def _is_top_level_hook_file(resolved: Path, project_root: Path) -> bool:
     """判斷 resolved 是否為 .claude/hooks/ 頂層的 .py/.sh（非遞迴）。
 
     以父目錄相等判斷，天然排除 tests/、acceptance_checkers/、archived/
-    等子目錄——與 hook-completeness-check.py 的非遞迴 glob 排除機制一致。
+    等子目錄——與 hook-registration-coverage-check.py 的非遞迴 glob 排除機制一致。
     """
     hooks_dir = (project_root / ".claude" / "hooks").resolve()
     return resolved.parent == hooks_dir and resolved.suffix in _HOOK_SCRIPT_SUFFIXES

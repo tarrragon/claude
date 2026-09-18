@@ -1,7 +1,7 @@
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Hook 排除清單 - 標記不需要在 settings.json 註冊的檔案",
-  "last_updated": "2026-08-26",
+  "last_updated": "2026-09-09",
   "exclude": [
     "eval_pyyaml.py",
     "dart-presence-detection-hook.py",
@@ -9,7 +9,9 @@
     "changelog-update-hook.py",
     "commit-handoff-hook.py",
     "post-commit-fetch-hook.py",
-    "dispatch-record-hook.py"
+    "dispatch-record-hook.py",
+    "git-ref-transaction-content-guard.py",
+    "handoff_session_mgmt.py"
   ],
   "exclude_patterns": [
     "*-backup.py"
@@ -22,6 +24,8 @@
     "changelog-update-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
     "commit-handoff-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
     "post-commit-fetch-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
-    "dispatch-record-hook.py": "派發記錄職責已遷移至 active-dispatch-tracker-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏"
+    "dispatch-record-hook.py": "派發記錄職責已遷移至 active-dispatch-tracker-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
+    "git-ref-transaction-content-guard.py": "非 settings.json 直接註冊；由已註冊的 git-ref-transaction-guard-install-hook.py 安裝為原生 git reference-transaction hook shim（.git/hooks/reference-transaction）觸發，鏈路自洽非缺漏（2026-09-09 盤點）",
+    "handoff_session_mgmt.py": "非獨立 hook 進入點（無 __main__），為已註冊的 handoff-auto-resume-stop-hook.py 匯入的共用模組，因與該 hook 緊密耦合而置於 hooks/ 目錄（2026-09-09 盤點）"
   }
 }

@@ -79,7 +79,7 @@ Skill 可附帶私有 Hook（僅服務於該 Skill 的觸發場景），與框�
 
 ### 3.3 註冊流程
 
-Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**: settings.json 是 Claude Code runtime 載入 Hook 的唯一來源，檔案存在但未註冊則永不執行。**Consequence**: 未註冊的 Hook 形成「靜默失效」——檔案在版控中可見、開發者以為已啟用、實際從未觸發；此類缺陷只能透過 `hook-completeness-check` 主動掃描發現。**Action**: 註冊路徑須使用完整相對路徑：
+Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**: settings.json 是 Claude Code runtime 載入 Hook 的唯一來源，檔案存在但未註冊則永不執行。**Consequence**: 未註冊的 Hook 形成「靜默失效」——檔案在版控中可見、開發者以為已啟用、實際從未觸發；此類缺陷只能透過 `hook-registration-coverage-check` 主動掃描發現。**Action**: 註冊路徑須使用完整相對路徑：
 
 ```json
 {
@@ -104,12 +104,12 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 | 項目 | 要求 |
 |------|------|
 | 路徑前綴 | 必用 `$CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<file>.py` |
-| 執行權限 | `chmod +x` 必要（`hook-completeness-check` 會自動修復） |
+| 執行權限 | `chmod +x` 必要（`hook-registration-coverage-check` 會自動修復） |
 | Hook event 選擇 | 與框架 Hook 相同（PreToolUse / PostToolUse / SessionStart / Stop 等） |
 
 ### 3.4 掃描器行為
 
-`hook-completeness-check.py` 同時掃描兩層，兩層分別產出獨立報告區段，避免命名衝突誤判（同名檔案在不同 skill 各自獨立）。
+`hook-registration-coverage-check.py` 同時掃描兩層，兩層分別產出獨立報告區段，避免命名衝突誤判（同名檔案在不同 skill 各自獨立）。
 
 | 目錄 | 比對對象 |
 |------|---------|
@@ -137,7 +137,7 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 1. 確認 Hook 觸發條件與單一 Skill 強耦合（如 ticket / worktree / wrap-decision 專屬）
 2. 移檔：`.claude/hooks/<name>.py` → `.claude/skills/<skill>/hooks/<name>.py`
 3. 更新 `settings.json` command 路徑
-4. 執行 `hook-completeness-check.py` 確認兩層註冊狀態
+4. 執行 `hook-registration-coverage-check.py` 確認兩層註冊狀態
 5. 同 commit 提交檔案搬遷 + settings.json 變更，避免中途 hook 失效（拆 commit 會產生中間 commit 路徑無效的時間窗，回放歷史時 Hook 觸發失敗）
 
 ---
@@ -178,7 +178,7 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 - `.claude/references/reference-stability-rules.md` - 規格引用穩定性規則（規則 8）
 - `.claude/error-patterns/architecture/ARCH-012-agent-project-specific-hardcoding.md` - 代理人定義硬編碼專案特定內容的錯誤模式
 - `.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md` - Memory 跨專案原則升級遺漏的錯誤模式
-- `.claude/hooks/hook-completeness-check.py` - 雙層 Hook 掃描器
+- `.claude/hooks/hook-registration-coverage-check.py` - 雙層 Hook 掃描器
 - plugin-dev plugin 的 `hook-development` skill（plugin 形式，非 .claude/ 內檔）- Claude Code Hook 開發通用指引（事件、API）
 - `.claude/commands/sync-push.md` - sync-push 流程與 `--clean` 刪除傳播紀律（§4 連結來源）
 

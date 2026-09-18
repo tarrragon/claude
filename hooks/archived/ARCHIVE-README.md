@@ -52,7 +52,7 @@ archived/
 
 1. 使用 `git mv` 將檔案移回 `.claude/hooks/` 根目錄
 2. 更新 `.claude/settings.json` 以註冊該 Hook
-3. 執行 hook-completeness-check.py 驗證
+3. 執行 hook-registration-coverage-check.py 驗證
 
 ```bash
 git mv .claude/hooks/archived/script-name.py .claude/hooks/script-name.py

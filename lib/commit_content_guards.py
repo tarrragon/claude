@@ -170,10 +170,20 @@ def _check_file_type_permission(sf: StagedFile, logger) -> List[Finding]:
     return []
 
 
-def _check_branch_verify(sf: StagedFile, logger) -> List[Finding]:
+def _check_branch_verify(
+    sf: StagedFile, logger, is_merge_commit: bool = False
+) -> List[Finding]:
     """轉呼 branch-verify-hook：完整重用 is_protected_branch /
     is_allowed_branch / is_exempt_path_on_protected_branch，內容無關，
     僅依當前分支與檔案路徑判斷。
+
+    is_merge_commit：本次寫入來自合併 commit（多 parent）時為 True，一律
+    放行（不看個別路徑是否豁免）。守衛要擋的是「繞過 feature 分支、直接
+    對保護分支寫入非豁免內容」；merge 是把已經過各項 guard 檢查（原始
+    提交在 feature 分支上時已受同一套檢查）的內容整批帶入保護分支的正規
+    動作，與逐檔直接提交性質不同，豁免對象是「這次 merge 事件」而非個別
+    檔案內容——其餘 per-file guard（rule8 等）不受 is_merge_commit 影響，
+    仍照常執行。直接提交（is_merge_commit=False，預設值）維持原行為不變。
     """
     m = _load_module("commit_gate_branch_verify", _HOOKS_DIR / "branch-verify-hook.py")
     if m is None:
@@ -185,6 +195,8 @@ def _check_branch_verify(sf: StagedFile, logger) -> List[Finding]:
     if not current_branch or is_allowed_branch(current_branch):
         return []
     if not is_protected_branch(current_branch):
+        return []
+    if is_merge_commit:
         return []
     if m.is_exempt_path_on_protected_branch(sf.rel_path, cwd=str(project_root)):
         return []
@@ -381,11 +393,13 @@ def _check_wrap_skill_yaml(sf: StagedFile, logger, project_root: Path) -> List[F
 #     commit-stage-guard-gate-hook.py 檔頭「產生路徑盤點表」第 10 項）。
 
 
+# _check_branch_verify 不列入本清單：其判斷需額外的 is_merge_commit 旗標
+# （見該函式 docstring），_run_all_checks 對它單獨呼叫，與 _check_wrap_
+# skill_yaml（需額外 project_root 參數，同理不列入）採同一種特例模式。
 _PER_FILE_CHECKS: List[Callable[[StagedFile, "object"], List[Finding]]] = [
     _check_rule8,
     _check_uc_reference,
     _check_file_type_permission,
-    _check_branch_verify,
     _check_error_pattern_flat,
     _check_framework_skill_trigger,
     _check_memory_write,
@@ -395,16 +409,26 @@ _PER_FILE_CHECKS: List[Callable[[StagedFile, "object"], List[Finding]]] = [
 ]
 
 
-def _run_all_checks(staged_files: List[StagedFile], project_root: Path, logger) -> List[Finding]:
+def _run_all_checks(
+    staged_files: List[StagedFile],
+    project_root: Path,
+    logger,
+    is_merge_commit: bool = False,
+) -> List[Finding]:
     """對每個變更檔案跑過 per-file 轉呼函式，另跑一次全域的
     wrap-skill-yaml 一致性檢查（該 guard 語意上是「專案狀態一致性」而非
     逐檔獨立判斷，避免同一警告因多檔變更而重複輸出）。
+
+    is_merge_commit：轉呼 _check_branch_verify（見該函式 docstring）；預設
+    False，既有呼叫端（commit-stage-guard-gate-hook.py 的 PreToolUse 掃
+    index 路徑）不帶此參數即維持原行為不變。
     """
     findings: List[Finding] = []
     wrap_checked = False
     for sf in staged_files:
         for check in _PER_FILE_CHECKS:
             findings.extend(check(sf, logger))
+        findings.extend(_check_branch_verify(sf, logger, is_merge_commit=is_merge_commit))
         if not wrap_checked:
             wrap_findings = _check_wrap_skill_yaml(sf, logger, project_root)
             if wrap_findings:

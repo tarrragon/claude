@@ -165,6 +165,8 @@ description: "Advanced statistical modeling for CSV files. Use for regression, c
 | 壞（缺觸發） | `Creates sophisticated multi-page documentation systems.` |
 | 壞（描述內部架構） | `統一 Ticket 系統 v1.0 — 整合 create / track / handoff / resume / migrate / generate 六大功能。` |
 
+**「描述內部架構」為何算壞例，與「缺觸發」同一個病灶**：整句只列了系統自身的功能清單與版本號，沒有交代〈結構公式〉要求的「何時使用 / 觸發詞清單」——讀者看完仍判斷不出什麼情境該用它，判準與「壞（缺觸發）」那一列相同，只是外顯形式換成了內部功能列舉加版本號。
+
 ### 觸發品質診斷
 
 | 症狀 | 修正 |

@@ -63,3 +63,5 @@ reviewer 也沒有義務澄清。多數產出契約要求的是「列出檢查�
 - [均勻修法複製新模具](uniform-remediation-recreates-homogenization.md)：那裡是修法**引入新的**問題，本卡是修法**留下舊的**同類實例。偵測難度相反——新引入的下一輪近 frame 抓得到，留下的舊實例可能永遠抓不到，因為這一類已經被回報過。
 - [多次修法會合成缺陷](sequential-fixes-compose-into-defects.md)：兩者都是修法留下的問題，而偵測入口完全不同。那張卡的缺陷在條目之間、要靠一次以整體為對象的通讀；本卡的缺陷就在條目所屬的那一類裡面，一條掃描指令就抓得到——用通讀去找本卡這一類，是把貴的工具用在便宜的問題上。
 - [翻譯強制消歧](translation-forces-disambiguation.md)：本卡實例裡撞見第二處的就是這個 frame。它在那裡的作用不是抓新缺陷，是換一個角度重新掃過同一份稿件，於是抓到了上一輪修法漏掉的同類實例——換 frame 順帶做了複掃，而那本來應該由修的人主動做。
+- [fix-must-land-on-the-layer-of-the-defect](fix-must-land-on-the-layer-of-the-defect.md)：正交的另一軸。本卡管修法的範圍（同一類還有哪幾處沒被點名），那張卡管修法的層（這一處動到的是不是缺陷所在的那一層）。兩個檢查互不替代——一次掃遍全批而每一處都修在錯的層上，掃描報告會顯示全部處理完畢。
+- [fix-never-landed-and-the-round-signed-off-for-it](fix-never-landed-and-the-round-signed-off-for-it.md)：同屬「產物的形式提供了它沒有量到的保證」——本卡的清單形式在暗示完整性，那裡的紀錄形式在暗示已執行；兩者的驗收動作相同，回到原始材料逐條對照、不讀清單本身。

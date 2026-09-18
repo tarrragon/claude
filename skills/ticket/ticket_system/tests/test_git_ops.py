@@ -23,6 +23,8 @@ cwd 切至 worktree 後呼叫 `_auto_commit_completion_files`（傳入路徑為�
 
 import os
 import subprocess
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -420,3 +422,165 @@ class TestAutoCommitCompletionFilesWorktreeCwd:
 
         main_head_after = _run_git(main_repo, "rev-parse", "HEAD").stdout.strip()
         assert main_head_after != main_head_before
+
+
+class TestRefLockRetryAndStaleDiagnosis:
+    """0.1.0-W3-271：ref 鎖重試條件與鎖齡判讀。
+
+    原缺陷兩段：(1) ``_run_git_with_lock_retry`` 只比對 ``index.lock`` 子字串，
+    對 update-ref 撞鎖的錯誤文字（``cannot lock ref 'HEAD'`` +
+    ``refs/heads/main.lock`` / ``HEAD.lock``）恆為 False，撞鎖瞬間即失敗且
+    commit-tree SHA 遺失；(2) 修好重試後工具仍無鎖齡判讀，會對不會自行消失的
+    崩潰殘骸無限重試。殘骸與活鎖的錯誤輸出完全同形，唯一可程式化的區別是鎖齡，
+    故本類別的關鍵測項以持久殘骸鎖為輸入（``test_persistent_stale_lock_*``）
+    ——只斷言「正常情況重試會成功」的測項在鎖齡判讀完全失效時照樣全綠。
+    """
+
+    _MAIN_LOCK_ERR = (
+        "error: cannot lock ref 'HEAD': Unable to create "
+        "'/repo/.git/refs/heads/main.lock': File exists."
+    )
+    _HEAD_LOCK_ERR = "fatal: Unable to create '/repo/.git/HEAD.lock': File exists."
+
+    @pytest.mark.parametrize(
+        "lock_err",
+        [_MAIN_LOCK_ERR, _HEAD_LOCK_ERR],
+        ids=["refs-heads-lock", "head-lock"],
+    )
+    def test_ref_lock_error_triggers_retry(self, lock_err):
+        """AC1：refs/heads/*.lock 與 HEAD.lock 兩種錯誤文字皆觸發重試。"""
+        attempts = {"update_ref": 0}
+
+        def fake_run(args, **kwargs):
+            if args[:2] == ["git", "update-ref"]:
+                attempts["update_ref"] += 1
+                if attempts["update_ref"] == 1:
+                    return MagicMock(returncode=1, stdout="", stderr=lock_err)
+                return MagicMock(returncode=0, stdout="", stderr="")
+            return _fake_run_factory([])(args, **kwargs)
+
+        with patch.object(git_ops.subprocess, "run", side_effect=fake_run), patch.object(
+            git_ops.time, "sleep", return_value=None
+        ):
+            result = git_ops.commit_files_isolated([_TARGET], "msg")
+
+        assert attempts["update_ref"] == 2, "ref 鎖錯誤未觸發重試（重試條件恆為 False）"
+        assert result["status"] == "committed"
+
+    def test_update_ref_failure_error_contains_commit_sha_and_residue_verdict(self):
+        """AC2 + AC5：update-ref 最終失敗時錯誤含 commit-tree SHA 與鎖殘骸歸屬。"""
+
+        def fake_run(args, **kwargs):
+            if args[:2] == ["git", "update-ref"]:
+                return MagicMock(returncode=1, stdout="", stderr="fatal: HEAD 已改變")
+            return _fake_run_factory([])(args, **kwargs)
+
+        with patch.object(git_ops.subprocess, "run", side_effect=fake_run):
+            result = git_ops.commit_files_isolated([_TARGET], "msg")
+
+        assert result["status"] == "failed"
+        assert "new_commit_sha" in result["error"], "錯誤未帶已建立的 commit-tree SHA"
+        assert "鎖殘骸" in result["error"], "錯誤未指出本次是否留下鎖殘骸"
+
+    def test_update_ref_reports_residue_lock_created_by_this_call(self, tmp_path):
+        """AC5：呼叫前不存在、失敗後存在的鎖判為本次留下，責任歸屬本執行者。"""
+        git_dir = tmp_path / ".git"
+        (git_dir / "refs" / "heads").mkdir(parents=True)
+        residue = git_dir / "refs" / "heads" / "main.lock"
+
+        def fake_run(args, **kwargs):
+            if args[:2] == ["git", "rev-parse"] and args[2] == "--show-toplevel":
+                return MagicMock(returncode=0, stdout=f"{tmp_path}\n", stderr="")
+            if args[:2] == ["git", "update-ref"]:
+                residue.write_bytes(b"a" * 41)  # 模擬 CAS 中途崩潰留下的半成品
+                return MagicMock(returncode=1, stdout="", stderr="fatal: 中斷")
+            return _fake_run_factory([], repo_root=str(tmp_path))(args, **kwargs)
+
+        with patch.object(git_ops.subprocess, "run", side_effect=fake_run):
+            result = git_ops.commit_files_isolated([str(tmp_path / _TARGET)], "msg")
+
+        assert result["status"] == "failed"
+        assert "留下鎖殘骸" in result["error"]
+        assert str(residue) in result["error"]
+        assert "41 bytes" in result["error"], "殘骸診斷未含大小，無從溯源"
+
+    def test_persistent_stale_lock_stops_retrying_with_diagnosis(self, tmp_path):
+        """AC4 + AC6（已知該紅的輸入）：以持久殘骸鎖為輸入，工具須在有限次重試後
+        放棄並輸出殘骸診斷（mtime／大小／內容），而非持續重試。
+
+        鎖檔 mtime 推回遠早於閾值且全程不移除，模擬不會自行消失的崩潰殘骸。
+        鎖齡判讀失效時本測項紅在 update_ref 次數上（工具持續重試），診斷失效時
+        紅在 mtime／大小／內容三項斷言上。
+        """
+        git_dir = tmp_path / ".git"
+        (git_dir / "refs" / "heads").mkdir(parents=True)
+        stale_lock = git_dir / "refs" / "heads" / "main.lock"
+        stale_lock.write_text("ref: crashed-cas-payload\n", encoding="utf-8")
+        stale_mtime = time.time() - 3600
+        os.utime(stale_lock, (stale_mtime, stale_mtime))
+
+        lock_err = (
+            f"error: cannot lock ref 'HEAD': Unable to create '{stale_lock}': File exists."
+        )
+        attempts = {"update_ref": 0}
+
+        def fake_run(args, **kwargs):
+            if args[:2] == ["git", "rev-parse"] and args[2] == "--show-toplevel":
+                return MagicMock(returncode=0, stdout=f"{tmp_path}\n", stderr="")
+            if args[:2] == ["git", "update-ref"]:
+                attempts["update_ref"] += 1
+                return MagicMock(returncode=1, stdout="", stderr=lock_err)
+            return _fake_run_factory([], repo_root=str(tmp_path))(args, **kwargs)
+
+        with patch.object(git_ops.subprocess, "run", side_effect=fake_run), patch.object(
+            git_ops.time, "sleep", return_value=None
+        ):
+            result = git_ops.commit_files_isolated([str(tmp_path / _TARGET)], "msg")
+
+        assert attempts["update_ref"] == 1, (
+            f"殘骸鎖不會自行消失，工具須立即放棄而非重試（實得 {attempts['update_ref']} 次）"
+        )
+        assert result["status"] == "failed"
+        error = result["error"]
+        assert "殘骸診斷" in error
+        assert str(stale_lock) in error
+        assert "mtime" in error and "bytes" in error
+        assert "crashed-cas-payload" in error, "診斷未含鎖內容，無法溯源為哪次崩潰的產物"
+        assert stale_lock.exists(), "工具不得移除任何鎖，只該停止重試並診斷"
+
+    def test_live_ref_lock_released_by_background_thread_then_succeeds(self, tmp_path):
+        """AC3：真實 repo + 背景執行緒持有 refs/heads/<branch>.lock，鎖釋放後
+        提交成功（活鎖與殘骸處置相反，本測項釘住活鎖側）。"""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _run_git(repo, "init")
+        _run_git(repo, "config", "user.email", "test@test.com")
+        _run_git(repo, "config", "user.name", "test")
+        target = repo / "a.txt"
+        target.write_text("v1\n", encoding="utf-8")
+        _run_git(repo, "add", "a.txt")
+        _run_git(repo, "commit", "-m", "init")
+
+        branch = _run_git(repo, "symbolic-ref", "--short", "HEAD").stdout.strip()
+        lock_path = repo / ".git" / "refs" / "heads" / f"{branch}.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text("held by background thread\n", encoding="utf-8")
+
+        released = threading.Event()
+
+        def release_lock():
+            time.sleep(0.3)
+            lock_path.unlink()
+            released.set()
+
+        holder = threading.Thread(target=release_lock)
+        holder.start()
+        try:
+            target.write_text("v2\n", encoding="utf-8")
+            result = git_ops.commit_files_isolated(["a.txt"], "msg", cwd=str(repo))
+        finally:
+            holder.join()
+
+        assert released.is_set()
+        assert result["status"] == "committed", f"活鎖釋放後應重試成功：{result['error']}"
+        assert _run_git(repo, "log", "-1", "--pretty=%s").stdout.strip() == "msg"

@@ -2,7 +2,7 @@
 name: tdd
 description: "TDD 全流程指導工具。Use for: (1) 開始新功能的 TDD 流程（Phase 0-4）, (2) 推進到下一個 TDD 階段, (3) Phase 1 SOLID 原則驅動功能拆分分析, (4) 查看當前 TDD 進度和階段狀態, (5) 評估是否需要 Phase 4 重構以及 3b 拆分評估, (6) 需求文件（Spec/UC）銜接到測試流程, (7) 新專案起手的批量測試設計, (8) 紅燈測試存根策略（靜態語言編譯通過）, (9) 實作 Ticket 拆分邊界判讀（測試變綠驗收點）, (10) 測試↔UseCase 追溯矩陣。Use when: 開始新功能開發、進入任何 TDD Phase、需要 SOLID 拆分指導、需要確認當前所在 TDD 階段、需要做 Phase 4 豁免判斷時、從 spec/UC 開始寫測試、新專案批量測試規劃、紅燈測試編譯不過需要 stub、判斷 ticket 拆分粒度是否合理、確認測試是否覆蓋 UC 場景。Triggers: tdd, 測試, 紅燈, 綠燈, stub, 存根, 拆分粒度, 測試覆蓋, 追溯, traceability, spec 轉測試, UC 轉測試, 批量測試, 新專案測試, 測試變綠, Phase 0, Phase 1, Phase 2, Phase 3, Phase 4, 重構評估, outside-in, 外圈紅燈, on-device, 實機驗證, wip tag。"
 metadata:
-  version: 2.2.10
+  version: 2.10.9
   portable: true
 
 ---
@@ -162,6 +162,7 @@ Layer 2 內容以 blockquote 標記，提供本框架的具體實現方式：
 ## 相關資源
 
 - 文件連貫性紀律（分級 / 住址 / 各 Phase 檢查點）：`references/document-coherence.md`
+- Phase 2 測試設計時，若需要從規格推導「要測哪些對象」並定義每個對象的契約完整度，見 `references/test-object-catalogue.md`（doc-handoff 回答 spec→測試映射、layered-test-strategy 回答該層怎麼測，本檔回答要測哪些對象）
 - TDD 流程規則：專案的 TDD 流程規則
 - 任務拆分指南：專案的任務拆分指南
 - 並行派發指南：專案的並行派發規則
@@ -169,6 +170,6 @@ Layer 2 內容以 blockquote 標記，提供本框架的具體實現方式：
 
 ---
 
-**Last Updated**: 2026-08-08
+**Last Updated**: 2026-09-16
 
 版本紀錄在同目錄的 `CHANGELOG.md`。

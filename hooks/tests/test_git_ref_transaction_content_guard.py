@@ -224,5 +224,105 @@ class TestMainIntegration:
         assert "framework-rule-edit-skill-trigger" in result.stderr
 
 
+def _prepare_merge_commit(repo, feature_path, feature_content):
+    """在 `repo` 建一個 feature 分支（`feature/x`）並 commit 一個非豁免路徑
+    的變更，回到 main 後以 `git merge --no-ff --no-commit` 完成合併計算
+    （寫入 index、建立 `MERGE_HEAD`，但不建立 commit 也不更新 ref，精確
+    對應 `reference-transaction` `prepared` 階段的真實狀態），再以
+    `commit-tree` 補上尚未接上任何 ref 的合併 commit 物件。
+
+    回傳 (main_head_sha, merge_commit_sha)，呼叫端自行組 stdin。
+    """
+    main_head = _capture(["rev-parse", "HEAD"], cwd=repo)
+    _run_git(["checkout", "-q", "-b", "feature/x"], cwd=repo)
+    target = repo / feature_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(feature_content, encoding="utf-8")
+    _run_git(["add", "."], cwd=repo)
+    _run_git(["commit", "-q", "-m", "feature work"], cwd=repo)
+    feature_head = _capture(["rev-parse", "HEAD"], cwd=repo)
+
+    _run_git(["checkout", "-q", "main"], cwd=repo)
+    rc, _out, err = _run_git(["merge", "--no-ff", "--no-commit", "feature/x"], cwd=repo)
+    assert rc == 0, f"merge --no-commit 失敗: {err}"
+
+    tree = _capture(["write-tree"], cwd=repo)
+    merge_sha = _capture(
+        ["commit-tree", tree, "-p", main_head, "-p", feature_head, "-m", "merge test"],
+        cwd=repo,
+    )
+    return main_head, merge_sha
+
+
+class TestMergeExemption:
+    """0.1.0-W3-136：branch-verify 對合併 commit（多 parent）豁免，消解
+    「框架建議的 `git merge --no-edit`」與「守衛必然 deny 保護分支非豁免
+    路徑」之間的矛盾。三案例對應 acceptance 第 5 條。
+    """
+
+    def test_merge_commit_on_main_allows_non_exempt_path(self, scratch_repo):
+        """main 上 merge：非豁免路徑（`lib/`，不在 `.claude/` / `docs/`
+        豁免前綴內）原本必然被 branch-verify deny，豁免後應放行。"""
+        main_head, merge_sha = _prepare_merge_commit(
+            scratch_repo, "lib/app.dart", "void main() {}\n"
+        )
+        stdin_text = f"{main_head} {merge_sha} refs/heads/main\n"
+
+        result = _run_guard(scratch_repo, "prepared", stdin_text)
+
+        assert result.returncode == 0, result.stderr
+
+    def test_direct_commit_on_main_to_non_exempt_path_still_denied(self, scratch_repo):
+        """main 上逐檔直接提交（單一 parent，非合併）：非豁免路徑仍須被
+        branch-verify 擋下，豁免不擴及直接提交，保護意圖不變。"""
+        head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        new_sha = _make_dangling_commit(
+            scratch_repo, head, "lib/app.dart", "void main() {}\n"
+        )
+        stdin_text = f"{head} {new_sha} refs/heads/main\n"
+
+        result = _run_guard(scratch_repo, "prepared", stdin_text)
+
+        assert result.returncode == 1
+        assert "branch-verify" in result.stderr
+
+    def test_merge_with_other_guard_violation_includes_residue_cleanup_note(
+        self, scratch_repo
+    ):
+        """merge 情境下若其他 guard（非 branch-verify）仍 deny，stderr 須含
+        MERGE_HEAD 殘局提醒與 `git merge --abort` 清理指引（acceptance 第 2
+        條：即使仍被擋，也不留下無提示的殘局）。"""
+        main_head, merge_sha = _prepare_merge_commit(
+            scratch_repo,
+            ".claude/references/merge-note.md",
+            "既有內容，不含引用。\n引用 W9-777 的分析結論。\n",
+        )
+        stdin_text = f"{main_head} {merge_sha} refs/heads/main\n"
+
+        result = _run_guard(scratch_repo, "prepared", stdin_text)
+
+        assert result.returncode == 1
+        assert "reference-stability-rule8-guard" in result.stderr
+        assert "merge 殘局提醒" in result.stderr
+        assert "git merge --abort" in result.stderr
+
+    def test_commit_on_feature_branch_unaffected(self, scratch_repo):
+        """worktree／feature 分支內提交行為不變：目標 ref 非保護分支時，
+        merge 與直接提交皆不受 branch-verify 管轄（is_merge_commit 旗標
+        對此路徑無作用，維持既有放行行為）。"""
+        main_head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        _run_git(["checkout", "-q", "-b", "feature/base"], cwd=scratch_repo)
+        (scratch_repo / "lib").mkdir(exist_ok=True)
+        (scratch_repo / "lib" / "app.dart").write_text("void main() {}\n", encoding="utf-8")
+        _run_git(["add", "."], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "feature base"], cwd=scratch_repo)
+        feature_head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+
+        stdin_text = f"{main_head} {feature_head} refs/heads/feature/base\n"
+        result = _run_guard(scratch_repo, "prepared", stdin_text)
+
+        assert result.returncode == 0, result.stderr
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

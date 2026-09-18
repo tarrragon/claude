@@ -58,9 +58,9 @@ python3 .claude/skills/framework-issue/scripts/section_comment.py dedup \
 
 ```bash
 python3 .claude/skills/framework-issue/scripts/section_comment.py init 53 \
-  --owner flutter-balance-77 \
   --sections-file <scratchpad>/sections.json \
   --dedup-keywords "hook" "註冊" "settings.json" "豁免"
+# owner 不需指定，CLI 自行推導；--owner 僅供覆寫確認用途
 ```
 
 輸出是查重報告（與 `dedup` 相同）接一行回填結果；區段建立本身不逐段印訊息，成功與否看末行：

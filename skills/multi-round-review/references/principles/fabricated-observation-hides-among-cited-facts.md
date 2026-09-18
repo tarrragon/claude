@@ -85,3 +85,4 @@
 - [要交出物件，不要交出關於物件的判斷](ask-for-the-object-not-the-verdict.md)：同源而施力點不同。那張卡直接要求交出物件；本卡問一個只有握著物件才答得出來的後續問題，於是回頭取物件的動作由回報者自己發起。時機也不同——那張用在已經起疑時，本卡用在還沒起疑、只是想把一件事問清楚時，而虛構的觀測通常不觸發起疑。
 - [要求揭露只擋得住省略，要分層得改成要求分類](disclosure-yields-one-bucket-classification-yields-layers.md)：分類法的性質相同。那張卡的「沒查」那一格與本卡的第四欄是同一個設計——類別要窮盡，少一格時落在那一格的東西會被歸進最接近的一格，而最接近的通常是「已經驗過」的那一格。
 - [finding 清單列的是抽樣位置](fix-the-class-not-the-cited-instances.md)：那張卡的修法要求掃描指令先拿一個已知會命中的字串驗過管道，本卡是同一個設計在觀測端的形態——要求那次呼叫真的發生並且留下痕跡。
+- [fix-never-landed-and-the-round-signed-off-for-it](fix-never-landed-and-the-round-signed-off-for-it.md)：本卡在修法紀錄上的形態。「我修了」為真而「那個檔案改了」為假，而變更紀錄照修改計畫寫、不照 diff 寫時，這兩者中間沒有任何一處會被查。

@@ -113,20 +113,24 @@ def check_file_for_violations(file_path: Path) -> list[dict]:
 
     lines = content.split('\n')
 
-    # Native component direct-use patterns (spec §14.3 禁用對照表)
+    # Native component direct-use patterns
     # word-boundary anchored to avoid matching AppCard / _buildXxxChip etc.
+    _NATIVE_COMPONENT_GUIDANCE = (
+        "改用元件庫封裝版，定義見 component-contract-design step-3"
+        "〈原生元件禁用對照表〉"
+    )
     native_component_patterns = [
-        (r'\bTextButton\(', 'NativeComponent', 'Use AppButton instead'),
-        (r'\bElevatedButton\(', 'NativeComponent', 'Use AppButton instead'),
-        (r'\bCard\(', 'NativeComponent', 'Use AppCard instead'),
-        (r'\bAlertDialog\(', 'NativeComponent', 'Use AppDialog instead'),
-        (r'\bshowDialog\(', 'NativeComponent', 'Use AppDialog helper instead'),
-        (r'\bDivider\(', 'NativeComponent', 'Use AppDivider instead'),
-        (r'\bChip\(', 'NativeComponent', 'Use AppBadge/AppChip instead'),
-        (r'\bChoiceChip\(', 'NativeComponent', 'Use AppChip instead'),
+        (r'\bTextButton\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
+        (r'\bElevatedButton\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
+        (r'\bCard\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
+        (r'\bAlertDialog\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
+        (r'\bshowDialog\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
+        (r'\bDivider\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
+        (r'\bChip\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
+        (r'\bChoiceChip\(', 'NativeComponent', _NATIVE_COMPONENT_GUIDANCE),
     ]
 
-    # Line-level exclusions for native component patterns (spec §14.3 注意事項)
+    # Line-level exclusions for native component patterns
     native_exclusion_patterns = [
         r'\bApp(Card|Button|Dialog|Divider|Badge|Chip)\b',  # already migrated
         r'ThemeData',

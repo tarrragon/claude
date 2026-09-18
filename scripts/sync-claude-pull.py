@@ -3227,7 +3227,7 @@ def verify_local_settings_no_hooks(project_root: Path) -> None:
     advice = (
         "   框架 hook 應只註冊於 settings.json（PC-148 單一註冊來源）；"  # i18n-exempt
         "settings.local.json 為 sync 排除檔，殘留註冊 relocate 後會成幽靈。"  # i18n-exempt
-        "修復：移至 settings.json，或執行 hook-completeness-check.py --fix 清理幽靈。"  # i18n-exempt
+        "修復：移至 settings.json，或執行 hook-registration-coverage-check.py --fix 清理幽靈。"  # i18n-exempt
     )
     print_color(advice, "yellow")
 

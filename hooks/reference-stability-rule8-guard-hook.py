@@ -15,6 +15,21 @@
   不再依「跳轉引導詞」句型判斷依賴型 vs 歷史錨點型（該判準已被
   reference-stability-rules.md 規則 8 汰換，見同檔「與舊兩類判準的對應」）。
 
+專案檔案路徑偵測（WARNING-only 新增層）：
+  規則 8 條文以「等」開放列舉專案層級識別符，不限 ticket ID——worklog
+  路徑、docs/spec 路徑等專案目錄開頭的路徑同樣落入條文範圍（曾有實證：
+  框架方法論多處寫入具體 docs/spec/ 路徑，全數通過本守衛的舊版偵測，
+  因舊版只認 ticket ID 兩個樣式，未涵蓋路徑類識別符）。判準不是列舉
+  「所有可能的專案目錄」，而是「該路徑在其他 consumer 專案是否保證
+  存在」：`.claude/` 開頭的路徑跨專案恆存在（框架內部結構，規則 8 明文
+  允許），PROJECT_PATH_PREFIXES 所列的專案頂層目錄開頭路徑則不保證
+  存在（其他 consumer 專案可能是不同語言、不同目錄結構，甚至無此目錄）。
+  對 .claude/ 全量掃描（量測時點：本層級實作當下，逐字元路徑 token 比對，
+  已排除 .claude/ 開頭與 code fence）命中 1990 個相異路徑值、分布於 394
+  個檔案——規模遠大於可承受的一次性阻擋量（ARCH-016 失效模式：一次把
+  大量既有違規轉為阻擋會逼出整批豁免標記，等於廢掉規則），故本層級僅
+  WARNING 提示（exit 0，不阻擋），阻擋層留待觀察期後另評估。
+
 存量凍結機制（避免對既有大量存量違規產生噪音壓力，ARCH-016 失效模式）：
   本 hook 於 PreToolUse（編輯套用前）讀取目標檔案「編輯前」的磁碟內容作為
   該檔的即時基準（不需另存快照檔），套用本次 Edit/Write/MultiEdit 重建
@@ -47,9 +62,14 @@
 觸發時機: PreToolUse Edit / Write / MultiEdit
 掃描範圍: 目標檔案路徑位於 `.claude/` 下，且不在 `.claude/handoff/archive/`
           （該目錄為歷史紀錄，規則 8 明文豁免）
-偵測樣式:
+偵測樣式（ticket ID 軌，exit 2 可阻擋）:
   - 版本化 ticket ID：`\\d+\\.\\d+\\.\\d+-W\\d+-\\d+`（如 9.9.9-W9-999）
   - 裸格式 ticket ID：`W\\d+-\\d+`（如 W9-999）
+偵測樣式（專案路徑軌，WARNING-only，exit 0 不阻擋）:
+  - 完整路徑 token 以 PROJECT_PATH_PREFIXES（docs/、lib/、test/、
+    integration_test/）任一前綴開頭，且以常見框架檔案副檔名
+    （md/py/dart/yaml/yml/json/txt/svg）結尾
+  - 完整 token 以 `.claude/` 開頭者排除（框架內部結構，規則 8 允許）
 放行例外（不視為 ticket ID 候選）:
   - 框架 error-pattern ID（PC-xxx / IMP-xxx / ARCH-xxx）與其檔名
   - 日期字串（YYYY-MM-DD）
@@ -67,6 +87,10 @@
       無新增命中 / 全屬既有存量 / 非掃描範圍 / 豁免路徑 / 輸入異常 /
       新增命中全數被有效 marker 涵蓋
       → 靜默放行（既有存量命中額外寫入 debug 日誌供觀察）
+      命中新增專案路徑且未被有效 marker 涵蓋（含 marker 格式錯誤）
+      → exit 0 放行 + stderr 寫入 WARNING（不影響 exit code，與 ticket ID
+      軌並列獨立判斷；兩軌同時命中時 stderr 依序含兩段訊息，exit code
+      仍完全由 ticket ID 軌決定）
 
 對應規則：.claude/references/reference-stability-rules.md 規則 8
 及其「引用性質判準：全禁原則與五類分類」章節
@@ -135,6 +159,23 @@ VALID_MARKER_CATEGORIES = frozenset({"testdata", "illustration", "relocation"})
 # ".claude/pm-rules/parallel-dispatch.md"），供判斷「是否確實指出搬移來源」
 RELOCATION_SOURCE_PATH_PATTERN = re.compile(
     r"\S+\.(?:md|py|dart|ya?ml|json|txt|svg)\b"
+)
+
+# 專案層級檔案路徑偵測（規則 8「等」開放列舉的路徑類識別符，非僅 ticket
+# ID）。判準是「該路徑在其他 consumer 專案是否保證存在」，不是列舉所有
+# 可能的專案目錄：`.claude/` 開頭的路徑跨專案恆存在（框架內部結構），
+# 下列前綴則是常見專案頂層目錄、在其他 consumer 專案不保證存在（可能是
+# 不同語言、不同目錄結構，甚至無此目錄）。新增專案類型的頂層目錄可直接
+# 擴充此 tuple，不影響判準本身；此清單非豁免類白名單（無成員上限規定）。
+PROJECT_PATH_PREFIXES = ("docs/", "lib/", "test/", "integration_test/")
+
+# 路徑類命中的完整 token 樣式：從最外層邊界（行首 / 空白 / 反引號 / 引號 /
+# 括號）開始比對到副檔名結尾，取得的是完整路徑而非任意子字串——避免
+# ".claude/skills/lib/foo.py" 這類巢狀路徑中的 "lib/foo.py" 子字串被誤判
+# 為專案路徑（完整路徑其實以 .claude/ 開頭，屬框架內部結構，規則 8 允許）。
+# 副檔名沿用 RELOCATION_SOURCE_PATH_PATTERN 同一組常見框架檔案類型。
+PROJECT_PATH_TOKEN_PATTERN = re.compile(
+    r"(?:(?<=[\s`'\"(\[])|^)((?:\.?[\w.\-]+/)+[\w.\-]+\.(?:md|py|dart|ya?ml|json|txt|svg))\b"
 )
 
 
@@ -339,6 +380,49 @@ def find_ticket_id_hits(text: str) -> List[str]:
     return hits
 
 
+def find_project_path_hits_with_lines(text: str) -> List[Tuple[str, int]]:
+    """逐行找出專案層級檔案路徑候選，回傳 (path, line_index) list（0-based，不去重）。
+
+    與 find_ticket_id_hits_with_lines 為並列的獨立偵測軸（同一份規則 8，
+    不同識別符類型），共用同一套 code fence 排除實作
+    （_strip_code_fences_preserve_lines）與逐行 marker 生效範圍設計，
+    使 filter_marker_exempt 可原樣套用於兩種命中類型。
+
+    豁免判斷：完整路徑 token 以 `.claude/`（SCAN_PREFIX）開頭者一律排除
+    （框架內部結構，規則 8 明文允許）；其餘 token 只有以
+    PROJECT_PATH_PREFIXES 任一前綴開頭才視為候選。
+    """
+    if not text:
+        return []
+    cleaned = _strip_code_fences_preserve_lines(text)
+    hits: List[Tuple[str, int]] = []
+    for idx, line in enumerate(cleaned.split("\n")):
+        for match in PROJECT_PATH_TOKEN_PATTERN.finditer(line):
+            token = match.group(1)
+            if token.startswith(SCAN_PREFIX):
+                continue
+            if token.startswith(PROJECT_PATH_PREFIXES):
+                hits.append((token, idx))
+    return hits
+
+
+def find_project_path_hits(text: str) -> List[str]:
+    """在文字中找出專案層級檔案路徑候選（已排除 .claude/ 開頭與 code fence），去重保序。
+
+    為 find_project_path_hits_with_lines 的去重保序投影，結構對稱
+    find_ticket_id_hits 之於 find_ticket_id_hits_with_lines 的關係。
+    """
+    if not text:
+        return []
+    hits: List[str] = []
+    seen = set()
+    for value, _line_idx in find_project_path_hits_with_lines(text):
+        if value not in seen:
+            seen.add(value)
+            hits.append(value)
+    return hits
+
+
 def _read_existing_file(file_path: str) -> str:
     """讀取檔案編輯前的磁碟內容；不存在或無法解碼時回傳空字串（視為新檔）。"""
     try:
@@ -411,10 +495,19 @@ def reconstruct_pre_post_text(
     return pre_text, pre_text
 
 
-def diff_new_hits(pre_text: str, post_text: str) -> List[str]:
-    """回傳 post_text 相對 pre_text 淨增量的 ticket ID 命中（去重保序）。"""
-    pre_hits = set(find_ticket_id_hits(pre_text))
-    post_hits = find_ticket_id_hits(post_text)
+def diff_new_hits(
+    pre_text: str,
+    post_text: str,
+    finder=find_ticket_id_hits,
+) -> List[str]:
+    """回傳 post_text 相對 pre_text 淨增量的命中（去重保序）。
+
+    finder 預設為 find_ticket_id_hits（既有呼叫端行為不變）；傳入
+    find_project_path_hits 可複用同一套淨增量比對邏輯處理路徑類命中，
+    避免另寫一份幾乎相同的比對函式（DRY）。
+    """
+    pre_hits = set(finder(pre_text))
+    post_hits = finder(post_text)
 
     new_hits: List[str] = []
     seen = set()
@@ -458,6 +551,32 @@ def build_block_message(file_path: str, blocked_hits: List[str]) -> str:
         f"{build_marker_syntax_hint()}"
         f"這是阻擋（exit 2），非提示——若確認此 ID 屬合法情境（測資 / 示範），"
         f"請在該行或上一行加上逃生閥 marker 後重試。"
+    )
+
+
+def build_path_warning_message(file_path: str, new_paths: List[str]) -> str:
+    """組合專案路徑類新增命中的 WARNING 訊息（非阻擋，exit 0）。
+
+    與 build_block_message（ticket ID，exit 2）並列但語氣與行為不同：
+    路徑類命中規模過大（全量掃描 .claude/ 命中 1990 個相異路徑值、
+    分布 394 個檔案，見模組 docstring），一次轉為阻擋會逼出整批豁免
+    標記而廢掉規則，故本層級僅提示不阻擋，阻擋層留待觀察期後另評估。
+    """
+    paths_display = "、".join(new_paths)
+    return (
+        f"[WARNING][reference-stability-rule8] .claude/ 框架檔案新增內容含"
+        f"專案層級檔案路徑引用：{file_path}\n"
+        f"新增命中：{paths_display}\n"
+        f"依據：.claude/references/reference-stability-rules.md 規則 8"
+        f"（框架文件禁止引用專案層級識別符，worklog 路徑等專案目錄開頭的"
+        f"路徑在其他 consumer 專案 sync 後會變成死連結；既有於檔案內的"
+        f"存量引用不重複觸發本提示）。\n"
+        f"處置：改引用 `.claude/` 框架檔案路徑，或抽象化為不依賴具體專案"
+        f"路徑的描述；若屬合法情境（如 error-pattern 記載歷史事實），"
+        f"可用行內 marker 豁免。\n"
+        f"{build_marker_syntax_hint()}"
+        f"這是 WARNING（exit 0），不阻擋本次操作；命中量過大，此層級目前"
+        f"僅提示，是否升級為阻擋留待觀察期後另評估。"
     )
 
 
@@ -513,7 +632,10 @@ def _find_marker_lines(post_text: str) -> Dict[int, Tuple[bool, str, str]]:
 
 
 def filter_marker_exempt(
-    file_path: str, post_text: str, new_hits: List[str]
+    file_path: str,
+    post_text: str,
+    new_hits: List[str],
+    hits_with_lines_finder=find_ticket_id_hits_with_lines,
 ) -> Tuple[List[str], List[str]]:
     """依行內 marker 逃生閥篩選新增命中，回傳 (blocked_hits, format_error_messages)。
 
@@ -521,21 +643,26 @@ def filter_marker_exempt(
     若所在行或上一行有有效 marker → 豁免；若有 marker 但格式錯誤（未知
     category 或理由為空）→ 該命中仍阻擋，且產生獨立的格式錯誤訊息。
 
+    `hits_with_lines_finder` 預設為 find_ticket_id_hits_with_lines（既有
+    呼叫端行為不變）；傳入 find_project_path_hits_with_lines 可讓路徑類
+    命中沿用同一套 marker 逃生閥機制（同一組 rule8-exempt category），
+    不需為路徑類另寫一份豁免判斷邏輯。
+
     前提（呼叫端契約）：`new_hits` 必須是針對同一份 `post_text` 呼叫
-    `find_ticket_id_hits` 得到結果的子集。此契約現由單一事實來源保證
-    成立——find_ticket_id_hits 已改為 find_ticket_id_hits_with_lines 的
-    去重投影（見該函式），故 `new_hits` 中的每個值必然能在
-    `find_ticket_id_hits_with_lines(post_text)` 找到至少一筆對應的
-    (value, line_idx)。曾經需要的「找不到對應行時 fail-closed 阻擋」
-    保底分支（因兩函式各自獨立實作 fence 排除、邊界可能不一致）已隨此
-    次重構結構性消除，不再需要，故移除。若未來任一呼叫端違反此契約
-    （傳入非源自 find_ticket_id_hits(post_text) 的 new_hits），本函式會
-    靜默忽略該值——這是新的風險面，留意 main() 為唯一生產路徑且已符合
+    `hits_with_lines_finder` 對應的去重投影函式（find_ticket_id_hits /
+    find_project_path_hits）得到結果的子集。此契約由單一事實來源保證
+    成立——兩組 finder 皆為對應 with_lines 版本的去重投影（見各自函式），
+    故 `new_hits` 中的每個值必然能在 `hits_with_lines_finder(post_text)`
+    找到至少一筆對應的 (value, line_idx)。曾經需要的「找不到對應行時
+    fail-closed 阻擋」保底分支（因兩函式各自獨立實作 fence 排除、邊界
+    可能不一致）已隨重構結構性消除，不再需要，故移除。若未來任一呼叫端
+    違反此契約（傳入非源自對應 finder(post_text) 的 new_hits），本函式會
+    靜默忽略該值——這是既有風險面，留意 main() 為唯一生產路徑且已符合
     契約。
     """
     marker_info = _find_marker_lines(post_text)
     new_hits_set = set(new_hits)
-    hits_with_lines = find_ticket_id_hits_with_lines(post_text)
+    hits_with_lines = hits_with_lines_finder(post_text)
 
     blocked: List[str] = []
     seen_blocked = set()
@@ -578,8 +705,41 @@ def filter_marker_exempt(
     return blocked, format_error_messages
 
 
+def build_path_warning_output(file_path: str, pre_text: str, post_text: str) -> Optional[str]:
+    """計算路徑類新增命中並組合 WARNING 訊息；無新增命中或全數豁免時回傳 None。
+
+    本函式輸出恆為 WARNING（不影響 main() 的阻擋判斷，exit code 全由
+    ticket ID 命中軌決定）——即使 marker 格式錯誤，路徑類命中規模過大
+    （見模組 docstring「專案檔案路徑偵測」段），此層級整體維持僅提示、
+    不阻擋，格式錯誤同樣併入提示訊息而非升級為阻擋。
+    """
+    new_paths = diff_new_hits(pre_text, post_text, finder=find_project_path_hits)
+    if not new_paths:
+        return None
+
+    blocked_paths, format_error_messages = filter_marker_exempt(
+        file_path,
+        post_text,
+        new_paths,
+        hits_with_lines_finder=find_project_path_hits_with_lines,
+    )
+    if not blocked_paths and not format_error_messages:
+        return None
+
+    messages = []
+    if blocked_paths:
+        messages.append(build_path_warning_message(file_path, blocked_paths))
+    messages.extend(format_error_messages)
+    return "\n\n".join(messages)
+
+
 def main() -> int:
-    """主入口：讀取 stdin → 篩選掃描範圍與豁免 → 重建編輯前後內容 → 淨增量比對 → marker 篩選 → 阻擋。"""
+    """主入口：讀取 stdin → 篩選掃描範圍與豁免 → 重建編輯前後內容 → 淨增量比對 → marker 篩選 → 阻擋。
+
+    路徑類命中（build_path_warning_output）與 ticket ID 命中為並列的兩條
+    獨立軌，前者無論後者是否阻擋皆會計算並輸出 WARNING（exit code 不受
+    影響，全由 ticket ID 軌決定）——見模組 docstring「專案檔案路徑偵測」段。
+    """
     logger = setup_hook_logging("reference-stability-rule8-guard")
 
     input_data = read_json_from_stdin(logger)
@@ -608,6 +768,14 @@ def main() -> int:
         return EXIT_ALLOW
 
     pre_text, post_text = reconstruct_pre_post_text(tool_name, tool_input, file_path)
+
+    path_warning = build_path_warning_output(file_path, pre_text, post_text)
+    if path_warning:
+        sys.stderr.write(path_warning + "\n")
+        logger.info(
+            f"專案路徑類新增命中（WARNING，不阻擋）：file={file_path} tool={tool_name}"
+        )
+
     new_hits = diff_new_hits(pre_text, post_text)
 
     if not new_hits:

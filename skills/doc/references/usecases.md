@@ -105,6 +105,11 @@ UC 文件本文可選擇性附加一個結構化 `flow` YAML 區塊，把「主�
 | return_to | 選填（替代場景步驟填） | 回歸到哪個步驟 id（`returning` 邊，back-edge，排除於 DAG 佈局） |
 | implements | 選填 | 對應 FR 編號 |
 | emits / consumes | 選填 | 對應 EVT 編號，EVT 型別現階段屬提案中，尚未進 validator 必填契約 |
+| traverses | 必填（欄位必存在，值可為空清單） | 本步驟直接觸及的 domain 公開面，domain 名字串清單（0..n）。純畫面步驟（畫面狀態屬 layer 而非 domain）填 `[]`；經 domain 依賴邊間接到達者不列；一步可列多個 domain。對應 domain map 的「貫穿」，domain 被幾條 flow 貫穿由消費端聚合本欄位，不另存反向欄位。domain 名是否存在於 domain map 不在 schema 層檢查 |
+
+**traverses 為何是清單而非單值**：一個步驟可同時觸及多個 domain，且畫面狀態
+不是 domain，單值欄位會迫使純畫面步驟硬塞一個 domain、多 domain 步驟只能擇一。
+欄位必存在是為了讓「未填」與「填了空清單（刻意不觸及任何 domain）」可區分。
 
 **「由某步驟分岔出哪些替代場景」不另存欄位**：只有 `branch_from`（替代場景
 側）是儲存欄位；反向查詢（某主流程步驟分岔出哪些替代場景）由消費端掃描所有

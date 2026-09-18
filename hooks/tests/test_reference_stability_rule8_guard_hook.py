@@ -914,6 +914,138 @@ class TestInlineBacktickFenceBoundary:
 
 
 # ---------------------------------------------------------------------------
+# 專案檔案路徑偵測（WARNING-only，0.1.0-W3-181 擴充）：規則 8 條文以「等」
+# 開放列舉專案層級識別符，不限 ticket ID；本層級只提示不阻擋（見模組
+# docstring「專案檔案路徑偵測」段），故以下測試皆斷言 rc == 0，僅檢查
+# stderr 訊息內容而非 exit code。
+# ---------------------------------------------------------------------------
+
+
+class TestProjectPathWarningLayer:
+    def test_new_project_path_reference_triggers_warning_not_blocking(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        target = _claude_path(tmp_path, "methodologies", "example-methodology.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "詳見 docs/spec/ui/SPEC-003-interaction-response.md 的規格。"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert "WARNING" in err
+        assert "docs/spec/ui/SPEC-003-interaction-response.md" in err
+
+    def test_nested_claude_path_not_flagged_as_project_path(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """完整路徑以 .claude/ 開頭時，其中的 lib/foo.py 子字串不應被誤判
+        為專案路徑（判準比對完整 token，非任意子字串）。"""
+        target = _claude_path(tmp_path, "references", "example-doc2.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": "原始內容\n實作見 .claude/skills/example/lib/foo.py。",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_project_path_marker_exempt_same_line(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        target = _claude_path(tmp_path, "pm-rules", "path-marker-same-line.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "詳見 docs/spec/ui/SPEC-003.md "
+                    "rule8-exempt: illustration:規則 8 正文示範路徑類豁免"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_project_path_freeze_existing_not_rewarned(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        target = _claude_path(tmp_path, "pm-rules", "path-freeze-example.md")
+        target.write_text(
+            "既有內容第一行\n既有引用 docs/spec/ui/SPEC-002.md\n既有內容第三行\n",
+            encoding="utf-8",
+        )
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "既有內容第三行",
+                "new_string": "既有內容第三行（微調文字，仍含 docs/spec/ui/SPEC-002.md）",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_project_path_blocking_ticket_id_case_still_warns_independently(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """路徑類 WARNING 與 ticket ID 阻擋為並列獨立軌：同一次編輯若同時
+        新增 ticket ID（阻擋）與專案路徑（提示），exit code 仍由 ticket ID
+        軌決定（exit 2），但 stderr 應同時含兩軌訊息。"""
+        target = _claude_path(tmp_path, "pm-rules", "path-and-ticket-id.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "詳見 0.2.1-W3-909 與 docs/spec/ui/SPEC-004.md。"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "BLOCKED" in err
+        assert "0.2.1-W3-909" in err
+        assert "WARNING" in err
+        assert "docs/spec/ui/SPEC-004.md" in err
+
+
+# ---------------------------------------------------------------------------
 # 單元函式測試（守衛與規則文件判準一致性，acceptance 4）
 # ---------------------------------------------------------------------------
 
@@ -938,6 +1070,29 @@ class TestUnitFunctions:
     def test_whitelist_member_count_within_limit(self, hook_mod):
         """規則文件明訂第 4 類白名單成員上限 3。"""
         assert len(hook_mod.WHITELIST_PATHS) <= 3
+
+    def test_find_project_path_hits_detects_project_dir_prefix(self, hook_mod):
+        hits = hook_mod.find_project_path_hits(
+            "詳見 docs/spec/ui/SPEC-003-interaction-response.md 的規格。"
+        )
+        assert "docs/spec/ui/SPEC-003-interaction-response.md" in hits
+
+    def test_find_project_path_hits_excludes_claude_prefixed_full_path(self, hook_mod):
+        """完整路徑以 .claude/ 開頭時（即使巢狀含 lib/ 等專案目錄同名片段）
+        不視為專案路徑候選——判準比對完整 token，非任意子字串。"""
+        hits = hook_mod.find_project_path_hits(
+            "實作見 .claude/skills/example/lib/foo.py。"
+        )
+        assert hits == []
+
+    def test_diff_new_hits_with_project_path_finder(self, hook_mod):
+        pre = "既有引用 docs/spec/ui/SPEC-002.md"
+        post = "既有引用 docs/spec/ui/SPEC-002.md 新增引用 lib/foo.py"
+        new_hits = hook_mod.diff_new_hits(
+            pre, post, finder=hook_mod.find_project_path_hits
+        )
+        assert "lib/foo.py" in new_hits
+        assert "docs/spec/ui/SPEC-002.md" not in new_hits
 
     def test_diff_new_hits_excludes_pre_existing(self, hook_mod):
         pre = "既有引用（0.2.1-W3-100）"

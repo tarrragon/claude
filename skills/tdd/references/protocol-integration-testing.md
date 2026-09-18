@@ -118,8 +118,8 @@ SDK init → event/error 送出 → flush → collector 驗證 → SQLite 儲存
 ## 相關文件
 
 - `references/phase2-test-design.md` — 測試金字塔和測試設計（本文是其 protocol integration 擴充）
-- `references/doc-handoff.md` — 整合測試 vs 單元測試分工框架
-- `references/layered-test-strategy.md` — Clean Arch 五層測試方法選擇
+- `references/doc-handoff-test-tier-assignment.md` — 整合測試 vs 單元測試分工框架
+- `references/layered-test-strategy.md` — 依架構層級選擇測試方法
 - `docs/transport.md` — SDK↔collector 通訊契約
 - `schema/event.schema.json` — 事件格式契約 SOT
 

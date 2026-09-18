@@ -27,6 +27,8 @@
 | 錯誤聚合        | error tracking 服務（Sentry 類）：同錯誤聚合、新錯誤通知、帶 stack trace  |
 | 主機 / 平台訊號 | CPU、記憶體、磁碟、連線數 — 託管平台多半內建、確認打開並設基本 alert      |
 
+系統進入卸載（load shedding）時的額外訊號 — 每個仲裁決策的可觀測事件、被丟棄請求的留痕粒度、告警綁狀態變遷而非「佔用量高」— 判準見事件流負載仲裁方法論〈可觀測性〉、欄位範本與訪談流程見 `event-flow-arbitration-design` skill，以本維度的 structured log 與 request id 為前提。
+
 這個集合的設計原則：每個訊號都直接回答一個事故當下的問題。「掛了嗎」→ uptime；「誰受影響」→ request log 的 user 欄；「是我的 bug 還是依賴掛了」→ 錯誤分類；「哪行程式」→ error tracking。訊號回答不了任何具體問題的、不進 day one 集合。
 
 **外部託管判讀**：觀測的買 vs 建關鍵在計費怎麼隨資料量放大 —— observability SaaS 的帳單跟著 metrics cardinality 與保留期長（見 `principles/capability-outsourcing-depth.md`）。day-one 最小集本身偏外包：uptime 監控、error tracking（Sentry 類）、平台內建主機訊號都是 feature SaaS / 平台原生、零自建。真正的買 vs 建出現在延後項那一層：metrics 趨勢、log 聚合、tracing 要嘛買 observability SaaS（Datadog / Grafana Cloud 類、把存儲與查詢外包），要嘛自建 stack（Prometheus / Loki / Tempo、省授權費但扛維運與容量）。小團隊預設買 SaaS 到「帳單成長超過自建維運成本」的 tripwire 觸發為止；cardinality 與保留期是計費的主要放大器、納入規模 tripwire。

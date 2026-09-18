@@ -86,6 +86,8 @@
 
 ---
 
+本 Pass 的判準卡：[anecdotal-source-needs-mechanism-reconstruction](principles/anecdotal-source-needs-mechanism-reconstruction.md)——那裡給分析層要重建哪幾件事，以及只換敘述口吻時的判讀徵兆。
+
 ## 五個 Pass
 
 ### Pass 1：Source Layering
@@ -118,6 +120,8 @@ Source layering 是把材料拆成事實、原作者判讀、本文推導。每�
 本文把這個收購視為「基礎設施廠商往 data pipeline 延伸」的訊號。這是本文判讀，不是事件本身。
 ```
 
+本 Pass 的判準卡：[external-analysis-source-layering](principles/external-analysis-source-layering.md)——那裡給「事實 / 原作者判讀 / 本文推導」三層的分層方式與混層的判讀徵兆。
+
 ### Pass 2：Reader Level
 
 Reader-level pass 是把原文 reader contract 改成目標讀者 contract。先辨識原文寫給誰，再決定是否降一級。
@@ -134,6 +138,8 @@ Reader-level pass 是把原文 reader contract 改成目標讀者 contract。先
 - 三句內連續三個以上跨領域術語，拆段或補卡。
 - 一句話跨三個以上因果步，拆成多段。
 - 讀者能背結論但說不出推導，補機制、公式、數字或例子。
+
+本 Pass 的判準卡：[cross-domain-reader-level-alignment](principles/cross-domain-reader-level-alignment.md)——那裡給讀者層級的定位順序，以及層級定了之後術語密度怎麼跟著決定。
 
 ### Pass 3：Internal Analysis
 
@@ -177,6 +183,8 @@ Deliverable pass 確認文章交付的是可遷移框架，而不是原文摘要
 這是一份責任清單，不是固定模板。不同文章可以調整順序，但不能缺少可遷移框架與失效條件。
 
 ---
+
+本 Pass 的判準卡：[analysis-rewrite-delivers-transferable-framework](principles/analysis-rewrite-delivers-transferable-framework.md)——那裡給「可遷移框架」與「風格轉換」的分界，以及交付物只到後者時的判讀徵兆。
 
 ## 自檢清單
 

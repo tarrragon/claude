@@ -374,51 +374,81 @@ class TestGetUcSummary:
             # 標準單段結構無子場景前綴
             assert all(not step.startswith("[") for step in summary["main_flow"]), uc_id
 
-    def test_real_project_uc05_returns_section_summary(self):
+    def test_uc05_style_no_main_flow_returns_section_summary(self, tmp_path):
         """回歸驗證：UC-05（無主要成功場景）fallback 回傳非空章節標題摘要（W1-076 acceptance 1）。
 
-        本專案尚無 UC-05；不存在時 skip（見上方 class docstring 判定理由）。
+        0.1.0-W3-358 歸因：原斷言依賴上游來源專案 UC-05 文件內容形狀，本專案
+        UC-05 已回填結構化 flow 而走 dual-track 新路徑，斷言隨之過期。
+        改為暫存目錄自建符合 acceptance 1 場景（無「主要成功場景」章節）的
+        SSOT 內容，斷言程式行為而非特定專案文件內容。
         """
-        from doc_system.core.file_locator import FileLocator
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / "app-use-cases.md").write_text(
+            "## UC-05: 找出被阻擋的工作\n\n### 前置條件\n內容\n",
+            encoding="utf-8",
+        )
 
-        project_root = FileLocator.get_project_root()
-        if "UC-05" not in uc_registry.parse_ssot(project_root):
-            pytest.skip("本專案 spec 未包含 UC-05，略過回歸驗證")
-        summary = uc_registry.get_uc_summary("UC-05", project_root)
+        summary = uc_registry.get_uc_summary("UC-05", str(tmp_path))
+
         assert summary is not None
         assert len(summary["main_flow"]) > 0
         assert summary["is_section_summary"] is True
 
-    def test_real_project_uc06_merges_6a_6b_with_prefix(self):
+    def test_uc06_style_merges_6a_6b_with_prefix(self, tmp_path):
         """回歸驗證：UC-06 合併 6A+6B 主流程步驟並加子場景前綴（W1-076 acceptance 2）。
 
-        本專案尚無 UC-06；不存在時 skip（見上方 class docstring 判定理由）。
+        0.1.0-W3-358 歸因：原斷言依賴上游來源專案 UC-06 文件內容形狀，改為
+        暫存目錄自建 6A/6B 子場景的 SSOT 內容，斷言程式行為而非文件內容。
         """
-        from doc_system.core.file_locator import FileLocator
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / "app-use-cases.md").write_text(
+            "## UC-06: 標題\n\n"
+            "### 基本資訊\n內容\n\n"
+            "## 6A. 子場景\n\n"
+            "### 主要成功場景\n\n"
+            "1. **步驟一**\n\n"
+            "## 6B. 子場景2\n\n"
+            "### 主要成功場景\n\n"
+            "1. **步驟二**\n",
+            encoding="utf-8",
+        )
 
-        project_root = FileLocator.get_project_root()
-        if "UC-06" not in uc_registry.parse_ssot(project_root):
-            pytest.skip("本專案 spec 未包含 UC-06，略過回歸驗證")
-        summary = uc_registry.get_uc_summary("UC-06", project_root)
+        summary = uc_registry.get_uc_summary("UC-06", str(tmp_path))
+
         assert summary is not None
         assert summary["is_section_summary"] is False
         labels = {step.split("]")[0].lstrip("[") for step in summary["main_flow"]}
         assert labels == {"6A", "6B"}
 
-    def test_real_project_uc08_uc09_prefix_h4_sub_scenarios(self):
+    def test_uc08_uc09_style_prefix_h4_sub_scenarios(self, tmp_path):
         """回歸驗證：UC-08/09 的 H4 子場景步驟加前綴消除編號重複歧義（W1-076 acceptance 3）。
 
-        本專案尚無 UC-08/09；不存在時 skip（見上方 class docstring 判定理由）。
+        0.1.0-W3-358 歸因附帶檢查：本測試原以「本專案是否已含 UC-08/09」
+        判斷是否 skip，與 uc05/06 同型隱患——一旦本專案回填 UC-08/09 結構化
+        flow，斷言即可能過期。改為暫存目錄自建測試資料，不依賴任何專案的
+        UC 文件內容存在與否。
         """
-        from doc_system.core.file_locator import FileLocator
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir(parents=True)
+        for uc_id in ("UC-08", "UC-09"):
+            (docs_dir / "app-use-cases.md").write_text(
+                f"## {uc_id}: 標題\n\n"
+                "### 主要成功場景\n\n"
+                "#### 8A. 自動版本識別\n\n"
+                "1. **觸發版本檢測**\n\n"
+                "2. **相似度計算**\n\n"
+                "#### 8B. 手動版本管理\n\n"
+                "1. **版本管理界面存取**\n\n"
+                "### 延伸場景\n\n"
+                "#### 8D. 翻譯版本自動識別\n\n"
+                "1. **不應被收錄**\n",
+                encoding="utf-8",
+            )
 
-        project_root = FileLocator.get_project_root()
-        ssot = uc_registry.parse_ssot(project_root)
-        present = [uc_id for uc_id in ("UC-08", "UC-09") if uc_id in ssot]
-        if not present:
-            pytest.skip("本專案 spec 未包含 UC-08/09，略過回歸驗證")
-        for uc_id in present:
-            summary = uc_registry.get_uc_summary(uc_id, project_root)
+            summary = uc_registry.get_uc_summary(uc_id, str(tmp_path))
+
             assert summary is not None, uc_id
             assert summary["is_section_summary"] is False, uc_id
             assert all(step.startswith("[") for step in summary["main_flow"]), uc_id

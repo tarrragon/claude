@@ -3,6 +3,15 @@
 本文件定義接手既有程式碼（Legacy Code）時的標準化流程（前置步驟 + 步驟 0~6）。
 適用於專案重啟、接手他人程式碼、或長期未維護的程式碼庫。
 
+> **先確認模式**：本流程服務**吸收**——接手的專案將納入本框架的文件與追蹤系統繼續開發，
+> 因此前置要求 worklog 與 ticket 系統可用，終點是提案與版本計畫。被操作的專案不會用本框架
+> 開發時（無本框架票庫且 ticket CLI 不可用即屬此類）改走 `project-analysis` skill：該 skill
+> 的工序由本流程剝除吸收成分而來，產物住被操作 repo 之外的外接資料夾，追蹤載體是盤點工作項表。
+>
+> **雙向同步要求**：本流程增刪或重編步驟時，同步更新 `project-analysis` skill 的盤點步驟路由與
+> 剝除表。該 skill 以本檔的章節名指路，章節改名後它會指向不存在的章節，而指錯與指對在讀者端
+> 同形——讀者只會發現找不到，不會知道原因。
+
 ---
 
 ## 評估報告（必要）
@@ -656,8 +665,11 @@ Roadmap 建立後，若有新需求或設計變更，走相同模式：
 | `references/proposal-evaluation-guide.md` | 提案三關式審查 |
 | `.claude/rules/core/quality-baseline.md` | 品質基線（Phase 4 等） |
 | `.claude/pm-rules/tdd-flow.md` | TDD 流程 |
+| `project-analysis` skill | 分析模式（非吸收）的工序；本流程的 ticket 系統前置不成立時走該 skill，兩者互指 |
+| `references/external-workspace-spec.md` | 分析模式的產物規格（外接資料夾、工作項表、讀法映射） |
 
 ---
 
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-09-16
+**Version**: 1.9.0 - 開頭補「先確認模式」一段（含雙向同步要求），指出本流程服務吸收，非本框架專案改走 `project-analysis` skill（兩者互指）；相關文件表增列該 skill 與外接資料夾規格。流程本體未動
 **Version**: 1.8.0 - 步驟 4 策略修正：UC 整合測試優先於全量測試，全量測試數字無法判斷業務流程是否斷裂
