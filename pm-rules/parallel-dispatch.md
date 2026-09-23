@@ -409,6 +409,34 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 > 詳細驗證步驟和常見原因：.claude/references/parallel-dispatch-details.md
 
+### PM 側 worktree 合入與驗收三軸（強制）
+
+本節定義 PM 收到 worktree 代理人 `finish` 回報後的動作：合入四步、驗收三軸、失效處置。代理人側的「在 worktree 內 `git merge main`」見 `.claude/references/agent-dispatch-template.md`〈worktree 派發 base 同步指引〉，本節不重複。**Why**：worktree 派發的分支以派發瞬間的 main 為基底，同批其他票與 PM 自己的提交會讓 main 持續前進，直接 fast-forward 必被拒；而代理人回報的「已完成」是記錄平面，票狀態與程式碼是否真的進了歷史要看 git。**Consequence**：不重併就 ff 會反覆被拒或誤走成 merge commit；只信回報會把停在工作區的完成狀態當成已落地，下一個 session 看到的是 in_progress。**Action**：
+
+| 步驟 | 命令 | 說明 |
+|------|------|------|
+| 1 併 main 進 worktree | `git -C <worktree> merge --no-edit main` | 在分支側解衝突，主 repo 不動 |
+| 2 ff 進 main | `git merge --ff-only <branch>` | 被拒即 main 又前進了，回到步驟 1 再併一次；主 repo 工作區若有 PM 自己對同檔的未提交修改，先精確提交再 ff |
+| 3 清理 | `git worktree remove <path>`、`git branch -d <branch>` | 鎖定中先 `git worktree unlock` |
+| 4 推送 | `git push origin main` | 推送輸出與 `rev-parse origin/main` 核對 |
+
+**驗收三軸**（每張票回報後逐項；與 `bash-tool-usage-rules.md` 規則七的「三平面」（HEAD／index／working tree）無關，此處三軸為票狀態、內容、測試）：
+
+| 平面 | 看什麼 | 判準 |
+|------|-------|------|
+| 票狀態 | `git show HEAD:<票 md>` 的 `status` | 回報「已完成」而 HEAD 仍 `in_progress`，代表代理人收尾的隔離提交因鎖競爭失敗、狀態停在工作區——由 PM 精確 `git add <票 md>` 後裸提交，不要求代理人重跑 |
+| 內容 | 分支 `git show --stat` 與票面 `where.files` 對照 | 多出的檔案要有票面解釋；`where.files` 有交集的票不得同批並行 |
+| 測試 | PM 在 worktree 覆核重跑該票測試 | 以 PM 自己看到的通過數為準，不以回報數為準 |
+
+**失效與處置**：
+
+| 現象 | 處置 |
+|------|------|
+| 代理人自行標記衍生票的 `scope_blocker` | PM 以版本契約三問重判；非契約者 `set-scope-blocker --clear`，留池由發版前移 |
+| 代理人自行 merge 並推送主分支 | 越界但不回滾：`git merge origin/main` 回本地後照三軸覆核，越界事實記入票面 |
+| 代理人上報驗收條件字面不可能成立 | 改寫條件（PM 裁決），不要求代理人繞過守衛 |
+| `index.lock` 反覆出現而無代理人在跑 | PostToolUse 的票務自動提交 hook（`ticket-md-auto-commit-hook.py`）與 PM 命令競爭：短暫重試；含 `git commit` 的命令會被 `commit-stage-guard-gate-hook.py` 於執行前掃描 index，index 內須先無違規檔（例如非豁免的版本檔） |
+
 ---
 
 ## 派發機制選用準則（named agent vs 一般 subagent，W2-002 ANA 落地）
@@ -509,7 +537,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
-**Last Updated**: 2026-09-08
+**Last Updated**: 2026-09-23
+**Version**: 4.33.0 - 〈並行派發後驗證〉下新增「PM 側 worktree 合入與驗收三軸（強制）」：合入四步與 ff 被拒重併規則、驗收三軸（票狀態以 `git show HEAD` 為準、內容對照 `where.files`、PM 覆核重跑）、四則失效處置（代理人自標 scope_blocker、自行推送主分支、驗收條件不可能成立、index.lock 與 hook 競爭）。代理人側 merge main 已在 template，PM 側此前無條文，一日內三次靠記憶處理。
 **Version**: 4.32.0 - 「派發 prompt 必含精準 git staging」表格 commit 階段列與「歷史註記」改寫：代理人票務提交場景預設改為 `ticket track commit`（隔離索引），精確 add 三步降為該命令失敗或不可用時的 fallback；PM 收尾等無票務 CLI 場景仍以精確 add 三步為預設。與 `bash-tool-usage-rules.md` 規則七、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步，收斂副本漂移。
 **Last Updated**: 2026-08-26
 **Version**: 4.31.0 - 「跨 session 同儕沉默時的接管判準」與「跨 session 同儕來訊時的脈絡存續判讀」兩節整區外移至新建 `.claude/references/cross-session-coordination-details.md`，主文改留判準表與速查 stub（兩 H2 標題保留以維持既有錨點——`PC-076`、`tool-output-trust-rules.md`、`session-switching-sop.md` 皆以標題文字引用本兩節，不隨外移改變）；本區行數由 137 降至約 40 行；「本區外移時機與偵測承擔者」條文更新為完成式，補「未來篇幅回升時適用同一整區外移判準」一句
