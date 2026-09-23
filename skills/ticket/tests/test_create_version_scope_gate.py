@@ -26,6 +26,7 @@ from ticket_system.commands.create import execute
 from ticket_system.lib.field_validators import validate_version_scope_gate
 from ticket_system.lib.version import (
     _suggest_next_patch,
+    find_open_successor,
     is_version_scope_frozen,
     suggest_overflow_version,
     validate_version_registered,
@@ -642,8 +643,8 @@ class TestSuggestNextPatchBasisChangedToActive:
         assert _suggest_next_patch(versions) is None
 
     def test_uses_active_not_completed_as_basis(self):
-        """completed 停留舊版號、active 已推進：新基準採 active+1，
-        非舊基準的 completed+1（E1：改前改後輸出不同）。"""
+        """completed 停留舊版號、active 已推進且未凍結：新基準直接採
+        active 本身，非舊基準的 completed+1（E1：改前改後輸出不同）。"""
         versions = [
             {"version": "0.0.3", "status": "completed"},
             {"version": "0.1.0", "status": "active"},
@@ -651,17 +652,27 @@ class TestSuggestNextPatchBasisChangedToActive:
         result = _suggest_next_patch(versions)
         assert result is not None
         suggested, _reason = result
-        # 舊基準（completed+1）會得到 0.0.4；新基準（active+1）得到 0.1.1
-        assert suggested == "0.1.1"
+        # 舊基準（completed+1）會得到 0.0.4；新基準（active 未凍結）得到 0.1.0
+        assert suggested == "0.1.0"
         assert suggested != "0.0.4"
 
     def test_suggested_version_already_registered_returns_existing(self):
+        """active 未凍結時直接建議該 active，不算 patch+1。"""
         versions = [
             {"version": "0.1.0", "status": "active"},
             {"version": "0.1.1", "status": "planned"},
         ]
         result = _suggest_next_patch(versions)
-        assert result == ("0.1.1", "修復/改善/分析/文件類型歸小版本")
+        assert result == ("0.1.0", "非功能動詞歸目前進行中版本（未凍結）")
+
+    def test_active_frozen_falls_back_to_patch_plus_one(self):
+        """active 本身已凍結時，才走 patch+1 分支（正向對照：解除 frozen
+        後結果變為直接建議 active，E2 對照見上方兩測試）。"""
+        versions = [
+            {"version": "0.1.0", "status": "active", "scope": "frozen"},
+        ]
+        result = _suggest_next_patch(versions)
+        assert result == ("0.1.1", "修復/改善/分析/文件類型歸小版本（版本尚未在 todolist 註冊）")
 
 
 # ============================================================
@@ -700,3 +711,106 @@ class TestScopeBlockerPersistedToFrontmatter:
 
         frontmatter = create_ticket_frontmatter(config)
         assert frontmatter["scope_blocker"] is None
+
+
+# ============================================================
+# I 層：find_open_successor / suggest_overflow_version 開放後繼優先
+# （0.2.0-W1-016，AC1 E1 對照、AC3 E2 正向對照）
+# ============================================================
+
+
+class TestFindOpenSuccessor:
+    def test_open_successor_found(self, monkeypatch, tmp_path):
+        _write_todolist(
+            tmp_path,
+            [
+                {"version": "0.1.0", "status": "completed"},
+                {"version": "0.1.1", "status": "active", "scope": "frozen"},
+                {"version": "0.2.0", "status": "active"},
+            ],
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.version.get_project_root", lambda: tmp_path
+        )
+        assert find_open_successor("0.1.1") == "0.2.0"
+
+    def test_no_open_successor_returns_none(self, monkeypatch, tmp_path):
+        _write_todolist(
+            tmp_path,
+            [
+                {"version": "0.1.1", "status": "active", "scope": "frozen"},
+                {"version": "0.2.0", "status": "active", "scope": "frozen"},
+            ],
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.version.get_project_root", lambda: tmp_path
+        )
+        assert find_open_successor("0.1.1") is None
+
+    def test_todolist_missing_returns_none(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "ticket_system.lib.version.get_project_root", lambda: tmp_path
+        )
+        assert find_open_successor("0.1.0") is None
+
+
+class TestSuggestOverflowVersionOpenSuccessorPriority:
+    def test_frozen_with_open_successor_routes_to_successor(
+        self, monkeypatch, tmp_path
+    ):
+        """AC1：0.1.1 frozen 且 0.2.0 open 時，溢出目標為 0.2.0（E1 對照
+        起點：下一測試把 0.2.0 也改 frozen 後結果變 0.1.2）。"""
+        _write_todolist(
+            tmp_path,
+            [
+                {"version": "0.1.0", "status": "completed"},
+                {"version": "0.1.1", "status": "active", "scope": "frozen"},
+                {"version": "0.2.0", "status": "active"},
+            ],
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.version.get_project_root", lambda: tmp_path
+        )
+        result = suggest_overflow_version("0.1.1", "IMP", "修復")
+        assert result == ("0.2.0", "路由至最近的開放後繼版本")
+
+    def test_all_successors_frozen_falls_back_to_patch_plus_one(
+        self, monkeypatch, tmp_path
+    ):
+        """AC1 對照組：0.2.0 也改 frozen 後，同一呼叫改回 patch+1（0.1.2）。"""
+        _write_todolist(
+            tmp_path,
+            [
+                {"version": "0.1.0", "status": "completed"},
+                {"version": "0.1.1", "status": "active", "scope": "frozen"},
+                {"version": "0.2.0", "status": "active", "scope": "frozen"},
+            ],
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.version.get_project_root", lambda: tmp_path
+        )
+        result = suggest_overflow_version("0.1.1", "IMP", "修復")
+        assert result == ("0.1.2", "修復/改善/分析/文件類型歸下一個 patch（相對凍結版本 patch+1）")
+
+    def test_no_successors_registered_falls_back_to_verb_calc(
+        self, monkeypatch, tmp_path
+    ):
+        """AC3：fixture 中全無開放後繼（版本不存在於 todolist）時仍依
+        動詞算 patch+1／minor+1（E2 紅輸入：確認舊路徑未被刪）。"""
+        _write_todolist(
+            tmp_path,
+            [{"version": "0.1.1", "status": "active", "scope": "frozen"}],
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.version.get_project_root", lambda: tmp_path
+        )
+        fix_result = suggest_overflow_version("0.1.1", "IMP", "修復")
+        assert fix_result == (
+            "0.1.2",
+            "修復/改善/分析/文件類型歸下一個 patch（相對凍結版本 patch+1）",
+        )
+        feature_result = suggest_overflow_version("0.1.1", "IMP", "新增")
+        assert feature_result == (
+            "0.2.0",
+            "新功能歸下一個小版本（相對凍結版本 minor+1）",
+        )

@@ -76,6 +76,8 @@
 | 新能力 | 下一個 minor（x.y+1.0） | 需先於 `docs/todolist.yaml` 登記為 `planned` 或 `active` |
 | 框架問題（抽象可攜 + 根源在 `.claude/` 通用資產，兩條件皆成立） | canonical framework issue | 不落地為本地版本票；該問題在本 consumer 的落地實作票才回頭建本地票，並掛 `--dedup-checked <issue 號>`（見 `.claude/skills/ticket/references/create-command.md`〈可攜問題分流硬閘門〉） |
 
+**三層推進判準**（何時該正式開下一個 patch / minor / major，而非只是票的版本欄位已指向該處）：patch 只在有外部使用者依賴已發布契約、需要維護時才正式「開」；minor 需當前版本契約已發布且下一版本提案已 confirmed（滿足本節登記門檻）；major 為架構里程碑，判準與上方〈版本層級語義〉一致。完整判準表、Why/Consequence/Action、patch 生命週期（收件窗口與關閉時機）、發版判準（契約阻擋而非池清空）、五步收斂程序（版本契約→範圍歸屬三問→依賴分批→溢出分流→凍結兩步）與反模式，見 `.claude/methodologies/version-scope-convergence-methodology.md`。本節只定義凍結後的分流去向，不重複該方法論的判準內容。
+
 ---
 
 ## Ticket 版本歸屬規則
@@ -159,6 +161,7 @@ Wave 是相互隔離的執行單位。禁止跨 Wave 依賴和並行派發。
 - .claude/references/version-progression-details.md - Wave 獨立性、Ticket 歸屬、二元決策流程
 - .claude/references/version-decision-case-studies.md - 案例分析
 - .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
+- .claude/methodologies/version-scope-convergence-methodology.md - 版本範圍收斂五步程序、三層推進判準、patch 生命週期、發版判準、反模式
 
 ---
 
@@ -217,5 +220,6 @@ Wave 是相互隔離的執行單位。禁止跨 Wave 依賴和並行派發。
 ---
 
 **Last Updated**: 2026-09-23
+**Version**: 4.2.0 — 〈版本生命週期〉分流去向表後補一段「三層推進判準」：patch/minor/major 何時該正式推進（非只是票的版本欄位已指向該處）的判準速記，主文（含五步收斂程序、patch 生命週期、發版判準、反模式）路由至新建方法論 `version-scope-convergence-methodology.md`，本節不重複展開。
 **Version**: 4.1.0 — 〈版本生命週期〉凍結列補「凍結動作含兩步」說明：凍結不只標記版本條目，還須對凍結前已存在的必要 pending 票逐張 `ticket track set-scope-blocker` 回溯標記，否則發版檢查會把它們誤判為可前移；補一句規劃頁面不是 CLI 資料來源，必要性須進票面欄位。
 **Version**: 4.0.0 — 衍生問題歸屬規則改為 scope 凍結模型：強制規則表舊有三列免版本判斷、一律無條件收入 active 版本的規則改寫為「scope 開放時進本版本」「scope 凍結後依品質/能力/框架三性質分流」兩列；快速判斷檢查清單新增第 1 項 scope 凍結檢查；新增〈版本生命週期〉段，明寫版本歸屬／收件資格／執行資格三軸解耦，以及執行早已與版本狀態解耦（claim 不查版本狀態）的事實。舊制在實測中造成 pending 池膨脹至遠超必要交付範圍的規模，且與版本範圍凍結硬閘門（`ticket create` 子命令的可攜問題分流閘門旁側機制）的路由結論直接衝突——同一 create 路徑上，凍結閘門引導改投下一版本，而本文件舊制要求免判斷收入本版本。`PC-121-pm-recommends-framework-ticket-to-future-version.md` 因前提（框架 ticket 當時無版本收件資格路由選項）改變已標 superseded，見該檔 Superseded 註記段。歷史 1.0–3.4 版見 git log。

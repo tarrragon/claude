@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.41.0 — 版本溢出目標規則改為優先路由至最近的「開放後繼版本」（todolist.yaml 中版本號較大、狀態 planned/active 且未 `scope: frozen` 者），未命中才依動詞算 patch+1／minor+1；`_suggest_next_patch` 對未凍結的 active 版本同步改為直接建議該 active，不再誤算未在 todolist.yaml 註冊的 patch+1（新增 `find_open_successor`，`references/create-command.md`〈版本範圍凍結硬閘門〉溢出目標表同步更新，WRAP canonical #55，2026-09-23）。
+
 **Version**: 2.40.1 — `references/create-command.md`〈版本範圍凍結硬閘門〉三個範例的 `--where` 值由具體檔名改為 `<path>` 佔位符：具體檔名在 consumer 專案不存在，sync 守衛判為失效引用而中止推送；佔位符同時避免讀者把示意值當可複製的實值（2026-09-23）。
 
 **Version**: 2.40.0 — 新增 `set-scope-blocker <id> --reason <text>|--clear` 子命令：事後設定或清除 frontmatter `scope_blocker` 欄位，`--reason`/`--clear` 互斥、空字串理由視同未給同樣拒絕。動機：`scope_blocker` 原僅在 `create` 建票當下可寫入（`--scope-blocker`），凍結前已存在的必要 pending 票沒有建立時機補這個欄位，發版檢查（依 `scope_blocker` 區分阻擋與前移）會把它們誤判為可前移，必要工作因此被搬到下一版本。配套 `.claude/pm-rules/version-progression.md`〈版本生命週期〉凍結步驟補「回溯標記既有必要票」動作。詳見 `references/track-command.md`〈UPDATE 操作〉、〈CLI 可修改欄位 vs 手動編輯欄位〉。

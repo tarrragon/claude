@@ -529,6 +529,10 @@ def _suggest_next_patch(
     0.0.4），且與版本範圍凍結閘門印出的溢出目標互相矛盾——兩者基準不
     同源。改為相對 active 版本計算，與 suggest_overflow_version 的
     patch+1 分支同一基準。
+
+    WRAP 補充（canonical #55）：active 版本本身未凍結時，直接建議該
+    active（不算 patch+1），消除「建議一個未在 todolist.yaml 註冊的
+    版本」噪音；僅 active 已凍結時才走 patch+1 分支。
     """
     active = [
         v for v in versions
@@ -541,6 +545,9 @@ def _suggest_next_patch(
     # 定義一致：多個 active 並行分支開發時，第一個為主線）
     latest = active[0]
     ver_str = str(latest.get("version", ""))
+
+    if latest.get("scope") != "frozen":
+        return (ver_str, "非功能動詞歸目前進行中版本（未凍結）")
     parts = ver_str.split(".")
     if len(parts) != 3:
         return None
@@ -630,22 +637,94 @@ def is_version_scope_frozen(version: str) -> bool:
     return False
 
 
+def _version_tuple(version_str: str) -> Optional[tuple[int, int, int]]:
+    """將 "X.Y.Z" 字串轉為可比較的整數元組，格式異常回傳 None。"""
+    parts = version_str.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
+
+
+_OPEN_STATUSES = frozenset({"planned", "active"})
+
+
+def find_open_successor(base_version: str) -> Optional[str]:
+    """在 todolist.yaml 找排在 base_version 之後、狀態開放、未凍結的最小版本。
+
+    WRAP 結論（canonical #55 觀測流）：溢出目標應優先路由至「最近的開放
+    後繼版本」，只有全部後繼皆凍結或不存在時才回退動詞式 patch+1／
+    minor+1 計算。「開放」定義為 status 屬 planned 或 active，且
+    scope 欄位非 "frozen"（scope 缺席視為開放，向後相容）。
+
+    Args:
+        base_version: 基準版本號（無 v 前綴，如 "0.1.1"）
+
+    Returns:
+        Optional[str]: 最小的開放後繼版本號；無符合條件者或 todolist.yaml
+        缺席/解析失敗時回傳 None（純函式，不拋例外）
+    """
+    base_tuple = _version_tuple(base_version)
+    if base_tuple is None:
+        return None
+
+    root = get_project_root()
+    todolist_path = root / "docs" / "todolist.yaml"
+    if not todolist_path.exists():
+        return None
+
+    try:
+        import yaml
+        with open(todolist_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning(
+            f"find_open_successor: 解析 todolist.yaml 失敗 "
+            f"({type(e).__name__}: {e})，視為無開放後繼"
+        )
+        return None
+
+    versions_list = data.get("versions", [])
+    candidates: list[tuple[tuple[int, int, int], str]] = []
+    for entry in versions_list:
+        ver_str = str(entry.get("version", ""))
+        ver_tuple = _version_tuple(ver_str)
+        if ver_tuple is None or ver_tuple <= base_tuple:
+            continue
+        if entry.get("status") not in _OPEN_STATUSES:
+            continue
+        if entry.get("scope") == "frozen":
+            continue
+        candidates.append((ver_tuple, ver_str))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0])
+    return candidates[0][1]
+
+
 def suggest_overflow_version(
     frozen_version: str,
     ticket_type: str,
     action: str,
 ) -> Optional[tuple[str, str]]:
-    """相對凍結版本計算溢出目標版本（純計算，不查註冊）。
+    """計算溢出目標版本：優先最近的開放後繼版本，其次動詞式計算。
 
     版本範圍凍結閘門擋下根票時，須告知使用者「該去哪個版本」而非只說
-    「這裡不收票」——本函式提供該計算，與 `suggest_version_for_ticket`
-    的差異在於基準點：後者查 todolist.yaml 找「最新已完成版本」或「有
-    proposals 的 active 版本」，本函式相對「被擋下的這個凍結版本本身」
-    計算，兩者服務不同情境（一個是建票起點引導，一個是被擋後的去處）。
+    「這裡不收票」。與 `suggest_version_for_ticket` 的差異在於基準點：
+    後者查 todolist.yaml 找「最新已完成版本」或「有 proposals 的 active
+    版本」，本函式相對「被擋下的這個凍結版本本身」計算，兩者服務不同
+    情境（一個是建票起點引導，一個是被擋後的去處）。
 
-    規則（與 `_FEAT_ACTIONS` 分類一致）：
-    - IMP 且 action 屬新功能動詞（實作/新增/建立/開發）→ minor+1.0
-    - 其餘（含修復/改善/分析/文件） → patch+1
+    規則（WRAP canonical #55）：
+    1. 先呼叫 `find_open_successor`：命中已註冊的開放後繼版本即直接
+       採用，不需動詞分類判斷（避免建議未註冊版本的噪音）。
+    2. 未命中時沿用舊規則（與 `_FEAT_ACTIONS` 分類一致）：
+       - IMP 且 action 屬新功能動詞（實作/新增/建立/開發）→ minor+1.0
+       - 其餘（含修復/改善/分析/文件） → patch+1
 
     Args:
         frozen_version: 被凍結的版本號（無 v 前綴，如 "0.1.0"）
@@ -664,6 +743,10 @@ def suggest_overflow_version(
         major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
     except ValueError:
         return None
+
+    successor = find_open_successor(frozen_version)
+    if successor:
+        return (successor, "路由至最近的開放後繼版本")
 
     is_new_feature = ticket_type == "IMP" and action in _FEAT_ACTIONS
 

@@ -8,6 +8,13 @@
 
 驗證發布前置條件是否滿足：
 
+**前置關卡（Step 1 之前）**：`check_version_frozen(version)` 先確認目標版本
+於 `todolist.yaml` 已標 `scope: frozen`。scope_blocker 判定只在凍結後才有
+意義——未凍結版本的 blocker 恆為 0，對「可發布」判定沒有鑑別力。未凍結時
+`check` 與 `finish` 皆印 FAIL 並 exit 非 0，不進入 blocker 計算；`finish`
+的此關卡在 Step 0（migrate overflow tickets）之前，未凍結不產生 migrate
+副作用。
+
 ```python
 def preflight_check(version: str):
     """
@@ -86,7 +93,10 @@ def update_documents(version: str):
 def git_merge_and_push(version: str, dry_run: bool = False):
     """
     3.1 提交所有變更（如果有未提交的）
-        git add docs/todolist.yaml CHANGELOG.md
+        staged 範圍 = 執行前 baseline（finish/release 入口的 git status 快照）
+        與目前狀態的差集，過濾出屬 docs/ 或 CHANGELOG.md 者，逐檔 add
+        （不用 -A／目錄）——涵蓋 Step 0 前移產生的 ticket rename，取代舊版
+        寫死的 `git add docs/todolist.yaml CHANGELOG.md`
         git commit -m "docs: 版本 {version} 發布準備"
 
     3.2 切換到 main 分支
@@ -110,19 +120,36 @@ def git_merge_and_push(version: str, dry_run: bool = False):
         git branch -d feature/v{VERSION}
         git push origin --delete feature/v{VERSION}
 
-    3.8 推進下一版本為 active
-        讀取 todolist.yaml，找第一個 status: planned 的版本
-        將其 status 改為 active（保留引號格式）
-        若無 planned 版本，跳過（非錯誤）
+    3.8 推進下一版本為 active（啟動，冪等）
+        讀取 todolist.yaml，依 semver 排序選最小的 planned/pending 候選版本
+        呼叫 ensure_version_activated(next_version)：逐項檢查 todolist
+        status、worklog 主檔、版本檔版號、CHANGELOG In Development 段落，
+        只補缺的項目並印 [OK]/[補]；全部就位時不改動任何檔案（含 mtime）
+        （與 start 對既有版本走的補齊路徑共用同一常式，避免副作用集合與
+        執行路徑不對齊）
+        若無 planned/pending 候選版本，跳過（非錯誤）
+
+    3.9 第二次收尾提交（Commit Version Activation）
+        Mark Version Completed 與 Activate Next Version 在 3.1 之後才寫入
+        todolist.yaml，故對同一 baseline 差集再跑一次 3.1 的 add + commit
+        邏輯，把這兩步的變更一併納入版本控制
+
+    3.10 exit 前殘留守衛
+        對 baseline 差集（不限 docs/ 或 CHANGELOG.md）做最終檢查；非空即
+        列出殘留路徑並以非 0 結束，不自動 add——避免吸入非本次 finish
+        產生的變更
     """
 ```
 
 **Git 操作順序**:
 
-1. 提交檔案變更
+1. 提交檔案變更（差集範圍）
 2. 切換到 main 分支
 3. 拉取最新 main
 4. 合併 feature 分支（保留合併記錄）
 5. 建立 Tag
 6. 推送 main + Tag
 7. 刪除本地/遠端 feature 分支
+8. 標記版本完成、推進下一版本為 active
+9. 第二次收尾提交（涵蓋標記完成與版本啟用的變更）
+10. exit 前殘留守衛（非空即非 0 退出並列殘留清單）

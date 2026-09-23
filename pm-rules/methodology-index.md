@@ -52,6 +52,7 @@
 | ticket-lifecycle-management-methodology.md | Ticket 生命週期 |
 | ticket-design-dispatch-methodology.md | Ticket 設計與派發 |
 | tdd-ticket-integration-methodology.md | TDD 與 Ticket 整合 |
+| version-scope-convergence-methodology.md | 版本範圍收斂（五步程序：版本契約→範圍歸屬三問→依賴分批→溢出分流→凍結兩步；三層推進判準；patch 生命週期；發版判準；反模式） |
 | .claude/skills/compositional-writing/references/writing-documents.md | 工作日誌撰寫 |
 | .claude/skills/version-release/references/monorepo-versioning-strategy.md | monorepo 單一版本 vs 子專案獨立版本取捨判準（交叉指標） |
 | suggestion-tracking-methodology.md | 建議追蹤 |
@@ -104,7 +105,8 @@
 
 ---
 
-**Last Updated**: 2026-07-25
+**Last Updated**: 2026-09-23
+**Version**: 1.10.0 - 新增 version-scope-convergence-methodology.md 索引項（流程管理節）
 **Version**: 1.9.0 - 新增 data-layer-contract-methodology.md 索引項（程式碼品質節，0.2.0-W2-002，source: PROP-002 In Scope 2）
 **Version**: 1.8.0 - W8-041 標籤同步：11 處用途欄「30 秒核心」標籤改為「核心判準」，對齊 W8-040 方法論新定位（框架判斷標準，非 30 秒壓縮）。版本註腳歷史保留原「30 秒核心」字樣
 **Version**: 1.7.0 - 補列 package-import-language-mechanisms.md 衛星檔索引項 + 主檔用途補「30 秒核心」（程式碼品質節，W8-020.1 衛星檔原未入索引，W8-020.12 campaign 收尾 gate 補齊）

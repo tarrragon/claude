@@ -1,3 +1,10 @@
+## [2.60.3] - 2026-09-23
+
+### Summary
+0.1.0 發版後守衛補強與版本結構：溢出優先開放後繼（ticket 2.41）、finish 收尾差集提交／check 凍結前置／啟用冪等化（version-release 2.3–2.5）、版本範圍收斂方法論、version-progression 三層判準、PC-121 superseded
+
+---
+
 ## [2.60.2] - 2026-09-23
 
 ### Summary

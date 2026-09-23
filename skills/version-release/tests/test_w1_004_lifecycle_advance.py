@@ -346,15 +346,25 @@ class TestCmdStartVersionActivatePath:
         assert statuses["0.20.0"] == "active"
         assert len(data["versions"]) == 2
 
-    def test_active_existing_version_still_fails(self, tmp_path, monkeypatch):
-        """既有 active 版本 start：仍應 FAIL（重複啟動保護不變）"""
+    def test_active_existing_version_activates_instead_of_failing(
+        self, tmp_path, monkeypatch
+    ):
+        """既有 active 版本 start：走冪等補齊路徑，不再 FAIL
+        （0.2.0-W1-031：ensure_version_activated 補齊缺漏副作用，取代舊版
+        重複啟動保護）"""
         self._setup_project(tmp_path, "active")
         self._patch_common(monkeypatch, tmp_path)
 
         result = vr.cmd_start_version(
             version="0.20.0", from_version="0.19.0", description="", dry_run=False
         )
-        assert result is False
+        assert result is True
+
+        data = yaml.safe_load(
+            (tmp_path / "docs" / "todolist.yaml").read_text(encoding="utf-8")
+        )
+        statuses = {v["version"]: v["status"] for v in data["versions"]}
+        assert statuses["0.20.0"] == "active"
 
     def test_completed_existing_version_still_fails(self, tmp_path, monkeypatch):
         """既有 completed 版本 start：仍應 FAIL"""

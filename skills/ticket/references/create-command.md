@@ -245,12 +245,13 @@ ticket create --wave 3 --action "修復" --target "XXX" \
 
 `--version` 指向的版本狀態須為 `planned` 或 `active` 才收票（`completed` 仍拒）；情境 b 改投的溢出目標版本若尚未在 todolist.yaml 註冊，登記為 `planned` 即可直接建票，不須等該版本轉為 `active`。
 
-**溢出目標計算**（相對被擋下的凍結版本本身，與 `_FEAT_ACTIONS` 分類一致）：
+**溢出目標計算**（相對被擋下的凍結版本本身；WRAP canonical #55 定案：優先路由至最近的開放後繼版本，未命中才依 `_FEAT_ACTIONS` 分類算 patch+1／minor+1）：
 
 | 條件 | 溢出目標 |
 |------|---------|
-| IMP 且 `--action` 屬新功能動詞（實作/新增/建立/開發） | minor+1.0（如 `0.1.0` → `0.2.0`） |
-| 其餘（含修復/改善/分析/文件） | patch+1（如 `0.1.0` → `0.1.1`） |
+| todolist.yaml 中存在版本號大於基準、狀態為 `planned` 或 `active`、且未 `scope: frozen` 的版本 | 路由至其中最小者（開放後繼優先，避免建議未註冊版本的噪音） |
+| 無開放後繼 + IMP 且 `--action` 屬新功能動詞（實作/新增/建立/開發） | minor+1.0（如 `0.1.0` → `0.2.0`） |
+| 無開放後繼 + 其餘（含修復/改善/分析/文件） | patch+1（如 `0.1.0` → `0.1.1`） |
 
 ```bash
 # 情境 a：todolist.yaml 中 0.1.0 標記 scope: frozen，直接建票被阻擋
