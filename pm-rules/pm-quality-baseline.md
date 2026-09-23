@@ -41,15 +41,17 @@
 
 ### 規則 6.1：框架 ticket 版本歸屬補強
 
-**框架 ticket 必須建在當前 active 版本，禁止建在 planned 狀態的未來版本**
+**scope 開放的 active 版本內，框架 ticket 應建在當前版本，禁止以主題不符為由改建在 planned 狀態的未來版本**
 
-> **來源**：規則 6 原條款規定「當前 Wave 內建立」但未明示「Wave 必須屬於 active 版本」。當 active 版本主題與框架 ticket 不符時，PM 易傾向放主題吻合的 planned 版本（如 W14-019 設計時 PM 內心傾向 v0.20.0 planned），實質延後框架改善並違反規則 6 本意。`version-progression.md` 已強制「.claude 工件歸活躍版本」，但規則 6 未交叉引用，造成 PM 漏看。
+> **已由 scope 凍結模型部分取代**：本條款原以「.claude 工件一律歸活躍版本、免除判斷」為前提。`.claude/pm-rules/version-progression.md`〈版本生命週期〉已改為：active 版本 scope 開放時，本條款「禁止改建未來 planned 版本」的核心主張仍成立；active 版本 scope **凍結**時，框架問題不再進入本地任一版本的判斷，改路由至 canonical framework issue（見 `framework-issue` skill），只有落地實作票才回頭建本地票。以下情境表與 Action 步驟針對 scope 開放情境撰寫，scope 凍結時改依 `version-progression.md` 分流。
+>
+> **來源**：規則 6 原條款規定「當前 Wave 內建立」但未明示「Wave 必須屬於 active 版本」。當 active 版本主題與框架 ticket 不符時，PM 易傾向放主題吻合的 planned 版本（如一次框架 ticket 設計時 PM 內心傾向未來版本），實質延後框架改善並違反規則 6 本意。`version-progression.md` 舊制曾強制框架工件免判斷收入 active 版本，但規則 6 未交叉引用，造成 PM 漏看。
 
 **「當前 active 版本」定義**：
 
 | 來源 | 說明 |
 |------|------|
-| `docs/todolist.yaml` 中 `status: active` 的版本 | 與 `version-progression.md` 強制規則「活躍版本由 todolist.yaml 決定」「版本邊界以 active 為準」「.claude 工件歸活躍版本」一致 |
+| `docs/todolist.yaml` 中 `status: active` 的版本 | 與 `version-progression.md` 強制規則「活躍版本由 todolist.yaml 決定」「版本邊界以 active 為準」一致；scope 是否凍結另見該檔〈版本生命週期〉 |
 | 多個 active 版本（monorepo） | 建在最早完成的 active 版本 |
 | 無 active 版本（罕見） | 先依 `version-progression.md` 啟用 planned 版本為 active，再建立 |
 
@@ -86,7 +88,7 @@
 
 | 規則 | 關係 |
 |------|------|
-| `version-progression.md`「.claude 工件歸活躍版本」 | 本條款是規則 6 對該強制規則的明文引用 + 補強執行細節 |
+| `version-progression.md`〈版本生命週期〉 | 本條款是規則 6 對「scope 開放時本版本處理」路徑的明文引用 + 補強執行細節；scope 凍結時的框架問題路由以該檔為準 |
 | `monorepo-version-strategy.md` L1 權威來源 | 完全一致——L1 即 active 版本，Ticket 版本基於 L1 |
 | `ai-communication-rules.md` 規則 5 機制 4 反討好設計 | 互相引用——本 session PM 違反規則 5 才暴露規則 6 漏洞 |
 | `PC-121-pm-recommends-framework-ticket-to-future-version.md` | 本條款的反模式案例 + 防護記錄 |
@@ -186,7 +188,8 @@
 
 ---
 
-**Last Updated**: 2026-08-10
+**Last Updated**: 2026-09-23
+**Version**: 2.4.0 — 規則 6.1 補「已由 scope 凍結模型部分取代」註記：scope 開放時「禁止改建未來 planned 版本」的核心主張不變，scope 凍結時框架問題改路由至 canonical framework issue，不進本地版本判斷；「當前 active 版本」定義表與〈與其他規則邊界〉表同步改引 `version-progression.md`〈版本生命週期〉，移除已由該模型取代的「.claude 工件歸活躍版本」字面引用。
 **Version**: 2.3.0 - 規則 7 三處修正（文字審查發現）：Action 層原指向不存在的發版 checklist 落點，改為指向 `version-release/SKILL.md` 使用流程檢查清單新增的對應勾選項（該勾選項同一次變更中同步新增）；memory 排除列補涵蓋邊界（PreToolUse deny 僅覆蓋 Write/Edit/MultiEdit/NotebookEdit，Bash 路徑由事後稽核承接）；Consequence 補標「400 筆樣本為本專案實測，機制主張可攜但量測值不可攜」；移除「選配資訊性掃描的處置」過去式過程紀錄段落（依 spec 與 process record 分離原則，過程細節屬 ticket/worklog 範疇），改為不含過程與識別符的一句現況陳述。
 **Version**: 2.2.0 - 規則 7「驗證方式」段落改寫：移除對不存在的 version-release 稽核項的字面宣稱，改為如實描述現況（memory 排除已 hook 化；三分流語意分類無機械稽核、依賴人工抽查），並補三明示（Why 三分流本質為語意判斷 / Consequence 400 ticket 樣本關鍵字比對偽陽性率 100% 實測 / Action 版本發布前人工抽查 checklist）；新增選配資訊性掃描（方案 C）處置說明，判定不隨本次併入並已提出 follow-up spawn request，避免無 trigger 延後。
 **Version**: 2.1.0 - 規則 7 全文改寫：以三分流（框架相關／專案相關／兩者皆非）取代原「跨專案錯誤學習 + memory 承接專案特定與 deferred 項」目的地表，memory 不再列為任何分支的合法目的地；`upgrade: deferred` frontmatter 標註與「升級後處理」三步（MEMORY.md 索引移除）隨之廢除；底線要求總結與相關規則指標同步更新（0.2.1-W3-083，承接 0.2.1-W3-082 用戶裁示）。

@@ -713,6 +713,136 @@ def resolve_worklog_dir(root: Path, version: str, pattern: str) -> Path:
     return root / relative
 
 
+# TDD Phase 附件檔案後綴（非獨立 Ticket，掃描時排除）
+TDD_ATTACHMENT_SUFFIXES = (
+    "-phase1-design", "-phase2-test", "-phase3a-strategy",
+    "-phase3b-", "-phase4-", "-refactor", "-analysis",
+    "-feature-spec", "-feature-design", "-test-design",
+    "-test-case", "-execution-report", "-execution-log",
+)
+
+# 與 ticket skill 的溢出版本判斷函式分類一致（IMP + 新功能動詞 → minor+1）
+_OVERFLOW_FEAT_ACTIONS = frozenset({"實作", "新增", "建立", "開發"})
+
+
+def _strip_yaml_scalar_quotes(raw: str) -> str:
+    """去除 YAML 純量值可能的單/雙引號包覆，便於顯示與空值判斷。"""
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        value = value[1:-1]
+    return value
+
+
+def compute_overflow_target_version(
+    frozen_version: str, ticket_type: str, action_hint: str
+) -> Tuple[str, str]:
+    """相對凍結版本計算前移目標版本。
+
+    鏡射 ticket skill 內部 lib 的溢出版本判斷分類規則，但本 skill 為獨立 uv
+    script 不跨 skill import 該內部 lib（避免安裝版 site-packages 路徑不相容）；
+    action_hint 取自 ticket `what` 欄位的第一個詞，對應建立時 `what` 預設值
+    「動詞 + 目標」的慣例（--what 被覆寫時可能失準，此為已知簡化）。
+
+    Args:
+        frozen_version: 被凍結（發版判準阻擋）的版本號（無 v 前綴，如 "0.1.0"）
+        ticket_type: Ticket 類型（IMP, ANA, DOC 等）
+        action_hint: 由 `what` 欄位推斷的動詞（可能為空字串）
+
+    Returns:
+        (溢出目標版本, 理由)
+    """
+    major, minor, patch = (int(p) for p in strip_build_metadata(frozen_version).split("."))
+    is_new_feature = ticket_type == "IMP" and action_hint in _OVERFLOW_FEAT_ACTIONS
+    if is_new_feature:
+        return (f"{major}.{minor + 1}.0", "新功能歸下一個小版本（相對凍結版本 minor+1）")
+    return (f"{major}.{minor}.{patch + 1}", "修復/改善/分析/文件類型歸下一個 patch（相對凍結版本 patch+1）")
+
+
+def collect_ticket_scope_groups(tickets_dir: Path, version: str) -> Dict[str, List[Dict]]:
+    """掃描版本 tickets 目錄，依 status 與 scope_blocker 分組。
+
+    分組規則：
+    - in_progress：一律列入阻擋（工作中的票不能前移）
+    - pending 且 frontmatter 含非空 scope_blocker：列入阻擋
+    - pending 且無 scope_blocker：列入前移清單（overflow），附計算出的目標版本
+    - completed 或其他狀態：略過
+
+    Args:
+        tickets_dir: 版本 tickets 目錄
+        version: 版本號（用於計算前移目標版本的基準）
+
+    Returns:
+        {"blocked": [...], "overflow": [...], "in_progress": [...]}
+    """
+    groups: Dict[str, List[Dict]] = {"blocked": [], "overflow": [], "in_progress": []}
+    if not tickets_dir.exists():
+        return groups
+
+    for ticket_file in sorted(tickets_dir.glob("*.md")):
+        if any(s in ticket_file.stem for s in TDD_ATTACHMENT_SUFFIXES):
+            continue
+        try:
+            with open(ticket_file, encoding="utf-8") as f:
+                content = f.read()
+        except Exception:
+            continue
+        frontmatter = parse_ticket_frontmatter(content)
+        if not frontmatter:
+            continue
+
+        status_match = re.search(r"^status:\s*(\S+)", frontmatter, re.MULTILINE)
+        if not status_match:
+            continue
+        status = status_match.group(1).strip()
+
+        id_match = re.search(r"^id:\s*(\S+)", frontmatter, re.MULTILINE)
+        ticket_id = id_match.group(1).strip() if id_match else ticket_file.stem
+
+        if status == "in_progress":
+            groups["in_progress"].append({"id": ticket_id, "status": status, "file": ticket_file.name})
+            continue
+
+        if status != "pending":
+            continue
+
+        blocker_match = re.search(r"^scope_blocker:\s*(.+)$", frontmatter, re.MULTILINE)
+        scope_blocker = _strip_yaml_scalar_quotes(blocker_match.group(1)) if blocker_match else ""
+        if scope_blocker and scope_blocker.lower() not in ("null", "~"):
+            groups["blocked"].append(
+                {"id": ticket_id, "status": status, "scope_blocker": scope_blocker, "file": ticket_file.name}
+            )
+            continue
+
+        type_match = re.search(r"^type:\s*(\S+)", frontmatter, re.MULTILINE)
+        ticket_type = type_match.group(1).strip() if type_match else ""
+        what_match = re.search(r"^what:\s*(.+)$", frontmatter, re.MULTILINE)
+        what_text = _strip_yaml_scalar_quotes(what_match.group(1)) if what_match else ""
+        action_hint = what_text.split()[0] if what_text else ""
+
+        target_version, target_reason = compute_overflow_target_version(version, ticket_type, action_hint)
+        groups["overflow"].append(
+            {
+                "id": ticket_id,
+                "status": status,
+                "type": ticket_type,
+                "target_version": target_version,
+                "target_reason": target_reason,
+                "file": ticket_file.name,
+            }
+        )
+
+    return groups
+
+
+def print_overflow_migration_plan(overflow: List[Dict]) -> None:
+    """印出前移清單（發版時前移，不阻擋）。"""
+    if not overflow:
+        return
+    print_info(f"\n發版時前移（{len(overflow)} 個，不阻擋）：", 1)
+    for t in overflow:
+        print_info(f"  - {t['id']} -> v{t['target_version']}（{t['target_reason']}）", 2)
+
+
 def check_worklog_completed(version: str) -> Tuple[bool, List[str]]:
     """檢查工作日誌是否完成"""
     root = get_project_root()
@@ -764,23 +894,23 @@ def check_worklog_completed(version: str) -> Tuple[bool, List[str]]:
             with open(main_worklog, encoding="utf-8") as f:
                 content = f.read()
 
-            # 檢查 Ticket 完成情況（透過掃描 tickets 目錄的 YAML frontmatter）
+            # 檢查 Ticket 完成情況：帶 scope_blocker 的 pending 與 in_progress 阻擋，
+            # 其餘 pending 列為前移清單不阻擋（透過掃描 tickets 目錄的 YAML frontmatter）
             tickets_dir = version_subdir / "tickets" if version_subdir.exists() else None
             if tickets_dir and tickets_dir.exists():
-                total, pending = 0, 0
-                for ticket_file in tickets_dir.glob("*.md"):
-                    try:
-                        with open(ticket_file, encoding="utf-8") as tf:
-                            ticket_content = tf.read()
-                        status_match = re.search(r"^status:\s*(\S+)", ticket_content, re.MULTILINE)
-                        if status_match:
-                            total += 1
-                            if status_match.group(1) in ("pending", "in_progress"):
-                                pending += 1
-                    except Exception:
-                        pass
-                if pending > 0:
-                    errors.append(f"版本 v{version} 有 {pending}/{total} 個未完成的 Ticket")
+                groups = collect_ticket_scope_groups(tickets_dir, version)
+                if groups["in_progress"]:
+                    ids = "、".join(t["id"] for t in groups["in_progress"])
+                    errors.append(
+                        f"版本 v{version} 有 {len(groups['in_progress'])} 個 in_progress Ticket 尚未完成: {ids}"
+                    )
+                if groups["blocked"]:
+                    detail = "; ".join(f"{t['id']}（{t['scope_blocker']}）" for t in groups["blocked"])
+                    errors.append(
+                        f"版本 v{version} 有 {len(groups['blocked'])} 個帶 scope_blocker 的 pending Ticket 阻擋發版: {detail}"
+                    )
+                if groups["overflow"]:
+                    print_overflow_migration_plan(groups["overflow"])
         except Exception as e:
             errors.append(f"讀取 {main_worklog} 失敗: {e}")
     else:
@@ -1820,6 +1950,82 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
 
     all_ok = wl_ok and td_status["passed"] and td_ok and pv_ok and vs_ok
     return all_ok, results
+
+
+def _run_ticket_migrate(
+    source_id: str, target_id: str, target_version: str, dry_run: bool = False
+) -> subprocess.CompletedProcess:
+    """呼叫 ticket CLI 執行單一 Ticket 遷移（獨立 subprocess，供 finish 呼叫與測試 mock）。"""
+    cmd = ["ticket", "migrate", source_id, target_id, "--version", target_version]
+    if dry_run:
+        cmd.append("--dry-run")
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
+    """對前移清單逐張執行 ticket migrate 至目標版本。
+
+    目標版本必須已在 todolist.yaml 登記（planned 或 active 皆可），未登記時
+    整批阻擋且不自動登記；任一張 migrate 失敗即中止，不留半搬狀態（已成功
+    遷移的票不回滾——需人工檢視後決定補跑剩餘或手動處理）。
+
+    Args:
+        version: 目前被判準阻擋的版本號（無 v 前綴）
+        dry_run: 預覽模式（傳遞給每個 ticket migrate 呼叫）
+
+    Returns:
+        全部前移成功（或無需前移）回傳 True；任一步驟失敗回傳 False
+    """
+    root = get_project_root()
+    config = load_version_release_config(root)
+    pattern = config.get(
+        "worklog_path_pattern", DEFAULT_VERSION_RELEASE_CONFIG["worklog_path_pattern"]
+    )
+    version_subdir = resolve_worklog_dir(root, version, pattern)
+    tickets_dir = version_subdir / "tickets"
+
+    groups = collect_ticket_scope_groups(tickets_dir, version)
+    overflow = groups["overflow"]
+
+    if not overflow:
+        print_info("無需前移的 pending Ticket")
+        return True
+
+    todolist_path = root / "docs" / "todolist.yaml"
+    registered_versions = set()
+    if todolist_path.exists():
+        try:
+            with open(todolist_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            registered_versions = {str(v.get("version", "")) for v in data.get("versions", [])}
+        except Exception as e:
+            print_error(f"讀取 todolist.yaml 失敗: {e}")
+            return False
+
+    missing_targets = sorted(
+        {t["target_version"] for t in overflow if t["target_version"] not in registered_versions}
+    )
+    if missing_targets:
+        print_error(
+            f"前移目標版本未在 todolist.yaml 登記: {', '.join(missing_targets)}；"
+            f"請先登記後再執行 finish（不自動登記）"
+        )
+        return False
+
+    for ticket in overflow:
+        source_id = ticket["id"]
+        target_version = ticket["target_version"]
+        target_id = re.sub(r"^\d+\.\d+\.\d+", target_version, source_id, count=1)
+        print_info(f"前移 {source_id} -> {target_id} ...")
+        result = _run_ticket_migrate(source_id, target_id, target_version, dry_run)
+        if result.returncode != 0:
+            print_error(
+                f"前移失敗，中止：{source_id} -> {target_id}\n{result.stdout}\n{result.stderr}"
+            )
+            return False
+        print_success(f"已前移 {source_id} -> {target_id}")
+
+    return True
 
 
 def extract_changelog_section(version: str) -> Optional[str]:
@@ -3425,6 +3631,13 @@ def main():
     release_parser.add_argument("--force", action="store_true", help="強制執行")
     release_parser.add_argument("--defer-td", help="將待處理 TD 延後到指定版本 (例如 0.21.0)")
 
+    # finish 子命令：發版收尾（前移非阻擋 pending Ticket 後執行既有發布流程）
+    finish_parser = subparsers.add_parser("finish", help="發版收尾：前移非阻擋 pending Ticket 並執行發布流程")
+    finish_parser.add_argument("--version", help="版本號 (X.Y 或 X.Y.Z)")
+    finish_parser.add_argument("--dry-run", action="store_true", help="預覽模式")
+    finish_parser.add_argument("--force", action="store_true", help="強制執行")
+    finish_parser.add_argument("--defer-td", help="將待處理 TD 延後到指定版本 (例如 0.21.0)")
+
     # check 子命令
     check_parser = subparsers.add_parser("check", help="只執行檢查")
     check_parser.add_argument("--version", help="版本號")
@@ -3498,11 +3711,11 @@ def main():
                 print_error("文件更新失敗")
                 return 1
 
-        elif args.command == "release":
+        elif args.command in ("release", "finish"):
             dry_run = args.dry_run if hasattr(args, "dry_run") else False
             defer_td = args.defer_td if hasattr(args, "defer_td") else None
 
-            header = f"Version Release Tool - {version}"
+            header = f"Version {'Finish' if args.command == 'finish' else 'Release'} Tool - {version}"
             if dry_run:
                 header += " (DRY RUN)"
 
@@ -3511,6 +3724,13 @@ def main():
 
             if dry_run:
                 print_warning("預覽模式：不會執行實際的 git 操作\n")
+
+            # finish：先對前移清單逐張 migrate，任一張失敗即中止（不留半搬狀態）
+            if args.command == "finish":
+                print_section("Step 0: Migrate Overflow Tickets")
+                if not migrate_overflow_tickets(version, dry_run):
+                    print_error("\n前移未完成，發版收尾已中止")
+                    return 1
 
             # 如果指定了 --defer-td，先延後 TD
             if defer_td:

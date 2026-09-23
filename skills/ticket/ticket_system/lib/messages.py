@@ -61,8 +61,8 @@ class ErrorMessages:
         "（{fallback_reason}）。"
     )
     VERSION_NOT_ACTIVE = (
-        "[Error] 版本 {version} 狀態為 {status}（非 active）。"
-        "只能在 active 版本中建立 Ticket。"
+        "[Error] 版本 {version} 狀態為 {status}；"
+        "只有 planned 或 active 版本可建票。"
     )
     SET_PARENT_REQUIRES_TARGET = (
         "[Error] set-parent 需指定新 parent_id，或加上 --clear 清除現有值"

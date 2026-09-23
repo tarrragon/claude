@@ -2,7 +2,7 @@
 name: skill-design-guide
 description: "Anthropic skill spec plus this project's conventions: frontmatter, descriptions, loading budgets, and splitting an oversized skill. Use when creating a skill, editing SKILL.md, reviewing skill quality, or moving content into references/."
 metadata:
-  version: 1.23.0
+  version: 1.23.1
 ---
 
 # Skill Design Guide

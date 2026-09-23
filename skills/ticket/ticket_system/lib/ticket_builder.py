@@ -271,6 +271,7 @@ class TicketConfig(TypedDict, total=False):
     related_to: Optional[List[str]]  # 相關的 Ticket IDs（多對多關聯）
     source_ticket: Optional[str]  # 衍生來源 Ticket ID（spawned 關係，與 parent_id 互斥）
     discovered_during: Optional[str]  # 發現衍生來源 Ticket ID（記錄脈絡，不觸發主題繼承，與 source_ticket 互斥）
+    scope_blocker: Optional[str]  # 版本範圍凍結硬閘門的放行理由（--scope-blocker，供發版側查詢）
 
     # TDD 資訊（2 個欄位）
     tdd_phase: Optional[str]    # 當前 TDD 階段（phase1/phase2/phase3a/phase3b/phase4）
@@ -790,6 +791,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         - spawned_tickets: []（空清單）
         - source_ticket: config.get("source_ticket")（可選；衍生關係）
         - discovered_during: config.get("discovered_during")（可選；發現衍生血緣，不觸發主題繼承）
+        - scope_blocker: config.get("scope_blocker")（可選；版本範圍凍結閘門的放行理由）
         - dispatch_reason: ""（空字串）
         - decision_tree_path: config.get("decision_tree_path")（決策樹路徑，可選）
         - who: {"current": config["who"], "history": {}}
@@ -854,6 +856,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         "spawned_tickets": [],
         "source_ticket": config.get("source_ticket"),
         "discovered_during": config.get("discovered_during"),
+        "scope_blocker": config.get("scope_blocker"),
         "dispatch_reason": "",
         "decision_tree_path": config.get("decision_tree_path"),
         "who": {"current": config["who"], "history": {}},

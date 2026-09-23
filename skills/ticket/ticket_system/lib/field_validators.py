@@ -441,6 +441,103 @@ def validate_source_ticket_arg(args: argparse.Namespace) -> bool:
     return True
 
 
+def is_portable_where_files(tokens: List[str]) -> bool:
+    """判斷 where.files 是否全數落在 `.claude/` 之下（可攜問題判準）。
+
+    可攜問題定義：替換掉專案名稱與路徑後仍成立、根源在 `.claude/` 通用資產的
+    問題（見 `.claude/skills/framework-issue/SKILL.md`「決策入口」）。此判準
+    只做路徑層級的機械檢查——不判斷 why/語意，因語意判準誤擋成本高會推高
+    建票摩擦力，而路徑判準機械可判、零誤判。
+
+    Args:
+        tokens: 已 strip 的 where.files token 清單（可含 `::read` 等意圖標記）
+
+    Returns:
+        bool: True 表示全數落在 `.claude/` 之下（含至少一個 token）；
+        空清單或含任一非 `.claude/` 路徑回 False（非可攜，不觸發閘門）
+    """
+    from ticket_system.lib.file_conflict import parse_file_intent
+
+    if not tokens:
+        return False
+    for token in tokens:
+        if not token:
+            return False
+        path, _intent = parse_file_intent(token)
+        if not path.startswith(".claude/"):
+            return False
+    return True
+
+
+def validate_portable_issue_gate(
+    where_files: List[str],
+    dedup_checked: Optional[str],
+) -> bool:
+    """可攜問題分流硬閘門。
+
+    where.files 非空且全數以 `.claude/` 開頭時視為可攜問題：正確載體是
+    canonical framework issue（tarrragon/claude），非本地 ticket——
+    quality-baseline 規則 5「發現即建立」的預設載體是本地 ticket，但可攜
+    問題的合法收件方不是它，兩者之間原本沒有分流閘門，導致本地池累積重複
+    問題（實證：單一 session 內新建的多張票中，多數問題在 canonical 已有
+    open issue，全程未查重）。既有的 where.files 撞檔熱度提示（僅警告不
+    阻擋）已證實對此類失效無效（同一提示連續被略過），故本閘門為硬擋。
+
+    `--dedup-checked` 必須同時帶查重結論本身（命中的 issue 號或 `none`），
+    不接受純旗標存在——只給旗標不給結論等同宣稱查過但未留下可覆核的結論。
+
+    命中 issue 不等於不該建票：`framework-issue` 的核心模型是「ticket 記
+    執行，issue 記問題」（見該 skill〈定位〉）。若本票要做的是記錄/分析
+    問題本身（問題可完整寫進 issue 文字），命中既有 issue 應 observe 附加
+    後不建本地票；但若本票要做的是執行程式碼變更（該 issue 解法在本
+    consumer 的落地實作），即使命中 issue 仍應建票——issue 號本身就是
+    查重結論，執行不能只靠一段文字代替。此閘門只做路徑層級判準，無法
+    區分這兩種情況，故訊息把判斷交還給建票者，見 hint 內的分流提問。
+
+    Args:
+        where_files: 已 strip 的 where.files token 清單
+        dedup_checked: `--dedup-checked` 參數值（查重結論：issue 號或 "none"；
+            未提供或空字串視為未給結論）
+
+    Returns:
+        bool: True 表示通過（非可攜，或可攜但已附查重結論）；False 表示
+        應阻擋建票（已印出錯誤與範本，呼叫端應 return None/1）
+    """
+    if not is_portable_where_files(where_files):
+        return True
+
+    if dedup_checked:
+        return True
+
+    print(format_error(ErrorEnvelope(
+        component="create",
+        action="portable_issue_gate",
+        errno="PORTABLE_ISSUE_UNDEDUPED",
+        hint=(
+            "where.files 全數落在 .claude/ 之下，判定為可攜問題（跨專案可"
+            "重現、根源在框架通用資產）。請先查重，再判斷這張票是「記錄/"
+            "分析問題」還是「執行程式碼變更」——兩者處置不同：\n\n"
+            "  1) 查重指令範本：\n"
+            "     python3 .claude/skills/framework-issue/scripts/"
+            "section_comment.py dedup --keywords \"關鍵字一\" \"關鍵字二\"\n\n"
+            "  2) 判斷本票性質（ticket 記執行，issue 記問題）：\n"
+            "     a) 本票只記錄/分析問題本身（問題可完整寫進 issue 文字）→ "
+            "命中既有 issue 用 observe 附加，不建本地票；未命中則到 issue "
+            "補區段，同樣不建本地票\n"
+            "     b) 本票要執行程式碼變更（該 issue 解法在本 consumer 的"
+            "落地實作，如本地測試/部署/程式碼修改）→ 命中 issue 不代表"
+            "不該建票，issue 號本身就是查重結論，加 --dedup-checked "
+            "<issue 號> 建票執行；--why 建議引用該 issue 號說明本票與其"
+            "關係\n"
+            "     c) 查重確認全框架皆未命中 → --dedup-checked none 建票，"
+            "並視情況同步在 canonical 開新 issue\n\n"
+            "  3) 帶查重結論重新執行本次建票，例如：\n"
+            "     --dedup-checked '#102'  或  --dedup-checked none"
+        ),
+    )))
+    return False
+
+
 def validate_discovered_during_arg(args: argparse.Namespace) -> bool:
     """--discovered-during 參數前置驗證：與 --source-ticket 互斥。
 
@@ -476,3 +573,71 @@ def validate_discovered_during_arg(args: argparse.Namespace) -> bool:
         return False
 
     return True
+
+
+def validate_version_scope_gate(
+    version: str,
+    ticket_type: str,
+    action: str,
+    scope_blocker: Optional[str],
+) -> bool:
+    """版本範圍凍結硬閘門（僅根票，子票由呼叫端不經此函式）。
+
+    todolist.yaml 版本條目標 `scope: frozen` 時，該版本判定為「範圍已凍結
+    不再收新根票」——與可攜問題分流閘門同形：預設路徑（建票）需被硬擋，
+    才能逼出「這張票該不該進這個版本」的判斷，而非靜默流入既有池。
+
+    `--scope-blocker` 須帶非空理由才放行，僅給旗標或給空字串仍視為未給
+    理由（與 `validate_portable_issue_gate` 的 `--dedup-checked` 同一設計：
+    只給旗標不給結論等同宣稱評估過但未留下可覆核的理由）。
+
+    Args:
+        version: 已解析的版本號（無 v 前綴，如 "0.1.0"）
+        ticket_type: Ticket 類型（IMP, ANA, DOC 等）
+        action: --action 參數值
+        scope_blocker: `--scope-blocker` 參數值（放行理由；未提供或空字串
+            視為未給理由）
+
+    Returns:
+        bool: True 表示通過（版本未凍結，或已凍結但附放行理由）；
+        False 表示應阻擋建票（已印出錯誤與二擇一處置，呼叫端應 return 1）
+    """
+    from ticket_system.lib.version import (
+        is_version_scope_frozen,
+        suggest_overflow_version,
+    )
+
+    if not is_version_scope_frozen(version):
+        return True
+
+    if scope_blocker:
+        print(format_warning(
+            "[版本範圍凍結] {version} 已標記 scope: frozen，以 --scope-blocker "
+            "理由放行：{reason}",
+            version=version,
+            reason=scope_blocker,
+        ))
+        return True
+
+    overflow = suggest_overflow_version(version, ticket_type, action)
+    overflow_hint = (
+        f"建議溢出目標: {overflow[0]}（{overflow[1]}）"
+        if overflow
+        else "無法計算溢出目標（版本格式異常）"
+    )
+
+    print(format_error(ErrorEnvelope(
+        component="create",
+        action="version_scope_gate",
+        errno="VERSION_SCOPE_FROZEN",
+        hint=(
+            f"版本 {version} 已標記 scope: frozen（範圍已凍結，不再收新根"
+            f"票）。{overflow_hint}\n\n"
+            "請二擇一：\n"
+            f"  1) --version {overflow[0] if overflow else '<溢出目標>'}"
+            "（若尚未在 todolist.yaml 註冊，須先登記該版本條目）\n"
+            "  2) --scope-blocker \"<理由>\"（帶非空理由才放行，說明為何"
+            "這張票必須進入已凍結的版本）"
+        ),
+    )))
+    return False

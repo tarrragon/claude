@@ -55,6 +55,7 @@ from ticket_system.lib.precondition import (
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
+    check_reverse_source_conflict,
 )
 from ticket_system.constants import VALID_TICKET_TYPES, VALID_PRIORITIES
 
@@ -1187,6 +1188,13 @@ def _execute_resolve_spawn_request_locked(args: argparse.Namespace, version: str
         print(f"   spawned_tickets 新增: {', '.join(added)}")
     if skipped:
         print(f"   spawned_tickets 已存在略過: {', '.join(skipped)}")
+    # 血緣衝突提示（best-effort、僅 WARNING）：此路徑接受任意既有 ticket ID
+    # 作為 --spawned-ticket，是本命令補齊 remove-spawned 前的錯誤源頭
+    # （見 check_reverse_source_conflict docstring）
+    for value in added:
+        conflict_warning = check_reverse_source_conflict(value, args.ticket_id)
+        if conflict_warning:
+            print(format_warning(conflict_warning), file=_sys.stderr)
 
     try:
         with open(ticket_path, "r", encoding="utf-8") as _vf:

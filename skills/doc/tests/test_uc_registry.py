@@ -180,6 +180,28 @@ class TestTokenVariantDetection:
         assert hits == []
 
 
+class TestCompoundIdentifierTokenBoundary:
+    """0.1.0-W3-643：複合識別符中緊鄰的 uc- 片段不應吞併其後真正的 UC-NN。"""
+
+    def test_compound_test_key_does_not_produce_phantom_uc_uc(self):
+        """正向案例：action-ucFlow-select-uc-UC-01 只應偵測到 UC-01，
+        不應因 select-uc- 片段與後續 UC-01 拼接產生偽 token UC-UC。"""
+        text = "const _optionKey = ValueKey('action-ucFlow-select-uc-UC-01');"
+        hits = uc_registry.find_uc_tokens_in_text(text)
+        assert hits == [("UC-01", 1)]
+
+    def test_defined_uc_in_compound_identifier_is_not_violation(self):
+        assert uc_registry.is_violation_token("UC-01", {"UC-01": "x"}) is False
+
+    def test_undefined_uc_in_compound_identifier_still_flagged(self):
+        """E2 反向對照：同一種複合識別符形態，換成真正未定義的 UC 編號時，
+        守衛仍須翻紅——確保修邊界沒有把真命中一起關掉。"""
+        text = "const _optionKey = ValueKey('action-ucFlow-select-uc-UC-99');"
+        hits = uc_registry.find_uc_tokens_in_text(text)
+        assert hits == [("UC-99", 1)]
+        assert uc_registry.is_violation_token("UC-99", {"UC-01": "x"}) is True
+
+
 class TestGetUcSummary:
     def test_returns_none_when_uc_not_in_ssot(self, tmp_path):
         _write_spec(tmp_path, [("UC-01", "匯入書庫")])

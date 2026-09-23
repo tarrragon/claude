@@ -128,3 +128,55 @@ def resolve_ticket_path(
         Path(.../docs/work-logs/v0.31.0/tickets/0.31.0-W1-001.md)
     """
     return Path(ticket.get("_path", get_ticket_path(version, ticket_id)))
+
+
+def check_reverse_source_conflict(
+    target_ticket_id: str, parent_ticket_id: str
+) -> Optional[str]:
+    """檢查 target_ticket 的 source_ticket 是否與 parent_ticket 衝突。
+
+    Best-effort 唯讀檢查：僅在能明確判定「target 已存在且其 source_ticket
+    指向另一張與 parent 不同的既有票」時回傳警告文字；target 不存在、
+    版本無法解析、或 source_ticket 未設定／恰為 parent 本身，一律回傳
+    None（無衝突可報）。
+
+    Why:
+        spawned_tickets 的常見寫入路徑（add-spawned、resolve-spawn-request
+        --spawned-ticket）接受任意既有 ticket ID，不驗證該 ID 是否已宣稱
+        歸屬另一張票——血緣一旦寫錯，ticket md 又受 hook 禁止直讀直編，
+        等於沒有合法更正路徑（remove-spawned 補的正是這條更正路徑，本
+        函式補的是更前面一關：寫入當下即時提示，屬 opinionated default
+        「預設路徑引導正確做法」，兩者互補不互斥）。
+
+        僅發 WARNING 不阻擋寫入：spawned_tickets 的關聯強度本就弱於
+        source_ticket，存在「刻意關聯一張已有主的既有票」的合法情境
+        （如事後補記一個獨立完成、未走 --source-ticket 流程的既有票），
+        故不宜升級為硬擋。
+
+    Args:
+        target_ticket_id: 即將寫入 spawned_tickets 的目標 ticket ID。
+        parent_ticket_id: 執行寫入的來源（父）ticket ID。
+
+    Returns:
+        Optional[str]: 衝突時回傳可直接印出的警告文字；無衝突或無法
+        判定時回傳 None。
+    """
+    from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
+
+    target_version = extract_version_from_ticket_id(target_ticket_id)
+    if target_version is None:
+        return None
+
+    target_ticket = load_ticket(target_version, target_ticket_id)
+    if not target_ticket:
+        return None
+
+    existing_source = target_ticket.get("source_ticket")
+    if not existing_source or existing_source == parent_ticket_id:
+        return None
+
+    return (
+        f"{target_ticket_id} 的 source_ticket 已為 {existing_source}"
+        f"（非 {parent_ticket_id}）：此次寫入僅新增 spawned_tickets 關聯，"
+        f"不會覆蓋 target 既有血緣。若非刻意關聯既有票，請確認 ID 是否誤植。"
+    )

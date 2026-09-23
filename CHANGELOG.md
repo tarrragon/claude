@@ -1,3 +1,10 @@
+## [2.60.2] - 2026-09-23
+
+### Summary
+scope 凍結模型：版本歸屬／收件資格／執行資格三軸解耦——version-progression 衍生問題歸屬改為 scope 分流並新增版本生命週期段、PC-121 superseded、七處回聲同步；ticket CLI 2.40.1（凍結閘門、planned 收票、scope_blocker、set-scope-blocker）與 version-release 2.2（check 以 blocker 阻擋、finish 前移）
+
+---
+
 ## [2.60.1] - 2026-09-18
 
 ### Summary

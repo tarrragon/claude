@@ -63,6 +63,10 @@ def _make_args(**overrides):
         topic=None,
         new_topic=None,
         no_topic=False,
+        # 本檔多處以 .claude/ 下路徑作 where_files 測資（測主題推導 S2 叢集，
+        # 非測可攜問題分流硬閘門），該路徑組合會被新增的硬閘門判定為可攜
+        # 問題而阻擋；帶查重結論放行，語意上等同「已查過重、確認非重複」。
+        dedup_checked="none",
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)

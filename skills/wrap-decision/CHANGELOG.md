@@ -2,6 +2,16 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.15.0 — 錨點確認補第三錨點「評估單位」（實例還是模式；嚴重性在單位固定並量過普及度之後才給），推導在 detailed-techniques.md 新子節，principle 卡 evaluation-unit-before-severity（case：同一個發現當句子評是校對、當形態評是 33 篇的規範問題）；pm-checklist 1.3.0 同步；iterative-research 首次標號 1.0.0；hooks 硬路徑加 portability-allow 註記
+
+**Version**: 2.14.1 — 反轉 2.14.0 對 reference 檔尾的處理：本 skill 九份 reference 有七份帶自己的 Last Updated / Version 註記，逐條對照後 13 條裡 11 條不在本 CHANGELOG（本檔只回溯到 2.1.0），那是各 reference 的歷史不是重複。「版本住 CHANGELOG」管的是 SKILL.md，套到 reference 層會掉歷史。還原 claim-quick-wrap 的 2.0.0 註記，pm-checklist 補 1.2.0 對齊註記
+
+**Version**: 2.14.0 — pm-checklist.md 對齊 SKILL.md：五個月未動（內嵌版號停在 1.1.0 / 2026-04-16），缺 Step 0 整道閘門、W 的假設層級／三類涵蓋／方案關聯性、R 的搜尋範圍校準／清單逐項核對／事實宣稱驗證、A 前置的工具選擇四問、A 的 10/10/10 與悖論識別五條、P 的早期警訊與自我暴露；快速模式補 Step 0；自測表 6 項擴為 10 項（門檻 7/10）。claim-quick-wrap.md 與 pm-checklist.md 移除內嵌 Last Updated / Version 檔尾，版本住 CHANGELOG
+
+**Version**: 2.13.2 — 2.13.1 接回的三張卡改用反引號路徑（`references/principles/x.md`）而非超連結，與 premortem-workflow 指 premortem-klein 的既有慣例一致：這三張是外部理論摘要、沒有也不該有 report 對應，超連結進鏡像會成斷鏈
+
+**Version**: 2.13.1 — principles/ 三張卡（benevolent-paternalism、four-villains、voss-influence-transparency）自 8/18 建立以來零入連，各接回檔頭指名的宿主段：前兩張接 anti-paternalism.md 的檢查 2 與自我暴露段（含學術依據列），four-villains 接 detailed-techniques.md 開頭
+
 **Version**: 2.13.0 — 體量收斂：SKILL.md 全檔 10,507 tokens（門檻 5,000 的 2.10 倍）收斂至 4,954 tokens。做法：(1) 移除全站 markdown 表格的對齊留白（純格式，不影響渲染），單此項省約 1,145 tokens；(2)「二元處置取捨」節的完整 Why/Consequence 論證與兩則實證、Step 0「為什麼必須在 W 之前」與「反模式偵測」完整版移至 `references/detailed-techniques.md` 新增章節，SKILL.md 保留核心定義 + Action + 路由；(3) 觸發條件表、W/R/A/P 各階段表格與段落逐句壓縮為核心問句 + 速查表，移除與 references 重複的展開說明。全部 references 交叉引用逐條驗證可達（無斷鏈），H2 章節數與結構不變（10 節）。Portable skill，收斂後需 skill-sync push。
 **Version**: 2.12.0 — 補記 2.11.0 之後累積但未 bump 版號的變更（版號未動使發佈庫與本庫的內容分歧無法由版號察覺）。`hooks/wrap-skill-yaml-consistency-hook.py` 的「映射檔不存在」錯誤訊息改為內嵌最小可用範例（兩個頂層必要欄位 + 佔位符），原訊息叫讀者「見 SKILL.md」，但映射檔的 schema 只寫在映射檔自身的檔頭註解裡——也就是缺失的那個檔案內，指向外部文件無法自救。另 `hooks/wrap-decision-tripwire-hook.py` 移除註解與 docstring 內的專案 ticket ID，訊號判定行為未變
 

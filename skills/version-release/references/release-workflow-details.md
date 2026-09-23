@@ -13,8 +13,10 @@ def preflight_check(version: str):
     """
     1.1 確認 worklog 目標達成
         - 掃描 docs/work-logs/v{VERSION}*.md
-        - 掃描 tickets/ 目錄，檢查所有 Ticket 是否都已完成
-        - 若有 pending/in_progress 的 Ticket，回報數量
+        - 掃描 tickets/ 目錄，依 status 與 scope_blocker 分組（見 SKILL.md
+          〈發版判準：blocker 阻擋、其餘前移〉）：in_progress 與帶
+          scope_blocker 的 pending 阻擋；無 blocker 的 pending 列入前移
+          清單，不阻擋發版
 
     1.2 檢查技術債務狀態
         - 讀取 todolist.yaml 的「技術債務追蹤」區塊
@@ -35,7 +37,7 @@ def preflight_check(version: str):
 
 **檢查項目**:
 
-- [x] 所有 Ticket 已完成（無 pending/in_progress）
+- [x] 無 in_progress Ticket、無帶 scope_blocker 的 pending Ticket（無 blocker 的 pending 列前移清單不阻擋）
 - [x] 技術債務已分類和處理
 - [x] 版本號在所有地方一致
 - [x] 當前分支正確

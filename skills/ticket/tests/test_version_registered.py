@@ -66,7 +66,7 @@ class TestValidateVersionRegistered:
         assert "未在 todolist.yaml 中註冊" in error_msg
 
     def test_completed_version_rejected(self, temp_project):
-        """已註冊但 completed 狀態的版本被拒絕"""
+        """已註冊但 completed 狀態的版本被拒絕（E2：紅輸入，completed 仍拒）"""
         _write_todolist(temp_project, {
             "versions": [
                 {"version": "0.17.3", "status": "completed"},
@@ -82,7 +82,23 @@ class TestValidateVersionRegistered:
         assert is_valid is False
         assert "0.17.3" in error_msg
         assert "completed" in error_msg
-        assert "非 active" in error_msg
+        assert "只有 planned 或 active 版本可建票" in error_msg
+
+    def test_planned_version_passes(self, temp_project):
+        """已註冊且 planned 狀態的版本通過驗證（放寬後新增合法狀態）"""
+        _write_todolist(temp_project, {
+            "versions": [
+                {"version": "0.2.0", "status": "planned"},
+            ]
+        })
+        with patch(
+            "ticket_system.lib.version.get_project_root",
+            return_value=temp_project,
+        ):
+            is_valid, error_msg = validate_version_registered("0.2.0")
+
+        assert is_valid is True
+        assert error_msg == ""
 
     def test_todolist_not_exists_allows(self, temp_project):
         """todolist.yaml 不存在時向後相容（允許）"""

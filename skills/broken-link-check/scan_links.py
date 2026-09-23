@@ -72,10 +72,21 @@ REF_REGEX = re.compile(
 # `@.claude/` 前綴（不會命中 REF_REGEX），不需要加 marker。
 EXEMPT_MARKER = re.compile(r"<!--\s*broken-link-exempt\b.*?-->|portability-allow")
 
+# 同步工具把這些目錄整個排除在傳遞之外（skill-sync 的 EXCLUDE_DIRS），所以裡面
+# 的消費端專屬路徑是刻意的、不是缺陷：project-integration/ 正是 Layer 2 內容
+# 該住的地方，消費端專案自備自己的一份。本掃描若不跟著排除，唯一合法的 Layer 2
+# 住址會變成每行都要標記的地方，而那等於取消了這個目錄的用途。
+# 兩支工具的排除清單要一起改——只改一邊的症狀是「照規範放對位置反而被報違規」。
+SYNC_EXCLUDED_DIRS = ("hook-logs/", "project-integration/")
+
+
+def _in_sync_excluded_dir(path_str: str) -> bool:
+    return any(d in path_str for d in SYNC_EXCLUDED_DIRS)
+
 # fence 內 cp/mv 指令目的地參數的相對路徑：resolve_path() 對 `./X`（非
-# `./.claude/X`）一律以來源檔目錄為基準，但這類指令的相對路徑基準是執行時
-# cwd（通常為 repo root），靜態文字無法確定 cwd（不同於 `.claude/X`／
-# `@.claude/X`／`../X` 三種前綴皆有明確、不依賴 cwd 的解析規則）。與其猜測
+# `./.claude/<路徑>`）一律以來源檔目錄為基準，但這類指令的相對路徑基準是執行時
+# cwd（通常為 repo root），靜態文字無法確定 cwd（不同於 `.claude/<路徑>`／
+# `@.claude/<路徑>`／`../<路徑>` 三種前綴皆有明確、不依賴 cwd 的解析規則）。與其猜測
 # cwd（會產生另一種誤判來源）或放行所有 fence 內相對路徑（會遮蔽真實
 # drift——同一 fence 慣例內混有大量非 cp/mv 的 markdown 相對連結），窄化為
 # 僅 cp/mv 指令行的單點相對路徑目的地才視為信心不足，見 classify_ref 的
@@ -100,8 +111,8 @@ _EXAMPLE_SKILL_NAME_SEGMENT = re.compile(
 )
 
 # 樣式型 placeholder 偵測（缺陷 2）：文件中的示意路徑非真實引用。
-# - glob 萬用字元 * 或 ?（如 .claude/agents/*.md、.claude/rules/**/*.md）
-# - 角括號佔位 <name> / <檔名>（如 .claude/agents/<agent>.md）
+# - glob 萬用字元 * 或 ?（如 .claude/agents/*.md、.claude/rules/**/*.md）  broken-link-exempt: 示範路徑形態
+# - 角括號佔位 <name> / <檔名>（如 .claude/agents/<agent>.md）  broken-link-exempt: 示範路徑形態
 # - 大括號模板 {language} / {name}（如 quality-{language}.md）
 _GLOB_PLACEHOLDER = re.compile(r"[*?]")
 _ANGLE_PLACEHOLDER = re.compile(r"<[^>]*>")
@@ -111,16 +122,16 @@ _BRACE_PLACEHOLDER = re.compile(r"\{[^}]*\}")
 # （TEST / TEST_AGENT / TEST_EXEMPT...）。小寫 test 嵌在真實描述名中
 # （如 test-helper-design-methodology.md）不視為 placeholder，避免誤排真實斷鏈。
 # 副檔名比對含 .py/.sh：射程擴充後同一類示意樣式同樣出現在這兩種副檔名
-# （如 .claude/hooks/xxx-hook.py、./.claude/scripts/xxx.py）。
+# （如 .claude/hooks/xxx-hook.py、./.claude/scripts/xxx.py）。  broken-link-exempt: 示範路徑形態
 _XXX_TOKEN = re.compile(r"(?:^|/|_)xxx(?:\.md|\.py|\.sh|/|$)", re.IGNORECASE)
 _TEST_TOKEN = re.compile(r"(?:^|/)TEST(?:_[A-Z0-9]+)*(?:\.md|/|$)")
 # triage A 類：版本佔位 vX（如 vX-main.md），區別於真實版本目錄
 # （v0.13.0-... 等以數字開頭），故要求 vX 後緊接非數字字元或行尾。
 _VX_PLACEHOLDER = re.compile(r"(?:^|/)vX(?:[^0-9][^/]*)?\.md$")
-# triage A 類：省略號縮寫（如 PC-050-...md、`.claude/hooks/...py`），
+# triage A 類：省略號縮寫（如 PC-050-...md、`.claude/hooks/...py`），  broken-link-exempt: 示範路徑形態
 # 檔名以字面三個點直接接副檔名（無點分隔），與 ../ 相對路徑前綴（點+點+斜線）
 # 不同構。副檔名比對含 .py/.sh：射程擴充後同一縮寫慣例同樣出現在這兩種副檔名
-# （如 error-pattern 案例中示範 backtick 路徑被截斷顯示為 `.claude/hooks/...py`）。
+# （如 error-pattern 案例中示範 backtick 路徑被截斷顯示為 `.claude/hooks/...py`）。  broken-link-exempt: 示範路徑形態
 _ELLIPSIS_PLACEHOLDER = re.compile(r"\.\.\.(?:md|py|sh)$")
 
 # .py/.sh 射程擴充後的已知佔位符 hook 檔名 exact-match 集：文件示例中用來示範
@@ -132,7 +143,7 @@ _ELLIPSIS_PLACEHOLDER = re.compile(r"\.\.\.(?:md|py|sh)$")
 # 2026-08：hook(s)/ 與檔名間允許任意層子目錄（如 archived/），涵蓋
 # 「hooks/archived/script-name.py」這類歸檔範例引用（git mv 範本佔位符）。放寬
 # 前僅原地匹配（hooks/ 後緊接檔名），此類巢狀路徑仍判 broken。放寬安全性已
-# 實測驗證：`.claude/hooks/` 全樹（含 archived/ 等所有子目錄）遞迴列出的真實
+# 實測驗證：`.claude/hooks/` 全樹（含 archived/ 等所有子目錄）遞迴列出的真實  portability-allow: 掃描對象目錄
 # 檔名與本清單無交集，故任意子目錄層級皆不會誤判真實檔案為佔位符。
 _PLACEHOLDER_HOOK_BASENAMES = frozenset({
     "foo.py", "a.py", "x.py", "qux.py", "guard.py", "hook-name.py",
@@ -242,9 +253,9 @@ def extract_refs(text):
 
 def _hook_registration_coverage_check_path():
     """定位 hook-registration-coverage-check.py 原始檔（scan_links.py 自身所在
-    repo 的 .claude/hooks/，與被掃描的 root 參數無關）。
+    repo 的 .claude/hooks/，與被掃描的 root 參數無關）。  portability-allow: consumer 共通安裝位置
 
-    scan_links.py 固定位於 `<repo>/.claude/skills/broken-link-check/`；往上
+    scan_links.py 固定位於 `<repo>/.claude/skills/broken-link-check/`（portability-allow: consumer 共通安裝位置）；往上
     兩層即 `<repo>/.claude/`，其下 `hooks/` 是 extract_merge_declarations 的
     權威來源。掃描目標（可能是合成測試樹）由呼叫端另外傳入 hooks_dir 決定，
     與此函式定位的「載入哪個原始檔」無關。
@@ -289,7 +300,7 @@ def _build_merge_successor_index(hooks_dir):
 
     hooks_dir 不存在或載入失敗時回傳空字典（fail-open，見
     load_extract_merge_declarations 容錯說明）。hooks_dir 不存在時提前回傳，
-    避免對每個沒有 .claude/hooks/ 的掃描根都嘗試動態載入（多數合成測試樹與
+    避免對每個沒有 .claude/hooks/ 的掃描根都嘗試動態載入（portability-allow: 掃描對象目錄，存不存在由各專案決定；多數合成測試樹與
     docs-only 掃描根皆屬此類）。
     """
     if not hooks_dir.is_dir():
@@ -308,15 +319,15 @@ def _build_merge_successor_index(hooks_dir):
 def resolve_path(raw, source_file, root):
     """引用字串轉實際路徑字串。
 
-    - @.claude/X 與 .claude/X：相對 repo root
-    - ./.claude/X：相對 repo root（殼層呼叫慣例的特例，見下方說明）
+    - @.claude/<路徑> 與 .claude/<路徑>：相對 repo root
+    - ./.claude/<路徑>：相對 repo root（殼層呼叫慣例的特例，見下方說明）
     - 其餘 ./X 與 ../X：相對 source_file 所在目錄（os.path.normpath 純字串消解 ..）
 
-    `./.claude/X` 獨立於一般 `./X` 規則：射程擴至 `.py`/`.sh` 後，大量引用是
+    `./.claude/<路徑>` 獨立於一般 `./<路徑>` 規則：射程擴至 `.py`/`.sh` 後，大量引用是
     「以 repo root 為 cwd 示範指令」的殼層呼叫慣例（如
-    `python3 ./.claude/scripts/x.py`），其中 `./` 語意是「執行當下目錄」，
+    `python3 ./.claude/scripts/x.py`  broken-link-exempt: 示範指令，路徑不存在是預期的），其中 `./` 語意是「執行當下目錄」，
     與純文件互相引用時 `./` 相對本文件目錄的慣例不同構。若不特判，非 repo
-    root 目錄下的文件寫這種形態會被誤解析成 `<本文件目錄>/.claude/...`
+    root 目錄下的文件寫這種形態會被誤解析成 `<本文件目錄>/.claude/<路徑>`
     的雙層 `.claude/` 巢狀路徑，恆不存在，成為固定假陽性來源。
     """
     root = Path(root)
@@ -345,7 +356,7 @@ def classify_ref(raw, resolved, knobs, exists, exempt=False, shell_ambiguous_cwd
     if not knobs["include_placeholder"]:
         if raw in PLACEHOLDER_SAMPLES or is_placeholder_pattern(raw):
             return "placeholder"
-    if "migration-backups/" in resolved or "hook-logs/" in resolved:
+    if "migration-backups/" in resolved or _in_sync_excluded_dir(resolved):
         if not knobs["include_migration_backups"]:
             return "excluded_backup"
         # 旋鈕開啟 → 落到下方 exists/broken 判定
@@ -380,7 +391,7 @@ def scan(root, knobs=None, scan_roots=None):
     md_files = set()
     for subtree in scan_roots:
         md_files.update(root.glob(f"{subtree}/**/*.md"))
-    md_files = sorted(f for f in md_files if "hook-logs/" not in str(f))
+    md_files = sorted(f for f in md_files if not _in_sync_excluded_dir(str(f)))
     categories = {
         "broken": 0,
         "placeholder": 0,
@@ -557,7 +568,7 @@ def fence_audit(root, scan_roots=None):
     md_files = set()
     for subtree in scan_roots:
         md_files.update(root.glob(f"{subtree}/**/*.md"))
-    md_files = sorted(f for f in md_files if "hook-logs/" not in str(f))
+    md_files = sorted(f for f in md_files if not _in_sync_excluded_dir(str(f)))
     entries = []
     scanned = 0
     for f in md_files:

@@ -4,8 +4,9 @@ Spec 版本標示一致性檢查 Hook 測試
 涵蓋範圍：
 1. frontmatter version 擷取
 2. 變更歷史表最大版號擷取（含跨區段截斷）
-3. 單檔漂移判定（一致 / 不一致 / 缺資料）
-4. 掃描彙整與警告訊息格式化
+3. 正文「**版本**:」行版號擷取（部分 spec 如 SPEC-004 獨有的第三來源）
+4. 單檔漂移判定（一致 / 不一致 / 缺資料 / 僅正文版號行漂移）
+5. 掃描彙整與警告訊息格式化
 """
 
 import importlib.util
@@ -104,6 +105,41 @@ version: "1.1"
 | 9.9 | 附錄表格資料 |
 """
 
+CONSISTENT_WITH_BODY_VERSION_SPEC = """---
+id: SPEC-994
+title: "含正文版號行且三處一致"
+version: "1.2"
+---
+
+# 含正文版號行且三處一致
+
+**版本**: 1.2（沿革敘述，與 frontmatter 一致）
+
+## 變更歷史
+
+| 版本 | 日期 | 變更內容 |
+|------|------|---------|
+| 1.2 | 2026-07-01 | 補欄位 |
+"""
+
+BODY_VERSION_DRIFT_SPEC = """---
+id: SPEC-995
+title: "正文版號行落後 frontmatter"
+version: "1.2"
+---
+
+# 正文版號行落後 frontmatter
+
+**版本**: 1.0（測試用途，故意落後 frontmatter 與變更歷史）
+
+## 變更歷史
+
+| 版本 | 日期 | 變更內容 |
+|------|------|---------|
+| 1.0 | 2026-06-21 | 初始版本 |
+| 1.2 | 2026-07-01 | 補欄位 |
+"""
+
 
 # ---------------------------------------------------------------------------
 # extract_frontmatter_version
@@ -134,6 +170,20 @@ def test_extract_history_max_version_missing_section():
 def test_extract_history_max_version_stops_at_next_heading():
     # 附錄表格的 9.9 不應污染變更歷史區段的最大版號判定
     assert _hook.extract_history_max_version(TRAILING_TABLE_SPEC) == "1.1"
+
+
+# ---------------------------------------------------------------------------
+# extract_body_version
+# ---------------------------------------------------------------------------
+
+
+def test_extract_body_version_found():
+    assert _hook.extract_body_version(BODY_VERSION_DRIFT_SPEC) == "1.0"
+
+
+def test_extract_body_version_missing_line_returns_none():
+    # CONSISTENT_SPEC 沒有正文「**版本**:」行（多數 spec 現況）
+    assert _hook.extract_body_version(CONSISTENT_SPEC) is None
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +219,28 @@ def test_check_spec_file_missing_history_returns_none(tmp_path):
 def test_check_spec_file_missing_frontmatter_returns_none(tmp_path):
     file_path = tmp_path / "no_frontmatter.md"
     file_path.write_text(NO_FRONTMATTER_SPEC, encoding="utf-8")
+
+    assert _hook.check_spec_file(file_path) is None
+
+
+def test_check_spec_file_body_version_drift_returns_result(tmp_path):
+    # 正向對照輸入（test-assertion-design 規則 E2）：frontmatter／變更歷史一致，
+    # 僅正文版號行落後，須被第三來源比對翻紅——證明此檢查在真正運作，
+    # 不是恰好與既有 history 檢查同形而從未被觸發。
+    file_path = tmp_path / "body_drift.md"
+    file_path.write_text(BODY_VERSION_DRIFT_SPEC, encoding="utf-8")
+
+    result = _hook.check_spec_file(file_path)
+
+    assert result is not None
+    assert result.frontmatter_version == "1.2"
+    assert result.history_max_version == "1.2"
+    assert result.body_version == "1.0"
+
+
+def test_check_spec_file_consistent_with_body_version_returns_none(tmp_path):
+    file_path = tmp_path / "consistent_body.md"
+    file_path.write_text(CONSISTENT_WITH_BODY_VERSION_SPEC, encoding="utf-8")
 
     assert _hook.check_spec_file(file_path) is None
 
@@ -209,6 +281,19 @@ def test_format_drift_warning_includes_both_versions(tmp_path):
     assert "frontmatter=1.0" in warning
     assert "變更歷史最大版號=1.3" in warning
     assert "drifted.md" in warning
+
+
+def test_format_drift_warning_includes_body_version(tmp_path):
+    file_path = tmp_path / "docs" / "spec" / "body_drift.md"
+    file_path.parent.mkdir(parents=True)
+    file_path.write_text(BODY_VERSION_DRIFT_SPEC, encoding="utf-8")
+
+    drift = _hook.check_spec_file(file_path)
+    warning = _hook.format_drift_warning([drift], tmp_path)
+
+    assert "frontmatter=1.2" in warning
+    assert "正文版號行=1.0" in warning
+    assert "body_drift.md" in warning
 
 
 # ---------------------------------------------------------------------------

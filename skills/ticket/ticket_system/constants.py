@@ -166,7 +166,12 @@ VALID_STATUSES: frozenset = frozenset(TICKET_STATUS.values())
 # complete 僅 in_progress、release 依 blockedBy 退 pending 或 blocked、
 # close 接受三個非終態。completed 唯一出邊為 superseded（被後繼票取代）——
 # 現行 CLI 無寫入 superseded 的命令（grep 實證），此邊為前瞻保留；warn 期
-# 出現其他 completed 出邊即為異常訊號。closed / superseded 為終態無出邊。
+# 出現其他 completed 出邊即為異常訊號。superseded 為終態無出邊。
+# closed -> pending：補上唯一出邊，僅供 `ticket track restore` 觸發
+# （誤關票的還原路徑）。release/claim 對 closed 票仍由各自 command-level
+# guard 擋下（release 明確拒絕 closed；claim 恆將 closed 導向 in_progress，
+# 該邊不在此矩陣內，仍被本閘擋下）——此矩陣只開放 pending 這一個出邊，
+# 不開放 in_progress/blocked，故無法被 claim 誤用。
 STATUS_TRANSITIONS: Dict[str, frozenset] = {
     STATUS_PENDING: frozenset({STATUS_IN_PROGRESS, STATUS_BLOCKED, STATUS_CLOSED}),
     STATUS_IN_PROGRESS: frozenset(
@@ -175,7 +180,7 @@ STATUS_TRANSITIONS: Dict[str, frozenset] = {
     STATUS_BLOCKED: frozenset({STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_CLOSED}),
     STATUS_COMPLETED: frozenset({STATUS_SUPERSEDED}),
     STATUS_SUPERSEDED: frozenset(),
-    STATUS_CLOSED: frozenset(),
+    STATUS_CLOSED: frozenset({STATUS_PENDING}),
 }
 
 # ============================================================

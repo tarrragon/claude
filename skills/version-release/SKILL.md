@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 2.1.0
+  version: 2.2.0
 ---
 
 # Version Release Skill
@@ -35,6 +35,9 @@ metadata:
 # 只執行檢查
 /version-release check
 
+# 發版收尾：前移非阻擋 pending Ticket 後執行發布流程
+/version-release finish --version 0.19
+
 # 只更新文件
 /version-release update-docs
 ```
@@ -43,8 +46,39 @@ metadata:
 |--------|------|
 | `start` | 啟動新版本（Options: `--version`(必填)、`--from`、`--description`、`--dry-run`） |
 | `release` | 完整發布流程（Options: `--version`、`--dry-run`、`--force`、`--defer-td`） |
-| `check` | 只執行 Pre-flight 檢查 |
+| `check` | 只執行 Pre-flight 檢查（發版判準見下方〈發版判準：blocker 阻擋、其餘前移〉） |
+| `finish` | 發版收尾：對前移清單逐張 `ticket migrate` 至目標版本，成功後接續 `release` 同一套流程（Options 同 `release`） |
 | `update-docs` | 只更新文件 |
+
+### 發版判準：blocker 阻擋、其餘前移
+
+`check`／`release`／`finish` 共用同一套判準（`check_worklog_completed` 內部呼叫
+`collect_ticket_scope_groups`）：當前版本的 pending／in_progress Ticket 不再以
+「池是否清空」為發版判準，改為：
+
+| 分組 | 條件 | 對發版的影響 |
+|------|------|-------------|
+| 阻擋 | `status: in_progress`（一律） | error，發版中止 |
+| 阻擋 | `status: pending` 且 frontmatter 含非空 `scope_blocker` | error，發版中止（訊息含 ticket ID 與 blocker 理由） |
+| 前移 | `status: pending` 且無 `scope_blocker` | info，列於「發版時前移」清單，**不阻擋** |
+
+前移清單中每張票依 `compute_overflow_target_version` 計算目標版本（IMP 型別
+且 `what` 欄位首詞屬新功能動詞「實作/新增/建立/開發」→ minor+1；其餘 →
+patch+1）；`finish` 對此清單逐張執行 `ticket migrate <source_id> <target_id>
+--version <target_version>`，任一張失敗即中止、不留半搬狀態。**目標版本
+必須已在 `docs/todolist.yaml` 登記**（planned 或 active 皆可），未登記時
+整批阻擋並提示先登記，`finish` 不自動登記。
+
+範例輸出（`check` 命中前移清單）：
+
+```
+[OK] 檢查工作日誌完成度...
+
+  發版時前移（2 個，不阻擋）：
+    - 0.1.0-W3-700 -> v0.1.1（修復/改善/分析/文件類型歸下一個 patch（相對凍結版本 patch+1））
+    - 0.1.0-W3-701 -> v0.2.0（新功能歸下一個小版本（相對凍結版本 minor+1））
+[OK] Worklog 目標達成
+```
 
 ### start 子命令
 

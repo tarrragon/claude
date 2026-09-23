@@ -129,7 +129,7 @@ description: [...]
 1. **框架綁定工具講自己的主題**：`.claude/` 路徑就是該 skill 的操作對象而非閱讀材料時。判準是**它對那個路徑做什麼**——讀寫該路徑下的檔案是它的功能本身，而不是叫讀者去讀那個檔。不列具名清單：成員資格會與成員自述脫節（實測有一份 skill 的 SKILL.md 自稱 `zero framework dependencies and works in any project`，而它同時是任何一份具名清單都會收的成員）。
 2. **介面規格**：下游程式讀特定檔案的特定欄位時，泛稱會使契約不可驗證。此類須在鄰近處標明它是本框架的位置慣例、不是契約本身。
 3. **路徑本身即被討論的對象**：如本節引述「hook 自 `.claude/hooks/` 移入⋯⋯」作為失效實證。此時路徑是舉例的內容，不是指向要讀的東西。
-4. **hook 與 script 的溯源引用**：這類東西無法以名字載入（沒有 Skill 工具可用、也沒有標題可檢索），路徑是唯一可行的指名方式。寫路徑時給檔名即可，不必寫全路徑——`file-size-guardian-hook.py` 比 `.claude/hooks/file-size-guardian-hook.py` 更耐搬移。
+4. **hook 與 script 的溯源引用**：這類東西無法以名字載入（沒有 Skill 工具可用、也沒有標題可檢索），路徑是唯一可行的指名方式。寫路徑時給檔名即可，不必寫全路徑——`file-size-guardian-hook.py` 比 `.claude/hooks/file-size-guardian-hook.py` 更耐搬移。<!-- broken-link-exempt: 後者是本條規則的反例，刻意寫成全路徑 -->
 
 5. **skill 內相對路徑補足前綴後的結果**：依下一段的規則把 `` `references/foo.md` `` 補成完整路徑時，產生的 `.claude/…` 寫法屬本類，不必再歸入前四類。**這一條是為了讓遵守下一段規則的產物不會被〈發布前檢查清單〉的機械檢查判為「說不出屬於哪一類」。**
 

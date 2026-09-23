@@ -47,6 +47,10 @@ How much content belongs in a single file, and when do you cut?
 - **Error-pattern**: One pattern per file. Multiple root causes → multiple files, cross-linked.
 - **Ticket**: One ticket per file is the atomic contract. Splitting a ticket means creating child tickets, not subdividing the file.
 
+### Supplementary notes live next to their parent command
+
+操作型文件裡的先備知識（為什麼這個參數值得用）與環境陷阱（某個平台上同一條指令會靜默失敗）跟在它們所屬的指令旁邊——表格的用途欄、或緊跟指令的那一段。判斷問句是「讀者在讀到哪個位置時會需要這段資訊」，答案指向的位置就是它該放的地方。遊離的形態是參數的理由獨立成段（讀者掃表格時跳過它）、環境陷阱跟在無關的段落後面；成因是寫的時候想到什麼補什麼，而文件的讀者掃描式閱讀、不照順序讀每一段。見 [supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)。
+
 ### Anti-patterns
 
 | Anti-pattern                                           | What happens                                                          |
@@ -138,6 +142,16 @@ Put the conclusion first. A reader who stops after the opening paragraph should 
 | Safe to rewrite?  | Yes (versioned)                          | No (append-only)                  |
 
 **Rule**: Never mix the two in one document. A spec paragraph written in past tense is a process note; move it to worklog. A worklog entry that begins "the system must" is a spec fragment; promote it.
+
+### Operation sentences: fill four slots before writing the sentence
+
+文件裡描述操作的每一句由四個槽位組成——動作者（人、腳本、工具、系統元件）、動詞、受詞（動詞在這個領域裡能作用的對象）、結果——外加量詞範圍一格，每格填的都是這個領域裡實際存在的東西。三條判定：動作者格填了指令片段（「`-G 16M` 放大緩衝區」）→ 換成人或系統元件；受詞格的名詞在領域外（「執行」的受詞填「字」）→ 換成領域內的名詞；量詞（完全、任何、所有）的範圍沒在句內具名 → 補範圍。**判定者不代填槽位**——單位要寫在句子裡，從上下文推得出來不算。worklog 與操作指引是這一類句子密度最高的文件；寫的跟審的是同一個模型時審查端對它偵測率是零，所以規格放在寫的當下。判準與 before/after 見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md) 與 [spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)；教學定位的文件另查開場與教室互動語句（[teaching-is-not-lecturing](principles/teaching-is-not-lecturing.md)）。
+
+### Command operands: the values the reader must change
+
+上一節的判定單位是句子，所以它走到程式碼區塊就停下來——指令沒有主詞也沒有謂語。示範指令另有一條檢查，而規範與操作指引的指令密度最高，所以這一條在這裡比在文章裡更常觸發。
+
+四個位置（工具 / 子命令 / 選項 / 引數）裡引數最需要寫：工具與子命令的名字讀者查得到，選項多半有 `--help`，而引數的語意常常只有這份文件講得出來（路徑為什麼選在這裡、兩個引數哪個是來源、給不給這個引數會讓指令做不同的事），而且它是讀者唯一要動手改的位置。判準：**讀者把這條指令用在自己的環境上要改哪幾個位置，每個位置文件有沒有說過它填什麼。** 掃描入口是區塊裡的字面值而不是佔位符——佔位符自帶「這裡要換」的訊號，字面值長得像一個完整可用的答案，稿件上因此看不出缺口。**引數的有無改變行為時，兩種形態要並列在同一個程式碼區塊裡、各帶一行註解**，文字說明是補充而不是替代。五種形態與修法見 [literal-operand-hides-the-change-point](principles/literal-operand-hides-the-change-point.md)。 區塊的排法、註解的分工與參數表的判準在 [demonstrating-commands](demonstrating-commands.md)。
 
 ### Business logic, not syntax translation
 

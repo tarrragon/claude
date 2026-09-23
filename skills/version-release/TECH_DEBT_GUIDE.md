@@ -36,7 +36,7 @@ Version Release Skill 新增了**自動技術債務檢查**和**延後機制**�
 
 ### 2. 延後技術債務機制
 
-如果無法在當前版本處理所有 TD，可使用 `--defer-td` 選項延後到下一版本。
+如果本版本範圍內無法涵蓋所有 TD，可使用 `--defer-td` 選項延後到下一版本。
 
 #### 命令格式
 
@@ -301,5 +301,6 @@ if is_current_version and is_pending:
 
 ---
 
-**最後更新**: 2026-01-07
+**最後更新**: 2026-09-23
+**變更**：「如果無法在當前版本處理所有 TD」改寫為「如果本版本範圍內無法涵蓋所有 TD」，對齊 `.claude/pm-rules/version-progression.md` scope 凍結模型（舊制字面已由該模型取代）。
 **維護者**: basil-hook-architect

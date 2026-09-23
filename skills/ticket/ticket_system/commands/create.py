@@ -49,7 +49,9 @@ from ticket_system.lib.field_validators import (
     missing_where_paths,
     validate_blocked_by_references,
     validate_discovered_during_arg,
+    validate_portable_issue_gate,
     validate_source_ticket_arg,
+    validate_version_scope_gate,
     validate_where_files,
 )
 from ticket_system.lib.topic_inference import (
@@ -202,6 +204,13 @@ def _parse_cli_args_to_config(
             path=missing,
         ))
 
+    # 可攜問題分流硬閘門：where.files 全數落在 .claude/ 下時，須先查重並
+    # 附查重結論（--dedup-checked）才放行，否則阻擋建票（詳見
+    # validate_portable_issue_gate docstring）。
+    dedup_checked = getattr(args, "dedup_checked", None)
+    if not validate_portable_issue_gate(where_files, dedup_checked):
+        return None
+
     # 處理 blocked_by
     blocked_by = [b.strip() for b in args.blocked_by.split(",")] if args.blocked_by else []
 
@@ -263,6 +272,7 @@ def _parse_cli_args_to_config(
         "related_to": related_to if related_to else None,
         "source_ticket": args.source_ticket,
         "discovered_during": getattr(args, "discovered_during", None),
+        "scope_blocker": getattr(args, "scope_blocker", None) or None,
         "acceptance": acceptance,
         "tdd_phase": tdd_phase,
         "tdd_stage": tdd_result.phases,
@@ -884,6 +894,13 @@ def execute(args: argparse.Namespace) -> int:
             )))
             return 1
 
+        # 版本範圍凍結硬閘門（僅根票；子票繼承父票版本，屬已在範圍內
+        # 工作的細分，不經此閘門）。--version 明示指向凍結版本仍須經過，
+        # 避免習慣性繞過（詳見 validate_version_scope_gate docstring）。
+        scope_blocker = getattr(args, "scope_blocker", None)
+        if not validate_version_scope_gate(version, ticket_type, action, scope_blocker):
+            return 1
+
     # IMP-072 方案 A：Step 1（ID 分配）到 Step 3（落盤）之間原本無鎖，跨
     # process / 跨 session 並行 create 會同讀相同 max seq 配出同一 ID，後寫者
     # 靜默覆寫前者。目錄級 fcntl lock 將整段臨界區序列化；lock 取得失敗時
@@ -1096,6 +1113,23 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     parser.add_argument("--where", "--where-files", dest="where_files", help="影響檔案（逗號分隔，如 'file1.py,file2.py'）")
     parser.add_argument("--why", help="需求依據（IMP/ANA/ADJ 類型必填）")
+    parser.add_argument(
+        "--dedup-checked",
+        dest="dedup_checked",
+        help=(
+            "可攜問題分流硬閘門的查重結論：where.files 全數落在 .claude/ 下時"
+            "必填，值為命中的 issue 號（如 '#102'）或 'none'；僅給旗標不給"
+            "結論仍阻擋建票"
+        ),
+    )
+    parser.add_argument(
+        "--scope-blocker",
+        dest="scope_blocker",
+        help=(
+            "版本範圍凍結硬閘門的放行理由：目標版本 scope: frozen 時"
+            "必填，須帶非空理由才放行；僅給旗標不給理由仍阻擋建票"
+        ),
+    )
     # --how / --ho 攔截：exact match 優先於縮寫展開，給友善提示
     # （1.0.0-W1-024.1 A3 + 1.0.0-W1-028 模式化）。--ho 為更短前綴同類誤打，
     # 共用同一中文提示（約束 2 落地：攔截而非懸而未決）。

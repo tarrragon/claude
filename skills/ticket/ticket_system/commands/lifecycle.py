@@ -1060,6 +1060,12 @@ class TicketLifecycle:
             if status == STATUS_BLOCKED:
                 print(f"[Warning] {ticket_id} 已被阻塞，無法釋放")
                 return 1
+            if status == STATUS_CLOSED:
+                print(
+                    f"[Warning] {ticket_id} 已關閉，無法釋放。"
+                    f"closed 的合法出邊只有 pending，且僅能由 `ticket track restore` 觸發"
+                )
+                return 1
 
             # W3-082：依 blockedBy 是否為空決定目標狀態（沿用同檔 blockedBy 慣例）
             blocked_by = ticket.get("blockedBy") or []

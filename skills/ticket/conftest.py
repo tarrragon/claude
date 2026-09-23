@@ -132,8 +132,13 @@ def seeded_repo_root(tmp_path_factory, monkeypatch):
     todolist，版本偵測三函式全走確定性資料，與專案狀態解耦。
 
     種子設計（覆蓋 patch 與 major 兩條建議路徑）：
-    - 1.0.0 completed：_suggest_next_patch 錨點 → 建議 1.0.1
-    - 1.0.1 active：patch 建議即已註冊 active 版本 → 註冊驗證通過
+    - 1.0.0 completed：不再作 _suggest_next_patch 錨點（基準已改為 active
+      版本，與版本範圍凍結閘門的 suggest_overflow_version 同一基準；
+      completed 保留僅供「completed 仍拒」類測試取用）
+    - 1.0.1 active：_suggest_next_patch 錨點（首個 active）→ 建議 1.0.2
+    - 1.0.2 planned：patch 建議即已註冊版本 → 註冊驗證通過（放寬
+      validate_version_registered 後 planned 亦合法，故無需佔用第二個
+      active 名額）
     - 1.1.0 active + proposals：_suggest_next_major 首選 → feat 路徑亦確定
     """
     root = tmp_path_factory.mktemp("seeded-repo-root")
@@ -145,6 +150,8 @@ def seeded_repo_root(tmp_path_factory, monkeypatch):
         "    status: completed\n"
         "  - version: 1.0.1\n"
         "    status: active\n"
+        "  - version: 1.0.2\n"
+        "    status: planned\n"
         "  - version: 1.1.0\n"
         "    status: active\n"
         "    proposals:\n"

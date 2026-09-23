@@ -243,6 +243,54 @@ class TestResolveProcessed:
 
 
 # ============================================================
+# 血緣一致性檢查（W3-644 acceptance 3 的裁定落地）：processed 回填
+# spawned_tickets 時，target 的 source_ticket 若衝突僅發 WARNING 不擋寫入
+# ============================================================
+
+
+class TestReverseSourceConflictWarning:
+    def test_processed_warns_when_target_source_conflicts(self, patch_paths_to_repo, capsys):
+        from ticket_system.commands import track_acceptance as ta_mod
+
+        with pytest_patch_check_conflict(
+            ta_mod, "0.0.0-W0-100 的 source_ticket 已為 0.0.0-W0-999"
+        ):
+            rc = _call_resolve("0.0.0-W0-SR", "SR-1", "processed", spawned_ticket=["0.0.0-W0-100"])
+
+        assert rc == 0
+        fm, _ = parse_frontmatter(_read_md(patch_paths_to_repo))
+        # 衝突僅是提示，寫入仍照常完成
+        assert fm["spawned_tickets"] == ["0.0.0-W0-100"]
+        err = capsys.readouterr().err
+        assert "0.0.0-W0-100" in err
+        assert "0.0.0-W0-999" in err
+
+    def test_processed_no_warning_when_no_conflict(self, patch_paths_to_repo, capsys):
+        from ticket_system.commands import track_acceptance as ta_mod
+
+        with pytest_patch_check_conflict(ta_mod, None):
+            rc = _call_resolve("0.0.0-W0-SR", "SR-1", "processed", spawned_ticket=["0.0.0-W0-100"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert err == ""
+
+
+def pytest_patch_check_conflict(module, return_value):
+    """回傳 context manager：直接替換呼叫點的 check_reverse_source_conflict。
+
+    不透過 patch_paths_to_repo 追加對 ticket_ops.load_ticket 的重導向
+    （該 fixture 目前只重導向 ta_mod / ticket_loader 兩處），對齊
+    test_add_spawned_multi.py 的相同做法：直接 patch 呼叫點名稱，測試
+    warning 的發出/不發出邏輯，不重複測 check_reverse_source_conflict
+    本身的判定邏輯（已在 test_check_reverse_source_conflict.py 覆蓋）。
+    """
+    from unittest.mock import patch as _patch
+
+    return _patch.object(module, "check_reverse_source_conflict", return_value=return_value)
+
+
+# ============================================================
 # AC2: dismissed 帶 reason
 # ============================================================
 

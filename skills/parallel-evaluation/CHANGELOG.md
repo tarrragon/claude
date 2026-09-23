@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.3.1 — `references/integration-guide.md` 版本歸屬措辭同步 scope 凍結模型（2026-09-23）：「衍生問題進當前版本」改為依 `version-progression.md`〈版本生命週期〉分流
+**Last Updated**: 2026-09-23
+
 **Version**: 1.3.0 — 移除 basil opt-out 機制（universal_lens 統一不可跳過）+ 常駐委員加入情境移除冗餘列舉「（A-G）」改用「所有情境」
 **Last Updated**: 2026-06-25
 

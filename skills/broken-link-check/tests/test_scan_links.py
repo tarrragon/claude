@@ -37,8 +37,8 @@ def synthetic_repo(tmp_path):
     """建立一個已知計數的 .claude/ 樹。
 
     內容設計（預設旋鈕：排除 code block + placeholder + backup）：
-    - good.md     → 1 個有效引用 (@.claude/target.md 存在)
-    - broken.md   → 1 個 broken 引用 (.claude/missing/gone.md 不存在)
+    - good.md     → 1 個有效引用 (@.claude/target.md 存在)  broken-link-exempt: 合成測試夾具，路徑在 tmp_path 裡建出來
+    - broken.md   → 1 個 broken 引用 (.claude/missing/gone.md 不存在)  broken-link-exempt: 合成測試夾具，路徑在 tmp_path 裡建出來
     - code.md     → 1 個 broken 引用，但在 fenced code block 內 → 預設不計
     - holder.md   → 1 個 placeholder 範例 (path/file.md) → 不計 broken
     - backup ref  → resolved 落在 migration-backups/ → 預設不計
@@ -759,7 +759,7 @@ class TestScanRootsDefaultUnchanged:
     def test_scan_without_scan_roots_ignores_docs(self, docs_scan_repo):
         result = scan_links.scan(docs_scan_repo, knobs=None)
         assert result["broken_count"] == 0
-        assert result["scanned_files"] == 2  # 僅 .claude/target.md + good.md
+        assert result["scanned_files"] == 2  # 僅 .claude/target.md + good.md，broken-link-exempt: 合成測試夾具
 
     def test_cli_bare_invocation_ignores_docs(self, docs_scan_repo):
         proc = run_cli(docs_scan_repo, "--format", "json")
@@ -835,7 +835,7 @@ class TestKnownMissingPathSamples:
     不存在路徑為樣本，驗證掃描根擴充後的分類正確性。
 
     樣本性質摘要（詳見對應 ticket 的 Solution 章節）：
-    - 3 個示範佔位符（`.claude/hooks/foo.py` 等，取自已逐一列名的已知佔位符
+    - 3 個示範佔位符（`.claude/hooks/foo.py` 等，取自已逐一列名的已知佔位符  broken-link-exempt: 合成測試夾具，路徑在 tmp_path 裡建出來
       hook 檔名集，非任意命名）
     - 1 個真陽性（`.md` 檔案筆誤，實際檔案位於他處）
     - 2 個待查／時序性項目（皆非 `.md`，射程擴充後應被偵測為 broken，留待
@@ -1107,13 +1107,13 @@ class TestMergeSuccessorAnnotation:
         assert entry["merge_successor"] is None
 
     def test_no_hooks_dir_defaults_to_none_successor(self, synthetic_repo):
-        # fail-open：root/.claude/hooks 不存在時不中斷主掃描，merge_successor 皆 None
+        # fail-open：root/.claude/hooks 不存在時不中斷主掃描，merge_successor 皆 None  broken-link-exempt: 合成測試夾具
         result = scan_links.scan(synthetic_repo, knobs=None)
         entry = next(e for e in result["broken"] if "broken.md" in e["source_file"])
         assert entry["merge_successor"] is None
 
     def test_json_schema_includes_merge_successor_key(self, synthetic_repo):
-        # schema 存在性：不需真實合併索引，root 無 .claude/hooks 時仍須有此欄位
+        # schema 存在性：不需真實合併索引，root 無 .claude/hooks 時仍須有此欄位  broken-link-exempt: 合成測試夾具
         proc = run_cli(synthetic_repo, "--format", "json")
         data = json.loads(proc.stdout)
         assert data["broken"], "fixture 應至少產生一筆 broken"
@@ -1172,7 +1172,7 @@ class TestRefRegexMultiExtension:
 # ===========================================================================
 # J. 案例 2：shell cp/mv 指令目的地參數的相對路徑基準誤判
 #
-# resolve_path() 對 `./X`（非 `./.claude/X`）一律以來源檔目錄為基準，但 fence
+# resolve_path() 對 `./<路徑>`（非 `./.claude/<路徑>`）一律以來源檔目錄為基準，但 fence
 # 內 cp/mv 指令的相對路徑基準是執行時 cwd（通常為 repo root），靜態文字無法
 # 確定 cwd。範圍窄化為「cp/mv 指令行 + 單點相對路徑」才視為信心不足，改列
 # excluded_shell_dest，不下 broken 判定；不放行其他 fence 內相對路徑（如
@@ -1223,9 +1223,9 @@ class TestCarrierNature:
 def fence_audit_repo(tmp_path):
     """opt-in fence 稽核模式測試樹：涵蓋三種載體 + marker 行 + 對照組。
 
-    - commands.md（.claude/commands/ 下）：fence 內未標記失效引用
-    - case.md（.claude/error-patterns/ 下）：fence 內未標記失效引用
-    - report.md（.claude/hook-specs/ 下）：fence 內未標記失效引用
+    - commands.md（.claude/commands/ 下）：fence 內未標記失效引用  broken-link-exempt: 合成測試夾具，路徑在 tmp_path 裡建出來
+    - case.md（.claude/error-patterns/ 下）：fence 內未標記失效引用  broken-link-exempt: 合成測試夾具，路徑在 tmp_path 裡建出來
+    - report.md（.claude/hook-specs/ 下）：fence 內未標記失效引用  broken-link-exempt: 合成測試夾具，路徑在 tmp_path 裡建出來
     - plain.md（未分類目錄）：fence 內未標記失效引用
     - marked.md（未分類目錄）：fence 內已標記 marker 的失效引用
     - existing.md：fence 內引用實際存在（不應出現在稽核清單）
@@ -1475,3 +1475,27 @@ class TestShellDestAmbiguousCwd:
         d1 = json.loads(widened.stdout)
         assert d0["broken_count"] == 0
         assert d1["broken_count"] == 1
+
+    def test_sync_excluded_dirs_are_not_scanned(self, tmp_path):
+        """project-integration/ 是同步工具排除傳遞的目錄，裡面的消費端路徑是刻意的。
+
+        突變驗證：把 project-integration/ 從 SYNC_EXCLUDED_DIRS 拿掉之後，同一份
+        輸入要從 0 broken 變成 1 broken——沒有這一半，這個測試在實作被改壞時仍然通過。
+        """
+        claude = tmp_path / ".claude"
+        pi = claude / "skills" / "demo" / "references" / "project-integration"
+        pi.mkdir(parents=True)
+        (pi / "integration.md").write_text(
+            "本框架的 schema 在 `.claude/rules/core/nonexistent-rule.md`。\n"
+        )
+
+        assert scan_links.scan(tmp_path)["broken_count"] == 0
+
+        original = scan_links.SYNC_EXCLUDED_DIRS
+        try:
+            scan_links.SYNC_EXCLUDED_DIRS = ("hook-logs/",)
+            assert scan_links.scan(tmp_path)["broken_count"] == 1
+        finally:
+            scan_links.SYNC_EXCLUDED_DIRS = original
+
+        assert scan_links.scan(tmp_path)["broken_count"] == 0

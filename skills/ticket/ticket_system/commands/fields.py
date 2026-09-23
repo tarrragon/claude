@@ -46,6 +46,7 @@ from ticket_system.lib.ticket_loader import get_ticket_path
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
+    check_reverse_source_conflict,
 )
 from ticket_system.commands.track_set_acceptance import _strip_checkbox_prefix
 
@@ -596,6 +597,64 @@ def execute_set_priority(args: argparse.Namespace, version: str) -> int:
     return execute_set_field(args, version, "priority")
 
 
+def execute_set_scope_blocker(args: argparse.Namespace, version: str) -> int:
+    """事後設定或清除 Ticket 的 scope_blocker 欄位。
+
+    scope_blocker 原僅在建立當下可寫入；凍結前已存在的必要票沒有建立
+    時機補這個欄位。本命令補上事後設定路徑，使發版檢查的分組邏輯（依
+    scope_blocker 區分阻擋與前移）能把既有必要票歸入阻擋組而非前移清單。
+
+    --reason 與 --clear 互斥（argparse mutually exclusive group 強制）；
+    空字串理由視同未給——不寫入空字串，避免下游「scope_blocker and ...」
+    的判斷因空字串為 falsy 而靜默落入前移分支，造成「CLI 回報寫入成功但
+    發版側視同未設定」的落差。
+    """
+    reason = getattr(args, "reason", None)
+    clear = bool(getattr(args, "clear", False))
+
+    if not clear and not (isinstance(reason, str) and reason.strip()):
+        print(format_error(ErrorMessages.MISSING_FIELD_VALUE, ticket_id=args.ticket_id, field_name="scope_blocker"))
+        return 1
+
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
+
+        if clear:
+            ticket["scope_blocker"] = None
+        else:
+            ticket["scope_blocker"] = reason.strip()
+
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
+
+        import sys as _sys
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(ticket_path), args.ticket_id, "scope_blocker",
+                operation="set-scope-blocker",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                _sys.stderr.write(
+                    f"[set-scope-blocker] auto-commit skipped（{commit_status}，非致命）；"
+                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            _sys.stderr.write(
+                f"[set-scope-blocker] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+            )
+
+    print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="scope_blocker"))
+    if clear:
+        print("   scope_blocker 已清除")
+    else:
+        print(f"   scope_blocker: {ticket['scope_blocker']}")
+    return 0
+
+
 def execute_add_acceptance(args: argparse.Namespace, version: str) -> int:
     """追加驗收條件到 Ticket。
 
@@ -703,7 +762,16 @@ def execute_remove_acceptance(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
-    """追加 spawned_tickets 項目（支援多 ID，對齊 Unix 慣例）"""
+    """追加 spawned_tickets 項目（支援多 ID，對齊 Unix 慣例）。
+
+    寫入前不驗證 target 血緣（避免鎖序交錯：驗證需讀 target 票，與本票
+    的 file_lock 無關但仍是額外 IO）；新增成功後才對每個 added 值做
+    best-effort 血緣衝突提示（見 `check_reverse_source_conflict`），僅
+    WARNING 不擋寫入——target 已有不同 source_ticket 時仍允許關聯，只是
+    提示可能誤植。
+    """
+    import sys as _sys
+
     # W14-045: file_lock 包圍 load → modify → save
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
@@ -729,12 +797,181 @@ def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         ticket_loader.save_ticket(ticket, ticket_path)
 
+        # 與 add-acceptance 同保護等級的 auto-commit（path-limited + graceful
+        # degrade）：spawned_tickets 是 ticket 血緣欄位，寫入後若停在未 commit
+        # 的 working tree，可能被 git checkout/reset/stash 覆蓋回舊版本。
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(ticket_path), args.ticket_id, "spawned_tickets",
+                operation="add-spawned",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                _sys.stderr.write(
+                    f"[add-spawned] auto-commit skipped（{commit_status}，非致命）；"
+                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            _sys.stderr.write(
+                f"[add-spawned] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+            )
+
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
     if added:
         print(f"   新增: {', '.join(added)}")
     if skipped:
         print(f"   已存在略過: {', '.join(skipped)}")
+    for value in added:
+        warning = check_reverse_source_conflict(value, args.ticket_id)
+        if warning:
+            print(format_warning(warning), file=_sys.stderr)
     print(f"   目前共 {len(spawned)} 項")
+    return 0
+
+
+def _clear_reverse_source_if_matches(target_ticket_id: str, parent_ticket_id: str) -> bool:
+    """若 target_ticket 的 source_ticket 回指 parent_ticket，清除該反向欄位。
+
+    spawned_tickets 的反向欄位是目標票的 source_ticket（見
+    ticket_builder.update_source_spawned_tickets：建立衍生票時寫入雙向
+    關聯）。移除 spawned_tickets 條目若不同步清這一側，target 票仍會
+    宣稱自己衍生自 parent，tree/deps 視圖出現單向殘留關係——即使觸發本
+    機制的污染案例本身只污染了單一方向（誤植的 spawned 條目，target 票
+    的 source_ticket 未受影響），一般化的移除操作仍須處理這一側，否則
+    日後任何一次移除都會留下同型殘留。
+
+    Best-effort：僅在 target 票存在、其 source_ticket 恰為 parent_ticket_id
+    時才清除；target 不存在、版本無法解析、或 source_ticket 指向他處
+    （代表該票的血緣與本次移除的 parent 無關）一律視為「無需清除」，不
+    中斷主流程——移除 spawned_tickets 條目本身已成功，反向欄位清理是
+    輔助一致性動作而非必要前提。
+
+    Args:
+        target_ticket_id: 被移除的 spawned ticket ID。
+        parent_ticket_id: 本次執行 remove-spawned 的 ticket ID。
+
+    Returns:
+        bool: True 表示已清除並寫入；False 表示無需清除或寫入失敗。
+    """
+    from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
+
+    target_version = extract_version_from_ticket_id(target_ticket_id)
+    if target_version is None:
+        return False
+
+    target_path = Path(get_ticket_path(target_version, target_ticket_id))
+    with file_lock(target_path):
+        target_ticket = ticket_loader.load_ticket(target_version, target_ticket_id)
+        if not target_ticket:
+            return False
+        if target_ticket.get("source_ticket") != parent_ticket_id:
+            return False
+        target_ticket["source_ticket"] = None
+        actual_path = Path(target_ticket.get("_path", target_path))
+        try:
+            ticket_loader.save_ticket(target_ticket, actual_path)
+        except (IOError, OSError):
+            return False
+
+        # 同保護等級 auto-commit（見 execute_add_spawned 同一段理由）；
+        # 失敗僅記錄不影響回傳值——反向欄位已寫入 working tree，本函式
+        # 的回傳語意是「是否已清除」而非「是否已 commit」。
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(actual_path), target_ticket_id, "source_ticket",
+                operation="remove-spawned",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                import sys as _sys
+                _sys.stderr.write(
+                    f"[remove-spawned] 反向欄位 auto-commit skipped（{commit_status}，"
+                    f"非致命）；body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            import sys as _sys
+            _sys.stderr.write(
+                f"[remove-spawned] 反向欄位 auto-commit 失敗（非致命，"
+                f"body 已保留 working tree）：{exc}\n"
+            )
+    return True
+
+
+def execute_remove_spawned(args: argparse.Namespace, version: str) -> int:
+    """移除 spawned_tickets 條目（介面比照 remove-acceptance；支援多 ID，對齊 add-spawned）。
+
+    以 ID 而非索引移除（spawned_tickets 本身即 ID 清單，索引語意不穩定
+    ——add-spawned 允許任意順序追加，索引會隨其他寫入者的追加而漂移）。
+    對不存在的 ID 回報而非靜默：add-spawned 與 acceptance 皆有 add/remove
+    對稱介面，spawned_tickets 原僅有 add 無 remove，一旦寫錯就沒有合法
+    的更正路徑，只能繞過 hook 直改 ticket md。
+
+    移除成功時，同步清除目標票回指本票的 source_ticket 反向欄位（見
+    `_clear_reverse_source_if_matches`），保持雙向血緣一致。
+    """
+    import sys as _sys
+
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
+
+        # args.value 為 list（nargs='+'），可能含 1 至多個 ID
+        values = args.value if isinstance(args.value, list) else [args.value]
+
+        spawned = ticket.get("spawned_tickets") or []
+        removed: list[str] = []
+        not_found: list[str] = []
+        for value in values:
+            if value not in spawned:
+                not_found.append(value)
+                continue
+            spawned.remove(value)
+            removed.append(value)
+
+        ticket["spawned_tickets"] = spawned
+
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
+
+        # 與 add-spawned／add-acceptance 同保護等級的 auto-commit（見
+        # execute_add_spawned 同一段註解的理由）。
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(ticket_path), args.ticket_id, "spawned_tickets",
+                operation="remove-spawned",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                _sys.stderr.write(
+                    f"[remove-spawned] auto-commit skipped（{commit_status}，非致命）；"
+                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            _sys.stderr.write(
+                f"[remove-spawned] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+            )
+
+    # 反向欄位清理發生在本票的 file_lock 釋放後：每個目標票各自獨立上鎖，
+    # 不與本票鎖巢狀持有，避免鎖序交錯（目標票路徑與本票路徑不同檔案，
+    # 但巢狀持有仍是不必要的鎖範圍擴張）。
+    reverse_cleared: list[str] = []
+    for target_id in removed:
+        if _clear_reverse_source_if_matches(target_id, args.ticket_id):
+            reverse_cleared.append(target_id)
+
+    print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
+    if removed:
+        print(f"   移除: {', '.join(removed)}")
+    if reverse_cleared:
+        print(f"   已同步清除反向欄位 source_ticket: {', '.join(reverse_cleared)}")
+    if not_found:
+        print(format_warning(f"找不到以下條目（未變更）: {', '.join(not_found)}"), file=_sys.stderr)
+    print(f"   目前共 {len(spawned)} 項")
+
+    if not removed:
+        return 1
     return 0
 
 

@@ -3,7 +3,7 @@ name: broken-link-check
 description: "broken-link 偵測工具。掃描 .claude/ 目錄所有 Markdown 文件中的路徑引用，偵測失效連結。Use for: (1) 一次性掃描所有 broken links, (2) 搭配 /loop 定期監控, (3) 修改規則/方法論/代理人文件後驗證路徑完整性。Use when: user runs /broken-link-check, 或搭配 /loop 定期執行, 或發現 broken link 錯誤後。"
 metadata:
   portable: true
-  version: 2.3.0
+  version: 2.5.0
 ---
 
 # broken-link-check
@@ -26,7 +26,7 @@ broken-link 計數的唯一權威來源是 `scan_links.py` 確定性 CLI，不�
 ### 立即掃描（權威）
 
 ```
-python3 .claude/skills/broken-link-check/scan_links.py .
+python3 .claude/skills/broken-link-check/scan_links.py .  # portability-allow: consumer 共通安裝位置
 ```
 
 - 位置參數為 repo root（預設 cwd），預設掃描 `<root>/.claude/**/*.md`
@@ -36,7 +36,7 @@ python3 .claude/skills/broken-link-check/scan_links.py .
 
 ```
 # 擴充掃描 docs/ 下規劃文件（疊加於預設 .claude/，不取代）
-python3 .claude/skills/broken-link-check/scan_links.py . --scan-root docs
+python3 .claude/skills/broken-link-check/scan_links.py . --scan-root docs  # portability-allow: consumer 共通安裝位置
 ```
 
 ### 輸出格式
@@ -79,7 +79,7 @@ broken 引用大量為歷史實作報告與教學/語法示範，翻預設會使
 累積。
 
 ```
-python3 .claude/skills/broken-link-check/scan_links.py . --fence-audit
+python3 .claude/skills/broken-link-check/scan_links.py . --fence-audit  # portability-allow: consumer 共通安裝位置
 ```
 
 **定位：這不是 gate。** `--fence-audit` 恆 `exit 0`，不參與既有命令的 exit
@@ -113,7 +113,7 @@ code 語意，也不接 CI 阻擋——即使找到大量發現，指令本身�
 ### 搭配 /loop 定期掃描
 
 ```
-/loop 1h python3 .claude/skills/broken-link-check/scan_links.py .
+/loop 1h python3 .claude/skills/broken-link-check/scan_links.py .  # portability-allow: consumer 共通安裝位置
 ```
 
 ---
@@ -126,8 +126,8 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 
 | 格式 | 範例 | 解析基準 |
 |------|------|------|
-| `@.claude/path/file.md` | `@.claude/pm-rules/decision-tree.md` | repo root |
-| `.claude/path/file.md` | `.claude/agents/incident-responder.md` | repo root |
+| `@.claude/path/file.md` | `@.claude/pm-rules/decision-tree.md` | repo root |<!-- broken-link-exempt: 格式示範範例路徑，非真實引用（A 類） -->
+| `.claude/path/file.md` | `.claude/agents/incident-responder.md` | repo root |<!-- broken-link-exempt: 格式示範範例路徑，非真實引用（A 類） -->
 | `../path/file.md` | `../agents/lavender-interface-designer.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（A 類） --> |
 | `./path/file.md` | `./references/detail.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（A 類） --> |
 
@@ -139,7 +139,7 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 
 以下手動 Glob/Grep 流程為 `scan_links.py` 無法執行時（如環境缺 Python）的降級參考，計數可能浮動，不可作為完成 gate。權威結果一律以 CLI 輸出為準。
 
-1. Glob 找出 `.claude/**/*.md`，排除 `.claude/hook-logs/`
+1. Glob 找出 `.claude/**/*.md`，排除 `.claude/hook-logs/`<!-- portability-allow: 掃描對象目錄，存不存在由各專案決定 -->
 2. Grep 找出上述四種前綴的路徑引用，排除 URL / 錨點 / 程式碼區塊
 3. 依解析基準轉為實際路徑
 4. Read/Glob 確認路徑存在，不存在者記為 broken link（含文件名與行號）

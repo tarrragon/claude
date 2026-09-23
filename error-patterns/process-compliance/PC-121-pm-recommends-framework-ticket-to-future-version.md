@@ -3,7 +3,7 @@ id: PC-121
 title: PM 推薦框架 ticket 至未來 planned 版本（規則 6 與 version-progression 引用斷裂）
 category: process-compliance
 severity: medium
-status: active
+status: superseded
 created: 2026-05-03
 related:
 - pm-quality-baseline-rule-6
@@ -14,6 +14,18 @@ related:
 ---
 
 # PC-121: PM 推薦框架 ticket 至未來 planned 版本
+
+## Superseded 註記
+
+本 PC 的前提與防護機制已被 scope 凍結模型（`.claude/pm-rules/version-progression.md`〈版本生命週期〉）取代，以下三點記錄取代理由；原文不刪，保留作為根因與觸發案例的歷史記錄。
+
+- **前提不成立**：本 PC 的 Consequence 原主張「框架改善若放 planned 版本，需等 planned 版本啟用才能執行」。查證 `lifecycle.py` 對版本狀態零檢查，claim 不查版本狀態——任何版本（含 `planned`）下已存在的票，今天就能被 claim 並執行。執行資格與版本狀態早已解耦，「等啟用才能執行」的前提不成立。
+- **框架問題的合法收件方已改變**：本 PC 撰寫時，框架 ticket 只能落在本地版本（active 或 planned 二選一）。現行規則下，抽象可攜、根源在 `.claude/` 通用資產的框架問題改路由至 canonical framework issue（見 `framework-issue` skill〈決策入口〉），不再是「該放 active 還是 planned」的二選一問題；只有該問題在本 consumer 的落地實作票才回頭建本地票。
+- **防護目的由新機制滿足**：本 PC 意圖避免「重要框架改善被延後執行」。此目的現由「執行資格與版本狀態解耦」直接滿足——票一旦建立（無論掛哪個版本），即可立即 claim 執行，不需要靠「禁止放 planned 版本」這條規則來保證不被延後。
+
+新規則見 `.claude/pm-rules/version-progression.md`〈版本生命週期〉與〈強制規則〉；`.claude/pm-rules/pm-quality-baseline.md` 規則 6.1 已同步補「已由 scope 凍結模型部分取代」註記。
+
+---
 
 ## 問題描述
 
@@ -93,5 +105,6 @@ PM 設計 W14-019（規則 5「權力不對等下的對話品質」設計，修�
 
 ---
 
-**Last Updated**: 2026-05-03
+**Last Updated**: 2026-09-23
+**Superseded by**: `.claude/pm-rules/version-progression.md`〈版本生命週期〉（scope 凍結模型）— 前提（`lifecycle.py` 對版本狀態零檢查，claim 不查版本狀態）、收件方變更（框架問題改路由至 canonical framework issue）、防護目的（執行資格與版本狀態已解耦）三點取代理由詳見上方「Superseded 註記」。
 **Source**: 0.18.0-W14-020 ANA 落地產出

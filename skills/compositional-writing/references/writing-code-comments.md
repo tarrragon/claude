@@ -111,6 +111,9 @@ List<Book> searchBooks(SearchCriteria criteria) { /* ... */ }
 
 ## 原則三：意圖顯性與商業邏輯 × 註解
 
+註解裡描述行為的句子同樣填槽位：動作者、動詞、受詞、結果。註解的動作者常是「這段程式」本身，那是合法的動作者；受詞填領域外的名詞（「這裡把東西丟掉」）與量詞範圍未具名（「全部清掉」——全部的什麼）才是缺口。判準見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md)。
+
+
 **Doc comment 描述業務情境，不解釋語法選擇。** 閱讀者想知道「這段程式解決什麼業務問題」「什麼情境下會觸發」「如果不這樣做會發生什麼產品層面後果」；語法細節（while vs if、async、late 變數）讀者看 code 就能推斷，不需要 doc comment 佔用最靠近視線的位置解釋。
 
 ### 3.1 語法 vs 業務情境區分

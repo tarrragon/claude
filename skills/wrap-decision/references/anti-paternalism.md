@@ -32,6 +32,8 @@
 ### 檢查 2：善意家長主義（benevolent paternalism）4 條件測試
 
 > 此規則是否符合 Frontiers AI 研究提出的「善意家長主義（benevolent paternalism）4 條件」？
+>
+> 四條件的完整定義、來源與「正當家長主義」的判定見 `references/principles/benevolent-paternalism.md`。
 
 | 條件                  | 通過標準                                   |
 | --------------------- | ------------------------------------------ |
@@ -72,7 +74,7 @@
 
 ### 為什麼必要
 
-提供建議時假裝中立 = 隱性家長主義（paternalism）。Voss 自陳「one person's influence is another person's manipulation」——影響力的本質取決於是否被透明化。
+提供建議時假裝中立 = 隱性家長主義（paternalism）。Voss 自陳「one person's influence is another person's manipulation」——影響力的本質取決於是否被透明化。原則的完整推導與訪談出處見 `references/principles/voss-influence-transparency.md`。
 
 ### 4 個實踐維度
 
@@ -172,10 +174,10 @@
 
 ## 學術依據
 
-- **Frontiers AI**：「善意家長主義（benevolent paternalism）」4 條件框架
+- **Frontiers AI**：「善意家長主義（benevolent paternalism）」4 條件框架——整理在 `references/principles/benevolent-paternalism.md`
 - **Anthropic CAI**：「balance user wellbeing against user autonomy and excessive paternalism」
 - **Lifton 8 條件**：第 7「教義凌駕個人（Doctrine over Person）」反例
-- **Chris Voss**：「intent decides」自陳（influence vs manipulation）
+- **Chris Voss**：「intent decides」自陳（influence vs manipulation）——整理在 `references/principles/voss-influence-transparency.md`
 
 ---
 

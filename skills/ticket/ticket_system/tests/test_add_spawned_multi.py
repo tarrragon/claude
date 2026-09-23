@@ -27,7 +27,15 @@ def fake_ticket():
 
 
 def _patch_io(ticket: dict):
-    """Patch load/save/resolve to operate on in-memory ticket."""
+    """Patch load/save/resolve to operate on in-memory ticket.
+
+    亦 patch `git_utils._auto_commit_ticket_md`：`execute_add_spawned`
+    對假路徑（`/tmp/fake-path.md`，非 git repo）呼叫真實版本會回傳
+    `git_failed` 並寫 stderr WARNING，與本檔測試的目標行為（多 ID 新增/
+    略過/血緣衝突提示）無關，會污染 `capsys` 斷言（auto-commit 本身的
+    行為已由其他測試檔以真實 git repo fixture 覆蓋，見
+    test_set_acceptance_auto_commit.py 同型案例）。
+    """
     saved = {}
 
     def fake_load(version, tid):
@@ -44,6 +52,10 @@ def _patch_io(ticket: dict):
         patch.object(fields_mod, "load_and_validate_ticket", side_effect=fake_load),
         patch.object(fields_mod, "resolve_ticket_path", side_effect=fake_resolve),
         patch.object(fields_mod.ticket_loader, "save_ticket", side_effect=fake_save),
+        patch(
+            "ticket_system.lib.git_utils._auto_commit_ticket_md",
+            return_value="committed",
+        ),
     ]
 
 
@@ -117,3 +129,47 @@ def test_add_spawned_backward_compat_string_value(fake_ticket):
 
     assert rc == 0
     assert saved["ticket"]["spawned_tickets"] == ["X"]
+
+
+def test_add_spawned_warns_on_reverse_source_conflict(fake_ticket, capsys):
+    """血緣一致性檢查（W3-644 acceptance 3 的裁定落地）：target 的
+    source_ticket 指向他處時，寫入仍成功但發 stderr WARNING，不靜默。"""
+    saved, patches = _patch_io(fake_ticket)
+    conflict_patch = patch.object(
+        fields_mod,
+        "check_reverse_source_conflict",
+        return_value="0.31.0-W1-001 的 source_ticket 已為 0.31.0-W9-999",
+    )
+    for p in patches + [conflict_patch]:
+        p.start()
+    try:
+        rc = fields_mod.execute_add_spawned(
+            _make_args("T-1", ["0.31.0-W1-001"]), version="0.18.0"
+        )
+    finally:
+        for p in patches + [conflict_patch]:
+            p.stop()
+
+    assert rc == 0
+    assert saved["ticket"]["spawned_tickets"] == ["0.31.0-W1-001"]
+    err = capsys.readouterr().err
+    assert "0.31.0-W1-001" in err
+    assert "0.31.0-W9-999" in err
+
+
+def test_add_spawned_no_warning_when_no_conflict(fake_ticket, capsys):
+    saved, patches = _patch_io(fake_ticket)
+    conflict_patch = patch.object(fields_mod, "check_reverse_source_conflict", return_value=None)
+    for p in patches + [conflict_patch]:
+        p.start()
+    try:
+        rc = fields_mod.execute_add_spawned(
+            _make_args("T-1", ["A"]), version="0.18.0"
+        )
+    finally:
+        for p in patches + [conflict_patch]:
+            p.stop()
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""

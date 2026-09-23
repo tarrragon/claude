@@ -4,7 +4,7 @@ description: 'Use whenever the user wants to create, track, query, or manage tic
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
-  version: 2.35.0
+  version: 2.40.1
 ---
 
 # Ticket System
@@ -124,7 +124,7 @@ set-who <id> --current <agent>`）——回報 PM 執行該指令重新指派，
 | 子命令 | 用途 | 範例 | 檔案 | 涵蓋章節 |
 | --- | --- | --- | --- | --- |
 | `create` | 建立 Atomic Ticket，支援 5W1H 引導式建立、子 Ticket 建立；版本目錄不存在時自動建立（無獨立 init 子命令） | `/ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX"` | `references/workflow-create.md` | 〈建立流程決策樹〉 |
-| `create` | 需要參數/歸屬引導/重複偵測細節時讀本檔 |  | `references/create-command.md` | 〈基本用法〉〈版本歸屬引導〉〈主題歸屬（自動推導）〉〈多值參數格式〉〈類型說明〉〈決策樹路由參數〉〈重複偵測（兩層防護）〉〈--source-ticket 參數（衍生關係）〉 |
+| `create` | 需要參數/歸屬引導/重複偵測細節時讀本檔 |  | `references/create-command.md` | 〈基本用法〉〈版本歸屬引導〉〈主題歸屬（自動推導）〉〈多值參數格式〉〈類型說明〉〈決策樹路由參數〉〈重複偵測（兩層防護）〉〈可攜問題分流硬閘門〉〈--source-ticket 參數（衍生關係）〉 |
 | `track` | 追蹤和更新 Ticket 狀態：READ 操作（summary/query/dashboard/list/runqueue/board/5W1H/validate 等）與 UPDATE 操作（claim/complete/release/set-*/append-log/dispatch 等）；`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` | `/ticket track summary` | `references/workflow-execute.md` | 〈執行流程決策樹〉〈更新操作決策樹〉〈批量操作決策樹〉〈完成判斷決策樹〉〈完成後同步提醒〉 |
 | `track` | 只需查詢決策路徑時讀本檔 | `ticket track query <id>` | `references/workflow-query.md` | 〈查詢流程決策樹〉 |
 | `track` | 需要 UPDATE/READ 完整旗標細節時讀本檔 | `ticket track claim <id>` / `ticket track complete <id> --as <agent>` / `ticket track complete <id> --no-stage` / `ticket track complete <id> --force` | `references/track-command.md` | 〈子命令總覽（全量對照 --help）〉〈READ 操作〉〈track runqueue 子命令（Scheduler）〉〈UPDATE 操作〉〈UPDATE 操作補充：commit 副作用與欄位語意〉〈track commit 子命令〉〈track set-exit-status 子命令〉〈Ticket 狀態與程式碼提交的 root 分離（worktree 場景）〉〈驗收條件操作詳解〉〈CLI 可修改欄位 vs 手動編輯欄位〉〈track deps / depth 子命令〉〈track parallel-check 子命令〉〈track board 子命令〉〈track audit 子命令〉〈track stale-list 子命令〉〈track stuck-anas 子命令〉〈track dashboard 子命令〉〈track list 子命令〉〈track dispatch 子命令〉〈track dispatch-validate 子命令〉〈track dispatch-readiness 子命令〉〈track dispatch-check 子命令〉〈track sessions 子命令〉〈track reclaim 子命令〉〈track activity 子命令〉〈track conflicts 子命令〉〈track onboard 子命令〉〈track hook-liveness 子命令〉〈track register-artifact / resolve-artifact / list-artifacts 子命令〉〈共用旗標語意（track 系列命令通用）〉〈空狀態字面規範（track 系列命令通用）〉<!-- rule8-exempt: relocation:自 references/track-command.md 逐字搬移 --> |

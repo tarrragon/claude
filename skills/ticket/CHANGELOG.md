@@ -2,6 +2,18 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.40.1 — `references/create-command.md`〈版本範圍凍結硬閘門〉三個範例的 `--where` 值由具體檔名改為 `<path>` 佔位符：具體檔名在 consumer 專案不存在，sync 守衛判為失效引用而中止推送；佔位符同時避免讀者把示意值當可複製的實值（2026-09-23）。
+
+**Version**: 2.40.0 — 新增 `set-scope-blocker <id> --reason <text>|--clear` 子命令：事後設定或清除 frontmatter `scope_blocker` 欄位，`--reason`/`--clear` 互斥、空字串理由視同未給同樣拒絕。動機：`scope_blocker` 原僅在 `create` 建票當下可寫入（`--scope-blocker`），凍結前已存在的必要 pending 票沒有建立時機補這個欄位，發版檢查（依 `scope_blocker` 區分阻擋與前移）會把它們誤判為可前移，必要工作因此被搬到下一版本。配套 `.claude/pm-rules/version-progression.md`〈版本生命週期〉凍結步驟補「回溯標記既有必要票」動作。詳見 `references/track-command.md`〈UPDATE 操作〉、〈CLI 可修改欄位 vs 手動編輯欄位〉。
+
+**Version**: 2.39.0 — `create` 版本註冊檢查放寬收 `planned` 版本（原僅收 `active`），修補 2.38.0 版本範圍凍結閘門提示的出路「先登記下一版本再建票」成為死路的問題——剛登記的版本狀態必為 `planned`，原判準仍會拒絕。動機：執行早已與版本解耦（生命週期模組對版本狀態零檢查），「planned = 要等啟用才能執行」的前提不成立。`VERSION_NOT_ACTIVE` 訊息改寫為「只有 planned 或 active 版本可建票」；`completed` 版本仍拒。同時退役 `_suggest_next_patch` 相對「最新已完成版本」計算版本歸屬引導的舊基準——版本推進後對非功能動詞根票恆建議未註冊版本，且與凍結閘門印出的溢出目標互相矛盾（基準不同源），改為相對 active 版本 patch+1，與 `suggest_overflow_version` 同一基準。`--scope-blocker` 放行理由新增持久化為 frontmatter 選填欄位 `scope_blocker`，供發版側查詢哪些票被明確放行進已凍結版本。詳見 `references/create-command.md`〈版本範圍凍結硬閘門〉、`references/field-semantics.md`〈scope_blocker 欄位語意〉。
+
+**Version**: 2.38.0 — 新增 `create` 的版本範圍凍結硬閘門：`docs/todolist.yaml` 版本條目新增選填欄位 `scope`（值 `frozen`；缺席即開放，向後相容），目標版本凍結時，無 `--parent` 的根票被阻擋，訊息含相對凍結版本計算的溢出目標（IMP 且新功能動詞 → minor+1.0，其餘 → patch+1）與二擇一處置；`--scope-blocker` 須帶非空理由才放行，僅給旗標或空字串仍阻擋；`--parent` 子票繼承父票版本不經此閘門。動機：0.1.0 pending 池 83 張無法分辨必要與非必要，現有版本歸屬引導只有「功能 vs 修復」一個軸，缺「目標版本現在還收不收票」的軸。形態比照 2.36.0 可攜問題分流閘門（正交，同在 create 驗證層）。新增 `is_version_scope_frozen` / `suggest_overflow_version`（`lib/version.py`）、`validate_version_scope_gate`（`lib/field_validators.py`）。詳見 `references/create-command.md`〈版本範圍凍結硬閘門〉。
+
+**Version**: 2.37.0 — 新增 `restore` 子命令：`closed` 票唯一合法出邊（closed -> pending），修補三條路同時封死的死局（`release`/`claim` 被 enum-gate 擋下、ticket md 直接 Edit 被 `ticket-file-access-guard-hook` 阻擋）。`--reason` 必填，落地清除 `close_reason`/`close_reason_note`/`closed_by`/`closed_at`/`completed_at` 五個 close 相關欄位，並寫入 `restored_at`/`restored_by`/`restore_reason` 還原記錄，走 auto-commit。`STATUS_TRANSITIONS` 新增 `closed -> pending` 唯一出邊，僅供本命令觸發：`release` 另補 app-level guard 明確拒絕 closed 票，`claim` 恆將 closed 導向 `in_progress`（不在新開放出邊內）——兩者對 closed 票仍被擋下，測試各附一個該紅輸入驗證。動機：一次誤判判準的關票掃蕩誤關 11 張執行票，而 closed 原無任何還原路徑，不可逆操作配上會誤判的判準等於把誤差率轉成永久損失。
+
+**Version**: 2.36.0 — 新增 `create` 的可攜問題分流硬閘門：`--where` 全數落在 `.claude/` 之下時視為可攜問題（根源在框架通用資產，合法收件方是 canonical framework issue 非本地 ticket），未帶 `--dedup-checked` 查重結論即 `[ERROR]` + `exit 1` 阻擋。動機：單一 session 內新建多張票，其中半數以上的問題在 canonical 已有 open issue 卻全程未查重；既有的 where.files 撞檔熱度提示（僅警告）已證實對此類失效無效。`--dedup-checked` 的值即查重結論本身（issue 號或 `none`），純旗標存在不放行。新增 `is_portable_where_files` / `validate_portable_issue_gate`（`field_validators.py`），僅做路徑層級機械判準，不判斷 why 欄語意。**阻擋訊息明寫「命中 issue 不等於不該建票」**：`framework-issue` 的模型是「ticket 記執行，issue 記問題」，命中既有 issue 後仍須判斷本票是記錄/分析問題（observe 附加、不建票）還是執行該 issue 解法的程式碼變更（issue 號即查重結論，仍應建票）——此區分本身無法自動判準，發生在本票初次落地時：路徑判準字面上會擋下這張票自己（`where.files` 是純 `.claude/` 的 `create.py`），原始訊息文字誤導成「命中即不建票」，經一次誤關閉票的實例修正。詳見 `references/create-command.md`〈可攜問題分流硬閘門〉。
+
 **Version**: 2.35.0 — 累積四項先前已落地但版號未遞增的修法，本次補記。(1) `create --no-topic` 改以哨兵短路 S1／S2 自動推導：原本旗標只在報告層生效，上游繼承路徑仍會指派主題，旗標對該路徑等同空操作。(2) ref 鎖重試條件與鎖齡判讀（`lib/git_ops.py`）：區分並行活鎖與崩潰殘骸，殘骸不自行移除而是回報鎖檔內容與鎖齡供溯源，並在 HEAD 於提交期間被並行移動時給出明確訊息。(3) `add-acceptance` 剝除誤帶入的核取方塊前綴並補 help 說明，附迴歸測試。(4) `create` 一律回報本次存入的驗收條數與逐條內容，使「存進去的與打算存的是否相同」不需另外查詢即可核對。另含 `track_dispatch_validate` 合理性檢查的判準調整與 `topic_inference` 的對應更新，測試同步新增。
 
 **Version**: 2.34.0

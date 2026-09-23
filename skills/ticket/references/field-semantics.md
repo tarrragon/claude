@@ -117,9 +117,11 @@
 
 | 屬性 | 值 |
 |------|---|
-| 維護方式 | CLI 自動維護（建立衍生 ticket 時自動追加） |
+| 維護方式 | CLI 自動維護（建立衍生 ticket 時自動追加）；亦可手動維護（見下） |
 | 阻擋語意 | 視本 ticket type 而定（見「阻擋語意對照表」） |
 | 業務語意 | 「衍生副產品，獨立排程」 |
+| CLI 手動寫入 | `add-spawned <id> <spawned-id...>`／`resolve-spawn-request ... --spawned-ticket <id...>`（皆接受任意既有 ID，不驗證血緣，僅於目標票 `source_ticket` 衝突時 WARNING） |
+| CLI 手動移除 | `remove-spawned <id> <spawned-id...>`（按 ID 非索引；找不到的條目回報而非靜默；成功移除時若目標票 `source_ticket` 恰回指本票，同步清除該反向欄位） |
 
 ### blockedBy（陣列，array of IDs）
 
@@ -248,6 +250,14 @@ Q1: 上游 ticket 的結論「要求」此 ticket 落地嗎？
 | 多個 spawned 但每個都阻擋 source（非 ANA） | `spawned_tickets` 對非 ANA 不阻擋（設計獨立排程） | 若需阻擋改用 children；若獨立排程 spawned 即可 |
 | 執行 IMP 時發現獨立 bug，建為 children | children 用於「必同時交付」，獨立 bug 應為 spawned | 改用 `--source-ticket <CURRENT-TICKET>` |
 | 兄弟 A 與 B 有依賴但 B 無 `blockedBy` | 隱式依賴難以追蹤（ARCH-017） | 顯式設定 `blockedBy`，或重組為父子（升格） |
+
+---
+
+## scope_blocker 欄位語意
+
+非六欄位範疇（不承載血緣/依賴/關聯），獨立記於此因其寫入時機與 `create` 閘門耦合。
+
+`scope_blocker`（單值，選填 string）：版本範圍凍結硬閘門（見 `create-command.md`〈版本範圍凍結硬閘門〉）以 `--scope-blocker "<理由>"` 放行建票時，理由文字持久化於本欄位；未經過該閘門或未放行時為 `null`。供發版側查詢「哪些票是被明確放行進已凍結版本」，`ticket track full` 可直接查看；CLI 不驗證理由語意，語意審查（是否合理）留給後續流程（如版本回顧）。
 
 ---
 

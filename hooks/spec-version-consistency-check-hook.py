@@ -15,11 +15,21 @@ session 啟動時自動掃描 docs/spec/**/*.md，偵測 frontmatter version
 與「## 變更歷史」表格最大版號是否一致，漂移時輸出警告（含兩處版號），
 一致時不輸出任何內容。
 
+擴充（2026-09）: 部分 spec（現僅 SPEC-004）正文開頭另有一行
+「**版本**: X（沿革敘述）」與 frontmatter 版號重複維護，該欄過去僅靠
+人工於每次版本異動時同步（變更歷史逐列註記「檔頭版本段對齊
+frontmatter」），已兩度因未同步而停留舊值長達 7、8 個版本才被發現並校正。
+本 hook 因此新增第三來源比對：正文「**版本**:」行的版號與 frontmatter
+版號。三來源中任一來源存在且與 frontmatter 不一致即視為漂移；來源不存在
+時略過該來源（不強制每份 spec 都要有此行）。
+
 檢查邏輯:
 1. 掃描 docs/spec/**/*.md
 2. 解析 frontmatter 的 version 欄位
 3. 解析「## 變更歷史」表格，取第一欄可解析為版號的最大值
-4. 兩者不一致 → 輸出警告；缺 frontmatter 或缺變更歷史表 → 略過該檔
+4. 解析正文開頭「**版本**:」行的版號（若存在）
+5. frontmatter 與任一存在的來源不一致 → 輸出警告；缺 frontmatter，或
+   變更歷史與正文版號行兩者皆缺 → 略過該檔
 """
 
 import re
@@ -37,15 +47,21 @@ SPEC_GLOB = "docs/spec/**/*.md"
 CHANGE_HISTORY_HEADING = "## 變更歷史"
 FRONTMATTER_VERSION_PATTERN = re.compile(r'^version:\s*"?([0-9]+(?:\.[0-9]+)*)"?\s*$', re.MULTILINE)
 HISTORY_ROW_VERSION_PATTERN = re.compile(r'^\|\s*([0-9]+(?:\.[0-9]+)*)\s*\|')
+BODY_VERSION_LINE_PATTERN = re.compile(r'^\*\*版本\*\*:\s*([0-9]+(?:\.[0-9]+)*)', re.MULTILINE)
 FRONTMATTER_BLOCK_PATTERN = re.compile(r'^---\n(.*?)\n---\n', re.DOTALL)
 
 
 class DriftResult(NamedTuple):
-    """單一 spec 檔案的版號漂移檢查結果"""
+    """單一 spec 檔案的版號漂移檢查結果
+
+    history_max_version／body_version 各自代表該來源存在時的擷取值；
+    來源不存在時為 None（該來源不參與本檔的漂移判定，也不出現在警告訊息）。
+    """
 
     file_path: Path
     frontmatter_version: str
-    history_max_version: str
+    history_max_version: Optional[str] = None
+    body_version: Optional[str] = None
 
 
 def _version_key(version: str) -> Tuple[int, ...]:
@@ -106,14 +122,36 @@ def extract_history_max_version(content: str) -> Optional[str]:
     return max(versions, key=_version_key)
 
 
+def extract_body_version(content: str) -> Optional[str]:
+    """從正文開頭「**版本**:」行擷取版號（若存在）
+
+    現僅 SPEC-004 有此行；其餘 spec 無此行時回傳 None，不視為漂移來源。
+
+    Args:
+        content: spec 檔案完整內容
+
+    Returns:
+        該行的版號字串，行不存在時回傳 None
+    """
+    match = BODY_VERSION_LINE_PATTERN.search(content)
+    if not match:
+        return None
+
+    return match.group(1)
+
+
 def check_spec_file(file_path: Path) -> Optional[DriftResult]:
-    """檢查單一 spec 檔案的 frontmatter 版號與變更歷史最大版號是否一致
+    """檢查單一 spec 檔案的 frontmatter 版號，與變更歷史最大版號／正文版號行是否一致
+
+    後兩者為獨立來源，任一存在時才納入比對；兩者皆不存在（無變更歷史表、
+    無正文版號行）時無從比對，回傳 None。
 
     Args:
         file_path: spec 檔案絕對路徑
 
     Returns:
-        版號不一致時回傳 DriftResult；一致或資料不足（缺任一來源）時回傳 None
+        任一存在來源與 frontmatter 不一致時回傳 DriftResult；
+        全部一致或資料不足（缺 frontmatter，或兩來源皆缺）時回傳 None
     """
     try:
         content = file_path.read_text(encoding="utf-8")
@@ -122,17 +160,28 @@ def check_spec_file(file_path: Path) -> Optional[DriftResult]:
 
     frontmatter_version = extract_frontmatter_version(content)
     history_max_version = extract_history_max_version(content)
+    body_version = extract_body_version(content)
 
-    if frontmatter_version is None or history_max_version is None:
+    if frontmatter_version is None:
         return None
 
-    if _version_key(frontmatter_version) == _version_key(history_max_version):
+    if history_max_version is None and body_version is None:
+        return None
+
+    frontmatter_key = _version_key(frontmatter_version)
+    history_mismatch = (
+        history_max_version is not None and _version_key(history_max_version) != frontmatter_key
+    )
+    body_mismatch = body_version is not None and _version_key(body_version) != frontmatter_key
+
+    if not history_mismatch and not body_mismatch:
         return None
 
     return DriftResult(
         file_path=file_path,
         frontmatter_version=frontmatter_version,
         history_max_version=history_max_version,
+        body_version=body_version,
     )
 
 
@@ -164,13 +213,15 @@ def format_drift_warning(drifts: List[DriftResult], project_root: Path) -> str:
     Returns:
         警告訊息文字
     """
-    lines = ["[Spec Version Drift] 偵測到 frontmatter 與變更歷史表版號不一致："]
+    lines = ["[Spec Version Drift] 偵測到 frontmatter 與其他版號來源不一致："]
     for drift in drifts:
         relative_path = drift.file_path.relative_to(project_root)
-        lines.append(
-            f"  - {relative_path}: frontmatter={drift.frontmatter_version}, "
-            f"變更歷史最大版號={drift.history_max_version}"
-        )
+        parts = [f"frontmatter={drift.frontmatter_version}"]
+        if drift.history_max_version is not None:
+            parts.append(f"變更歷史最大版號={drift.history_max_version}")
+        if drift.body_version is not None:
+            parts.append(f"正文版號行={drift.body_version}")
+        lines.append(f"  - {relative_path}: " + ", ".join(parts))
     return "\n".join(lines)
 
 

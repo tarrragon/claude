@@ -59,9 +59,9 @@ except ImportError:
 # ============================================================================
 
 YAML_REL_PATH = ".claude/config/wrap-triggers.yaml"
-SKILL_REL_PATH = ".claude/skills/wrap-decision/SKILL.md"
+SKILL_REL_PATH = ".claude/skills/wrap-decision/SKILL.md"  # portability-allow: hook 綁專案根目錄，隨專案部署、不隨 skill 搬遷
 ALIGNMENT_REL_PATH = (
-    ".claude/skills/wrap-decision/references/project-integration/triggers-alignment.yaml"
+    ".claude/skills/wrap-decision/references/project-integration/triggers-alignment.yaml"  # portability-allow: 同上
 )
 
 WATCHED_PATHS = (YAML_REL_PATH, SKILL_REL_PATH)

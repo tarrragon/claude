@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.4.0 — 清掉可攜性閘門標的 5 條消費端路徑與 1 條 blog 路由。5 條全指向同一份上游專案的方法論檔，而文字明寫「不重述」「不在本維度」，判準確實不在句內——屬真依賴而非出處引用。修法不是標記也不是內聯（判準是固定方法論、不是各專案自訂的值），而是**改用語意名稱指稱**：`.claude/methodologies/event-flow-load-arbitration-methodology.md` 改成「事件流負載仲裁方法論」。這是同庫 `event-flow-arbitration-design` skill 既有的寫法（它的 `references/interview-questions.md` 指同一份方法論時就只寫名稱不寫路徑），而閘門比對的是 `.claude/` 開頭的路徑樣式，名稱不含路徑因此不需要任何豁免標記。章節名〈到達類別〉〈級別〉〈讓步與卸載順序〉保留——那是方法論自己的章節名，且在該 sibling skill 裡逐字查對過，非憑記憶反推。另移除 `references/dimensions/state-storage.md` 的 blog 路由（AGENTS.md §9 禁 blog-internal route，閘門抓不到這一類），改成描述該去哪類教材查。<!-- portability-allow: 版本歷史陳述被換掉的是什麼，路徑是史實的一部分 -->
+
 **Version**: 1.3.0 — 事件流負載仲裁整合（先前已落地但版號未遞增，本次補記）。event catalog 表在 `references/decision-record-template.md` 與 `references/domain-event-modeling.md` 兩處各補「到達類別（等待型／自發型／推送型）」與「級別（不可棄／須留痕／可棄）」兩欄，判準指向事件流負載仲裁方法論、不在本 skill 複述。三個維度各補一段路由：async-queue（多條事件流競爭同一 worker pool／連線池時誰讓步、誰被丟、丟了怎麼留痕，並補「同一 partition 是否混流不同級別」訪談問題）、capacity-performance（降級預案的「先停哪些請求」順序判準依到達類別 × 級別，並補連線池分池／擴容的觸發條件列）、observability（進入卸載時的額外訊號——仲裁決策的可觀測事件、被丟棄請求的留痕粒度、告警綁狀態變遷而非佔用量高）。訪談流程與產出物範本一律指向 `event-flow-arbitration-design` skill。
 
 **Version**: 1.2.3 — 清理 1 處 language-constraints.md 規則 2 禁用詞基線債務（`低代碼` → 低程式碼），純用語修正，指令內容與判準未改。
