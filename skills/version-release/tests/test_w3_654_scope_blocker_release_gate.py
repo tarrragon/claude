@@ -96,7 +96,8 @@ class TestCollectTicketScopeGroupsE1AndE2:
             },
         )
 
-        groups = vr.collect_ticket_scope_groups(tickets_dir, "0.1.0")
+        with patch.object(vr, "get_project_root", return_value=tmp_path):
+            groups = vr.collect_ticket_scope_groups(tickets_dir, "0.1.0")
 
         assert groups["blocked"] == []
         assert groups["in_progress"] == []
@@ -117,7 +118,8 @@ class TestCollectTicketScopeGroupsE1AndE2:
             },
         )
 
-        groups = vr.collect_ticket_scope_groups(tickets_dir, "0.1.0")
+        with patch.object(vr, "get_project_root", return_value=tmp_path):
+            groups = vr.collect_ticket_scope_groups(tickets_dir, "0.1.0")
 
         assert groups["overflow"][0]["target_version"] == "0.2.0"
 

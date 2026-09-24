@@ -724,6 +724,75 @@ TDD_ATTACHMENT_SUFFIXES = (
 # 與 ticket skill 的溢出版本判斷函式分類一致（IMP + 新功能動詞 → minor+1）
 _OVERFLOW_FEAT_ACTIONS = frozenset({"實作", "新增", "建立", "開發"})
 
+# 與 ticket skill 的開放後繼判斷一致（status 屬此集合視為開放）
+_OVERFLOW_OPEN_STATUSES = frozenset({"planned", "active"})
+
+
+def _overflow_version_tuple(version_str: str) -> Optional[Tuple[int, int, int]]:
+    """將 "X.Y.Z" 字串轉為可比較的整數元組，格式異常回傳 None。"""
+    parts = version_str.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
+
+
+def find_open_successor(base_version: str) -> Optional[str]:
+    """在 todolist.yaml 找排在 base_version 之後、狀態開放、未凍結的最小版本。
+
+    鏡射 ticket skill 內部 lib（`ticket_system/lib/version.py` 的
+    `find_open_successor`）的語意，但本 skill 為獨立 uv script 不跨 skill
+    import（避免安裝版 site-packages 路徑不相容）。「開放」定義為 status
+    屬 planned 或 active，且 scope 欄位非 "frozen"（scope 缺席視為開放，
+    向後相容）。
+
+    Args:
+        base_version: 基準版本號（無 v 前綴，如 "0.1.1"）
+
+    Returns:
+        Optional[str]: 最小的開放後繼版本號；無符合條件者或 todolist.yaml
+        缺席/解析失敗時回傳 None（純函式，不拋例外）
+    """
+    base_tuple = _overflow_version_tuple(base_version)
+    if base_tuple is None:
+        return None
+
+    root = get_project_root()
+    todolist_path = root / "docs" / "todolist.yaml"
+    if not todolist_path.exists():
+        return None
+
+    try:
+        with open(todolist_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            f"find_open_successor: 解析 todolist.yaml 失敗 "
+            f"({type(e).__name__}: {e})，視為無開放後繼"
+        )
+        return None
+
+    versions_list = (data or {}).get("versions", [])
+    candidates: List[Tuple[Tuple[int, int, int], str]] = []
+    for entry in versions_list:
+        ver_str = str(entry.get("version", ""))
+        ver_tuple = _overflow_version_tuple(ver_str)
+        if ver_tuple is None or ver_tuple <= base_tuple:
+            continue
+        if entry.get("status") not in _OVERFLOW_OPEN_STATUSES:
+            continue
+        if entry.get("scope") == "frozen":
+            continue
+        candidates.append((ver_tuple, ver_str))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0])
+    return candidates[0][1]
+
 
 def _strip_yaml_scalar_quotes(raw: str) -> str:
     """去除 YAML 純量值可能的單/雙引號包覆，便於顯示與空值判斷。"""
@@ -736,12 +805,19 @@ def _strip_yaml_scalar_quotes(raw: str) -> str:
 def compute_overflow_target_version(
     frozen_version: str, ticket_type: str, action_hint: str
 ) -> Tuple[str, str]:
-    """相對凍結版本計算前移目標版本。
+    """相對凍結版本計算前移目標版本：優先最近的開放後繼版本，其次動詞式計算。
 
-    鏡射 ticket skill 內部 lib 的溢出版本判斷分類規則，但本 skill 為獨立 uv
-    script 不跨 skill import 該內部 lib（避免安裝版 site-packages 路徑不相容）；
-    action_hint 取自 ticket `what` 欄位的第一個詞，對應建立時 `what` 預設值
-    「動詞 + 目標」的慣例（--what 被覆寫時可能失準，此為已知簡化）。
+    鏡射 ticket skill 內部 lib 的溢出版本判斷規則（先 `find_open_successor`
+    再動詞分類），但本 skill 為獨立 uv script 不跨 skill import 該內部 lib
+    （避免安裝版 site-packages 路徑不相容）；action_hint 取自 ticket `what`
+    欄位的第一個詞，對應建立時 `what` 預設值「動詞 + 目標」的慣例
+    （--what 被覆寫時可能失準，此為已知簡化）。
+
+    規則（與 ticket lib `suggest_overflow_version` 一致）：
+    1. 先呼叫 `find_open_successor`：命中已註冊的開放後繼版本即直接
+       採用，不需動詞分類判斷。
+    2. 未命中時沿用舊規則：IMP 且 action_hint 屬新功能動詞 → minor+1；
+       其餘 → patch+1。
 
     Args:
         frozen_version: 被凍結（發版判準阻擋）的版本號（無 v 前綴，如 "0.1.0"）
@@ -751,7 +827,13 @@ def compute_overflow_target_version(
     Returns:
         (溢出目標版本, 理由)
     """
-    major, minor, patch = (int(p) for p in strip_build_metadata(frozen_version).split("."))
+    frozen = strip_build_metadata(frozen_version)
+    major, minor, patch = (int(p) for p in frozen.split("."))
+
+    successor = find_open_successor(frozen)
+    if successor:
+        return (successor, "路由至最近的開放後繼版本")
+
     is_new_feature = ticket_type == "IMP" and action_hint in _OVERFLOW_FEAT_ACTIONS
     if is_new_feature:
         return (f"{major}.{minor + 1}.0", "新功能歸下一個小版本（相對凍結版本 minor+1）")

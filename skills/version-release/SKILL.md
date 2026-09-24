@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 2.5.0
+  version: 2.6.0
 ---
 
 # Version Release Skill
@@ -78,9 +78,12 @@ metadata:
 | 阻擋 | `status: pending` 且 frontmatter 含非空 `scope_blocker` | error，發版中止（訊息含 ticket ID 與 blocker 理由） |
 | 前移 | `status: pending` 且無 `scope_blocker` | info，列於「發版時前移」清單，**不阻擋** |
 
-前移清單中每張票依 `compute_overflow_target_version` 計算目標版本（IMP 型別
-且 `what` 欄位首詞屬新功能動詞「實作/新增/建立/開發」→ minor+1；其餘 →
-patch+1）；`finish` 對此清單逐張執行 `ticket migrate <source_id> <target_id>
+前移清單中每張票依 `compute_overflow_target_version` 計算目標版本：**有已在
+`docs/todolist.yaml` 登記且未凍結（`status` 為 `planned` 或 `active`，
+`scope` 非 `frozen`）的最近後繼版本時，前移目標一律為該後繼版本**；僅當
+無此開放後繼時才回退舊規則（IMP 型別且 `what` 欄位首詞屬新功能動詞
+「實作/新增/建立/開發」→ minor+1；其餘 → patch+1）。`finish` 對此清單逐張
+執行 `ticket migrate <source_id> <target_id>
 --version <target_version>`，任一張失敗即中止、不留半搬狀態。**目標版本
 必須已在 `docs/todolist.yaml` 登記**（planned 或 active 皆可），未登記時
 整批阻擋並提示先登記，`finish` 不自動登記。

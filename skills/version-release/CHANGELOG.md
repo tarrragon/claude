@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.6.0 - `compute_overflow_target_version` 補「開放後繼」分支：凍結版本有已在 `docs/todolist.yaml` 登記且未凍結（`status` 為 `planned`/`active`、`scope` 非 `frozen`）的最近後繼版本時，前移目標一律為該後繼版本，不再套動詞分類（IMP 新功能動詞 → minor+1／其餘 → patch+1 僅在無開放後繼時回退）。新增 `find_open_successor`（鏡射 ticket skill 內部 lib 的同名函式語意，不跨 skill import）與對照測試（同 fixture 下與 ticket lib `suggest_overflow_version` 逐案結果相等）。修復根因：本函式為 ticket lib 的鏡射複本，缺此分支導致 0.2.1 凍結後 6 張溢出票被算成未登記的 v0.2.2 而非已登記的 v0.3.0
+**Last Updated**: 2026-09-24
+
 **Version**: 2.5.0 - 新增 `ensure_version_activated`：版本啟用的三項副作用（todolist status active、worklog 主檔存在、版本檔版號一致）加 CHANGELOG In Development 骨架，抽成單一冪等常式，逐項檢查只補缺項並印 `[OK]`／`[補]`。`start` 對已 active／planned／pending 版本改呼叫此常式補齊，不再對 active 版本 FAIL；`finish` 的 `activate_next_planned_version` 改呼叫同一常式（取代原本只翻 todolist status 的 `_apply_version_activation`），避免副作用集合與執行路徑不對齊（與 `finish` 收尾 add 清單缺陷同型）
 **Last Updated**: 2026-09-23
 
