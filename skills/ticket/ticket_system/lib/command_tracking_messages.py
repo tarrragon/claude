@@ -547,20 +547,23 @@ class MigrateMessages:
         "  既有狀態: {existing_status}\n"
         "  若確認覆寫請執行時加上 --force-overwrite"
     )
-    # 實際執行階段拒絕覆寫
-    ERROR_MIGRATE_TARGET_EXISTS = (
-        "[ERROR] 拒絕覆寫既有 Ticket: {target_id}\n"
+    # 發版前移撞號改號機制
+    # dry-run 階段：碰撞判 FAIL 並印改號預覽（不再視為可放行的預覽）
+    DRY_RUN_COLLISION_FAIL = (
+        "[ERROR] dry-run 偵測到目標 Ticket 已存在，正式執行將自動改號:\n"
+        "  原目標: {target_id}\n"
         "  目標路徑: {target_path}\n"
         "  既有標題: {existing_title}\n"
         "  既有狀態: {existing_status}\n"
-        "  如確認覆寫，請加上 --force-overwrite 旗標明示授權"
+        "  改號預覽: {resolved_id}\n"
+        "  若確認覆寫既有 Ticket 請改用 --force-overwrite"
     )
-    # 批量遷移 fail-fast
-    ERROR_BATCH_COLLISION = (
-        "[ERROR] 批量遷移偵測到目標 ID 撞既有 Ticket，已 fail-fast 不執行任何遷移:\n"
-        "{collisions}\n"
-        "  如確認全部覆寫，請加上 --force-overwrite 旗標"
+    # 實際執行階段：自動改號完成通知
+    INFO_MIGRATE_RENUMBERED = (
+        "[INFO] 目標 Ticket {original_target_id} 已存在，自動改號為 {resolved_id}"
+        "（已寫入 migrated_from: {original_target_id}）"
     )
+
     # --force-overwrite audit log
     INFO_FORCE_OVERWRITE = (
         "[AUDIT] --force-overwrite 已啟用，覆寫既有 Ticket: {target_id}\n"

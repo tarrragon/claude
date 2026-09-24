@@ -2144,12 +2144,19 @@ def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
         target_id = re.sub(r"^\d+\.\d+\.\d+", target_version, source_id, count=1)
         print_info(f"前移 {source_id} -> {target_id} ...")
         result = _run_ticket_migrate(source_id, target_id, target_version, dry_run)
+        # 發版前移撞號改號機制：碰撞時 ticket migrate 會判 FAIL（dry-run）
+        # 或自動改號（正式執行），改號後的實際目標 ID 與改號預覽只存在於
+        # child process 的 stdout；此處原樣轉印，不可沿用固定的 target_id
+        # 字串自行組訊息，否則碰撞時會誤報一個未實際使用的目標 ID。
+        if result.stdout.strip():
+            print(result.stdout.rstrip("\n"))
         if result.returncode != 0:
             print_error(
-                f"前移失敗，中止：{source_id} -> {target_id}\n{result.stdout}\n{result.stderr}"
+                f"前移失敗，中止：{source_id} -> {target_id}"
+                + (f"\n{result.stderr}" if result.stderr.strip() else "")
             )
             return False
-        print_success(f"已前移 {source_id} -> {target_id}")
+        print_success(f"已前移 {source_id}（若發生碰撞改號，實際目標見上方訊息）")
 
     return True
 

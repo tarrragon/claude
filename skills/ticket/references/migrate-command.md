@@ -57,7 +57,7 @@ Ticket ID 遷移（支援單一和批量遷移）。
 
    ```bash
    ticket migrate --config migration.yaml --dry-run
-   # W14-048 修復後：dry-run 會顯示 collision warning；修復前：需手動 git status 核查
+   # 碰撞時 dry-run 判 FAIL（exit 1）並印改號預覽，非可放行的 warning
    ```
 
 4. **實際執行後、commit 前必看 git status**：
@@ -156,14 +156,15 @@ migrations:
 
 > 來源：W14-048
 
-遷移會檢查目標 ID 是否與既有 Ticket 撞檔：
+遷移會檢查目標 ID 是否與既有 Ticket 撞檔。發版前移撞號改號機制生效後，預設行為由
+「拒絕」改為「改取目標版本同 Wave 下一可用序號完成遷移」：
 
 | 階段       | 行為                                                                                |
 | ---------- | ----------------------------------------------------------------------------------- |
-| `--dry-run`  | 目標已存在時輸出 `[WARNING] 目標 Ticket 已存在，實際執行時將被覆寫`，exit 0       |
-| 實際執行   | 預設拒絕並 exit 1（顯示既有 Ticket 的標題/狀態，提示 `--force-overwrite` 旗標）     |
-| 批量遷移   | 預掃描所有 target_id；任一撞 ID 即 fail-fast，**不執行任何 migration**             |
-| `--force-overwrite` | 明示授權覆寫，並在 stdout 記錄 `[AUDIT]` log（含時間戳與既有標題）        |
+| `--dry-run`  | 目標已存在時判 `[ERROR]` FAIL（exit 1），印改號預覽（下一可用序號）；不再是可放行的 WARNING |
+| 實際執行   | 預設改取下一可用序號完成遷移（exit 0），改號後的票面 frontmatter 寫入 `migrated_from: <原目標 ID>`；既有的碰撞目標不受影響 |
+| 批量遷移   | 不再預掃描 fail-fast；每筆遷移各自對當下檔案系統狀態判斷碰撞並改號，天然支援批次內連環碰撞（前一筆改號後的新目標仍會被下一筆的碰撞檢查看見） |
+| `--force-overwrite` | 語意不變：明示授權覆寫既有 Ticket，並在 stdout 記錄 `[AUDIT]` log（含時間戳與既有標題）；dry-run 下仍為可放行的 `[WARNING]` |
 
 例外：`source_id == target_id`（in-place rename）不視為 collision。
 

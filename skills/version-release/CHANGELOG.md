@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.7.0 - `migrate_overflow_tickets`（`finish` Step 0）改為原樣轉印 `ticket migrate` child process 的 stdout，不再自行以固定字串組「已前移」訊息——上游 `migrate` 對碰撞行為改為 dry-run 判 FAIL 並印改號預覽、正式執行自動改號完成，改號後的實際目標 ID 只存在於 child process 輸出中，沿用固定字串會誤報一個未實際使用的目標 ID。配套 ticket skill 2.42.0（碰撞改號機制）。
+**Last Updated**: 2026-09-24
+
 **Version**: 2.6.0 - `compute_overflow_target_version` 補「開放後繼」分支：凍結版本有已在 `docs/todolist.yaml` 登記且未凍結（`status` 為 `planned`/`active`、`scope` 非 `frozen`）的最近後繼版本時，前移目標一律為該後繼版本，不再套動詞分類（IMP 新功能動詞 → minor+1／其餘 → patch+1 僅在無開放後繼時回退）。新增 `find_open_successor`（鏡射 ticket skill 內部 lib 的同名函式語意，不跨 skill import）與對照測試（同 fixture 下與 ticket lib `suggest_overflow_version` 逐案結果相等）。修復根因：本函式為 ticket lib 的鏡射複本，缺此分支導致 0.2.1 凍結後 6 張溢出票被算成未登記的 v0.2.2 而非已登記的 v0.3.0
 **Last Updated**: 2026-09-24
 

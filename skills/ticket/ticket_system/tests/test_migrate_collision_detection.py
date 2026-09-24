@@ -104,15 +104,17 @@ def project_with_tickets(tmp_path, monkeypatch):
 
 
 class Test_DryRun_Collision_Warning:
-    """AC1：dry_run 階段對既有 target_path 輸出 WARN。"""
+    """AC1（W1-041 改版）：dry_run 階段對既有 target_path 判 FAIL 並印改號預覽。"""
 
-    def test_dry_run_warns_when_target_exists(self, project_with_tickets, capsys):
+    def test_dry_run_fails_and_previews_renumber_when_target_exists(
+        self, project_with_tickets, capsys
+    ):
         """
         Given: source_id 存在，target_id 也存在（既有 ticket）
-        When: 以 dry_run=True 呼叫 _migrate_single_ticket
+        When: 以 dry_run=True、force_overwrite=False 呼叫 _migrate_single_ticket
         Then:
-          - exit code 0（dry-run 不阻擋）
-          - stdout 含 WARNING 字樣與既有 target_id 標題
+          - exit code 1（碰撞在 dry-run 階段即判 FAIL，不再視為可放行的預覽）
+          - stdout 含 ERROR 字樣、既有 target 標題與改號預覽（下一可用序號）
           - 既有 target 檔案未被覆寫
         """
         _, tickets_dir = project_with_tickets
@@ -127,14 +129,40 @@ class Test_DryRun_Collision_Warning:
         )
         captured = capsys.readouterr()
 
-        assert rc == 0
-        assert "WARNING" in captured.out
+        assert rc == 1
+        assert "ERROR" in captured.out
         assert "Existing Target Title" in captured.out
+        assert "0.18.0-W14-002" in captured.out  # 改號預覽：下一可用序號
 
         # 既有 target 應仍存在且內容未變
         assert (tickets_dir / f"{target_id}.md").exists()
         fm = _read_frontmatter(tickets_dir / f"{target_id}.md")
         assert fm["title"] == "Existing Target Title"
+
+    def test_dry_run_warns_when_force_overwrite_and_target_exists(
+        self, project_with_tickets, capsys
+    ):
+        """
+        Given: source_id 存在，target_id 也存在（既有 ticket）
+        When: dry_run=True、force_overwrite=True
+        Then: 維持覆寫預覽語意（WARN 而非 FAIL），exit code 0
+        """
+        _, tickets_dir = project_with_tickets
+        source_id = "0.18.0-W5-005"
+        target_id = "0.18.0-W14-005"
+
+        _write_ticket(tickets_dir, source_id, {})
+        _write_ticket(tickets_dir, target_id, {"title": "Existing Target Title"})
+
+        rc = _migrate_single_ticket(
+            "0.18.0", source_id, target_id,
+            dry_run=True, backup=False, force_overwrite=True,
+        )
+        captured = capsys.readouterr()
+
+        assert rc == 0
+        assert "WARNING" in captured.out
+        assert "Existing Target Title" in captured.out
 
     def test_dry_run_no_warning_when_target_absent(self, project_with_tickets, capsys):
         """
@@ -162,19 +190,21 @@ class Test_DryRun_Collision_Warning:
 # ---------------------------------------------------------------------------
 
 
-class Test_Actual_Default_Rejects:
-    """AC2：實際執行階段預設拒絕覆寫並 exit 1。"""
+class Test_Actual_Default_Renumbers:
+    """AC2（W1-041 改版）：實際執行階段預設對碰撞自動改號並寫 migrated_from。"""
 
-    def test_actual_run_rejects_overwrite_by_default(
+    def test_actual_run_renumbers_on_collision_by_default(
         self, project_with_tickets, capsys
     ):
         """
         Given: source / target 都存在
         When: dry_run=False, force_overwrite=False
         Then:
-          - exit code 1
+          - exit code 0（改號後照常遷移成功）
           - 既有 target 未被覆寫
-          - source 仍存在（未被刪除）
+          - 新序號檔案（0.18.0-W14-004）被建立，frontmatter 含
+            migrated_from: 0.18.0-W14-003（原碰撞目標）
+          - source 已被刪除（遷移已完成，只是落在改號後的新 ID）
         """
         _, tickets_dir = project_with_tickets
         source_id = "0.18.0-W5-003"
@@ -188,15 +218,23 @@ class Test_Actual_Default_Rejects:
         )
         captured = capsys.readouterr()
 
-        assert rc == 1
-        assert "ERROR" in captured.out or "拒絕覆寫" in captured.out
+        assert rc == 0
+        assert "INFO" in captured.out
+        assert "0.18.0-W14-004" in captured.out  # 改號後的新目標
 
-        # 既有 target 內容未變
-        fm = _read_frontmatter(tickets_dir / f"{target_id}.md")
-        assert fm["title"] == "Should Not Be Overwritten"
+        # 既有 target 內容未變（未被覆寫）
+        fm_existing = _read_frontmatter(tickets_dir / f"{target_id}.md")
+        assert fm_existing["title"] == "Should Not Be Overwritten"
 
-        # source 仍存在（沒被刪）
-        assert (tickets_dir / f"{source_id}.md").exists()
+        # 改號後的新檔案已建立，且記錄 migrated_from
+        renumbered_path = tickets_dir / "0.18.0-W14-004.md"
+        assert renumbered_path.exists()
+        fm_new = _read_frontmatter(renumbered_path)
+        assert fm_new["id"] == "0.18.0-W14-004"
+        assert fm_new["migrated_from"] == target_id
+
+        # source 已完成遷移（原檔案被刪）
+        assert not (tickets_dir / f"{source_id}.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -247,25 +285,25 @@ class Test_ForceOverwrite_Allows:
 # ---------------------------------------------------------------------------
 
 
-class Test_Batch_FailFast:
-    """AC4：批量 fail-fast。"""
+class Test_Batch_Renumber:
+    """AC4（W1-041 改版）：批量遷移碰撞不再 fail-fast，改由個別項目自動改號。"""
 
-    def test_batch_fail_fast_when_any_target_collides(
+    def test_batch_renumbers_colliding_target_instead_of_failing(
         self, project_with_tickets, tmp_path, capsys
     ):
         """
-        Given: 三筆批量遷移，其中第二筆 target 已存在
-        When: _batch_migrate 實際執行
+        Given: 兩筆批量遷移，其中第二筆 target 已存在
+        When: _batch_migrate 實際執行（無 --force-overwrite）
         Then:
-          - exit code 1
-          - 任何 source 都未被遷移（fail-fast 在 pre-scan 階段阻擋）
+          - exit code 0（碰撞自動改號，不再整批 fail-fast）
+          - 兩筆 source 均完成遷移
+          - 第一筆落在原目標；第二筆落在改號後的新目標，且記錄 migrated_from
+          - 既有碰撞的 target 檔案未被覆寫
         """
         _, tickets_dir = project_with_tickets
 
-        # 三個 source
         _write_ticket(tickets_dir, "0.18.0-W5-010", {})
         _write_ticket(tickets_dir, "0.18.0-W5-011", {})
-        _write_ticket(tickets_dir, "0.18.0-W5-012", {})
         # 第二筆 target 撞
         _write_ticket(
             tickets_dir, "0.18.0-W14-011",
@@ -276,7 +314,6 @@ class Test_Batch_FailFast:
             "migrations": [
                 {"from": "0.18.0-W5-010", "to": "0.18.0-W14-010"},
                 {"from": "0.18.0-W5-011", "to": "0.18.0-W14-011"},
-                {"from": "0.18.0-W5-012", "to": "0.18.0-W14-012"},
             ]
         }
         config_path = tmp_path / "migrations.yaml"
@@ -287,18 +324,26 @@ class Test_Batch_FailFast:
         )
         captured = capsys.readouterr()
 
-        assert rc == 1
-        assert "fail-fast" in captured.out or "ERROR" in captured.out
+        assert rc == 0
+        assert "INFO" in captured.out
 
-        # 三個 source 全部仍存在（沒人被遷移）
-        assert (tickets_dir / "0.18.0-W5-010.md").exists()
-        assert (tickets_dir / "0.18.0-W5-011.md").exists()
-        assert (tickets_dir / "0.18.0-W5-012.md").exists()
-        # 第一筆 target 不該被建立
-        assert not (tickets_dir / "0.18.0-W14-010.md").exists()
-        # 既有 target 未變
-        fm = _read_frontmatter(tickets_dir / "0.18.0-W14-011.md")
-        assert fm["title"] == "Pre-existing Collision Target"
+        # 兩個 source 皆已遷移完成（原檔被刪）
+        assert not (tickets_dir / "0.18.0-W5-010.md").exists()
+        assert not (tickets_dir / "0.18.0-W5-011.md").exists()
+
+        # 第一筆落在原目標
+        assert (tickets_dir / "0.18.0-W14-010.md").exists()
+
+        # 既有碰撞 target 未變
+        fm_existing = _read_frontmatter(tickets_dir / "0.18.0-W14-011.md")
+        assert fm_existing["title"] == "Pre-existing Collision Target"
+
+        # 第二筆改號落在下一可用序號，並記錄 migrated_from
+        renumbered_path = tickets_dir / "0.18.0-W14-012.md"
+        assert renumbered_path.exists()
+        fm_new = _read_frontmatter(renumbered_path)
+        assert fm_new["id"] == "0.18.0-W14-012"
+        assert fm_new["migrated_from"] == "0.18.0-W14-011"
 
     def test_batch_succeeds_when_no_collision(
         self, project_with_tickets, tmp_path, capsys

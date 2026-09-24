@@ -1,3 +1,10 @@
+## [2.60.12] - 2026-09-24
+
+### Summary
+ticket 2.42.0 migrate 碰撞改號；version-release 2.7.0 finish dry-run 碰撞 FAIL
+
+---
+
 ## [2.60.11] - 2026-09-24
 
 ### Summary

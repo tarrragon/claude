@@ -296,6 +296,53 @@ def _check_target_collision(target_id: str, version: str) -> Optional[Dict[str, 
     }
 
 
+def _increment_sequence_str(sequence_str: str) -> str:
+    """
+    將序號字串（可含點號）最末一段遞增 1，保留原有補零寬度。
+
+    Args:
+        sequence_str: 序號字串（如 "011" 或 "011.1"）
+
+    Returns:
+        str: 遞增後的序號字串（如 "012" 或 "011.2"）
+    """
+    parts = sequence_str.split(".")
+    last = parts[-1]
+    width = len(last)
+    parts[-1] = str(int(last) + 1).zfill(width)
+    return ".".join(parts)
+
+
+def _resolve_available_target_id(target_id: str, version: str) -> str:
+    """
+    碰撞時尋找下一個可用序號（發版前移撞號改號機制）。
+
+    在目標版本同一 Wave 下，自目標序號起遞增，直到找到無碰撞的 ID 為止。
+    僅在 target_id 可解析元件時生效；無法解析時原樣返回（呼叫端仍會照舊
+    走碰撞拒絕路徑，避免對非標準格式 ID 產生未預期行為）。
+
+    Args:
+        target_id: 原本碰撞的目標 Ticket ID
+        version: fallback 版本號（若 target_id 無法解析版本時使用）
+
+    Returns:
+        str: 下一個可用的目標 Ticket ID
+    """
+    components = extract_id_components(target_id)
+    if not components:
+        return target_id
+
+    target_version = components["version"]
+    wave = components["wave"]
+    sequence_str = components["sequence"]
+
+    while True:
+        sequence_str = _increment_sequence_str(sequence_str)
+        candidate_id = f"{target_version}-W{wave}-{sequence_str}"
+        if not _check_target_collision(candidate_id, version):
+            return candidate_id
+
+
 def _validate_target_version(target_id: str, version: str) -> Optional[str]:
     """
     驗證目標 Ticket ID 的版本是否已在 todolist.yaml 中註冊（W9-002）。
@@ -382,32 +429,48 @@ def _migrate_single_ticket(
         print(f"{MigrateMessages.DRY_RUN_TITLE_PREFIX} {ticket.get('title', 'N/A')}")
         print(f"{MigrateMessages.DRY_RUN_STATUS_PREFIX} {ticket.get('status', 'N/A')}")
         if collision:
-            print(format_warning(
-                MigrateMessages.WARN_MIGRATE_TARGET_EXISTS,
-                target_path=str(collision["path"]),
-                existing_title=collision["title"],
-                existing_status=collision["status"],
-            ))
-        return 0
-
-    # W14-048: 實際執行階段，預設拒絕覆寫；--force-overwrite 旗標時記錄 audit log 繼續
-    if collision:
-        if not force_overwrite:
+            if force_overwrite:
+                print(format_warning(
+                    MigrateMessages.WARN_MIGRATE_TARGET_EXISTS,
+                    target_path=str(collision["path"]),
+                    existing_title=collision["title"],
+                    existing_status=collision["status"],
+                ))
+                return 0
+            # 發版前移撞號改號機制：dry-run 對碰撞判 FAIL 並印改號預覽，
+            # 不再視為可放行的預覽（避免 finish --dry-run 對碰撞誤判 [OK]）。
+            resolved_id = _resolve_available_target_id(target_id, version)
             print(format_error(
-                MigrateMessages.ERROR_MIGRATE_TARGET_EXISTS,
+                MigrateMessages.DRY_RUN_COLLISION_FAIL,
                 target_id=target_id,
                 target_path=str(collision["path"]),
                 existing_title=collision["title"],
                 existing_status=collision["status"],
+                resolved_id=resolved_id,
             ))
             return 1
-        # force_overwrite=True：記錄 audit log 後繼續執行
-        print(format_info(
-            MigrateMessages.INFO_FORCE_OVERWRITE,
-            target_id=target_id,
-            timestamp=datetime.now().isoformat(),
-            existing_title=collision["title"],
-        ))
+        return 0
+
+    # 實際執行階段：碰撞時預設改取下一可用序號（migrated_from 記錄原目標）；
+    # --force-overwrite 旗標語意不變，仍記錄 audit log 後覆寫既有 Ticket。
+    if collision:
+        if not force_overwrite:
+            original_target_id = target_id
+            target_id = _resolve_available_target_id(target_id, version)
+            ticket["migrated_from"] = original_target_id
+            print(format_info(
+                MigrateMessages.INFO_MIGRATE_RENUMBERED,
+                original_target_id=original_target_id,
+                resolved_id=target_id,
+            ))
+        else:
+            # force_overwrite=True：記錄 audit log 後繼續執行
+            print(format_info(
+                MigrateMessages.INFO_FORCE_OVERWRITE,
+                target_id=target_id,
+                timestamp=datetime.now().isoformat(),
+                existing_title=collision["title"],
+            ))
 
     # 執行備份
     backup_path = None
@@ -543,40 +606,11 @@ def _batch_migrate(
 
     print(format_info(MigrationMessages.LOAD_MIGRATIONS, count=len(migrations)))
 
-    # W14-048: 預掃描所有目標 ID 的 collision，任一撞 ID 即 fail-fast 不執行任何 migration
-    # 例外：
-    # - force_overwrite=True 時跳過 pre-scan，由個別 _migrate_single_ticket 記錄 audit log
-    # - source 不存在時跳過（_migrate_single_ticket 會 return 2 並由 skip_count 計入），
-    #   讓 idempotent re-run 不會誤判 collision（test_w11_reorganization_idempotency）
-    if not dry_run and not force_overwrite:
-        collisions = []
-        for migration in migrations:
-            if not isinstance(migration, dict):
-                continue
-            source_id = migration.get("from")
-            target_id = migration.get("to")
-            if not source_id or not target_id:
-                continue
-            # source == target 不視為 collision（in-place rename）
-            if source_id == target_id:
-                continue
-            # source 不存在則交由個別執行 skip，不在 pre-scan 算 collision
-            source_components = extract_id_components(source_id)
-            source_version = source_components["version"] if source_components else version
-            source_path = get_ticket_path(source_version, source_id)
-            if not source_path.exists():
-                continue
-            collision = _check_target_collision(target_id, version)
-            if collision:
-                collisions.append(
-                    f"  - {source_id} → {target_id}（既有: {collision['title']} / {collision['status']}）"
-                )
-        if collisions:
-            print(format_error(
-                MigrateMessages.ERROR_BATCH_COLLISION,
-                collisions="\n".join(collisions),
-            ))
-            return 1
+    # 發版前移撞號改號機制：碰撞不再 fail-fast，改由個別 _migrate_single_ticket
+    # 自動改號（force_overwrite=True 時仍記錄 audit log 覆寫，語意不變）。
+    # 批量預掃描因此不再需要——各筆遷移各自對當下檔案系統狀態判斷碰撞並
+    # 改號，天然支援批次內連環碰撞（前一筆改號後的新目標仍會被下一筆的
+    # 碰撞檢查看見）。
 
     success_count = 0
     fail_count = 0
