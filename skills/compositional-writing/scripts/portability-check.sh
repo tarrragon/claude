@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
   portability-check.sh --self-test         以內嵌 ground truth 驗證分類邏輯
 
 exit 0 = 無違規；exit 1 = 發現違規；exit 2 = 執行環境錯誤。
-分類判準：.claude/references/skill-marketplace-standard.md §2.4
+分類判斷標準：.claude/references/skill-marketplace-standard.md §2.4
 USAGE
             exit 0
             ;;
@@ -96,7 +96,7 @@ REF_REGEX = re.compile(
 EXEMPT_MARKER = re.compile(r"<!--\s*broken-link-exempt\b.*?-->|portability-allow")
 
 # --- 誤報排除規則 -----------------------------------------------------------
-# 共同判準：字面本身不指向單一具體檔案，故不構成「引用」。計入這類字面會使
+# 共同判斷標準：字面本身不指向單一具體檔案，故不構成「引用」。計入這類字面會使
 # 掃描器輸出含永遠無法消除的項目（全庫量測顯示約佔未標記引用的 3.7%）。
 # 三個語法家族：
 #   glob        通配字元（.claude/**/*.md、.claude/hooks/*.py）
@@ -111,7 +111,7 @@ EXAMPLE_SEGMENTS = frozenset(
 )
 EXAMPLE_BASENAMES = frozenset({"file.md", "file.py", "file.sh"})
 
-# --- 分類判準 ---------------------------------------------------------------
+# --- 分類判斷標準 ---------------------------------------------------------------
 # 來源條文：.claude/references/skill-marketplace-standard.md §2.4「框架共用層
 # 引用」的四類判定表，不留無處可歸的第四類：
 #   framework-layer   .claude/{rules,pm-rules,methodologies,references,hooks,
@@ -145,7 +145,7 @@ ACTIONABLE_CLASSES = ("cross-skill", "project-specific")
 
 
 def false_positive_reason(raw):
-    """回傳誤報家族名稱；非誤報回傳 None。判準見上方「誤報排除規則」。"""
+    """回傳誤報家族名稱；非誤報回傳 None。判斷標準見上方「誤報排除規則」。"""
     if any(ch in raw for ch in GLOB_METACHARS):
         return "glob"
     if PLACEHOLDER_CHARS.search(raw):
@@ -303,7 +303,7 @@ if report_path:
         with open(report_path, "w", encoding="utf-8") as fh:
             fh.write("# portability-check 分類清單\n")
             fh.write(f"# scope\t{skill_rel}\n")
-            fh.write("# 分類判準\t.claude/references/skill-marketplace-standard.md §2.4\n")
+            fh.write("# 分類判斷標準\t.claude/references/skill-marketplace-standard.md §2.4\n")
             fh.write("# 欄位\tsource_file:line\ttarget_ref\tclass\n")
             for source_rel, line_no, raw, cls in sorted(classified):
                 fh.write(f"{source_rel}:{line_no}\t{raw}\t{cls}\n")

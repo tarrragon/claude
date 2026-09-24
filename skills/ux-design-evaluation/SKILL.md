@@ -4,7 +4,7 @@ description: "UX / UI 設計的系統性評估：把「使用者被困住」類�
 license: MIT
 metadata:
   portable: true
-  version: 1.11.12
+  version: 1.11.14
   category: ux-design
 ---
 
@@ -120,7 +120,7 @@ ux-design-evaluation/
 
 ### 三段鏈式範例：本 skill 的產出必須是可被引用的具體值
 
-情境：一個非同步操作，`component-contract-design` skill 填元件契約〈回饋契約〉欄時需要一個明確的時間門檻與回饋形式，而非本 skill 自行留白讓對方猜。驗證段的判定屬「設計產出物」（見 `.claude/skills/skill-design-guide/references/chained-examples.md`〈各段允許與禁止內容〉【驗證】段的判定規則）。
+情境：一個非同步操作，`component-contract-design` skill 填元件契約〈回饋契約〉欄時需要一個明確的時間門檻與回饋形式，而非本 skill 自行留白讓對方猜。驗證段的判定屬「設計產出物」（判定規則：產出物能在執行期被啟動、看得到它運作的屬執行期行為，驗證段寫 Given/When/Then；契約表、判定結果這類靜態文件屬設計產出物，驗證段寫檢驗問句加預期答案）。
 
 【輸入】
 

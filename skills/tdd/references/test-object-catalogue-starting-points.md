@@ -2,7 +2,7 @@
 
 > **何時讀**：要從零開始建立或擴充測試對象目錄，需要判斷專案現況屬「有規格」「有既有測試無契約」還是「有程式碼無測試」三種起點之一、並依對應步驟推導時。
 >
-> **同目錄**：入口檔 `test-object-catalogue.md`（單位判定、來源類別、契約欄位表、派發語言句型在此）；姊妹檔 `test-object-catalogue-completeness-criteria.md`（四、齊全判準，本檔起點 A 步驟 A8 執行其機械檢查）。
+> **同目錄**：入口檔 `test-object-catalogue.md`（單位判定、來源類別、契約欄位表、派發語言句型在此）；姊妹檔 `test-object-catalogue-completeness-criteria.md`（四、齊全判斷標準，本檔起點 A 步驟 A8 執行其機械檢查）。
 >
 > **溯源**：原為 `test-object-catalogue.md` 的〈五、三種起點的推導程序〉節，補齊範例後全檔超出單檔 token 門檻；三種起點互斥、單一讀者只需其中一種，依讀者任務三問判定外移為獨立檔（搬移程序見 skill-design-guide `references/splitting-an-existing-skill.md`）。
 
@@ -19,7 +19,7 @@
 | A5 | 從專案技術決策記錄匯入平台契約 | 條目清單（平台契約類別） |
 | A6 | 逐條填寫測試形態（依分層測試策略的判斷流程）、驗證形態、斷言來源、fixture 需求 | 契約欄位填寫 |
 | A7 | 逐條評估跳過條件（依分層測試策略的跳過條件或元件庫規格豁免清單） | 跳過標記 |
-| A8 | 執行 `test-object-catalogue-completeness-criteria.md`「四、齊全判準」C1-C4 機械檢查 | 齊全驗證 |
+| A8 | 執行 `test-object-catalogue-completeness-criteria.md`「四、齊全判斷標準」C1-C4 機械檢查 | 齊全驗證 |
 
 ## 起點 B：有既有測試，無契約
 

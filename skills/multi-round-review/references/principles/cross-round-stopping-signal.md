@@ -44,4 +44,4 @@
 
 ## 跟相鄰原則的關係
 
-- [thresholds-registered-before-dispatch](thresholds-registered-before-dispatch.md)：本卡管什麼時候可以停，那張卡管每一輪之內哪些要修。兩者都拒絕用當輪的感覺當判準，而替代物不同——本卡是 frame 涵蓋，那裡是派發前寫死的門檻。
+- [thresholds-registered-before-dispatch](thresholds-registered-before-dispatch.md)：本卡管什麼時候可以停，那張卡管每一輪之內哪些要修。兩者都拒絕用當輪的感覺當判斷標準，而替代物不同——本卡是 frame 涵蓋，那裡是派發前寫死的門檻。

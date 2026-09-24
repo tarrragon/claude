@@ -35,7 +35,7 @@
 | `agent` | `context: fork` 時的代理類型 | `Explore` |
 | `hooks` | Skill 生命週期 hook | 見官方文件 |
 
-### 擴展欄位的選擇判準
+### 擴展欄位的選擇判斷標準
 
 七列裡只有 `disable-model-invocation`／`user-invocable` 兩列在〈觸發控制矩陣〉給了選擇時機；其餘五列在建立時沒有依據可查，寫的人只能照抄範例值。
 
@@ -61,7 +61,7 @@
 
 | 問題 | 答案 | 決定 |
 |------|------|------|
-| 這個 skill 的判準／流程／範本是否綁定特定專案的目錄結構或檔案路徑？ | 否——邏輯可原樣搬到任何專案 | `portable: true`；正文與 reference 一律以身分指名而非路徑（見 `writing-the-body.md`〈外部引用〉），專案專屬的實際路徑另放 `references/project-integration/`（依命名慣例排除於 `skill-sync` push，`component-contract-design` skill 已有此實例） |
+| 這個 skill 的判斷標準／流程／範本是否綁定特定專案的目錄結構或檔案路徑？ | 否——邏輯可原樣搬到任何專案 | `portable: true`；正文與 reference 一律以身分指名而非路徑（見 `writing-the-body.md`〈外部引用〉），專案專屬的實際路徑另放 `references/project-integration/`（依命名慣例排除於 `skill-sync` push，`component-contract-design` skill 已有此實例） |
 | 是 | 不宣告 `portable` | 可自由使用 `.claude/...` 路徑 |
 
 **Consequence**：宣告 `portable: true` 後才發現正文寫死了路徑，要嘛違反可攜性承諾被 push 擋下，要嘛回頭把已寫好的內容全部改成身分指名並搬移到 `project-integration/`——晚判斷的成本是重寫，不是重新標記一個欄位。
@@ -165,7 +165,7 @@ description: "Advanced statistical modeling for CSV files. Use for regression, c
 | 壞（缺觸發） | `Creates sophisticated multi-page documentation systems.` |
 | 壞（描述內部架構） | `統一 Ticket 系統 v1.0 — 整合 create / track / handoff / resume / migrate / generate 六大功能。` |
 
-**「描述內部架構」為何算壞例，與「缺觸發」同一個病灶**：整句只列了系統自身的功能清單與版本號，沒有交代〈結構公式〉要求的「何時使用 / 觸發詞清單」——讀者看完仍判斷不出什麼情境該用它，判準與「壞（缺觸發）」那一列相同，只是外顯形式換成了內部功能列舉加版本號。
+**「描述內部架構」為何算壞例，與「缺觸發」同一個病灶**：整句只列了系統自身的功能清單與版本號，沒有交代〈結構公式〉要求的「何時使用 / 觸發詞清單」——讀者看完仍判斷不出什麼情境該用它，判斷標準與「壞（缺觸發）」那一列相同，只是外顯形式換成了內部功能列舉加版本號。
 
 ### 觸發品質診斷
 

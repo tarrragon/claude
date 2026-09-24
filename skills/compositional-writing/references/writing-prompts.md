@@ -126,7 +126,7 @@ AI 讀 prompt 時會建立「段落角色模型」——哪段是目標、哪段
 
 ### 3. 意圖顯性與商業邏輯（Explicit Intent & Business Logic）× Prompt
 
-Prompt 描述的正是「誰對什麼做什麼」，所以每一句指令先填四個槽位再成句——動作者（agent、工具、被叫用的腳本）、動詞、受詞（被操作的檔案／資料／輸出）、結果。動作者格填了工具片段或參數、受詞格填了領域外的名詞、量詞（所有、任何、完全）的範圍沒在句內具名，都是 agent 要自己補完的缺口，而 agent 補完的方式與作者的意圖不一定相同。判準見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md) 與 [spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)。
+Prompt 描述的正是「誰對什麼做什麼」，所以每一句指令先填四個槽位再成句——動作者（agent、工具、被叫用的腳本）、動詞、受詞（被操作的檔案／資料／輸出）、結果。動作者格填了工具片段或參數、受詞格填了領域外的名詞、量詞（所有、任何、完全）的範圍沒在句內具名，都是 agent 要自己補完的缺口，而 agent 補完的方式與作者的意圖不一定相同。判斷標準見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md) 與 [spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)。
 
 
 **核心**：開頭直述任務目標，明確預期輸出格式，告訴 AI 為什麼。

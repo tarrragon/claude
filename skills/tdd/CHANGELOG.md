@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.12.1 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來
+
 **Version**: 2.12.0 — 可攜性分層教義接線，並清掉 20 條消費端路徑引用。**作用域修正**：Layer 1 禁止引用原本寫成「在 `references/phase{N}/rules.md` 的非 blockquote 區域」，而一次閘門掃描的 20 條違規有 18 條落在那個範圍之外、在字面規則下不算違規；改成涵蓋全部會被同步出去的內容（SKILL.md、references/ 每一份含子目錄、CHANGELOG.md）。**新增三種合規的出路**（SKILL.md 與 `references/portable-design-boundary.md` 各一份）：原本的替代方式表只給「改寫成中性名詞」，處理不了「我真的要說這條規則來自哪裡」，而缺了出路的禁令會被繞過——違規是唯一做得到那件事的寫法。三類各有判準：出處引用（內容已在句內，路徑刪掉不影響執行）標 `portability-allow`；真依賴（值或表格不在句內）改寫成該專案自訂並說明歸屬；Layer 2 段落（檔名、schema、CLI）移進 `references/project-integration/`。**逐條處置**：9 條出處引用標記（doc-handoff、layered-test-strategy ×3、phase1/rules ×2、phase2/rules）；1 條真依賴改寫（`doc-handoff.md` 的任務拆分閾值，閾值歸屬改成各專案自訂）；1 段 Layer 2 拆分（`test-object-catalogue.md`〈與追溯矩陣的界線〉的語意留在原處，本框架的檔名、schema 定義處與消費 CLI 移進 `references/project-integration/traceability-matrix.md`）；6 行 CHANGELOG 標記（版本歷史陳述當時的改動對象，路徑是史實的一部分）。**後續工作段更新**：原列的兩個子任務已由現行結構承接；還沒有的是一道會擋下來的檢查——這條禁令寫在每次叫用都會讀到的 SKILL.md 裡而違規照樣長出來，規則被讀到不等於規則被執行。SKILL.md 另加〈自己查，不要等閘門擋〉：推送前用不執行的方式讀一次可攜性閘門。
 
 **Version**: 2.11.0 — 新增 `examples/flutter-sdk-tdd-walkthrough.md`：一個 Flutter 端監測 SDK 走完 Phase 0-4 的完整紀錄（6 條 FR、62 個測試、Phase 4 評級 A-），含 FR↔AC 覆蓋矩陣留白導致漏測的實例。角色一律以職能稱呼（系統分析者／設計者／測試設計者／實作者／策略規劃者／整合測試者），依 `references/portable-design-boundary.md` 的可攜性對照表；ticket 編號、SPEC 編號與議題編號改成中性描述。

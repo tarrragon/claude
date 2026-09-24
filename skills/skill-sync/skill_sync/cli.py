@@ -50,18 +50,18 @@ _DEFAULT_HOOK_LOGS_DIR = ".claude/hook-logs"
 _PORTABILITY_FORCE_LOG_FILENAME = "skill-sync-portability-force.jsonl"
 _DIVERGENCE_FORCE_LOG_FILENAME = "skill-sync-divergence-force.jsonl"
 
-# 憑證判準（移植自 .claude/lib/sync_exclude_manifest.py 的憑證維度）。
+# 憑證判斷標準（移植自 .claude/lib/sync_exclude_manifest.py 的憑證維度）。
 #
-# 只移植判準本身，不移植整份清單：manifest 作用域是整個 .claude/ 樹，本模組
+# 只移植判斷標準本身，不移植整份清單：manifest 作用域是整個 .claude/ 樹，本模組
 # 作用域是單一 skill 目錄，兩者要排除的目錄集合天差地遠（如 manifest 的
 # LOCAL_ONLY_PATTERNS 含 hook-state / .claude-state 等，對單一 skill 目錄
-# 無意義）；只有「憑證」這個判準——外流即安全事故——與作用域無關，跨通道
-# 應處置一致（push 目標是公開 GitHub repo，原判準只比對 EXCLUDE_DIRS 目錄
+# 無意義）；只有「憑證」這個判斷標準——外流即安全事故——與作用域無關，跨通道
+# 應處置一致（push 目標是公開 GitHub repo，原判斷標準只比對 EXCLUDE_DIRS 目錄
 # 名，對憑證檔零攔截）。
 _CREDENTIAL_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx", ".jks"})
 _CREDENTIAL_NAME_PREFIXES = frozenset({".env.", "secret"})
-# 無副檔名、不以 env/secret 開頭的憑證慣例檔名，suffix/prefix 判準覆蓋不到，
-# 須精確列名：.env 本身（前綴判準只匹配 ".env." 變體，不含裸檔名）、.keys、
+# 無副檔名、不以 env/secret 開頭的憑證慣例檔名，suffix/prefix 判斷標準覆蓋不到，
+# 須精確列名：.env 本身（前綴判斷標準只匹配 ".env." 變體，不含裸檔名）、.keys、
 # 與 SSH 私鑰的慣例俗名（framework 通道也同樣漏檢這類，另由專屬票處理）。
 _CREDENTIAL_EXACT_NAMES = frozenset({
     ".env",
@@ -193,12 +193,12 @@ def _should_exclude_file(rel_path: str) -> bool:
 # 字面複製自 .claude/hooks/skill-banned-term-scan-hook.py 的 BANNED_TERMS /
 # INLINE_MARKER / 隱式規則（fenced code block、inline code span），非 import——
 # skill-sync 是零框架依賴的獨立套件（見 pyproject.toml dependencies = []），
-# 任何跨套件 import 都會讓它無法安裝到不含該 hook 的環境。兩份判準是否一致
+# 任何跨套件 import 都會讓它無法安裝到不含該 hook 的環境。兩份判斷標準是否一致
 # 由專案層級的獨立測試斷言（`.claude/hooks/tests/`，比照既有裸格式 ticket ID
 # 正則複製同一模式，不放在本套件目錄內以免測試原始碼自身的字面路徑引用被
-# `check_portability` 的 consumer-path 判準命中形成自我指涉）。
+# `check_portability` 的 consumer-path 判斷標準命中形成自我指涉）。
 #
-# 只複製「判準本身」（詞表 + 行內豁免規則），不複製該 hook 的
+# 只複製「判斷標準本身」（詞表 + 行內豁免規則），不複製該 hook 的
 # FILE_LEVEL_ALLOWLIST：那份白名單是為全檔掃描設計（術語對照表整篇都是
 # mention），而本模組只掃描 push 相對遠端新增/修改的行——範圍已經比全檔
 # 掃描窄得多，尚未觀察到需要整檔豁免的實例，且新增行不太可能剛好是既有
@@ -357,7 +357,7 @@ _TICKET_ID_RE = re.compile(r"\b\d+\.\d+\.\d+-W\d+-\d+")
 # skill-sync 是零框架依賴的獨立套件（見上方一段的既有說明），任何跨套件 import
 # 都會讓它無法安裝到不含該套件的環境。字面是否與權威定義一致由專案層級的獨立測試
 # 斷言（不放在本套件目錄內，避免測試原始碼自身的字面路徑引用被本檔的
-# consumer-path 判準命中，形成自我指涉）。
+# consumer-path 判斷標準命中，形成自我指涉）。
 _BARE_TICKET_ID_RE = re.compile(r"\bW\d+-\d+\b")
 # 行內豁免：該行的引用經人判定為刻意保留（架構性橋接、教學範例）。標記語彙沿用
 # 專案既有的 portability-allow，寫在哪一行就只豁免那一行。
@@ -371,7 +371,7 @@ _ALLOW_RE = re.compile(r"portability-allow|broken-link-exempt")
 # 「主線程 PM」等代理人名稱／專案自稱，未搭配具體 .claude/ 路徑或 ticket ID）。
 # 沒有像路徑前綴或數字樣式那樣的穩定錨點可以掛 regex——關鍵詞清單（「本專案」
 # 「本框架」等）在中文敘述性文件裡出現頻率高且語意多半與可攜性無關，會產生
-# 大量假陽性，稀釋既有兩類判準（consumer-path／ticket-id）的訊號可信度；而
+# 大量假陽性，稀釋既有兩類判斷標準（consumer-path／ticket-id）的訊號可信度；而
 # 反過來限縮關鍵詞集合又會漏掉大多數實際違規措辭。這類指涉留給 portable
 # 宣告者人工審閱，不納入自動判定。
 
@@ -390,7 +390,7 @@ def _is_portable_declared(skill_dir: Path) -> bool:
 
     未宣告即視為未宣告 portable——框架專屬工具 skill（ticket / doc / worktree 等）
     談 .claude/ 路徑是正當內容而非缺陷，預設嚴格會把它們全部凍結在 push 之外。
-    宣告的責任歸 skill 自己，判準因此隨 skill 走而不是靠外部清單維護。
+    宣告的責任歸 skill 自己，判斷標準因此隨 skill 走而不是靠外部清單維護。
     """
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.is_file():
@@ -411,7 +411,7 @@ def _is_portable_declared(skill_dir: Path) -> bool:
 def _scan_line_for_violations(rel: str, lineno: int, line: str) -> list[PortabilityViolation]:
     """單行文字比對消費端路徑／ticket-ID pattern，回傳違規清單（可能多筆）。
 
-    .md 全文掃描與 .py 敘述性文字（docstring／# 註解）掃描共用同一判準，避免
+    .md 全文掃描與 .py 敘述性文字（docstring／# 註解）掃描共用同一判斷標準，避免
     兩條路徑各自維護一份 regex 比對邏輯而彼此漂移。
 
     裸格式比對（_BARE_TICKET_ID_RE）會命中全格式 ID 內嵌的裸片段（如
@@ -605,12 +605,12 @@ def _skill_exists_in_publish_repo(name: str, repo_dir: Path) -> bool:
     它」——發佈庫是散佈通道，versions.json 只記錄 hash 與 version，不記錄
     任何安裝／訂閱資訊。回傳 True 時只適合用來給未宣告 portable 的 skill附加
     一則提示（見 _report_portability），不適合作為升級嚴重度或中止 push 的
-    依據，兩者判準不同不可混用。
+    依據，兩者判斷標準不同不可混用。
 
     讀已 clone 的目錄而非自己向遠端取：唯一呼叫端 `cmd_push` 本來就要為 diff
     與推送 clone 一次同一個 repo，本函式先前經 `fetch_remote_manifest` 再
     clone 一次只為讀同一份檔案，等於同一份遠端內容取兩次、每次 push 兩趟網路
-    往返。改吃呼叫端已有的 clone 後兩次收斂為一次，判準來源不變——仍是 repo
+    往返。改吃呼叫端已有的 clone 後兩次收斂為一次，判斷標準來源不變——仍是 repo
     根目錄 versions.json 於 HEAD 的內容。
 
     讀取或解析失敗回傳 False（fail open）：本函式只是提示訊息的輔助查詢，不
@@ -1123,17 +1123,17 @@ def _warn_skill_md_case_mismatch(base_dir: Path) -> None:
     兩個版本都不報錯，只是掃描集合不同——目錄內若只有 `skill.md`（或其他
     大小寫變體），在較舊版本上會被靜默略過、永遠不進入 manifest。改為
     case-insensitive glob 會讓兩種檔名長期並存並在 push 時互相覆蓋，不採用；
-    本函式只負責告警，判準仍維持 case-sensitive。
+    本函式只負責告警，判斷標準仍維持 case-sensitive。
 
-    判準讀取實際目錄項名稱（`os.scandir` 的 `entry.name`），不可用
+    判斷標準讀取實際目錄項名稱（`os.scandir` 的 `entry.name`），不可用
     `Path.exists()` 或 `Path.glob()`——兩者在 case-insensitive 檔案系統上
-    都可能對小寫 `skill.md` 回傳「找到了」，會讓本判準失效。
+    都可能對小寫 `skill.md` 回傳「找到了」，會讓本判斷標準失效。
 
     本函式與 `.claude/lib/skill_case_guard.py` 的 `warn_skill_md_case_mismatch`
-    為同一判準的兩份實作，刻意不共用程式碼：skill-sync 以 hatchling 打包為
+    為同一判斷標準的兩份實作，刻意不共用程式碼：skill-sync 以 hatchling 打包為
     獨立 wheel（`pyproject.toml` 的 `dependencies = []`、
     `packages = ["skill_sync"]`），安裝到其他 consumer 專案時不含 `.claude/`
-    樹，import `.claude.lib` 會在該情境下失敗。兩份實作的判準邏輯變更時須
+    樹，import `.claude.lib` 會在該情境下失敗。兩份實作的判斷標準邏輯變更時須
     同步修改。
     """
     if not base_dir.is_dir():

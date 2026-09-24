@@ -27,7 +27,7 @@
 | 錯誤聚合        | error tracking 服務（Sentry 類）：同錯誤聚合、新錯誤通知、帶 stack trace  |
 | 主機 / 平台訊號 | CPU、記憶體、磁碟、連線數 — 託管平台多半內建、確認打開並設基本 alert      |
 
-系統進入卸載（load shedding）時的額外訊號 — 每個仲裁決策的可觀測事件、被丟棄請求的留痕粒度、告警綁狀態變遷而非「佔用量高」— 判準見事件流負載仲裁方法論〈可觀測性〉、欄位範本與訪談流程見 `event-flow-arbitration-design` skill，以本維度的 structured log 與 request id 為前提。
+系統進入卸載（load shedding）時的額外訊號 — 每個仲裁決策的可觀測事件、被丟棄請求的留痕粒度、告警綁狀態變遷而非「佔用量高」— 判斷標準見事件流負載仲裁方法論〈可觀測性〉、欄位範本與訪談流程見 `event-flow-arbitration-design` skill，以本維度的 structured log 與 request id 為前提。
 
 這個集合的設計原則：每個訊號都直接回答一個事故當下的問題。「掛了嗎」→ uptime；「誰受影響」→ request log 的 user 欄；「是我的 bug 還是依賴掛了」→ 錯誤分類；「哪行程式」→ error tracking。訊號回答不了任何具體問題的、不進 day one 集合。
 

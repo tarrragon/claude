@@ -986,7 +986,7 @@ class TestPySHExtraction:
 
 
 class TestPlaceholderHookBasenames:
-    """已知佔位符 hook 檔名 exact-match 集：逐一列名，非長度代理判準。"""
+    """已知佔位符 hook 檔名 exact-match 集：逐一列名，非長度代理判斷標準。"""
 
     DEFAULT_KNOBS = {
         "include_code_block": False,

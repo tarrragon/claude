@@ -2,7 +2,7 @@
 name: skill-sync
 description: 'Sync Claude Code skills between local .claude/skills/ and a remote skills repository. Use for: pulling skills from remote, pushing local skills to remote, listing available remote skills.'
 metadata:
-  version: 1.24.1
+  version: 1.24.2
 ---
 
 # skill-sync

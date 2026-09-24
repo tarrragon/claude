@@ -12,6 +12,8 @@
 前三次的同型缺陷。**這一問是壓縮專用的**：既有的「同一件事寫了幾種形式」對展開有鑑別力，
 對壓縮沒有——壓縮的產物只有一種形式，它只是錯的。
 
+**Version**: 1.23.2 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來
+
 **Version**: 1.23.1 — 兩處路徑形態修正。`references/patterns-and-troubleshooting.md` 的本庫實例把全路徑改成裸檔名 `decision-tree.md`——依據是同支 skill 的 `references/writing-the-body.md` 自己訂的規則（hook 與 script 的溯源引用給檔名即可，不必寫全路徑，因為裸檔名更耐搬移），該行先前違反了它。`writing-the-body.md` 那條規則本身用全路徑當反例，加 `broken-link-exempt` 標明它是刻意的反例。
 
 **Version**: 1.23.0 — 補齊範例審查閘門複查發現的兩處部分依據（皆屬「權威已寫明、只欠路由」，未新增判準）：`frontmatter-and-description.md`〈範例對照〉「壞（描述內部架構）」一列補一句，指出其病灶與「壞（缺觸發）」相同——皆未交代〈結構公式〉要求的「何時使用 / 觸發詞清單」；`patterns-and-troubleshooting.md`〈Opinionated Defaults〉判準表後補路由句，指向 `writing-the-body.md`〈一則完整走查：兩個判準只有一個附了可執行動作〉，使該節「只有一個判準附動作時哪個生效」與「補上動作後仍須定合併規則」兩則延伸教訓可從判準表本身被找到，不再只活在該則走查段落內。新增句逐句 `git grep -F` 查證命中出處。

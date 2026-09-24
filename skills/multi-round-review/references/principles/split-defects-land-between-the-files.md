@@ -86,4 +86,4 @@
 - [concept-used-but-never-named](concept-used-but-never-named.md)：那張卡已經記下「檔頭的同目錄索引與正文的跨檔指涉是兩套不同的指標系統」，本卡給那兩套各自一個可執行的檢查，並把「方向數不等於入口數」推進一步——入口數也不等於落點數，同一條指路寫在檔頭與寫在首次用點的效果相差三份對零份。
 - [cross-links-eat-the-article-they-live-in](cross-links-eat-the-article-they-live-in.md)：那裡問連結**交付什麼**（遮住目的地能不能預測那一篇會給什麼），本卡問連結**放在哪裡**。兩個檢查互不替代——一條寫在檔頭的指路可以把目的地交代得很完整而讀者仍然拿不到它。
 - [comprehension-sampled-not-judged](comprehension-sampled-not-judged.md)：本卡的偵測工具，五個設計條件全部沿用；本卡對它的增補是受測單位多一種（檔案集合）與派發多一條（對照組一次只改一個手段）。
-- [rule-must-point-at-something-openable](rule-must-point-at-something-openable.md)：入口檔缺起手動作是那條判準在拆分結構下的形態——規則本身指得到東西，而讀者拿到的那一份檔案裡沒有；差別在餵入範圍，所以兩個檢查都要跑。
+- [rule-must-point-at-something-openable](rule-must-point-at-something-openable.md)：入口檔缺起手動作是那條判斷標準在拆分結構下的形態——規則本身指得到東西，而讀者拿到的那一份檔案裡沒有；差別在餵入範圍，所以兩個檢查都要跑。

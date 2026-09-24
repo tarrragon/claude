@@ -10,9 +10,9 @@
 | `interaction-feedback-checklist.md`（本檔） | 反模式速查／檢查清單／參考來源 |
 
 適用：提交前快速核對按鈕、等待、通知、元件語意四類是否有已知反模式；作為三份內容檔的共用附錄查表。
-不適用：判準本身的設計依據與範例（各判準的完整說明在對應內容檔，本檔只列查表結論）。
+不適用：判斷標準本身的設計依據與範例（各判斷標準的完整說明在對應內容檔，本檔只列查表結論）。
 
-> **自包含聲明**：本檔的兩張表可獨立查閱，不需要先讀其他三檔；表中每一行的判準來源見對應內容檔（下方表格已依主題分段落）。
+> **自包含聲明**：本檔的兩張表可獨立查閱，不需要先讀其他三檔；表中每一行的判斷標準來源見對應內容檔（下方表格已依主題分段落）。
 
 ---
 
@@ -40,7 +40,7 @@
 | 關鍵回饋文字被版面壓成省略號     | 回饋存在、使用者拿到零資訊     | 最小寬度保障、縮格式優於 ellipsis      |
 | 佔位 handler 上線（toast / log） | 可點的假按鈕、被讀成壞掉       | 隱藏或 disabled + 說明、release 前掃描 |
 
-前 8 行對應 `interaction-feedback.md`〈按鈕級回饋〉與 `interaction-feedback-waiting-and-notification.md`〈時間門檻與回饋策略〉〈Spinner vs Skeleton〉；中段 6 行對應 `interaction-feedback-waiting-and-notification.md`〈畫面級回饋〉〈結果通知的形式選擇〉；末 4 行對應 `interaction-feedback-component-semantics.md`〈八項判準〉。
+前 8 行對應 `interaction-feedback.md`〈按鈕級回饋〉與 `interaction-feedback-waiting-and-notification.md`〈時間門檻與回饋策略〉〈Spinner vs Skeleton〉；中段 6 行對應 `interaction-feedback-waiting-and-notification.md`〈畫面級回饋〉〈結果通知的形式選擇〉；末 4 行對應 `interaction-feedback-component-semantics.md`〈八項判斷標準〉。
 
 ## 檢查清單
 

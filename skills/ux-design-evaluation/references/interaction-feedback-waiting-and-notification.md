@@ -10,7 +10,7 @@
 | `interaction-feedback-checklist.md` | 反模式速查／檢查清單／參考來源（三份內容檔共用） |
 
 適用：判斷 loading indicator 的時機與形式（spinner / skeleton / 進度條）；決定非同步操作等待期間的回饋策略（動畫過渡 / spinner / 進度指示 / 取消選項）；連線 / 配對 / 同步類多步驟流程的畫面級回饋；操作結果的通知形式選擇（SnackBar / Dialog / Banner / Bottom Sheet）。
-不適用：單一按鈕的狀態機（idle / loading / disabled，屬按鈕級回饋範疇，見 `interaction-feedback.md`〈按鈕級回饋〉）；元件語意與版面判準（屬 `interaction-feedback-component-semantics.md`）；畫面狀態的完整枚舉與退出路徑（狀態矩陣範疇，見 `screen-state-matrix.md`）。
+不適用：單一按鈕的狀態機（idle / loading / disabled，屬按鈕級回饋範疇，見 `interaction-feedback.md`〈按鈕級回饋〉）；元件語意與版面判斷標準（屬 `interaction-feedback-component-semantics.md`）；畫面狀態的完整枚舉與退出路徑（狀態矩陣範疇，見 `screen-state-matrix.md`）。
 
 > **自包含聲明**：本檔判斷等待時間該用哪種回饋策略、通知該用哪種形式時不需要先讀其他 reference。本檔〈時間門檻與回饋策略〉回答的是 `interaction-feedback.md`〈三層回饋模型〉第 2 層「等待指示」的具體策略，兩檔已互相具名指路。
 
@@ -45,7 +45,7 @@
 
 ### 三段鏈式範例：p90 與 p95 的選用須顯式記錄
 
-情境：同一支 API 的延遲量測結果，p90 與 p95 落在不同時間門檻帶，判斷規格是否需要記錄選用哪一個。驗證段的判定屬「設計產出物」（見 `.claude/skills/skill-design-guide/references/chained-examples.md`〈各段允許與禁止內容〉【驗證】段的判定規則）。
+情境：同一支 API 的延遲量測結果，p90 與 p95 落在不同時間門檻帶，判斷規格是否需要記錄選用哪一個。驗證段的判定屬「設計產出物」（判定規則：產出物能在執行期被啟動、看得到它運作的屬執行期行為，驗證段寫 Given/When/Then；契約表、判定結果這類靜態文件屬設計產出物，驗證段寫檢驗問句加預期答案）。
 
 【輸入】
 

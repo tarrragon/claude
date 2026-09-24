@@ -2,7 +2,7 @@
 name: skill-design-guide
 description: "Anthropic skill spec plus this project's conventions: frontmatter, descriptions, loading budgets, and splitting an oversized skill. Use when creating a skill, editing SKILL.md, reviewing skill quality, or moving content into references/."
 metadata:
-  version: 1.23.1
+  version: 1.23.2
 ---
 
 # Skill Design Guide
@@ -24,7 +24,7 @@ metadata:
 | 改既有 skill 的某一部分 | 依下方〈按需讀取〉表選一份開；改完走〈發布前檢查清單〉 |
 | 既有 skill 疑似超標 | 先跑〈Progressive Disclosure〉的量測指令確認，超標才進〈超標了怎麼辦〉 |
 
-本檔留下的是三者共用的判準——正文與 references 的分工、三層預算、超標的診斷、發布前檢查清單。
+本檔留下的是三者共用的判斷標準——正文與 references 的分工、三層預算、超標的診斷、發布前檢查清單。
 
 ---
 
@@ -39,11 +39,11 @@ metadata:
 | 步驟的順序與交棒點（哪一步之後接哪一步） | 每一步的完整程序與分支 |
 | **選路所需的判斷條件**——讀者不用它就判不出自己該走哪條路、該讀哪一份 | 判斷條件背後的完整論證與實證 |
 | 每個狀況對應的動作（命中 X 就做 Y） | 狀況的細部分類與邊界案例 |
-| 正文用到的每個受管詞的定義 | 用詞的來源與判準演進 |
+| 正文用到的每個受管詞的定義 | 用詞的來源與判斷標準演進 |
 | 門檻值與量測指令 | 門檻的推導、校準過程、誤判分析 |
 | — | 範例、正例、反例、可貼用的模板 |
 
-**判準只有一條：agent 照正文走得完嗎。** 走不完有兩種形態，修法相反——正文只給結論而把判斷條件外移，讀者選不了路，把條件搬回正文；正文塞進完整論證，讀者在該動手時還在讀理由，把論證外移只留主張句。
+**判斷標準只有一條：agent 照正文走得完嗎。** 走不完有兩種形態，修法相反——正文只給結論而把判斷條件外移，讀者選不了路，把條件搬回正文；正文塞進完整論證，讀者在該動手時還在讀理由，把論證外移只留主張句。
 
 
 ### Concise is Key — context 是公共資源
@@ -66,13 +66,13 @@ metadata:
 |----|---------|------|-------|
 | 1. frontmatter（name + description） | 常駐 system prompt | 250 字元（唯一閘門，另兩個口徑不換算，見 `references/frontmatter-and-description.md` 的〈Description 寫作（最重要的一節）〉） | 何時觸發 + 做什麼 |
 | 2. SKILL.md 全檔 | 觸發後載入 | < 5k tokens；另須符合官方 < 500 行 | 核心工作流 + 路由 |
-| 3. references/ + scripts/ + assets/ | Claude 按需 read / exec | 目錄總量無上限；單檔判準見〈第 3 層的單檔判準是讀取方式〉 | 細節、範例、模板、可執行腳本 |
+| 3. references/ + scripts/ + assets/ | Claude 按需 read / exec | 目錄總量無上限；單檔判斷標準見〈第 3 層的單檔判斷標準是讀取方式〉 | 細節、範例、模板、可執行腳本 |
 
 **第 2 層與第 3 層都沒有 hook 會擋你，寫錯不會有人告訴你。** 唯一有執法的是第 1 層的 250 字元（`skill-description-length-check-hook.py`）。`file-size-guardian-hook.py` 掃的是 pm-rules / rules / references 三個目錄，**不掃 `.claude/skills/`**——所以第 2 層與第 3 層完全依賴撰寫者自查，量錯或不量，結果一樣。
 
-**三個預算的適用對象各不相同，先認對象再量。** 第 2 層的兩個數字只管 `SKILL.md` **全檔**這一個檔，**含 frontmatter**——觸發後整份檔案會原樣再讀入一次，量測不扣除它。第 3 層的「無上限」講的是**目錄總量**（官方："no context penalty until accessed"），**不是單檔無上限**；單檔判準見下方〈第 3 層的單檔判準是讀取方式〉。
+**三個預算的適用對象各不相同，先認對象再量。** 第 2 層的兩個數字只管 `SKILL.md` **全檔**這一個檔，**含 frontmatter**——觸發後整份檔案會原樣再讀入一次，量測不扣除它。第 3 層的「無上限」講的是**目錄總量**（官方："no context penalty until accessed"），**不是單檔無上限**；單檔判斷標準見下方〈第 3 層的單檔判斷標準是讀取方式〉。
 
-**Action**：第 2 層的主判準是分段 token 估算，直接與 5k 比較。
+**Action**：第 2 層的主判斷標準是分段 token 估算，直接與 5k 比較。
 
 ```bash
 python3 -c "import sys;t=open(sys.argv[1],encoding='utf-8').read();a=sum(1 for c in t if ord(c)<128);print(round(a/4+(len(t)-a)/1.3),'tokens (est)')" .claude/skills/<name>/SKILL.md
@@ -87,8 +87,8 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 
 | 診斷 | 處置 |
 |------|------|
-| 正文塞了論證與實證敘事（「為什麼判準是這樣」「一次實測發現…」） | 壓縮成主張句，敘事移入 `CHANGELOG.md` 或 ticket。這是最常見的一種，也該最先做 |
-| 正文含選路之後才用到的細節 | 外移到對應的 reference，正文留路由。判準見 `references/splitting-an-existing-skill.md` 的〈外移什麼、留什麼〉：問**這段用在讀者選路之前還是之後**。**「反正讀者一次只查一列」不是外移理由。** 每一張判準表、路由表、分類表都符合這個描述，照它推下去整份正文都該外移——它分不出任何東西，當不了訊號 |
+| 正文塞了論證與實證敘事（「為什麼判斷標準是這樣」「一次實測發現…」） | 壓縮成主張句，敘事移入 `CHANGELOG.md` 或 ticket。這是最常見的一種，也該最先做 |
+| 正文含選路之後才用到的細節 | 外移到對應的 reference，正文留路由。判斷標準見 `references/splitting-an-existing-skill.md` 的〈外移什麼、留什麼〉：問**這段用在讀者選路之前還是之後**。**「反正讀者一次只查一列」不是外移理由。** 每一張判斷標準表、路由表、分類表都符合這個描述，照它推下去整份正文都該外移——它分不出任何東西，當不了訊號 |
 | 正文承載了兩個以上不相干的工作流 | **依 SRP 拆成多個 skill，彼此指名互相引用**，不是把一個 skill 拆成更多檔。見下段 |
 | 上述三項都不成立，內容全是選路前必需且已無冗餘 | **超標是設計問題，不是編輯問題。** 不得為了達標而刪判斷條件或把它搬進 references——那會讓 agent 選不了路，而預算數字漂亮 |
 
@@ -100,11 +100,11 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 | **做什麼** | 建立第二個 skill 目錄（新的 `SKILL.md` 加它自己的 `references/`），兩邊各自完整、以指名方式互相引用（「做完 X 之後走 `Y` skill」） | 在同一個 skill 內新增 reference，入口檔留路由 |
 | **判錯的代價** | 該拆 skill 卻拆了檔案 → 一份正文要同時服務兩種讀者，誰都走不完 | 該拆檔案卻拆了 skill → 兩個互相依賴到無法單獨使用，每次用都要開兩份 |
 
-**拆過頭與塞太滿違反的是同一條判準。** 拆到讀者接不住線索，與塞到讀者讀不完，都是「agent 照正文走不完」；預算只是其中一端的代理指標，不是目標。為了達標而外移的內容正是造成閱讀割裂的那一批——一次實測，為壓進預算切成七份的 skill 過了三輪高階 reviewer 仍留五類缺陷（見 `CHANGELOG.md`）。**預算合格不代表拆分可用，兩者分別驗**（`references/splitting-an-existing-skill.md`〈兩種驗證，方法不同〉）。
+**拆過頭與塞太滿違反的是同一條判斷標準。** 拆到讀者接不住線索，與塞到讀者讀不完，都是「agent 照正文走不完」；預算只是其中一端的代理指標，不是目標。為了達標而外移的內容正是造成閱讀割裂的那一批——一次實測，為壓進預算切成七份的 skill 過了三輪高階 reviewer 仍留五類缺陷（見 `CHANGELOG.md`）。**預算合格不代表拆分可用，兩者分別驗**（`references/splitting-an-existing-skill.md`〈兩種驗證，方法不同〉）。
 
-**行數是官方合規項，不是體量判準。** 每行字元數沒有上界，兩者在長行處脫鉤（實測有 245 行通過而 token 逾兩倍預算的檔）。**兩個都量、取較嚴者；行數通過只代表官方那一項沒違反。**
+**行數是官方合規項，不是體量判斷標準。** 每行字元數沒有上界，兩者在長行處脫鉤（實測有 245 行通過而 token 逾兩倍預算的檔）。**兩個都量、取較嚴者；行數通過只代表官方那一項沒違反。**
 
-**第 3 層的單檔判準是讀取方式，不是行數。** 判別依據是〈按需讀取〉路由表那一列的措辭：明令「讀這一份再繼續」者為整份執行，其餘為選段查閱（本 skill 的 references 現況全部是後者）。
+**第 3 層的單檔判斷標準是讀取方式，不是行數。** 判別依據是〈按需讀取〉路由表那一列的措辭：明令「讀這一份再繼續」者為整份執行，其餘為選段查閱（本 skill 的 references 現況全部是後者）。
 
 | 讀取方式 | 量什麼 | 門檻 |
 |---------|-------|------|
@@ -121,22 +121,22 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 | 2. 有可定位的分段結構 | 章節或欄位可依編號或名稱直接對應查閱起點，不需通讀全文才能定位 |
 | 3. 消費動作不要求跨節推理 | 讀者查閱單一章節或欄位即可完成當下任務，不需要比對其他章節內容才能下判斷 |
 
-**Consequence**：不設判定條件，任何長文都能以「反正是查閱用」自稱豁免整份執行門檻，選段查閱的例外會變成迴避門檻的漏洞——那正是本判準要防的另一端。
+**Consequence**：不設判定條件，任何長文都能以「反正是查閱用」自稱豁免整份執行門檻，選段查閱的例外會變成迴避門檻的漏洞——那正是本判斷標準要防的另一端。
 
 ---
 
 ## 按需讀取
 
-本檔留下的是路由與判準——三層載入的預算、判斷內容去留的兩問、發布前的檢查清單。細節依你當下在做什麼取一份讀。
+本檔留下的是路由與判斷標準——三層載入的預算、判斷內容去留的兩問、發布前的檢查清單。細節依你當下在做什麼取一份讀。
 
 | 何時讀 | 檔案 | 涵蓋章節 |
 |--------|------|---------|
 | 寫或修 frontmatter：name、description、擴展欄位、觸發控制、命名 | `references/frontmatter-and-description.md` | 〈YAML Frontmatter〉〈Description 寫作（最重要的一節）〉〈命名規則〉〈觸發控制矩陣〉 |
-| 寫或修 SKILL.md 正文：骨架、內容品質、引用形式、什麼不該放 | `references/writing-the-body.md` | 〈嚴禁清單 — 什麼不該放進 Skill〉〈Body 寫作〉（含〈外部引用：指名身分，不用檔案路徑〉）〈Claude Code 特有功能〉〈一則完整走查：兩個判準只有一個附了可執行動作〉 |
+| 寫或修 SKILL.md 正文：骨架、內容品質、引用形式、什麼不該放 | `references/writing-the-body.md` | 〈嚴禁清單 — 什麼不該放進 Skill〉〈Body 寫作〉（含〈外部引用：指名身分，不用檔案路徑〉）〈Claude Code 特有功能〉〈一則完整走查：兩個判斷標準只有一個附了可執行動作〉 |
 | 從零建一個新 skill、判斷它屬哪一類型、決定內容該放 `scripts/`／`references/`／`assets/`、要廢止或遷移既有 skill、或引入他人的 skill | `references/creating-and-adopting-skills.md` | 〈檔案結構〉〈三類 bundled resource 的分工〉〈Skill 建立流程〉〈Skill 類型速查〉〈廢止與遷移〉〈安全考量〉 |
 | 既有 skill 超出第 2 層預算、要外移內容 | `references/splitting-an-existing-skill.md` | 〈為什麼需要專屬程序〉〈補範例後超標：觸發條件與處置順序〉〈外移什麼、留什麼〉〈拆分特有的必查項〉〈兩種驗證，方法不同〉〈拆分特有的高頻缺陷〉〈結構約定〉〈收尾〉〈一則最小走查〉〈走完之後〉〈相關〉 |
 | 決定工作流該給多少自由度或要不要設預設值、設計多步驟工作流、要進階範本、規劃測試方法、或 skill 行為不如預期 | `references/patterns-and-troubleshooting.md` | 〈Degrees of Freedom — 自由度匹配脆弱性〉〈Opinionated Defaults — 預設路徑引導正確做法〉〈Skill 設計模式〉（**控制流形狀**，要模板來這裡）〈選擇方法：Problem-first vs Tool-first〉〈測試方法〉〈迭代回饋指引〉〈常見問題排除〉 |
-| 設計某個 skill 的範例、或判斷某處文字約束是否需要配範例 | `references/chained-examples.md` | 〈三段鏈式格式〉〈各段允許與禁止內容〉〈「何處需要範例」判準〉〈「缺範例」與「缺引導」的分界〉〈完整示範〉〈語言專屬 skill 的例外：違規／修正程式碼對照〉〈與既有範例規格的相容判定〉 |
+| 設計某個 skill 的範例、或判斷某處文字約束是否需要配範例 | `references/chained-examples.md` | 〈三段鏈式格式〉〈各段允許與禁止內容〉〈「何處需要範例」判斷標準〉〈「缺範例」與「缺引導」的分界〉〈完整示範〉〈語言專屬 skill 的例外：違規／修正程式碼對照〉〈與既有範例規格的相容判定〉 |
 | 某個設計取捨說不出理由、想理解工具設計哲學與 agent 視角的演進，或需要可貼用的進階設計模式（評估驅動開發、Feedback Loop 等）與程式碼片段 | `references/seeing-like-an-agent.md` | 〈核心哲學〉〈Claude Code 團隊的演進教訓〉〈進階 Skill 設計模式〉（**設計方法論**，不是控制流模板）〈觀察 Claude 如何使用 Skill〉〈反模式〉 |
 
 > **維護本表時**（讀者選路不需要這一段）：「涵蓋章節」欄的字串要與目標檔的 `##` 標題逐字相同且**雙向齊全**——每個名字都在目標檔存在（無死名），且目標檔的每個 `##` 都在這一欄出現（無孤兒節）。**兩個方向各驗一次**：只驗死名會漏掉無人指向的新節。
@@ -150,7 +150,7 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 - [ ] `SKILL.md` 大小寫正確
 - [ ] 無 `README.md`（任何層級，含子目錄）
 - [ ] 無 `INSTALLATION_GUIDE.md` / `QUICK_REFERENCE.md`（`CHANGELOG.md` 不在此列，見 `references/writing-the-body.md` 的〈嚴禁清單〉）
-- [ ] SKILL.md 全檔（含 frontmatter）通過兩個門檻（5k tokens 與 500 行）；各 reference 通過第 3 層的單檔判準。門檻的適用對象、量測指令與分段估算表見〈Progressive Disclosure — 三層載入〉
+- [ ] SKILL.md 全檔（含 frontmatter）通過兩個門檻（5k tokens 與 500 行）；各 reference 通過第 3 層的單檔判斷標準。門檻的適用對象、量測指令與分段估算表見〈Progressive Disclosure — 三層載入〉
 - [ ] skill 帶 CLI 入口點時，另走 `skill-cli-sync-check` 規則。**不涵蓋**：本清單不問「CLI 行為變更後 SKILL.md 與 pm-rules 是否同步」，走完本清單全綠不代表那件事被問過
 
 ### YAML
@@ -167,7 +167,7 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 - [ ] 指令具體可操作、含錯誤處理
 - [ ] 含至少 1 個範例
 - [ ] 新增或修改範例的【驗證】段時，`chained-examples.md`〈驗證段機械檢查：依據句可溯性〉的逐問句表由非撰寫者複核「引文位置在範例之外？」與「判定詞逐詞對照」兩欄；撰寫者自檢無鑑別力，不可省略此步驟
-- [ ] 每份 reference 一跳可達（判準與例外見 `references/writing-the-body.md` 的〈Body 寫作〉）。機械檢查如下，每個命中逐一判定——說明用的示意路徑與被討論的對象不算違規，其餘即是
+- [ ] 每份 reference 一跳可達（判斷標準與例外見 `references/writing-the-body.md` 的〈Body 寫作〉）。機械檢查如下，每個命中逐一判定——說明用的示意路徑與被討論的對象不算違規，其餘即是
 
 ```bash
 # 在該 skill 的目錄下執行
@@ -194,7 +194,7 @@ LC_ALL=C comm -13 <(grep -o 'references/[a-z-]*\.md' SKILL.md | LC_ALL=C sort -u
 
 ### 觸發測試
 
-**本組目前不是閘門**：四項對走 git 同步的專案皆無可執行程序，勾選只代表「已知有這件事」，不代表已驗證。查詢形態與判準見 `references/patterns-and-troubleshooting.md`〈測試方法〉與〈迭代回饋指引〉；description 側的診斷見 `references/frontmatter-and-description.md` 的〈觸發品質診斷〉。
+**本組目前不是閘門**：四項對走 git 同步的專案皆無可執行程序，勾選只代表「已知有這件事」，不代表已驗證。查詢形態與判斷標準見 `references/patterns-and-troubleshooting.md`〈測試方法〉與〈迭代回饋指引〉；description 側的診斷見 `references/frontmatter-and-description.md` 的〈觸發品質診斷〉。
 
 - [ ] 主關鍵字觸發成功
 - [ ] 改述查詢仍觸發

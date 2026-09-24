@@ -1,3 +1,10 @@
+## [2.60.13] - 2026-09-24
+
+### Summary
+技能庫 pull 九個 skill：compositional-writing 1.33.0、multi-round-review 2.21.0、skill-sync 1.24.2、tdd 2.12.1 等
+
+---
+
 ## [2.60.12] - 2026-09-24
 
 ### Summary

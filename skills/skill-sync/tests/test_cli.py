@@ -172,7 +172,7 @@ def test_credential_pem_suffix_excluded():
 
 def test_credential_ssh_private_key_no_suffix_excluded():
     # id_rsa 等 SSH 私鑰慣例檔名無副檔名、不以 env/secret 起頭，
-    # suffix/prefix 判準覆蓋不到，須精確列名（PM 實測發現的附帶缺口）。
+    # suffix/prefix 判斷標準覆蓋不到，須精確列名（PM 實測發現的附帶缺口）。
     assert _should_exclude_file("keys/id_rsa") is True
 
 
@@ -227,7 +227,7 @@ def test_compute_diff_excludes_credential_files_from_dst_only(tmp_path):
 
 def test_regular_skill_file_with_env_substring_not_falsely_excluded():
     # 防過度排除：檔名含 "env" 子字串但非 ".env." 前綴形態，不應被誤判
-    # （前綴判準要求緊接開頭的 ".env."，非任意位置的 "env" 子字串）。
+    # （前綴判斷標準要求緊接開頭的 ".env."，非任意位置的 "env" 子字串）。
     assert _should_exclude_file("scripts/environment_helper.py") is False
     assert _should_exclude_file("docs/openapi.yaml") is False
 
@@ -1131,7 +1131,7 @@ def test_cmd_push_prune_only_deletion_still_commits(tmp_path, monkeypatch):
 
 
 def test_cmd_push_force_still_excludes_credential_files(tmp_path, monkeypatch):
-    """--force 只跳過互動預覽的 [y/N] 確認，不得繞過 compute_diff 的排除判準
+    """--force 只跳過互動預覽的 [y/N] 確認，不得繞過 compute_diff 的排除判斷標準
 
     （0.2.1-W3-481 acceptance 2：排除必須發生在 compute_diff，overlay_copy
     只複製 diff["added"] + diff["modified"]，憑證檔不進 added 就不會被複製
@@ -3125,7 +3125,7 @@ def test_push_force_help_text_covers_portability_bypass(capsys):
 # versions.json 取得的結構性事實，不是新猜測——凡是 versions.json
 # 收錄的 skill 名稱，定義上就是已經在被多個 consumer 拉取的 skill。
 #
-# 判準來源改吃呼叫端已 clone 好的工作目錄（不再自行向遠端取），故以下測試
+# 判斷標準來源改吃呼叫端已 clone 好的工作目錄（不再自行向遠端取），故以下測試
 # 佈置的是一個含 versions.json 的目錄，不再 monkeypatch fetch_remote_manifest。
 
 
