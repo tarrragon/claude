@@ -81,6 +81,18 @@ class TestBuildSchemaDictWellFormed:
         assert "framework_version" not in schema_dict
         assert "schema_generated_at_framework_version" in schema_dict
 
+    def test_has_completeness_fields_and_semantics(self):
+        """#99 第三項裁決：JSON 須含 completeness_fields 與 completeness_semantics 兩鍵。
+
+        FlowStep 的完整性集合須含 traverses——這是本裁決落地前唯一已存在的
+        完整性集合成員，缺漏代表匯出邏輯未正確引用 tracking_schema.py 的
+        COMPLETENESS_FIELDS 總表。
+        """
+        schema_dict = build_schema_dict()
+        assert "completeness_fields" in schema_dict
+        assert "completeness_semantics" in schema_dict
+        assert "traverses" in schema_dict["completeness_fields"]["FlowStep"]
+
 
 class TestBidirectionalConsistencyNodeTypes:
     """節點型別表雙向一致性：磁碟上的 JSON 產物 vs import 進來的 SSOT。"""

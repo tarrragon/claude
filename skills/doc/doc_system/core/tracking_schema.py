@@ -130,6 +130,37 @@ GRAPH_EDGE_CLASSES = frozenset(
 # 語意邊的維護方值域。
 GRAPH_EDGE_MAINTAINERS = frozenset({"手動", "CLI 自動", "手動/CLI"})
 
+# 路徑模式與具體度（機器可比對的 carrier 補充，人讀 carrier 描述保留不動）。
+#
+# 只有 carrier 是「檔案路徑」的型別才有 carrier_path_patterns；FlowStep
+# 的 carrier 是 UC 文件內的區塊，不適用。
+#
+# carrier_path_patterns：清單，每個元素為 {"pattern": <regex>,
+# "specificity": [literal_segment_count, cross_segment_wildcard_count]}。
+# 同一型別若有多個合法替代路徑形態（例如 DomainBundle 的 per-domain 巢
+# 狀路徑與根層路徑），拆成清單中的多個元素，每個各自計算具體度；不將
+# 多個形態合併成單一 alternation 正則後只算一個具體度。
+#
+# pattern：與 id_pattern 同一正則方言（見匯出端 ID_PATTERN_DIALECT，
+# "python-re"）。比對對象是相對於工作區根目錄、以 "/" 分隔的完整路徑
+# （含檔名），區分大小寫。
+#
+# specificity 由路徑樣板（非最終正則字串）以 "/" 切分計算，只有兩層：
+#   1. literal_segment_count：整段皆為固定文字才算「字面段」；只要該段
+#      含任何萬用成分（例如 {slug}.md、PROP-*-*.md）即整段不算，不採部
+#      分計分。
+#   2. cross_segment_wildcard_count：能一次跨越多個路徑段的萬用成分數
+#      （例如樣板中的 "..."）；單一路徑段內的萬用字元不計入本項。
+#
+# 具體度比較僅在「同一路徑可能同時命中多個型別的模式」時才有意義——目
+# 錄名不重疊的型別（例如 proposals 與 usecases）不會命中同一路徑，兩者
+# 具體度打平不影響任何實際分類決策。比對規則：先比
+# literal_segment_count（多者優先），再比 cross_segment_wildcard_count
+# （少者優先）；兩項皆同視為打平，**打平即為 schema 歧義，交由消費端回
+# 報**，不引入任何第三層次悄悄消歧——新增型別若與既有的、路徑命名空間
+# 可能重疊的型別在兩項打平，須調整路徑深度或縮小重疊範圍化解，不得用
+# 額外比對層次掩蓋。
+
 # 節點型別表：A 層 5 節點 + B 層 2 節點。FR 與 Test 不列為獨立節點型別
 # （無獨立檔案/ID 空間，語意由 SPEC / traceability 節點欄位承載）。
 GRAPH_NODE_TYPES = {
@@ -137,6 +168,12 @@ GRAPH_NODE_TYPES = {
         "layer": GRAPH_LAYER_ESTABLISHED,
         "id_pattern": r"^PROP-\d{3}$",
         "carrier": "docs/proposals/PROP-NNN-{slug}.md frontmatter",
+        "carrier_path_patterns": [
+            {
+                "pattern": r"^docs/proposals/PROP-\d{3}-[^/]+\.md$",
+                "specificity": [2, 0],
+            },
+        ],
     },
     "SPEC": {
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -144,11 +181,26 @@ GRAPH_NODE_TYPES = {
         # 不強制配發數字別名。
         "id_pattern": r"^SPEC-([0-9]{3}|[A-Z0-9-]+)$",
         "carrier": "docs/spec/{domain}/{slug}.md frontmatter",
+        # README.md 排除在外（domain 目錄的說明文件非 SPEC）；domain-map.md
+        # 未排除——與 DomainBundle 的巢狀路徑刻意重疊，由具體度分出優先
+        # 序（DomainBundle 巢狀形態的字面段數較高，見其 carrier_path_patterns）。
+        "carrier_path_patterns": [
+            {
+                "pattern": r"^docs/spec/[^/]+/(?!README\.md$)[^/]+\.md$",
+                "specificity": [2, 0],
+            },
+        ],
     },
     "UC": {
         "layer": GRAPH_LAYER_ESTABLISHED,
         "id_pattern": r"^UC-\d{2,}$",
         "carrier": "docs/usecases/UC-NN-{slug}.md frontmatter",
+        "carrier_path_patterns": [
+            {
+                "pattern": r"^docs/usecases/UC-\d{2,}-[^/]+\.md$",
+                "specificity": [2, 0],
+            },
+        ],
     },
     "Ticket": {
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -156,11 +208,32 @@ GRAPH_NODE_TYPES = {
         "carrier": "docs/work-logs/.../tickets/{id}.md frontmatter",
         # Ticket 欄位/驗證器歸屬 ticket_system（field-semantics.md 為權
         # 威），本節僅收錄 doc_system 消費圖譜所需的 id_pattern 與 carrier。
+        # "..." 為可變版本/波次目錄，對應 cross_segment_wildcard_count=1。
+        "carrier_path_patterns": [
+            {
+                "pattern": r"^docs/work-logs/(?:[^/]+/)+tickets/[^/]+\.md$",
+                "specificity": [3, 1],
+            },
+        ],
     },
     "DomainBundle": {
         "layer": GRAPH_LAYER_ESTABLISHED,
         "id_pattern": r"^DOMAIN-MAP-[a-z0-9-]+$",
         "carrier": "docs/spec/{domain}/domain-map.md 或 docs/domain-map.md frontmatter",
+        # 兩種合法路徑形態各自列一個元素，各自計算具體度：巢狀形態
+        # （字面段數 3）用於與 SPEC 的重疊消歧（domain-map.md 同時符合
+        # 兩型別的路徑模式，SPEC 為 2）；根層形態為獨立路徑，與其他型別
+        # 命名空間不重疊。
+        "carrier_path_patterns": [
+            {
+                "pattern": r"^docs/spec/[^/]+/domain-map\.md$",
+                "specificity": [3, 0],
+            },
+            {
+                "pattern": r"^docs/domain-map\.md$",
+                "specificity": [2, 0],
+            },
+        ],
     },
     "FlowStep": {
         "layer": GRAPH_LAYER_PROPOSED,
@@ -168,6 +241,7 @@ GRAPH_NODE_TYPES = {
         # return_to 表達。kebab-case，與首批真實資料一致。
         "id_pattern": r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
         "carrier": "UC 文件內結構化 flow 區塊（YAML list）",
+        # 無 carrier_path_patterns：carrier 非獨立檔案路徑，見本節前言。
     },
     "EVT": {
         "layer": GRAPH_LAYER_PROPOSED,
@@ -180,11 +254,66 @@ GRAPH_NODE_TYPES = {
             "目錄掃描滿足。改採 registry 屬 schema 變更，需先提出 per-file 無法"
             "滿足的具體查詢或一致性需求。）"
         ),
+        "carrier_path_patterns": [
+            {
+                "pattern": r"^docs/events/[^/]+/EVT-[A-Z0-9]+-\d{3}-[^/]+\.md$",
+                "specificity": [2, 0],
+            },
+        ],
     },
 }
 
-# EVT 節點必填欄位。
+# 具備 carrier_path_patterns 的型別集合（供匯出與測試查表，避免各處自行
+# 枚舉 FlowStep 是否排除而彼此漂移）。
+CARRIER_PATH_TYPES = frozenset(
+    name for name, entry in GRAPH_NODE_TYPES.items() if "carrier_path_patterns" in entry
+)
+
+# 完整性集合的共通語意（#99 第三項裁決，2026-09-24）：欄位必須存在；值
+# 可為 None（單值）或空清單 []（多值），代表「明確沒有」。此語意對應
+# JSON Schema 的 `required`（只管鍵存在，不管值是否為空）。更嚴格的值
+# 規則（例如 EVT 的 producers/consumers 不得為空）屬各型別 validator 的
+# 附加規則，不放進本節的完整性集合。判斷一律用 `in`（鍵是否存在），不
+# 用真值判斷，否則合法的 null/[] 會被誤判為缺漏。
+
+
+def find_missing_completeness_fields(fields: frozenset[str], entry: dict) -> set[str]:
+    """回傳 entry 缺漏的完整性欄位（值為 None 或 [] 仍算存在，非缺漏）。
+
+    共用實作供 validate.py 與其他消費端引用，避免各自重寫「用 `in` 而非
+    真值判斷」這條件，一旦分散重寫，某處退化為 `if not entry.get(field)`
+    會把合法空值誤判為缺漏卻無測試攔截（見 test_tracking_schema_conformance
+    的鑑別對照測試）。
+    """
+    return {field for field in fields if field not in entry}
+
+
+# EVT 節點必填欄位（完整性集合，語意見上方共通說明）。
 EVT_REQUIRED_FIELDS = frozenset({"id", "name", "canonical_name", "category"})
+
+# PROP／SPEC／UC 識別與顯示最小集（#99 第三項裁決 Q2：c 選項）。
+PROP_REQUIRED_FIELDS = frozenset({"id", "title", "status"})
+SPEC_REQUIRED_FIELDS = frozenset({"id", "title", "status"})
+UC_REQUIRED_FIELDS = frozenset({"id", "title", "status"})
+
+# DomainBundle 識別最小集。個別 domain 的 carrier 是整份 domain-map.md，
+# 本集合僅描述單一 bundle 的識別欄位，不含 domain-map 全域結構。
+DOMAINBUNDLE_REQUIRED_FIELDS = frozenset({"id", "domain"})
+
+# Ticket 型別不在此設完整性集合：欄位權威在 ticket skill
+# （field-semantics.md），本模組僅收錄圖譜消費所需的 id_pattern/carrier
+# （見 GRAPH_NODE_TYPES["Ticket"] 的既有註解）。
+
+# 完整性集合總表，供 JSON 匯出與消費端查表使用（單一入口，避免各處各自
+# 列舉型別名稱清單而彼此漂移）。FlowStep 完整性集合定義在下方（含
+# traverses 的詳細語意說明），此處以底部賦值方式併入，故本行不重複列出。
+COMPLETENESS_FIELDS: dict[str, frozenset[str]] = {
+    "PROP": PROP_REQUIRED_FIELDS,
+    "SPEC": SPEC_REQUIRED_FIELDS,
+    "UC": UC_REQUIRED_FIELDS,
+    "DomainBundle": DOMAINBUNDLE_REQUIRED_FIELDS,
+    "EVT": EVT_REQUIRED_FIELDS,
+}
 
 # EVT category 值域：domain_event（狀態變更事實，必有 consumer）或
 # process_event（步驟進行中標記，允許無 consumer）。
@@ -203,6 +332,10 @@ EVT_CATEGORIES = frozenset({"domain_event", "process_event"})
 FLOWSTEP_REQUIRED_FIELDS = frozenset(
     {"id", "name", "next", "branch_from", "return_to", "emits", "consumes", "traverses"}
 )
+
+# 併入完整性集合總表（FlowStep 定義晚於 COMPLETENESS_FIELDS 賦值處，故
+# 於此補登記，不在上方重複宣告 FLOWSTEP_REQUIRED_FIELDS 的內容）。
+COMPLETENESS_FIELDS["FlowStep"] = FLOWSTEP_REQUIRED_FIELDS
 
 # 語意邊表：A 層 12 條 + B 層 4 條，欄位齊全：class / 正向欄位（儲存
 # 側）/ 反向欄位 / 維護方 / status。

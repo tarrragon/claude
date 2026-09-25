@@ -13,6 +13,10 @@ from pathlib import Path
 from doc_system.commands.create import DOC_TYPE_CONFIG, _get_templates_dir
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
+from doc_system.core.tracking_schema import (
+    EVT_REQUIRED_FIELDS,
+    find_missing_completeness_fields,
+)
 
 
 # 錨點關鍵字：容忍章節標題的合理變體（如「A.1 表/欄位語意」「A.1：xxx」等），
@@ -37,8 +41,9 @@ FLAG_ROW_KEYWORDS = ["契約文件", "migration 治理"]
 # 判定「旗標未填」的佔位符樣式（模板留白），非空但仍視為未填
 _PLACEHOLDER_PATTERN = re.compile(r"^\{.*\}$")
 
-# EVT 型別必填 frontmatter 欄位（定案於節點型別表，見 doc SKILL.md）
-EVENT_REQUIRED_FIELDS = ["id", "name", "canonical_name", "category"]
+# EVT 型別必填 frontmatter 欄位改讀 tracking_schema.EVT_REQUIRED_FIELDS
+# （單一 SSOT，見 #99 第三項裁決：完整性集合語意為「欄位必須存在，值可
+# 為 null 或 []」）。category 值域維持本檔獨立常數，不在本票範圍調整。
 EVENT_VALID_CATEGORIES = ("domain_event", "process_event")
 
 
@@ -135,15 +140,25 @@ def _validate_data_contract(text: str) -> list[str]:
 def _validate_event(frontmatter: dict) -> list[str]:
     """驗證 EVT frontmatter，回傳缺失項清單（空清單代表通過）。
 
-    producers/consumers 在建立模板時為選填，但 validate 對已存在的 EVT
-    文件強制檢查兩者皆非空——這是本型別的核心價值：缺任一端代表事件的
-    發送方或接收方未被記錄，交叉驗證正是為了在文件層攔截這類缺口。
+    完整性（欄位存在）與值非空是兩條獨立規則（#99 第三項裁決）：
+    `find_missing_completeness_fields` 只判斷欄位是否存在，id/name/
+    canonical_name/category 這四個識別/顯示欄位額外要求值非空——這是
+    EVT 型別的附加規則，不屬圖譜 schema 的通用完整性語意（該語意允許
+    FlowStep 等型別的欄位為 null/[]）。producers/consumers 同屬附加規則，
+    是本型別的核心價值：缺任一端代表事件的發送方或接收方未被記錄，交叉
+    驗證正是為了在文件層攔截這類缺口。
     """
     missing: list[str] = []
 
-    for field in EVENT_REQUIRED_FIELDS:
-        if not frontmatter.get(field):
-            missing.append(f"缺少必填欄位: {field}")
+    missing_fields = find_missing_completeness_fields(EVT_REQUIRED_FIELDS, frontmatter)
+    missing.extend(f"缺少必填欄位: {field}" for field in sorted(missing_fields))
+
+    empty_fields = sorted(
+        field
+        for field in EVT_REQUIRED_FIELDS - missing_fields
+        if not frontmatter.get(field)
+    )
+    missing.extend(f"必填欄位值不可為空: {field}" for field in empty_fields)
 
     category = frontmatter.get("category")
     if category and category not in EVENT_VALID_CATEGORIES:

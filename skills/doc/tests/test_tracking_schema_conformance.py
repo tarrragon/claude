@@ -14,6 +14,9 @@ import yaml
 
 from doc_system.core.frontmatter_parser import parse_frontmatter
 from doc_system.core.tracking_schema import (
+    CARRIER_PATH_TYPES,
+    COMPLETENESS_FIELDS,
+    DOMAINBUNDLE_REQUIRED_FIELDS,
     EVT_CATEGORIES,
     EVT_REQUIRED_FIELDS,
     FLOWSTEP_REQUIRED_FIELDS,
@@ -23,8 +26,12 @@ from doc_system.core.tracking_schema import (
     GRAPH_LAYER_ESTABLISHED,
     GRAPH_LAYER_PROPOSED,
     GRAPH_NODE_TYPES,
+    PROP_REQUIRED_FIELDS,
     PROPOSALS_TRACKING_SCHEMA,
+    SPEC_REQUIRED_FIELDS,
     TRACEABILITY_SCHEMA,
+    UC_REQUIRED_FIELDS,
+    find_missing_completeness_fields,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -240,7 +247,13 @@ class TestGraphTypeTablesWellFormed:
         def layer_field_names(table):
             layer_values = {GRAPH_LAYER_ESTABLISHED, GRAPH_LAYER_PROPOSED}
             return {
-                frozenset(k for k, val in entry.items() if val in layer_values)
+                frozenset(
+                    k
+                    for k, val in entry.items()
+                    # carrier_path_specificity 等欄位值為 list（unhashable），
+                    # isinstance 先排除避免 `val in layer_values` 拋例外。
+                    if isinstance(val, str) and val in layer_values
+                )
                 for entry in table.values()
             }
 
@@ -252,6 +265,246 @@ class TestGraphTypeTablesWellFormed:
         assert len(node_layer_keys) == 1 and len(next(iter(node_layer_keys))) == 1, (
             "每張表的層級欄位名應唯一且單一"
         )
+
+
+class TestCarrierPathPatternConformance:
+    """carrier_path_patterns 機器可比對的路徑模式（二層具體度，無第三層）。
+
+    只有 carrier 是檔案路徑的型別（PROP／SPEC／UC／Ticket／DomainBundle／EVT）
+    有本欄位；FlowStep 的 carrier 是 UC 文件內區塊，不適用。
+
+    具體度比較僅在「同一路徑可能同時命中多個型別」時才有意義；目錄名不
+    重疊的型別（例如 PROP 的 proposals 與 UC 的 usecases）打平不影響任
+    何實際分類決策，因此本檔不斷言所有型別兩兩不平手，只對「正向樣本
+    路徑會命中對方模式」的型別對斷言不平手。
+    """
+
+    # 每個型別各自一個正向樣本路徑，用來偵測哪些型別的模式會命中同一路
+    # 徑（交叉比對用，非窮舉所有可能路徑）。
+    SAMPLE_PATHS = {
+        "PROP": "docs/proposals/PROP-001-example.md",
+        "SPEC": "docs/spec/example-domain/SPEC-001-example.md",
+        "UC": "docs/usecases/UC-01-example.md",
+        "Ticket": "docs/work-logs/v0/v0.1/v0.1.0/tickets/0.1.0-W3-641.md",
+        "DomainBundle": "docs/spec/example-domain/domain-map.md",
+        "EVT": "docs/events/example-domain/EVT-EXAMPLE-001-example.md",
+    }
+
+    def test_carrier_path_types_excludes_flowstep(self):
+        assert CARRIER_PATH_TYPES == {
+            "PROP",
+            "SPEC",
+            "UC",
+            "Ticket",
+            "DomainBundle",
+            "EVT",
+        }
+
+    def test_every_carrier_path_type_has_patterns_list(self):
+        for name in CARRIER_PATH_TYPES:
+            entry = GRAPH_NODE_TYPES[name]
+            patterns = entry.get("carrier_path_patterns")
+            assert patterns, f"{name} 缺少 carrier_path_patterns"
+            for item in patterns:
+                assert item.get("pattern"), f"{name} 的模式項缺少 pattern"
+                specificity = item.get("specificity")
+                assert specificity and len(specificity) == 2, (
+                    f"{name} 的 specificity 須為二元組（無第三層）"
+                )
+
+    def test_flowstep_has_no_carrier_path_patterns(self):
+        """拿掉本測試會漏偵測 FlowStep 誤加路徑模式（其 carrier 非檔案路徑）。"""
+        assert "carrier_path_patterns" not in GRAPH_NODE_TYPES["FlowStep"]
+
+    def test_domainbundle_has_two_pattern_entries_each_own_specificity(self):
+        """同一型別的多個替代路徑須拆成清單、各自計算具體度，不合併成一個。"""
+        patterns = GRAPH_NODE_TYPES["DomainBundle"]["carrier_path_patterns"]
+        assert len(patterns) == 2, "DomainBundle 須有 per-domain 與根層兩個獨立模式項"
+        specificities = [tuple(item["specificity"]) for item in patterns]
+        assert len(specificities) == len(set(specificities)), (
+            "DomainBundle 自身兩個模式項的具體度不應相同"
+        )
+
+    def test_overlapping_type_pairs_specificities_distinct(self):
+        """對「正向樣本會命中對方模式」的型別對，斷言二層具體度不平手。
+
+        拿掉任一型別的模式，或把某型別的 specificity 改成與其重疊對象
+        相同，本測試翻紅。目錄不重疊的型別對（例如 PROP vs UC）不在本
+        測試斷言範圍內，兩者具體度即使相同也不影響分類正確性。
+        """
+        overlapping_pairs_found = []
+        for type_a, path_a in self.SAMPLE_PATHS.items():
+            for type_b in CARRIER_PATH_TYPES:
+                if type_a == type_b:
+                    continue
+                for item_b in GRAPH_NODE_TYPES[type_b]["carrier_path_patterns"]:
+                    if not re.match(item_b["pattern"], path_a):
+                        continue
+                    # type_a 的樣本路徑同時命中 type_b 的模式：真實重疊。
+                    for item_a in GRAPH_NODE_TYPES[type_a]["carrier_path_patterns"]:
+                        if re.match(item_a["pattern"], path_a):
+                            spec_a = tuple(item_a["specificity"])
+                            spec_b = tuple(item_b["specificity"])
+                            assert spec_a != spec_b, (
+                                f"{type_a} 與 {type_b} 在路徑 {path_a} 重疊卻具體度打平："
+                                f"{spec_a} == {spec_b}"
+                            )
+                            overlapping_pairs_found.append((type_a, type_b))
+
+        # 正向對照：目前 schema 確實有重疊型別對（SPEC 與 DomainBundle），
+        # 若清空重疊表示前面的比對邏輯已失效（例如正則被改壞不再命中）。
+        assert overlapping_pairs_found, "應至少找到一組真實重疊的型別對（SPEC/DomainBundle）"
+
+    def test_two_overlapping_same_tier_patterns_are_reported_as_tie(self):
+        """示範：兩個重疊、二層具體度相同的模式會被判為打平（非既有型別，測試機制本身）。
+
+        這不是既有 schema 的一部分，只用來證明「打平即回報歧義」的判定
+        本身正確運作，不會被某個隱藏的第三層次悄悄消解。
+        """
+        pattern_x = {"pattern": r"^docs/widgets/[^/]+\.md$", "specificity": [2, 0]}
+        pattern_y = {"pattern": r"^docs/widgets/[^/]+\.md$", "specificity": [2, 0]}
+        sample_path = "docs/widgets/example.md"
+
+        assert re.match(pattern_x["pattern"], sample_path)
+        assert re.match(pattern_y["pattern"], sample_path)
+        assert tuple(pattern_x["specificity"]) == tuple(pattern_y["specificity"]), (
+            "此為刻意建構的打平示範：兩模式重疊且二層具體度相同，"
+            "應被視為 schema 歧義（消費端回報，不由第三層次消解）"
+        )
+
+    def test_domain_readme_not_matched_by_spec_pattern(self):
+        """拿掉 SPEC pattern 的 README 排除規則時，本測試翻紅。"""
+        pattern = re.compile(
+            GRAPH_NODE_TYPES["SPEC"]["carrier_path_patterns"][0]["pattern"]
+        )
+        assert pattern.match("docs/spec/example-domain/README.md") is None
+        assert pattern.match("docs/spec/README.md") is None
+
+    def test_spec_pattern_matches_ordinary_spec_file(self):
+        """正向對照：一般 SPEC 檔案仍應命中，避免 README 排除規則過度擴張。"""
+        pattern = re.compile(
+            GRAPH_NODE_TYPES["SPEC"]["carrier_path_patterns"][0]["pattern"]
+        )
+        assert pattern.match("docs/spec/example-domain/SPEC-001-example.md")
+
+    def test_domain_map_matches_both_spec_and_domainbundle(self):
+        """domain-map.md 同時命中 SPEC 與 DomainBundle，具體度由 DomainBundle 勝出。
+
+        拿掉 SPEC 或 DomainBundle 任一型別的模式，或把 DomainBundle 巢
+        狀形態的具體度改成低於或等於 SPEC，本測試翻紅。
+        """
+        path = "docs/spec/example-domain/domain-map.md"
+        spec_pattern = re.compile(
+            GRAPH_NODE_TYPES["SPEC"]["carrier_path_patterns"][0]["pattern"]
+        )
+        # DomainBundle 巢狀形態（specificity [3, 0]）——非根層 [2, 0] 那項。
+        nested_domainbundle = next(
+            item
+            for item in GRAPH_NODE_TYPES["DomainBundle"]["carrier_path_patterns"]
+            if item["specificity"][0] == 3
+        )
+        domainbundle_pattern = re.compile(nested_domainbundle["pattern"])
+
+        assert spec_pattern.match(path), "domain-map.md 應仍命中 SPEC 模式"
+        assert domainbundle_pattern.match(path), "domain-map.md 應命中 DomainBundle 巢狀模式"
+
+        spec_specificity = tuple(
+            GRAPH_NODE_TYPES["SPEC"]["carrier_path_patterns"][0]["specificity"]
+        )
+        domainbundle_specificity = tuple(nested_domainbundle["specificity"])
+        assert domainbundle_specificity > spec_specificity, (
+            "DomainBundle 巢狀形態具體度須高於 SPEC，domain-map.md 才會歸類為 DomainBundle"
+        )
+
+    def test_domainbundle_specificity_regression_would_fail_disambiguation(self):
+        """把 DomainBundle 巢狀具體度改成 <= SPEC 時，本測試翻紅（獨立於上一測試的直接回歸樣本）。"""
+        spec_specificity = tuple(
+            GRAPH_NODE_TYPES["SPEC"]["carrier_path_patterns"][0]["specificity"]
+        )
+        nested_domainbundle = next(
+            item
+            for item in GRAPH_NODE_TYPES["DomainBundle"]["carrier_path_patterns"]
+            if item["specificity"][0] == 3
+        )
+        domainbundle_specificity = tuple(nested_domainbundle["specificity"])
+        assert domainbundle_specificity[0] > spec_specificity[0] or (
+            domainbundle_specificity[0] == spec_specificity[0]
+            and domainbundle_specificity[1] < spec_specificity[1]
+        ), "DomainBundle 巢狀具體度不再高於 SPEC，SPEC/DomainBundle 重疊將無法消歧"
+
+    def test_ticket_pattern_matches_nested_version_dirs(self):
+        """Ticket carrier 的可變版本/波次目錄須被多段萬用成分覆蓋。"""
+        pattern = re.compile(
+            GRAPH_NODE_TYPES["Ticket"]["carrier_path_patterns"][0]["pattern"]
+        )
+        assert pattern.match(
+            "docs/work-logs/v0/v0.1/v0.1.0/tickets/0.1.0-W3-641.md"
+        )
+
+    def test_prop_pattern_does_not_match_other_type_directory(self):
+        """反向對照：PROP 模式不應命中其他型別的目錄（不同萬用字元污染彼此命中範圍）。"""
+        pattern = re.compile(
+            GRAPH_NODE_TYPES["PROP"]["carrier_path_patterns"][0]["pattern"]
+        )
+        assert pattern.match("docs/usecases/UC-01-example.md") is None
+
+
+class TestCompletenessFieldsWellFormed:
+    """完整性集合最小集本身（#99 第三項裁決 Q2：識別與顯示最小集）。"""
+
+    def test_prop_spec_uc_are_identity_display_minimal_set(self):
+        assert PROP_REQUIRED_FIELDS == {"id", "title", "status"}
+        assert SPEC_REQUIRED_FIELDS == {"id", "title", "status"}
+        assert UC_REQUIRED_FIELDS == {"id", "title", "status"}
+
+    def test_domainbundle_minimal_set(self):
+        assert DOMAINBUNDLE_REQUIRED_FIELDS == {"id", "domain"}
+
+    def test_completeness_fields_table_covers_all_defined_types(self):
+        """總表須涵蓋 PROP/SPEC/UC/DomainBundle/EVT/FlowStep 六型（Ticket 不設集合，權威在 ticket skill）。"""
+        assert set(COMPLETENESS_FIELDS.keys()) == {
+            "PROP",
+            "SPEC",
+            "UC",
+            "DomainBundle",
+            "EVT",
+            "FlowStep",
+        }
+
+
+class TestFindMissingCompletenessFieldsDiscrimination:
+    """find_missing_completeness_fields 的鑑別對照：鍵缺漏應紅、null／[] 應綠。
+
+    改回舊語意（`if not entry.get(field)` 真值判斷）時，
+    test_null_value_is_not_missing 與 test_empty_list_value_is_not_missing
+    會翻紅：真值判斷會把合法的 None／[] 誤判為缺漏。
+    """
+
+    @pytest.mark.parametrize("type_name,fields", sorted(COMPLETENESS_FIELDS.items()))
+    def test_missing_key_is_rejected(self, type_name, fields):
+        field_to_drop = sorted(fields)[0]
+        entry = {f: "placeholder" for f in fields}
+        del entry[field_to_drop]
+
+        missing = find_missing_completeness_fields(fields, entry)
+
+        assert missing == {field_to_drop}, f"{type_name}: 鍵缺漏未被偵測到"
+
+    @pytest.mark.parametrize("type_name,fields", sorted(COMPLETENESS_FIELDS.items()))
+    def test_null_value_is_not_missing(self, type_name, fields):
+        entry = dict.fromkeys(fields)  # 所有欄位存在，值皆為 None
+
+        missing = find_missing_completeness_fields(fields, entry)
+
+        assert missing == set(), f"{type_name}: 合法的 None 值被誤判為缺漏"
+
+    @pytest.mark.parametrize("type_name,fields", sorted(COMPLETENESS_FIELDS.items()))
+    def test_empty_list_value_is_not_missing(self, type_name, fields):
+        entry = {f: [] for f in fields}
+
+        missing = find_missing_completeness_fields(fields, entry)
+
+        assert missing == set(), f"{type_name}: 合法的空清單值被誤判為缺漏"
 
 
 def _discover_evt_files() -> list[Path]:

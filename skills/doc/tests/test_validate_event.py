@@ -63,6 +63,81 @@ class TestValidateEventSchema:
         output = capsys.readouterr().out
         assert "canonical_name" in output
 
+    def test_null_category_fails(self, tmp_path, capsys):
+        """category: null（欄位存在但值為空）應被拒，且訊息與「缺少欄位」區分。
+
+        鑑別對照（E2 正向對照輸入）：完整性判斷（find_missing_completeness_fields）
+        只驗欄位是否存在，null 值不會被判為缺漏；本測試驗證的是 EVT 附加規則
+        （值不可為空），拿掉該附加規則此測試即翻紅。
+        """
+        events_dir = tmp_path / "docs" / "events" / "library"
+        _write_event(
+            events_dir,
+            "EVT-LIBRARY-010",
+            'name: "借閱完成"\ncanonical_name: "Library.Checkout.Completed"\n'
+            "category: null\nproducers: [CheckoutService]\nconsumers: [InventoryTracker]",
+        )
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            try:
+                execute(argparse.Namespace(doc_id="EVT-LIBRARY-010"))
+            except SystemExit as e:
+                assert e.code == 1
+
+        output = capsys.readouterr().out
+        assert "值不可為空" in output
+        assert "category" in output
+        assert "缺少必填欄位: category" not in output
+
+    def test_empty_string_name_fails(self, tmp_path, capsys):
+        """name: ""（欄位存在但值為空字串）應被拒，且訊息與「缺少欄位」區分。"""
+        events_dir = tmp_path / "docs" / "events" / "library"
+        _write_event(
+            events_dir,
+            "EVT-LIBRARY-011",
+            'name: ""\ncanonical_name: "Library.Checkout.Completed"\n'
+            "category: domain_event\nproducers: [CheckoutService]\nconsumers: [InventoryTracker]",
+        )
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            try:
+                execute(argparse.Namespace(doc_id="EVT-LIBRARY-011"))
+            except SystemExit as e:
+                assert e.code == 1
+
+        output = capsys.readouterr().out
+        assert "值不可為空" in output
+        assert "name" in output
+        assert "缺少必填欄位: name" not in output
+
+    def test_field_entirely_missing_uses_missing_field_message_not_empty_value_message(
+        self, tmp_path, capsys
+    ):
+        """欄位完全沒寫（非存在但為空）應回報「缺少必填欄位」，不與「值不可為空」訊息混淆。
+
+        與 test_null_category_fails／test_empty_string_name_fails 構成鑑別對照組：
+        「缺欄位」與「欄位存在但值空」在完整性判斷上分屬不同分支，錯誤訊息
+        亦不可互相覆蓋，否則使用者無法分辨該補欄位還是補值。
+        """
+        events_dir = tmp_path / "docs" / "events" / "library"
+        _write_event(
+            events_dir,
+            "EVT-LIBRARY-012",
+            'name: "借閱完成"\ncategory: domain_event\n'
+            "producers: [CheckoutService]\nconsumers: [InventoryTracker]",
+        )
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            try:
+                execute(argparse.Namespace(doc_id="EVT-LIBRARY-012"))
+            except SystemExit as e:
+                assert e.code == 1
+
+        output = capsys.readouterr().out
+        assert "缺少必填欄位: canonical_name" in output
+        assert "canonical_name 值不可為空" not in output
+        assert "必填欄位值不可為空: canonical_name" not in output
+
     def test_invalid_category_fails(self, tmp_path, capsys):
         """category 值不在合法清單內應驗證失敗。"""
         events_dir = tmp_path / "docs" / "events" / "library"

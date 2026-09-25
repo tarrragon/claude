@@ -1,3 +1,21 @@
+## [2.61.0] - 2026-09-25
+
+### Summary
+feat: 節點型別新增機器可比對的 carrier 路徑模式與具體度; feat: 圖譜 schema 完整性集合 JSON 匯出（補齊 schema.py）; feat: 圖譜 schema 完整性集合改為欄位必存在值可空語意 (+5 more)
+
+Changes: 3 feat, 2 fix, 1 docs, 1 chore, 1 test
+
+- feat: 節點型別新增機器可比對的 carrier 路徑模式與具體度
+- feat: 圖譜 schema 完整性集合 JSON 匯出（補齊 schema.py）
+- feat: 圖譜 schema 完整性集合改為欄位必存在值可空語意
+- fix: carrier 具體度改回二層，打平回報歧義而非悄悄消解
+- fix: EVT 值非空附加規則覆核修正（行為退化）
+- docs: PC-BAL-040 補定義檔消費端變體與 worktree 派發邊界
+- chore: VERSION 2.60.13（sync-push 技能庫 pull 九個 skill）
+- test: EVT 值非空附加規則正向對照測試 + CHANGELOG 記錄
+
+---
+
 ## [2.60.13] - 2026-09-24
 
 ### Summary
