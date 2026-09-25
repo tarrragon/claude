@@ -1,3 +1,15 @@
+## [2.61.1] - 2026-09-25
+
+### Summary
+chore: skill-sync pull compositional-writing 1.34.1、multi-round-review 2.23.1; chore: .claude/VERSION 2.61.0（sync-push：tracking_schema 完整性集合與 carrier 路徑模式、PC-BAL-040）
+
+Changes: 2 chore
+
+- chore: skill-sync pull compositional-writing 1.34.1、multi-round-review 2.23.1
+- chore: .claude/VERSION 2.61.0（sync-push：tracking_schema 完整性集合與 carrier 路徑模式、PC-BAL-040）
+
+---
+
 ## [2.61.0] - 2026-09-25
 
 ### Summary

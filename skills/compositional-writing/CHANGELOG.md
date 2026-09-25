@@ -2,6 +2,12 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.34.1 — 「名詞缺所屬」bank 條目與 principle 卡補一條：判定譬喻要換之後先數它在集合裡出現幾次、整批換成同一個領域用詞（全分類實跑：「手上」三十多次、連段標都用）
+
+**Version**: 1.34.0 — 槽位規格範圍從操作句擴大到每一句（〈操作句先填槽位再成句〉更名〈每一句先填槽位再成句〉）：論斷句、段標、總結句、過渡句的缺口在名詞裡，本身要求「誰的、什麼的」的名詞要寫出所屬，形容詞與動詞不直接當名詞用；keyword bank 新增「名詞缺所屬」類別（按位置逐句讀，名詞清單只當候選）；writing-articles 同步；新 principle 卡 `noun-without-its-owner-passes-the-slot-check`（含二十句校準：名詞清單與「列出缺項」探針無鑑別力，逐字引出所屬的探針有）
+
+**Version**: 1.33.1 — 序數命名的掃描 pattern 補上「種、類、條、項」（逐段審查發現「第一種／第二種／第三種錯法」因詞綴缺「種」被漏掉）
+
 **Version**: 1.33.0 — 新增 principle 卡 `counted-summary-delivers-only-the-length`：介紹另一份內容時（description、交付欄、連結介紹）寫出成員，「四個追問、三種寫法」只交付清單長度。〈索引建立〉原則加生成端規則，keyword bank 新增「計數式摘要」類別（無穩定 pattern，按位置逐句讀）
 
 **Version**: 1.32.1 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來；keyword bank 新增「縮寫術語」類別（content/ 由 mdtools `TERM-abbreviation` 擋，skill 目錄要手動掃）
