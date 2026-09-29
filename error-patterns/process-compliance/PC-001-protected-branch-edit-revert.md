@@ -64,7 +64,7 @@ def check_branch_before_edit(tool_name, tool_input):
             "decision": "block",  # 或 "warn"
             "message": f"[Branch Guard] 當前在保護分支 {current_branch} 上。"
                        f"請先建立 feature 分支或 worktree。"
-                       f"建議：git checkout -b feat/your-feature"
+                       f"建議：git checkout -b feat/your-feature"  # 已被 parallel-dispatch.md〈禁止在共用主工作樹切換或建立分支（強制）〉取代，勿照抄
         }
 ```
 

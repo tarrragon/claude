@@ -48,33 +48,6 @@ from lib import (
 # W17-127.1：framework 類別清單改由 SSOT 提供（避免與 layer-boundary 雙寫漂移）
 from lib.framework_paths import get_categories as _get_framework_categories
 
-# W10-084：審查模式關鍵字（命中時對實作代理人豁免 worktree 強制）
-#
-# 設計理由：multi-view review 派發實作代理人擔任「審查/掃描/評估」角色時，
-# prompt 雖含 src/ tests/ 等路徑（屬被審查目標的引用），但代理人僅讀不寫，
-# 不會污染 .git/HEAD。worktree 強制反而阻擋合法審查派發。
-#
-# 觸發條件：prompt 含下列任一關鍵字（大小寫不敏感），且為實作代理人派發。
-# 邊界：外部 .claude/ 仍阻擋（runtime 必拒，與審查模式無關）。
-REVIEW_MODE_KEYWORDS: Tuple[str, ...] = (
-    "審查", "review", "掃描", "scan", "評估", "evaluate",
-)
-
-
-def _is_review_mode_prompt(prompt: str) -> bool:
-    """偵測 prompt 是否為審查模式（含審查/review/掃描/scan/評估/evaluate）。
-
-    大小寫不敏感比對；任一命中即為 True。
-    """
-    if not prompt:
-        return False
-    lowered = prompt.lower()
-    for kw in REVIEW_MODE_KEYWORDS:
-        if kw.lower() in lowered:
-            return True
-    return False
-
-
 # 0.2.1-W3-269：dispatch_mode=readonly 豁免 worktree 強制（框架 issue 36 落地）
 #
 # 背景：0.2.1-W3-263 ANA 裁決方案 A 為 Agent tool_input 結構化欄位
@@ -85,8 +58,9 @@ def _is_review_mode_prompt(prompt: str) -> bool:
 # 改採 fallback：prompt 首行固定格式協議 `Dispatch-Mode: readonly`。
 #
 # 仍非關鍵字比對（issue 36 明文要求）：判準是「首行」+「固定前綴」+「固定值」
-# 三條件精確比對，非在全文掃描自然語言詞彙（審查/review 等關鍵字比對法的問題
-# 見 REVIEW_MODE_KEYWORDS 區塊）。PM 必須在 prompt 第一行顯式宣告，非被動推導。
+# 三條件精確比對，非在全文掃描自然語言詞彙。關鍵字法已移除：實作票收尾標準
+# 用語「Phase 4 評估」必然命中子字串，守衛失效方向為放行。審查派發的唯一豁免路徑
+# 是 PM 在 prompt 第一行顯式宣告，非被動推導。
 DISPATCH_MODE_PREFIX = "Dispatch-Mode:"
 DISPATCH_MODE_READONLY_VALUE = "readonly"
 
@@ -1329,47 +1303,35 @@ def main() -> int:
 
     isolation = tool_input.get("isolation", "")
 
-    # (1.5) W10-084：審查模式豁免 worktree 強制
-    #       條件：prompt 含審查/review/掃描/scan/評估/evaluate 等關鍵字
-    #       理由：multi-view review 派發實作代理人擔任審查角色僅讀不寫，
-    #            不會污染 .git/HEAD；worktree 強制反而阻擋合法審查派發。
-    #       邊界：外部 .claude/（已於 (1) 阻擋）不受本豁免影響。
-    if _is_review_mode_prompt(prompt):
-        logger.info(
-            "放行：%s 偵測到審查模式關鍵字（W10-084 豁免 worktree 強制）",
-            subagent_type,
-        )
-        return 0
-
-    # (1.6) 0.2.1-W3-269：唯讀派發豁免 worktree 強制（框架 issue 36）
+    # (1.5) 0.2.1-W3-269：唯讀派發豁免 worktree 強制（框架 issue 36）
     #       條件：prompt 首行為固定格式 `Dispatch-Mode: readonly`
     #       理由：探針實測確認 CC runtime 剝離 Agent tool_input 自訂欄位，
     #            改採 prompt 首行結構化協議（非關鍵字比對，見函式 docstring）
-    #       與 (1.5) review mode 為 OR 關係，任一命中即豁免
+    #       這是審查派發的唯一豁免路徑（關鍵字豁免已移除）
     #       邊界：外部 .claude/（已於 (1) 阻擋）不受本豁免影響
     if _is_dispatch_mode_readonly_prompt(prompt):
         logger.info(
             "放行：%s 偵測到 Dispatch-Mode: readonly 首行宣告"
-            "（0.2.1-W3-269 豁免 worktree 強制）",
+            "（豁免 worktree 強制）",
             subagent_type,
         )
         return 0
 
-    # (2) 僅主 repo .claude/ 且無其他路徑 → 放行（ARCH-015 豁免 worktree）
+    # (2) 已使用 worktree → 放行（先於 ARCH-015，log 才記為 worktree 放行）
+    #     涵蓋：主 repo .claude/ + 非 .claude/ + worktree（W5-050 新發現）
+    #           僅非 .claude/ + worktree、僅主 repo .claude/ + worktree
+    if isolation == "worktree":
+        _emit_worktree_complete_warning(prompt, logger)
+        logger.info("通過：%s 使用 worktree 隔離", subagent_type)
+        return 0
+
+    # (3) 僅主 repo .claude/ 且無其他路徑 → 放行（ARCH-015 豁免 worktree）
     #     條件：has_main_repo_claude=True 且 has_other=False
     if has_main_repo_claude and not has_other:
         logger.info(
             "放行：%s 目標僅在主 repo .claude/（ARCH-015 豁免 worktree）",
             subagent_type,
         )
-        return 0
-
-    # (3) 已使用 worktree → 放行
-    #     涵蓋：主 repo .claude/ + 非 .claude/ + worktree（W5-050 新發現）
-    #           僅非 .claude/ + worktree
-    if isolation == "worktree":
-        _emit_worktree_complete_warning(prompt, logger)
-        logger.info("通過：%s 使用 worktree 隔離", subagent_type)
         return 0
 
     # (4) 其餘情況（has_other 無 worktree、空 prompt 無 worktree）→ 阻擋

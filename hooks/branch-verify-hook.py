@@ -30,6 +30,10 @@ Decision: "allow" (feature 分支) | "deny" (保護分支)
 - 在保護分支上，豁免路徑不阻止編輯
 - 強化 worktree 環境支援：當檔案路徑無法推導 cwd 時，嘗試從 CLAUDE_PROJECT_DIR 推導
 - 在 feat/* 分支上，所有路徑檢查均跳過（明確 early return）
+- deny 訊息移除「手動 git checkout -b」二擇一，改為代理人/PM 角色分流
+  並路由至 parallel-dispatch.md〈派發位置判準（強制）〉；跨專案訊息改為
+  git -C <repo> worktree add。實證：二擇一措辭使代理人在共用主工作樹切分支，
+  實作 commit 落到 feat 分支（下游 consumer 專案實測）。判定邏輯不變。
 """
 
 import os
@@ -172,15 +176,15 @@ def build_cross_repo_deny_message(
 - 目標 branch：{target_branch}
 
 跨專案豁免清單僅含通用文件（README.md / CHANGELOG.md / .gitignore / .gitattributes），
-此檔案不在豁免清單內，需先切換到 feature 分支再編輯。
+此檔案不在豁免清單內，需在獨立工作樹的 feature 分支上編輯。
+目標 repo 的主工作樹可能被其他 session 共用，禁止在其中切換或建立分支。
 
-複製以下指令切換目標 repo 分支（在另一個 terminal 執行）：
+在目標 repo 另建工作樹（在另一個 terminal 執行）：
 
-  cd {target_repo}
-  git status
-  git checkout -b {suggested_branch}
+  git -C {target_repo} worktree add <路徑> -b {suggested_branch}
 
-完成切換後即可重試本次編輯。"""
+於新工作樹內完成編輯後重試。
+派發位置判準見 .claude/pm-rules/parallel-dispatch.md〈派發位置判準（強制）〉。"""
 
 
 def main() -> int:
@@ -276,18 +280,18 @@ def main() -> int:
 
 保護分支用於穩定開發，需要在獨立分支上進行更改。
 
-建議的操作方式：
+共用主工作樹禁止切換或建立分支，請依角色處理：
 
-1. 建立 feature worktree（推薦）：
-   /worktree create <ticket-id>
-
-2. 或手動建立分支：
-   git checkout -b feat/your-feature
+- 代理人：停手，於 ticket NeedsContext 記錄「在 main 被 branch-verify-hook 擋下」，
+  交還 PM 以 isolation:worktree 重派；禁止自行建立或切換分支。
+- PM：/worktree create <ticket-id>
 
 豁免路徑（允許在保護分支上編輯）：
 - .claude/ （規則、配置、Hook、方法論）
 - docs/ （工作日誌、Ticket 檔案）
-- CLAUDE.md、README.md、CHANGELOG.md """
+- CLAUDE.md、README.md、CHANGELOG.md
+
+派發位置判準見 .claude/pm-rules/parallel-dispatch.md〈派發位置判準（強制）〉。"""
         else:
             # 非專案檔案（應該不會發生，但保留說明）
             deny_message = f"""保護分支編輯被阻止

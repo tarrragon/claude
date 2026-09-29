@@ -11,6 +11,11 @@ Branch Status Reminder - SessionStart Hook 用於顯示分支狀態
 
 Hook Event: SessionStart
 
+改進 (v1.4.0):
+- 保護分支提醒移除「或手動建立分支 git checkout -b」選項，改為明示共用主工作樹
+  禁止切換或建立分支並路由至 parallel-dispatch.md〈派發位置判準（強制）〉。
+  該選項與 branch-verify-hook 舊 deny 訊息同型，會把讀者推向在共用主工作樹切分支。
+
 改進 (v1.3.0, W13-011):
 - PC-076 防護落地：列出全部 tracked-modified + untracked
 - 分組顯示（staged / modified / untracked），上限提升至 50 + 完整清單提示
@@ -189,8 +194,8 @@ def main():
         hook_output("  建立 feature worktree 進行開發：", "info")
         hook_output("  /worktree create <ticket-id>", "info")
         hook_output("", "info")
-        hook_output("  或手動建立分支：", "info")
-        hook_output("  git checkout -b feat/your-feature", "info")
+        hook_output("  共用主工作樹禁止切換或建立分支（git checkout -b 等）；", "info")
+        hook_output("  派發位置見 .claude/pm-rules/parallel-dispatch.md〈派發位置判準（強制）〉", "info")
         hook_output("", "info")
         logger.warning(f"Currently on protected branch in main repo: {current_branch}")
 

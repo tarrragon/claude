@@ -90,6 +90,8 @@ must target its own worktree.
 
 ## 派發模式決策流程
 
+> **派發位置單一入口**：isolation 值、派發前置、收尾指令與禁止事項合併查表見 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉；本流程圖中「主 repo feat 分支」各分支以該節〈禁止在共用主工作樹切換或建立分支（強制）〉為準，改走 `isolation: "worktree"`。
+
 ```
 開始派發前
   |
@@ -148,6 +150,8 @@ Worktree: /absolute/path/to/worktree-ticket-N
 
 ## 方案 B：主 repo feat 分支（不隔離）
 
+> **已被取代**：本方案在共用主工作樹切分支，違反 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉。非豁免路徑的實作派發改用 `isolation: "worktree"`，PM 前台改用 `/worktree create <ticket-id>`；本節保留為歷史記錄，不再作為派發選項。
+
 適用單一代理人或已知不會衝突的場景。
 
 **PM 準備**（派發前）：
@@ -180,6 +184,7 @@ git checkout -b feat/ticket-N
 
 ---
 
-**Last Updated**: 2026-07-31
+**Last Updated**: 2026-09-29
+**Version**: 1.2.0 - 〈派發模式決策流程〉加一行路由至 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉；〈方案 B：主 repo feat 分支（不隔離）〉加註已被〈禁止在共用主工作樹切換或建立分支（強制）〉取代（在共用主工作樹開分支會把並行 session 帶離 main，框架 issue 101）
 **Version**: 1.1.0 - 新增「isolation:worktree 派發的 complete 收尾限制」專節與失敗模式速查列（PC-SCLK-002，1.4.0-W1-023 探針取得逐字證據證實：CC runtime worktree 隔離守衛判定 `complete` token 為 shell builtin 呼叫而拒絕，本 repo 無法修正，需 PM 代跑收尾）
 **Version**: 1.0.0 - 初版，整合 PC-059 retry5 結論建立決策表

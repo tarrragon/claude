@@ -55,6 +55,7 @@
 必須執行以下操作之一：
   1. 建立 feature worktree：/worktree create <ticket-id>
   2. 建立 feature branch：git checkout -b feat/your-feature
+  （註記：本範例第 2 項已被 parallel-dispatch.md〈禁止在共用主工作樹切換或建立分支（強制）〉取代，勿照抄）
 
 注意：禁止使用 Bash 工具繞過此保護。
 ```

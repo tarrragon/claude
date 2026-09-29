@@ -33,11 +33,48 @@ SKELETON_TEMPLATE_NORMAL = """Ticket: {ticket_id}
 測試與其結果為後續步驟前置的命令一律前景執行（加 timeout、`| tail`），run_in_background 僅限真正可並行的旁路任務。
 發現 prompt 與 ticket/框架正本衝突，停手寫入 ticket NeedsContext 上報，不自行選邊。
 遇阻立即停下回報，禁繞過 Hook。
-收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution / Test Results → commit → `ticket track complete {ticket_id} --as {agent_name}`。"""
+{closing}"""
+
+# normal 變體收尾句（依 isolation 對表選用，不在 format 字串內寫條件分支）。
+# worktree：隔離環境下 complete 受守衛限制，改 finish，被拒時交還 PM 代跑。
+CLOSING_BY_ISOLATION = {
+    "none": (
+        "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution / "
+        "Test Results → commit → `ticket track complete {ticket_id} --as {agent_name}`。"
+    ),
+    "worktree": (
+        "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution / "
+        "Test Results → commit（`ticket track commit`，於 worktree 路徑）→ "
+        "`ticket track finish {ticket_id} --as {agent_name}`；finish 若被隔離守衛拒絕，"
+        "於 Exit Status 記錄後交還 PM 於主 repo 代跑，禁止改寫命令形式規避。"
+    ),
+}
+
+# 非 worktree 派發豁免路徑（與 .claude/hooks/branch-verify-hook.py
+# is_exempt_path_on_protected_branch 的 same-repo 清單一致；該 hook 為權威）。
+EXEMPT_PATH_PREFIXES = (".claude/", "docs/", "scripts/experiments/")
+EXEMPT_EXACT_PATHS = (
+    "CLAUDE.md",
+    "README.md",
+    "CHANGELOG.md",
+    "package.json",
+    "manifest.json",
+    ".gitignore",
+    ".gitattributes",
+)
+
+
+def non_exempt_paths(paths) -> list:
+    """回傳 paths 中不屬豁免清單的路徑（需 worktree 隔離的候選）。"""
+    return [
+        p for p in paths
+        if not p.startswith(EXEMPT_PATH_PREFIXES) and p not in EXEMPT_EXACT_PATHS
+    ]
 
 # review 變體：審查派發不觸發 claim/complete 生命週期（審查非執行票，票本身
 # 只是審查標的，任務書在 prompt），欄位改為審查標的/視角/裁決問題/回報格式。
-SKELETON_TEMPLATE_REVIEW = """Ticket: {ticket_id}
+SKELETON_TEMPLATE_REVIEW = """Dispatch-Mode: readonly
+Ticket: {ticket_id}
 
 ## 審查任務
 
@@ -136,6 +173,7 @@ def build_skeleton(
     decision_question: str = "{裁決問題}",
     commit_policy: str = "agent",
     touches_hook_scope: bool = False,
+    isolation: str = "none",
 ) -> str:
     """依 `kind` 產生骨架文字（review 變體不含 claim/收尾協議）。
 
@@ -155,6 +193,9 @@ def build_skeleton(
         ticket_id=ticket_id,
         task_summary=task_summary,
         agent_name=agent_name,
+        closing=CLOSING_BY_ISOLATION.get(isolation, CLOSING_BY_ISOLATION["none"]).format(
+            ticket_id=ticket_id, agent_name=agent_name
+        ),
     )
 
     if commit_policy == "agent":

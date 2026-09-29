@@ -21,6 +21,8 @@
 
 > **Source of truth**：此風險分級表為 worktree 隔離需求的唯一定義來源。Hook `agent-dispatch-validation-hook.py` 的 `IMPLEMENTATION_AGENTS` 清單必須與高風險列的代理人範例同步。
 
+> **派發位置單一入口**：本表只回答「要不要 worktree」；isolation 值、派發前置、收尾指令與禁止事項合併查表見 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉。
+
 ### worktree 派發注意事項
 
 <!-- rule8-exempt: relocation:自 .claude/pm-rules/parallel-dispatch.md 逐字搬移 -->
@@ -204,5 +206,6 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 ---
 
-**Last Updated**: 2026-09-01
+**Last Updated**: 2026-09-29
+**Version**: 1.1.0 — 〈風險分級表〉後加一行路由至 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉（派發位置單一入口，框架 issue 101）。
 **Version**: 1.0.0 — 從 `.claude/pm-rules/parallel-dispatch.md`「Worktree 隔離（風險分級）」章節整段外移（熱點檔案叢集拆分），內容未經改寫，僅位置搬移。

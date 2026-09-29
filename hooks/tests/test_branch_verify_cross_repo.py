@@ -195,14 +195,14 @@ def test_deny_message_contains_target_branch():
     assert "main" in msg
 
 
-def test_deny_message_contains_cd_and_checkout_command():
+def test_deny_message_contains_worktree_add_command():
     msg = build_cross_repo_deny_message(
         file_path="/repo/file.md",
         target_repo="/repo",
         target_branch="main",
     )
-    assert "cd /repo" in msg
-    assert "git checkout -b" in msg
+    assert "git -C /repo worktree add" in msg
+    assert "git checkout -b" not in msg
 
 
 def test_deny_message_uses_custom_suggested_branch():

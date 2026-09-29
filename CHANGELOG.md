@@ -1,3 +1,20 @@
+## [2.63.0] - 2026-09-29
+
+### Summary
+feat: dispatch 骨架依 isolation 分流收尾句，review 首行宣告 readonly; fix: 拆除審查關鍵字豁免，審查派發只認 Dispatch-Mode: readonly 首行; fix: 清除 branch-status-reminder 與 guardian SKILL 的主工作樹切分支指引 (+4 more)
+
+Changes: 1 feat, 3 fix, 1 docs, 1 chore, 1 other
+
+- feat: dispatch 骨架依 isolation 分流收尾句，review 首行宣告 readonly
+- fix: 拆除審查關鍵字豁免，審查派發只認 Dispatch-Mode: readonly 首行
+- fix: 清除 branch-status-reminder 與 guardian SKILL 的主工作樹切分支指引
+- fix: branch-verify-hook deny 訊息角色分流，移除 checkout -b
+- docs: 新增派發位置判準表與禁止共用主工作樹切分支條款
+- chore: .claude/VERSION 2.62.1（sync-push：compositional-writing 1.38.1、multi-round-review 2.24.0）
+- other: x
+
+---
+
 ## [2.62.1] - 2026-09-29
 
 ### Summary

@@ -32,7 +32,7 @@
 > ticket track dispatch {ticket_id} --as {agent_name}
 > ```
 >
-> 需落票約束時加 `--note "..."`（寫入票的「派發日誌」章節）；審查派發改 `--kind review`（輸出不含認領/收尾的審查骨架，改用審查標的/視角/裁決問題/回報格式四欄）。指令輸出即可直接複製貼入 `Agent(...)` prompt。同步保護（`.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`）涵蓋兩個獨立維度，缺一不足：(1) 骨架常數是否仍命中 length-guard hook 的模板關鍵字（僅影響 Layer 2 軟提示）；(2) 骨架**實際組裝後的行數**（含 `--commit-policy agent` 短版指標句、觸及 hooks 目錄票的額外提醒）是否仍 <= PROMPT_LINE_LIMIT（Layer 1 硬上限，無豁免）——(2) 是骨架曾實際成長至 39-48 行、逐字貼入被 Layer 1 阻擋兩次後才補上的維度，任一維度漂移即測試失敗。
+> 派發位置由 `--isolation {worktree,none}` 指定：`worktree` 變體的收尾句為 `ticket track commit`（於 worktree 路徑）→ `ticket track finish`，並註明 finish 被隔離守衛拒絕時於 Exit Status 記錄後交還 PM 於主 repo 代跑（權威為 `CLOSING_BY_ISOLATION`）；未帶且 where.files 含非豁免路徑時 stderr 警告。`--kind review` 骨架首行固定為 `Dispatch-Mode: readonly`（`SKELETON_TEMPLATE_REVIEW`），第二行起為 `Ticket: {id}`。需落票約束時加 `--note "..."`（寫入票的「派發日誌」章節）；審查派發改 `--kind review`（輸出不含認領/收尾的審查骨架，改用審查標的/視角/裁決問題/回報格式四欄）。指令輸出即可直接複製貼入 `Agent(...)` prompt。同步保護（`.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`）涵蓋兩個獨立維度，缺一不足：(1) 骨架常數是否仍命中 length-guard hook 的模板關鍵字（僅影響 Layer 2 軟提示）；(2) 骨架**實際組裝後的行數**（含 `--commit-policy agent` 短版指標句、觸及 hooks 目錄票的額外提醒）是否仍 <= PROMPT_LINE_LIMIT（Layer 1 硬上限，無豁免）——(2) 是骨架曾實際成長至 39-48 行、逐字貼入被 Layer 1 阻擋兩次後才補上的維度，任一維度漂移即測試失敗。
 
 > **claim 行必帶 `--as {agent_name}`**（派發身份前移，W5-005 F1a）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
 
@@ -624,7 +624,7 @@ commit 前快速掃描禁用字（數據/代碼/默認/文檔/軟件/硬件/信�
 
 > **用途**：派發實作代理人執行**唯讀規劃/分析階段**（如 TDD Phase 3a 只讀不寫）時，prompt 首行宣告 `Dispatch-Mode: readonly` 可豁免 worktree 強制，不需先建立/切換 worktree 即可派發。
 >
-> **權威來源**：完整判準（聲明方式三條件 AND、反例、與 review mode 的 OR 關係、與 Agent 工具 `dispatch_mode` 參數失效的實測結論）見 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節；本節僅提供派發 prompt 骨架速查。
+> **權威來源**：完整判準（聲明方式三條件 AND、反例、關鍵字豁免已移除、與 Agent 工具 `dispatch_mode` 參數失效的實測結論）見 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節；本節僅提供派發 prompt 骨架速查。
 
 **聲明方式**：prompt **首行**（strip 後第一行，非文中任意位置）逐字寫 `Dispatch-Mode: readonly`：
 
@@ -653,7 +653,7 @@ Ticket: {ticket_id}
 | 外部（非本專案）`.claude/` 路徑 | 不可用（不受本豁免影響，判斷序列中先於本豁免被阻擋） |
 | Agent 工具 `dispatch_mode: "readonly"` 結構化參數 | 無效——CC runtime 剝離 Agent tool_input 自訂欄位，唯一有效聲明方式是本節的 prompt 首行文字 |
 
-**與既有審查模式豁免（W10-084）的關係**：兩者為 OR 關係，任一命中即豁免；審查模式是 prompt 全文關鍵字比對（「審查/review/掃描/scan/評估/evaluate」），本豁免是首行固定格式協議，判準互相獨立、互不取代。
+**與既有審查模式豁免（W10-084）的關係**：關鍵字豁免已移除，審查派發唯一路徑為首行宣告。理由：實作票收尾標準用語「Phase 4 評估」必然命中子字串，守衛失效方向為放行；改為未宣告即阻擋。
 
 ---
 
@@ -779,6 +779,8 @@ ticket track complete <ticket-id> --as <自身 agent 名稱>
 ---
 
 ## tests/ 修改派發 SOP（W1-051）
+
+> **已被取代**：本 SOP 在共用主工作樹以 `git checkout -b` 建 feat branch，違反 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉。涉及 tests/ 的實作派發改用 `isolation: "worktree"`，派發位置查該檔〈派發位置判準（強制）〉；本節保留為歷史記錄，不再作為派發選項。
 
 **用途**：派發涉及 tests/ 修改的 agent 前，PM 必須先建立 feat branch，避免代理人在受保護的 main branch 上被 branch-verify-hook 阻擋。
 
@@ -1063,7 +1065,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-09-14
+**Last Updated**: 2026-09-29
+**Version**: 1.36.0 — 〈tests/ 修改派發 SOP〉加註已被 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉取代，改路由至〈派發位置判準（強制）〉；push-first 與 finish 兩節內容不變，由該判準表引用（框架 issue 101）。
 **Version**: 1.35.0 — 「既有失敗歸因約束句（PC-BAL-022）」後新增「派發裁示不留未定義行為約束句（PC-GPD-026）」子節：觸發條件（裁示句「補 X」型句型只指名決策點、未給具體內容）+ Why/Consequence（執行者填空後外觀取得裁決權威，與既有先例矛盾要等事後審查才浮現）+ 正反例對照表；「填空檢查清單」同步補一列。實證來源：一次規格回寫派發裁示留白「並補未選定時的呈現」未寫內容，執行者自行決定「不另計狀態」與同規格既有先例（另一過渡行為被提升為一級狀態）矛盾，另建 `PC-GPD-026` 記錄。
 
 **Last Updated**: 2026-09-08

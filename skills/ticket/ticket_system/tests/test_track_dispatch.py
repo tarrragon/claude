@@ -655,3 +655,71 @@ def test_dispatch_validate_passes_when_acceptance_is_filled(monkeypatch):
     rc = tdv_mod.execute_dispatch_validate(args, "0.0.0")
 
     assert rc == 0
+
+
+# --- --isolation 感知與 review 首行宣告（0.3.2-W1-013） -------------------------
+
+_NON_EXEMPT_FILES = ["src/app/main.dart", ".claude/skills/ticket/SKILL.md"]
+_EXEMPT_FILES = [".claude/hooks/x.py", "docs/a.md", "CHANGELOG.md", "scripts/experiments/e.py"]
+
+
+def _dispatch_out(args, capsys):
+    rc = td_mod.execute_dispatch(args, "0.0.0")
+    captured = capsys.readouterr()
+    return rc, captured.out, captured.err
+
+
+def test_dispatch_isolation_worktree_vs_default_closing_differs(dispatch_ticket, capsys):
+    """E1：同票帶 --isolation worktree 與不帶，收尾句不同。"""
+    _, out_default, _ = _dispatch_out(_base_args(), capsys)
+    _, out_wt, _ = _dispatch_out(_base_args(isolation="worktree"), capsys)
+
+    assert out_default != out_wt
+    assert "ticket track complete" in out_default
+    assert "ticket track finish" not in out_default
+    assert "ticket track finish" in out_wt
+    assert "ticket track complete" not in out_wt
+    assert "PM" in out_wt.splitlines()[-1] or "代跑" in out_wt
+
+
+def test_dispatch_isolation_none_keeps_complete_closing(dispatch_ticket, capsys):
+    _, out_none, _ = _dispatch_out(_base_args(isolation="none"), capsys)
+    _, out_default, _ = _dispatch_out(_base_args(), capsys)
+    assert out_none == out_default
+
+
+def test_dispatch_review_first_line_declares_readonly_normal_does_not(dispatch_ticket, capsys):
+    """E1：review 首行 Dispatch-Mode: readonly，normal 首行不是。"""
+    _, out_review, _ = _dispatch_out(
+        _base_args(kind="review", review_perspective="p", decision_question="q"), capsys
+    )
+    _, out_normal, _ = _dispatch_out(_base_args(), capsys)
+
+    assert out_review.splitlines()[0] == "Dispatch-Mode: readonly"
+    assert out_review.splitlines()[1].startswith("Ticket:")
+    assert out_normal.splitlines()[0] != "Dispatch-Mode: readonly"
+    assert "Dispatch-Mode" not in out_normal
+
+
+def test_dispatch_warns_when_non_exempt_files_and_no_isolation(tmp_path, monkeypatch, capsys):
+    _make_dispatch_ticket(tmp_path, monkeypatch, where_files=_NON_EXEMPT_FILES)
+    rc, out, err = _dispatch_out(_base_args(), capsys)
+    assert rc == 0
+    assert "WARNING" in err
+    assert "parallel-dispatch.md" in err
+    assert "ticket track claim" in out  # 骨架照常輸出
+
+
+def test_dispatch_no_warning_when_all_files_exempt(tmp_path, monkeypatch, capsys):
+    _make_dispatch_ticket(tmp_path, monkeypatch, where_files=_EXEMPT_FILES)
+    rc, _, err = _dispatch_out(_base_args(), capsys)
+    assert rc == 0
+    assert "WARNING" not in err
+
+
+@pytest.mark.parametrize("isolation", ["none", "worktree"])
+def test_dispatch_no_warning_when_isolation_explicit(tmp_path, monkeypatch, capsys, isolation):
+    _make_dispatch_ticket(tmp_path, monkeypatch, where_files=_NON_EXEMPT_FILES)
+    rc, _, err = _dispatch_out(_base_args(isolation=isolation), capsys)
+    assert rc == 0
+    assert "WARNING" not in err

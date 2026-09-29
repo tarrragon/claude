@@ -84,6 +84,8 @@ PM 在派發 / 拆分 / 排序 / 審查決策時，Wave 容量檢查依 token �
 
 ### tests/ 修改派發 SOP
 
+> **已被取代**：下列「在 main 執行 `git checkout -b`」做法違反 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉。涉及 `tests/` 的實作派發改用 `isolation: "worktree"`，派發位置查該檔〈派發位置判準（強制）〉；本段保留為歷史記錄。
+
 派發涉及 `tests/` Edit/Write 的代理人前，PM 先在 main 執行 `git checkout -b feat/<ticket-id>-<short-desc>`。
 
 **Why**：`tests/` 不在 branch-verify-hook exempt 內（豁免清單僅 `.claude/`、`docs/`、`scripts/experiments/`），直接派發會被 deny 並浪費代理人回合。
@@ -177,5 +179,6 @@ SOP 詳見 `.claude/references/agent-dispatch-template.md`「tests/ 修改派發
 
 ---
 
-**Last Updated**: 2026-08-17
+**Last Updated**: 2026-09-29
+**Version**: 1.1.0 — 〈tests/ 修改派發 SOP〉加註已被 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉取代，改路由至〈派發位置判準（強制）〉（框架 issue 101）。
 **Version**: 1.0.0 — 初始建立：承接 `rules/core/pm-role.md` 外移的 substance（職責邊界完整判準、行為循環執行細節、Caveat 判讀、Session-start 清點、Re-center Protocol）。外移依據 `rules/README.md`「自動載入預算原則」與 `references/auto-load-stub-conventions.md` 外移 SOP。

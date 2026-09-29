@@ -2,7 +2,7 @@
 name: branch-worktree-guardian
 description: "Branch Worktree Guardian - Git 分支和 Worktree 管理工具。Use for: (1) 新開發需求時建立隔離分支, (2) 使用 worktree 機制避免分支衝突, (3) 驗證當前工作分支正確性, (4) 預防在錯誤分支上開發"
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Branch Worktree Guardian
@@ -58,18 +58,17 @@ Git 分支和 Worktree 管理工具，用於預防在錯誤分支上開發的問
 git checkout main
 git pull origin main
 
-# 2. 創建 feature 分支
-git checkout -b feat/your-feature-name
+# 2. 建立 worktree 並同時建立 feature 分支（在專案同級目錄；主工作樹停在 main 不動）
+git worktree add ../project-name-feature-name -b feat/your-feature-name
 
-# 3. 創建 worktree（在專案同級目錄）
-git worktree add ../project-name-feature-name feat/your-feature-name
-
-# 4. 切換到 worktree 目錄
+# 3. 切換到 worktree 目錄
 cd ../project-name-feature-name
 
-# 5. 確認分支正確
+# 4. 確認分支正確
 git branch --show-current
 ```
+
+> 不在主工作樹執行 `git checkout -b`：主工作樹由並行 session 與 hook 共用，其 HEAD 離開 main 會把它們一併帶到錯誤分支。完整條款見 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉。
 
 ### 查看現有 Worktree
 

@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.0（本地變更，指向 tarrragon/claude#101）— `agent-dispatch-validation-hook` 拆除審查模式關鍵字豁免（`REVIEW_MODE_KEYWORDS`、`_is_review_mode_prompt`、全文子字串放行分支）：實作票收尾標準用語「Phase 4 評估」必然命中子字串，實作派發被放行至共用主工作樹，守衛失效方向為放行。審查豁免唯一路徑為 prompt 首行 `Dispatch-Mode: readonly`。外部 `.claude/` 阻擋後放行順序改為 readonly 首行、`isolation=worktree`、純主 repo `.claude/`（ARCH-015）、阻擋；帶 isolation 的派發 log 記為 worktree 放行。E2 對照測試：含「Phase 4 評估」無 isolation 者阻擋、加首行宣告者放行、帶 isolation 者 log 為 worktree 放行。
+
+**Version**: 2.43.0（本地變更，指向 tarrragon/claude#101）— `ticket track dispatch` 骨架感知派發位置：新增 `--isolation {worktree,none}`（預設不帶＝none），worktree 變體 normal 骨架收尾句改 `ticket track commit` → `ticket track finish` 並註明 finish 被隔離守衛拒絕時交還 PM 代跑（收尾句以 `CLOSING_BY_ISOLATION` 對表選用）；未帶旗標且 where.files 含非豁免路徑時 stderr WARNING（不阻擋，豁免清單同 branch-verify-hook）。`--kind review` 骨架首行加 `Dispatch-Mode: readonly`（normal 不帶）。E1 對照測試：帶與不帶 isolation 收尾句不同、review 與 normal 首行不同、警告三情境（非豁免／全豁免／明示旗標）各異。
+
 **Version**: 2.42.5（本地變更，指向 tarrragon/claude#55）— 讀取端支援跨版本 blocker：`blocker_resolution` 新增 `resolve_blocker`（版本內 map 查無時以 blocker ID 自身的版本前綴載入，取不到版本或載入失敗維持「未解除」），`is_fully_unblocked` 與 `track_runqueue._unresolved_blockers` 共用，消除第二份判定實作的漂移空間。`complete` 的反向解鎖除本版本外，加掃 todolist 中尚未 completed 的其他版本（新增 `list_open_versions`；候選以 ID 去重、以候選自身版本落盤），被其他版本 blocker 擋住的票 complete 後可由 blocked 轉 pending 並列出。不變：`validate_blocked_by_references` 的循環偵測仍只看單一版本。E1／E2 對照測試：跨版本 completed／pending／真不存在三案判定各異，反向解鎖含無關票對照。
 
 **Version**: 2.42.4（本地變更，指向 tarrragon/claude#55）— `set-related-to`、`set-blocked-by`、`create --blocked-by` 改以被引用 ID 自身的版本前綴驗證存在性（新增 `field_validators.resolve_reference_version`，取不到版本前綴才退回目標票版本），修復引用建在其他版本的 ticket 時一律回報找不到的問題。載入仍經 `track_relations` 與 `field_validators` 模組層的 `load_ticket`。不變：`validate_blocked_by_references` 的循環偵測仍只看單一版本。E1／E2 對照測試：替身以 `(version, id)` 為鍵，兩個方向的跨版本引用成功，真不存在的 ID 仍報找不到。讀取端（blocker 解除判定、runqueue、complete 反向解鎖）由後續子票處理。

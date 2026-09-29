@@ -55,7 +55,7 @@ Dispatch-Mode: readonly
 | 非首行宣告（如夾在 prompt 中段） | 三條件不符，不豁免 |
 | Agent 工具 `dispatch_mode` 結構化參數 | **無效**——探針實測確認 CC runtime 組 PreToolUse hook payload 時剝離 Agent tool_input 的自訂欄位，唯一有效聲明方式是 prompt 首行文字（0.2.1-W3-269 Problem Analysis 附 hook log 證據） |
 
-**與 review mode 的關係**：與既有 W10-084 審查模式豁免（prompt 全文含「審查/review/掃描/scan/評估/evaluate」等關鍵字）為 **OR 關係**——任一命中即豁免 worktree 強制，兩者判斷邏輯互相獨立、互不取代。差異：review mode 是全文關鍵字比對，本豁免是首行固定格式協議（結構化精確比對，非關鍵字掃描），issue 36 明文要求後者形式以避免關鍵字比對法的誤判風險。
+**與 review mode 的關係**：全文關鍵字豁免（原 W10-084，「審查/review/掃描/scan/評估/evaluate」）已移除，審查派發的唯一豁免路徑為本節首行宣告。理由：實作票收尾的標準用語「Phase 4 評估」必然命中子字串，實作派發因此被放行至共用主工作樹，守衛失效方向為放行；首行固定格式協議為結構化精確比對，未宣告即阻擋。以實作代理人擔任審查角色時，prompt 首行必須是 `Dispatch-Mode: readonly`。
 
 **其餘兩道檢查無需另外處理**：`worktree-pre-dispatch-branch-drift-hook.py`（即本文件「Worktree 狀態檢查觸發點」表的 Guard B）與 `.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py` 皆以 `isolation == "worktree"` 為觸發前提；本豁免路徑不設定該欄位，兩者的跳過條件自然生效，不需額外設定。
 

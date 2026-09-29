@@ -72,6 +72,39 @@
 
 ---
 
+## 派發位置判準（強制）
+
+派發任何會寫入檔案的代理人之前，依本表決定派發位置。本表是派發位置的單一入口：每格只指向既有權威條文，不重述條文內容；條文與本表衝突時以條文為準並回修本表。
+
+**非豁免路徑**指 `branch-verify-hook.py` 豁免清單以外的路徑（`lib/`、`test/`、`src/` 等產品程式碼與測試）；**豁免路徑**指 `.claude/`、`docs/` 與頂層文件（`CLAUDE.md`、`README.md`、`CHANGELOG.md` 等），在保護分支上可直接編輯。
+
+| 派發類型 | isolation 值 | 派發前置 | 收尾指令 | 禁止事項 |
+|---------|-------------|---------|---------|---------|
+| 實作派發，`where.files` 含非豁免路徑 | `isolation: "worktree"`（`.claude/references/parallel-dispatch-worktree-details.md`〈風險分級表〉高風險列） | `git push origin main`（同檔〈worktree 派發注意事項〉worktree base 條；`.claude/references/agent-dispatch-template.md`〈worktree 派發 base 同步指引〉） | 代理人 `ticket track finish <id> --as <agent>`；被隔離守衛拒絕時交還 PM 於主 repo 代跑（template〈worktree 派發收尾指引：用 `finish` 別名避開 `complete` 誤判〉；`.claude/references/agent-dispatch-decision.md`〈isolation:worktree 派發的 complete 收尾限制〉）；PM 合入依本檔〈PM 側 worktree 合入與驗收三軸（強制）〉 | 不帶 isolation 派到共用主工作樹；代理人或 PM 在共用主工作樹切換或建立分支（下節） |
+| 實作派發，`where.files` 全為豁免路徑 | 不帶（主 repo cwd，`agent-dispatch-validation-hook.py` 放行純主 repo `.claude/` 目標）；同時修改 `.claude/` 的派發數上限見 worktree-details〈`.claude/` 修改類並行數限 ≤ 2〉 | 無 | 代理人 `ticket track complete <id> --as <agent>`（主 repo cwd 維持原名） | 在共用主工作樹切換或建立分支（下節） |
+| 唯讀審查／分析派發 | 不帶；prompt 首行宣告 `Dispatch-Mode: readonly`（template〈唯讀派發豁免 worktree 強制〉） | 無 | 無 commit；PM 讀取報告後自行落地 | 寫入任何檔案；以 prompt 內文的審查類字眼代替首行宣告 |
+
+PM 前台自己修改檔案時同樣適用本表的禁止事項：豁免路徑直接在 main 編輯；非豁免路徑用 `/worktree create <ticket-id>` 建立獨立工作樹，不在主工作樹開分支。
+
+### 禁止在共用主工作樹切換或建立分支（強制）
+
+**禁止代理人與 PM 在共用主工作樹（主 repo 的 checkout）執行 `git checkout -b`、`git switch -c`、`git checkout <其他分支>` 等切換或建立分支的操作。**
+
+**Why**：主工作樹是所有並行 session、背景代理人與 hook 共同讀取的單一 checkout，其 HEAD 所在分支就是這些讀者的基準。
+
+**Consequence**：主工作樹 HEAD 一旦離開 main，並行 session 的編輯與提交落到錯誤分支，以 main 為基準的 hook（保護分支判定、worktree 派發前 push 檢查等）改以錯誤分支判斷，且事後只能靠 checkout main 再合回收拾。實例：某 consumer 專案的實作代理人被派到共用主工作樹，在 main 被 `branch-verify-hook` 擋下後依拒絕訊息自行開 feat 分支，提交 7 個 commit，並行 session 被一併帶離 main。
+
+**Action**：
+
+| 執行者 | 在 main 對非豁免路徑編輯被擋下時 |
+|-------|------------------------------|
+| 被派發的代理人 | 停手，於 ticket NeedsContext 記錄「在 main 被 branch-verify-hook 擋下」，交還 PM 以 `isolation: "worktree"` 重派；不自行建立或切換分支 |
+| PM 前台 | `/worktree create <ticket-id>` 建立獨立工作樹後在該工作樹編輯 |
+
+**優先序**：既有條文中指示在主 repo 執行 `git checkout -b` 的段落（`.claude/references/agent-dispatch-decision.md`〈方案 B：主 repo feat 分支（不隔離）〉、`.claude/references/agent-dispatch-template.md` 與 `.claude/references/pm-role-details.md` 兩處〈tests/ 修改派發 SOP〉）以本條為準，各處已加註路由至此。
+
+---
+
 ## 並行安全檢查（強制）
 
 ```markdown
@@ -537,7 +570,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
-**Last Updated**: 2026-09-23
+**Last Updated**: 2026-09-29
+**Version**: 4.34.0 - 〈並行安全檢查〉前新增「派發位置判準（強制）」單一判準表（實作派發含非豁免路徑／全為豁免路徑／唯讀審查三列 × isolation 值、派發前置、收尾指令、禁止事項四欄，每格只引用既有權威條文）與「禁止在共用主工作樹切換或建立分支（強制）」條款（Why／Consequence／分角色 Action，並宣告對既有三處 `git checkout -b` 指引的優先序）。來源：判準原散在風險分級表、template、agent-dispatch-decision 與 `branch-verify-hook.py` 拒絕訊息四處，某 consumer 專案的實作代理人被 hook 擋下後依訊息在共用主工作樹開分支，並行 session 被帶離 main（框架 issue 101）。
 **Version**: 4.33.0 - 〈並行派發後驗證〉下新增「PM 側 worktree 合入與驗收三軸（強制）」：合入四步與 ff 被拒重併規則、驗收三軸（票狀態以 `git show HEAD` 為準、內容對照 `where.files`、PM 覆核重跑）、四則失效處置（代理人自標 scope_blocker、自行推送主分支、驗收條件不可能成立、index.lock 與 hook 競爭）。代理人側 merge main 已在 template，PM 側此前無條文，一日內三次靠記憶處理。
 **Version**: 4.32.0 - 「派發 prompt 必含精準 git staging」表格 commit 階段列與「歷史註記」改寫：代理人票務提交場景預設改為 `ticket track commit`（隔離索引），精確 add 三步降為該命令失敗或不可用時的 fallback；PM 收尾等無票務 CLI 場景仍以精確 add 三步為預設。與 `bash-tool-usage-rules.md` 規則七、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步，收斂副本漂移。
 **Last Updated**: 2026-08-26

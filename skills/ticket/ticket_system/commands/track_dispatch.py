@@ -52,6 +52,7 @@ from ticket_system.lib.dispatch_skeleton import (
     STAGING_PHRASE_NONE,
     STAGING_PHRASE_PM,
     build_skeleton,
+    non_exempt_paths,
 )
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.section_locator import find_section
@@ -100,6 +101,7 @@ def _build_skeleton(args: argparse.Namespace) -> str:
         decision_question=args.decision_question or "{裁決問題}",
         commit_policy=commit_policy,
         touches_hook_scope=getattr(args, "_touches_hook_scope", False),
+        isolation=getattr(args, "isolation", None) or "none",
     )
 
 
@@ -313,6 +315,26 @@ def _touches_hook_protection_scope(ticket: dict) -> bool:
         return False
 
 
+def _warn_missing_isolation(ticket: dict, args: argparse.Namespace) -> None:
+    """未帶 --isolation 且 where.files 含非豁免路徑時，stderr 印 WARNING（不阻擋）。
+
+    帶任一 --isolation 值視為 PM 已明示，不警告。
+    """
+    if getattr(args, "isolation", None) or args.kind != "normal":
+        return
+    from ticket_system.lib.file_conflict import write_files
+
+    risky = non_exempt_paths(write_files(ticket))
+    if not risky:
+        return
+    sys.stderr.write(
+        "[WARNING] where.files 含非豁免路徑但未帶 --isolation："
+        f"{', '.join(risky)}。實作派發應使用 worktree 隔離"
+        "（--isolation worktree），確屬主工作樹派發請明示 --isolation none。"
+        "判準見 .claude/pm-rules/parallel-dispatch.md〈派發位置判準（強制）〉。\n"
+    )
+
+
 def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     """派發即落票：--note 寫入派發日誌章節 + kind="normal" 且
     commit_policy="agent" 時冪等寫入/更新「### Commit 規範」固定章節（骨架
@@ -380,6 +402,7 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
         print(block_message)
         return 1
 
+    _warn_missing_isolation(ticket, args)
     args._touches_hook_scope = _touches_hook_protection_scope(ticket)
 
     skeleton = _build_skeleton(args)
@@ -443,6 +466,16 @@ def register_dispatch_command(subparsers: "argparse._SubParsersAction") -> None:
         help=(
             "commit 歸屬：agent（預設，嵌入精準 staging 制式句權威版全文）/"
             " pm（PM 統一 commit，agent 不執行）/ none（本次派發不涉及 commit）"
+        ),
+    )
+    p_dispatch.add_argument(
+        "--isolation",
+        dest="isolation",
+        choices=["worktree", "none"],
+        default=None,
+        help=(
+            "派發位置：worktree（收尾句改 finish 並註明 PM 代跑）/ none（主工作樹，"
+            "收尾 complete；未帶且 where.files 含非豁免路徑時 stderr 警告）"
         ),
     )
     p_dispatch.add_argument(

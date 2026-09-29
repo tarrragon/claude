@@ -143,3 +143,49 @@ class TestExemptPathExceptionBehavior:
         )
 
         assert exit_code == 1
+
+
+# ============================================================================
+# E2 對照：deny 訊息角色分流（0.3.2-W1-012）
+# ============================================================================
+
+CRITERIA_SECTION = "派發位置判準（強制）"
+
+
+def _capture_same_repo_deny_message(monkeypatch, capsys) -> str:
+    """在保護分支上編輯同 repo 非豁免路徑，回傳 hook 輸出全文。"""
+    _set_stdin(
+        monkeypatch,
+        {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/foo.py"}},
+    )
+    monkeypatch.setattr(hook_module, "get_current_branch", lambda cwd=None: "main")
+    monkeypatch.setattr(hook_module, "is_allowed_branch", lambda branch: False)
+    monkeypatch.setattr(hook_module, "is_protected_branch", lambda branch: True)
+    monkeypatch.setattr(hook_module, "find_target_repo", lambda path: None)
+    monkeypatch.setattr(hook_module, "get_project_root", lambda cwd=None: Path("/repo"))
+    assert hook_module.main() == 0
+    return capsys.readouterr().out
+
+
+class TestDenyMessageRoleSplit:
+    def test_same_repo_deny_is_actually_deny(self, monkeypatch, capsys):
+        """正向對照：非豁免路徑於保護分支必須 deny（守衛未失效）。"""
+        out = _capture_same_repo_deny_message(monkeypatch, capsys)
+        assert "deny" in out
+
+    def test_same_repo_deny_has_no_checkout_b(self, monkeypatch, capsys):
+        out = _capture_same_repo_deny_message(monkeypatch, capsys)
+        assert "checkout -b" not in out
+
+    def test_same_repo_deny_has_role_split_and_criteria_anchor(self, monkeypatch, capsys):
+        out = _capture_same_repo_deny_message(monkeypatch, capsys)
+        assert "代理人：停手" in out
+        assert "PM：/worktree create" in out
+        assert CRITERIA_SECTION in out
+
+    def test_cross_repo_deny_has_no_checkout_b(self):
+        msg = hook_module.build_cross_repo_deny_message(
+            file_path="/other/src/a.py", target_repo="/other", target_branch="main"
+        )
+        assert "checkout -b" not in msg.replace("worktree add", "")
+        assert "git -C /other worktree add" in msg
