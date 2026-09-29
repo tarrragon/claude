@@ -2,6 +2,16 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.42.5（本地變更，指向 tarrragon/claude#55）— 讀取端支援跨版本 blocker：`blocker_resolution` 新增 `resolve_blocker`（版本內 map 查無時以 blocker ID 自身的版本前綴載入，取不到版本或載入失敗維持「未解除」），`is_fully_unblocked` 與 `track_runqueue._unresolved_blockers` 共用，消除第二份判定實作的漂移空間。`complete` 的反向解鎖除本版本外，加掃 todolist 中尚未 completed 的其他版本（新增 `list_open_versions`；候選以 ID 去重、以候選自身版本落盤），被其他版本 blocker 擋住的票 complete 後可由 blocked 轉 pending 並列出。不變：`validate_blocked_by_references` 的循環偵測仍只看單一版本。E1／E2 對照測試：跨版本 completed／pending／真不存在三案判定各異，反向解鎖含無關票對照。
+
+**Version**: 2.42.4（本地變更，指向 tarrragon/claude#55）— `set-related-to`、`set-blocked-by`、`create --blocked-by` 改以被引用 ID 自身的版本前綴驗證存在性（新增 `field_validators.resolve_reference_version`，取不到版本前綴才退回目標票版本），修復引用建在其他版本的 ticket 時一律回報找不到的問題。載入仍經 `track_relations` 與 `field_validators` 模組層的 `load_ticket`。不變：`validate_blocked_by_references` 的循環偵測仍只看單一版本。E1／E2 對照測試：替身以 `(version, id)` 為鍵，兩個方向的跨版本引用成功，真不存在的 ID 仍報找不到。讀取端（blocker 解除判定、runqueue、complete 反向解鎖）由後續子票處理。
+
+**Version**: 2.42.3（本地變更，指向 tarrragon/claude#77）— `complete` 內建 auto-commit 只在工作日誌本次確實寫入時才把它列入提交範圍：`append_worklog_progress` 回傳 bool（True＝本次寫入；檔案不存在、冪等跳過、無日期標題區段、寫後驗證失敗、例外皆 False），`complete()` 據此決定 `modified_paths`。此前無條件列入，工作日誌未變更時 `commit_files_isolated` 自我驗證（實際變更須等於預期）失敗，整批提交放棄，連票面 md 也未提交。`commit_files_isolated` 的自我驗證不放寬（影響所有呼叫端）。`track_batch` 忽略回傳值，不受影響。E1 對照測試：同批 fixture 下追加回傳 True／False 兩案，提交範圍的工作日誌成員不同。
+
+**Version**: 2.42.2（本地變更，指向 tarrragon/claude#55）— `ticket track commit` 將票自身 md 視為隱含可寫範圍：ANA 票 where.files 預設唯讀，導致無法提交自己的票面（誤報「未宣告任何寫入路徑」）。輸入僅票自身 md 時放行；輸入含其他路徑時判定不變（宣告為空仍沿用原錯誤與 ANA `::write` 說明，非票面路徑仍整批拒絕）。E2 對照測試：票自身 md 放行、票自身 md 搭配非票面路徑拒絕。
+
+**Version**: 2.42.1（本地變更，指向 tarrragon/claude#102）— `acceptance_auditor._check_spawned_recursive` 改以衍生票自身 ID 的版本前綴載入 spawned（`extract_version_from_ticket_id`，取不到才退回父票版本），修復建在其他版本的合法衍生票在 complete ANA 票時一律被判 `not_found` 的問題（此前只能整批 `--yes-spawned` 放行）。`_check_children_recursive` 不受影響（children ID 恆以父票 ID 為前綴）。E1 對照測試：同批 fixture 下跨版本存在與真不存在兩案結果不同。
+
 **Version**: 2.42.0 — `migrate` 碰撞行為改為改號而非拒絕：實際執行階段（無 `--force-overwrite`）目標 ID 已存在時，改取目標版本同 Wave 下一可用序號完成遷移，並於改號後票面寫入 `migrated_from: <原目標 ID>`；dry-run 對碰撞改判 FAIL（原為可放行的 WARNING）並印改號預覽，供 `version-release finish --dry-run` 對前移撞號提早止血。`--force-overwrite` 覆寫語意不變（仍記錄 audit log 後覆寫）。批量遷移移除碰撞 pre-scan fail-fast——碰撞不再是需要整批擋下的失敗，改由每筆遷移各自對當下檔案系統狀態判斷並改號，天然支援批次內連環碰撞（前一筆改號後的新目標仍會被下一筆的碰撞檢查看見）。動機：多 PM 或跨版本並行建票時，`finish` 只換版本前綴保留原序號，撞號必然發生；過渡期僅能人工遷到空號。
 
 **Version**: 2.41.0 — 版本溢出目標規則改為優先路由至最近的「開放後繼版本」（todolist.yaml 中版本號較大、狀態 planned/active 且未 `scope: frozen` 者），未命中才依動詞算 patch+1／minor+1；`_suggest_next_patch` 對未凍結的 active 版本同步改為直接建議該 active，不再誤算未在 todolist.yaml 註冊的 patch+1（新增 `find_open_successor`，`references/create-command.md`〈版本範圍凍結硬閘門〉溢出目標表同步更新，WRAP canonical #55，2026-09-23）。

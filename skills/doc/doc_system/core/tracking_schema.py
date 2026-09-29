@@ -204,7 +204,7 @@ GRAPH_NODE_TYPES = {
     },
     "Ticket": {
         "layer": GRAPH_LAYER_ESTABLISHED,
-        "id_pattern": r"^[\w.]+-W\d+-\d+$",
+        "id_pattern": r"^[\w.]+-W\d+-\d+(\.\d+)*$",
         "carrier": "docs/work-logs/.../tickets/{id}.md frontmatter",
         # Ticket 欄位/驗證器歸屬 ticket_system（field-semantics.md 為權
         # 威），本節僅收錄 doc_system 消費圖譜所需的 id_pattern 與 carrier。

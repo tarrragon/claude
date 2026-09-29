@@ -163,6 +163,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | TEST-BAL-008 | 自建 fixture 的資料形狀與真實資料分佈不同，使歸納式推導的退化案例測不出來 | 中 | — |
 | TEST-BAL-009 | mutation testing 的改回落在同一秒內，pyc 秒級 mtime 判準使還原後仍載入變異位元碼 | 中 | — |
 | TEST-BAL-010 | 測試以 in-process import 載入模組，遮蔽隔離執行環境（PEP 723 / venv / 容器）的依賴缺失，零依賴 hook 靜默 fail-open | 高 | — |
+| TEST-GPD-001 | 同 bundle id 的多份 .app 使系統依 bundle id 啟動錯的那一份，實機觀測被第二實例污染 | 高 | 0.3.1 |
 
 ### 文件 (DOC)
 

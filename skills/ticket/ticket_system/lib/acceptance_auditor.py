@@ -32,6 +32,7 @@ from .constants import (
 # 原本 acceptance_auditor 內有平行版本（簡單 regex，無 word boundary / 表格豁免），
 # 與 ticket_validator 版本邏輯漂移；W10-125 起統一使用 ticket_validator 版本。
 from .ticket_validator import _is_placeholder as _shared_is_placeholder
+from .ticket_validator import extract_version_from_ticket_id
 
 
 # ============================================================
@@ -251,7 +252,9 @@ def _check_spawned_recursive(
         visited.add(spawned_id)
 
         # 載入 spawned ticket
-        spawned_ticket = load_ticket(version, spawned_id)
+        # 衍生票可建在其他版本：以自身 ID 的版本載入，取不到才退回父票版本
+        spawned_version = extract_version_from_ticket_id(spawned_id) or version
+        spawned_ticket = load_ticket(spawned_version, spawned_id)
         if not spawned_ticket:
             incomplete.append(f"{spawned_id}: not_found")
             continue

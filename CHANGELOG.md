@@ -1,3 +1,22 @@
+## [2.62.0] - 2026-09-29
+
+### Summary
+feat: blocker 解除判定與 complete 反向解鎖支援跨版本 blocker; fix: 跨版本 blocker 解析失敗時輸出 warning; fix: 關聯寫入端以被引用 ID 自身版本驗證存在性 (+6 more)
+
+Changes: 1 feat, 4 fix, 1 docs, 1 chore, 2 other
+
+- feat: blocker 解除判定與 complete 反向解鎖支援跨版本 blocker
+- fix: 跨版本 blocker 解析失敗時輸出 warning
+- fix: 關聯寫入端以被引用 ID 自身版本驗證存在性
+- fix: complete auto-commit 僅在工作日誌本次寫入時列入提交範圍
+- fix: Ticket id_pattern 接受子票 ID，重產內嵌型別表與 IT-2 凍結測資
+- docs: TEST-GPD-001 同 bundle id 多份 .app 污染實機觀測
+- chore: .claude/VERSION 2.61.1（sync-push：compositional-writing 1.34.1、multi-round-review 2.23.1）
+- other: fix 某票 track commit 允許提交票自身 md
+- other: fix 某票 acceptance_auditor 以衍生票自身版本載入 spawned
+
+---
+
 ## [2.61.1] - 2026-09-25
 
 ### Summary

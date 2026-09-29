@@ -14,9 +14,64 @@ unblock / 建議列表）與 track_runqueue（list 視圖可執行判定）共�
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import sys
+from typing import Any, Dict, List, Optional
 
 from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_CLOSED
+from ticket_system.lib.ticket_loader import get_project_root, load_ticket
+from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
+
+VERSION_STATUS_COMPLETED = "completed"
+
+
+def resolve_blocker(
+    blocker_id: str, ticket_map: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    """取得 blocker 票：先查版本內 ticket_map，查無再以 ID 自身版本前綴載入。
+
+    跨版本 blocker 不在呼叫端的版本內全集裡。取不到版本前綴或載入失敗回傳
+    None，呼叫端據此保守判定為未解除。
+    """
+    hit = ticket_map.get(blocker_id)
+    if hit is not None:
+        return hit
+    version = extract_version_from_ticket_id(blocker_id)
+    if not version:
+        return None
+    try:
+        return load_ticket(version, blocker_id)
+    except Exception as err:
+        sys.stderr.write(
+            f"[blocker_resolution] WARNING: 載入 blocker {blocker_id} 失敗"
+            f"（{err}），視為未解除\n"
+        )
+        return None
+
+
+def list_open_versions() -> List[str]:
+    """回傳 todolist 中尚未 completed 的版本（供跨版本反向解鎖掃描）。
+
+    todolist 不存在或解析失敗回傳空清單（僅退化為同版本掃描）。
+    """
+    path = get_project_root() / "docs" / "todolist.yaml"
+    if not path.exists():
+        return []
+    try:
+        import yaml
+
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return [
+            str(v["version"])
+            for v in data.get("versions", [])
+            if v.get("status") != VERSION_STATUS_COMPLETED
+        ]
+    except Exception as err:
+        sys.stderr.write(
+            f"[blocker_resolution] WARNING: 解析 todolist.yaml 失敗（{err}），"
+            "跨版本反向解鎖退化為僅掃同版本（略過）\n"
+        )
+        return []
 
 
 def is_fully_unblocked(
@@ -53,7 +108,7 @@ def is_fully_unblocked(
         else (STATUS_COMPLETED,)
     )
     for blocker_id in blocked_by:
-        blocker = ticket_map.get(blocker_id)
+        blocker = resolve_blocker(blocker_id, ticket_map)
         if blocker is None:
             return False
         if blocker.get("status") not in resolved_statuses:

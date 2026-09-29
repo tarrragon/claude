@@ -2,6 +2,13 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Local（本專案，尚未上游；不改 SKILL.md 版號）**: Ticket 型 `id_pattern` 由
+`^[\w.]+-W\d+-\d+$` 改為 `^[\w.]+-W\d+-\d+(\.\d+)*$`，接受 ticket CLI 自產的子票 ID
+（`NNN.M`、`NNN.M.K`）；`tracking_schema.json` 已重產，`schema_generated_at_framework_version`
+刻意維持 2.60.13。`test_tracking_schema_conformance.py` 新增
+`TestTicketIdPatternSubTicketDiscrimination`（子票匹配 + 殘缺 ID 被拒的正向對照）。canonical 修正追蹤
+tarrragon/claude#99；下次 `sync-pull` 若上游尚未修正會覆蓋本變更。
+
 **Version**: 1.22.6 — 每個以檔案為 carrier 的節點型別（PROP／SPEC／UC／Ticket／DomainBundle／EVT）
 新增機器可比對的 `carrier_path_patterns`（清單，每項為 `{pattern, specificity}`，pattern 與
 `id_pattern` 同一 python-re 方言；specificity 為二元組 `[literal_segment_count,

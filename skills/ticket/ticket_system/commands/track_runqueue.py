@@ -51,7 +51,7 @@ from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.section_locator import find_section
 from ticket_system.lib.staleness import is_live_occupied, is_stale_in_progress
-from ticket_system.lib.blocker_resolution import is_fully_unblocked
+from ticket_system.lib.blocker_resolution import is_fully_unblocked, resolve_blocker
 from ticket_system.lib.constants import (
     STATUS_COMPLETED,
     STATUS_CLOSED,
@@ -159,12 +159,12 @@ def _unresolved_blockers(
     if ticket_map is None:
         return list(blocked_by)
     resolved_statuses = (STATUS_COMPLETED, STATUS_CLOSED)
-    return [
-        blocker_id
-        for blocker_id in blocked_by
-        if ticket_map.get(blocker_id) is None
-        or ticket_map[blocker_id].get("status") not in resolved_statuses
-    ]
+    unresolved = []
+    for blocker_id in blocked_by:
+        blocker = resolve_blocker(blocker_id, ticket_map)
+        if blocker is None or blocker.get("status") not in resolved_statuses:
+            unresolved.append(blocker_id)
+    return unresolved
 
 
 def _is_listable(ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None) -> bool:

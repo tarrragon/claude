@@ -50,6 +50,7 @@ def _run_complete(
     reverse_unblock_tickets=None,
     captured_saves=None,
     commit_result=None,
+    worklog_written=True,
 ):
     """共用 patch 結構，回傳 (result, captured_commit_calls)。
 
@@ -124,7 +125,8 @@ def _run_complete(
         "ticket_system.commands.lifecycle.resolve_ticket_path",
         side_effect=fake_resolve_path,
     ), patch(
-        "ticket_system.commands.lifecycle.append_worklog_progress"
+        "ticket_system.commands.lifecycle.append_worklog_progress",
+        return_value=worklog_written,
     ), patch(
         "ticket_system.commands.lifecycle._build_worklog_path_for_stage",
         return_value=fake_worklog_path,
@@ -171,6 +173,21 @@ class TestCompleteAutoStage:
         assert any("worklog" in p for p in committed), committed
         # W4-026：cwd 錨定為 modified_paths[0]（票面 md）所在目錄
         assert calls[0]["cwd"] == "/tmp", calls[0]
+
+    def test_worklog_written_vs_skipped_changes_commit_scope(self, capsys):
+        """E1 對照：追加回傳 True／False 兩案，提交範圍的工作日誌成員不同。"""
+        _, calls_written = _run_complete(
+            ticket=_build_ticket(), worklog_written=True
+        )
+        _, calls_skipped = _run_complete(
+            ticket=_build_ticket(), worklog_written=False
+        )
+
+        written = calls_written[0]["paths"]
+        skipped = calls_skipped[0]["paths"]
+        assert any("worklog" in p for p in written), written
+        assert not any("worklog" in p for p in skipped), skipped
+        assert any("0.18.0-W17-998.md" in p for p in skipped), skipped
 
     def test_complete_cascade_does_not_commit_children(self, capsys):
         """children 解鎖仍落盤（save_ticket 被呼叫），但不進入提交清單。"""

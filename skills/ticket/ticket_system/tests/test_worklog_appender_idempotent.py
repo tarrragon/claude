@@ -97,6 +97,40 @@ def test_existing_record_blocks_reappend(tmp_path):
     assert _count_lines_for(worklog, "0.31.1-W8-099") == 1
 
 
+def test_return_value_true_only_when_line_written(tmp_path):
+    """回傳值表示本次是否確實寫入：首次 True，冪等跳過 False。"""
+    _setup_worklog(tmp_path)
+
+    with patch.object(wa, "get_ticket_state_root", return_value=tmp_path):
+        first = wa.append_worklog_progress("0.31.1", "0.31.1-W8-099", "t")
+        second = wa.append_worklog_progress("0.31.1", "0.31.1-W8-099", "t")
+
+    assert first is True
+    assert second is False
+
+
+def test_no_date_heading_returns_false_and_file_unchanged(tmp_path):
+    """工作日誌無日期標題區段：回傳 False 且檔案內容不變。"""
+    worklog = tmp_path / WORKLOG_REL
+    worklog.parent.mkdir(parents=True, exist_ok=True)
+    original = "# v0.31.1 版本工作日誌\n\n## 前情提要\n\n## 開發日誌\n"
+    worklog.write_text(original, encoding="utf-8")
+
+    with patch.object(wa, "get_ticket_state_root", return_value=tmp_path):
+        result = wa.append_worklog_progress("0.31.1", "0.31.1-W8-099", "t")
+
+    assert result is False
+    assert worklog.read_text(encoding="utf-8") == original
+
+
+def test_missing_worklog_returns_false(tmp_path):
+    """工作日誌檔不存在：回傳 False。"""
+    with patch.object(wa, "get_ticket_state_root", return_value=tmp_path):
+        result = wa.append_worklog_progress("0.31.1", "0.31.1-W8-099", "t")
+
+    assert result is False
+
+
 def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args], cwd=cwd, capture_output=True, text=True, check=True

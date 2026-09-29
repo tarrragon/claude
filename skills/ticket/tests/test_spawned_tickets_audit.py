@@ -135,3 +135,48 @@ def test_validate_spawned_not_found_fails():
     assert passed is False
     joined = "\n".join(issues)
     assert "not_found" in joined
+
+
+# E1 對照：衍生票建在其他版本（fake_load 以 (version, id) 為鍵）
+def _patch_versioned_loader(store):
+    def fake_load(version, ticket_id):
+        return store.get((version, ticket_id))
+
+    return patch(
+        "ticket_system.lib.acceptance_auditor.load_ticket",
+        side_effect=fake_load,
+    )
+
+
+_CROSS_VERSION_STORE = {
+    ("0.4.0", "0.4.0-W1-040"): {
+        "id": "0.4.0-W1-040",
+        "status": "completed",
+        "type": "IMP",
+    },
+}
+
+
+def test_spawned_in_other_version_loaded_by_own_version():
+    parent = {
+        "id": "0.3.1-W1-001",
+        "type": "ANA",
+        "spawned_tickets": ["0.4.0-W1-040"],
+    }
+    with _patch_versioned_loader(_CROSS_VERSION_STORE):
+        passed, issues, skipped = validate_spawned_tickets_completed(parent, "0.3.1")
+    assert passed is True
+    assert issues == []
+    assert skipped is False
+
+
+def test_spawned_truly_missing_still_not_found():
+    parent = {
+        "id": "0.3.1-W1-001",
+        "type": "ANA",
+        "spawned_tickets": ["0.4.0-W1-099"],
+    }
+    with _patch_versioned_loader(_CROSS_VERSION_STORE):
+        passed, issues, _ = validate_spawned_tickets_completed(parent, "0.3.1")
+    assert passed is False
+    assert any("0.4.0-W1-099: not_found" in i for i in issues)

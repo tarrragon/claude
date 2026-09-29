@@ -34,6 +34,16 @@ from ticket_system.lib.ticket_validator import (
 )
 
 
+def resolve_reference_version(fallback_version: str, referenced_id: str) -> str:
+    """回傳載入被引用 ticket 應使用的版本。
+
+    以被引用 ID 自身的版本前綴為準（跨版本關聯）；ID 不含版本前綴時
+    退回 fallback_version（目標票所在版本）。只決定版本，載入仍由呼叫端
+    模組層的 load_ticket 執行，以維持既有 patch 點。
+    """
+    return extract_version_from_ticket_id(referenced_id) or fallback_version
+
+
 def validate_blocked_by_references(
     version: str,
     ticket_id: str,
@@ -60,7 +70,7 @@ def validate_blocked_by_references(
 
     # 驗證 1：blockedBy 存在性檢查
     for bid in blocked_by:
-        blocked_ticket = load_ticket(version, bid)
+        blocked_ticket = load_ticket(resolve_reference_version(version, bid), bid)
         if blocked_ticket is None:
             print(format_error(ErrorEnvelope(
                 component="create",

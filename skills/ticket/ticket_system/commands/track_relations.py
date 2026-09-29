@@ -36,6 +36,7 @@ from ticket_system.lib.constants import (
     STATUS_CLOSED,
     STATUS_SUPERSEDED,
 )
+from ticket_system.lib.field_validators import resolve_reference_version
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.ticket_loader import (
     get_ticket_path,
@@ -227,7 +228,9 @@ def _execute_set_relation_field(
         is_remove_mode = getattr(args, "remove", False)
         if not is_remove_mode:
             for ref_id in referenced_ids:
-                _, success = validate_ticket_exists(version, ref_id)
+                _, success = validate_ticket_exists(
+                    resolve_reference_version(version, ref_id), ref_id
+                )
                 if not success:
                     return 1
 

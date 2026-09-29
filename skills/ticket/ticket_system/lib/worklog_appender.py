@@ -96,7 +96,7 @@ def _find_last_date_section_end(lines: list[str]) -> int | None:
     return insert_at
 
 
-def append_worklog_progress(version: str, ticket_id: str, title: str) -> None:
+def append_worklog_progress(version: str, ticket_id: str, title: str) -> bool:
     """
     在 main worklog 的最後一個日期區段末尾追加進度行
 
@@ -112,12 +112,17 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> None:
         version: 版本號，例如 "0.31.1"
         ticket_id: Ticket ID，例如 "0.31.1-W12-003"
         title: Ticket 標題
+
+    Returns:
+        bool: True 表示本次確實寫入進度行；False 表示未寫入（檔案不存在、
+        冪等跳過、無日期標題區段、寫後驗證失敗、例外），呼叫端據此決定
+        是否把 worklog 列入提交範圍。
     """
     worklog_path = _build_worklog_path(version)
 
     if not worklog_path.exists():
         print(f"[WARNING] worklog 檔案不存在，跳過進度追加：{worklog_path}")
-        return
+        return False
 
     completion_marker = f"{ticket_id} 完成"
 
@@ -130,12 +135,12 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> None:
 
             # 冪等性：若該 ticket 的完成行已存在則跳過，避免重複 append（W8-048）
             if any(completion_marker in line for line in search_lines):
-                return
+                return False
 
             insert_at = _find_last_date_section_end(search_lines)
             if insert_at is None:
                 print("[WARNING] worklog 中找不到日期標題區段，跳過進度追加")
-                return
+                return False
 
             lines = content.splitlines(keepends=True)
             today = date.today().isoformat()
@@ -151,6 +156,10 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> None:
                     f"[WARNING] worklog 進度行寫入後重讀驗證失敗，"
                     f"未在檔案中找到自身行：{ticket_id}（{worklog_path}）\n"
                 )
+                return False
+
+            return True
 
     except Exception as e:
         print(f"[WARNING] worklog 進度追加失敗：{e}")
+        return False

@@ -267,6 +267,38 @@ class TestGraphTypeTablesWellFormed:
         )
 
 
+class TestTicketIdPatternSubTicketDiscrimination:
+    """Ticket id_pattern 須收子票 ID（NNN.M、NNN.M.K），並仍拒絕殘缺形式。"""
+
+    @staticmethod
+    def _matching_types(candidate: str) -> set[str]:
+        return {
+            name
+            for name, entry in GRAPH_NODE_TYPES.items()
+            if re.match(entry["id_pattern"], candidate)
+        }
+
+    @pytest.mark.parametrize(
+        "ticket_id",
+        [
+            "0.3.1-W1-089",
+            "0.3.1-W1-089.1",
+            "0.2.1-W3-623.2",
+            "0.2.1-W3-795.2.1",
+        ],
+    )
+    def test_ticket_and_sub_ticket_ids_match_only_ticket(self, ticket_id):
+        assert self._matching_types(ticket_id) == {"Ticket"}
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        ["0.3.1-W1-089.", "0.3.1-W1-089.a", "0.3.1-W1-089..1", "0.3.1-W1-.1"],
+    )
+    def test_malformed_sub_ticket_ids_match_no_type(self, bad_id):
+        """正向對照（E2）：不合法 ID 仍被拒；放寬 pattern 過頭時此測試翻紅。"""
+        assert self._matching_types(bad_id) == set()
+
+
 class TestCarrierPathPatternConformance:
     """carrier_path_patterns 機器可比對的路徑模式（二層具體度，無第三層）。
 

@@ -28,7 +28,7 @@ from typing import List, Optional, Set
 from ticket_system.lib.file_conflict import files_intersect, parse_file_intent, write_files
 from ticket_system.lib.git_ops import commit_files_isolated
 from ticket_system.lib.messages import ErrorMessages, format_error
-from ticket_system.lib.paths import get_ticket_state_root
+from ticket_system.lib.paths import get_ticket_path, get_ticket_state_root
 from ticket_system.lib.project_root import resolve_project_cwd
 from ticket_system.lib.ticket_loader import load_ticket
 
@@ -70,6 +70,19 @@ def _to_repo_relative(path: str, repo_root: str, base_dir: str) -> str:
     """
     abs_path = path if os.path.isabs(path) else os.path.join(base_dir, path)
     return os.path.relpath(os.path.abspath(abs_path), repo_root).replace(os.sep, "/")
+
+
+def _own_ticket_md(version: str, ticket_id: str, repo_root: str) -> str:
+    """票自身 md 的 repo-relative posix 路徑（隱含可寫範圍，不需 ::write）。
+
+    get_ticket_path 依主 repo 解析；linked worktree 下該絕對路徑落在
+    repo_root 之外時，改以票務狀態根目錄為基準取相對路徑（相對部分相同）。
+    """
+    abs_path = str(get_ticket_path(version, ticket_id))
+    rel = _to_repo_relative(abs_path, repo_root, repo_root)
+    if rel.startswith(".."):
+        rel = _to_repo_relative(abs_path, str(get_ticket_state_root()), repo_root)
+    return rel
 
 
 def _out_of_scope_files(
@@ -239,7 +252,13 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         _to_repo_relative(p, repo_root, repo_root) for p in declared
     }
 
-    if not normalized_declared:
+    own_md = _own_ticket_md(version, args.ticket_id, repo_root)
+    non_own_inputs = [
+        f for f in args.files if _to_repo_relative(f, repo_root, base_dir) != own_md
+    ]
+
+    # 「未宣告」以使用者宣告集合為準；輸入僅票自身 md 時不視為未宣告。
+    if not normalized_declared and non_own_inputs:
         message = (
             f"[ERROR] Ticket {args.ticket_id} 的 where.files 未宣告任何寫入路徑，"
             "無法判斷提交範圍是否合法，拒絕提交"
@@ -257,7 +276,9 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         print(message)
         return 1
 
-    out_of_scope = _out_of_scope_files(args.files, normalized_declared, repo_root, base_dir)
+    out_of_scope = _out_of_scope_files(
+        args.files, normalized_declared | {own_md}, repo_root, base_dir
+    )
     if out_of_scope:
         print(
             "[ERROR] 以下檔案不在 ticket where.files 宣告的寫入範圍內，拒絕提交：\n"

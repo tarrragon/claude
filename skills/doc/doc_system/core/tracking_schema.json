@@ -241,7 +241,7 @@
           ]
         }
       ],
-      "id_pattern": "^[\\w.]+-W\\d+-\\d+$",
+      "id_pattern": "^[\\w.]+-W\\d+-\\d+(\\.\\d+)*$",
       "layer": "established"
     },
     "UC": {

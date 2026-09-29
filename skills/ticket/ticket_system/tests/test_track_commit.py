@@ -117,6 +117,35 @@ class TestExecuteCommit:
         assert "ANA 型" in out
         assert "::write" in out
 
+    def test_ana_ticket_can_commit_own_md_without_write_declaration(self):
+        """E2：ANA 票 where.files 全唯讀，僅提交票自身 md 應放行。"""
+        ticket = {"id": _TICKET_ID, "type": "ANA", "where": {"files": ["a/b.py"]}}
+        own = "/repo/docs/work-logs/t/" + _TICKET_ID + ".md"
+        with patch.object(track_commit, "load_ticket", return_value=ticket), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch.object(track_commit, "get_ticket_path", return_value=own), \
+             patch.object(
+                 track_commit, "commit_files_isolated",
+                 return_value={"status": "committed", "commit_sha": "abc123"},
+             ) as mock_commit:
+            rc = track_commit.execute_commit(_args([own]), _VERSION)
+
+        assert rc == 0
+        mock_commit.assert_called_once()
+
+    def test_ana_ticket_own_md_plus_foreign_path_still_rejected(self):
+        """E2 正向對照：票自身 md 搭配非票面路徑仍整批拒絕。"""
+        ticket = {"id": _TICKET_ID, "type": "ANA", "where": {"files": ["a/b.py"]}}
+        own = "/repo/docs/work-logs/t/" + _TICKET_ID + ".md"
+        with patch.object(track_commit, "load_ticket", return_value=ticket), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch.object(track_commit, "get_ticket_path", return_value=own), \
+             patch.object(track_commit, "commit_files_isolated") as mock_commit:
+            rc = track_commit.execute_commit(_args([own, "a/b.py"]), _VERSION)
+
+        assert rc == 1
+        mock_commit.assert_not_called()
+
     def test_missing_ticket_returns_error(self, capsys):
         with patch.object(track_commit, "load_ticket", return_value=None):
             rc = track_commit.execute_commit(_args(["a/b.py"]), _VERSION)
