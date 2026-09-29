@@ -1,3 +1,15 @@
+## [2.63.3] - 2026-09-29
+
+### Summary
+docs: component-contract-design 最小尺寸須含元件自身內距（3.12.0）; chore: .claude/VERSION 2.63.2（sync-push：doc 1.22.7）
+
+Changes: 1 docs, 1 chore
+
+- docs: component-contract-design 最小尺寸須含元件自身內距（3.12.0）
+- chore: .claude/VERSION 2.63.2（sync-push：doc 1.22.7）
+
+---
+
 ## [2.63.2] - 2026-09-29
 
 ### Summary
