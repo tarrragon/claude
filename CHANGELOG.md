@@ -1,3 +1,15 @@
+## [2.63.2] - 2026-09-29
+
+### Summary
+chore: doc 1.22.7（子票 id_pattern 本地變更轉為正式版號，供發佈庫推送）; chore: .claude/VERSION 2.63.1（sync-push：component-contract-design 3.11.0）
+
+Changes: 2 chore
+
+- chore: doc 1.22.7（子票 id_pattern 本地變更轉為正式版號，供發佈庫推送）
+- chore: .claude/VERSION 2.63.1（sync-push：component-contract-design 3.11.0）
+
+---
+
 ## [2.63.1] - 2026-09-29
 
 ### Summary
