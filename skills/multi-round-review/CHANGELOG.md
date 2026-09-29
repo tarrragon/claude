@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.24.0 — 嚴重度量尺的必修補一項：被反覆談論的概念沒有被界定與命名就被引用（「一部分／另一半／那一側」或每次換描述重講），逐個概念點名檢查；新增 principle 卡 unnamed-halves-are-unextracted-variables
+
 **Version**: 2.23.1 — 2-B⁗ 逐字引出所屬變體補篩選規則三條（不寫預期比例、判定時先只看兩句、每條不改附依據並依依據抽查）與兩項驗證（替換文字新增的事實回原文核對、實例間判定差異大不直接套用）；principle 卡同步譬喻整批換
 
 **Version**: 2.23.0 — 2-B⁗ 新增「逐字引出所屬」變體，專抓論斷句與段標裡缺所屬的名詞；記下「列出缺項」問法在同一組校準句上沒有鑑別力；新 principle 卡 `noun-without-its-owner-passes-the-slot-check`

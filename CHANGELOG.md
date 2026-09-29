@@ -1,3 +1,15 @@
+## [2.62.1] - 2026-09-29
+
+### Summary
+chore: skill-sync pull compositional-writing 1.38.1、multi-round-review 2.24.0; chore: .claude/VERSION 2.62.0（sync-push：ticket 跨版本關聯與 auto-commit 修正、doc 子票 id_pattern、TEST-GPD-001）
+
+Changes: 2 chore
+
+- chore: skill-sync pull compositional-writing 1.38.1、multi-round-review 2.24.0
+- chore: .claude/VERSION 2.62.0（sync-push：ticket 跨版本關聯與 auto-commit 修正、doc 子票 id_pattern、TEST-GPD-001）
+
+---
+
 ## [2.62.0] - 2026-09-29
 
 ### Summary
