@@ -1,3 +1,16 @@
+## [2.63.1] - 2026-09-29
+
+### Summary
+docs: component-contract-design 值對映四形與上色判準（3.11.0）; docs: component-contract-design 新增既有變體欄的差異判別（3.10.0）; chore: .claude/VERSION 2.63.0（sync-push：派發位置判準與 worktree 強制修正）
+
+Changes: 2 docs, 1 chore
+
+- docs: component-contract-design 值對映四形與上色判準（3.11.0）
+- docs: component-contract-design 新增既有變體欄的差異判別（3.10.0）
+- chore: .claude/VERSION 2.63.0（sync-push：派發位置判準與 worktree 強制修正）
+
+---
+
 ## [2.63.0] - 2026-09-29
 
 ### Summary
