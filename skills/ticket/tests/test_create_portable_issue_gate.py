@@ -419,3 +419,83 @@ class TestClosedFrameworkTicketsAsRedInput:
 
         assert rc == 0
         build_mock.assert_called_once()
+
+
+# ============================================================
+# F 層：sync-skills.yaml private / select 範圍（0.4.0-W1-057）
+# ============================================================
+#
+# 閘門判準 =「這條路徑是否會被 sync-push 推到 canonical」，判定重用
+# `.claude/lib/sync_exclude_manifest.py`（與推送範圍同一份實作，不另寫
+# private 判斷）。宣告為 private（或 mode=select 下不在 include）的
+# skill 路徑不會被推送，屬專案特化，不視為可攜問題。
+
+
+def _use_sync_skills_config(monkeypatch, tmp_path, yaml_text):
+    """建立含 sync-skills.yaml 的暫存 .claude/，lib 以 symlink 指向真實實作。"""
+    from pathlib import Path
+
+    real_lib = Path(__file__).resolve().parents[3] / "lib"
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    (claude_dir / "lib").symlink_to(real_lib)
+    (claude_dir / "sync-skills.yaml").write_text(yaml_text, encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+
+
+PRIVATE_VERIFY_YAML = "mode: all\nprivate:\n  - verify\n"
+SELECT_YAML = "mode: select\ninclude:\n  - ticket\n"
+
+
+class TestPrivateSkillNotPortable:
+    def test_e1_all_files_under_private_skill_not_portable(self, monkeypatch, tmp_path):
+        _use_sync_skills_config(monkeypatch, tmp_path, PRIVATE_VERIFY_YAML)
+        assert is_portable_where_files([".claude/skills/verify/SKILL.md"]) is False
+
+    def test_e1_control_same_paths_portable_without_private_declaration(
+        self, monkeypatch, tmp_path
+    ):
+        # 對照：未宣告 private 時同一路徑為可攜（證明 private 宣告是唯一差異）
+        _use_sync_skills_config(monkeypatch, tmp_path, "mode: all\n")
+        assert is_portable_where_files([".claude/skills/verify/SKILL.md"]) is True
+
+    def test_e2_mixed_private_and_non_private_claude_path_still_portable(
+        self, monkeypatch, tmp_path
+    ):
+        # 含會被推送的 .claude/ 路徑：問題可能落在框架資產，仍觸發
+        _use_sync_skills_config(monkeypatch, tmp_path, PRIVATE_VERIFY_YAML)
+        assert is_portable_where_files(
+            [".claude/skills/verify/SKILL.md", ".claude/hooks/foo.py"]
+        ) is True
+
+    def test_e2_non_private_skill_still_portable(self, monkeypatch, tmp_path):
+        _use_sync_skills_config(monkeypatch, tmp_path, PRIVATE_VERIFY_YAML)
+        assert is_portable_where_files([".claude/skills/ticket/SKILL.md"]) is True
+
+    def test_select_mode_skill_outside_include_not_portable(self, monkeypatch, tmp_path):
+        _use_sync_skills_config(monkeypatch, tmp_path, SELECT_YAML)
+        assert is_portable_where_files([".claude/skills/verify/SKILL.md"]) is False
+
+    def test_select_mode_included_skill_portable(self, monkeypatch, tmp_path):
+        _use_sync_skills_config(monkeypatch, tmp_path, SELECT_YAML)
+        assert is_portable_where_files([".claude/skills/ticket/SKILL.md"]) is True
+
+    def test_read_marker_on_private_skill_path_not_portable(self, monkeypatch, tmp_path):
+        _use_sync_skills_config(monkeypatch, tmp_path, PRIVATE_VERIFY_YAML)
+        assert is_portable_where_files([".claude/skills/verify/SKILL.md::read"]) is False
+
+    def test_gate_passes_for_private_skill_without_dedup(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        _use_sync_skills_config(monkeypatch, tmp_path, PRIVATE_VERIFY_YAML)
+        assert validate_portable_issue_gate(
+            [".claude/skills/verify/SKILL.md"], None
+        ) is True
+        assert capsys.readouterr().out == ""
+
+    def test_gate_blocks_mixed_paths_without_dedup(self, monkeypatch, tmp_path, capsys):
+        _use_sync_skills_config(monkeypatch, tmp_path, PRIVATE_VERIFY_YAML)
+        assert validate_portable_issue_gate(
+            [".claude/skills/verify/SKILL.md", ".claude/hooks/foo.py"], None
+        ) is False
+        assert "PORTABLE_ISSUE_UNDEDUPED" in capsys.readouterr().out

@@ -5,7 +5,7 @@
 id: UC-XX
 title: "{用例名稱}"
 status: draft                    # draft / review / approved / deprecated
-source_proposal: null            # 來源提案 ID，如 PROP-001
+source_proposal: null            # 來源提案 ID，如 PROP-001；可為清單 [PROP-001, PROP-002]，純量視為單項清單
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 version: "1.0"                   # 用例版本

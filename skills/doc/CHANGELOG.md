@@ -2,6 +2,19 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.23.0 — `GRAPH_EDGE_TYPES` 每個邊型新增正向基數欄位 `forward_cardinality`
+（值域 `one`／`many`，常數 `EDGE_CARDINALITY_VALUES`），宣告 `forward_field` 可有一個或多個終點；
+`doc schema export` 匯出的 `edge_types` 全欄位帶出，`tracking_schema.json` 已用正式指令重產。
+`provenance`（`source_proposal`）為 `many`（可寫清單；純量視為單項清單），`spawn`／`blood`／
+`discovery`／`branching`／`returning` 為 `one`，其餘清單型欄位為 `many`。新增
+`find_edge_types_with_invalid_cardinality()` 檢核缺欄位或值域錯誤的邊型定義。
+`references/tracking.md` 與五份範本註解寫明 `source_proposal` 可為清單。
+`test_schema_export.py` 新增 `TestEdgeForwardCardinality`（16 個邊型值逐一斷言 + 缺欄位／
+值域外的正向對照輸入）。**消費端注意**：`source_proposal` 讀取須先正規化為清單。
+`schema_generated_at_framework_version` 刻意維持 2.60.13：App 的「已知範圍」判準拿此值與內建值
+比對，高於內建即判不相容；本次只在 `edge_types` 加欄位而 App 不讀 `edge_types`，實際仍相容。
+待 App 開始讀此欄位時，產生版本與 App 內建版本一起升（處置同 1.22.7）。
+
 **Version**: 1.22.7 — Ticket 型 `id_pattern` 由
 `^[\w.]+-W\d+-\d+$` 改為 `^[\w.]+-W\d+-\d+(\.\d+)*$`，接受 ticket CLI 自產的子票 ID
 （`NNN.M`、`NNN.M.K`）；`tracking_schema.json` 已重產，`schema_generated_at_framework_version`

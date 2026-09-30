@@ -6,7 +6,7 @@
 id: SPEC-NNN
 title: "{規格標題}"
 status: draft                    # draft / review / approved / deprecated
-source_proposal: null            # 來源提案 ID，如 PROP-001
+source_proposal: null            # 來源提案 ID，如 PROP-001；可為清單 [PROP-001, PROP-002]，純量視為單項清單
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 version: "1.0"                   # 規格版本（非專案版本）

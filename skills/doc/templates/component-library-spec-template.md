@@ -17,7 +17,7 @@
 id: SPEC-COMPONENT-LIBRARY
 title: "元件庫規格"
 status: draft
-source_proposal: null
+source_proposal: null            # 來源提案 ID；可為清單，純量視為單項清單
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 version: "1.0"

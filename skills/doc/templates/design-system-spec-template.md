@@ -6,7 +6,7 @@
 id: SPEC-DESIGN-SYSTEM
 title: "UI Design System 規格"
 status: draft                    # draft / review / approved / deprecated
-source_proposal: null            # 來源提案 ID
+source_proposal: null            # 來源提案 ID；可為清單 [PROP-001, PROP-002]，純量視為單項清單
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 version: "1.0"

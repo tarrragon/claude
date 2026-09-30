@@ -1,3 +1,16 @@
+## [2.66.1] - 2026-09-30
+
+### Summary
+fix: 可攜問題閘門改以 sync-push 推送範圍判定，private skill 不再誤判; fix: tracking_schema.json 產生版本維持 2.60.13（用戶裁決）; chore: .claude/VERSION 2.66.0（sync-push：session-start-issue-check 並行、ticket 2.44.2、派發骨架票面規則）
+
+Changes: 2 fix, 1 chore
+
+- fix: 可攜問題閘門改以 sync-push 推送範圍判定，private skill 不再誤判
+- fix: tracking_schema.json 產生版本維持 2.60.13（用戶裁決）
+- chore: .claude/VERSION 2.66.0（sync-push：session-start-issue-check 並行、ticket 2.44.2、派發骨架票面規則）
+
+---
+
 ## [2.66.0] - 2026-09-30
 
 ### Summary

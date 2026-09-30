@@ -12,6 +12,7 @@ import 兩次同性質函式。
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -451,32 +452,76 @@ def validate_source_ticket_arg(args: argparse.Namespace) -> bool:
     return True
 
 
+def _is_pushed_to_canonical(rel_path: str) -> bool:
+    """判斷相對 `.claude/` 的路徑是否會被 sync-push 推到 canonical。
+
+    判準與推送範圍共用 `.claude/lib/sync_exclude_manifest.py`
+    （`load_sync_skills_config` / `should_exclude_skill` / `should_exclude`），
+    不另寫一份 private 判斷，避免閘門與推送範圍分岐。
+
+    接法：`claude_lib_loader.load_claude_lib` lazy 載入（ticket CLI 的
+    sys.path 不含 `.claude/lib`，此為 identity_guard 等既有模組的同一
+    做法）。manifest 不可用或設定檔解析失敗時回 True（維持原本「`.claude/`
+    下皆視為會推送」的保守行為，寧可多擋不可漏擋）。
+    """
+    from ticket_system.lib.claude_lib_loader import find_claude_dir, load_claude_lib
+
+    manifest = load_claude_lib("sync_exclude_manifest")
+    claude_dir = find_claude_dir("sync_exclude_manifest.py")
+    if manifest is None or claude_dir is None:
+        return True
+    try:
+        config = manifest.load_sync_skills_config(claude_dir)
+    except ValueError as exc:
+        # 設定無效：manifest 已寫 stderr；此處退回保守判定並留下可見訊息
+        sys.stderr.write(
+            f"[portable_issue_gate] sync-skills.yaml 無法解析，"
+            f"視為會推送: {exc}\n"
+        )
+        return True
+
+    rel = Path(rel_path)
+    if manifest.should_exclude(rel):
+        return False
+    parts = rel.parts
+    if len(parts) >= 2 and parts[0] == "skills":
+        return not manifest.should_exclude_skill(parts[1], config, "push")
+    return True
+
+
 def is_portable_where_files(tokens: List[str]) -> bool:
-    """判斷 where.files 是否全數落在 `.claude/` 之下（可攜問題判準）。
+    """判斷 where.files 是否全數落在 `.claude/` 之下且會被推送（可攜問題判準）。
 
     可攜問題定義：替換掉專案名稱與路徑後仍成立、根源在 `.claude/` 通用資產的
     問題（見 `.claude/skills/framework-issue/SKILL.md`「決策入口」）。此判準
     只做路徑層級的機械檢查——不判斷 why/語意，因語意判準誤擋成本高會推高
     建票摩擦力，而路徑判準機械可判、零誤判。
 
+    「通用資產」以 sync-push 的推送範圍為準：sync-skills.yaml 宣告 private
+    （或 mode=select 下不在 include）的 skill 屬專案特化，不算可攜。
+
     Args:
         tokens: 已 strip 的 where.files token 清單（可含 `::read` 等意圖標記）
 
     Returns:
-        bool: True 表示全數落在 `.claude/` 之下（含至少一個 token）；
-        空清單或含任一非 `.claude/` 路徑回 False（非可攜，不觸發閘門）
+        bool: True 表示全數落在 `.claude/` 之下，且至少一條路徑會被推送到
+        canonical；空清單、含任一非 `.claude/` 路徑、或 `.claude/` 路徑
+        全屬不推送範圍回 False（非可攜，不觸發閘門）
     """
     from ticket_system.lib.file_conflict import parse_file_intent
 
     if not tokens:
         return False
+    any_pushed = False
     for token in tokens:
         if not token:
             return False
         path, _intent = parse_file_intent(token)
         if not path.startswith(".claude/"):
             return False
-    return True
+        if _is_pushed_to_canonical(path[len(".claude/"):]):
+            any_pushed = True
+    return any_pushed
 
 
 def validate_portable_issue_gate(

@@ -49,6 +49,7 @@
   "edge_types": {
     "association": {
       "class": "see-also",
+      "forward_cardinality": "many",
       "forward_field": "relatedTo",
       "layer": "established",
       "maintainer": "手動/CLI",
@@ -56,6 +57,7 @@
     },
     "blocking": {
       "class": "ordering",
+      "forward_cardinality": "many",
       "forward_field": "blockedBy",
       "layer": "established",
       "maintainer": "手動/CLI",
@@ -63,6 +65,7 @@
     },
     "blood": {
       "class": "containment",
+      "forward_cardinality": "one",
       "forward_field": "parent_id",
       "layer": "established",
       "maintainer": "CLI 自動",
@@ -70,6 +73,7 @@
     },
     "branching": {
       "class": "ordering",
+      "forward_cardinality": "one",
       "forward_field": "branch_from",
       "layer": "proposed",
       "maintainer": "手動",
@@ -77,6 +81,7 @@
     },
     "consumption": {
       "class": "dataflow",
+      "forward_cardinality": "many",
       "forward_field": "consumes",
       "layer": "proposed",
       "maintainer": "手動",
@@ -84,6 +89,7 @@
     },
     "discovery": {
       "class": "provenance",
+      "forward_cardinality": "one",
       "forward_field": "discovered_during",
       "layer": "established",
       "maintainer": "手動",
@@ -91,6 +97,7 @@
     },
     "domain_coverage": {
       "class": "containment",
+      "forward_cardinality": "many",
       "forward_field": "source_specs",
       "layer": "established",
       "maintainer": "手動",
@@ -98,6 +105,7 @@
     },
     "domain_dependency": {
       "class": "ordering",
+      "forward_cardinality": "many",
       "forward_field": "depends_on_domains",
       "layer": "established",
       "maintainer": "手動",
@@ -105,6 +113,7 @@
     },
     "emission": {
       "class": "dataflow",
+      "forward_cardinality": "many",
       "forward_field": "emits",
       "layer": "proposed",
       "maintainer": "手動",
@@ -112,6 +121,7 @@
     },
     "proposal_association": {
       "class": "see-also",
+      "forward_cardinality": "many",
       "forward_field": "related_proposals",
       "layer": "established",
       "maintainer": "手動",
@@ -119,6 +129,7 @@
     },
     "provenance": {
       "class": "provenance",
+      "forward_cardinality": "many",
       "forward_field": "source_proposal",
       "layer": "established",
       "maintainer": "手動",
@@ -126,6 +137,7 @@
     },
     "requirement_impl": {
       "class": "containment",
+      "forward_cardinality": "many",
       "forward_field": "implements_requirements",
       "layer": "established",
       "maintainer": "手動",
@@ -133,6 +145,7 @@
     },
     "returning": {
       "class": "ordering",
+      "forward_cardinality": "one",
       "forward_field": "return_to",
       "layer": "proposed",
       "maintainer": "手動",
@@ -140,6 +153,7 @@
     },
     "spawn": {
       "class": "provenance",
+      "forward_cardinality": "one",
       "forward_field": "source_ticket",
       "layer": "established",
       "maintainer": "CLI 自動",
@@ -147,6 +161,7 @@
     },
     "spec_association": {
       "class": "see-also",
+      "forward_cardinality": "many",
       "forward_field": "related_specs",
       "layer": "established",
       "maintainer": "手動",
@@ -154,6 +169,7 @@
     },
     "uc_association": {
       "class": "see-also",
+      "forward_cardinality": "many",
       "forward_field": "related_usecases",
       "layer": "established",
       "maintainer": "手動",

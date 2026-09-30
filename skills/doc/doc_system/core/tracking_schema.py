@@ -337,13 +337,39 @@ FLOWSTEP_REQUIRED_FIELDS = frozenset(
 # 於此補登記，不在上方重複宣告 FLOWSTEP_REQUIRED_FIELDS 的內容）。
 COMPLETENESS_FIELDS["FlowStep"] = FLOWSTEP_REQUIRED_FIELDS
 
+# 正向基數（用戶 WRAP 裁決 2026-09-30）：forward_field 在節點上可宣告
+# 一個終點（one，frontmatter 為純量）或多個終點（many，為清單）。
+# - 由 schema 宣告，不由 frontmatter 寫法或讀取端程式寫死
+# - many 的欄位寫成純量時，消費端視為只有一項的清單（如 source_proposal:
+#   PROP-001 等同 [PROP-001]）；one 的欄位不接受清單
+# - 值域見 EDGE_CARDINALITY_VALUES；每個邊型必帶 forward_cardinality
+EDGE_CARDINALITY_ONE = "one"
+EDGE_CARDINALITY_MANY = "many"
+EDGE_CARDINALITY_VALUES = frozenset({EDGE_CARDINALITY_ONE, EDGE_CARDINALITY_MANY})
+
+
+def find_edge_types_with_invalid_cardinality(edge_types: dict) -> dict[str, str]:
+    """回傳缺少 forward_cardinality 或值不在值域的邊型（名稱 → 原因）。
+
+    判斷用 `in`（鍵是否存在），與完整性集合同一原則，不用真值判斷。
+    """
+    invalid: dict[str, str] = {}
+    for name, entry in edge_types.items():
+        if "forward_cardinality" not in entry:
+            invalid[name] = "缺少 forward_cardinality"
+        elif entry["forward_cardinality"] not in EDGE_CARDINALITY_VALUES:
+            invalid[name] = f"forward_cardinality 值域錯誤: {entry['forward_cardinality']!r}"
+    return invalid
+
+
 # 語意邊表：A 層 12 條 + B 層 4 條，欄位齊全：class / 正向欄位（儲存
-# 側）/ 反向欄位 / 維護方 / status。
+# 側）/ 正向基數 / 反向欄位 / 維護方 / status。
 GRAPH_EDGE_TYPES = {
     # --- A 層（12 條，established）---
     "provenance": {
         "class": "provenance",
         "forward_field": "source_proposal",
+        "forward_cardinality": "many",
         "reverse_field": "outputs",
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -351,6 +377,7 @@ GRAPH_EDGE_TYPES = {
     "spec_association": {
         "class": "see-also",
         "forward_field": "related_specs",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -358,6 +385,7 @@ GRAPH_EDGE_TYPES = {
     "uc_association": {
         "class": "see-also",
         "forward_field": "related_usecases",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -365,6 +393,7 @@ GRAPH_EDGE_TYPES = {
     "proposal_association": {
         "class": "see-also",
         "forward_field": "related_proposals",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -372,6 +401,7 @@ GRAPH_EDGE_TYPES = {
     "requirement_impl": {
         "class": "containment",
         "forward_field": "implements_requirements",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -379,6 +409,7 @@ GRAPH_EDGE_TYPES = {
     "domain_dependency": {
         "class": "ordering",
         "forward_field": "depends_on_domains",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -386,6 +417,7 @@ GRAPH_EDGE_TYPES = {
     "domain_coverage": {
         "class": "containment",
         "forward_field": "source_specs",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -393,6 +425,7 @@ GRAPH_EDGE_TYPES = {
     "blood": {
         "class": "containment",
         "forward_field": "parent_id",
+        "forward_cardinality": "one",
         "reverse_field": "children",
         "maintainer": "CLI 自動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -400,6 +433,7 @@ GRAPH_EDGE_TYPES = {
     "spawn": {
         "class": "provenance",
         "forward_field": "source_ticket",
+        "forward_cardinality": "one",
         "reverse_field": "spawned_tickets",
         "maintainer": "CLI 自動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -407,6 +441,7 @@ GRAPH_EDGE_TYPES = {
     "blocking": {
         "class": "ordering",
         "forward_field": "blockedBy",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動/CLI",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -416,6 +451,7 @@ GRAPH_EDGE_TYPES = {
         # 仍為單向欄位，故 reverse_field 仍為 None。
         "class": "see-also",
         "forward_field": "relatedTo",
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動/CLI",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -423,6 +459,7 @@ GRAPH_EDGE_TYPES = {
     "discovery": {
         "class": "provenance",
         "forward_field": "discovered_during",
+        "forward_cardinality": "one",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
@@ -431,6 +468,7 @@ GRAPH_EDGE_TYPES = {
     "emission": {
         "class": "dataflow",
         "forward_field": "emits",  # FlowStep.emits → EVT
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_PROPOSED,
@@ -438,6 +476,7 @@ GRAPH_EDGE_TYPES = {
     "consumption": {
         "class": "dataflow",
         "forward_field": "consumes",  # EVT → FlowStep.consumes
+        "forward_cardinality": "many",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_PROPOSED,
@@ -445,6 +484,7 @@ GRAPH_EDGE_TYPES = {
     "branching": {
         "class": "ordering",
         "forward_field": "branch_from",
+        "forward_cardinality": "one",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_PROPOSED,
@@ -453,6 +493,7 @@ GRAPH_EDGE_TYPES = {
         "class": "ordering",
         # back-edge，排除於 DAG 佈局。
         "forward_field": "return_to",
+        "forward_cardinality": "one",
         "reverse_field": None,
         "maintainer": "手動",
         "layer": GRAPH_LAYER_PROPOSED,

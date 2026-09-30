@@ -34,7 +34,11 @@ from doc_system.commands.schema import (
     execute,
     execute_export,
 )
-from doc_system.core.tracking_schema import GRAPH_EDGE_TYPES, GRAPH_NODE_TYPES
+from doc_system.core.tracking_schema import (
+    GRAPH_EDGE_TYPES,
+    GRAPH_NODE_TYPES,
+    find_edge_types_with_invalid_cardinality,
+)
 
 # 磁碟上已產生的產物，雙向一致性測試的比對端點之一（另一端是 import 進來
 # 的 GRAPH_NODE_TYPES / GRAPH_EDGE_TYPES）。路徑與 commands/schema.py
@@ -194,3 +198,58 @@ class TestExecuteRouting:
         execute(args)
         captured = capsys.readouterr()
         assert "export" in captured.out
+
+
+# 正向基數期望表（0.4.0-W1-056）：依各邊型 forward_field 的實際形狀判定。
+# 純量欄位（parent_id／source_ticket／discovered_during／branch_from／return_to）
+# 為 one；清單欄位與 source_proposal（WRAP 裁決 2026-09-30）為 many。
+EXPECTED_FORWARD_CARDINALITY = {
+    "provenance": "many",
+    "spec_association": "many",
+    "uc_association": "many",
+    "proposal_association": "many",
+    "requirement_impl": "many",
+    "domain_dependency": "many",
+    "domain_coverage": "many",
+    "blood": "one",
+    "spawn": "one",
+    "blocking": "many",
+    "association": "many",
+    "discovery": "one",
+    "emission": "many",
+    "consumption": "many",
+    "branching": "one",
+    "returning": "one",
+}
+
+
+class TestEdgeForwardCardinality:
+    """每個邊型帶正向基數欄位 forward_cardinality（值域 one／many），且匯出同步。"""
+
+    def test_expected_table_covers_every_edge_type(self):
+        assert set(EXPECTED_FORWARD_CARDINALITY) == set(GRAPH_EDGE_TYPES)
+
+    @pytest.mark.parametrize("name,expected", sorted(EXPECTED_FORWARD_CARDINALITY.items()))
+    def test_ssot_cardinality_value(self, name, expected):
+        assert GRAPH_EDGE_TYPES[name]["forward_cardinality"] == expected
+
+    @pytest.mark.parametrize("name,expected", sorted(EXPECTED_FORWARD_CARDINALITY.items()))
+    def test_disk_json_cardinality_value(self, name, expected):
+        disk_schema = _load_schema_json_from_disk()
+        assert disk_schema["edge_types"][name]["forward_cardinality"] == expected
+
+    def test_validator_accepts_current_ssot(self):
+        assert find_edge_types_with_invalid_cardinality(GRAPH_EDGE_TYPES) == {}
+
+    def test_validator_flags_missing_field_positive_control(self):
+        """E2：缺欄位的邊型定義必須被判紅。"""
+        broken = dict(GRAPH_EDGE_TYPES)
+        broken["mutant_missing"] = {
+            k: v for k, v in GRAPH_EDGE_TYPES["blood"].items() if k != "forward_cardinality"
+        }
+        assert "mutant_missing" in find_edge_types_with_invalid_cardinality(broken)
+
+    def test_validator_flags_out_of_domain_value_positive_control(self):
+        broken = dict(GRAPH_EDGE_TYPES)
+        broken["mutant_bad"] = {**GRAPH_EDGE_TYPES["blood"], "forward_cardinality": "few"}
+        assert "mutant_bad" in find_edge_types_with_invalid_cardinality(broken)
