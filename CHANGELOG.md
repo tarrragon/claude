@@ -1,3 +1,19 @@
+## [2.65.0] - 2026-09-30
+
+### Summary
+feat: component-contract-design 3.13.0 原生佈局掃描判準改寫; fix: hook timeout 下限由 10 秒改為 30 秒; fix: hook timeout 毫秒誤用校正為秒並加回歸守衛 (+3 more)
+
+Changes: 1 feat, 4 fix, 1 chore
+
+- feat: component-contract-design 3.13.0 原生佈局掃描判準改寫
+- fix: hook timeout 下限由 10 秒改為 30 秒
+- fix: hook timeout 毫秒誤用校正為秒並加回歸守衛
+- fix: 依 Layer 2 審查修正原生佈局判準兩項阻擋
+- fix: hooks-test-gate 預算耗盡時未執行檔改為放行並附可見提醒
+- chore: .claude/VERSION 2.64.2（sync-push：hooks-test-gate 逐檔計時，某票）
+
+---
+
 ## [2.64.2] - 2026-09-30
 
 ### Summary

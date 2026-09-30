@@ -211,7 +211,7 @@
           {
             "type": "command",
             "command": "your-command-here",
-            "timeout": 60000  // 可選，預設 60 秒
+            "timeout": 60  // 可選，單位為秒；command 預設 600、UserPromptSubmit 預設 30
           }
         ]
       }
@@ -394,9 +394,14 @@ exit 0
    {
      "type": "command",
      "command": "long-running-script.sh",
-     "timeout": 120000  // 2 分鐘
+     "timeout": 120  // 單位為秒，即 2 分鐘
    }
    ```
+
+   - **單位是秒，不是毫秒**。出處：code.claude.com/docs/en/hooks —— "Seconds before canceling."；預設值 "600 for command, http, and mcp_tool"；"A timed-out command, http, or mcp_tool hook doesn't block the tool call."
+   - 以毫秒數值填寫（如 5000）會變成 83 分鐘，等同未設上限。
+   - timeout 過窄會讓守衛靜默失效：逾時的 hook 被平台中止後放行工具呼叫（non-blocking），所以新值須大於 hook 實測最大耗時加 uv 啟動開銷。
+   - 回歸守衛：`.claude/hooks/tests/test_settings_hook_timeout_units.py` 斷言 settings.json 每筆 timeout 小於 1000。
 
 5. **使用 Exit Code 2 阻塞**
    ```bash

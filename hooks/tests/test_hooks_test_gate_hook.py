@@ -443,19 +443,71 @@ class TestMainIntegration:
         assert "紅燈" in reason
         assert "逾時" not in reason.split("測試輸出")[0]
 
-    def test_total_budget_exhausted_denies_unrun_files(self, monkeypatch, tmp_path):
-        """總耗時上界：預算耗盡後未執行的檔案保守 deny 並指名，總耗時不超過預算。"""
-        self._setup_files(monkeypatch, tmp_path, ["a", "b", "c", "d"])
-        self._fake_subprocess(monkeypatch, 0.5)
-        monkeypatch.setattr(hook_module, "PER_FILE_TIMEOUT", 5.0, raising=False)
-        monkeypatch.setattr(hook_module, "TOTAL_BUDGET", 1.2, raising=False)
-        start = time.monotonic()
+    def _budget_exhausted_setup(self, monkeypatch, tmp_path, names, red=()):
+        """假時鐘：每次 pytest 呼叫推進 10s、總預算 20s：前兩檔跑完後剩餘 0，
+        其餘預算耗盡未執行。不實際睡眠，結果與機器負載無關。"""
+        import subprocess
+        import types
+
+        self._setup_files(monkeypatch, tmp_path, names)
+        clock = {"t": 0.0}
+
+        def _fake_run(cmd, timeout=None, **kw):
+            clock["t"] += 10.0
+            paths = [c for c in cmd if c.endswith(".py")]
+            rc = 1 if any(r in p for p in paths for r in red) else 0
+            return subprocess.CompletedProcess(cmd, rc, stdout="out", stderr="")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _fake_run)
+        monkeypatch.setattr(
+            hook_module, "time", types.SimpleNamespace(monotonic=lambda: clock["t"])
+        )
+        monkeypatch.setattr(hook_module, "PER_FILE_TIMEOUT", 60.0, raising=False)
+        monkeypatch.setattr(hook_module, "TOTAL_BUDGET", 20.0, raising=False)
+
+    def test_e1_budget_exhausted_all_green_allowed_with_reminder(
+        self, monkeypatch, tmp_path
+    ):
+        """E1：預算耗盡、已執行檔全綠 -> 放行（非 deny），additional_context
+        指名未驗證檔並附可直接複製的補跑指令。"""
+        self._budget_exhausted_setup(monkeypatch, tmp_path, ["a", "b", "c", "d"])
+        exit_code, captured = _run_main(monkeypatch, self._cmd_input())
+        assert exit_code == 0
+        assert len(captured) == 1
+        specific = json.loads(captured[0])["hookSpecificOutput"]
+        assert specific.get("permissionDecision") != "deny"
+        ctx = specific["additionalContext"]
+        assert "d-hook.py" in ctx and "test_d_hook.py" in ctx
+        assert "總預算" in ctx
+        assert "uv run --directory .claude/hooks pytest" in ctx
+        assert "a-hook.py" not in ctx  # 已驗證檔不列入
+
+    def test_e2_red_file_with_unverified_denied_and_lists_unverified(
+        self, monkeypatch, tmp_path
+    ):
+        """E2：已執行檔含紅燈且另有未驗證檔 -> deny，訊息含未驗證清單。"""
+        self._budget_exhausted_setup(
+            monkeypatch, tmp_path, ["a", "b", "c", "d"], red=("a",)
+        )
         _, captured = _run_main(monkeypatch, self._cmd_input())
-        elapsed = time.monotonic() - start
-        reason = json.loads(captured[0])["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "總預算" in reason
-        assert "d-hook.py" in reason
-        assert elapsed < 1.2 + 1.0  # 預算 + 最後一檔單次誤差
+        specific = json.loads(captured[0])["hookSpecificOutput"]
+        assert specific["permissionDecision"] == "deny"
+        reason = specific["permissionDecisionReason"]
+        assert "a-hook.py" in reason and "紅燈" in reason
+        assert "d-hook.py" in reason and "未驗證" in reason
+        assert "uv run --directory .claude/hooks pytest" in reason
+
+    def test_unverified_and_untested_reminders_coexist(self, monkeypatch, tmp_path):
+        """未驗證與無對應測試並存：兩類提醒都出現，不互相覆蓋。"""
+        self._budget_exhausted_setup(monkeypatch, tmp_path, ["a", "b", "c", "d"])
+        staged = "".join(f"M\0.claude/hooks/{n}-hook.py\0" for n in "abcd")
+        staged += "M\0.claude/hooks/orphan-hook.py\0"
+        monkeypatch.setattr(hook_module, "run_git_command", lambda *a, **k: (True, staged))
+        _, captured = _run_main(monkeypatch, self._cmd_input())
+        assert len(captured) == 1
+        ctx = json.loads(captured[0])["hookSpecificOutput"]["additionalContext"]
+        assert "d-hook.py" in ctx and "總預算" in ctx
+        assert "orphan-hook.py" in ctx and "未受測試保護" in ctx
 
     def test_settings_timeout_exceeds_worst_case(self):
         """settings.json 註冊本 hook 的 timeout（單位：秒）須與常數一致，

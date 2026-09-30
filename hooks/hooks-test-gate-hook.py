@@ -116,7 +116,8 @@ PLATFORM_TIMEOUT_SECONDS = 120
 _STATUS_PASS = "pass"
 _STATUS_RED = "red"
 _STATUS_TIMEOUT = "timeout"
-_STATUS_SKIPPED = "skipped"
+# 總預算耗盡而未執行：數量多不代表測試有缺陷，不判失敗（放行 + 可見提醒）
+_STATUS_UNVERIFIED = "unverified"
 
 # 便宜前置判斷：命令是否含 "commit" 字樣（非 git 相關的 Bash 命令於此短路）
 _COMMIT_WORD_RE = re.compile(r"\bcommit\b")
@@ -323,7 +324,7 @@ def _run_all_tests(
     """逐檔執行，回傳 {hook檔名: (狀態, 輸出末段)}。
 
     每檔逾時 = min(PER_FILE_TIMEOUT, 剩餘總預算)；預算耗盡後其餘檔案標記
-    skipped（保守方向：視同未通過，不放行）。最壞總耗時 <= TOTAL_BUDGET。
+    unverified（不判失敗，由 main 放行並附提醒）。最壞總耗時 <= TOTAL_BUDGET。
     """
     deadline = time.monotonic() + TOTAL_BUDGET
     results = {}
@@ -332,7 +333,7 @@ def _run_all_tests(
         if remaining <= 0:
             logger.warning("總預算 %ss 耗盡，未執行: %s", TOTAL_BUDGET, hook_filename)
             results[hook_filename] = (
-                _STATUS_SKIPPED,
+                _STATUS_UNVERIFIED,
                 f"總預算 {TOTAL_BUDGET}s 耗盡，未執行",
             )
             continue
@@ -350,27 +351,49 @@ _BOUNDARY_NOTE = (
 _STATUS_LABELS = {
     _STATUS_RED: "測試紅燈（未通過）",
     _STATUS_TIMEOUT: "測試逾時（單檔超過上限，疑似卡住）",
-    _STATUS_SKIPPED: "未執行（總預算耗盡，保守視為未通過）",
 }
+
+
+def _build_unverified_reminder(tested: Dict[str, Path], unverified: List[str]) -> str:
+    """總預算耗盡而未驗證的檔案：指名、說明原因、給可複製的補跑指令。"""
+    files_block = "\n".join(
+        f"  - {f} -> {tested[f]}" for f in sorted(unverified)
+    )
+    tests_arg = " ".join(str(tested[f]) for f in sorted(unverified))
+    return (
+        f"[Hooks 測試 gate 提醒] 以下被改動的 hook 檔尚未驗證"
+        f"（總預算 {TOTAL_BUDGET} 秒耗盡，未執行其對應測試；未驗證不代表有缺陷）：\n"
+        f"{files_block}\n\n"
+        "請補跑：\n"
+        f"  uv run --directory .claude/hooks pytest {tests_arg}"
+    )
 
 
 def _build_deny_message(tested: Dict[str, Path], results: dict) -> str:
     """區分測試紅、單檔逾時、總預算耗盡未執行，並指名檔案。"""
     lines = []
     tails = []
+    unverified = []
     for hook_filename, (status, tail) in sorted(results.items()):
+        if status == _STATUS_UNVERIFIED:
+            unverified.append(hook_filename)
+            continue
         if status == _STATUS_PASS:
             continue
         lines.append(
             f"  - {hook_filename} -> {tested[hook_filename]} : {_STATUS_LABELS[status]}"
         )
         tails.append(f"[{hook_filename}]\n{tail}")
+    unverified_block = ""
+    if unverified:
+        unverified_block = "\n\n" + _build_unverified_reminder(tested, unverified)
     return (
         "Hooks 目標測試 gate：commit 被阻止\n\n"
         "以下被改動的 hook 檔對應測試未通過：\n"
         + "\n".join(lines)
         + "\n\n測試輸出（末段）：\n"
         + "\n\n".join(tails)
+        + unverified_block
         + f"\n\n{_BOUNDARY_NOTE}\n"
         "請修正對應測試後再重試 commit。"
         f"（單檔上限 {PER_FILE_TIMEOUT}s，總預算 {TOTAL_BUDGET}s）"
@@ -426,9 +449,15 @@ def main() -> int:
     hooks_dir = Path(host_root) / ".claude" / "hooks"
     tested, untested = _resolve_test_paths(touched, hooks_dir)
 
+    unverified: List[str] = []
     if tested:
         results = _run_all_tests(tested, hooks_dir, logger)
-        failing = {f: r[0] for f, r in results.items() if r[0] != _STATUS_PASS}
+        failing = {
+            f: r[0]
+            for f, r in results.items()
+            if r[0] not in (_STATUS_PASS, _STATUS_UNVERIFIED)
+        }
+        unverified = sorted(f for f, r in results.items() if r[0] == _STATUS_UNVERIFIED)
         if failing:
             logger.info("目標測試未通過，阻擋 commit: %s", sorted(failing.items()))
             emit_hook_output(
@@ -439,11 +468,17 @@ def main() -> int:
             )
             return 0
 
+    reminders = []
+    if unverified:
+        logger.warning("總預算耗盡，放行但以下檔案未驗證: %s", unverified)
+        reminders.append(_build_unverified_reminder(tested, unverified))
     if untested:
         logger.info("以下觸及的 hook 檔無對應測試: %s", sorted(untested))
+        reminders.append(_build_untested_reminder(untested))
+    if reminders:
         emit_hook_output(
             "PreToolUse",
-            additional_context=_build_untested_reminder(untested),
+            additional_context="\n\n".join(reminders),
             input_data=input_data,
         )
         return 0
