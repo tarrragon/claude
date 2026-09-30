@@ -1,3 +1,16 @@
+## [2.64.1] - 2026-09-30
+
+### Summary
+fix: commit_content_guards 放行純版本號變動，finish 整合測試裝 reference-transaction hook; chore: worktree 1.5.1（Guard A 內容取代出口、quotepath 收斂；補版號供發佈庫推送）; chore: .claude/VERSION 2.64.0（sync-push：某版本 框架修正）
+
+Changes: 1 fix, 2 chore
+
+- fix: commit_content_guards 放行純版本號變動，finish 整合測試裝 reference-transaction hook
+- chore: worktree 1.5.1（Guard A 內容取代出口、quotepath 收斂；補版號供發佈庫推送）
+- chore: .claude/VERSION 2.64.0（sync-push：某版本 框架修正）
+
+---
+
 ## [2.64.0] - 2026-09-30
 
 ### Summary

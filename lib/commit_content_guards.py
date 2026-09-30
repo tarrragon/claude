@@ -27,11 +27,14 @@ reference-transaction 讀已提交的 commit 物件），此模組即為兩者�
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 import sys
 import types
 from pathlib import Path
-from typing import Callable, Dict, List, NamedTuple, Optional
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 
+_VERSION_FILE_NAMES = frozenset({"pubspec.yaml", "package.json", "pyproject.toml"})
 _LIB_DIR = Path(__file__).resolve().parent
 _CLAUDE_DIR = _LIB_DIR.parent
 _HOOKS_DIR = _CLAUDE_DIR / "hooks"
@@ -170,6 +173,75 @@ def _check_file_type_permission(sf: StagedFile, logger) -> List[Finding]:
     return []
 
 
+_PUBSPEC_VERSION_RE = re.compile(r"^version:\s*(\S+)\s*$")
+_TOML_VERSION_RE = re.compile(r"""^version\s*=\s*["']([^"']+)["']\s*$""")
+_TOML_SECTION_RE = re.compile(r"^\[([^\[\]]+)\]\s*$")
+_TOML_VERSION_SECTIONS = ("project", "tool.poetry")
+
+
+def _toml_section_at(lines: List[str], index: int) -> str:
+    """回傳第 index 行所屬的 TOML section 名稱（最近的前置 `[name]`）。"""
+    for line in reversed(lines[:index]):
+        match = _TOML_SECTION_RE.match(line)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def _single_changed_line(pre: List[str], post: List[str]) -> Optional[int]:
+    """兩份文字逐行比對，恰有一行相異且行數相同時回傳該行索引，否則 None。"""
+    if len(pre) != len(post):
+        return None
+    changed = [i for i, (a, b) in enumerate(zip(pre, post)) if a != b]
+    return changed[0] if len(changed) == 1 else None
+
+
+def _json_version_bump(pre_text: str, post_text: str) -> Optional[Tuple[str, str]]:
+    try:
+        pre, post = json.loads(pre_text), json.loads(post_text)
+    except ValueError:
+        return None
+    if not isinstance(pre, dict) or not isinstance(post, dict):
+        return None
+    old, new = pre.pop("version", None), post.pop("version", None)
+    if old is None or new is None or old == new or pre != post:
+        return None
+    return str(old), str(new)
+
+
+def _line_version_bump(
+    name: str, pre_lines: List[str], post_lines: List[str]
+) -> Optional[Tuple[str, str]]:
+    index = _single_changed_line(pre_lines, post_lines)
+    if index is None:
+        return None
+    pattern = _PUBSPEC_VERSION_RE if name == "pubspec.yaml" else _TOML_VERSION_RE
+    old_match = pattern.match(pre_lines[index])
+    new_match = pattern.match(post_lines[index])
+    if not (old_match and new_match):
+        return None
+    if name == "pyproject.toml" and (
+        _toml_section_at(pre_lines, index) not in _TOML_VERSION_SECTIONS
+    ):
+        return None
+    return old_match.group(1), new_match.group(1)
+
+
+def _pure_version_bump(sf: StagedFile) -> Optional[Tuple[str, str]]:
+    """版本檔且前後差異只有版本欄位那一行時回傳 (舊版本, 新版本)，否則 None。
+
+    版本欄位：pubspec.yaml 頂層 `version:`；package.json 頂層 `"version"`；
+    pyproject.toml 的 `[project]` 或 `[tool.poetry]` 下 `version =`。
+    檔名以 basename 比對，涵蓋 monorepo 子目錄。新增檔案（pre 為空）不算 bump。
+    """
+    name = Path(sf.rel_path).name
+    if name not in _VERSION_FILE_NAMES or not sf.pre_text or sf.pre_text == sf.post_text:
+        return None
+    if name == "package.json":
+        return _json_version_bump(sf.pre_text, sf.post_text)
+    return _line_version_bump(name, sf.pre_text.splitlines(), sf.post_text.splitlines())
+
+
 def _check_branch_verify(
     sf: StagedFile, logger, is_merge_commit: bool = False
 ) -> List[Finding]:
@@ -199,6 +271,13 @@ def _check_branch_verify(
     if is_merge_commit:
         return []
     if m.is_exempt_path_on_protected_branch(sf.rel_path, cwd=str(project_root)):
+        return []
+    bump = _pure_version_bump(sf)
+    if bump is not None:
+        logger.info(
+            "[branch-verify] 保護分支 '%s' 上放行純版本號變動 %s：%s -> %s",
+            current_branch, sf.rel_path, bump[0], bump[1],
+        )
         return []
     return [
         Finding(

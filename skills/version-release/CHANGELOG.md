@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.10.0 - 本地變更，指向 tarrragon/claude#55：`finish` 的 Commit Version Activation 在裝有 git 層 reference-transaction 守衛的 repo 內不再被擋。`.claude/lib/commit_content_guards.py` 的 `_check_branch_verify` 新增純版本號變動放行：版本檔（`pubspec.yaml`、`package.json`、`pyproject.toml`，含 monorepo 子目錄）且前後差異只有版本欄位那一行時放行並寫 info 日誌（含前後版本值），依賴或其他行的變動（含版本行與依賴行同改）維持 deny，不使用環境變數旁路。新增整合測試，fixture repo 安裝真實 reference-transaction hook 後在 main 上跑啟用與提交。修復根因：守衛對保護分支上的非豁免檔案一律 deny，未區分版本欄位變動與其他變動，而前一版把版本檔併入啟用提交時的測試 fixture 未安裝該 hook，沒測到此路徑。
+**Last Updated**: 2026-09-30
+
 **Version**: 2.9.0 - 本地變更，指向 tarrragon/claude#55：`finish` 的 Commit Version Activation 提交納入本次啟用步驟 bump 的版本檔（Flutter 為 `pubspec.yaml`，含 config 指定的 monorepo 子目錄版本檔）。`commit_changes` 新增 `extra_paths` 參數，路徑須同時在 baseline 差集內才 stage，非版本檔的非 docs 變更仍不納入；新增 `resolve_activation_version_paths` 取得版本檔集合（與 `ensure_version_activated` 同源）。修復根因：stage 範圍只收 `CHANGELOG.md` 與 `docs/`，版本檔殘留於工作區使 exit 前殘留守衛 rc=1。
 **Last Updated**: 2026-09-30
 
