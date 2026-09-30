@@ -61,6 +61,8 @@ from ticket_system.lib.ticket_ops import (
 )
 from ticket_system.lib.tdd_phase_inference import TDD_PHASE_SOURCE_MANUAL
 from ticket_system.lib.ticket_validator import validate_ticket_id
+from ticket_system.lib.ana_coupling_hint import hint_blocked_by_ana
+from ticket_system.lib import git_utils
 
 # _execute_set_relation_field 呼叫入口對應的 CLI 子命令名稱，
 # 用於逗號分隔誤用訊息中組出正確指令範例。
@@ -253,6 +255,11 @@ def _execute_set_relation_field(
 
         ticket_path = resolve_ticket_path(target_ticket, version, target_id)
         save_ticket(target_ticket, ticket_path)
+        commit_failed = git_utils.commit_ticket_md_reporting(
+            _RELATION_FIELD_TO_CLI_COMMAND.get(field_name, field_name),
+            str(ticket_path), target_id, field_name,
+            operation=_RELATION_FIELD_TO_CLI_COMMAND.get(field_name, field_name),
+        )
 
     # Step 6：輸出成功訊息
     print(format_info(
@@ -265,7 +272,10 @@ def _execute_set_relation_field(
     else:
         print(f"  新值：（空）")
 
-    return 0
+    if field_name == "blockedBy" and not is_remove_mode:
+        hint_blocked_by_ana(version, referenced_ids, target_id)
+
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def execute_set_blocked_by(args: argparse.Namespace, version: str) -> int:
@@ -564,11 +574,14 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
 
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         save_ticket(ticket, ticket_path)
+        commit_failed = git_utils.commit_ticket_md_reporting(
+            "phase", str(ticket_path), args.ticket_id, "current_phase", operation="phase",
+        )
 
     print(format_info(InfoMessages.PHASE_UPDATED, ticket_id=args.ticket_id))
     print(f"{TrackRelationsMessages.PHASE_PREFIX} {phase}")
     print(f"{TrackRelationsMessages.PHASE_ASSIGNEE_PREFIX} {args.agent}")
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def execute_agent(args: argparse.Namespace, version: str) -> int:

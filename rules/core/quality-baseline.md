@@ -63,7 +63,7 @@
 
 | 情境 | 必要動作 |
 |------|---------|
-| Solution 含 spawn 規劃表格 | complete 前建對應 ticket：`ticket create --source-ticket <本票 ID>`（CLI 建立當下回填雙向血緣），子任務形態用 `--parent <本票 ID>` |
+| Solution 含 spawn 規劃表格 | complete 前建對應 ticket：ANA 結論要求的落地一律 `ticket create --parent <本票 ID>`（children，PC-091 唯一路線；後果與 `--force` 條件見 `ticket-lifecycle.md`〈防護性 ANA〉）；`--source-ticket <本票 ID>` 只用於分析中發現、但結論未要求的獨立工作 |
 | 成票與否 / 範疇 / 優先級需 PM 裁決 | 先 `ticket track add-spawn-request`，complete 前再 `resolve-spawn-request <本票 ID> SR-N --status processed --spawned-ticket <id>` 或 `--status dismissed --reason <理由>`；停在 pending 不算落地 |
 | 規劃項目經評估不需建 ticket | Solution **逐項**標註「無需建 ticket：[具體理由]」，一則宣告扣抵一項 |
 | 代理人工具清單不含 Bash（無法呼叫 ticket CLI） | 派發階段即不指派 ANA 型 ticket；已誤派者停手上報 NeedsContext 由 PM 改派，不以 `--force` 收尾 |
@@ -109,7 +109,8 @@
 - `.claude/skills/framework-issue/SKILL.md` - 規則 5 框架問題升級流程（介入判斷、兩條路徑、issue 關閉協議、回報前查重 SOP）
 
 ---
-**Last Updated**: 2026-09-16 | **Version**: 3.7.0 — 規則 5 補一行射程註記（不展開三明示，僅路由）：「建立 Ticket」以發現的收件方裝有本框架 ticket 系統為前提，協作或接手他人專案時合法載體改為通過閘門的盤點工作項表，三種終態對應與強制層零改動接法見 `.claude/references/decision-trigger-binding-details.md` 規則 2.6。
+**Last Updated**: 2026-09-30 | **Version**: 3.8.0 — 規則 5 ANA spawn 情境表第一列對齊 PC-091：ANA 結論要求的落地改 `--parent`（children），`--source-ticket` 限分析中發現、結論未要求的獨立工作；後果與 `--force` 條件路由 ticket-lifecycle。
+**Version**: 3.7.0 — 規則 5 補一行射程註記（不展開三明示，僅路由）：「建立 Ticket」以發現的收件方裝有本框架 ticket 系統為前提，協作或接手他人專案時合法載體改為通過閘門的盤點工作項表，三種終態對應與強制層零改動接法見 `.claude/references/decision-trigger-binding-details.md` 規則 2.6。
 **Version**: 3.6.0 — 規則 5 補一行接縫註記（不展開三明示，僅路由）：優先級對應表「高→當前版本（IMP Ticket）」應讀作「高＝本版處理」，票型由證據狀態決定而非優先級，判準主文見 `.claude/skills/framework-issue/references/escalation-flow.md`〈修法時點分離：發現票何時能寫定修法〉（發現時點與修法定案時點分離，來源用戶裁示）。
 **Version**: 3.5.0 — 規則 5「ANA Solution 內 spawn 規劃」情境表對齊強制層：原第 3 列「由無 create 權限代理人執行 → complete 後 PM 補建」與同節引言句（complete 前）時點相反，且該類別經全量盤點無實例（無任何 agent 定義禁止建票），刪除後改列「工具清單不含 Bash」此一實際受限條件。新增 spawn request 通道列（先登記、complete 前 resolve 為終態，pending 不算落地）；豁免列改為逐項宣告。強制層註記補「保證方為執行者」與新的落地數計算式，PM 事後驗收降為冗餘檢查。
 **Version**: 3.4.0 — 新增「第一原則：誤差預算」章節於核心價值之前：生成式產出逼近正確、品質機制為已定價成本、禁道歉自責敘事、檢討唯二目標（降低復核成本／提高逼近精度）。規則 1、2、4、6 定位為其直接實例化（3、5 屬時序／完整性，經 Layer 2 審查收窄）。用戶裁示定為框架基本原則，隨 .claude/ sync 擴散至所有 consumer 專案。

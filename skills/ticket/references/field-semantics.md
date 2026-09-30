@@ -185,6 +185,7 @@
 | `spawned_tickets`（ANA 類型 source） | 是（`lifecycle.py` 確認關卡＋`acceptance_auditor.py` 稽核，已定案） | 否 |
 | `spawned_tickets`（非 ANA 類型 source） | 否（獨立排程） | 否 |
 | `blockedBy` | 否（不影響 complete） | 是（過濾本 ticket） |
+| `children` 對 `blockedBy` 下游的傳遞效果（下游 blockedBy 指向有非終態 children 的父票，常見於 ANA） | 否（下游自身 complete 不受影響） | 是（傳遞阻擋）：父票因 children 未終態而無法 complete，下游的 blockedBy 目標便不進入 terminal，下游持續被過濾。處置：下游 `blockedBy` 改指具體 child，不指父票（PC-091） |
 | `relatedTo` | 否 | 否 |
 
 > **現況分層說明**：`acceptance-gate-hook.py` 的 `ana_spawned_checker`（hook 層舊機制）已於 W17-120.2 退場，僅保留 `check_ana_has_spawned_tickets` 作為「無後續 ticket」的 missing 警告（不阻擋）。但 ANA complete 阻擋本身**未**隨之移除，仍由另外兩個獨立機制實際執行：`lifecycle.py` 的 `_handle_ana_spawned_confirmation`（complete 時的互動/CLI 確認關卡）與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`（W15-003，acceptance 稽核階段的 FAIL 判定）。此為目前已定案的現行設計，非等待收斂的過渡態；若日後確有移除計畫，應另建 ticket 並在此標註其 ID。

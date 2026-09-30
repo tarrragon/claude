@@ -49,6 +49,7 @@
   "edge_types": {
     "association": {
       "class": "see-also",
+      "direction": "undirected",
       "forward_cardinality": "many",
       "forward_field": "relatedTo",
       "layer": "established",
@@ -57,6 +58,7 @@
     },
     "blocking": {
       "class": "ordering",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "blockedBy",
       "layer": "established",
@@ -65,6 +67,7 @@
     },
     "blood": {
       "class": "containment",
+      "direction": "directed",
       "forward_cardinality": "one",
       "forward_field": "parent_id",
       "layer": "established",
@@ -73,6 +76,7 @@
     },
     "branching": {
       "class": "ordering",
+      "direction": "directed",
       "forward_cardinality": "one",
       "forward_field": "branch_from",
       "layer": "proposed",
@@ -81,6 +85,7 @@
     },
     "consumption": {
       "class": "dataflow",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "consumes",
       "layer": "proposed",
@@ -89,6 +94,7 @@
     },
     "discovery": {
       "class": "provenance",
+      "direction": "directed",
       "forward_cardinality": "one",
       "forward_field": "discovered_during",
       "layer": "established",
@@ -97,6 +103,7 @@
     },
     "domain_coverage": {
       "class": "containment",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "source_specs",
       "layer": "established",
@@ -105,6 +112,7 @@
     },
     "domain_dependency": {
       "class": "ordering",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "depends_on_domains",
       "layer": "established",
@@ -113,6 +121,7 @@
     },
     "emission": {
       "class": "dataflow",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "emits",
       "layer": "proposed",
@@ -121,6 +130,7 @@
     },
     "proposal_association": {
       "class": "see-also",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "related_proposals",
       "layer": "established",
@@ -129,6 +139,7 @@
     },
     "provenance": {
       "class": "provenance",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "source_proposal",
       "layer": "established",
@@ -137,6 +148,7 @@
     },
     "requirement_impl": {
       "class": "containment",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "implements_requirements",
       "layer": "established",
@@ -145,6 +157,7 @@
     },
     "returning": {
       "class": "ordering",
+      "direction": "directed",
       "forward_cardinality": "one",
       "forward_field": "return_to",
       "layer": "proposed",
@@ -153,6 +166,7 @@
     },
     "spawn": {
       "class": "provenance",
+      "direction": "directed",
       "forward_cardinality": "one",
       "forward_field": "source_ticket",
       "layer": "established",
@@ -161,6 +175,7 @@
     },
     "spec_association": {
       "class": "see-also",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "related_specs",
       "layer": "established",
@@ -169,6 +184,7 @@
     },
     "uc_association": {
       "class": "see-also",
+      "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "related_usecases",
       "layer": "established",

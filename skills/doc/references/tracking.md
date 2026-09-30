@@ -58,6 +58,14 @@ proposals:
 - `one`：欄位為純量（`parent_id`、`source_ticket`、`discovered_during`、`branch_from`、`return_to`）。
 - 消費端讀 `source_proposal` 必須先正規化為清單，不可假設為字串。
 
+### 方向性（direction）
+
+`GRAPH_EDGE_TYPES` 每個邊型以 `direction`（`directed` / `undirected`）宣告邊語意是否有方向；權威為 `tracking_schema.py`，`doc schema export` 匯出的 `edge_types` 同步帶出。
+
+- `undirected`：語意對稱，儲存端仍單向，消費端須做 1-hop symmetric closure。目前僅 `association`（`relatedTo`）。
+- `directed`：其餘全部邊型。判準是上游是否明文宣告對稱，不由 `class` 推導：`spec_association`／`uc_association`／`proposal_association` 與 `association` 同為 `see-also`，但上游未宣告對稱，故為 `directed`。
+- 消費端不以鍵名寫死無向判定，讀 `direction` 欄位；缺該欄位的舊版 JSON，消費端以自身內建型別表補值。
+
 ## 查詢方式
 
 | 方式 | 工具 | 範例 |

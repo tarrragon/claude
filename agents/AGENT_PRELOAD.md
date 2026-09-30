@@ -120,7 +120,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 #### 2.6 執行中建票血緣回填
 
-執行中發現需建票時禁止裸 `ticket create` 只標 `--related-to`（`relatedTo` 不維護雙向血緣欄位，PM 需事後手動補齊）；必須帶 `--source-ticket <自身 ticket id>` 或改走 `add-spawn-request`（PM `resolve-spawn-request` 時自動回填）。兩通道選用判準與欄位差異：`.claude/references/agent-dispatch-template.md`「建票血緣回填義務」節；欄位語意 SSOT：`.claude/skills/ticket/references/field-semantics.md`。
+執行中發現需建票時禁止裸 `ticket create` 只標 `--related-to`（`relatedTo` 不維護雙向血緣欄位，PM 需事後手動補齊）；必須帶 `--source-ticket <自身 ticket id>` 或改走 `add-spawn-request`（例外：ANA 結論要求的落地改用 `--parent`，PC-091）（PM `resolve-spawn-request` 時自動回填）。兩通道選用判準與欄位差異：`.claude/references/agent-dispatch-template.md`「建票血緣回填義務」節；欄位語意 SSOT：`.claude/skills/ticket/references/field-semantics.md`。
 
 ---
 

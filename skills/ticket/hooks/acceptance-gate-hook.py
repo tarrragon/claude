@@ -69,8 +69,10 @@ from lib import (
     is_subagent_environment,
 )
 from lib.hook_messages import GateMessages, CoreMessages, AskUserQuestionMessages, format_message
+from lib.git_command_parse import parse_command_statements
 
 from acceptance_checkers import (
+    collect_incomplete_descendants_from_frontmatter,
     extract_children_from_frontmatter,
     is_doc_type,
     is_ana_type,
@@ -145,6 +147,10 @@ class AcceptanceCheckResult(NamedTuple):
     god_ticket_scale_violations: List[str] = []
     # 0.2.1-W3-052.1：職責邊界判準（C3 移植）違規清單，warning 不阻擋
     responsibility_scope_violations: List[str] = []
+    # complete --force 旁路的未完成 children 清單（每項一行文字；空清單代表未旁路）
+    force_bypassed_children: List[str] = []
+    # 觸發旁路的命令全文（稽核用）
+    force_bypass_command: str = ""
     # 0.4.1-W2-006：complete 與 git merge / set-acceptance / append-log 等寫入操作
     # 串接於同一 Bash 呼叫時為 True，代表 acceptance / execution log 檢查因讀檔
     # 時序早於同鏈操作執行而略過（避免滯後誤報，見 detect_chained_pre_complete_write）
@@ -253,6 +259,58 @@ def extract_ticket_id_from_command(command: str, logger) -> Optional[str]:
     return None
 
 
+def has_force_flag_on_complete(command: str, ticket_id: str) -> bool:
+    """命令中引號外的 `ticket track complete <ticket_id> ... --force` 語句是否存在。
+
+    只認「complete 語句本身」的 --force：先剝除引號內文字（--why 等參數值），
+    再以共用解析管線切成語句（涵蓋 `&&`／`;`／`|`／子 shell 括號），比對
+    含 `ticket track complete` 與該票 ID 的語句是否帶 `--force` token。同鏈其他
+    命令的 --force（如推送旗標）不算。無法解析（未閉合引號）回傳 False，
+    由呼叫端維持 deny（fail-closed）；解析例外向上拋出，由呼叫端處置。
+    """
+    statements = parse_command_statements(_strip_quoted_spans(command))
+    if statements is None:
+        return False
+    for tokens in statements:
+        for i in range(len(tokens) - 2):
+            if tokens[i:i + 3] == ["ticket", "track", "complete"]:
+                rest = tokens[i + 3:]
+                if ticket_id in rest and "--force" in rest:
+                    return True
+    return False
+
+
+def _resolve_force_bypass(
+    command: str,
+    ticket_id: str,
+    ticket_file: Path,
+    frontmatter: Dict[str, Any],
+    project_dir: Path,
+    logger,
+) -> Optional[List[str]]:
+    """children 阻擋時判斷是否由 `complete --force` 旁路。
+
+    Returns:
+        旁路成立回傳未完成 children 的文字清單（並已寫稽核日誌）；
+        不旁路或解析失敗回傳 None（呼叫端維持 deny，fail-closed）。
+    """
+    try:
+        if not command or not has_force_flag_on_complete(command, ticket_id):
+            return None
+        incomplete = collect_incomplete_descendants_from_frontmatter(
+            ticket_file, frontmatter, project_dir, ticket_id, logger
+        )
+        lines = [f"{cid}: {ctitle} (status: {cstatus})" for cid, ctitle, cstatus in incomplete]
+        logger.warning(
+            f"FORCE_BYPASS ticket={ticket_id} 旁路 {len(lines)} 個未完成後代: "
+            f"{'; '.join(lines)} | command={command}"
+        )
+        return lines
+    except Exception as e:
+        logger.error(f"解析 --force 失敗，維持 deny（fail-closed）: {e}", exc_info=True)
+        return None
+
+
 def is_complete_command(command: str) -> bool:
     """判斷是否為 ticket track complete 命令
 
@@ -334,8 +392,18 @@ def check_acceptance_status(
         should_block, error_msg = check_children_completed_from_frontmatter(
             ticket_file, frontmatter, project_dir, ticket_id, logger
         )
+        force_bypassed_children: List[str] = []
         if should_block:
-            return AcceptanceCheckResult(True, False, error_msg, False, [], [], "", "", [], [], False)
+            bypassed = _resolve_force_bypass(
+                command, ticket_id, ticket_file, frontmatter, project_dir, logger
+            )
+            if bypassed is None:
+                # task_type 帶入，供 deny 時 checklist 第 5 項正確判斷 ANA
+                return AcceptanceCheckResult(
+                    True, False, error_msg, False, [], [],
+                    frontmatter.get("type", ""), "", [], [], False,
+                )
+            force_bypassed_children = bypassed
 
         # 步驟 1.5：防護類 hook ticket 的必含項目（前三項命中 acceptance，
         # 第四項「產生路徑盤點結果」命中 how.strategy 缺則 Solution 的盤點表
@@ -549,6 +617,8 @@ def check_acceptance_status(
             chained_write_detected=chained_write_detected,
             god_ticket_scale_violations=god_ticket_scale_violations,
             responsibility_scope_violations=responsibility_scope_violations,
+            force_bypassed_children=force_bypassed_children,
+            force_bypass_command=command if force_bypassed_children else "",
         )
 
     except Exception as e:
@@ -699,6 +769,17 @@ def generate_hook_output(
     if check_result.chained_write_detected:
         context_parts.append(CHAINED_WRITE_INFO_NOTE)
         logger.info("新增同命令鏈滯後讀檔提示（0.4.1-W2-006）")
+
+    # complete --force 旁路 children：列出被旁路的未完成 children（已寫稽核日誌）
+    if check_result.force_bypassed_children:
+        bypass_list = "\n".join(f"  - {c}" for c in check_result.force_bypassed_children)
+        context_parts.append(
+            f"[WARNING] complete --force 旁路 children 檢查（Ticket: {ticket_id}）\n"
+            f"以下未完成後代被旁路，已寫入稽核日誌 .claude/hook-logs/acceptance-gate/：\n"
+            f"{bypass_list}\n"
+            "其他阻擋（hook 防護必含項、spawn 一致性、multi_view 非法值等）不受 --force 影響。"
+        )
+        logger.info("新增 --force 旁路 children 提示")
 
     # 優先級 1：錯誤或警告訊息
     if check_result.message:

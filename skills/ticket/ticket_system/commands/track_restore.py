@@ -96,24 +96,13 @@ def execute_restore(args: argparse.Namespace, version: str) -> int:
         save_ticket(ticket, ticket_path)
 
         from ticket_system.lib import git_utils
-        try:
-            commit_status = git_utils._auto_commit_ticket_md(
-                str(ticket_path), ticket_id, "status",
-                operation="restore",
-            )
-            if commit_status in ("not_git_repo", "git_failed"):
-                _sys.stderr.write(
-                    f"[restore] auto-commit skipped（{commit_status}，非致命）；"
-                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
-                )
-        except Exception as exc:
-            _sys.stderr.write(
-                f"[restore] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-            )
+        commit_failed = git_utils.commit_ticket_md_reporting(
+            "restore", str(ticket_path), ticket_id, "status", operation="restore",
+        )
 
     print(f"[OK] {ticket_id} 已從 closed 還原為 pending")
     print(f"   還原時間: {restored_at}")
     print(f"   還原者: {ticket['restored_by']}")
     print(f"   還原理由: {reason}")
     print(f"   已清除欄位: {', '.join(_CLOSE_FIELDS_TO_CLEAR)}")
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0

@@ -407,6 +407,7 @@ Live in_progress 票（非 stale，`staleness.is_live_occupied` 判準）以 see
 /ticket track set-blocked-by <id> <id2> --add          # 追加（去重）
 /ticket track set-blocked-by <id> <id2> --remove       # 移除指定 blockedBy
 /ticket track set-blocked-by <id> "<id2> <id3>" --add  # 一次追加多個：value 是單一位置參數，須引號包成一個字串（否則 argparse 報 unrecognized arguments）
+# 覆寫與 --add 指向有非終態 children 的 ANA 時，stderr 印 [HINT] 說明 ANA 將保持開啟；只提示，exit code 不變（見 create-command.md〈指向 ANA 的耦合後果提示〉）
 
 # 設定相關關係（relatedTo 欄位）
 /ticket track set-related-to <id> <related-id>         # 覆寫（設定單一 relatedTo）
@@ -476,7 +477,9 @@ Live in_progress 票（非 stale，`staleness.is_live_occupied` 判準）以 see
 
 ### complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit
 
-`complete` 在父 ticket 含未完成 children（非 terminal：pending / in_progress / blocked）時會以 exit 1 阻擋。提供 `--force` 旁路強制完成，會在 stderr 列出未完成 children 作為警告，cascade 解鎖機制仍會執行。建議優先完成 children 後再 complete 父 ticket。
+`complete` 在父 ticket 含未完成 children（非 terminal：pending / in_progress / blocked）時會以 exit 1 阻擋。提供 `--force` 旁路強制完成，cascade 解鎖機制仍會執行。建議優先完成 children 後再 complete 父 ticket。
+
+**`--force` 的實際旁路範圍**：`acceptance-gate-hook` 辨識命令中引號外的 `ticket track complete <id> ... --force` 語句（同鏈其他命令的 `--force` 不算），**只旁路 children 檢查**，其他阻擋照常生效（hook 防護必含項、spawn 一致性、multi_view 非法值等）。旁路成立時：hook 的 additionalContext 列出被旁路的未完成 children（每項 `id: title (status)`），並在 `.claude/hook-logs/acceptance-gate/` 寫入 `FORCE_BYPASS` 稽核紀錄；解析失敗時維持阻擋（fail-closed）。CLI 層 `lifecycle.py` 亦於 stderr 列出未完成 children 作為警告。**Action**：`--force` 是逃生閥，不是 ANA 落地的收尾路徑；ANA 結論要求的落地用 `--parent`，等 children 終態後再 complete（PC-091）。
 
 `complete` 的自動提交於呼叫當下以隔離索引提交 ticket metadata（本票 md + 主 worklog），而非留待 PM 事後核對共用 index 手動 commit。**Why**：提交時機從「人工事後裸 commit」改為「CLI 呼叫當下自動提交」，是為了根除過期 index 快照被誤 commit 進 HEAD 的風險。**Consequence**：ticket metadata 與對應的程式碼變更**必然分屬兩個 commit**——單靠 `git log --grep <票號>` 只會命中 metadata commit（`chore(<id>): complete` / `chore(<id>): append-log ...`），不含實作變更；依「一票一 commit」假設做追溯的下游流程（含 sync 本框架的其他 consumer 專案）須知情此語意，否則會誤判追溯不完整或漏算變更範圍。**Action**：追溯某票完整變更時，搜尋範圍須同時涵蓋 metadata commit 與程式碼 commit（可用票號關鍵字掃兩者的 commit message，或查詢 ticket body 的 Test Results / Completion Info 章節記錄的程式碼 commit SHA）。
 

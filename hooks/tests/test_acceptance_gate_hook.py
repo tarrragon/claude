@@ -794,3 +794,301 @@ def test_detect_chained_pre_complete_write_helper():
         "ticket track set-acceptance 0.1.0-W1-001 --all-check "
         "&& ticket track batch-complete 0.1.0-W1-001"
     ) is True
+
+
+# ----------------------------------------------------------------------------
+# 0.4.0-W1-068.1：complete --force 只旁路 children 步驟，放行並寫稽核紀錄
+#
+# 成因：CLI 與 track-command.md 承諾 `complete --force` 旁路未完成 children，
+# 但 PreToolUse 的 acceptance-gate-hook 在 CLI 之前 deny，且不解析 --force，
+# 逃生閥失效。修法只旁路 children 這一步，其餘阻擋照舊。
+# ----------------------------------------------------------------------------
+
+# i18n-exempt: 測試比對用的訊息片段，非 user-facing
+_MSG_HOOK_PROTECTION = "防護類"
+# i18n-exempt: 測試比對用的訊息片段，非 user-facing
+_MSG_CHILDREN_BLOCK = "子任務未全部完成"
+# i18n-exempt: 測試比對用的訊息片段，非 user-facing
+_MSG_ILLEGAL_VALUE = "非法"
+# i18n-exempt: 測試比對用的訊息片段，非 user-facing
+_MSG_NOT_ANA = "非 ANA，不適用"
+# i18n-exempt: 測試比對用的訊息片段，非 user-facing
+_MSG_AUDIT = "稽核"
+# i18n-exempt: fixture 內容（Spawn 規劃表格為 checker 解析的 schema 字面）
+_SPAWN_BODY = (
+    "## Solution\n\n### Spawn 規劃\n\n"
+    "| # | Type | Priority | title | scope | agent |\n"
+    "|---|------|----------|------|------|-------|\n"
+    "| 1 | IMP | P1 | fix A | a.py | thyme |\n"
+    "| 2 | IMP | P1 | fix B | b.py | thyme |\n\n"
+    "## Test Results\n"
+)
+
+
+def _load_gate_module(name: str):
+    import importlib.util
+    hook_path = ticket_skill_hooks_path / "acceptance-gate-hook.py"
+    spec = importlib.util.spec_from_file_location(name, hook_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+@pytest.fixture
+def capture_logger():
+    """收集所有等級日誌的 logger，用於斷言稽核紀錄。"""
+    log = logging.getLogger("test-acceptance-gate-force")
+    log.handlers = []
+    handler = _ListHandler()
+    log.addHandler(handler)
+    log.setLevel(logging.DEBUG)
+    log.propagate = False
+    log.captured = handler.messages
+    return log
+
+
+def _write_force_ticket(
+    project_dir: Path,
+    ticket_id: str,
+    ticket_type: str = "IMP",
+    children: list = None,
+    extra_frontmatter: str = "",
+    body: str = "# Body\n",
+) -> Path:
+    version_part = ticket_id.split("-W")[0]
+    ticket_dir = project_dir / "docs" / "work-logs" / f"v{version_part}" / "tickets"
+    ticket_dir.mkdir(parents=True, exist_ok=True)
+    children_block = (
+        "children: [" + ", ".join(children) + "]" if children else "children: []"
+    )
+    content = (
+        f"---\nid: {ticket_id}\ntitle: force-{ticket_id}\ntype: {ticket_type}\n"
+        f"status: in_progress\nversion: {version_part}\n{children_block}\n"
+        f"{extra_frontmatter}---\n\n{body}"
+    )
+    path = ticket_dir / f"{ticket_id}.md"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _force_fixture(project_dir: Path, parent_id: str = "0.18.0-W30-001"):
+    child_id = parent_id.rsplit("-", 1)[0] + "-002"
+    _write_force_ticket(project_dir, parent_id, children=[child_id])
+    _write_ticket(project_dir, child_id, "pending")
+    return parent_id, child_id
+
+
+def test_e1_force_flag_flips_children_block_to_allow(project_dir, logger):
+    """E1：同一 fixture，帶 --force 放行、不帶 --force 阻擋，結果必須不同。"""
+    parent_id, child_id = _force_fixture(project_dir)
+
+    without_force = _check_via_orchestrator(
+        project_dir, parent_id, logger, f"ticket track complete {parent_id}"
+    )
+    with_force = _check_via_orchestrator(
+        project_dir, parent_id, logger, f"ticket track complete {parent_id} --force"
+    )
+
+    assert without_force.should_block is True
+    assert with_force.should_block is False
+    assert without_force.should_block != with_force.should_block
+    assert child_id in "\n".join(with_force.force_bypassed_children)
+
+
+def test_force_bypass_writes_audit_log_with_full_command(project_dir, capture_logger):
+    parent_id, child_id = _force_fixture(project_dir, "0.18.0-W30-010")
+    command = f"ticket track complete {parent_id} --force"
+
+    _check_via_orchestrator(project_dir, parent_id, capture_logger, command)
+
+    audit = [m for m in capture_logger.captured if "FORCE_BYPASS" in m]
+    assert audit, "bypass event must be logged"
+    assert command in audit[0], "audit record must carry the full command"
+    assert child_id in audit[0]
+
+
+def test_force_bypass_lists_incomplete_children_in_additional_context(project_dir, logger):
+    parent_id, child_id = _force_fixture(project_dir, "0.18.0-W30-020")
+    module = _load_gate_module("acceptance_gate_hook_force_ctx")
+    result = module.check_acceptance_status(
+        parent_id, project_dir, logger, f"ticket track complete {parent_id} --force"
+    )
+
+    output = module.generate_hook_output(parent_id, result, project_dir, logger)
+
+    hook_out = output["hookSpecificOutput"]
+    assert hook_out["permissionDecision"] == "allow"
+    assert child_id in hook_out["additionalContext"]
+    assert "--force" in hook_out["additionalContext"]
+
+
+def test_e2_force_only_inside_quotes_does_not_bypass(project_dir, logger):
+    """E2：--force 只出現在引號內（如 --why 文字），不觸發旁路。"""
+    parent_id, _ = _force_fixture(project_dir, "0.18.0-W30-030")
+
+    for command in (
+        f'ticket track complete {parent_id} --why "do not use --force"',
+        f"ticket track complete {parent_id} --why '--force'",
+    ):
+        result = _check_via_orchestrator(project_dir, parent_id, logger, command)
+        assert result.should_block is True, command
+
+
+def test_force_on_other_command_in_chain_does_not_bypass(project_dir, logger):
+    """--force 屬於同鏈的其他命令（非 complete 語句）時不旁路。"""
+    parent_id, _ = _force_fixture(project_dir, "0.18.0-W30-040")
+
+    result = _check_via_orchestrator(
+        project_dir, parent_id, logger,
+        f"git push --force && ticket track complete {parent_id}",
+    )
+
+    assert result.should_block is True
+
+
+@pytest.mark.parametrize("template", [
+    "(ticket track complete {tid} --force)",
+    "(ticket track complete {tid} --force); echo done",
+    "cd /x && ticket track complete {tid} --force",
+    "ticket track complete {tid} --force | tail -5",
+])
+def test_force_bypass_recognized_in_chained_and_subshell_forms(project_dir, logger, template):
+    parent_id, _ = _force_fixture(project_dir, "0.18.0-W30-050")
+
+    result = _check_via_orchestrator(
+        project_dir, parent_id, logger, template.format(tid=parent_id)
+    )
+
+    assert result.should_block is False
+
+
+def test_force_bypass_fail_closed_on_parse_failure(project_dir, logger):
+    """命令無法解析（未閉合引號）時 fail-closed：不旁路，維持 deny。"""
+    parent_id, _ = _force_fixture(project_dir, "0.18.0-W30-060")
+
+    result = _check_via_orchestrator(
+        project_dir, parent_id, logger,
+        f"ticket track complete {parent_id} --force --why 'unclosed",
+    )
+
+    assert result.should_block is True
+
+
+def test_force_bypass_fail_closed_when_parser_raises(project_dir, capture_logger, monkeypatch):
+    parent_id, _ = _force_fixture(project_dir, "0.18.0-W30-065")
+    module = _load_gate_module("acceptance_gate_hook_force_raise")
+
+    def _boom(_command):
+        raise RuntimeError("parser exploded")
+
+    monkeypatch.setattr(module, "parse_command_statements", _boom)
+    result = module.check_acceptance_status(
+        parent_id, project_dir, capture_logger,
+        f"ticket track complete {parent_id} --force",
+    )
+
+    assert result.should_block is True
+    assert any("parser exploded" in m for m in capture_logger.captured), "parse error must be logged"
+
+
+def test_force_does_not_bypass_hook_protection(project_dir, logger):
+    parent_id = "0.18.0-W30-070"
+    child_id = "0.18.0-W30-071"
+    _write_force_ticket(
+        project_dir, parent_id, children=[child_id],
+        extra_frontmatter="where:\n  files:\n  - .claude/hooks/new-guard-hook.py\n",
+    )
+    _write_ticket(project_dir, child_id, "pending")
+
+    result = _check_via_orchestrator(
+        project_dir, parent_id, logger, f"ticket track complete {parent_id} --force"
+    )
+
+    assert result.should_block is True
+    assert _MSG_HOOK_PROTECTION in (result.message or "")
+    assert _MSG_CHILDREN_BLOCK not in (result.message or "")
+
+
+def test_force_does_not_bypass_ana_spawn_consistency(project_dir, logger):
+    """無 children 可旁路時 --force 不影響 spawn 一致性阻擋。
+
+    spawn 落地數含 children，故「children 未完成」與「落地數為 0」不可能
+    同時成立；此案驗證 --force 不會順帶旁路 spawn 阻擋。
+    """
+    ticket_id = "0.18.0-W30-080"
+    _write_force_ticket(project_dir, ticket_id, ticket_type="ANA", body=_SPAWN_BODY)
+
+    result = _check_via_orchestrator(
+        project_dir, ticket_id, logger, f"ticket track complete {ticket_id} --force"
+    )
+
+    assert result.should_block is True
+    assert ticket_id in (result.message or "")
+
+
+def test_force_still_runs_spawn_check_when_children_bypassed(project_dir, logger):
+    """旁路 children 後，spawn 一致性檢查仍照常執行（規劃數 > 落地數 → 警告帶出）。"""
+    ticket_id = "0.18.0-W30-085"
+    child_id = "0.18.0-W30-086"
+    _write_force_ticket(
+        project_dir, ticket_id, ticket_type="ANA", children=[child_id], body=_SPAWN_BODY
+    )
+    _write_ticket(project_dir, child_id, "pending")
+
+    result = _check_via_orchestrator(
+        project_dir, ticket_id, logger, f"ticket track complete {ticket_id} --force"
+    )
+
+    assert result.should_block is False
+    assert result.force_bypassed_children
+    assert result.message, "spawn warning must survive the bypass"
+
+
+def test_force_does_not_bypass_illegal_multi_view_status(project_dir, logger):
+    ticket_id = "0.18.0-W30-090"
+    child_id = "0.18.0-W30-091"
+    body = "## Solution\n\nmulti_view_status: done\nconclusion: ok\n\n## Test Results\n"
+    _write_force_ticket(project_dir, ticket_id, ticket_type="ANA", children=[child_id], body=body)
+    _write_ticket(project_dir, child_id, "pending")
+
+    result = _check_via_orchestrator(
+        project_dir, ticket_id, logger, f"ticket track complete {ticket_id} --force"
+    )
+
+    assert result.should_block is True
+    assert _MSG_ILLEGAL_VALUE in (result.message or "")
+
+
+def test_deny_checklist_item5_shows_ana_task_type(project_dir, logger):
+    """children 阻擋時 checklist 第 5 項須以真實 task_type 判斷，ANA 不可顯示為非 ANA。"""
+    ticket_id = "0.18.0-W30-095"
+    child_id = "0.18.0-W30-096"
+    _write_force_ticket(project_dir, ticket_id, ticket_type="ANA", children=[child_id])
+    _write_ticket(project_dir, child_id, "pending")
+    module = _load_gate_module("acceptance_gate_hook_force_item5")
+
+    result = module.check_acceptance_status(
+        ticket_id, project_dir, logger, f"ticket track complete {ticket_id}"
+    )
+    output = module.generate_hook_output(ticket_id, result, project_dir, logger)
+
+    assert result.should_block is True
+    assert result.task_type == "ANA"
+    assert _MSG_NOT_ANA not in output["hookSpecificOutput"]["additionalContext"]
+
+
+def test_children_incomplete_message_documents_force_bypass():
+    from lib.hook_messages import GateMessages
+
+    msg = GateMessages.CHILDREN_INCOMPLETE_ERROR
+    assert "--force" in msg
+    assert _MSG_AUDIT in msg

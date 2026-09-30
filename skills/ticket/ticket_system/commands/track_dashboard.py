@@ -29,8 +29,10 @@ ticket track dashboard 命令（W10-114 落地，W10-113 ANA Solution M1+M4'）
   共用同一 predicate，非本次新增。
 - 本次新增 children 維度過濾：含未完成（非 completed/closed）子任務的
   父票不列入 Ready（見 `_has_incomplete_children`）。取捨依據：父票即使
-  被 claim 也會在 complete 時被 acceptance_auditor.validate_children_completed
-  阻擋（children 未完成），列為「可直接 claim」具誤導性，故選擇排除而非
+  被 claim 也會在 complete 時被阻擋（children 未完成；complete 路徑的攔截點
+  是 acceptance-gate-hook 的 children 檢查與 lifecycle 的
+  `_handle_pending_children_block`，`acceptance_auditor.validate_children_completed`
+  只在 `ticket track audit` 路徑），列為「可直接 claim」具誤導性，故選擇排除而非
   加標記。此過濾僅套用於 dashboard 的 Ready 章節，不回寫 runqueue——
   runqueue 的 dag/critical-path 視圖需完整呈現 DAG（含受 children 阻塞的
   父票）供排程判斷，兩者職責不同（各自的「同一 wave 一致性」僅指

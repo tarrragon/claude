@@ -84,6 +84,10 @@ from ticket_system.lib.duplicate_detector import (
     enforce_blocking_duplicate,
 )
 from ticket_system.lib.create_reporter import print_create_checklist
+from ticket_system.lib.ana_coupling_hint import (
+    hint_blocked_by_ana,
+    hint_parent_is_ana,
+)
 
 
 
@@ -675,6 +679,11 @@ def _persist_and_report(
         tdd_result=tdd_result,
         ticket_path=ticket_path,
     )
+
+    # 步驟 4.5：指向 ANA 的耦合後果提示（只寫 stderr，不影響 exit code）
+    if args.parent:
+        hint_parent_is_ana(version, args.parent, ticket_id)
+    hint_blocked_by_ana(version, config.get("blocked_by") or [], ticket_id)
 
     # 步驟 5（W17-008.15 方案 D）：未帶 --parent 時提示 in_progress group
     if not args.parent:

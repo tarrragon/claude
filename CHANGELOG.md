@@ -1,3 +1,25 @@
+## [2.69.0] - 2026-09-30
+
+### Summary
+feat: 統一寫入票面 track 子命令的 auto-commit 範圍與失敗可見性; feat: 指向 ANA 的 --parent／blockedBy 提示耦合後果（ticket 2.44.9）; feat: acceptance-gate-hook 辨識 complete --force 旁路 children 並寫稽核紀錄 (+9 more)
+
+Changes: 4 feat, 6 docs, 1 chore, 1 test
+
+- feat: 統一寫入票面 track 子命令的 auto-commit 範圍與失敗可見性
+- feat: 指向 ANA 的 --parent／blockedBy 提示耦合後果（ticket 2.44.9）
+- feat: acceptance-gate-hook 辨識 complete --force 旁路 children 並寫稽核紀錄
+- feat: GRAPH_EDGE_TYPES 新增方向性欄位 direction（doc 1.24.0）
+- docs: 兄弟票同檔排序以派發排程處理、不寫 blockedBy（parallel-dispatch 4.35.0、ARCH-017 1.2.0）
+- docs: TEST-GPD-002 契約守衛斷言常數等於其值，而非驗證使用該常數的行為
+- docs: 對齊 ticket 參考文件、PC-091 與代理人指引的 ANA 落地與 --force 行為
+- docs: 審查建議項：--source-ticket 限定語、術語統一、版本行格式
+- docs: execution-discovery-rules 5 step 閉環對齊 PC-091（驗證子任務用 --parent）
+- docs: 規則文字對齊 PC-091，ANA 落地用 --parent，補 blockedBy 耦合與 --force 條件
+- chore: .claude/VERSION 2.68.0（sync-push：ticket 2.44.8、merge／wipe 守衛與共用解析器括號修正）
+- test: fixture repo 比照真實 consumer gitignore hook-logs（修 session 環境依存的工作區乾淨斷言）
+
+---
+
 ## [2.68.0] - 2026-09-30
 
 ### Summary

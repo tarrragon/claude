@@ -157,17 +157,10 @@ def _execute_register_artifact_locked(args: argparse.Namespace, version: str) ->
     save_ticket(ticket, ticket_path)
 
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, SOLUTION_SECTION, operation="register-artifact"
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            _sys.stderr.write(
-                f"[register-artifact] auto-commit skipped（{commit_status}，非致命）；"
-                f"body 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        _sys.stderr.write(f"[register-artifact] auto-commit 失敗（非致命）：{exc}\n")
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        "register-artifact", str(ticket_path), args.ticket_id, SOLUTION_SECTION,
+        operation="register-artifact",
+    )
 
     print(format_info(InfoMessages.LOG_APPENDED, ticket_id=args.ticket_id, section=SOLUTION_SECTION))
     print(f"   編號: {label}")
@@ -183,7 +176,7 @@ def _execute_register_artifact_locked(args: argparse.Namespace, version: str) ->
     except OSError:
         pass
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def _build_artifact_status_value(status: str, reason: Optional[str], successor: Optional[str]) -> str:
@@ -283,20 +276,14 @@ def _execute_resolve_artifact_locked(args: argparse.Namespace, version: str) -> 
     save_ticket(ticket, ticket_path)
 
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, SOLUTION_SECTION, operation="resolve-artifact"
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            _sys.stderr.write(
-                f"[resolve-artifact] auto-commit skipped（{commit_status}，非致命）\n"
-            )
-    except Exception as exc:
-        _sys.stderr.write(f"[resolve-artifact] auto-commit 失敗（非致命）：{exc}\n")
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        "resolve-artifact", str(ticket_path), args.ticket_id, SOLUTION_SECTION,
+        operation="resolve-artifact",
+    )
 
     print(f"[OK] {args.ticket_id} 的 {label} status 已更新")
     print(f"   status: {new_value}")
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def parse_artifact_registrations(body: str) -> list[dict]:

@@ -168,6 +168,26 @@ def _collect_incomplete_descendants(
     return incomplete
 
 
+def collect_incomplete_descendants_from_frontmatter(
+    ticket_file: Path,
+    frontmatter: dict,
+    project_dir: Path,
+    ticket_id: str,
+    logger,
+) -> List[Tuple[str, str, str]]:
+    """回傳未完成後代清單 [(id, title, status), ...]（無 children 時為空）。
+
+    供 `complete --force` 旁路取得結構化清單，以列入 additionalContext 與
+    稽核紀錄；判定範圍與 check_children_completed_from_frontmatter 相同。
+    """
+    children = _extract_children_robust(ticket_file, frontmatter, logger)
+    if not children:
+        return []
+    return _collect_incomplete_descendants(
+        children, project_dir, logger, visited={ticket_id}
+    )
+
+
 def check_children_completed_from_frontmatter(
     ticket_file: Path,
     frontmatter: dict,

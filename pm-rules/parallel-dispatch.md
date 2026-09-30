@@ -151,6 +151,7 @@ ticket track conflicts --for <id>                # 列出該票與其他 pending
 |------|------|
 | 兩票 `where.files` 有交集，內容可拆分 | 拆分為互斥的檔案落點（如各自獨立測試檔，事後視需要合併） |
 | 兩票 `where.files` 有交集，內容不可拆分 | 改序列派發：待前票 commit 完成後才派後票 |
+| 上列序列化的兩票是同一父票下的兄弟票 | 只在派發排程處理（等前票 commit），不要寫進 `blockedBy`：同檔排序不是語意依賴，寫成兄弟 `blockedBy` 會觸發 ARCH-017 多兄弟依賴檢查，後票連 claim 都會被擋 |
 
 exit code 0（無衝突）時方可依原計畫並行派發。指令用法、判定規則、`[heuristic]` 標記語意見 `.claude/skills/ticket/references/track-command.md`「track conflicts 子命令」；完整案例與根因見 `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`「變體：檔案級共用」章節。
 
@@ -570,7 +571,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
-**Last Updated**: 2026-09-29
+**Last Updated**: 2026-09-30
+**Version**: 4.35.0 - 〈派發前 where.files 交集檢查〉處置表新增一列：兄弟票之間的同檔序列化只在派發排程處理，不寫 blockedBy，以免觸發 ARCH-017 多兄弟依賴檢查，連 claim 都被擋
 **Version**: 4.34.0 - 〈並行安全檢查〉前新增「派發位置判準（強制）」單一判準表（實作派發含非豁免路徑／全為豁免路徑／唯讀審查三列 × isolation 值、派發前置、收尾指令、禁止事項四欄，每格只引用既有權威條文）與「禁止在共用主工作樹切換或建立分支（強制）」條款（Why／Consequence／分角色 Action，並宣告對既有三處 `git checkout -b` 指引的優先序）。來源：判準原散在風險分級表、template、agent-dispatch-decision 與 `branch-verify-hook.py` 拒絕訊息四處，某 consumer 專案的實作代理人被 hook 擋下後依訊息在共用主工作樹開分支，並行 session 被帶離 main（框架 issue 101）。
 **Version**: 4.33.0 - 〈並行派發後驗證〉下新增「PM 側 worktree 合入與驗收三軸（強制）」：合入四步與 ff 被拒重併規則、驗收三軸（票狀態以 `git show HEAD` 為準、內容對照 `where.files`、PM 覆核重跑）、四則失效處置（代理人自標 scope_blocker、自行推送主分支、驗收條件不可能成立、index.lock 與 hook 競爭）。代理人側 merge main 已在 template，PM 側此前無條文，一日內三次靠記憶處理。
 **Version**: 4.32.0 - 「派發 prompt 必含精準 git staging」表格 commit 階段列與「歷史註記」改寫：代理人票務提交場景預設改為 `ticket track commit`（隔離索引），精確 add 三步降為該命令失敗或不可用時的 fallback；PM 收尾等無票務 CLI 場景仍以精確 add 三步為預設。與 `bash-tool-usage-rules.md` 規則七、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步，收斂副本漂移。

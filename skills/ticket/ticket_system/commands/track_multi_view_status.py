@@ -157,19 +157,9 @@ def _execute_fix_multi_view_status_locked(args: argparse.Namespace, version: str
     save_ticket(ticket, ticket_path)
 
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, section, operation=_OPERATION
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            _sys.stderr.write(
-                f"[{_OPERATION}] auto-commit skipped（{commit_status}，非致命）；"
-                "body 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        _sys.stderr.write(
-            f"[{_OPERATION}] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-        )
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        _OPERATION, str(ticket_path), args.ticket_id, section, operation=_OPERATION
+    )
 
     print(format_info(
         InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="multi_view_status"
@@ -184,4 +174,4 @@ def _execute_fix_multi_view_status_locked(args: argparse.Namespace, version: str
     except OSError:
         pass
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0

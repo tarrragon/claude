@@ -963,19 +963,10 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     # auto-commit（與 append-log 同機制；graceful degrade）
     # 0.2.1-W3-257：傳入 operation="add-spawn-request"，commit 訊息不再誤標為 append-log
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, section, operation="add-spawn-request"
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            _sys.stderr.write(
-                f"[add-spawn-request] auto-commit skipped（{commit_status}，非致命）；"
-                f"body 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        _sys.stderr.write(
-            f"[add-spawn-request] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-        )
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        "add-spawn-request", str(ticket_path), args.ticket_id, section,
+        operation="add-spawn-request",
+    )
 
     print(format_info(InfoMessages.LOG_APPENDED, ticket_id=args.ticket_id, section=section))
     print(f"   編號: {sr_label}")
@@ -988,7 +979,7 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     except OSError:
         pass
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def _build_spawn_request_status_value(
@@ -1133,19 +1124,10 @@ def _execute_resolve_spawn_request_locked(args: argparse.Namespace, version: str
     # auto-commit（與 append-log / add-spawn-request 同機制；graceful degrade；path-limited）
     # 0.2.1-W3-257：傳入 operation="resolve-spawn-request"，commit 訊息不再誤標為 append-log
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, section, operation="resolve-spawn-request"
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            _sys.stderr.write(
-                f"[resolve-spawn-request] auto-commit skipped（{commit_status}，非致命）；"
-                f"body 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        _sys.stderr.write(
-            f"[resolve-spawn-request] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-        )
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        "resolve-spawn-request", str(ticket_path), args.ticket_id, section,
+        operation="resolve-spawn-request",
+    )
 
     print(
         format_info(
@@ -1172,4 +1154,4 @@ def _execute_resolve_spawn_request_locked(args: argparse.Namespace, version: str
     except OSError:
         pass
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0

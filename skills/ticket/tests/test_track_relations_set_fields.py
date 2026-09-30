@@ -23,6 +23,14 @@ import pytest
 _LOCK_TARGET = Path(tempfile.gettempdir()) / "w1018_test_lock_target.md"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_auto_commit():
+    """本檔測項使用虛構票檔路徑，不驗證提交行為；隔離真實 git 呼叫。
+    提交失敗語意見 tests/test_write_command_autocommit_scope.py。"""
+    with patch("ticket_system.lib.git_utils._auto_commit_ticket_md", return_value="no_change"):
+        yield
+
+
 @pytest.fixture
 def sample_ticket_for_relations() -> dict:
     """用於測試關係欄位的 Ticket 樣本"""

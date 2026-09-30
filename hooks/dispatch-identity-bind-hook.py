@@ -74,7 +74,8 @@ PM_AGENT_NAME = "rosemary-project-manager"
 # 尚待指派給實際執行者」而非「已指派給 PM 本人執行」，故納入可覆蓋範圍，
 # 派發時才能正確重新綁定給實際 subagent_type（多起同型死結收斂後的修復：
 # 多名代理人各自撞上 who.current 停在 PM 而無法 complete 的死結）。
-UNBOUND_WHO_VALUES = {"pending", "待派發", "?", "", PM_AGENT_NAME}
+EXIT_AUTO_COMMIT_FAILED = 75  # ticket CLI：動作已完成、僅 auto-commit 失敗
+UNBOUND_WHO_VALUES ={"pending", "待派發", "?", "", PM_AGENT_NAME}
 
 # ticket CLI 逾時秒數（shim 經 uv run 解析，冷啟動可達數秒）
 TICKET_CLI_TIMEOUT = 15
@@ -110,7 +111,8 @@ def _run_ticket_cli(
             timeout=TICKET_CLI_TIMEOUT,
             cwd=project_root,
         )
-        if proc.returncode != 0:
+        # 75（EXIT_AUTO_COMMIT_FAILED）：寫入已完成，只是自動提交失敗，視同成功
+        if proc.returncode not in (0, EXIT_AUTO_COMMIT_FAILED):
             logger.warning(
                 "ticket CLI 非零退出 (rc=%s, cmd=%s): %s",
                 proc.returncode,

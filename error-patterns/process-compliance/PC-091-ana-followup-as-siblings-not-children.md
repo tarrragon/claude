@@ -75,6 +75,14 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 >
 > **陷阱**：別把盤點 ANA 的清理當成「衍生副產品」（spawned）——清理是盤點結論的**執行延伸（落地）**，必為 children。spawned 只給「執行中意外發現、與當前 ticket 無因果」的工作（如 W8-013 審查中發現的 W8-015/016 新需求）。
 
+## 案例：下游 blockedBy 指向 ANA 父票（children 的傳遞阻擋）
+
+**事件（描述，不含專案 ID）**：某專案的 ANA 依 PC-091 把落地工作建為 children，另有一張下游實作票的 `blockedBy` 指向該 ANA 本身。ANA 因 children 未終態而無法 complete，下游票的 blockedBy 目標永不進入 terminal，下游持續被 runqueue 過濾。此時有人動念以 `complete --force` 旁路 children 檢查，或把 children 改建為 spawned 以繞過阻擋。
+
+**根因**：`blockedBy` 指向「有非終態 children 的父票」時，children 的阻擋經由父票傳遞給下游；建下游票的人只看到「等 ANA」，沒有看到「等 ANA 就是等它全部 children」。
+
+**處置**：下游 `blockedBy` 改指具體 child（真正需要等待的那一張），不指 ANA 父票。**保留 children 是唯一路線**：不改用 spawned，不以 `--force` 旁路作為收尾手段（`--force` 只旁路 children 檢查並留下 `FORCE_BYPASS` 稽核紀錄，見 `track-command.md`）。建票或設依賴當下，CLI 對指向 ANA 的 `--parent` / `--blocked-by` 會輸出 [HINT]，說明見 `create-command.md`〈指向 ANA 的耦合後果提示〉。
+
 ## 補救措施（觸發案例）
 
 1. 編輯 W5-009 frontmatter：`children: [W5-043, W5-044, W5-045, W5-046]`，`spawned_tickets: []`

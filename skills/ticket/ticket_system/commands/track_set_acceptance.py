@@ -335,20 +335,10 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         # file_lock 內（與 append-log 的 _execute_append_log_locked 一致設計），
         # 確保 lock 釋放前 commit 已完成或已 graceful degrade，避免並發窗口。
         from ticket_system.lib import git_utils
-        try:
-            commit_status = git_utils._auto_commit_ticket_md(
-                str(ticket_path), args.ticket_id, "Acceptance Criteria",
-                operation="set-acceptance",
-            )
-            if commit_status in ("not_git_repo", "git_failed"):
-                _sys.stderr.write(
-                    f"[set-acceptance] auto-commit skipped（{commit_status}，非致命）；"
-                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
-                )
-        except Exception as exc:
-            _sys.stderr.write(
-                f"[set-acceptance] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-            )
+        commit_failed = git_utils.commit_ticket_md_reporting(
+            "set-acceptance", str(ticket_path), args.ticket_id, "Acceptance Criteria",
+            operation="set-acceptance",
+        )
 
     action_map = {
         "check": "勾選", "all_check": "勾選",
@@ -363,4 +353,4 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
     else:
         scope = f"index {indices}" if indices else f"{changed} 項"
     print(f"[INFO] {args.ticket_id} {action} {scope}：變更 {changed} 項")
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0

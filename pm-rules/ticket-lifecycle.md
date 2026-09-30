@@ -473,6 +473,21 @@ W10-072（ANA，防護性）
 
 **Action**：建立 ANA ticket 時依判別問題自問並在 how.strategy 標注類型（「研究性」或「防護性」）；若為防護性，在 Solution 完成後立即建 children 再繼續。
 
+### 防護性 ANA 與 blockedBy 下游的耦合，以及 `--force` 使用條件
+
+**Why**：防護性 ANA 要等全部 children 進入終態才能 complete（見上表）。下游 ticket 若 `blockedBy` 這張 ANA，實際等待的是「ANA 的所有落地都完成」，而非「ANA 的結論寫定」；落地中有一張與下游無關的 child 拖延，下游就被鎖住。
+
+**Consequence**：下游只需要結論卻 blockedBy 整張 ANA，會被無關的落地工作鎖死（曾有案例：某專案的防護性 ANA 因 children 中含長期後續工作而遲遲無法 complete，下游全被阻塞）；為解鎖而對 ANA 直接 `complete --force`，則繞過落地檢查，落地責任靜默消失。
+
+**Action**：
+
+| 情境 | 處置 |
+|------|------|
+| 下游只依賴 ANA 的結論 | blockedBy 改指產出結論的 child，不指 ANA 本身 |
+| ANA 結論寫定、children 已建 | 由 PM 檢視所有 blockedBy 這張 ANA 的下游，逐張判斷並改指具體 child |
+| 下游確實依賴全部落地 | 維持 blockedBy ANA（等待全部落地是預期效果） |
+| `complete --force` | 只在 children 屬「非前置的後續工作」（不影響結論成立、下游不依賴）時使用；並在 Completion Info 記錄理由（哪些 children 未終態、為何非前置）。hook 會留下稽核紀錄 |
+
 > **權威來源**：W17-120.2 多視角審查共識；PC-091 ANA 落地血緣選擇。
 
 ---
@@ -502,7 +517,7 @@ ANA Ticket 的下游 Ticket **必須以 children 表達**（用 `--parent <ANA-i
 - 把「執行獨立性」（可獨立執行）誤當「血緣獨立性」（與上游無關）→ 仍應為 children
 - 用 `spawned_tickets` 代替 `parent_id` 表達血緣（spawned 是衍生副產品語意，非直系後代）
 
-> **CLI 對照**：`--parent` vs `--source-ticket` 的副作用、欄位寫入、阻擋規則完整對比表，見 `.claude/skills/ticket/references/create-command.md`「--parent vs --source-ticket 對比表」章節。建立衍生 Ticket 時使用 `--source-ticket <SOURCE-ID>`，CLI 會自動追加新 Ticket ID 至 source 的 `spawned_tickets`，無需人工編輯。
+> **CLI 對照**：`--parent` vs `--source-ticket` 的副作用、欄位寫入、阻擋規則完整對比表，見 `.claude/skills/ticket/references/create-command.md`「--parent vs --source-ticket 對比表」章節。建立執行中發現、結論未要求的獨立衍生 Ticket 時使用 `--source-ticket <SOURCE-ID>`（ANA 結論要求的落地改用 `--parent`，見 PC-091），CLI 會自動追加新 Ticket ID 至 source 的 `spawned_tickets`，無需人工編輯。
 
 ---
 
@@ -691,7 +706,8 @@ how:
 
 ---
 
-**Last Updated**: 2026-05-08
+**Last Updated**: 2026-09-30
+**Version**: 6.4.0 — 「ANA 子分類」節新增「防護性 ANA 與 blockedBy 下游的耦合，以及 --force 使用條件」子節（三明示）。
 **Version**: 6.3.0 — 新增「ANA Solution Spawn 規劃落地（強制）」章節（W17-167 L3 落地，含 Why/Consequence/Action 三明示 + 強制/Schema/規則層交叉引用，配合 W17-168 hook + W17-169 quality-baseline 規則 5 / ticket-body-schema 同步修訂）
 
 **Version**: 6.2.0 — 新增「ANA 子分類：研究性 vs 防護性」章節（兩類定義 + 判別準則 + 各 1 個範例 + complete 觸發時機對照表 + Why/Consequence/Action），來源 W10-072 ANA 事實 4 + W17-120.2 / PC-091

@@ -2,6 +2,23 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.24.0 — `GRAPH_EDGE_TYPES` 每個邊型新增方向性欄位 `direction`
+（值域 `directed`／`undirected`，常數 `EDGE_DIRECTION_VALUES`），`doc schema export` 匯出的
+`edge_types` 全欄位帶出，`tracking_schema.json` 已用正式指令重產。欄位採字串列舉而非布林，
+與 `class`／`layer`／`forward_cardinality` 同為具名值域。僅 `association`（`relatedTo`）為
+`undirected`（上游明文宣告語意對稱、消費端做 1-hop symmetric closure）；其餘 15 個邊型為
+`directed`。`spec_association`／`uc_association`／`proposal_association` 與 `association` 同為
+`see-also`，但上游未宣告對稱，判準是明文宣告而非 `class`，故為 `directed`。新增
+`find_edge_types_with_invalid_direction()` 檢核缺欄位或值域錯誤的邊型定義；
+`test_schema_export.py` 新增 `TestEdgeDirection`（16 個邊型值逐一斷言 + 缺欄位／值域外的正向
+對照輸入）。`references/tracking.md` 新增「方向性」段；範本未列 `edge_types` 欄位，無需同步。
+`schema_generated_at_framework_version` 刻意維持 2.60.13：舊消費端解碼時忽略多出的欄位；
+開始讀取方向性欄位的消費端，在已知版本範圍內對缺少的欄位以內建表補值，故同一版本號下
+JSON 有無此欄位皆能正確處理（前提是該消費端的內建表已帶此欄位）。待消費端內建版本升版時，
+產生版本與內建版本一起升。更正 1.23.0 條目的產生版本號維持理由：消費端並非不讀
+`edge_types`；維持原值的依據是新欄位在舊消費端被忽略，且新消費端在已知版本範圍內，以內建表
+補足缺少的欄位。
+
 **Version**: 1.23.0 — `GRAPH_EDGE_TYPES` 每個邊型新增正向基數欄位 `forward_cardinality`
 （值域 `one`／`many`，常數 `EDGE_CARDINALITY_VALUES`），宣告 `forward_field` 可有一個或多個終點；
 `doc schema export` 匯出的 `edge_types` 全欄位帶出，`tracking_schema.json` 已用正式指令重產。

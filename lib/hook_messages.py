@@ -135,6 +135,9 @@ Ticket: {ticket_id}
 {incomplete_list}
 
 請先完成所有子任務後再執行 complete。
+確需強制完成時：`ticket track complete {ticket_id} --force`（只旁路本項 children 檢查，
+其他阻擋照舊；旁路事件與命令全文寫入 .claude/hook-logs/acceptance-gate/ 稽核日誌，
+並在 additionalContext 列出被旁路的未完成 children）。
 （ANA 落地請用 `ticket track create --parent {ticket_id} ...` 建 children）"""
 
     # 驗收記錄缺失警告訊息（acceptance-gate-hook.py）

@@ -15,6 +15,14 @@ from ticket_system.lib import field_validators
 
 _LOCK_TARGET = Path(tempfile.gettempdir()) / "w1006_1_test_lock_target.md"
 
+
+@pytest.fixture(autouse=True)
+def _isolate_auto_commit():
+    """本檔測項使用虛構票檔路徑，不驗證提交行為；隔離真實 git 呼叫。
+    提交失敗語意見 tests/test_write_command_autocommit_scope.py。"""
+    with patch("ticket_system.lib.git_utils._auto_commit_ticket_md", return_value="no_change"):
+        yield
+
 OLD_ID = "0.3.1-W1-001"
 NEW_ID = "1.0.0-W1-001"
 GHOST_OLD = "0.3.1-W1-999"

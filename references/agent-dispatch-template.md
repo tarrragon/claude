@@ -1010,7 +1010,7 @@ ticket track set-acceptance <ticket-id> --check 1 2 --as <自身 agent 名稱>
 
 | 通道 | 使用時機 | 指令 |
 |------|---------|------|
-| `--source-ticket` | 已確定要建票，且內容足以直接成票 | `ticket create --source-ticket <自身 ticket id> --action <動詞> --target <對象> --type <IMP\|ADJ\|ANA\|DOC> --why <依據>` |
+| `--source-ticket` | 已確定要建票，且內容足以直接成票（例外：ANA 結論要求的落地改用 `--parent`，PC-091） | `ticket create --source-ticket <自身 ticket id> --action <動詞> --target <對象> --type <IMP\|ADJ\|ANA\|DOC> --why <依據>` |
 | `add-spawn-request` | 發現議題但尚未確定是否成票、或範疇 / 優先級需 PM 裁決 | `ticket track add-spawn-request <自身 ticket id> --what ... --why ... --type ... --priority ...` |
 
 兩通道皆由 CLI 自動回填血緣欄位：`create --source-ticket` 在建立當下即回填 `source_ticket` / `spawned_tickets` 雙向欄位；`add-spawn-request` 於 PM 執行 `resolve-spawn-request <id> SR-N --status processed --spawned-ticket <ticket-id>` 時回填。`--related-to` 不具備此機制，僅供無血緣意圖的弱關聯引用（見 field-semantics.md「用戶情境對照表」）。欄位定義以 `.claude/skills/ticket/references/field-semantics.md` 為唯一權威來源，本節不重複定義。

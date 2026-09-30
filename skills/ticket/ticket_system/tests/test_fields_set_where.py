@@ -279,7 +279,9 @@ class TestSetWhereAutoCommit:
 
         calls = []
 
-        def _fake_auto_commit(path, ticket_id, section, operation="append-log"):
+        def _fake_auto_commit(
+            path, ticket_id, section, operation="append-log", result_out=None, **_kw
+        ):
             calls.append(
                 {"path": path, "ticket_id": ticket_id, "section": section, "operation": operation}
             )
@@ -327,9 +329,9 @@ class TestSetWhereAutoCommit:
         assert calls[0]["ticket_id"] == tid
         assert calls[0]["operation"] == "set-where"
 
-    def test_layer_only_does_not_trigger_auto_commit(self, set_where_ticket, monkeypatch, capsys):
-        """who/how 的 set 操作不受影響：--layer without --files/value 不同步 files，
-        不應觸發 auto-commit（acceptance 第 2 項）。"""
+    def test_layer_only_also_triggers_auto_commit(self, set_where_ticket, monkeypatch, capsys):
+        """所有 set-* 欄位寫入預設自動提交：--layer 不同步 files，仍寫入票面，
+        故照常提交（section 為 where 而非 where.files）。"""
         tid, md_path = set_where_ticket
         calls = self._patch_auto_commit(monkeypatch)
         args = argparse.Namespace(
@@ -342,7 +344,9 @@ class TestSetWhereAutoCommit:
         rc = fields_mod.execute_set_where(args, "0.0.0")
 
         assert rc == 0
-        assert calls == []
+        assert len(calls) == 1
+        assert calls[0]["section"] == "where"
+        assert calls[0]["operation"] == "set-where"
 
     def test_auto_commit_delegates_to_isolated_index_helper_only(
         self, set_where_ticket, monkeypatch, capsys

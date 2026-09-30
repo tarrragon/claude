@@ -38,6 +38,7 @@ from doc_system.core.tracking_schema import (
     GRAPH_EDGE_TYPES,
     GRAPH_NODE_TYPES,
     find_edge_types_with_invalid_cardinality,
+    find_edge_types_with_invalid_direction,
 )
 
 # 磁碟上已產生的產物，雙向一致性測試的比對端點之一（另一端是 import 進來
@@ -253,3 +254,47 @@ class TestEdgeForwardCardinality:
         broken = dict(GRAPH_EDGE_TYPES)
         broken["mutant_bad"] = {**GRAPH_EDGE_TYPES["blood"], "forward_cardinality": "few"}
         assert "mutant_bad" in find_edge_types_with_invalid_cardinality(broken)
+
+
+# 方向性期望表（0.4.0-W1-072）：僅 association（relatedTo）在上游宣告語意無向
+# （消費端做 1-hop symmetric closure）；其餘邊型上游未宣告對稱，一律有向。
+# see-also 三者（spec／uc／proposal_association）class 相同但不由 class 推導：
+# 上游只對 relatedTo 宣告對稱，其餘為作者由來源節點指向被參照節點的單向陳述。
+EXPECTED_DIRECTION = {name: "directed" for name in EXPECTED_FORWARD_CARDINALITY}
+EXPECTED_DIRECTION["association"] = "undirected"
+
+
+class TestEdgeDirection:
+    """每個邊型帶方向性欄位 direction（directed／undirected），且匯出同步。"""
+
+    def test_expected_table_covers_every_edge_type(self):
+        assert set(EXPECTED_DIRECTION) == set(GRAPH_EDGE_TYPES)
+
+    @pytest.mark.parametrize("name,expected", sorted(EXPECTED_DIRECTION.items()))
+    def test_ssot_direction_value(self, name, expected):
+        assert GRAPH_EDGE_TYPES[name]["direction"] == expected
+
+    @pytest.mark.parametrize("name,expected", sorted(EXPECTED_DIRECTION.items()))
+    def test_disk_json_direction_value(self, name, expected):
+        disk_schema = _load_schema_json_from_disk()
+        assert disk_schema["edge_types"][name]["direction"] == expected
+
+    def test_association_is_undirected_in_export(self):
+        disk_schema = _load_schema_json_from_disk()
+        assert disk_schema["edge_types"]["association"]["direction"] == "undirected"
+
+    def test_validator_accepts_current_ssot(self):
+        assert find_edge_types_with_invalid_direction(GRAPH_EDGE_TYPES) == {}
+
+    def test_validator_flags_missing_field_positive_control(self):
+        """E2：缺方向性欄位的邊型定義必須被判紅。"""
+        broken = dict(GRAPH_EDGE_TYPES)
+        broken["mutant_missing"] = {
+            k: v for k, v in GRAPH_EDGE_TYPES["blood"].items() if k != "direction"
+        }
+        assert "mutant_missing" in find_edge_types_with_invalid_direction(broken)
+
+    def test_validator_flags_out_of_domain_value_positive_control(self):
+        broken = dict(GRAPH_EDGE_TYPES)
+        broken["mutant_bad"] = {**GRAPH_EDGE_TYPES["blood"], "direction": "both"}
+        assert "mutant_bad" in find_edge_types_with_invalid_direction(broken)

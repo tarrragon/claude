@@ -93,3 +93,21 @@ def test_reclaim_landing_report_message_by_append_log_rc(rc, must_contain, must_
     err = capsys.readouterr().err
     assert must_contain in err
     assert must_not_contain not in err
+
+
+@pytest.mark.parametrize("rc, expected_bound", [(0, True), (75, True), (1, False)])
+def test_dispatch_identity_bind_hook_set_who_rc(rc, expected_bound, tmp_path):
+    """set-who 回 75 表示 who.current 已寫入、只是提交失敗，綁定須視為成功。"""
+    hook = _load(_CLAUDE / "hooks" / "dispatch-identity-bind-hook.py", "dib_hook")
+
+    def fake_run(cmd, **_kwargs):
+        is_write = "set-who" in cmd
+        return type("P", (), {
+            "returncode": rc if is_write else 0,
+            "stdout": "[OK]\n" if is_write else "Who: pending\n",
+            "stderr": "",
+        })()
+
+    with patch.object(hook.subprocess, "run", side_effect=fake_run):
+        bound = hook.bind_dispatch_identity("0.1.0-W1-001", "some-agent", tmp_path, _LOGGER)
+    assert bound is expected_bound

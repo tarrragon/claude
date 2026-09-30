@@ -122,6 +122,8 @@ A' 作為聚合父，兄弟層級（Parent 下）只有 A' 一個。A' 內部的
 - 合理 → 應深度化，原結構違反 ARCH-017
 - 不合理 → 串行兄弟合法，保留 blockedBy
 
+**不屬串行兄弟的常見誤用：為避檔案衝突而排序**。兩張兄弟票同時修改同一檔案時，先後順序是派發排程問題，不是規格到實作的時序依賴，不符合條件 3。寫成兄弟 `blockedBy`，一旦後票同時依賴兩張以上的前驅兄弟，就違反條件 1，後票連 claim 都會被擋。處置：只在派發排程序列化（等前票 commit 後再派後票，見 `.claude/pm-rules/parallel-dispatch.md`〈派發前 where.files 交集檢查〉），`blockedBy` 只保留真正的語意前置。
+
 ## 與 Wave 定義的關係
 
 `atomic-ticket-methodology.md` 已定義 Wave：
@@ -144,5 +146,6 @@ Wave 是**版本層級**的依賴分層，而 ARCH-017 規則是**單一任務�
 
 ---
 
-**Last Updated**: 2026-04-14
+**Last Updated**: 2026-09-30
+**Version**: 1.2.0 — 〈合法例外〉後新增「不屬串行兄弟的常見誤用：為避檔案衝突而排序」。同檔排序屬派發排程問題，寫成兄弟 blockedBy 會觸發多兄弟依賴 BLOCK；處置路由至 parallel-dispatch〈派發前 where.files 交集檢查〉
 **Version**: 1.1.0 — 新增「合法例外：串行兄弟」章節（解決原則與重組範例自身矛盾）

@@ -14,6 +14,7 @@ from acceptance_checkers.ticket_parser import (
 from acceptance_checkers.children_checker import (
     check_children_completed,
     check_children_completed_from_frontmatter,
+    collect_incomplete_descendants_from_frontmatter,
 )
 from acceptance_checkers.acceptance_checker import (
     has_acceptance_record,

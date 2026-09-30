@@ -74,7 +74,7 @@ ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete �
 | 情境 | 填寫方式 |
 |------|---------|
 | 全部已建 ticket | 勾選第一項，列出對應 ticket ID 清單 |
-| 部分未建 | complete 前由執行者自行補建（`ticket create --source-ticket <本票 ID>`，或 `--parent <本票 ID>` 建 children） |
+| 部分未建 | complete 前由執行者自行補建：ANA 結論要求的落地用 `ticket create --parent <本票 ID>`（children，PC-091）；`--source-ticket <本票 ID>` 只用於分析中發現、結論未要求的獨立工作 |
 | 成票與否需 PM 裁決 | 勾選第二項：先 `add-spawn-request`，complete 前再 `resolve-spawn-request` 標為終態 |
 | 評估後不需建 | 勾選第三項，**逐項**標註「無需建 ticket：[理由]」 |
 | 工具清單不含 Bash 而無法呼叫 CLI | 停手上報 NeedsContext 由 PM 改派；此情形應在派發階段即避免 |
@@ -457,7 +457,8 @@ acceptance:
 | 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
-**Last Updated**: 2026-08-23
+**Last Updated**: 2026-09-30
+**Version**: 1.11.0 — 「Spawn 落地確認」部分未建列對齊 PC-091：ANA 落地用 `--parent`，`--source-ticket` 限結論未要求的獨立工作。
 **Version**: 1.10.0 — ANA 章節新增第三個強制子節「Solution 章節：逐筆清單落地（PC-BAL-054 強制）」：三條件 AND 判準（可枚舉且量大 / 下游逐筆依賴 / 量測具時間敏感性）成立時逐筆清單須落地為獨立檔案，附可驗證的 acceptance 兩條寫法與「已保留逐筆清單」不可用的理由，並劃出與 Spawn 落地確認的邊界（前者管規劃是否變成 ticket，後者管判定所本資料是否留存，無替代關係）。體例沿用同章節既有兩個強制子節。與 1.9.0 改的是不同子節，無覆蓋。
 **Version**: 1.9.0 — 「Solution 章節：Spawn 落地確認」對齊規則 5 與強制層：checklist 補第二項（登記 spawn request 並 resolve 為終態），第三項改為逐項宣告；Action 段明示落地是執行者於 complete 前的義務，「部分未建」列的責任人由「PM 接手 ticket create 職責」改為執行者自行補建（原寫法與強制層實際擋的對象不符——gate 在 complete 前擋的是執行者，PM 無介入時機）；補「工具清單不含 Bash」的停手上報列。
 **Version**: 1.8.0 — 「Type-aware Quality Gate」節改寫：已刪除的 `ticket-quality-gate-hook.py` 換成現行承接者說明。逐一查證兩個現行 checker 原始碼後發現舊表格對 DOC 的 c2 描述失準——`execution_log_checker.py` 對 DOC 無 type-based 跳過邏輯，DOC 之所以實務上不被阻擋，是因 schema 範本固定內嵌「（免填：...）」文字未被剝除規則移除，屬範本副作用而非程式碼顯式豁免；c3（`responsibility_scope_checker.py`）則確有 `_EXEMPT_TYPES = {"ANA", "DOC"}` 顯式豁免，與舊表格一致。同步移除已不存在的 `quality_config.yaml` 配置位置引用，改為模組內常數說明。
