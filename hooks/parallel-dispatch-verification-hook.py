@@ -64,6 +64,9 @@ MSG_ADVICE_TITLE = "建議動作"
 GIT_DIFF_TIMEOUT = 10
 
 # 成功標記清單（用於識別 ticket complete 成功）
+# ticket CLI 寫入命令「動作已完成、僅 auto-commit 失敗」的專用退出碼（sysexits EX_TEMPFAIL）
+EXIT_AUTO_COMMIT_FAILED = 75
+
 TICKET_COMPLETE_SUCCESS_MARKERS = ["已完成", "成功"]
 
 
@@ -204,7 +207,7 @@ def is_ticket_complete_success(input_data: dict) -> bool:
     # 檢查執行結果
     tool_response = input_data.get("tool_response", {})
     exit_code = tool_response.get("exit_code", -1)
-    if exit_code != 0:
+    if exit_code not in (0, EXIT_AUTO_COMMIT_FAILED):
         return False
 
     # 檢查成功標記

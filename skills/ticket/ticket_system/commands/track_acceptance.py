@@ -26,6 +26,7 @@ if __name__ == "__main__":
 
 import argparse
 import re
+from ticket_system.lib.list_args import expand_list_arg
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -401,22 +402,11 @@ def _execute_single_check_acceptance(
     # 寫入後 auto-commit ticket md，對齊 set-acceptance 的保護等級
     # （path-limited + graceful degrade）。與 set-acceptance 同置於 file_lock 內
     # （execute_check_acceptance 的 with file_lock 區塊涵蓋本函式），避免並發窗口。
-    import sys as _sys
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, "Acceptance Criteria",
-            operation="check-acceptance",
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            _sys.stderr.write(
-                f"[check-acceptance] auto-commit skipped（{commit_status}，非致命）；"
-                f"body 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        _sys.stderr.write(
-            f"[check-acceptance] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-        )
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        "check-acceptance", str(ticket_path), args.ticket_id,
+        "Acceptance Criteria", operation="check-acceptance",
+    )
 
     # 輸出結果
     status_text = TrackAcceptanceMessages.STATUS_TEXT_CHECKED if not uncheck else TrackAcceptanceMessages.STATUS_TEXT_UNCHECKED
@@ -424,7 +414,7 @@ def _execute_single_check_acceptance(
     print(format_info(InfoMessages.ACCEPTANCE_CRITERIA_UPDATED, ticket_id=args.ticket_id, index=index, status_text=status_text))
     print(f"{TrackAcceptanceMessages.NEW_STATUS_PREFIX} {new_status}")
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def _apply_check_to_item(item: str, uncheck: bool) -> tuple[str | None, bool]:
@@ -487,22 +477,11 @@ def _execute_batch_check_acceptance(
     # 寫入後 auto-commit ticket md，對齊 set-acceptance 的保護等級
     # （path-limited + graceful degrade）。與 set-acceptance 同置於 file_lock 內
     # （execute_check_acceptance 的 with file_lock 區塊涵蓋本函式），避免並發窗口。
-    import sys as _sys
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, "Acceptance Criteria",
-            operation="check-acceptance",
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            _sys.stderr.write(
-                f"[check-acceptance] auto-commit skipped（{commit_status}，非致命）；"
-                f"body 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        _sys.stderr.write(
-            f"[check-acceptance] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-        )
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        "check-acceptance", str(ticket_path), args.ticket_id,
+        "Acceptance Criteria", operation="check-acceptance",
+    )
 
     # 輸出結果
     total_count = len(acceptance_list)
@@ -533,7 +512,7 @@ def _execute_batch_check_acceptance(
             total_count=total_count
         ))
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def execute_accept_creation(args: argparse.Namespace, version: str) -> int:
@@ -848,21 +827,11 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     # git 副作用；(2) 將 auto-commit 限定於此 graceful degrade 邊界內，import
     # 失敗不影響 append-log 主流程（body 已 save_ticket 寫入 working tree）。
     from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, section
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            # 非 git repo / git 命令失敗 → 警告（可觀測，quality-baseline 規則 4）
-            _sys.stderr.write(
-                f"[append-log] auto-commit skipped（{commit_status}，非致命）；"
-                f"body 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        # 例外（git 未安裝 OSError / patch 模擬 index.lock 等）不中斷 append-log
-        _sys.stderr.write(
-            f"[append-log] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
-        )
+    # 最終失敗（含例外）由 commit_ticket_md_reporting 輸出 WARNING（原因 + 補救指令），
+    # 並以 EXIT_AUTO_COMMIT_FAILED 結束（body 已在 working tree，與寫入失敗的 1 區分）。
+    commit_failed = git_utils.commit_ticket_md_reporting(
+        "append-log", str(ticket_path), args.ticket_id, section
+    )
 
     # 輸出結果
     print(format_info(InfoMessages.LOG_APPENDED, ticket_id=args.ticket_id, section=section))
@@ -877,7 +846,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     except OSError:
         pass
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def execute_add_spawn_request(args: argparse.Namespace, version: str) -> int:
@@ -945,7 +914,7 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     sr_label = f"SR-{next_id}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    files_value = args.files if args.files else ""
+    files_value = ",".join(expand_list_arg(args.files))
     context_value = args.context if args.context else ""
     new_entry = (
         f"\n- **{sr_label}** ({timestamp})\n"

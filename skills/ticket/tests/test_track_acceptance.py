@@ -25,6 +25,15 @@ from ticket_system.commands.track_acceptance import (
 _LOCK_TARGET = Path(tempfile.gettempdir()) / "w1018_test_lock_target.md"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_auto_commit():
+    """本檔測項使用虛構票檔路徑，不驗證提交行為；隔離真實 git 呼叫。
+    （0.4.0-W1-067 後提交失敗會回 exit 75，虛構路徑會因找不到 repo 而觸發。）
+    提交失敗語意見 ticket_system/tests/test_write_command_commit_failure.py。"""
+    with patch("ticket_system.lib.git_utils._auto_commit_ticket_md", return_value="no_change"):
+        yield
+
+
 class TestCheckAcceptance:
     """驗收條件檢查測試（frontmatter 版本）"""
 

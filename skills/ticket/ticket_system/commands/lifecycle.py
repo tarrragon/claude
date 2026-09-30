@@ -61,6 +61,10 @@ from ticket_system.lib.command_tracking_messages import (
 )
 from ticket_system.lib.claude_lib_loader import load_claude_lib
 from ticket_system.lib.git_ops import commit_files_isolated
+from ticket_system.lib.git_utils import (
+    EXIT_AUTO_COMMIT_FAILED,
+    format_write_command_commit_failure,
+)
 from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.tdd_sequence import (
     validate_phase_prerequisite,
@@ -1026,7 +1030,10 @@ class TicketLifecycle:
                     sys.stderr.write(
                         f"[auto-commit] worklog 路徑解析失敗（略過）：{exc}\n"
                     )
-            _auto_commit_completion_files(ticket_id, modified_paths)
+            if _auto_commit_completion_files(ticket_id, modified_paths):
+                # 狀態已寫入 working tree 但未入庫：以專用 exit code 反映，
+                # 與 complete 本身失敗（1）區分；WARNING 已由函式輸出。
+                return EXIT_AUTO_COMMIT_FAILED
 
         return 0
 
@@ -1971,7 +1978,7 @@ def _clear_dispatch_for_completed_ticket(ticket_id: str) -> None:
 def _auto_commit_completion_files(
     ticket_id: str,
     modified_paths: List[str],
-) -> None:
+) -> bool:
     """complete 後以隔離索引自動提交已知 modified 路徑，取代原「auto-stage +
     人工裸 commit」流程。
 
@@ -2006,20 +2013,24 @@ def _auto_commit_completion_files(
     Args:
         ticket_id: 主 ticket id（用於 commit 訊息）
         modified_paths: complete 流程實際寫入的檔案路徑清單
+
+    Returns:
+        True 表最終提交失敗（含例外），已輸出含原因與補救指令的 WARNING；
+        呼叫端以 ``EXIT_AUTO_COMMIT_FAILED`` 結束。committed / empty 回 False。
     """
     deduped: List[str] = list(dict.fromkeys(p for p in modified_paths if p))
     if not deduped:
-        return
+        return False
 
     cwd = str(Path(deduped[0]).parent)
     message = f"chore({ticket_id}): metadata sync post-completion"
     try:
         result = commit_files_isolated(deduped, message, cwd=cwd)
     except Exception as exc:
-        sys.stderr.write(
-            f"[auto-commit] 隔離提交異常（非致命，未留 staged 殘留）：{exc}\n"
-        )
-        return
+        sys.stderr.write(_format_complete_commit_failure(
+            ticket_id, deduped, f"{type(exc).__name__}: {exc}"
+        ))
+        return True
 
     status = result.get("status")
     if status == "committed":
@@ -2035,10 +2046,23 @@ def _auto_commit_completion_files(
         # 工作區內容與 HEAD 相同，無需提交（正常情況，非錯誤）
         pass
     else:
-        sys.stderr.write(
-            f"[auto-commit] 隔離提交失敗（非致命，未留 staged 殘留）："
-            f"{result.get('error')}\n"
-        )
+        sys.stderr.write(_format_complete_commit_failure(
+            ticket_id, deduped, str(result.get("error") or "")
+        ))
+        return True
+    return False
+
+
+def _format_complete_commit_failure(
+    ticket_id: str, paths: List[str], error: str
+) -> str:
+    """complete 的 metadata 提交最終失敗警告：原因、鎖檔路徑、補救指令。"""
+    return format_write_command_commit_failure(
+        "complete", paths[0], ticket_id, "post-completion", "metadata sync",
+        error, 1,
+    ).replace(
+        f'git add {paths[0]} &&', "git add " + " ".join(paths) + " &&"
+    )
 
 
 def _post_complete_cascade(

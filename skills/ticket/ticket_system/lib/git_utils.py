@@ -19,11 +19,23 @@
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Dict, Optional, Sequence
 
-from .git_ops import commit_files_isolated
+from .git_ops import _is_lock_contention, commit_files_isolated
 from .lease import resolve_current_session_id
+
+# ``ticket create`` 建票成功但 auto-commit 最終失敗時的專用 exit code。取 75
+# （sysexits EX_TEMPFAIL：暫時性失敗，稍後可重試），與建票失敗（1）、用法錯誤（2）區分。
+EXIT_AUTO_COMMIT_FAILED = 75
+
+# git_ops._stale_lock_diagnosis 附在過期殘骸鎖錯誤文字內的標記；出現即不重試。
+_STALE_DIAGNOSIS_MARK = "[殘骸診斷]"
+
+# 暫時性鎖競爭的退避重試：等待總和上限約 5 秒（依序等 0.5、1、2 秒，其後每次 2 秒，超出預算即停）。
+_COMMIT_RETRY_BUDGET_SECONDS = 5.0
+_COMMIT_RETRY_BACKOFF_SECONDS = (0.5, 1.0, 2.0)
 
 # git_ops.commit_files_isolated 回傳的 status（committed/empty/failed）轉譯為
 # 本模組既有呼叫端（ticket_system.commands.*）慣用的狀態字串。「not_git_repo」
@@ -44,8 +56,13 @@ def _auto_commit_ticket_md(
     operation: str = "append-log",
     extra_paths: Optional[Sequence[str]] = None,
     append_lines: Optional[Dict[str, str]] = None,
+    result_out: Optional[dict] = None,
 ) -> str:
     """精確路徑 auto-commit 單一 ticket md。
+
+    ``result_out`` 給定時以 ``commit_files_isolated`` 的完整結果（含 ``error``）
+    填入，供呼叫端輸出失敗原因；回傳值語意不變。目錄非 git repo 時回傳
+    ``"not_git_repo"``（無 repo 可提交，與提交失敗區分）。
 
     設計（改用隔離索引 CAS）：
     - 提交機制委派 ``git_ops.commit_files_isolated``：``GIT_INDEX_FILE`` 指向
@@ -114,4 +131,107 @@ def _auto_commit_ticket_md(
     # append_lines 僅在有值時才傳入，既有呼叫端的 commit_files_isolated 呼叫形態不變
     extra_kwargs = {"append_lines": append_lines} if append_lines else {}
     result = commit_files_isolated(paths, message, cwd=cwd, **extra_kwargs)
-    return _STATUS_MAP[result["status"]]
+    if result_out is not None:
+        result_out.update(result)
+    status = _STATUS_MAP[result["status"]]
+    if status == "git_failed" and "not a git repository" in (result.get("error") or "").lower():
+        return "not_git_repo"
+    return status
+
+
+def _is_retryable_commit_failure(error: str) -> bool:
+    """暫時性鎖競爭才值得重試；已判為過期殘骸的鎖重試只是空等。"""
+    return _is_lock_contention(error) and _STALE_DIAGNOSIS_MARK not in error
+
+
+def auto_commit_ticket_md_with_retry(*args, **kwargs) -> Dict[str, object]:
+    """呼叫 ``_auto_commit_ticket_md``，git_failed 且屬暫時性鎖競爭時退避重試。
+
+    總等待上限 ``_COMMIT_RETRY_BUDGET_SECONDS``（另加各次 git 呼叫本身耗時）。
+    絕不移除任何鎖檔。回傳 ``{"status", "error", "attempts"}``；``error`` 僅在
+    最終 status 為 git_failed 時有值，供呼叫端輸出失敗原因。
+    """
+    deadline = time.monotonic() + _COMMIT_RETRY_BUDGET_SECONDS
+    attempts = 0
+    while True:
+        detail: Dict[str, Optional[str]] = {}
+        status = _auto_commit_ticket_md(*args, result_out=detail, **kwargs)
+        attempts += 1
+        if status != "git_failed":
+            return {"status": status, "error": None, "attempts": attempts}
+        error = detail.get("error") or ""
+        delay = _COMMIT_RETRY_BACKOFF_SECONDS[
+            min(attempts - 1, len(_COMMIT_RETRY_BACKOFF_SECONDS) - 1)
+        ]
+        if not _is_retryable_commit_failure(error) or time.monotonic() + delay > deadline:
+            return {"status": status, "error": error, "attempts": attempts}
+        time.sleep(delay)
+
+
+def format_write_command_commit_failure(
+    label: str, ticket_path: str, ticket_id: str, section: str,
+    operation: str, error: str, attempts: int,
+) -> str:
+    """寫入命令 auto-commit 最終失敗的可見警告：原因、鎖檔路徑、補救指令。
+
+    與 create 的警告同形（見 ``create._format_commit_failure_warning``），差別是
+    寫入已落在 working tree 的既有票檔，補救指令的 commit message 依 operation 組出。
+    """
+    from .git_ops import _lock_paths_from_error
+
+    lines = [
+        f"[WARNING] [{label}] {ticket_id} 已寫入 working tree 但 auto-commit 失敗"
+        f"（嘗試 {attempts} 次）；尚未入庫，exit code {EXIT_AUTO_COMMIT_FAILED}。",
+        f"失敗原因：{error or '（git 未回報原因）'}",
+    ]
+    lock_paths = _lock_paths_from_error(error, str(Path(ticket_path).parent))
+    if lock_paths:
+        lines.append("鎖檔路徑：" + "；".join(lock_paths))
+        lines.append(
+            "鎖檔處置：工具不會自動刪除鎖。先確認沒有任何 git 行程在執行"
+            "（例如 `pgrep -lf git`），再依鎖檔內容與時間判斷是否為殘骸，"
+            "確認後才可手動移除。"
+        )
+    lines.append(
+        f"補救指令（鎖排除後）：git add {ticket_path} && "
+        f"git commit -m \"chore({ticket_id}): {operation} {section}\""
+    )
+    return "\n".join(lines) + "\n"
+
+
+def commit_ticket_md_reporting(
+    label: str, ticket_path: str, ticket_id: str, section: str,
+    operation: str = "append-log", **kwargs,
+) -> bool:
+    """寫入命令共用的 auto-commit 收尾：提交、重試、失敗時輸出 WARNING。
+
+    Returns:
+        True 表最終失敗（git_failed 或例外），呼叫端應以 ``EXIT_AUTO_COMMIT_FAILED``
+        結束。``not_git_repo`` 印 skipped 訊息但不算失敗（無 repo 可提交）。
+    """
+    import sys
+
+    try:
+        result = auto_commit_ticket_md_with_retry(
+            ticket_path, ticket_id, section, operation=operation, **kwargs
+        )
+    except Exception as exc:
+        sys.stderr.write(format_write_command_commit_failure(
+            label, ticket_path, ticket_id, section, operation,
+            f"{type(exc).__name__}: {exc}", 1,
+        ))
+        return True
+    status = result["status"]
+    if status == "not_git_repo":
+        sys.stderr.write(
+            f"[{label}] auto-commit skipped（not_git_repo，非致命）；"
+            "body 已保留 working tree，可手動 git commit 持久化。\n"
+        )
+        return False
+    if status == "git_failed":
+        sys.stderr.write(format_write_command_commit_failure(
+            label, ticket_path, ticket_id, section, operation,
+            str(result.get("error") or ""), int(result.get("attempts") or 1),
+        ))
+        return True
+    return False

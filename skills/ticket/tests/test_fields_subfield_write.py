@@ -54,7 +54,8 @@ def test_set_where_parser_accepts_layer_and_files_flags():
         "--layer", "Domain", "--files", ".claude/hooks/a.py,.claude/lib/b.py",
     ])
     assert args.layer == "Domain"
-    assert args.files == ".claude/hooks/a.py,.claude/lib/b.py"
+    # --files 為 append（可重複給），原始值為清單；逗號展開由 expand_list_arg 負責
+    assert args.files == [".claude/hooks/a.py,.claude/lib/b.py"]
     assert args.value is None
 
 

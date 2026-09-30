@@ -299,11 +299,13 @@ def _warn_and_prompt_complete_before_handoff(
     if response in ("", "y", "yes"):
         # 執行 complete
         from ticket_system.commands.lifecycle import execute_complete
+        from ticket_system.lib.git_utils import EXIT_AUTO_COMMIT_FAILED
 
         complete_args = argparse.Namespace(ticket_id=ticket_id, version=version)
         result = execute_complete(complete_args)
 
-        if result != 0:
+        # EXIT_AUTO_COMMIT_FAILED：complete 已完成、僅 metadata 未入庫，handoff 可繼續
+        if result not in (0, EXIT_AUTO_COMMIT_FAILED):
             print(f"[Error] complete 執行失敗，中止 handoff")
             return 1
 

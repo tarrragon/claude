@@ -122,8 +122,11 @@ def infer_topic_from_files(where_files) -> tuple:
     「路徑是否被太多主題共用」）。
     """
     from ticket_system.lib.file_conflict import files_intersect
+    from ticket_system.lib.list_args import expand_list_arg
 
-    paths = [p.strip() for p in (where_files or "").split(",") if p.strip()]
+    # create 的 --where 為 action="append"，where_files 是字串清單；
+    # 手組 Namespace 的呼叫端仍可能傳逗號字串，兩者經同一正規化。
+    paths = expand_list_arg(where_files)
     if not paths:
         return None, None
 

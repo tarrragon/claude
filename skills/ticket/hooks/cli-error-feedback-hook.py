@@ -174,6 +174,9 @@ GIT_INFO_STDERR_PATTERNS = [
 # Skill CLI Error 子邏輯（來自 skill-cli-error-feedback-hook）
 # ============================================================================
 
+# ticket CLI 寫入命令「動作已完成、僅 auto-commit 失敗」的專用退出碼（sysexits EX_TEMPFAIL）
+EXIT_AUTO_COMMIT_FAILED = 75
+
 def _find_skill_cli_token(command: str) -> Optional[str]:
     """在複合命令（含 && / ; / | 等鏈式運算子）中尋找觸發 ticket/skill CLI 的片段，
     回傳該片段的首 token（已去除 `/` 前綴）；未命中回傳 None。
@@ -278,7 +281,7 @@ def check_skill_cli_error(input_data: Dict[str, Any], logger) -> Optional[str]:
     # exit_code=0 表示命令成功
     if isinstance(tool_response, dict):
         exit_code = tool_response.get("exit_code")
-        if exit_code is not None and exit_code == 0:
+        if exit_code in (0, EXIT_AUTO_COMMIT_FAILED):
             logger.debug("skill-cli: 命令成功（exit_code=0），跳過")
             return None
 

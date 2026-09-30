@@ -1,3 +1,28 @@
+## [2.68.0] - 2026-09-30
+
+### Summary
+feat: merge-staged-index-guard PreToolUse(Bash) 守衛; fix: track 子命令未給 --version 時從 ID 位置參數解析版本; fix: 共用 index 同步認得己方歷史版本，update-index 不設 timeout (+12 more)
+
+Changes: 1 feat, 12 fix, 1 docs, 1 chore
+
+- feat: merge-staged-index-guard PreToolUse(Bash) 守衛
+- fix: track 子命令未給 --version 時從 ID 位置參數解析版本
+- fix: 共用 index 同步認得己方歷史版本，update-index 不設 timeout
+- fix: hook 端消費點視 exit 75 為動作已完成、僅提交失敗
+- fix: 共用 index 同步讀當下 HEAD + 寫入命令 auto-commit 失敗可見
+- fix: git_command_parse 子 shell 括號盲點
+- fix: 主題推導 S2 接受清單形態的 where_files（ticket 2.44.5）
+- fix: ticket create 自動提交失敗不再靜默（ticket 2.44.6）
+- fix: set-where/add-spawn-request --files 可重複給；expand_list_arg 移至 lib/list_args
+- fix: workspace-wipe-guard cd 作用域洩漏與括號黏著偵測盲點
+- fix: merge-staged-index-guard 放行可快轉的 merge
+- fix: ticket create 的 --blocked-by/--related-to/--where 可重複給且相容逗號分隔
+- fix: workspace-wipe-guard 先解析 git 命令目標 repo，非主 repo 放行
+- docs: CHANGELOG 2.44.7 補 hook 端 exit 75 消費點
+- chore: .claude/VERSION 2.67.0（sync-push：component-contract-design 3.13.1 空節點分流）
+
+---
+
 ## [2.67.0] - 2026-09-30
 
 ### Summary

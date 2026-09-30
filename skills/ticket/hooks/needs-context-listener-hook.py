@@ -67,6 +67,9 @@ _NEEDS_CONTEXT_SECTION_TOKEN = "NeedsContext"
 _LOG_APPENDED_SUCCESS_MARKER = "已追加日誌到"
 
 
+# ticket CLI 寫入命令「動作已完成、僅 auto-commit 失敗」的專用退出碼（sysexits EX_TEMPFAIL）
+EXIT_AUTO_COMMIT_FAILED = 75
+
 def _match_append_log_needscontext(tokens: List[str]) -> Optional[str]:
     """在單一語句 token 清單中尋找 `ticket track append-log <id> --section
     NeedsContext` 子序列，回傳格式合法的 ticket_id；否則回傳 None。
@@ -144,7 +147,7 @@ def main_logic() -> int:
         return EXIT_SUCCESS
 
     exit_code = tool_response.get("exit_code")
-    if exit_code is not None and exit_code != 0:
+    if exit_code is not None and exit_code not in (0, EXIT_AUTO_COMMIT_FAILED):
         return EXIT_SUCCESS
 
     # stdout 非空時，要求含 CLI 成功回音才視為真正寫入成功；stdout 缺席

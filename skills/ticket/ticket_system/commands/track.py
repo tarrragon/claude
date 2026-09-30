@@ -11,6 +11,7 @@ if __name__ == "__main__":
 
 
 import argparse
+from typing import Optional
 
 
 def _parse_wave_arg(value: str) -> int:
@@ -129,6 +130,7 @@ from .track_set_closed_by import execute_set_closed_by
 # 導入 restore 子命令（closed 票唯一合法出邊：closed -> pending 還原路徑）
 from .track_restore import execute_restore
 # 導入 set-exit-status / set-completion-info 子命令（1.5.0-W5-021 制式化內容生成）
+from ticket_system.lib.git_utils import EXIT_AUTO_COMMIT_FAILED
 from .track_structured_body import (
     execute_set_exit_status,
     execute_set_completion_info,
@@ -320,7 +322,8 @@ def _execute_complete(args: argparse.Namespace, version: str) -> int:
     if deny is not None:
         return deny
     rc = execute_complete(args, version)
-    if rc == 0:
+    # EXIT_AUTO_COMMIT_FAILED：complete 已完成、僅 metadata 未入庫，lease 仍須釋放
+    if rc in (0, EXIT_AUTO_COMMIT_FAILED):
         release_lease(version, args.ticket_id)
     return rc
 
@@ -395,7 +398,12 @@ def _reclaim_landing_report_hook(version: str, ticket_id: str, report_text: str,
         replace=False,
     )
     result = execute_append_log(append_args, version)
-    if result != 0:
+    if result == EXIT_AUTO_COMMIT_FAILED:
+        sys.stderr.write(
+            f"[reclaim] {ticket_id}: 鑑識報告日誌已寫入，自動提交失敗"
+            f"（append-log exit {result}，補救指令見上方 WARNING）；reclaim 狀態轉換已完成\n"
+        )
+    elif result != 0:
         sys.stderr.write(
             f"[reclaim] {ticket_id}: 鑑識報告落票失敗（append-log exit {result}），"
             "reclaim 狀態轉換已完成，僅稽核記錄缺失\n"
@@ -557,6 +565,24 @@ def _create_command_handlers() -> dict:
     }
 
 
+# 位置參數名各異的 track 子命令：依序取第一個存在者作為版本來源
+# ticket_id（多數）/ child_id（set-parent）/ parent_id（add-child）/ ticket_ids（batch-*，逗號分隔）
+_TICKET_ID_ARG_NAMES = ("ticket_id", "child_id", "parent_id", "ticket_ids")
+
+
+def _ticket_id_arg_version(args: argparse.Namespace) -> Optional[str]:
+    """從命令的 ticket ID 位置參數解析版本；解析不出時回傳 None（退回自動偵測）。"""
+    for name in _TICKET_ID_ARG_NAMES:
+        raw = getattr(args, name, None)
+        if not raw:
+            continue
+        first_id = str(raw).split(",")[0].strip()
+        version = extract_version_from_ticket_id(first_id)
+        if version:
+            return version
+    return None
+
+
 def execute(args: argparse.Namespace) -> int:
     """執行 track 命令"""
     operation = args.operation
@@ -589,10 +615,8 @@ def execute(args: argparse.Namespace) -> int:
             return 1
 
     # 如果未明確指定版本，嘗試從 Ticket ID 提取
-    if not explicit_version and hasattr(args, 'ticket_id'):
-        extracted_version = extract_version_from_ticket_id(args.ticket_id)
-        if extracted_version:
-            version = extracted_version
+    if not explicit_version:
+        version = _ticket_id_arg_version(args)
 
     # 如果仍未取得版本，使用自動偵測
     if not version:
@@ -984,7 +1008,7 @@ def _register_field_write_commands(
         help=TrackMessages.ARG_VALUE + "（與 --layer/--files 二擇一或合併使用）",
     )
     p_set_where.add_argument("--layer", help="僅寫入 where.layer 子欄位（保留 files）")
-    p_set_where.add_argument("--files", help="僅寫入 where.files 子欄位（逗號分隔多路徑，直接覆寫）")
+    p_set_where.add_argument("--files", action="append", help="僅寫入 where.files 子欄位（逗號分隔多路徑，可重複給，整體直接覆寫）")
     p_set_where.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # set-why 操作
@@ -1348,7 +1372,7 @@ def _register_acceptance_commands(
     p_add_spawn_request.add_argument(
         "--priority", required=True, help="建議優先級（P0/P1/P2/P3）"
     )
-    p_add_spawn_request.add_argument("--files", default=None, help="相關檔案路徑，逗號分隔")
+    p_add_spawn_request.add_argument("--files", action="append", default=None, help="相關檔案路徑，逗號分隔，可重複給")
     p_add_spawn_request.add_argument("--context", default=None, help="補充 context（可選）")
     p_add_spawn_request.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_add_spawn_request.add_argument(

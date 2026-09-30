@@ -268,7 +268,8 @@ class TestCompleteAutoStage:
         assert "chore(" not in captured.out
 
     def test_stderr_warns_on_failed_status_not_stdout(self, capsys):
-        """提交失敗時警告寫 stderr，不寫 stdout，且不中斷 complete。"""
+        """提交失敗時警告寫 stderr，不寫 stdout；complete 不中斷但 exit 75（0.4.0-W1-067）。
+        對照：提交成功的其他測項維持 exit 0。"""
         ticket = _build_ticket(ticket_id="0.18.0-W17-991")
         result, calls = _run_complete(
             ticket=ticket,
@@ -280,8 +281,10 @@ class TestCompleteAutoStage:
         )
         captured = capsys.readouterr()
 
-        assert result == 0
+        assert result == 75
         assert len(calls) == 1
+        assert "[WARNING]" in captured.err
+        assert "git add" in captured.err and "補救指令" in captured.err
         assert "提交範圍自我驗證失敗" in captured.err
         assert "提交範圍自我驗證失敗" not in captured.out
 

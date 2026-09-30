@@ -22,6 +22,7 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from ticket_system.lib.list_args import expand_list_arg
 from ticket_system.lib import ticket_loader
 from ticket_system.lib.constants import (
     STATUS_PENDING,
@@ -536,7 +537,8 @@ def execute_set_where(args: argparse.Namespace, version: str) -> int:
     仍優先於 value 推斷（不變）。
     """
     layer = _get_str_arg(args, "layer")
-    files_raw = _get_str_arg(args, "files")
+    files_arg = getattr(args, "files", None)
+    files_raw = files_arg if isinstance(files_arg, (str, list)) else None
     if layer is None and files_raw is None:
         if getattr(args, "value", None) is None:
             print(format_error(ErrorMessages.MISSING_FIELD_VALUE, ticket_id=args.ticket_id, field_name="where"))
@@ -547,7 +549,7 @@ def execute_set_where(args: argparse.Namespace, version: str) -> int:
     if layer is not None:
         subfields["layer"] = layer
     if files_raw is not None:
-        subfields["files"] = _parse_comma_list(files_raw)
+        subfields["files"] = expand_list_arg(files_raw)
     elif getattr(args, "value", None) is not None:
         path_entries = _parse_where_path_entries(args.value)
         if path_entries is not None:

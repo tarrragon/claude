@@ -29,6 +29,7 @@ add、是否命中保護分支、是否為 index-discarding commit 等）不受�
 呼叫端必須用 `is None` 明確區分，不可只寫 `if not invocations:`。
 """
 
+import logging
 import re
 import shlex
 from dataclasses import dataclass, field
@@ -119,6 +120,51 @@ def normalize_newlines_to_separators(command: str) -> str:
         else:
             result.append(ch)
     return "".join(result)
+
+
+# ===== 括號正規化 =====
+
+_logger = logging.getLogger("git_command_parse")
+
+
+def space_shell_parens(command: str) -> str:
+    """在不在引號內、未被反斜線跳脫的 `(` `)` 兩側補空白，使其成為獨立 token。
+
+    shlex（punctuation_chars 模式）會把相鄰的標點合併成單一 token，`);` 因此
+    黏成一個非分隔符 token，子 shell 閉合後的語句被併進前一個語句，其中的
+    git 呼叫漏抓。補空白後 `(` `)` 各自獨立，交由 `_split_statements` 當語句
+    邊界。引號內文字不動（引號內括號維持字面）。
+
+    括號無法配對（開閉數量不等）時不拋例外、不改變處理流程，僅寫 debug 日誌：
+    語句切分本就把每個括號當獨立邊界，不需配對資訊。
+    """
+    out: List[str] = []
+    quote = ""
+    prev = ""
+    depth = 0
+    unmatched_close = False
+    for ch in command:
+        if quote:
+            if ch == quote and prev != "\\":
+                quote = ""
+            out.append(ch)
+        elif ch in ("'", '"') and prev != "\\":
+            quote = ch
+            out.append(ch)
+        elif ch in "()" and prev != "\\":
+            if ch == "(":
+                depth += 1
+            elif depth > 0:
+                depth -= 1
+            else:
+                unmatched_close = True
+            out.append(" " + ch + " ")
+        else:
+            out.append(ch)
+        prev = ch
+    if depth > 0 or unmatched_close:
+        _logger.debug("命令括號無法配對（未閉合=%d，多餘右括號=%s），照常切分", depth, unmatched_close)
+    return "".join(out)
 
 
 # ===== token 分類 =====
@@ -287,6 +333,17 @@ def _tokenize(command: str) -> Optional[List[str]]:
         return None
 
 
+def _tokenize_command(command: str) -> Optional[List[str]]:
+    """完整前處理管線：heredoc 剝離 -> 換行正規化 -> 括號補空白 -> tokenize。
+
+    `parse_command_statements` 與 `find_git_invocations` 共用，確保兩者對同一
+    命令字串切出相同的 token 流。
+    """
+    stripped = strip_heredoc_bodies(command)
+    normalized = normalize_newlines_to_separators(stripped)
+    return _tokenize(space_shell_parens(normalized))
+
+
 def _merge_fd_duplication(tokens: List[str]) -> List[str]:
     """把 punctuation_chars 切開的 fd 複製重導向（2>&1）還原為單一 token。
 
@@ -433,9 +490,7 @@ def parse_command_statements(command: str) -> Optional[List[List[str]]]:
     """
     if not command:
         return []
-    stripped = strip_heredoc_bodies(command)
-    normalized = normalize_newlines_to_separators(stripped)
-    tokens = _tokenize(normalized)
+    tokens = _tokenize_command(command)
     if tokens is None:
         return None
     return _split_statements(tokens)
@@ -467,9 +522,7 @@ def find_git_invocations(
     if not command:
         return []
 
-    stripped = strip_heredoc_bodies(command)
-    normalized = normalize_newlines_to_separators(stripped)
-    tokens = _tokenize(normalized)
+    tokens = _tokenize_command(command)
     if tokens is None:
         return None
 

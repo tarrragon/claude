@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ticket_system.constants import PRIORITY_LEVELS, TICKET_TYPES
+from ticket_system.lib.git_utils import EXIT_AUTO_COMMIT_FAILED
+from ticket_system.lib.list_args import expand_list_arg
 from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
     save_ticket,
@@ -175,7 +177,7 @@ def _parse_cli_args_to_config(
         TicketConfig 或 None（失敗）
     """
     # 處理 where_files
-    where_files = [f.strip() for f in args.where_files.split(",")] if args.where_files else []
+    where_files = expand_list_arg(args.where_files)
 
     # 驗證路徑 token：reject 非路徑髒值（如 src=.claude/x、layer=core）。
     # 髒值若寫入 where.files 會致下游派發路徑分類誤判，故前置攔下。
@@ -213,10 +215,10 @@ def _parse_cli_args_to_config(
         return None
 
     # 處理 blocked_by
-    blocked_by = [b.strip() for b in args.blocked_by.split(",")] if args.blocked_by else []
+    blocked_by = expand_list_arg(args.blocked_by)
 
     # 處理 related_to
-    related_to = [r.strip() for r in args.related_to.split(",")] if args.related_to else []
+    related_to = expand_list_arg(args.related_to)
 
     # 處理 acceptance（支援多次 --acceptance 和分隔符拆條 + 反斜線跳脫 + 拆條警告）
     acceptance = None
@@ -1015,6 +1017,7 @@ def execute(args: argparse.Namespace) -> int:
     # Step 4 (W17-002.2)：Context Bundle 自動抽取（post-persist enhancement）
     # --dry-run 時 ticket 未落盤，抽取與 auto-commit 的對象不存在，一併略過。
     ticket_intact = True
+    commit_failed = False
     if rc == 0 and not dry_run:
         try:
             ticket_intact = _auto_extract_context_bundle_post_create(
@@ -1051,21 +1054,29 @@ def execute(args: argparse.Namespace) -> int:
                 from ticket_system.lib import git_utils
                 extra_paths = _source_backfill_paths(args, ticket_id)
                 try:
-                    commit_status = git_utils._auto_commit_ticket_md(
+                    commit_result = git_utils.auto_commit_ticket_md_with_retry(
                         ticket_path, ticket_id, "Task Summary", operation="create",
                         extra_paths=extra_paths,
                         append_lines=topic_append_lines or None,
                     )
-                    if commit_status in ("not_git_repo", "git_failed"):
+                    commit_status = commit_result["status"]
+                    if commit_status == "not_git_repo":
                         sys.stderr.write(
-                            f"[create] auto-commit skipped（{commit_status}，非致命）；"
-                            f"ticket md 已保留 working tree，可手動 git commit 持久化。\n"
+                            "[create] auto-commit skipped（not_git_repo，非致命）；"
+                            "ticket md 已保留 working tree，可手動 git commit 持久化。\n"
                         )
+                    elif commit_status == "git_failed":
+                        commit_failed = True
+                        sys.stderr.write(_format_commit_failure_warning(
+                            ticket_path, ticket_id,
+                            str(commit_result.get("error") or ""),
+                            int(commit_result.get("attempts") or 1),
+                        ))
                 except Exception as exc:
-                    sys.stderr.write(
-                        f"[create] auto-commit 失敗（非致命，ticket md 已保留 "
-                        f"working tree）：{exc}\n"
-                    )
+                    commit_failed = True
+                    sys.stderr.write(_format_commit_failure_warning(
+                        ticket_path, ticket_id, f"{type(exc).__name__}: {exc}", 1,
+                    ))
             else:
                 sys.stderr.write(
                     "[create] 偵測到 ticket 檔案受損，已略過 auto-commit 避免"
@@ -1077,8 +1088,38 @@ def execute(args: argparse.Namespace) -> int:
         # 不可讓 CLI 以成功狀態結束（先前故障：訊息宣稱不影響、退出碼 0，
         # 連續四次相同失敗都被讀成成功）。
         rc = 1
+    elif commit_failed and rc == 0:
+        # 票已建但未入庫：以專用 exit code 反映，與建票失敗（1）區分。
+        rc = EXIT_AUTO_COMMIT_FAILED
 
     return rc
+
+
+def _format_commit_failure_warning(
+    ticket_path: str, ticket_id: str, error: str, attempts: int
+) -> str:
+    """組出 auto-commit 最終失敗的可見警告：原因、鎖檔路徑、補救指令。"""
+    from ticket_system.lib.git_ops import _lock_paths_from_error
+
+    lock_paths = _lock_paths_from_error(error, str(Path(ticket_path).parent))
+    lines = [
+        f"[WARNING] [create] {ticket_id} 已建立但 auto-commit 失敗"
+        f"（嘗試 {attempts} 次）；票檔保留在 working tree 尚未入庫，"
+        f"exit code {EXIT_AUTO_COMMIT_FAILED}。",
+        f"失敗原因：{error or '（git 未回報原因）'}",
+    ]
+    if lock_paths:
+        lines.append("鎖檔路徑：" + "；".join(lock_paths))
+        lines.append(
+            "鎖檔處置：工具不會自動刪除鎖。先確認沒有任何 git 行程在執行"
+            "（例如 `pgrep -lf git`），再依鎖檔內容與時間判斷是否為殘骸，"
+            "確認後才可手動移除。"
+        )
+    lines.append(
+        f"補救指令（鎖排除後）：git add {ticket_path} && "
+        f"git commit -m \"chore({ticket_id}): create Task Summary\""
+    )
+    return "\n".join(lines) + "\n"
 
 
 
@@ -1157,7 +1198,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--where-layer", help="架構層級: Domain, Application, Infrastructure, Presentation"
     )
-    parser.add_argument("--where", "--where-files", dest="where_files", help="影響檔案（逗號分隔，如 'file1.py,file2.py'）")
+    parser.add_argument("--where", "--where-files", dest="where_files", action="append", help="影響檔案（逗號分隔，如 'file1.py,file2.py'；可重複給）")
     parser.add_argument("--why", help="需求依據（IMP/ANA/ADJ 類型必填）")
     parser.add_argument(
         "--dedup-checked",
@@ -1217,8 +1258,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         help="明示本票不指派主題（略過自動推導未命中時的警告；與 --topic / --new-topic 互斥）",
     )
-    parser.add_argument("--blocked-by", help="依賴的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")
-    parser.add_argument("--related-to", help="相關的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")
+    parser.add_argument("--blocked-by", action="append", help="依賴的 Ticket IDs（逗號分隔，如 'ID1,ID2'；可重複給）")
+    parser.add_argument("--related-to", action="append", help="相關的 Ticket IDs（逗號分隔，如 'ID1,ID2'；可重複給）")
     parser.add_argument("--acceptance", action="append", help="驗收條件（多次 --acceptance 或 | 分隔，如 '條件A|條件B'）")
     # --decision-tree 攔截：撞 --decision-tree-entry/-decision/-rationale（1.0.0-W1-028）
     register_ambiguous_prefix(

@@ -353,7 +353,7 @@ class TestSharedIndexProtection:
 
 
 class TestGracefulDegrade:
-    """AC4: auto-commit 失敗時 append-log 仍 exit 0 + stderr 警告，body 保留 working tree。"""
+    """AC4: 非 git repo 時 append-log 仍 exit 0 + stderr 警告；commit 最終失敗 exit 75 + WARNING，body 保留 working tree。"""
 
     def test_append_log_succeeds_when_not_git_repo(self, tmp_path: Path, monkeypatch, capsys):
         # 非 git repo 的 tickets 目錄
@@ -404,12 +404,13 @@ class TestGracefulDegrade:
         monkeypatch.setattr(git_utils, "_auto_commit_ticket_md", _raise, raising=False)
 
         rc = _call_append_log("0.0.0-W0-AC", "Solution", "LOCK_CONTENTION_BODY")
-        assert rc == 0, "auto-commit 失敗（index.lock）時 append-log 仍應 exit 0"
+        # 0.4.0-W1-067：commit 最終失敗改為 exit 75（body 已寫入 working tree），
+        # 與非 git repo 的 skipped（exit 0）區分；WARNING 含原因與補救指令。
+        assert rc == 75, "auto-commit 最終失敗時 append-log 應 exit 75"
 
         captured = capsys.readouterr()
-        assert "commit" in captured.err.lower() or "git" in captured.err.lower(), (
-            "auto-commit 失敗應在 stderr 警告"
-        )
+        assert "[WARNING]" in captured.err and "補救指令" in captured.err
+        assert "simulated index.lock contention" in captured.err
 
 
 # ============================================================

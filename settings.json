@@ -110,6 +110,11 @@
           },
           {
             "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/merge-staged-index-guard-hook.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/workspace-wipe-guard-hook.py"
           }
         ]

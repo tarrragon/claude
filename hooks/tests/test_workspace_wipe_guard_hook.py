@@ -782,3 +782,130 @@ class TestMainRepoDirtyDeny:
         exit_code = _run_hook(monkeypatch, "git checkout -- .", dispatch_count=0, main_repo_dirty=None)
 
         assert exit_code == 2
+
+
+# ============================================================================
+# 目標 repo 解析：目標不是主 repo 時放行（scratch repo 上的 git 實驗不該被主
+# repo 狀態誤擋）；無法解析時 fail-closed 視為主 repo
+# ============================================================================
+
+
+def _init_repo(path: Path) -> Path:
+    import subprocess
+
+    path.mkdir(parents=True, exist_ok=True)
+    for args in (
+        ["init", "-q"],
+        ["config", "user.email", "t@example.com"],
+        ["config", "user.name", "t"],
+    ):
+        subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True)
+    (path / "f.txt").write_text("a\n")
+    subprocess.run(["git", "-C", str(path), "add", "f.txt"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(path), "commit", "-q", "-m", "init"], check=True, capture_output=True
+    )
+    return path
+
+
+@pytest.fixture
+def two_repos(tmp_path):
+    """主 repo（有未提交 tracked 變更）+ 另一個獨立 tmp repo。"""
+    main_repo = _init_repo(tmp_path / "main")
+    (main_repo / "f.txt").write_text("dirty\n")
+    other = _init_repo(tmp_path / "other")
+    return main_repo, other
+
+
+def _run_target_hook(monkeypatch, command: str, main_repo: Path, cwd: str) -> int:
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": cwd}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: main_repo)
+    monkeypatch.setattr(hook_module, "_get_active_dispatch_count", lambda root, logger: 0)
+    return main()
+
+
+class TestTargetRepoResolution:
+    def test_e2_bare_stash_in_main_still_denied(self, monkeypatch, capsys, two_repos):
+        main_repo, _ = two_repos
+        assert _run_target_hook(monkeypatch, "git stash", main_repo, str(main_repo)) == 2
+
+    def test_e2_dash_c_main_repo_still_denied(self, monkeypatch, capsys, two_repos):
+        main_repo, _ = two_repos
+        code = _run_target_hook(monkeypatch, f"git -C {main_repo} stash", main_repo, "/")
+        assert code == 2
+
+    def test_e1_dash_c_other_repo_allowed(self, monkeypatch, capsys, two_repos):
+        main_repo, other = two_repos
+        code = _run_target_hook(monkeypatch, f"git -C {other} stash", main_repo, str(main_repo))
+        assert code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_e1_subshell_cd_other_repo_allowed(self, monkeypatch, capsys, two_repos):
+        main_repo, other = two_repos
+        command = f"(cd {other} && git stash create)"
+        assert _run_target_hook(monkeypatch, command, main_repo, str(main_repo)) == 0
+
+    def test_unresolvable_dash_c_variable_denied(self, monkeypatch, capsys, two_repos):
+        main_repo, _ = two_repos
+        code = _run_target_hook(monkeypatch, "git -C $SCRATCH stash", main_repo, str(main_repo))
+        assert code == 2
+
+    def test_nonexistent_target_dir_denied(self, monkeypatch, capsys, two_repos, tmp_path):
+        main_repo, _ = two_repos
+        command = f"git -C {tmp_path / 'nope'} stash"
+        assert _run_target_hook(monkeypatch, command, main_repo, str(main_repo)) == 2
+
+    def test_mixed_main_and_other_denied(self, monkeypatch, capsys, two_repos):
+        main_repo, other = two_repos
+        command = f"git -C {other} stash && git -C {main_repo} reset --hard"
+        assert _run_target_hook(monkeypatch, command, main_repo, str(main_repo)) == 2
+
+    def test_linked_worktree_of_main_keeps_main_attribution(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        import subprocess
+
+        main_repo, _ = two_repos
+        wt = tmp_path / "wt"
+        subprocess.run(
+            ["git", "-C", str(main_repo), "worktree", "add", "-q", "-b", "wtb", str(wt)],
+            check=True,
+            capture_output=True,
+        )
+        code = _run_target_hook(monkeypatch, f"git -C {wt} stash", main_repo, str(main_repo))
+        assert code == 2
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            "(cd {o} && git stash create); git checkout -- .",
+            "(cd {o} && git stash list)\ngit checkout -- .",
+            "(cd {o} && ls) ; git reset --hard",
+            "(cd {o}); git checkout -- .",
+            "cd {o} && git stash create; cd -; git checkout -- .",
+            "cd {o} && git stash create; cd ..; git checkout -- .",
+        ],
+    )
+    def test_e2_cd_scope_leak_denied(self, monkeypatch, capsys, two_repos, template):
+        """子 shell 結束後或 cd 無法解析後的清空操作作用於主工作區，必須擋。"""
+        main_repo, other = two_repos
+        command = template.format(o=other)
+        assert _run_target_hook(monkeypatch, command, main_repo, str(main_repo)) == 2
+
+    def test_e1_plain_cd_chain_other_repo_allowed(self, monkeypatch, capsys, two_repos):
+        main_repo, other = two_repos
+        command = f"cd {other} && git stash create"
+        assert _run_target_hook(monkeypatch, command, main_repo, str(main_repo)) == 0
+
+    def test_resolution_result_logged(self, monkeypatch, caplog, two_repos):
+        """liveness：放行路徑須留下目標 repo 解析日誌。"""
+        main_repo, other = two_repos
+        test_logger = logging.getLogger("test-wipe-guard-target-resolution")
+        monkeypatch.setattr(hook_module, "setup_hook_logging", lambda name: test_logger)
+        with caplog.at_level(logging.INFO, logger=test_logger.name):
+            code = _run_target_hook(
+                monkeypatch, f"git -C {other} stash", main_repo, str(main_repo)
+            )
+        assert code == 0
+        assert any("目標 repo 解析" in r.getMessage() for r in caplog.records)

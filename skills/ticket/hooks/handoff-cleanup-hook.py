@@ -52,6 +52,9 @@ EXIT_ERROR = 1
 # Ticket ID 格式正則 (支援子任務格式：0.31.0-W7-012.1.2)
 TICKET_ID_PATTERN = r'\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*'
 
+# ticket CLI 寫入命令「動作已完成、僅 auto-commit 失敗」的專用退出碼（sysexits EX_TEMPFAIL）
+EXIT_AUTO_COMMIT_FAILED = 75
+
 def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     """
     判斷是否為 'ticket track complete' 命令成功執行
@@ -97,7 +100,7 @@ def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     exit_code = tool_response.get("exit_code", -1)
 
     # 成功判斷：exit code = 0 且輸出包含成功標記
-    is_success = (exit_code == 0) and ("[OK]" in stdout or "已完成" in stdout or "completed" in stdout.lower())
+    is_success = (exit_code in (0, EXIT_AUTO_COMMIT_FAILED)) and ("[OK]" in stdout or "已完成" in stdout or "completed" in stdout.lower())
 
     if is_success:
         logger.info(f"檢測到成功的 complete 命令")

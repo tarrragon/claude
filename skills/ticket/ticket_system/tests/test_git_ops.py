@@ -74,6 +74,10 @@ def _fake_run_factory(calls, extra_changed=None, same_tree=False, repo_root=None
             requested = args[idx + 1 :]
             lines = [f"100644 blob fakeblobsha\t{p}\0" for p in requested]
             return MagicMock(returncode=0, stdout="".join(lines), stderr="")
+        if args[:2] == ["git", "ls-files"]:
+            idx = args.index("--")
+            lines = [f"100644 fakeblobsha 0\t{p}\0" for p in args[idx + 1 :]]
+            return MagicMock(returncode=0, stdout="".join(lines), stderr="")
         if args[:2] == ["git", "update-index"]:
             return MagicMock(returncode=0, stdout="", stderr="")
         raise AssertionError(f"未預期的 git 呼叫: {args}")
@@ -234,7 +238,9 @@ class TestCommitFilesIsolated:
 
         assert result["status"] == "committed"
         ls_tree_calls = [c for c in calls if c[:2] == ["git", "ls-tree"]]
-        assert ls_tree_calls == [["git", "ls-tree", "-z", "tree_sha", "--", _TARGET]]
+        # 內容取自當下 HEAD；本次 tree 與 parent 僅用於判定共用 index 是否含他方 stage
+        assert ["git", "ls-tree", "-z", "HEAD", "--", _TARGET] in ls_tree_calls
+        assert ["git", "ls-tree", "-z", "tree_sha", "--", _TARGET] in ls_tree_calls
         index_info_calls = [
             c for c in calls if c[:2] == ["git", "update-index"] and "--index-info" in c
         ]
@@ -285,7 +291,8 @@ class TestCommitFilesIsolated:
 
         def fake_run(args, **kwargs):
             calls.append(args)
-            if args[:2] == ["git", "ls-tree"]:
+            # 刪除情境：parent 版本仍有此檔（共用 index entry 等於它），HEAD 與本次 tree 已無
+            if args[:2] == ["git", "ls-tree"] and args[3] != "old_head_sha":
                 return MagicMock(returncode=0, stdout="", stderr="")
             return _fake_run_factory([])(args, **kwargs)
 
@@ -582,3 +589,146 @@ class TestRefLockRetryAndStaleDiagnosis:
         assert released.is_set()
         assert result["status"] == "committed", f"活鎖釋放後應重試成功：{result['error']}"
         assert _run_git(repo, "log", "-1", "--pretty=%s").stdout.strip() == "msg"
+
+
+class TestSharedIndexSyncAfterCommit:
+    """0.4.0-W1-067：提交後共用 index 同步不得留下過期 entry。
+
+    路徑 B（同步順序顛倒）：兩次 CAS 提交同一檔案，較早提交的同步最後才執行，
+    舊實作把「較舊 tree 的 blob」寫回，共用 index entry 比 HEAD 舊。
+    路徑 A（同步遇鎖用盡）：重試用盡時舊實作只印無路徑的 WARNING。
+    E1 對照：每個測項都有「無故障時 entry == HEAD」的對照，故障才是差異。
+    """
+
+    _REL = "ticket.md"
+
+    @pytest.fixture
+    def repo(self, tmp_path):
+        _run_git(tmp_path, "init", "-q", "-b", "main")
+        _run_git(tmp_path, "config", "user.email", "t@example.com")
+        _run_git(tmp_path, "config", "user.name", "t")
+        (tmp_path / self._REL).write_text("v1\n")
+        _run_git(tmp_path, "add", self._REL)
+        _run_git(tmp_path, "commit", "-q", "-m", "init")
+        return tmp_path
+
+    def _index_blob(self, repo: Path) -> str:
+        return _run_git(repo, "rev-parse", f":{self._REL}").stdout.strip()
+
+    def _head_blob(self, repo: Path) -> str:
+        return _run_git(repo, "rev-parse", f"HEAD:{self._REL}").stdout.strip()
+
+    def _commit_deferring_sync(self, repo: Path, content: str) -> dict:
+        """提交但攔截同步呼叫，回傳其參數，供測試決定同步時序。"""
+        (repo / self._REL).write_text(content)
+        captured: dict = {}
+
+        def capture(paths, tree_sha, cwd, *args, **kwargs):
+            captured.update(paths=paths, tree_sha=tree_sha, cwd=cwd, args=args, kwargs=kwargs)
+
+        with patch.object(git_ops, "_sync_shared_index_after_commit", side_effect=capture):
+            result = git_ops.commit_files_isolated([str(repo / self._REL)], "m", cwd=str(repo))
+        assert result["status"] == "committed"
+        return captured
+
+    def _run_deferred_sync(self, captured: dict) -> None:
+        git_ops._sync_shared_index_after_commit(
+            captured["paths"], captured["tree_sha"], captured["cwd"],
+            *captured["args"], **captured["kwargs"],
+        )
+
+    def test_in_order_sync_matches_head_control(self, repo):
+        """對照：同步順序正常時 entry == HEAD。"""
+        first = self._commit_deferring_sync(repo, "v2\n")
+        self._run_deferred_sync(first)
+        assert self._index_blob(repo) == self._head_blob(repo)
+
+    def test_reversed_sync_order_leaves_entry_equal_to_head(self, repo):
+        """路徑 B：較早提交的同步最後才執行，entry 仍須等於 HEAD。"""
+        first = self._commit_deferring_sync(repo, "v2\n")
+        second = self._commit_deferring_sync(repo, "v3\n")
+        self._run_deferred_sync(second)
+        self._run_deferred_sync(first)  # 晚到的舊同步
+        assert self._index_blob(repo) == self._head_blob(repo)
+
+    def test_foreign_staged_content_is_not_overwritten(self, repo, capsys):
+        """他方另外 stage 的內容（既非 parent 版也非本次 tree 版）不被覆寫，並印 WARNING。"""
+        first = self._commit_deferring_sync(repo, "v2\n")
+        (repo / self._REL).write_text("foreign\n")
+        _run_git(repo, "add", self._REL)
+        foreign_blob = self._index_blob(repo)
+        self._run_deferred_sync(first)
+        assert self._index_blob(repo) == foreign_blob
+        err = capsys.readouterr().err
+        assert "[WARNING]" in err and self._REL in err
+
+    def test_final_sync_failure_warning_lists_path_and_remedy(self, repo, capsys):
+        """路徑 A：update-index 遇鎖重試用盡，WARNING 列出路徑與補救指令。"""
+        first = self._commit_deferring_sync(repo, "v2\n")
+        real = git_ops._run_git
+
+        def lock_on_update_index(args, *a, **kw):
+            if args[:2] == ["git", "update-index"]:
+                return False, "", "fatal: Unable to create '/r/.git/index.lock': File exists."
+            return real(args, *a, **kw)
+
+        with patch.object(git_ops, "_run_git", side_effect=lock_on_update_index), patch.object(
+            git_ops.time, "sleep", return_value=None
+        ):
+            self._run_deferred_sync(first)
+        err = capsys.readouterr().err
+        assert "[WARNING]" in err
+        assert f"git restore --staged -- {self._REL}" in err
+
+    def _three_commits(self, repo: Path):
+        return [self._commit_deferring_sync(repo, c) for c in ("v2\n", "v3\n", "v4\n")]
+
+    def test_frozen_own_stale_entry_recovers_on_next_sync(self, repo):
+        """缺陷 1：第一次同步失敗（未執行）後 entry 停在 v1，第二次同步須寫成 HEAD。"""
+        _first, second, _third = self._three_commits(repo)
+        assert self._index_blob(repo) != self._head_blob(repo)
+        self._run_deferred_sync(second)
+        assert self._index_blob(repo) == self._head_blob(repo)
+
+    def test_never_committed_blob_still_treated_as_foreign(self, repo, capsys):
+        """E2 對照：entry 是從未提交過的 blob 時，即使有歷史比對仍不覆寫。"""
+        _first, second, _third = self._three_commits(repo)
+        (repo / self._REL).write_text("foreign\n")
+        _run_git(repo, "add", self._REL)
+        foreign_blob = self._index_blob(repo)
+        self._run_deferred_sync(second)
+        assert self._index_blob(repo) == foreign_blob
+        assert "[WARNING]" in capsys.readouterr().err
+
+    def test_history_lookback_is_bounded(self, repo, monkeypatch):
+        """歷史比對有上限：己方舊版本超出回溯範圍即視為他方（保守不覆寫）。"""
+        monkeypatch.setattr(git_ops, "_OWN_HISTORY_LOOKBACK", 1, raising=False)
+        _first, second, _third = self._three_commits(repo)
+        frozen = self._index_blob(repo)
+        self._run_deferred_sync(second)
+        assert self._index_blob(repo) == frozen
+
+    def test_update_index_never_killed_by_timeout_leaves_no_lock(self, repo, monkeypatch):
+        """缺陷 2：持 index.lock 的 update-index 若被 timeout 殺掉會殘留鎖。
+
+        以 subprocess.run 包裝模擬「持鎖耗時超過 _GIT_TIMEOUT」：有 timeout 時，
+        依真實行為在鎖仍在時拋 TimeoutExpired（殘留鎖）；無 timeout 才正常釋放。
+        update-index 無 hook 可掛，故以此模擬持鎖耗時。
+        """
+        first = self._commit_deferring_sync(repo, "v2\n")
+        lock = repo / ".git" / "index.lock"
+        real_run = subprocess.run
+
+        def slow_run(args, *a, **kw):
+            if list(args[:2]) == ["git", "update-index"]:
+                lock.write_text("")
+                timeout = kw.get("timeout")
+                if timeout is not None:  # 持鎖耗時視為超過任何有限 timeout
+                    raise subprocess.TimeoutExpired(args, timeout)
+                lock.unlink()
+            return real_run(args, *a, **kw)
+
+        monkeypatch.setattr(git_ops.subprocess, "run", slow_run)
+        self._run_deferred_sync(first)
+        assert not lock.exists()
+        assert self._index_blob(repo) == self._head_blob(repo)

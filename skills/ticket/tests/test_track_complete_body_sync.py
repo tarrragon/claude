@@ -176,6 +176,8 @@ class TestCompleteIntegration:
                    return_value={}), \
              patch("ticket_system.commands.lifecycle._print_next_steps"), \
              patch("ticket_system.commands.lifecycle._auto_handoff_if_needed"), \
+             patch("ticket_system.commands.lifecycle._auto_commit_completion_files",
+                   return_value=False), \
              patch("ticket_system.commands.lifecycle._handle_ana_spawned_confirmation",
                    return_value=None):
             result = lifecycle.complete("0.18.0-W17-999")

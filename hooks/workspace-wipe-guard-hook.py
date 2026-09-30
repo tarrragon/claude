@@ -80,10 +80,22 @@ staged 等）計入，未追蹤新檔案（`??`）不計入——後者本就不
 ============================================================
 - `git restore --staged .`（純 index 操作）刻意排除，理由見上「涵蓋範圍」
   第 5 項的風險模型說明。
-- 與 bare-commit-guard-hook 相同：僅偵測 cwd 隱含形式與 `-C <path>` 形式，
-  不解析子 shell `cd` 形式的目標 repo；dispatch 狀態與主 repo 未提交狀態
-  一律讀取專案根目錄（get_project_root()，經 CLAUDE_PROJECT_DIR 恆指主
-  repo，不隨 worktree 內執行時的實際 cwd 改變）。
+- dispatch 狀態與主 repo 未提交狀態一律讀取專案根目錄（get_project_root()，
+  經 CLAUDE_PROJECT_DIR 恆指主 repo，不隨 worktree 內執行時的實際 cwd 改變）。
+
+目標 repo 解析（2026-09 修正 scratch repo 誤擋）：守衛的隱含前提是「git
+命令的目標必為主 repo」，在 scratch repo 做 git 實驗（`git -C <他 repo>
+stash`、`(cd <他 repo> && git stash create)`）時前提不成立，主 repo 的髒污／
+派發狀態與該命令無關卻被擋。故判定前先解析目標：`-C <dir>` 或先前語句的
+`cd <dir>` → `git -C <dir> rev-parse --show-toplevel` 與專案根比對，目標不是
+主 repo（toplevel 與 git common dir 皆不同）時放行並寫日誌。
+
+取捨（fail-closed，維持保守原意）：任何無法確認的情形一律視為主 repo 並照舊
+判定——`-C` 含 `$VAR`／命令替換／`~`、目錄不存在、git 執行失敗、cwd 隱含
+形式（無 -C 亦無 cd）、-C 與 cd 併用、同命令任一呼叫目標為主 repo。主 repo
+的 linked worktree 與主 repo 共用 git common dir，歸屬維持現行行為（視為主
+repo，不放行）。寧可誤擋 scratch repo 上的命令，也不因解析錯誤放行對主工作區
+的破壞性操作。`_get_active_dispatch_count` 的全量計數語意不在本次變更範圍。
 
 ============================================================
 背景（2026-09：偵測改為命令位置 token 比對，修復引號內參數誤判）
@@ -139,7 +151,9 @@ tokenize + 保守預設路徑——本修復僅收斂「完全不含 git 字樣�
 
 import json
 import logging
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -149,7 +163,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.dispatch_tracker import get_active_dispatches
-from lib.git_command_parse import contains_git_word, find_git_invocations
+from lib.git_command_parse import (
+    contains_git_word,
+    find_git_invocations,
+    parse_command_statements,
+)
 from lib.git_utils import FileStatus, get_project_root, get_uncommitted_files
 
 
@@ -303,6 +321,109 @@ def _detect_operation(command: str) -> Optional[Tuple[str, Optional[str]]]:
     return None
 
 
+_WIPE_SUBCOMMANDS = frozenset({"stash", "checkout", "reset", "clean", "restore"})
+
+
+_SINGLE_SUBSHELL_RE =re.compile(r"^\(\s*cd\s+[^\s()]+\s*&&[^()]*\)$")
+
+
+def _run_rev_parse(target_dir: str, *flags: str) -> Optional[List[str]]:
+    """在 target_dir 執行 `git rev-parse <flags>`，回傳輸出行；任何失敗回傳 None。"""
+    try:
+        result = subprocess.run(
+            ["git", "-C", target_dir, "rev-parse", *flags],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.splitlines()
+
+
+def _resolve_target_is_other_repo(
+    target_dir: str, project_root: Path, cwd: str, logger: logging.Logger
+) -> bool:
+    """判斷 target_dir 是否為「與本專案主 repo 無關的另一個 repo」。
+
+    以 `git -C <dir> rev-parse --show-toplevel` 取目標根並與專案根比對；相等
+    即主 repo。目標根不同時再比對 git common dir：主 repo 的 linked worktree
+    與主 repo 共用 common dir，其歸屬維持現行行為（視為主 repo，不放行）。
+
+    任何無法解析的情形（含 shell 變數／命令替換／`~`、目錄不存在、git 執行
+    失敗、專案根本身無法解析）一律回傳 False（視為主 repo，fail-closed）。
+    """
+    if any(ch in target_dir for ch in ("$", "`", "~", "*", "?")):
+        logger.info("目標 repo 解析: dir=%s 含 shell 展開語法，無法解析，視為主 repo", target_dir)
+        return False
+    base = target_dir if os.path.isabs(target_dir) else os.path.join(cwd, target_dir)
+    flags = ("--path-format=absolute", "--show-toplevel", "--git-common-dir")
+    target = _run_rev_parse(base, *flags)
+    main = _run_rev_parse(str(project_root), *flags)
+    if not target or len(target) < 2 or not main or len(main) < 2:
+        logger.info("目標 repo 解析: dir=%s 解析失敗，視為主 repo（fail-closed）", target_dir)
+        return False
+    same_top = os.path.realpath(target[0]) == os.path.realpath(main[0])
+    same_common = os.path.realpath(target[1]) == os.path.realpath(main[1])
+    is_other = not same_top and not same_common
+    logger.info(
+        "目標 repo 解析: dir=%s toplevel=%s 歸屬=%s",
+        target_dir,
+        target[0],
+        "其他 repo（放行）" if is_other else "主 repo（維持判定）",
+    )
+    return is_other
+
+
+def _command_targets_only_other_repos(
+    command: str, project_root: Path, cwd: str, logger: logging.Logger
+) -> bool:
+    """命令中所有清空工作區類 git 呼叫的目標 repo 皆不是主 repo 時回傳 True。
+
+    目標來源：`git -C <dir>`，或同命令中先前語句的 `cd <dir>`（涵蓋
+    `(cd <dir> && git ...)`）。兩者皆無 = cwd 隱含形式，視為主 repo。
+
+    取捨（fail-closed）：解析失敗、無任何可辨識呼叫、或任一呼叫目標為主 repo
+    時回傳 False，維持原保守判定——本守衛防不可逆資料遺失，寧可誤擋 scratch
+    repo 上的命令，也不放行無法確認的目標。
+    """
+    statements = parse_command_statements(command)
+    invocations = find_git_invocations(command, _WIPE_SUBCOMMANDS)
+    if not statements or not invocations:
+        return False
+    # cd 作用域：tokenizer 會丟括號，無法得知子 shell 何時結束，故含括號時
+    # 只接受「整個命令恰為單一 ( cd X && ... ) 且內部無其他括號」，其餘不採用
+    # cd 推導（fail-closed，視為主 repo）。
+    cd_scope_known = "(" not in command and ")" not in command
+    if not cd_scope_known:
+        cd_scope_known = bool(_SINGLE_SUBSHELL_RE.match(command.strip()))
+    cd_by_statement = {}
+    current_cd = None
+    for stmt in statements:
+        if len(stmt) >= 2 and stmt[0] == "cd":
+            # 相對路徑或 `-` 無法可靠解析，標為無法解析
+            current_cd = stmt[1] if os.path.isabs(stmt[1]) else "$"
+            continue
+        if not cd_scope_known:
+            current_cd = None
+        key = tuple(stmt)
+        if key in cd_by_statement and cd_by_statement[key] != current_cd:
+            cd_by_statement[key] = "$"  # 同語句在不同目錄重複出現：無法區分，視為無法解析
+        else:
+            cd_by_statement[key] = current_cd
+    for inv in invocations:
+        target_dir = inv.dash_c_path or cd_by_statement.get(tuple(inv.statement))
+        if not target_dir:
+            return False
+        if inv.dash_c_path and cd_by_statement.get(tuple(inv.statement)):
+            return False  # -C 與 cd 併用：相對路徑組合語意不處理，視為主 repo
+        if not _resolve_target_is_other_repo(target_dir, project_root, cwd, logger):
+            return False
+    return True
+
+
 def _get_active_dispatch_count(
     project_root: Path, logger: logging.Logger
 ) -> Optional[int]:
@@ -449,6 +570,11 @@ def main() -> int:
 
     op_name, safe_hint = detected
     project_root = get_project_root()
+    cwd = str(input_data.get("cwd") or os.getcwd())
+    if _command_targets_only_other_repos(command, project_root, cwd, logger):
+        logger.info("命令目標為非主 repo，不套用主 repo 狀態條件，放行（操作=%s）", op_name)
+        return 0
+    logger.info("命令目標為主 repo 或無法解析，維持既有判定（操作=%s）", op_name)
     dispatch_count = _get_active_dispatch_count(project_root, logger)
     main_repo_dirty = _has_main_repo_uncommitted_tracked_changes(project_root, logger)
 
