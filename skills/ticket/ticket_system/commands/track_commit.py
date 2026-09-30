@@ -257,6 +257,16 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         f for f in args.files if _to_repo_relative(f, repo_root, base_dir) != own_md
     ]
 
+    # 票面依 root 分離設計由主 repo CLI 寫入並自動提交；linked worktree 內的
+    # 票面只可能是舊副本，提交它會使合回 main 的票面狀態倒退。
+    if worktree and len(non_own_inputs) != len(args.files):
+        print(
+            f"[ERROR] Ticket {args.ticket_id} 的票面不可在 worktree 提交：票面由主 repo "
+            "CLI 寫入並自動提交，worktree 內的副本是舊版本，提交會使合回 main 的"
+            "票面狀態倒退。請從輸入移除票面，只提交產品檔。"
+        )
+        return 1
+
     # 「未宣告」以使用者宣告集合為準；輸入僅票自身 md 時不視為未宣告。
     if not normalized_declared and non_own_inputs:
         message = (

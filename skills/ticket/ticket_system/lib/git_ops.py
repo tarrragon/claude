@@ -307,8 +307,42 @@ def _sync_shared_index_after_commit(
             print(f"[WARNING] 共用 index 同步失敗（force-remove）：{err}", file=sys.stderr)
 
 
+def _stage_appended_blob(
+    rel_path: str, text: str, old_head: str, cwd: str, env: dict
+) -> Optional[str]:
+    """在隔離 index 中把 ``rel_path`` 設為「old_head 版本 + text」。
+
+    多寫入者 append-only 檔（如 topic-assignments.txt）不可整檔 add：工作區
+    版本可能含他人未提交的行。以 old_head 版本為基底追加，提交內容只多出
+    本次的 ``text``。HEAD 版本末尾無換行時先補一個換行，與寫入端一致。
+
+    Returns:
+        None 表成功；字串為失敗原因。
+    """
+    ok, base, _err = _run_git_with_lock_retry(
+        ["git", "show", f"{old_head}:{rel_path}"], cwd=cwd
+    )
+    base = base if ok else ""  # HEAD 尚無此檔：以空內容為基底
+    if base and not base.endswith("\n"):
+        base += "\n"
+    ok, blob_out, err = _run_git_with_lock_retry(
+        ["git", "hash-object", "-w", "--stdin"], cwd=cwd, input_text=base + text
+    )
+    if not ok:
+        return err or "hash-object 失敗"
+    ok, _, err = _run_git_with_lock_retry(
+        ["git", "update-index", "--add", "--cacheinfo",
+         f"100644,{blob_out.strip()},{rel_path}"],
+        cwd=cwd, env=env,
+    )
+    return None if ok else (err or "update-index 失敗")
+
+
 def commit_files_isolated(
-    paths: List[str], message: str, cwd: Optional[str] = None
+    paths: List[str],
+    message: str,
+    cwd: Optional[str] = None,
+    append_lines: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Optional[str]]:
     """在獨立臨時 index 中精確 stage ``paths`` 後以 plumbing 提交。
 
@@ -317,6 +351,9 @@ def commit_files_isolated(
             要件 1），呼叫端自帶（如 ticket md 絕對路徑）。
         message: commit message。
         cwd: git 命令執行目錄，預設為目前工作目錄所屬 repo。
+        append_lines: 路徑 -> 本次追加文字。這些檔案不整檔 stage，提交內容為
+            「HEAD 版本 + 追加文字」，不帶入工作區內他人未提交的內容；
+            用於多寫入者 append-only 檔。與 ``paths`` 重疊的路徑以整檔為準。
 
     Returns:
         dict，含三個鍵：
@@ -348,6 +385,12 @@ def commit_files_isolated(
         return os.path.relpath(os.path.abspath(abs_path), repo_root).replace(os.sep, "/")
 
     deduped: List[str] = list(dict.fromkeys(_to_repo_relative(p) for p in raw_deduped))
+    appended: Dict[str, str] = {}
+    for raw_path, text in (append_lines or {}).items():
+        rel = _to_repo_relative(raw_path)
+        if rel not in deduped and text:
+            appended[rel] = appended.get(rel, "") + text
+    expected_changes: List[str] = deduped + list(appended)
     cwd = repo_root
 
     ok, old_head_out, err = _run_git_with_lock_retry(
@@ -375,6 +418,11 @@ def commit_files_isolated(
         )
         if not ok:
             return {"status": "failed", "commit_sha": None, "error": err}
+
+        for rel, text in appended.items():
+            stage_err = _stage_appended_blob(rel, text, old_head, cwd, env)
+            if stage_err is not None:
+                return {"status": "failed", "commit_sha": None, "error": stage_err}
 
         ok, tree_out, err = _run_git_with_lock_retry(
             ["git", "write-tree"], cwd=cwd, env=env
@@ -406,12 +454,12 @@ def commit_files_isolated(
         if not ok:
             return {"status": "failed", "commit_sha": None, "error": err}
         changed = {line for line in diff_out.split("\0") if line}
-        if changed != set(deduped):
+        if changed != set(expected_changes):
             return {
                 "status": "failed",
                 "commit_sha": None,
                 "error": (
-                    f"提交範圍自我驗證失敗，預期 {sorted(deduped)} 實得 "
+                    f"提交範圍自我驗證失敗，預期 {sorted(expected_changes)} 實得 "
                     f"{sorted(changed)}"
                 ),
             }
@@ -429,7 +477,7 @@ def commit_files_isolated(
                 ),
             }
 
-        _sync_shared_index_after_commit(deduped, tree_sha, cwd)
+        _sync_shared_index_after_commit(expected_changes, tree_sha, cwd)
         return {"status": "committed", "commit_sha": commit_sha, "error": None}
     finally:
         try:

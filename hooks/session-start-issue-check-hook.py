@@ -41,6 +41,7 @@ import re
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -74,6 +75,15 @@ GH_TIMEOUT_SECONDS = 6
 # 對其包一層較短逾時，逾時即放棄該張 issue 的這次檢查（下次 session 再試），
 # 避免單張 issue 網路異常拖垮整個 hook。
 CHECK_TIMEOUT_SECONDS = 12
+# check 失敗（逾時／非 0／例外）時放入輸出的標記，讓失敗對用戶可見。
+CHECK_FAILED_PREFIX = "[check 失敗]"
+
+# 並行 check 的 worker 上限。依據：每張 check 內部約 2-3 次 gh REST 呼叫，
+# 5 workers 同時約 10-15 個進行中請求；GitHub 官方限制為每帳號並行請求
+# <= 100、REST 主限額 5000/小時，25 張整批約 75 次呼叫遠低於主限額，故
+# 上限由並行數決定。取 5 保留約 7 倍餘裕給 secondary rate limit
+# （內容建立類 80 次/分不適用唯讀），且 25 張時牆鐘約降為 1/5。
+MAX_CHECK_WORKERS = 5
 
 # gh search 候選上限：query 組成 "owner <prefix>"（單一字串、內含空白，非
 # 拆成兩個位置參數）觸發 GitHub 搜尋的同欄位實例 AND 語意——詞彙需落在同一
@@ -221,16 +231,50 @@ def _run_check(issue_number: int, logger) -> Optional[str]:
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         logger.info("issue #%s check 執行例外，fail-open 略過: %s", issue_number, exc)
-        return None
+        return f"{CHECK_FAILED_PREFIX} issue #{issue_number} 執行例外或逾時：{exc}\n"
     if result.returncode != 0:
         logger.info(
             "issue #%s check 非 0 結束，fail-open 略過: %s",
             issue_number, result.stderr.strip(),
         )
-        return None
+        return (
+            f"{CHECK_FAILED_PREFIX} issue #{issue_number} 非 0 結束："
+            f"{result.stderr.strip()[:200]}\n"
+        )
     if any(_WARNING_B_HIT_RE.match(line) for line in result.stdout.splitlines()):
         return result.stdout
     return None
+
+
+def _closed_issue_numbers(logger) -> set:
+    """以單次批次查詢取得已關閉 issue 編號集合（不逐張多打 API）。
+    失敗回傳空集合（fail-open：不略過任何一張）。"""
+    try:
+        result = subprocess.run(
+            [
+                "gh", "issue", "list", "--repo", FRAMEWORK_REPO,
+                "--state", "closed", "--json", "number", "--limit", "1000",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=GH_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            logger.info("已關閉 issue 批次查詢失敗，不略過任何張: %s", result.stderr.strip())
+            return set()
+        return {item["number"] for item in json.loads(result.stdout or "[]")}
+    except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError, KeyError) as exc:
+        logger.info("已關閉 issue 批次查詢例外，不略過任何張: %s", exc)
+        return set()
+
+
+def _safe_check(number: int, logger) -> Optional[str]:
+    """worker 包裝：單張任何例外都轉為可見的失敗標記，不影響其餘張。"""
+    try:
+        return _run_check(number, logger)
+    except Exception as exc:  # noqa: BLE001 - 隔離單張失敗，已記錄並回傳可見標記
+        logger.info("issue #%s check worker 例外: %s", number, exc)
+        return f"{CHECK_FAILED_PREFIX} issue #{number} worker 例外：{exc}\n"
 
 
 def _collect_hits(prefix: str, logger) -> List[Tuple[int, str]]:
@@ -251,14 +295,20 @@ def _collect_hits(prefix: str, logger) -> List[Tuple[int, str]]:
 
 def _collect_registry_hits(owned_numbers: List[int], logger) -> List[Tuple[int, str]]:
     """快速路徑：owned-issues 登記檔內容已由寫入端（section_comment.py
-    init／update）確定為真，逐張直接呼叫既有 check，省略舊路徑的候選發現
-    與本地 owner 驗證兩步驟。"""
-    hits: List[Tuple[int, str]] = []
-    for number in owned_numbers:
-        output = _run_check(number, logger)
-        if output:
-            hits.append((number, output))
-    return hits
+    init／update）確定為真，省略舊路徑的候選發現與本地 owner 驗證兩步驟。
+    先以一次批次查詢略過已關閉的 issue，其餘以 MAX_CHECK_WORKERS 個 worker
+    並行呼叫既有 check；結果依 issue 編號排序，單張失敗以標記字串回傳、不中斷其餘張。"""
+    closed = _closed_issue_numbers(logger)
+    targets = sorted(n for n in owned_numbers if n not in closed)
+    skipped = sorted(set(owned_numbers) - set(targets))
+    if skipped:
+        logger.info("略過已關閉 issue: %s", skipped)
+    if not targets:
+        return []
+    with ThreadPoolExecutor(max_workers=MAX_CHECK_WORKERS) as pool:
+        outputs = list(pool.map(lambda n: _safe_check(n, logger), targets))
+    # pool.map 依輸入順序回傳，targets 已排序，輸出順序與串行版一致
+    return [(n, out) for n, out in zip(targets, outputs) if out]
 
 
 def _read_owned_issue_numbers(project_root: Path, logger) -> Optional[List[int]]:

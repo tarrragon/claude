@@ -1,3 +1,19 @@
+## [2.66.0] - 2026-09-30
+
+### Summary
+fix: worktree 派發骨架收尾只提交產品檔，track commit 拒絕 worktree 內提交票面; fix: create 的 auto-commit 併入 --parent children 回填與 --new-topic registry 行; fix: ticket create 的 auto-commit 連同主題行與來源票回填進同一隔離索引提交 (+3 more)
+
+Changes: 3 fix, 1 docs, 1 chore, 1 perf
+
+- fix: worktree 派發骨架收尾只提交產品檔，track commit 拒絕 worktree 內提交票面
+- fix: create 的 auto-commit 併入 --parent children 回填與 --new-topic registry 行
+- fix: ticket create 的 auto-commit 連同主題行與來源票回填進同一隔離索引提交
+- docs: 更新 _collect_registry_hits docstring 為並行與略過已關閉
+- chore: .claude/VERSION 2.65.0（sync-push：hooks-test-gate 未驗證檔放行、hook timeout 秒數校正、component-contract-design 3.13.0）
+- perf: session-start-issue-check 並行 check 並略過已關閉 issue
+
+---
+
 ## [2.65.0] - 2026-09-30
 
 ### Summary

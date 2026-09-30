@@ -723,3 +723,17 @@ def test_dispatch_no_warning_when_isolation_explicit(tmp_path, monkeypatch, caps
     rc, _, err = _dispatch_out(_base_args(isolation=isolation), capsys)
     assert rc == 0
     assert "WARNING" not in err
+
+
+def test_dispatch_worktree_closing_excludes_ticket_md_from_commit(dispatch_ticket, capsys):
+    """0.4.0-W1-053 E1：worktree 收尾句須說明只提交產品檔、票面由主 repo 處理；
+    none 變體不帶此限制。斷言語意關鍵詞，不鎖整句。"""
+    _, out_default, _ = _dispatch_out(_base_args(), capsys)
+    _, out_wt, _ = _dispatch_out(_base_args(isolation="worktree"), capsys)
+
+    closing = next(ln for ln in out_wt.splitlines() if ln.startswith("收尾"))
+    default_closing = next(ln for ln in out_default.splitlines() if ln.startswith("收尾"))
+    assert "票面" in closing
+    assert "產品檔" in closing
+    assert "主 repo" in closing
+    assert "票面" not in default_closing

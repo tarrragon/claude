@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Dict, Optional, Sequence
 
 from .git_ops import commit_files_isolated
 from .lease import resolve_current_session_id
@@ -37,7 +38,12 @@ _STATUS_MAP = {
 
 
 def _auto_commit_ticket_md(
-    path: str, ticket_id: str, section: str, operation: str = "append-log"
+    path: str,
+    ticket_id: str,
+    section: str,
+    operation: str = "append-log",
+    extra_paths: Optional[Sequence[str]] = None,
+    append_lines: Optional[Dict[str, str]] = None,
 ) -> str:
     """精確路徑 auto-commit 單一 ticket md。
 
@@ -73,6 +79,11 @@ def _auto_commit_ticket_md(
         section: 寫入的 section 名稱（用於 commit message）
         operation: 實際呼叫端操作名（用於 commit message，預設
             "append-log" 保留既有呼叫端行為不變）
+        extra_paths: 同一提交要一併整檔納入的旁路寫入檔（如 create 的
+            ``--source-ticket`` 來源票）。預設 None，既有呼叫端不變。
+        append_lines: 路徑 -> 本次追加文字，該檔以「HEAD 版本 + 追加文字」
+            提交而非整檔（如 topic-assignments.txt 這類多寫入者 append-only
+            檔，整檔提交會吸入他人未提交的行）。預設 None。
 
     Returns:
         其中一個狀態字串：
@@ -99,5 +110,8 @@ def _auto_commit_ticket_md(
         # 時完全省略此段，不虛構值（規則 4 可觀測性的反面：寧缺不假）。
         message = f"{message}\n\nSession: {session_id}"
 
-    result = commit_files_isolated([str(md_path)], message, cwd=cwd)
+    paths = [str(md_path), *(extra_paths or ())]
+    # append_lines 僅在有值時才傳入，既有呼叫端的 commit_files_isolated 呼叫形態不變
+    extra_kwargs = {"append_lines": append_lines} if append_lines else {}
+    result = commit_files_isolated(paths, message, cwd=cwd, **extra_kwargs)
     return _STATUS_MAP[result["status"]]

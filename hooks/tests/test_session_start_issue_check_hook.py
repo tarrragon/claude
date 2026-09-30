@@ -214,3 +214,85 @@ def test_main_skips_registry_lookup_when_source_not_startup_or_resume(tmp_path):
         rc = hook.main()
     assert rc == hook.EXIT_SUCCESS
     get_root.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 並行執行（0.4.0-W1-051.1）：E1 牆鐘與順序、E2 單張失敗隔離、已關閉略過
+# ---------------------------------------------------------------------------
+
+import time  # noqa: E402
+
+_HIT = "[警訊 B][主警訊] 觸發：#{n}\n"
+
+
+def _fake_check_factory(delay: float, fail_numbers=(), raise_numbers=()):
+    def fake(number, logger):
+        time.sleep(delay)
+        if number in raise_numbers:
+            raise RuntimeError("boom")
+        if number in fail_numbers:
+            return None
+        return _HIT.format(n=number)
+    return fake
+
+
+def test_e1_registry_hits_run_in_parallel_and_keep_issue_order():
+    """12 張、每張 0.3 秒：串行約 3.6 秒；worker 上限 5 時約 0.9 秒。
+    亂序輸入，輸出必須依 issue 編號排序（與串行版一致）。"""
+    hook = load_hook_module()
+    numbers = [30, 12, 25, 1, 8, 19, 5, 40, 3, 22, 15, 9]
+    with patch.object(hook, "_run_check", _fake_check_factory(0.3)), \
+            patch.object(hook, "_closed_issue_numbers", return_value=set()):
+        start = time.monotonic()
+        hits = hook._collect_registry_hits(numbers, MagicMock())
+        elapsed = time.monotonic() - start
+    assert elapsed < 2.0, f"未並行：{elapsed:.2f}s"
+    assert [n for n, _ in hits] == sorted(numbers)
+
+
+def test_e2_single_check_exception_does_not_lose_other_results_and_is_visible():
+    hook = load_hook_module()
+    logger = MagicMock()
+    with patch.object(hook, "_run_check", _fake_check_factory(0.01, raise_numbers=(2,))), \
+            patch.object(hook, "_closed_issue_numbers", return_value=set()):
+        hits = hook._collect_registry_hits([1, 2, 3], logger)
+    assert [n for n, _ in hits] == [1, 2, 3]
+    assert "警訊 B" in dict(hits)[1] and "警訊 B" in dict(hits)[3]
+    assert hook.CHECK_FAILED_PREFIX in dict(hits)[2]
+    assert logger.info.called or logger.error.called or logger.warning.called
+
+
+def test_e2_run_check_timeout_is_reported_as_failure():
+    hook = load_hook_module()
+    import subprocess as sp
+    with patch.object(hook.subprocess, "run", side_effect=sp.TimeoutExpired("x", 1)), \
+            patch.object(hook, "get_project_root", return_value=Path("/nonexistent")):
+        out = hook._run_check(7, MagicMock())
+    assert out is not None and out.startswith(hook.CHECK_FAILED_PREFIX)
+
+
+def test_closed_issues_are_skipped_without_per_issue_api_calls():
+    hook = load_hook_module()
+    calls = []
+
+    def fake(number, logger):
+        calls.append(number)
+        return _HIT.format(n=number)
+
+    with patch.object(hook, "_run_check", fake), \
+            patch.object(hook, "_closed_issue_numbers", return_value={2, 3}) as closed:
+        hits = hook._collect_registry_hits([1, 2, 3, 4], MagicMock())
+    assert sorted(calls) == [1, 4]
+    assert [n for n, _ in hits] == [1, 4]
+    closed.assert_called_once()  # 狀態取得為單次批次查詢，非逐張
+
+
+def test_closed_issue_numbers_uses_single_gh_call_and_fails_open():
+    hook = load_hook_module()
+    ok = MagicMock(returncode=0, stdout='[{"number": 5}, {"number": 9}]', stderr="")
+    with patch.object(hook.subprocess, "run", return_value=ok) as run:
+        assert hook._closed_issue_numbers(MagicMock()) == {5, 9}
+    assert run.call_count == 1
+    bad = MagicMock(returncode=1, stdout="", stderr="err")
+    with patch.object(hook.subprocess, "run", return_value=bad):
+        assert hook._closed_issue_numbers(MagicMock()) == set()

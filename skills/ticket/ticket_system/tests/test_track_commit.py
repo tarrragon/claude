@@ -551,3 +551,55 @@ def _git(cwd, *args):
     return subprocess.run(
         ["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True
     )
+
+
+class TestWorktreeRejectsOwnTicketMd:
+    """0.4.0-W1-053：票面依 root 分離設計由主 repo CLI 寫入並自動提交；
+    worktree 內的票面副本是舊版本，提交會使合回 main 的票面狀態倒退。
+    E1：同批 fixture 下，worktree 提交帶票面 vs 不帶票面，分支內容不同。"""
+
+    @pytest.fixture
+    def repo_and_worktree(self, tmp_path):
+        main_repo = tmp_path / "main"
+        main_repo.mkdir()
+        _git(main_repo, "init", "-q", "-b", "main")
+        _git(main_repo, "config", "user.email", "test@example.com")
+        _git(main_repo, "config", "user.name", "Test")
+        (main_repo / "seed.txt").write_text("seed\n")
+        _git(main_repo, "add", "seed.txt")
+        _git(main_repo, "commit", "-q", "-m", "init")
+        worktree_dir = tmp_path / "wt1"
+        _git(main_repo, "worktree", "add", "-q", "-b", "feat/wt1", str(worktree_dir))
+        (worktree_dir / "docs").mkdir()
+        (worktree_dir / "docs" / f"{_TICKET_ID}.md").write_text("stale copy\n")
+        (worktree_dir / "prod.py").write_text("x = 1\n")
+        return worktree_dir
+
+    def _run(self, worktree_dir, files):
+        own = str(worktree_dir / "docs" / f"{_TICKET_ID}.md")
+        with patch.object(
+            track_commit, "load_ticket", return_value=_ticket(["prod.py"])
+        ), patch.object(track_commit, "get_ticket_path", return_value=own):
+            return track_commit.execute_commit(
+                _args(files, worktree=str(worktree_dir)), _VERSION
+            )
+
+    def test_product_only_commit_leaves_ticket_md_out_of_branch(
+        self, repo_and_worktree
+    ):
+        wt = repo_and_worktree
+        rc = self._run(wt, ["prod.py"])
+        assert rc == 0
+        files = _git(wt, "show", "--name-only", "--format=", "HEAD").stdout.split()
+        assert files == ["prod.py"]
+
+    def test_including_ticket_md_in_worktree_is_rejected(
+        self, repo_and_worktree, capsys
+    ):
+        wt = repo_and_worktree
+        head_before = _git(wt, "rev-parse", "HEAD").stdout
+        rc = self._run(wt, ["prod.py", f"docs/{_TICKET_ID}.md"])
+        out = capsys.readouterr().out
+        assert rc != 0
+        assert "票面" in out and "主 repo" in out
+        assert _git(wt, "rev-parse", "HEAD").stdout == head_before
