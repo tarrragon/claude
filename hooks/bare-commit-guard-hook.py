@@ -234,6 +234,25 @@ ticket_id」映射表（未落在任何宣告範圍者標「未宣告範圍」�
    執行過什麼的認知與事實相反（實測：多次獨立撞到此問題，皆誤以為前面
    步驟已經執行過）。修法：三則訊息的補救指令區塊前皆加一句明示語句，
    說明須逐條分開送出執行、不可用 `&&` 或分號串接。
+
+============================================================
+八修正：宣告範圍改讀票面現行 where.files，不再以派發快照為準
+============================================================
+派發記錄的 `files` 是派發當下由 dispatch_tracker 記錄的 where.files 快照。
+派發後 `ticket track set-where`（例如檔案改名）不會同步回記錄，新路徑被
+判為「未宣告範圍」，只能拆成兩次提交。
+
+修法選擇「hook 改讀票面」，不選「set-where 同步寫 dispatch-active」：
+where.files 的寫入路徑不只 set-where（create、`ticket track commit` 對未
+宣告檔案的補入、手改票面皆會寫），同步寫入只能補住其中一條，其餘路徑仍
+產生同型過期；改讀票面以票面為單一權威，任何寫入路徑自動生效。
+
+做法：`_with_live_declared_files` 在 `main()` 取得派發記錄後，依各筆
+ticket_id 讀票面現行 where.files 並取代該筆的 `files`，下游判定與 DENY
+訊息不需改動。ticket_id 為空、票檔找不到或 frontmatter 解析失敗時退回
+快照並寫 warning，行為與修前相同（不新增 fail-open／fail-closed 路徑）。
+不處理：記錄提前被清除（記錄生命週期問題，見「五修正」）；路徑字串解析
+（CJK／quotepath）。
 """
 
 import json
@@ -306,14 +325,62 @@ def _get_active_dispatches_safe(project_root: Path) -> List[Dict]:
         return []
 
 
+def _read_ticket_where_files(ticket_id: str, project_root: Path) -> List[str]:
+    """讀票面現行 where.files；票檔找不到或 frontmatter 解析不出時拋
+    ValueError（呼叫端據此退回快照）。可讀但 where.files 為空則回傳 []。
+    """
+    from lib.hook_ticket import (
+        extract_where_files_from_frontmatter,
+        find_ticket_file,
+        parse_ticket_frontmatter,
+    )
+
+    ticket_file = find_ticket_file(ticket_id, project_root)
+    if not ticket_file or not ticket_file.exists():
+        raise ValueError(f"找不到票檔 {ticket_id}")
+    frontmatter = parse_ticket_frontmatter(ticket_file)
+    if not frontmatter:
+        raise ValueError(f"票檔 {ticket_id} frontmatter 解析失敗")
+    return extract_where_files_from_frontmatter(frontmatter)
+
+
+def _with_live_declared_files(
+    dispatches: List[Dict], project_root: Path, logger
+) -> List[Dict]:
+    """回傳宣告範圍以票面現行 where.files 為準的派發記錄副本。
+
+    派發記錄的 `files` 是派發當下的快照，派發後 set-where／補入／手改票面
+    不會同步回記錄。ticket_id 為空、票不存在或解析失敗時退回快照並寫
+    warning（行為與修前相同，不新增 fail-open／fail-closed 路徑）。
+    """
+    resolved: List[Dict] = []
+    for dispatch in dispatches:
+        ticket_id = dispatch.get("ticket_id") or ""
+        if not ticket_id:
+            logger.warning("派發記錄無 ticket_id，宣告範圍退回派發快照")
+            resolved.append(dispatch)
+            continue
+        try:
+            live_files = _read_ticket_where_files(ticket_id, project_root)
+        except Exception as exc:
+            logger.warning(
+                "讀取票面 where.files 失敗（%s），宣告範圍退回派發快照：%s",
+                ticket_id, exc,
+            )
+            resolved.append(dispatch)
+            continue
+        resolved.append({**dispatch, "files": live_files})
+    return resolved
+
+
 def _get_staged_files(project_root: Path) -> List[str]:
     """取得目前 staged 檔案清單，讀取失敗時回傳空清單（fail-open）。"""
     success, output = run_git_command(
-        ["diff", "--cached", "--name-only"], cwd=str(project_root)
+        ["diff", "--cached", "--name-only", "-z"], cwd=str(project_root)
     )
     if not success or not output:
         return []
-    return [line.strip() for line in output.splitlines() if line.strip()]
+    return [path for path in output.split("\0") if path]
 
 
 def _get_unstaged_tracked_files(project_root: Path) -> List[str]:
@@ -324,10 +391,12 @@ def _get_unstaged_tracked_files(project_root: Path) -> List[str]:
     （fail-open，與 `_get_staged_files` 相同語意：讀不到內容時保守視為
     無額外風險內容，不阻擋，僅可能低估 `-a` 實際提交範圍）。
     """
-    success, output = run_git_command(["diff", "--name-only"], cwd=str(project_root))
+    success, output = run_git_command(
+        ["diff", "--name-only", "-z"], cwd=str(project_root)
+    )
     if not success or not output:
         return []
-    return [line.strip() for line in output.splitlines() if line.strip()]
+    return [path for path in output.split("\0") if path]
 
 
 def _staged_scope_is_safe_for_bare_commit(
@@ -670,7 +739,9 @@ def main() -> int:
     invocations = find_git_invocations(command, {"commit"})
 
     project_root = get_project_root()
-    dispatches = _get_active_dispatches_safe(project_root)
+    dispatches = _with_live_declared_files(
+        _get_active_dispatches_safe(project_root), project_root, logger
+    )
     dispatch_count = len(dispatches)
 
     if invocations is None:

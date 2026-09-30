@@ -40,7 +40,8 @@ def _mock_git_status(stdout: str) -> MagicMock:
     """建構 git status --porcelain 的 subprocess.run 回傳值。"""
     result = MagicMock()
     result.returncode = 0
-    result.stdout = stdout
+    # 共用層改用 status --porcelain -z：記錄以 NUL 結尾，測試以換行書寫後轉換
+    result.stdout = stdout.replace("\n", "\0")
     result.stderr = ""
     return result
 

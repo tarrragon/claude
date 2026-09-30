@@ -633,21 +633,20 @@ def compute_upstream_delta(temp_dir: Path, base_sha: str) -> dict[str, str]:
         dict[str, str]: {相對 repo root 的路徑: 狀態字母}，狀態 ∈ {A, M, D}
     """
     result = run_git(
-        ["diff", "--name-status", "--no-renames", base_sha, "HEAD"],
+        ["diff", "--name-status", "--no-renames", "-z", base_sha, "HEAD"],
         cwd=str(temp_dir),
     )
     delta: dict[str, str] = {}
     if result.returncode != 0:
         return delta
-    for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        fields = line.split("\t")
-        # --no-renames 保證恰為 [status, path] 兩欄（無 rename 的 status\told\tnew）
-        assert len(fields) == 2, f"非預期的 diff 行格式（含 rename？）: {line!r}"
-        status, path = fields[0].strip(), fields[1].strip()
+    # -z 格式："<status>\0<path>\0"；--no-renames 保證恆為兩段一組（無 rename 三段形態）
+    fields = result.stdout.split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    assert len(fields) % 2 == 0, f"非預期的 diff -z 格式（欄位數為奇數）: {fields!r}"
+    for status, path in zip(fields[0::2], fields[1::2]):
         # 只取狀態首字母（A/M/D），忽略 score 後綴
-        delta[path] = status[:1]
+        delta[path] = status.strip()[:1]
     return delta
 
 
@@ -1275,12 +1274,12 @@ def _is_git_tracked(rel_under_root: str, project_root: Path) -> bool:
     if result.returncode == 0:
         return True
     parent = str(PurePosixPath(rel_under_root).parent)
-    listing = run_git(["ls-files", "--", parent], cwd=str(project_root))
+    listing = run_git(["ls-files", "-z", "--", parent], cwd=str(project_root))
     if listing.returncode != 0:
         return False
     target_lower = rel_under_root.lower()
     return any(
-        line.strip().lower() == target_lower for line in listing.stdout.splitlines()
+        entry.lower() == target_lower for entry in listing.stdout.split("\0") if entry
     )
 
 
@@ -2876,10 +2875,12 @@ def _list_base_files(temp_dir: Path, base_sha: str) -> set[str] | None:
     """
     if not is_base_reachable(temp_dir, base_sha):
         return None
-    result = run_git(["ls-tree", "-r", "--name-only", base_sha], cwd=str(temp_dir))
+    result = run_git(
+        ["ls-tree", "-r", "--name-only", "-z", base_sha], cwd=str(temp_dir)
+    )
     if result.returncode != 0:
         return None
-    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    return {entry for entry in result.stdout.split("\0") if entry}
 
 
 def classify_orphans_by_base(

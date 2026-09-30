@@ -219,7 +219,7 @@ def run_git_command(
         _log_bare_index_operation(args, cwd)
     try:
         result = subprocess.run(
-            ["git", "--no-optional-locks"] + args,
+            ["git", "--no-optional-locks", "-c", "core.quotepath=false"] + args,
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -240,6 +240,27 @@ def run_git_command(
         error_msg = str(e)
         print(f"[Error] git command failed: {error_msg}", file=sys.stderr)
         return False, error_msg
+
+
+def parse_name_status_z(output: str) -> list[tuple[str, Optional[str], str]]:
+    """解析 `git diff --name-status -z` 輸出為 (status, old_path, new_path) 清單。
+
+    `-z` 以 NUL 分段：R／C 為 `Rnnn\\0舊路徑\\0新路徑`（消耗兩個路徑段），
+    其他狀態為 `狀態\\0路徑`（消耗一個）。單路徑狀態的 old_path 為 None。
+    路徑段數不足的殘缺記錄略過。
+    """
+    segments = [seg for seg in output.split("\0") if seg]
+    entries: list[tuple[str, Optional[str], str]] = []
+    index = 0
+    while index < len(segments):
+        status = segments[index]
+        path_count = 2 if status[0] in ("R", "C") else 1
+        paths = segments[index + 1 : index + 1 + path_count]
+        index += 1 + path_count
+        if len(paths) != path_count:
+            continue
+        entries.append((status, paths[0] if path_count == 2 else None, paths[-1]))
+    return entries
 
 
 def get_current_branch(cwd: Optional[str] = None) -> Optional[str]:
@@ -429,13 +450,28 @@ def _get_uncommitted_status_lines(cwd: Optional[str] = None) -> list[str]:
         for line in status_lines:
             print(f"  {line}")
     """
-    success, output = run_git_command(["status", "--porcelain"], cwd=cwd)
+    # -z：路徑不加引號、不跳脫，以 NUL 分隔；Renamed/Copied 為 "XY new\0old\0"
+    success, output = run_git_command(["status", "--porcelain", "-z"], cwd=cwd)
 
     if not success or not output:
         return []
 
-    lines = output.split("\n")
-    return [line for line in lines if line.strip()]
+    entries = output.split("\0")
+    lines: list[str] = []
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if not entry.strip():
+            continue
+        status = entry[:GIT_STATUS_CODE_LEN]
+        if ("R" in status or "C" in status) and index < len(entries):
+            # 沿用非 -z 輸出的 "old -> new" 形式，維持 FileStatus 契約
+            new_path = entry[GIT_STATUS_CODE_LEN + 1:]
+            entry = f"{status} {entries[index]} -> {new_path}"
+            index += 1
+        lines.append(entry)
+    return lines
 
 
 def get_worktree_list(

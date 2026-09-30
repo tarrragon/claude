@@ -282,9 +282,32 @@ def _tokenize(command: str) -> Optional[List[str]]:
     try:
         lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
-        return list(lexer)
+        return _merge_fd_duplication(list(lexer))
     except ValueError:
         return None
+
+
+def _merge_fd_duplication(tokens: List[str]) -> List[str]:
+    """把 punctuation_chars 切開的 fd 複製重導向（2>&1）還原為單一 token。
+
+    shlex 將 `2>&1` 切成 `2` / `>&` / `1`，後兩個數字會被下游誤當路徑。
+    僅在「數字 + `>&`（或 `<&`）+ 數字」三段成形時合併。
+    """
+    merged: List[str] = []
+    i = 0
+    while i < len(tokens):
+        if (
+            i + 2 < len(tokens)
+            and tokens[i].isdigit()
+            and tokens[i + 1] in (">&", "<&")
+            and tokens[i + 2].isdigit()
+        ):
+            merged.append(tokens[i] + tokens[i + 1] + tokens[i + 2])
+            i += 3
+            continue
+        merged.append(tokens[i])
+        i += 1
+    return merged
 
 
 def _split_statements(tokens: List[str]) -> List[List[str]]:

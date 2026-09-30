@@ -1,3 +1,32 @@
+## [2.64.0] - 2026-09-30
+
+### Summary
+refactor: 抽出 parse_name_status_z 至 lib/git_utils，三支守衛共用; fix: Guard A 放行 patch 等價分支，阻擋訊息補顯式丟棄出口; fix: staleness 測試主 repo 狀態守衛只比對 doc skill 目錄 (+16 more)
+
+Changes: 1 refactor, 15 fix, 1 docs, 1 chore, 1 test
+
+- refactor: 抽出 parse_name_status_z 至 lib/git_utils，三支守衛共用
+- fix: Guard A 放行 patch 等價分支，阻擋訊息補顯式丟棄出口
+- fix: staleness 測試主 repo 狀態守衛只比對 doc skill 目錄
+- fix: lib 測試 mock 改 NUL 分隔，測試入口涵蓋 lib/tests
+- fix: finish 啟用提交納入 bump 的版本檔
+- fix: protected-branch-guard 訊息改 worktree add，解析合併短旗標與 2>&1 切分
+- fix: check 依前移清單切換建議，release 遇前移清單拒絕
+- fix: 五支 hook 讀取 git 路徑清單改 -z 並補 E2
+- fix: git 路徑清單讀取改 -z，修復 CJK 檔名 quotepath 跳脫 (某票.2)
+- fix: 提交守衛的 staged 路徑清單讀取改 -z
+- fix: skill-sync uv.lock 自身版號對齊 1.24.3
+- fix: 共用讀取層加 core.quotepath=false 與 -z 解析 CJK 路徑
+- fix: scripts 與其他 skill 讀取 git 路徑清單改 -z
+- fix: bare-commit-guard 宣告範圍改讀票面現行 where.files
+- fix: spec 識別只讀 frontmatter 區塊並限 SPEC-NNN 形式
+- fix: check_domain_coverage FR 比對鍵改為 spec 識別加 FR 編號
+- docs: PC-BAL-004 補「驗收條文內嵌未查證環境前提」形態
+- chore: .claude/VERSION 2.63.3（sync-push：component-contract-design 3.12.0）
+- test: staleness guard 整合測試改在 tmp repo 執行
+
+---
+
 ## [2.63.3] - 2026-09-29
 
 ### Summary

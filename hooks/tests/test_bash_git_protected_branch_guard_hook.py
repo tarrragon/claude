@@ -208,11 +208,14 @@ class TestBuildDenyMessage:
         assert "main" in msg
         assert "src/x.py" in msg
 
-    def test_contains_checkout_instruction(self):
-        msg = build_bash_cross_repo_deny_message(
-            target_repo="/repo", target_branch="main", non_exempt_files=["a.py"]
-        )
-        assert "git -C /repo checkout -b" in msg
+    def test_guides_worktree_add_not_checkout(self):
+        for kwargs in ({"non_exempt_files": ["a.py"]}, {"non_exempt_files": [], "fail_closed": True}):
+            msg = build_bash_cross_repo_deny_message(
+                target_repo="/repo", target_branch="main", **kwargs
+            )
+            assert "checkout -b" not in msg
+            assert "git -C /repo worktree add" in msg
+            assert "派發位置判準（強制）" in msg
 
     def test_empty_non_exempt_files_shows_uncertain_note(self):
         msg = build_bash_cross_repo_deny_message(
@@ -872,6 +875,31 @@ class TestParseCommitPathspec:
         has_all, paths = _parse_commit_pathspec(["--amend", "--no-edit"])
         assert has_all is False
         assert paths == []
+
+    def test_combined_short_flag_value_not_pathspec(self):
+        """E2：-qm init 的 init 是訊息值，不是 pathspec。"""
+        assert _parse_commit_pathspec(["-qm", "init"]) == (False, [])
+
+    def test_combined_short_flag_with_real_pathspec(self):
+        assert _parse_commit_pathspec(["-qm", "init", "--", "docs/x.md"]) == (
+            False, ["docs/x.md"])
+
+    def test_value_glued_after_flag_does_not_consume_next(self):
+        """-mq：q 是黏著的訊息值，其後 token 仍是 pathspec。"""
+        assert _parse_commit_pathspec(["-mq", "docs/x.md"]) == (False, ["docs/x.md"])
+        assert _parse_commit_pathspec(["-mq"]) == (False, [])
+
+    def test_am_still_stage_all(self):
+        assert _parse_commit_pathspec(["-am", "msg"]) == (True, None)
+
+    def test_split_redirection_digits_not_pathspec(self):
+        """2>&1 被 tokenizer 切成 2 / >& / 1，數字不得列為 pathspec。"""
+        invs = hook_module.find_git_invocations(
+            "git commit -m msg docs/x.md 2>&1", {"commit"})
+        assert invs is not None and len(invs) == 1
+        assert _parse_commit_pathspec(list(invs[0].args)) == (False, ["docs/x.md"])
+        add_invs = hook_module.find_git_invocations("git add -A 2>&1", {"add"})
+        assert "2" not in add_invs[0].args and "1" not in add_invs[0].args
 
     def test_dot_pathspec_now_unenumerable(self):
         """統一 SSOT 後行為變化：原設計把 `.` 當成單一字面路徑加入 paths

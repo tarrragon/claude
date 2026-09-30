@@ -264,7 +264,7 @@ def get_git_changed_files(project_root: Path, logger: logging.Logger) -> list[st
     """
     try:
         result = subprocess.run(
-            ["git", "--no-optional-locks", "diff", "HEAD", "--name-only"],
+            ["git", "--no-optional-locks", "diff", "HEAD", "--name-only", "-z"],
             cwd=str(project_root),
             capture_output=True,
             text=True,
@@ -283,8 +283,8 @@ def get_git_changed_files(project_root: Path, logger: logging.Logger) -> list[st
 
         # 解析輸出並規範化
         git_changed = []
-        for line in result.stdout.split("\n"):
-            line = line.strip()
+        # -z：以 NUL 分隔原始路徑，不受 quotepath 加引號/跳脫影響
+        for line in result.stdout.split("\0"):
             if line:
                 normalized = normalize_path(line)
                 if normalized:

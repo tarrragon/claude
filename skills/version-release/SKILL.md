@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 2.7.0
+  version: 2.9.0
 ---
 
 # Version Release Skill
@@ -87,6 +87,19 @@ metadata:
 --version <target_version>`，任一張失敗即中止、不留半搬狀態。**目標版本
 必須已在 `docs/todolist.yaml` 登記**（planned 或 active 皆可），未登記時
 整批阻擋並提示先登記，`finish` 不自動登記。
+
+**前移清單與 `check` 建議、`release` 前置條件**：前移屬 `finish` 的職責，`release`
+不做前移，在前移清單非空時照做會把 pending 票留在已 completed 的版本下成為懸空票。
+因此：
+
+- `check` 通過後，結尾建議依前移清單切換：清單非空印 `finish`（並說明前移 N 張），
+  清單為空維持印 `release`。
+- `release` 在 Step 0 之前計算前移清單，非空即 exit 1，列出清單並提示改用 `finish`；
+  清單為空照常執行。`finish` 不受影響。
+- **`--force` 不覆蓋此拒絕**。`--force` 的既有語意是略過「可協商的警告」（Pre-flight
+  失敗、文件更新失敗、跨大版本推進）；前移清單是資料正確性（懸空票無法事後由發版流程
+  自動修復），不是可略過的警告。要略過前移只有一條路：先處理那些 pending 票（完成、
+  或加 `scope_blocker` 轉為阻擋），或改用 `finish`。
 
 範例輸出（`check` 命中前移清單）：
 

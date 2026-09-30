@@ -309,22 +309,25 @@ def _list_blocking_entries(project_root: Path) -> list[tuple[str, str]] | None:
         不列出具體檔案）
     """
     result = run_git(
-        ["status", "--porcelain", "--untracked=all", "--", ".claude"],
+        ["status", "--porcelain", "-z", "--untracked=all", "--", ".claude"],
         cwd=str(project_root),
         check=False,
     )
     if result.returncode != 0:
         return None
     entries: list[tuple[str, str]] = []
-    for line in result.stdout.splitlines():
-        if not line.strip():
+    # -z 格式："XY path"；X 或 Y 為 R/C 時後接一段 "origPath"（取新路徑判定，跳過舊路徑段）
+    fields = result.stdout.split("\0")
+    idx = 0
+    while idx < len(fields):
+        record = fields[idx]
+        idx += 1
+        if len(record) < 4:
             continue
-        # porcelain 格式：XY<space>path（rename 為 "orig -> new"，取末段判定）
-        status_code = line[:2]
-        path_field = line[3:] if len(line) > 3 else line
-        if " -> " in path_field:
-            path_field = path_field.split(" -> ", 1)[1]
-        path_field = path_field.strip().strip('"')
+        status_code = record[:2]
+        path_field = record[3:]
+        if "R" in status_code or "C" in status_code:
+            idx += 1
         # path 相對 project_root（含 .claude/ 前綴）；should_exclude 契約要求相對
         # claude_dir，故 strip 前綴
         rel_str = path_field
@@ -1427,14 +1430,14 @@ def _list_base_files(temp_dir: Path, base_sha: str) -> set[str]:
     獨立判定可達性。本函式契約維持不變（既有多個呼叫端依賴空集合語意）。
     """
     result = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", base_sha],
+        ["git", "ls-tree", "-r", "--name-only", "-z", base_sha],
         cwd=temp_dir,
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         return set()
-    return set(result.stdout.strip().splitlines())
+    return {p for p in result.stdout.split("\0") if p}
 
 
 def _is_base_sha_reachable(temp_dir: Path, base_sha: str | None) -> bool:

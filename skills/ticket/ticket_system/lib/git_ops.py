@@ -272,14 +272,15 @@ def _sync_shared_index_after_commit(
     共用 index。
     """
     ok, ls_out, err = _run_git_with_lock_retry(
-        ["git", "ls-tree", tree_sha, "--"] + paths, cwd=cwd
+        ["git", "ls-tree", "-z", tree_sha, "--"] + paths, cwd=cwd
     )
     if not ok:
         print(f"[WARNING] 共用 index 同步失敗（ls-tree）：{err}", file=sys.stderr)
         return
 
     present: Dict[str, str] = {}
-    for line in ls_out.splitlines():
+    # -z：以 NUL 分隔且路徑不跳脫，CJK 檔名才能與 paths 逐字比對
+    for line in ls_out.split("\0"):
         meta, _, path = line.partition("\t")
         if not path:
             continue
@@ -400,11 +401,11 @@ def commit_files_isolated(
 
         # 提交範圍自我驗證（要件 3）：不符即放棄，不 update-ref。
         ok, diff_out, err = _run_git_with_lock_retry(
-            ["git", "diff", "--name-only", old_head, commit_sha], cwd=cwd
+            ["git", "diff", "--name-only", "-z", old_head, commit_sha], cwd=cwd
         )
         if not ok:
             return {"status": "failed", "commit_sha": None, "error": err}
-        changed = {line for line in diff_out.splitlines() if line.strip()}
+        changed = {line for line in diff_out.split("\0") if line}
         if changed != set(deduped):
             return {
                 "status": "failed",

@@ -2080,8 +2080,9 @@ def cmd_list(args: argparse.Namespace) -> None:
         )
         run_git(["sparse-checkout", "set", "--no-cone", "*/SKILL.md"], cwd=tmp)
 
-        result = run_git(["ls-tree", "--name-only", "HEAD"], cwd=tmp)
-        dirs = [line for line in result.stdout.strip().splitlines() if line]
+        # -z：NUL 分隔且不做 quotepath 跳脫，非 ASCII 目錄名保持原文
+        result = run_git(["ls-tree", "--name-only", "-z", "HEAD"], cwd=tmp)
+        dirs = [entry for entry in result.stdout.split("\0") if entry]
 
         if not dirs:
             print("No skills found in remote repo.")

@@ -298,6 +298,9 @@ def run_git(
     Returns:
         stdout 輸出（僅移除尾端換行，保留行首空白），或 None 若執行失敗
     """
+    if args and args[0] == "git":
+        # 非 ASCII 路徑不加引號跳脫，呼叫端才能拿原始 UTF-8 路徑做比對
+        args = ["git", "-c", "core.quotepath=false"] + list(args[1:])
     try:
         result = subprocess.run(
             args,

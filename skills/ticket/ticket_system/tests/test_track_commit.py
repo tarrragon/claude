@@ -285,7 +285,7 @@ class TestDirectoryDeclarationScope:
         檔案後才交給 commit_files_isolated——後者恆收到具體檔案清單，不
         收到目錄字面值，故自我驗證不因目錄展開而誤判。"""
         declared = ["a/dir"]
-        status_output = " M a/dir/file1.py\n?? a/dir/file2.py\n"
+        status_output = " M a/dir/file1.py\0?? a/dir/file2.py\0"
         with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
              patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
              patch("os.getcwd", return_value="/repo"), \
@@ -327,7 +327,7 @@ class TestDirectoryDeclarationScope:
         派發（不同 ticket_id）宣告的檔案不應被吸入本次提交，即使該檔案
         實際落在本票宣告的目錄下且 git status 回報為變更。"""
         declared = ["a/dir"]
-        status_output = " M a/dir/mine.py\n?? a/dir/other_session.py\n"
+        status_output = " M a/dir/mine.py\0?? a/dir/other_session.py\0"
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
         (claude_dir / "dispatch-active.json").write_text(
@@ -364,7 +364,7 @@ class TestDirectoryDeclarationScope:
         """dispatch-active.json 不存在時 fail-open：不排除任何檔案（既有
         行為不變，回歸防護）。"""
         declared = ["a/dir"]
-        status_output = " M a/dir/file1.py\n?? a/dir/file2.py\n"
+        status_output = " M a/dir/file1.py\0?? a/dir/file2.py\0"
         with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
              patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
              patch("os.getcwd", return_value="/repo"), \

@@ -93,7 +93,7 @@ class TestTouchedHookFilenames:
             "run_git_command",
             lambda *a, **k: (
                 True,
-                "M\t.claude/hooks/tests/test_foo.py\nM\t.claude/hooks/bar-hook.py",
+                "M\0.claude/hooks/tests/test_foo.py\0M\0.claude/hooks/bar-hook.py\0",
             ),
         )
         logger = MagicMock()
@@ -106,7 +106,7 @@ class TestTouchedHookFilenames:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, "D\t.claude/hooks/removed-hook.py"),
+            lambda *a, **k: (True, "D\0.claude/hooks/removed-hook.py\0"),
         )
         logger = MagicMock()
         result = hook_module._touched_hook_filenames("git commit -m x", "/repo", logger)
@@ -119,7 +119,7 @@ class TestTouchedHookFilenames:
             "run_git_command",
             lambda *a, **k: (
                 True,
-                "R100\t.claude/hooks/old-hook.py\t.claude/hooks/new-hook.py",
+                "R100\0.claude/hooks/old-hook.py\0.claude/hooks/new-hook.py\0",
             ),
         )
         logger = MagicMock()
@@ -134,7 +134,7 @@ class TestTouchedHookFilenames:
             "run_git_command",
             lambda *a, **k: (
                 True,
-                "D\t.claude/hooks/removed-hook.py\nM\t.claude/hooks/kept-hook.py",
+                "D\0.claude/hooks/removed-hook.py\0M\0.claude/hooks/kept-hook.py\0",
             ),
         )
         logger = MagicMock()
@@ -215,7 +215,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, "M\t.claude/hooks/foo-hook.py"),
+            lambda *a, **k: (True, "M\0.claude/hooks/foo-hook.py\0"),
         )
         monkeypatch.setattr(
             hook_module, "_run_pytest", lambda test_paths, hooks_dir, logger: (True, "1 passed")
@@ -238,7 +238,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, "M\t.claude/hooks/foo-hook.py"),
+            lambda *a, **k: (True, "M\0.claude/hooks/foo-hook.py\0"),
         )
         monkeypatch.setattr(
             hook_module,
@@ -268,7 +268,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, "M\t.claude/hooks/untested-hook.py"),
+            lambda *a, **k: (True, "M\0.claude/hooks/untested-hook.py\0"),
         )
 
         exit_code, captured = _run_main(
@@ -340,7 +340,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, "D\t.claude/hooks/removed-hook.py"),
+            lambda *a, **k: (True, "D\0.claude/hooks/removed-hook.py\0"),
         )
 
         exit_code, captured = _run_main(
@@ -356,7 +356,7 @@ class TestMainIntegration:
 
         def _fake_run_git_command(*a, **k):
             called["n"] += 1
-            return True, "M\t.claude/hooks/foo-hook.py"
+            return True, "M\0.claude/hooks/foo-hook.py\0"
 
         monkeypatch.setattr(hook_module, "run_git_command", _fake_run_git_command)
 

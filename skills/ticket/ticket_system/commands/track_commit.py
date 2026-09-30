@@ -103,10 +103,10 @@ def _out_of_scope_files(
 
 
 def _git_status_porcelain(repo_root: str) -> str:
-    """回傳 `git status --porcelain` 原始輸出，供展開目錄型宣告為具體
-    變更檔案清單。獨立為模組層函式以便測試 monkeypatch。"""
+    """回傳 `git status --porcelain -z` 原始輸出（NUL 分隔、路徑不跳脫），
+    供展開目錄型宣告為具體變更檔案清單。獨立為模組層函式以便測試 monkeypatch。"""
     result = subprocess.run(
-        ["git", "status", "--porcelain=v1", "--no-renames"],
+        ["git", "status", "--porcelain=v1", "-z", "--no-renames"],
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -180,10 +180,10 @@ def _expand_directory_to_changed_files(
     status_out = _git_status_porcelain(repo_root)
     exclude = exclude or set()
     changed = []
-    for line in status_out.splitlines():
+    for line in status_out.split("\0"):
         if len(line) < 4:
             continue
-        path = line[3:].strip()
+        path = line[3:]
         if not files_intersect(path, directory):
             continue
         if any(files_intersect(path, other) for other in exclude):

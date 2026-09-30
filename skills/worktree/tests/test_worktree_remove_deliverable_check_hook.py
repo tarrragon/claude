@@ -373,3 +373,70 @@ class TestMain:
             hook, "_dirty_status", return_value=None
         ):
             assert hook.main() == 0
+
+
+# ---------------------------------------------------------------------------
+# Guard A 內容等價出口（真實 tmp git repo；E2 三案）
+# ---------------------------------------------------------------------------
+
+import subprocess
+
+
+def _git(repo, *args):
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture
+def repo(tmp_path, monkeypatch):
+    """main 上有 base.txt；chdir 到 repo 使 hook 內 run_git 作用於此 repo。"""
+    _git(tmp_path, "init", "-q", "-b", "main")
+    (tmp_path / "base.txt").write_text("base\n")
+    _git(tmp_path, "add", "base.txt")
+    _git(tmp_path, "commit", "-q", "-m", "base")
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def _commit_on_branch(repo, branch, filename, content):
+    _git(repo, "checkout", "-q", "-b", branch, "main")
+    (repo / filename).write_text(content)
+    _git(repo, "add", filename)
+    _git(repo, "commit", "-q", "-m", "on " + branch)
+
+
+class TestGuardAContentEquivalence:
+    def test_patch_equivalent_branch_passes(self, repo, logger):
+        """案 1：分支 commit 的 patch 已在 main（cherry 全為 -）→ 放行。"""
+        _commit_on_branch(repo, "feat/dup", "a.txt", "same\n")
+        _git(repo, "checkout", "-q", "main")
+        # main 先前進一個 commit，cherry-pick 才會產生不同 hash 的等價 patch
+        (repo / "other.txt").write_text("x\n")
+        _git(repo, "add", "other.txt")
+        _git(repo, "commit", "-q", "-m", "other")
+        _git(repo, "cherry-pick", "feat/dup")
+        assert hook._guard_a(str(repo), "feat/dup", logger) is None
+
+    def test_superseded_content_blocks_with_explicit_exit(self, repo, logger):
+        """案 2：cherry 含 +（內容被不同寫法取代）→ 阻擋，訊息含顯式出口。"""
+        _commit_on_branch(repo, "feat/old", "a.txt", "old version\n")
+        _git(repo, "checkout", "-q", "main")
+        (repo / "a.txt").write_text("new version\n")
+        _git(repo, "add", "a.txt")
+        _git(repo, "commit", "-q", "-m", "supersede")
+        message = hook._guard_a(str(repo), "feat/old", logger)
+        assert message is not None
+        assert "branch -D feat/old" in message
+        assert "checkout --detach" in message
+        assert "merge -s ours" not in message
+
+    def test_truly_unmerged_branch_blocks(self, repo, logger):
+        """案 3：真正未合併 → 阻擋（與修前一致）。"""
+        _commit_on_branch(repo, "feat/new", "b.txt", "only on branch\n")
+        _git(repo, "checkout", "-q", "main")
+        message = hook._guard_a(str(repo), "feat/new", logger)
+        assert message is not None
+        assert "b.txt" in message

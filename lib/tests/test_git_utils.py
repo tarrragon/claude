@@ -229,10 +229,7 @@ class TestUncommittedStatusLines(unittest.TestCase):
     @patch('lib.git_utils.run_git_command')
     def test_has_uncommitted_changes(self, mock_run):
         """測試有未提交變更時回傳非空列表"""
-        mock_run.return_value = (True, """ M file1.txt
-?? file2.txt
-A  file3.py
-""")
+        mock_run.return_value = (True, " M file1.txt\0?? file2.txt\0A  file3.py\0")
         status_lines = _get_uncommitted_status_lines()
         self.assertEqual(len(status_lines), 3)
         self.assertIn(" M file1.txt", status_lines)
@@ -263,10 +260,9 @@ A  file3.py
         首行前導空白）。該缺陷的回歸測試見
         TestRunGitCommandSubprocessLevel（mock 點下移至 subprocess.run）。
         """
-        mock_run.return_value = (True, """ M modified.txt
-?? untracked.txt
- D deleted.txt
-""")
+        mock_run.return_value = (
+            True, " M modified.txt\0?? untracked.txt\0 D deleted.txt\0"
+        )
         status_lines = _get_uncommitted_status_lines()
         # 驗證格式完整性（含狀態和空格）
         self.assertTrue(any(line.startswith(" M") for line in status_lines))
@@ -305,7 +301,7 @@ class TestRunGitCommandSubprocessLevel(unittest.TestCase):
         """
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=" M aaa.txt\n?? zzz-untracked.txt\n",
+            stdout=" M aaa.txt\0?? zzz-untracked.txt\0",
             stderr="",
         )
         files = get_uncommitted_files()
@@ -322,10 +318,7 @@ class TestUncommittedFiles(unittest.TestCase):
     @patch('lib.git_utils.run_git_command')
     def test_get_uncommitted_files_with_changes(self, mock_run):
         """測試有未提交變更時回傳 FileStatus 列表"""
-        mock_run.return_value = (True, """ M file1.txt
-?? file2.txt
-A  file3.py
-""")
+        mock_run.return_value = (True, " M file1.txt\0?? file2.txt\0A  file3.py\0")
         files = get_uncommitted_files()
         
         self.assertEqual(len(files), 3)
@@ -360,7 +353,7 @@ A  file3.py
         mock_run.return_value = (True, "")
         get_uncommitted_files(cwd="/some/worktree")
         mock_run.assert_called_once_with(
-            ["status", "--porcelain"], cwd="/some/worktree"
+            ["status", "--porcelain", "-z"], cwd="/some/worktree"
         )
 
     @patch('lib.git_utils.run_git_command')
@@ -373,12 +366,11 @@ A  file3.py
     @patch('lib.git_utils.run_git_command')
     def test_get_uncommitted_files_parse_multiple_files(self, mock_run):
         """測試正確解析多個變更檔案"""
-        mock_run.return_value = (True, """M  modified_staged.txt
- M unstaged_modified.txt
-?? new_untracked.txt
-A  added_staged.py
- D deleted_unstaged.py
-""")
+        mock_run.return_value = (
+            True,
+            "M  modified_staged.txt\0 M unstaged_modified.txt\0"
+            "?? new_untracked.txt\0A  added_staged.py\0 D deleted_unstaged.py\0",
+        )
         files = get_uncommitted_files()
         
         self.assertEqual(len(files), 5)

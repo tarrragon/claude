@@ -89,6 +89,7 @@ def list_ticket_files_from_main(
                     "ls-tree",
                     "-r",
                     "--name-only",
+                    "-z",
                     ref,
                     "--",
                     str(rel_tickets_dir),
@@ -106,11 +107,7 @@ def list_ticket_files_from_main(
             )
             return None
         if result.returncode == 0:
-            return [
-                line.strip()
-                for line in result.stdout.splitlines()
-                if line.strip()
-            ]
+            return [path for path in result.stdout.split("\0") if path]
         # returncode != 0：該 ref 不存在，續試下一候選
 
     # 所有候選 ref 皆無法解析（非 git 環境或無 main/master）→ fallback 純本地

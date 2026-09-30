@@ -186,7 +186,7 @@ def get_commit_files(project_root: Path, logger) -> List[str]:
     """
     try:
         result = subprocess.run(
-            ["git", "show", "--name-only", "--pretty=format:", "HEAD"],
+            ["git", "show", "--name-only", "-z", "--pretty=format:", "HEAD"],
             cwd=str(project_root),
             capture_output=True,
             text=True,
@@ -195,7 +195,8 @@ def get_commit_files(project_root: Path, logger) -> List[str]:
         if result.returncode != 0:
             logger.debug("git show 非零退出: %s", result.stderr.strip())
             return []
-        files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        # -z：以 NUL 分隔原始路徑，不受 quotepath 加引號/跳脫影響
+        files = [path for path in result.stdout.split("\0") if path]
         return files
     except Exception as e:
         logger.warning("取得 commit file list 失敗: %s", e)

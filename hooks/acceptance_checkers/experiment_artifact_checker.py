@@ -88,7 +88,7 @@ def _run_git_status_untracked(project_dir: Path, logger) -> List[str]:
     """
     try:
         result = subprocess.run(
-            ["git", "--no-optional-locks", "status", "--porcelain", "--untracked-files=all"],
+            ["git", "--no-optional-locks", "status", "--porcelain", "-z", "--untracked-files=all"],
             cwd=str(project_dir),
             capture_output=True,
             text=True,
@@ -107,11 +107,17 @@ def _run_git_status_untracked(project_dir: Path, logger) -> List[str]:
         )
         return []
 
+    # -z：條目以 NUL 分隔、路徑為原始字串；rename/copy（X 或 Y 為 R/C）條目後
+    # 多帶一段來源路徑，須整段略過，否則會被當成獨立條目。
     paths = []
-    for line in result.stdout.splitlines():
-        if len(line) < 4 or line[:2] != "??":
+    entries = iter(result.stdout.split("\0"))
+    for entry in entries:
+        if len(entry) < 4:
             continue
-        paths.append(line[3:].strip())
+        if entry[:2] == "??":
+            paths.append(entry[3:])
+        elif "R" in entry[:2] or "C" in entry[:2]:
+            next(entries, None)
     return paths
 
 

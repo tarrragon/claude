@@ -111,7 +111,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
 from lib.git_command_parse import find_git_invocations, contains_git_word  # noqa: E402
-from lib.git_utils import get_project_root, run_git_command  # noqa: E402
+from lib.git_utils import (  # noqa: E402
+    get_project_root,
+    parse_name_status_z,
+    run_git_command,
+)
 from lib.commit_content_guards import (  # noqa: E402
     Finding,
     StagedFile,
@@ -149,35 +153,32 @@ _CLAUDE_DIR = _HOOKS_DIR.parent
 def _get_staged_file_list(project_root: Path) -> List[str]:
     """取得 staged 檔案清單（新增/修改/rename，已刪除檔案略過）。"""
     success, output = run_git_command(
-        ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+        ["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"],
         cwd=str(project_root),
     )
     if not success or not output:
         return []
-    return [line.strip() for line in output.splitlines() if line.strip()]
+    return [path for path in output.split("\0") if path]
 
 
 def _get_staged_rename_map(project_root: Path) -> Dict[str, str]:
     """取得本次 staged 變更中 rename 檔案的新路徑 -> 舊路徑對照表（含純
     rename 與 rename 併內容變更）。`-M` 顯式開啟 rename 偵測（不依賴 git
-    版本/組態預設值）；`--name-status` 逐行輸出 `狀態<TAB>舊路徑<TAB>新路徑`
-    （R 開頭後接相似度百分比，如 R100/R063，皆視為 rename）。非 rename 的
-    行只有兩欄，split 後長度不符會被過濾。
+    版本/組態預設值）；`-z` 下 `--name-status` 以 NUL 分段：rename 為
+    `Rnnn\\0舊路徑\\0新路徑\\0`（R 後接相似度百分比，如 R100/R063），其他
+    狀態為 `狀態\\0路徑\\0`，逐段依狀態決定消耗一或兩個路徑段。
     """
     success, output = run_git_command(
-        ["diff", "--cached", "-M", "--name-status"],
+        ["diff", "--cached", "-M", "--name-status", "-z"],
         cwd=str(project_root),
     )
     if not success or not output:
         return {}
-    rename_map: Dict[str, str] = {}
-    for line in output.splitlines():
-        parts = line.split("\t")
-        if len(parts) != 3 or not parts[0].startswith("R"):
-            continue
-        _status, old_path, new_path = parts
-        rename_map[new_path] = old_path
-    return rename_map
+    return {
+        new_path: old_path
+        for status, old_path, new_path in parse_name_status_z(output)
+        if status.startswith("R") and old_path is not None
+    }
 
 
 def _git_show(rev_spec: str, project_root: Path) -> str:

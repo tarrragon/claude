@@ -87,13 +87,14 @@ def _run_hook(
     staged_files=None,
     unstaged_files=None,
     tool_name: str = "Bash",
+    project_root: Path = Path("/fake/project"),
 ) -> int:
     """以 monkeypatch 模擬 stdin + 依賴（活躍派發清單 / staged 檔案 /
     unstaged tracked 檔案），執行 main()。"""
     payload = {"tool_name": tool_name, "tool_input": {"command": command}}
     stdin_buffer = io.StringIO(json.dumps(payload))
     monkeypatch.setattr(sys, "stdin", stdin_buffer)
-    monkeypatch.setattr(hook_module, "get_project_root", lambda: Path("/fake/project"))
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: project_root)
     monkeypatch.setattr(
         hook_module, "_get_active_dispatches_safe", lambda root: dispatches or []
     )
@@ -872,3 +873,128 @@ class TestBacktestReplaySample:
         command = f'git commit -m "{commit_message}"'
         exit_code = _run_hook(monkeypatch, command, dispatches=[])
         assert exit_code == 0, f"無害案例不應被 DENY：{commit_message}"
+
+
+# ============================================================================
+# 宣告範圍改讀票面現行 where.files（派發快照過期問題）
+# ============================================================================
+
+_LIVE_TICKET_ID = "9.9.9-W1-001"
+_COMMIT_CMD = 'git commit -m "msg"'
+
+
+class _RecordingLogger:
+    def __init__(self):
+        self.warnings = []
+
+    def warning(self, msg, *args):
+        self.warnings.append(msg % args if args else msg)
+
+
+def _write_ticket(root: Path, ticket_id: str, files, raw: str = None) -> None:
+    """在 root 下依 find_ticket_file 的慣例路徑寫入票檔。"""
+    version = ticket_id.split("-W")[0]
+    tickets_dir = root / "docs" / "work-logs" / f"v{version}" / "tickets"
+    tickets_dir.mkdir(parents=True, exist_ok=True)
+    if raw is None:
+        listed = "".join(f"  - {f}\n" for f in files)
+        raw = f"---\nid: {ticket_id}\nwhere:\n  files:\n{listed}---\n\n# body\n"
+    (tickets_dir / f"{ticket_id}.md").write_text(raw, encoding="utf-8")
+
+
+class TestDeclaredScopeReadsLiveTicket:
+    """E1／E2 對照：派發快照含舊路徑、票面 where.files 已改為新路徑。"""
+
+    def _dispatches(self):
+        return [
+            _dispatch(_LIVE_TICKET_ID, ["old.py", "x.py"]),
+            _dispatch("T-2", ["b.py"]),
+        ]
+
+    def test_e1_renamed_path_on_ticket_is_declared(self, monkeypatch, capsys, tmp_path):
+        _write_ticket(tmp_path, _LIVE_TICKET_ID, ["new.py", "x.py"])
+        exit_code = _run_hook(
+            monkeypatch,
+            _COMMIT_CMD,
+            dispatches=self._dispatches(),
+            staged_files=["new.py", "x.py"],
+            project_root=tmp_path,
+        )
+        assert exit_code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_e1_control_snapshot_only_would_deny(self, monkeypatch, capsys, tmp_path):
+        """對照：票不存在（退回快照）時同一 staged 判為未宣告而 DENY，
+        證明上一案例的放行來自讀票面而非其他路徑。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            _COMMIT_CMD,
+            dispatches=self._dispatches(),
+            staged_files=["new.py", "x.py"],
+            project_root=tmp_path,
+        )
+        assert exit_code == 2
+
+    def test_e2_path_in_neither_ticket_nor_snapshot_still_denied(
+        self, monkeypatch, capsys, tmp_path
+    ):
+        _write_ticket(tmp_path, _LIVE_TICKET_ID, ["new.py", "x.py"])
+        exit_code = _run_hook(
+            monkeypatch,
+            _COMMIT_CMD,
+            dispatches=self._dispatches(),
+            staged_files=["z.py", "x.py"],
+            project_root=tmp_path,
+        )
+        assert exit_code == 2
+        assert "未宣告範圍" in capsys.readouterr().err
+
+    def test_deny_mapping_uses_ticket_files(self, monkeypatch, capsys, tmp_path):
+        _write_ticket(tmp_path, _LIVE_TICKET_ID, ["new.py", "x.py"])
+        exit_code = _run_hook(
+            monkeypatch,
+            _COMMIT_CMD,
+            dispatches=self._dispatches(),
+            staged_files=["new.py", "b.py"],
+            project_root=tmp_path,
+        )
+        assert exit_code == 2
+        assert f"{_LIVE_TICKET_ID}: new.py" in capsys.readouterr().err
+
+
+class TestLiveScopeFallbackToSnapshot:
+    """讀不到票面現行 where.files 時退回快照並寫 warning。"""
+
+    def _resolve(self, dispatch, root):
+        logger = _RecordingLogger()
+        result = hook_module._with_live_declared_files([dispatch], root, logger)
+        return result[0]["files"], logger.warnings
+
+    def test_empty_ticket_id_falls_back(self, tmp_path):
+        files, warnings = self._resolve(_dispatch("", ["snap.py"]), tmp_path)
+        assert files == ["snap.py"]
+        assert len(warnings) == 1
+
+    def test_missing_ticket_falls_back(self, tmp_path):
+        files, warnings = self._resolve(_dispatch(_LIVE_TICKET_ID, ["snap.py"]), tmp_path)
+        assert files == ["snap.py"]
+        assert len(warnings) == 1
+        assert _LIVE_TICKET_ID in warnings[0]
+
+    def test_unparsable_frontmatter_falls_back(self, tmp_path):
+        _write_ticket(tmp_path, _LIVE_TICKET_ID, [], raw="no frontmatter here\n")
+        files, warnings = self._resolve(_dispatch(_LIVE_TICKET_ID, ["snap.py"]), tmp_path)
+        assert files == ["snap.py"]
+        assert len(warnings) == 1
+
+    def test_readable_ticket_replaces_snapshot_without_warning(self, tmp_path):
+        _write_ticket(tmp_path, _LIVE_TICKET_ID, ["live.py"])
+        files, warnings = self._resolve(_dispatch(_LIVE_TICKET_ID, ["snap.py"]), tmp_path)
+        assert files == ["live.py"]
+        assert warnings == []
+
+    def test_does_not_mutate_input_dispatch(self, tmp_path):
+        _write_ticket(tmp_path, _LIVE_TICKET_ID, ["live.py"])
+        original = _dispatch(_LIVE_TICKET_ID, ["snap.py"])
+        hook_module._with_live_declared_files([original], tmp_path, _RecordingLogger())
+        assert original["files"] == ["snap.py"]

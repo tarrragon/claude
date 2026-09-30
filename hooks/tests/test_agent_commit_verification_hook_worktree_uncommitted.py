@@ -61,7 +61,7 @@ def _patch_git_utils_subprocess(stdout: str, returncode: int = 0, side_effect=No
 class TestGetWorktreeUncommittedFiles:
     def test_dirty_worktree_reports_files(self):
         """worktree 有未提交產品碼 → 回傳該 worktree 的檔案清單。"""
-        with _patch_git_utils_subprocess(" M lib/screen_clock.dart\n?? lib/new_widget.dart\n"):
+        with _patch_git_utils_subprocess(" M lib/screen_clock.dart\0?? lib/new_widget.dart\0"):  # status -z：NUL 分隔
             result = hook.get_worktree_uncommitted_files(
                 [("/repo/.claude/worktrees/agent-abc", "feat/1.4.0-W3-027")], _logger
             )
@@ -92,7 +92,7 @@ class TestGetWorktreeUncommittedFiles:
         def fake_run(cmd, **kwargs):
             path = kwargs.get("cwd")
             if path == "/repo/.claude/worktrees/agent-dirty":
-                return _mock_result(" M lib/foo.dart\n")
+                return _mock_result(" M lib/foo.dart\0")
             return _mock_result("")
 
         with _patch_git_utils_subprocess(None, side_effect=fake_run):
@@ -111,9 +111,9 @@ class TestGetWorktreeUncommittedFiles:
     def test_excluded_prefixes_filtered_same_as_main_repo(self):
         """`.claude/` 與 `docs/` 前綴沿用主 repo 同一份豁免清單。"""
         with _patch_git_utils_subprocess(
-            " M .claude/hooks/some-hook.py\n"
-            " M docs/work-logs/v0/ticket.md\n"
-            " M lib/real_feature.dart\n"
+            " M .claude/hooks/some-hook.py\0"
+            " M docs/work-logs/v0/ticket.md\0"
+            " M lib/real_feature.dart\0"
         ):
             result = hook.get_worktree_uncommitted_files(
                 [("/repo/.claude/worktrees/agent-abc", "feat/x")], _logger

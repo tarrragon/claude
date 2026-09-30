@@ -112,7 +112,7 @@ def check_git_tree_skill_md_case(repo_dir: Path, ref: str = "HEAD") -> list[str]
         時回傳空清單（fail-open，不阻擋呼叫端流程）。
     """
     result = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", ref, "--", "skills"],
+        ["git", "ls-tree", "-r", "--name-only", "-z", ref, "--", "skills"],
         cwd=str(repo_dir),
         capture_output=True,
         text=True,
@@ -121,8 +121,8 @@ def check_git_tree_skill_md_case(repo_dir: Path, ref: str = "HEAD") -> list[str]
     if result.returncode != 0:
         return []
     warnings: list[str] = []
-    for line in result.stdout.splitlines():
-        match = _GIT_TREE_LOWERCASE_SKILL_MD.match(line.strip())
+    for line in result.stdout.split("\0"):
+        match = _GIT_TREE_LOWERCASE_SKILL_MD.match(line)
         if match is None:
             continue
         skill_name = match.group(1)

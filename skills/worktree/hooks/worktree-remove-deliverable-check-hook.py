@@ -76,6 +76,13 @@ worktree: {path}
 
 確認交付物確在 main 後，再執行 remove。
 
+內容已由不同寫法取代（分支 commit 刻意不合入，例如重派後捨棄的舊版本）：
+  不要為讓守衛放行而造無內容的合併。改用顯式、可稽核的丟棄：
+    git -C {path} checkout --detach          # 分支不再被 worktree 檢出
+    git branch -D {branch}                   # 輸出含 tip hash，記入 ticket 以便 reflog 還原
+    git worktree remove {path}               # 無對應分支，Guard A 略過
+  丟棄前先核對取代關係：git diff main {branch} -- <上列檔案>
+
 詳見：.claude/pm-rules/worktree-operations.md（階段 3：清理後 / Guard A）"""
 
 
@@ -216,6 +223,16 @@ def _unmerged_files(branch: str, logger) -> Optional[List[str]]:
     return [f for f in diff_out.splitlines() if f.strip()]
 
 
+def _all_patches_on_main(branch: str, logger) -> bool:
+    """`git cherry main <branch>` 輸出全為 `-`（每個 commit 的 patch 在 main 已有等價者）。
+
+    無輸出或 git 失敗回傳 False（維持 Guard A 既有阻擋判定，不放寬）。
+    """
+    out = run_git(["git", "cherry", "main", branch], timeout=10, logger=logger)
+    lines = [ln for ln in (out or "").splitlines() if ln.strip()]
+    return bool(lines) and all(ln.startswith("-") for ln in lines)
+
+
 def _dirty_status(worktree_path: str, logger) -> List[str]:
     """查 target worktree 的未提交變更清單（0.2.1-W3-286 改用共用層）。
 
@@ -250,6 +267,10 @@ def _guard_a(path: str, branch: Optional[str], logger) -> Optional[str]:
         return None
     if not files:
         logger.info("分支 %s 無未合併交付物，Guard A 放行", branch)
+        return None
+
+    if _all_patches_on_main(branch, logger):
+        logger.info("分支 %s 內容已在 main（patch 等價，git cherry 全為 -），Guard A 放行", branch)
         return None
 
     files_list = "\n".join("  - {}".format(f) for f in sorted(files))

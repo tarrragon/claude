@@ -66,16 +66,14 @@ def _fake_run_factory(calls, extra_changed=None, same_tree=False, repo_root=None
             return MagicMock(returncode=0, stdout="new_commit_sha\n", stderr="")
         if args[:2] == ["git", "diff"]:
             changed = [_TARGET] + extra_changed
-            return MagicMock(returncode=0, stdout="\n".join(changed) + "\n", stderr="")
+            return MagicMock(returncode=0, stdout="".join(p + "\0" for p in changed), stderr="")
         if args[:2] == ["git", "update-ref"]:
             return MagicMock(returncode=0, stdout="", stderr="")
         if args[:2] == ["git", "ls-tree"]:
             idx = args.index("--")
             requested = args[idx + 1 :]
-            lines = [f"100644 blob fakeblobsha\t{p}" for p in requested]
-            return MagicMock(
-                returncode=0, stdout=("\n".join(lines) + "\n" if lines else ""), stderr=""
-            )
+            lines = [f"100644 blob fakeblobsha\t{p}\0" for p in requested]
+            return MagicMock(returncode=0, stdout="".join(lines), stderr="")
         if args[:2] == ["git", "update-index"]:
             return MagicMock(returncode=0, stdout="", stderr="")
         raise AssertionError(f"未預期的 git 呼叫: {args}")
@@ -236,7 +234,7 @@ class TestCommitFilesIsolated:
 
         assert result["status"] == "committed"
         ls_tree_calls = [c for c in calls if c[:2] == ["git", "ls-tree"]]
-        assert ls_tree_calls == [["git", "ls-tree", "tree_sha", "--", _TARGET]]
+        assert ls_tree_calls == [["git", "ls-tree", "-z", "tree_sha", "--", _TARGET]]
         index_info_calls = [
             c for c in calls if c[:2] == ["git", "update-index"] and "--index-info" in c
         ]

@@ -147,6 +147,12 @@ token 清單（不再自行 `shlex.split`），未閉合引號的失敗語意上
 職責延伸，詳見 ticket Solution）。`_parse_commit_pathspec` 額外套用同一
 判準亦使 `git commit .` 由「誤把 . 當成單一字面路徑」改為正確 fail-closed
 （原設計缺口，非本次引入，詳見 ticket Solution）。
+
+版本歷史補記（2026-09-30）：(1) 跨專案 deny 訊息由「checkout -b」改為
+`git -C <repo> worktree add`，與「禁止在共用主工作樹切換分支」條款一致；
+(2) `_parse_commit_pathspec` 辨識合併短旗標（-qm init 的 init 是訊息值，
+值黏在旗標後如 -mq 則不吃下一 token）；(3) 共用 tokenizer 把 shlex 切開的
+`2>&1` 還原為單一 token，消除 2 / 1 被列為 pathspec 的誤擋。
 """
 
 import re
@@ -196,6 +202,9 @@ _COMMIT_VALUE_FLAGS = {
     "--fixup", "--author", "--date", "-F", "--file", "-t", "--template",
     "--squash",
 }
+
+# 需要值的短旗標字元（合併短旗標組尾端判斷用）
+_SHORT_VALUE_FLAG_CHARS = frozenset("mcCFt")
 
 # 短 flag 組合偵測：含 'a' 字元的短 flag（如 -a / -am / -av）視為隱含
 # stage-all，一律 fail-closed（範疇邊界：不嘗試用 git diff --name-only 反推）
@@ -347,6 +356,22 @@ def _parse_literal_paths(tokens: List[str], unenumerable_flags: "set") -> Option
     return paths
 
 
+def _short_group_ends_with_value_flag(tok: str) -> bool:
+    """合併短旗標組（如 -qm）尾端為需要值的旗標時為 True，下一 token 是其值。
+
+    值黏在旗標後（-minit、-mq）時尾字元不是旗標字母語意，git 不會吃下一 token；
+    以「組內第一個需要值的字母是否恰為最後一字元」判斷。單一旗標（-m）已由
+    _COMMIT_VALUE_FLAGS 處理，此處只管 2 字元以上的組合。
+    """
+    if len(tok) < 3 or not _SHORT_FLAG_RE.match(tok):
+        return False
+    first_value_idx = next(
+        (i for i, ch in enumerate(tok[1:], start=1) if ch in _SHORT_VALUE_FLAG_CHARS),
+        None,
+    )
+    return first_value_idx == len(tok) - 1
+
+
 def _parse_commit_pathspec(tokens: List[str]) -> Tuple[bool, Optional[List[str]]]:
     """解析 commit 呼叫自身的 args token 清單，回傳 (has_stage_all_flag, paths)。
 
@@ -365,7 +390,7 @@ def _parse_commit_pathspec(tokens: List[str]) -> Tuple[bool, Optional[List[str]]
         if tok == "--all" or (_SHORT_FLAG_RE.match(tok) and "a" in tok[1:]):
             return True, None
 
-        if tok in _COMMIT_VALUE_FLAGS:
+        if tok in _COMMIT_VALUE_FLAGS or _short_group_ends_with_value_flag(tok):
             i += 2  # 跳過 flag 及其值（值不是 pathspec）
             continue
 
@@ -475,12 +500,12 @@ def build_bash_cross_repo_deny_message(
 
 {next_step}
 
-複製以下指令切換目標 repo 分支（在另一個 terminal 執行）：
+禁止在共用主工作樹切換或建立分支。請在目標 repo 另建工作樹後於其中提交：
 
   git -C {target_repo} status
-  git -C {target_repo} checkout -b {suggested_branch}
+  git -C {target_repo} worktree add <路徑> -b {suggested_branch}
 
-完成切換後即可重試本次 commit。"""
+判準見 .claude/pm-rules/parallel-dispatch.md〈派發位置判準（強制）〉。"""
 
 
 def build_shell_expansion_deny_message(repo_hint: str) -> str:

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.1（本地變更，指向 tarrragon/claude#111）— 讀取 git 路徑清單改 `-z` 以 NUL 切分，不再受 `core.quotepath` 影響：`git_ops.commit_files_isolated` 的 `diff --name-only` 自我驗證與 `_sync_shared_index_after_commit` 的 `ls-tree` 解析同批修正（只修前者時 CJK 路徑會被判缺席，`update-index --force-remove` 誤刪共用 index 項目）；`track_commit` 目錄展開的 `status --porcelain`、`ticket_builder.list_ticket_files_from_main` 的 `ls-tree` 同改；`ticket-md-auto-commit-hook` 移除部分處理用的 `.strip('"')`（源頭已由共用層 `get_uncommitted_files` 改 `-z`）。E2 對照測試：tmp git repo 以 CJK／ASCII 檔名 fixture 跑隔離索引提交、目錄展開、ls-tree 列舉，CJK 案修前紅、修後綠，ASCII 兩態皆綠。
+
 **Version**: 2.44.0（本地變更，指向 tarrragon/claude#101）— `agent-dispatch-validation-hook` 拆除審查模式關鍵字豁免（`REVIEW_MODE_KEYWORDS`、`_is_review_mode_prompt`、全文子字串放行分支）：實作票收尾標準用語「Phase 4 評估」必然命中子字串，實作派發被放行至共用主工作樹，守衛失效方向為放行。審查豁免唯一路徑為 prompt 首行 `Dispatch-Mode: readonly`。外部 `.claude/` 阻擋後放行順序改為 readonly 首行、`isolation=worktree`、純主 repo `.claude/`（ARCH-015）、阻擋；帶 isolation 的派發 log 記為 worktree 放行。E2 對照測試：含「Phase 4 評估」無 isolation 者阻擋、加首行宣告者放行、帶 isolation 者 log 為 worktree 放行。
 
 **Version**: 2.43.0（本地變更，指向 tarrragon/claude#101）— `ticket track dispatch` 骨架感知派發位置：新增 `--isolation {worktree,none}`（預設不帶＝none），worktree 變體 normal 骨架收尾句改 `ticket track commit` → `ticket track finish` 並註明 finish 被隔離守衛拒絕時交還 PM 代跑（收尾句以 `CLOSING_BY_ISOLATION` 對表選用）；未帶旗標且 where.files 含非豁免路徑時 stderr WARNING（不阻擋，豁免清單同 branch-verify-hook）。`--kind review` 骨架首行加 `Dispatch-Mode: readonly`（normal 不帶）。E1 對照測試：帶與不帶 isolation 收尾句不同、review 與 normal 首行不同、警告三情境（非豁免／全豁免／明示旗標）各異。

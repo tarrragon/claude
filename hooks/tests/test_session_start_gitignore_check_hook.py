@@ -108,10 +108,10 @@ def test_tracked_runtime_state_warns(tmp_path):
     complete_content = "\n".join(sorted(hook.REQUIRED_GITIGNORE_ENTRIES)) + "\n"
     _make_gitignore(tmp_path, complete_content)
     ls_output = (
-        "src/main.js\n"
-        ".claude/pm-status.json\n"
-        ".claude/state/marker.json\n"
-        "README.md\n"
+        "src/main.js\0"
+        ".claude/pm-status.json\0"
+        ".claude/state/marker.json\0"
+        "README.md\0"
     )
     with patch.object(
         hook.subprocess, "run", return_value=_mk_ls_files(ls_output)

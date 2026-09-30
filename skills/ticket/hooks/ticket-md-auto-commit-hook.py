@@ -228,7 +228,6 @@ def get_changed_ticket_md_files(logger) -> "list[str]":
         path = fs.file_path.strip()
         if " -> " in path:
             path = path.split(" -> ", 1)[1].strip()
-        path = path.strip('"')
         if path and is_ticket_md_path(path):
             candidates.append(path)
 

@@ -221,3 +221,68 @@ def test_main_without_event_flow_flag_skips_check(tmp_path, monkeypatch, capsys)
     rc = cdc.main([str(spec)])
     assert rc == 0
     assert "事件流標定" not in capsys.readouterr().out
+
+
+# --- FR 比對鍵 = (spec 識別, FR 編號) ---
+
+SPEC_A = "---\nid: SPEC-101\n---\n### FR-01: a\n### FR-02: b\n### FR-03: c\n"
+SPEC_B = SPEC_A.replace("SPEC-101", "SPEC-202")
+MAP_UNDER_B = "## 8. 覆蓋\n### SPEC-202 小節\n| FR-01~03 | Ledger |\n"
+
+
+def test_e2_same_number_fr_under_other_spec_is_uncovered(capsys):
+    """E2 正向對照：map 只在 SPEC-202 下覆蓋 FR-01~03，SPEC-101 三條全未覆蓋。"""
+    assert cdc.check_domain_coverage(SPEC_A, MAP_UNDER_B) == [1, 2, 3]
+
+
+def test_e2_same_map_fully_covers_owning_spec():
+    assert cdc.check_domain_coverage(SPEC_B, MAP_UNDER_B) == []
+
+
+def test_same_line_attribution_nearest_spec():
+    dm = "## 覆蓋\n| SPEC-101 FR-01、SPEC-202 FR-02 | X |\n"
+    assert cdc.check_domain_coverage(SPEC_A, dm) == [2, 3]
+    assert cdc.check_domain_coverage(SPEC_B, dm) == [1, 3]
+
+
+def test_same_line_multiple_frs_share_preceding_spec():
+    dm = "## 覆蓋\n| SPEC-101 FR-01、FR-03 | X |\n"
+    assert cdc.check_domain_coverage(SPEC_A, dm) == [2]
+
+
+def test_unattributed_tokens_ignored_when_map_has_attributed():
+    dm = "## 3. 其他\n提到 FR-01 FR-02 FR-03\n## SPEC-101 覆蓋\n| FR-02 | X |\n"
+    assert cdc.check_domain_coverage(SPEC_A, dm) == [1, 3]
+
+
+def test_compat_mode_when_map_has_no_attribution(capsys):
+    """E1 對照：無歸屬 map 走相容（不分 spec），stderr 說明；有歸屬 map 結果不同。"""
+    dm = "## 覆蓋\n| FR-01~03 | X |\n"
+    assert cdc.check_domain_coverage(SPEC_A, dm) == []
+    assert "相容" in capsys.readouterr().err
+    assert cdc.check_domain_coverage(SPEC_A, MAP_UNDER_B) != []
+
+
+def test_compat_mode_warns_when_spec_id_missing(capsys):
+    spec = "### FR-01: a\n"
+    assert cdc.check_domain_coverage(spec, MAP_UNDER_B) == []
+    assert "WARNING" in capsys.readouterr().err
+
+
+def test_spec_id_from_filename_when_no_frontmatter_id(tmp_path):
+    p = tmp_path / "SPEC-202-name.md"
+    p.write_text("### FR-01: a\n", encoding="utf-8")
+    assert cdc.extract_spec_id("### FR-01: a\n", p) == "SPEC-202"
+
+
+def test_spec_id_not_read_from_body_after_frontmatter():
+    """frontmatter 無 id 時，不得把收尾 --- 之後正文的 id: 行當成 spec 識別。"""
+    spec = "---\ntitle: x\n---\nid: SPEC-999\n### FR-01: a\n"
+    assert cdc.extract_spec_id(spec) is None
+
+
+def test_spec_id_outside_spec_nnn_form_falls_back_to_compat(capsys):
+    """id 不是 SPEC-NNN 形式時 map 的歸屬鍵對不上，須走相容模式並警告，不得全數報未覆蓋。"""
+    spec = "---\nid: SPEC-UI-001\n---\n### FR-01: a\n"
+    assert cdc.check_domain_coverage(spec, MAP_UNDER_B) == []
+    assert "WARNING" in capsys.readouterr().err

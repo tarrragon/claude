@@ -125,7 +125,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging  # noqa: E402
-from lib.git_utils import get_project_root, run_git_command  # noqa: E402
+from lib.git_utils import (  # noqa: E402
+    get_project_root,
+    parse_name_status_z,
+    run_git_command,
+)
 from lib.commit_content_guards import (  # noqa: E402
     Finding,
     StagedFile,
@@ -203,11 +207,11 @@ def _merge_in_progress(project_root: Path) -> bool:
 
 def _changed_files(pre_rev: str, new_rev: str, project_root: Path) -> List[str]:
     ok, out = run_git_command(
-        ["diff", "--name-only", pre_rev, new_rev], cwd=str(project_root)
+        ["diff", "--name-only", "-z", pre_rev, new_rev], cwd=str(project_root)
     )
     if not ok or not out:
         return []
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    return [path for path in out.split("\0") if path]
 
 
 def _rename_map(pre_rev: str, new_rev: str, project_root: Path) -> Dict[str, str]:
@@ -215,18 +219,16 @@ def _rename_map(pre_rev: str, new_rev: str, project_root: Path) -> Dict[str, str
     commit-stage-guard-gate-hook.py 的 `_get_staged_rename_map` 相同，
     差別僅在比對對象是兩個 commit revision 而非 index。"""
     ok, out = run_git_command(
-        ["diff", "-M", "--name-status", pre_rev, new_rev], cwd=str(project_root)
+        ["diff", "-M", "--name-status", "-z", pre_rev, new_rev],
+        cwd=str(project_root),
     )
     if not ok or not out:
         return {}
-    rename_map: Dict[str, str] = {}
-    for line in out.splitlines():
-        parts = line.split("\t")
-        if len(parts) != 3 or not parts[0].startswith("R"):
-            continue
-        _status, old_path, new_path = parts
-        rename_map[new_path] = old_path
-    return rename_map
+    return {
+        new_path: old_path
+        for status, old_path, new_path in parse_name_status_z(out)
+        if status.startswith("R") and old_path is not None
+    }
 
 
 def _git_show(rev_spec: str, project_root: Path) -> str:

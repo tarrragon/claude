@@ -49,7 +49,7 @@ def _git_status_result(untracked_paths: list) -> MagicMock:
     lines = [f"?? {p}" for p in untracked_paths]
     result = MagicMock()
     result.returncode = 0
-    result.stdout = "\n".join(lines)
+    result.stdout = "".join(f"{line}\0" for line in lines)
     result.stderr = ""
     return result
 

@@ -87,12 +87,13 @@ def _is_git_commit_command(command: str) -> bool:
 def _get_changed_files(project_dir: Path, logger) -> List[str]:
     """取得 HEAD commit 的變更檔案清單。"""
     output = run_git(
-        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+        ["git", "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", "HEAD"],
         cwd=project_dir, timeout=5, logger=logger,
     )
     if not output:
         return []
-    return [line.strip() for line in output.split("\n") if line.strip()]
+    # -z：以 NUL 分隔原始路徑，不受 quotepath 加引號/跳脫影響
+    return [path for path in output.split("\0") if path]
 
 
 def _get_commit_msg(project_dir: Path, logger) -> str:

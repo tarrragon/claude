@@ -70,11 +70,79 @@ def extract_spec_frs(spec_text):
     return {int(m.group(1).split("-")[1]) for m in FR_HEADER_RE.finditer(spec_text)}
 
 
-def check_domain_coverage(spec_text, domain_map_text):
-    """回傳 spec 定義但 domain map 未覆蓋的 FR 編號（排序 list）。"""
+SPEC_ID_RE = re.compile(r"SPEC-\d+")
+FRONTMATTER_BLOCK_RE = re.compile(r"\A---\s*\n(.*?)^---\s*$", re.MULTILINE | re.DOTALL)
+FRONTMATTER_ID_LINE_RE = re.compile(r"^id:\s*[\"']?([^\s\"']+)", re.MULTILINE)
+HEADING_RE = re.compile(r"^(#{1,6})\s")
+
+
+def extract_spec_id(spec_text, spec_path=None):
+    """spec 識別：先取 frontmatter id，缺時取檔名的 SPEC-NNN 前綴，都沒有回 None。
+
+    只接受 SPEC-NNN 形式：domain map 的歸屬鍵由 SPEC_ID_RE 抽出，其他形式的 id
+    （如 SPEC-UI-001）在 map 端永遠對不上，回 None 讓呼叫端走相容模式並警告，
+    而不是把該 spec 的全部 FR 報成未覆蓋。frontmatter 只看收尾 --- 之前的區塊。
+    """
+    block = FRONTMATTER_BLOCK_RE.match(spec_text)
+    fm = FRONTMATTER_ID_LINE_RE.search(block.group(1)) if block else None
+    if fm:
+        candidate = fm.group(1).upper()
+        return candidate if SPEC_ID_RE.fullmatch(candidate) else None
+    if spec_path is not None:
+        name = SPEC_ID_RE.match(Path(spec_path).name)
+        if name:
+            return name.group(0).upper()
+    return None
+
+
+def _line_fr_owners(line, heading_spec):
+    """回傳該行每個 FR token 的（所屬 spec 或 None, FR 編號集合）。
+
+    歸屬順序：同一行在 token 之前最近的 SPEC-NNN；否則沿用祖先標題的 spec。
+    """
+    for m in FR_TOKEN_RE.finditer(line):
+        before = SPEC_ID_RE.findall(line[: m.start()])
+        owner = before[-1].upper() if before else heading_spec
+        yield owner, _expand_fr_token(m.group(1), m.group(2))
+
+
+def extract_fr_attribution(domain_map_text):
+    """回傳 ({spec_id: FR 編號集合}, 未歸屬 FR 編號集合)。"""
+    attributed, unattributed = {}, set()
+    stack = []  # [(標題階層, 該標題的 spec 或 None)]
+    for line in domain_map_text.splitlines():
+        heading = HEADING_RE.match(line)
+        if heading:
+            level = len(heading.group(1))
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            found = SPEC_ID_RE.search(line)
+            stack.append((level, found.group(0).upper() if found else None))
+        heading_spec = next((sp for _, sp in reversed(stack) if sp), None)
+        for owner, nums in _line_fr_owners(line, heading_spec):
+            if owner:
+                attributed.setdefault(owner, set()).update(nums)
+            else:
+                unattributed |= nums
+    return attributed, unattributed
+
+
+def check_domain_coverage(spec_text, domain_map_text, spec_path=None):
+    """回傳 spec 定義但 domain map 未覆蓋的 FR 編號（排序 list）。
+
+    比對鍵為（spec 識別, FR 編號）。spec 識別取不到、或 map 無任何已歸屬 token 時，
+    走相容模式（不分 spec 的舊比對）並於 stderr 說明。
+    """
     spec_frs = extract_spec_frs(spec_text)
-    covered = extract_fr_ids(domain_map_text)
-    return sorted(spec_frs - covered)
+    spec_id = extract_spec_id(spec_text, spec_path)
+    attributed, _ = extract_fr_attribution(domain_map_text)
+    if spec_id is None:
+        sys.stderr.write("WARNING: 取不到 spec 識別（frontmatter id / 檔名 SPEC-NNN），走相容模式（不分 spec 比對）\n")
+    elif not attributed:
+        sys.stderr.write("domain 覆蓋檢核：domain map 無任何 FR 歸屬到 SPEC-NNN，走相容模式（不分 spec 比對）\n")
+    else:
+        return sorted(spec_frs - attributed.get(spec_id, set()))
+    return sorted(spec_frs - extract_fr_ids(domain_map_text))
 
 
 def extract_event_signaled_frs(spec_text, signal_words=EVENT_FLOW_SIGNAL_WORDS):
@@ -145,9 +213,9 @@ def locate_domain_map(spec_path, explicit):
     return fallback if fallback.exists() else None
 
 
-def _report_domain_coverage(spec_text, domain_map_path):
+def _report_domain_coverage(spec_text, domain_map_path, spec_path=None):
     """列印 FR->bundle 覆蓋檢核結果，回傳 exit code。"""
-    uncovered = check_domain_coverage(spec_text, domain_map_path.read_text(encoding="utf-8"))
+    uncovered = check_domain_coverage(spec_text, domain_map_path.read_text(encoding="utf-8"), spec_path)
     if not uncovered:
         print(f"domain 覆蓋檢核通過：spec 全部 FR 皆在 {domain_map_path} 有 bundle 歸屬")
         return 0
@@ -198,7 +266,7 @@ def main(argv=None):
         )
         return 1
 
-    rc = _report_domain_coverage(spec_text, domain_map_path)
+    rc = _report_domain_coverage(spec_text, domain_map_path, spec_path)
     if args.check_event_flow_labeling:
         rc = _report_event_flow_labeling(spec_text, domain_map_path) or rc
     return rc

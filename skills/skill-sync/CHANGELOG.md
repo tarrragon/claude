@@ -2,6 +2,8 @@
 
 新到舊。版號有三個住址，bump 時必須一起動：本檔最上方的 `**Version**:` 條目、`SKILL.md` frontmatter 的 `metadata.version`、`pyproject.toml` 的 `project.version`。三者相等由 `tests/test_cli.py::test_three_version_addresses_agree` 斷言，漏動任何一處測試即紅並印出三個值。（`uv.lock` 也帶版號，但由 uv 依 `pyproject.toml` 自動重算，不是人工住址。）版號規則見專案的 skill 同步規範。
 
+**Version**: 1.24.3 — 本地變更，指向 tarrragon/claude#111：`cmd_list` 讀發佈庫目錄清單改用 `git ls-tree --name-only -z`，以 NUL 切分；修復非 ASCII 的 skill 目錄名被 git 預設 `core.quotepath=true` 加引號並八進位跳脫，導致 `list` 輸出跳脫字串且找不到對應 `SKILL.md` 描述。新增 `tests/test_list_cjk_dirs.py`（CJK 目錄名 fixture，修前紅、修後綠）
+
 **Version**: 1.24.2 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來
 
 **Version**: 1.24.1 — SKILL.md 的 `[BannedTerm]` 說明提到專案層測試的位置，加 `portability-allow` 標記——該行正在說明那份測試為何不能被套件依賴，路徑是論點的一部分。

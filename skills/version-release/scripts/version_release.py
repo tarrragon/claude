@@ -925,6 +925,21 @@ def print_overflow_migration_plan(overflow: List[Dict]) -> None:
         print_info(f"  - {t['id']} -> v{t['target_version']}（{t['target_reason']}）", 2)
 
 
+def collect_overflow_tickets(version: str) -> List[Dict]:
+    """取得版本的前移清單（pending 且無 scope_blocker 的 Ticket）。
+
+    check 用以切換結尾建議、release 用以拒絕執行；清單來源與
+    migrate_overflow_tickets 相同（collect_ticket_scope_groups 的 overflow 組）。
+    """
+    root = get_project_root()
+    config = load_version_release_config(root)
+    pattern = config.get(
+        "worklog_path_pattern", DEFAULT_VERSION_RELEASE_CONFIG["worklog_path_pattern"]
+    )
+    tickets_dir = resolve_worklog_dir(root, version, pattern) / "tickets"
+    return collect_ticket_scope_groups(tickets_dir, version)["overflow"]
+
+
 def check_worklog_completed(version: str) -> Tuple[bool, List[str]]:
     """檢查工作日誌是否完成"""
     root = get_project_root()
@@ -3595,24 +3610,28 @@ def snapshot_git_status_paths(root: Path) -> set:
 
     用途：作為 finish 收尾差集比對的基準快照。
     """
+    # -z：NUL 分隔且不做 quotepath 跳脫（CJK 路徑保持原文）。
+    # 記錄格式 "XY path"；X 或 Y 為 R/C 時後接一段 "origPath"。
     result = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "-z"],
         cwd=root,
         capture_output=True,
         text=True,
         timeout=10,
     )
     paths = set()
-    for line in result.stdout.splitlines():
-        if not line:
+    fields = result.stdout.split("\0")
+    idx = 0
+    while idx < len(fields):
+        record = fields[idx]
+        idx += 1
+        if len(record) < 4:
             continue
-        body = line[3:] if len(line) > 3 else line.strip()
-        if " -> " in body:
-            old, new = body.split(" -> ", 1)
-            paths.add(old.strip().strip('"'))
-            paths.add(new.strip().strip('"'))
-        else:
-            paths.add(body.strip().strip('"'))
+        paths.add(record[3:])
+        if record[0] in "RC" or record[1] in "RC":
+            if idx < len(fields) and fields[idx]:
+                paths.add(fields[idx])
+            idx += 1
     return paths
 
 
@@ -3630,11 +3649,29 @@ def check_residual_after_finish(root: Path, baseline: set) -> List[str]:
     return _diff_new_paths(root, baseline)
 
 
+def resolve_activation_version_paths(root: Path) -> set:
+    """回傳啟用步驟會 bump 的版本檔，相對 root 的 posix 路徑集合。
+
+    與 ensure_version_activated 的 (c) 同源（resolve_version_source），含
+    config 指定的 monorepo 子目錄版本檔；git-tag 策略或找不到版本檔時為空集合。
+    """
+    version_file, _parser = resolve_version_source(
+        root, load_version_release_config(root)
+    )
+    if version_file is None:
+        return set()
+    try:
+        return {version_file.resolve().relative_to(root.resolve()).as_posix()}
+    except ValueError:
+        return set()
+
+
 def commit_changes(
     version: str,
     dry_run: bool = False,
     baseline: Optional[set] = None,
     commit_message: Optional[str] = None,
+    extra_paths: Optional[set] = None,
 ) -> bool:
     """提交檔案變更。
 
@@ -3644,16 +3681,20 @@ def commit_changes(
     ——寫死清單在副作用集合成長時（如前移 ticket 產生的 rename）必然落
     後，差集是自描述的。未提供 baseline 時退回舊版寫死清單行為（相容既
     有呼叫點）。
+
+    extra_paths：額外納入的明確路徑（如啟用步驟 bump 的版本檔），仍須同時
+    出現在差集內才會 stage，不擴大到任意路徑。
     """
     root = get_project_root()
     message = commit_message or f"docs: 版本 {version} 發布準備"
+    extra = extra_paths or set()
 
     try:
         if baseline is not None:
             stage_targets = [
                 p
                 for p in _diff_new_paths(root, baseline)
-                if p == "CHANGELOG.md" or p.startswith("docs/")
+                if p == "CHANGELOG.md" or p.startswith("docs/") or p in extra
             ]
             if not stage_targets:
                 return True
@@ -3663,7 +3704,17 @@ def commit_changes(
                 return True
 
             for path in stage_targets:
-                subprocess.run(["git", "add", path], cwd=root, timeout=10)
+                add_result = subprocess.run(
+                    ["git", "add", "--", path],
+                    cwd=root,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if add_result.returncode != 0:
+                    print_warning(
+                        f"git add 失敗（{path}）：{(add_result.stderr or '').strip()}"
+                    )
 
             result = subprocess.run(
                 ["git", "commit", "-m", message],
@@ -4036,14 +4087,23 @@ def main():
 
             if ok:
                 print_success("所有檢查通過！該版本已準備好發布")
-                print_info("\n發布指令:", 1)
+                overflow = collect_overflow_tickets(version)
+                # 前移清單非空時 release 會被拒絕，建議必須改為 finish（由 finish 執行前移）
+                subcommand = "finish" if overflow else "release"
+                if overflow:
+                    print_info(
+                        f"\n前移 {len(overflow)} 張 pending Ticket 須先遷出，請用 finish（release 會拒絕）:",
+                        1,
+                    )
+                else:
+                    print_info("\n發布指令:", 1)
                 print_info(
-                    f"uv run .claude/skills/version-release/scripts/version_release.py release",
+                    f"uv run .claude/skills/version-release/scripts/version_release.py {subcommand}",
                     2,
                 )
                 print_info("\n或預覽:", 1)
                 print_info(
-                    f"uv run .claude/skills/version-release/scripts/version_release.py release --dry-run",
+                    f"uv run .claude/skills/version-release/scripts/version_release.py {subcommand} --dry-run",
                     2,
                 )
             else:
@@ -4076,6 +4136,18 @@ def main():
 
             if dry_run:
                 print_warning("預覽模式：不會執行實際的 git 操作\n")
+
+            # release：前移清單非空即拒絕。release 不做前移，照做會把 pending 票
+            # 留在已 completed 的版本下成為懸空票；此為資料正確性判定，--force 不覆蓋。
+            if args.command == "release":
+                overflow = collect_overflow_tickets(version)
+                if overflow:
+                    print_error(
+                        f"版本 {version} 有 {len(overflow)} 張待前移 pending Ticket，release 不執行前移，已中止"
+                    )
+                    print_overflow_migration_plan(overflow)
+                    print_info("請改用 finish（先前移再發布）；--force 不覆蓋此判定", 1)
+                    return 1
 
             # 差集比對基準：finish/release 執行前的 git status 快照。
             # 收尾 commit 的 staged 範圍與 exit 前殘留守衛皆以此為準，
@@ -4162,6 +4234,7 @@ def main():
                 dry_run,
                 baseline=finish_baseline,
                 commit_message=f"docs: 版本 {version} 標記完成並啟用下一版本",
+                extra_paths=resolve_activation_version_paths(finish_root),
             ):
                 print_warning("版本啟用變更提交失敗（請手動確認 todolist.yaml 狀態）")
 

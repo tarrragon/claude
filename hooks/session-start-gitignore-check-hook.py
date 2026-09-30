@@ -140,7 +140,7 @@ def check_tracked_runtime_state(project_root: Path, logger) -> List[str]:
     """用 git ls-files 偵測應 ignore 但已 tracked 的檔案。"""
     try:
         result = subprocess.run(
-            ["git", "ls-files"],
+            ["git", "ls-files", "-z"],
             cwd=str(project_root),
             capture_output=True,
             text=True,
@@ -154,8 +154,8 @@ def check_tracked_runtime_state(project_root: Path, logger) -> List[str]:
         return []
 
     tracked: List[str] = []
-    for line in result.stdout.splitlines():
-        path = line.strip()
+    # -z：以 NUL 分隔原始路徑，不受 quotepath 加引號/跳脫影響
+    for path in result.stdout.split("\0"):
         if not path:
             continue
         for pattern in TRACKED_DETECTION_PATTERNS:
