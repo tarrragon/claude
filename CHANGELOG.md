@@ -1,3 +1,15 @@
+## [2.67.0] - 2026-09-30
+
+### Summary
+feat: component-contract-design 3.13.1 空節點依位置分流; chore: .claude/VERSION 2.66.1（sync-push：schema 邊型正向基數 doc 1.23.0、建票可攜閘門 ticket 2.44.3）
+
+Changes: 1 feat, 1 chore
+
+- feat: component-contract-design 3.13.1 空節點依位置分流
+- chore: .claude/VERSION 2.66.1（sync-push：schema 邊型正向基數 doc 1.23.0、建票可攜閘門 ticket 2.44.3）
+
+---
+
 ## [2.66.1] - 2026-09-30
 
 ### Summary
