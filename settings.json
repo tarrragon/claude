@@ -45,7 +45,8 @@
           },
           {
             "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hooks-test-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hooks-test-gate-hook.py",
+            "timeout": 120
           },
           {
             "type": "command",

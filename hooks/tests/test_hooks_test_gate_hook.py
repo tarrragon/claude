@@ -23,6 +23,7 @@ import importlib.util
 import io
 import json
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -218,7 +219,9 @@ class TestMainIntegration:
             lambda *a, **k: (True, "M\0.claude/hooks/foo-hook.py\0"),
         )
         monkeypatch.setattr(
-            hook_module, "_run_pytest", lambda test_paths, hooks_dir, logger: (True, "1 passed")
+            hook_module,
+            "_run_pytest",
+            lambda test_paths, hooks_dir, logger, timeout=None: ("pass", "1 passed"),
         )
 
         exit_code, captured = _run_main(
@@ -243,7 +246,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "_run_pytest",
-            lambda test_paths, hooks_dir, logger: (False, "1 failed"),
+            lambda test_paths, hooks_dir, logger, timeout=None: ("red", "1 failed"),
         )
 
         exit_code, captured = _run_main(
@@ -349,6 +352,126 @@ class TestMainIntegration:
         )
         assert exit_code == 0
         assert captured == []
+
+    # ---- 逐檔執行與逾時語意（E1 / E2） ----
+
+    def _setup_files(self, monkeypatch, tmp_path, names):
+        tests_dir = tmp_path / ".claude" / "hooks" / "tests"
+        tests_dir.mkdir(parents=True)
+        staged = ""
+        for n in names:
+            (tests_dir / f"test_{n}_hook.py").write_text("def test_x():\n    pass\n")
+            staged += f"M\0.claude/hooks/{n}-hook.py\0"
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(hook_module, "run_git_command", lambda *a, **k: (True, staged))
+
+    def _fake_subprocess(self, monkeypatch, per_file_seconds, hang=(), red=()):
+        """假 subprocess.run：耗時 = 0.5s * 檔案數（合併呼叫隨檔數線性增長，
+        單檔皆快）；檔名含 hang 者永遠卡住，含 red 者 returncode=1。"""
+        import subprocess
+
+        def _fake_run(cmd, timeout=None, **kw):
+            paths = [c for c in cmd if c.endswith(".py")]
+            hangs = any(h in p for p in paths for h in hang)
+            duration = 1000 if hangs else per_file_seconds * len(paths)
+            if timeout is not None and duration > timeout:
+                time.sleep(timeout)
+                raise subprocess.TimeoutExpired(cmd, timeout)
+            time.sleep(duration)
+            rc = 1 if any(r in p for p in paths for r in red) else 0
+            return subprocess.CompletedProcess(cmd, rc, stdout="out", stderr="")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _fake_run)
+
+    def _cmd_input(self):
+        return {"tool_name": "Bash", "tool_input": {"command": 'git commit -m "x"'}}
+
+    def test_e1_many_green_files_total_over_single_limit_allowed(
+        self, monkeypatch, tmp_path
+    ):
+        """E1：4 檔各 0.5s 皆綠，合併耗時 2s 超過單一上限 1s。修正前合併執行
+        逾時被 deny；逐檔執行後每檔 0.5s < 1s，放行。"""
+        self._setup_files(monkeypatch, tmp_path, ["a", "b", "c", "d"])
+        self._fake_subprocess(monkeypatch, 0.5)
+        # 舊常數（修正前）與新常數同設 1s，使同一測試可在修正前後各跑一次
+        monkeypatch.setattr(hook_module, "PYTEST_TIMEOUT", 1.0, raising=False)
+        monkeypatch.setattr(hook_module, "PER_FILE_TIMEOUT", 1.0, raising=False)
+        monkeypatch.setattr(hook_module, "TOTAL_BUDGET", 30, raising=False)
+        exit_code, captured = _run_main(monkeypatch, self._cmd_input())
+        assert exit_code == 0
+        assert captured == []
+
+    def test_e2_single_file_hang_still_denied(self, monkeypatch, tmp_path):
+        """E2 核心：單檔真實卡住，修正前後皆 deny（逾時語意不變，保守方向）。"""
+        self._setup_files(monkeypatch, tmp_path, ["a", "stuck"])
+        self._fake_subprocess(monkeypatch, 0.1, hang=("stuck",))
+        monkeypatch.setattr(hook_module, "PYTEST_TIMEOUT", 1.0, raising=False)
+        monkeypatch.setattr(hook_module, "PER_FILE_TIMEOUT", 1.0, raising=False)
+        monkeypatch.setattr(hook_module, "TOTAL_BUDGET", 30, raising=False)
+        _, captured = _run_main(monkeypatch, self._cmd_input())
+        output = json.loads(captured[0])
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_e2_single_file_hang_denied_and_named(self, monkeypatch, tmp_path):
+        """E2：單檔真實卡住仍 deny，訊息指名該檔且標示逾時（非紅燈）。"""
+        self._setup_files(monkeypatch, tmp_path, ["a", "stuck"])
+        self._fake_subprocess(monkeypatch, 0.1, hang=("stuck",))
+        monkeypatch.setattr(hook_module, "PYTEST_TIMEOUT", 1.0, raising=False)
+        monkeypatch.setattr(hook_module, "PER_FILE_TIMEOUT", 1.0, raising=False)
+        monkeypatch.setattr(hook_module, "TOTAL_BUDGET", 30, raising=False)
+        exit_code, captured = _run_main(monkeypatch, self._cmd_input())
+        assert exit_code == 0
+        output = json.loads(captured[0])
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        reason = output["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "stuck-hook.py" in reason
+        assert "逾時" in reason
+        assert "a-hook.py ->" not in reason  # 綠燈檔不列入
+
+    def test_e2_red_file_denied_and_labeled_red_not_timeout(
+        self, monkeypatch, tmp_path
+    ):
+        """E2：測試紅燈 deny，標示紅燈而非逾時。"""
+        self._setup_files(monkeypatch, tmp_path, ["a", "bad"])
+        self._fake_subprocess(monkeypatch, 0.1, red=("bad",))
+        monkeypatch.setattr(hook_module, "PYTEST_TIMEOUT", 5.0, raising=False)
+        monkeypatch.setattr(hook_module, "PER_FILE_TIMEOUT", 5.0, raising=False)
+        monkeypatch.setattr(hook_module, "TOTAL_BUDGET", 30, raising=False)
+        _, captured = _run_main(monkeypatch, self._cmd_input())
+        reason = json.loads(captured[0])["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "bad-hook.py" in reason
+        assert "紅燈" in reason
+        assert "逾時" not in reason.split("測試輸出")[0]
+
+    def test_total_budget_exhausted_denies_unrun_files(self, monkeypatch, tmp_path):
+        """總耗時上界：預算耗盡後未執行的檔案保守 deny 並指名，總耗時不超過預算。"""
+        self._setup_files(monkeypatch, tmp_path, ["a", "b", "c", "d"])
+        self._fake_subprocess(monkeypatch, 0.5)
+        monkeypatch.setattr(hook_module, "PER_FILE_TIMEOUT", 5.0, raising=False)
+        monkeypatch.setattr(hook_module, "TOTAL_BUDGET", 1.2, raising=False)
+        start = time.monotonic()
+        _, captured = _run_main(monkeypatch, self._cmd_input())
+        elapsed = time.monotonic() - start
+        reason = json.loads(captured[0])["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "總預算" in reason
+        assert "d-hook.py" in reason
+        assert elapsed < 1.2 + 1.0  # 預算 + 最後一檔單次誤差
+
+    def test_settings_timeout_exceeds_worst_case(self):
+        """settings.json 註冊本 hook 的 timeout（單位：秒）須與常數一致，
+        且大於最壞總耗時上界 TOTAL_BUDGET + 5s 開銷，否則平台先殺掉 gate
+        （non-blocking）等於放行。"""
+        settings = json.loads((HOOKS_DIR.parent / "settings.json").read_text())
+        found = []
+        for entries in settings["hooks"].values():
+            for entry in entries:
+                for h in entry.get("hooks", []):
+                    if "hooks-test-gate-hook.py" in h.get("command", ""):
+                        found.append(h.get("timeout"))
+        assert found and all(t is not None for t in found), "須明示 timeout"
+        for t in found:
+            assert t == hook_module.PLATFORM_TIMEOUT_SECONDS
+            assert t > hook_module.TOTAL_BUDGET + 5
 
     def test_cross_repo_commit_skipped(self, monkeypatch, tmp_path):
         monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)

@@ -1,3 +1,15 @@
+## [2.64.2] - 2026-09-30
+
+### Summary
+fix: hooks-test-gate 改逐檔執行 + 總預算 + 明示平台 timeout; chore: .claude/VERSION 2.64.1；某版本 notes 記發版時待驗證項與 version-release 推送條件
+
+Changes: 1 fix, 1 chore
+
+- fix: hooks-test-gate 改逐檔執行 + 總預算 + 明示平台 timeout
+- chore: .claude/VERSION 2.64.1；某版本 notes 記發版時待驗證項與 version-release 推送條件
+
+---
+
 ## [2.64.1] - 2026-09-30
 
 ### Summary

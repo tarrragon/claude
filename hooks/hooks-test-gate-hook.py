@@ -77,6 +77,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
@@ -94,9 +95,28 @@ from lib.git_utils import parse_name_status_z, run_git_command  # noqa: E402
 
 HOOK_NAME = "hooks-test-gate"
 
-# 單一目標測試檔基準 0.21s（W3-188 實測），逾時代表測試檔本身有問題
-# （如無窮迴圈），非本 gate 職責涵蓋範圍，保守給 30s 容錯空間。
-PYTEST_TIMEOUT = 30
+# 逐檔執行：每個對應測試檔各跑一次 pytest，單檔逾時才判失敗。
+# 舊設計把本次提交觸及的全部測試合成一次呼叫並套固定 30s 上限，總耗時隨觸及
+# hook 數線性增長（consumer 實測 10 支 hook 合併 45.2s），綠燈被報為逾時。
+#
+# 單檔上限：本 repo 最慢四檔各取樣 5 次（負載下），bash-git-protected-branch-guard
+# 分佈 9.2 / 10.4 / 15.2 / 17.2 / 37.5s（最大值為負載尖峰），其餘三檔 <= 17s。
+# 取 60s 使負載尖峰不誤擋；超過視為測試檔本身卡住（無窮迴圈等），保守判失敗。
+PER_FILE_TIMEOUT = 60
+
+# 總預算（秒）：所有測試檔累計耗時的硬上限，每檔實際逾時 = min(PER_FILE_TIMEOUT, 剩餘預算)。
+# 最壞總耗時 = TOTAL_BUDGET + 進入測試前的 git diff 等開銷（實務 < 5s）。
+# 平台 hook timeout 為 non-blocking：gate 被平台殺掉等於放行且無訊號，
+# 故 settings.json 明示 timeout（單位：秒）必須大於此上界。
+TOTAL_BUDGET = 100
+
+# settings.json 中本 hook 註冊的 timeout（單位：秒；測試驗證兩者一致且大於最壞上界）。
+PLATFORM_TIMEOUT_SECONDS = 120
+
+_STATUS_PASS = "pass"
+_STATUS_RED = "red"
+_STATUS_TIMEOUT = "timeout"
+_STATUS_SKIPPED = "skipped"
 
 # 便宜前置判斷：命令是否含 "commit" 字樣（非 git 相關的 Bash 命令於此短路）
 _COMMIT_WORD_RE = re.compile(r"\bcommit\b")
@@ -270,12 +290,15 @@ def _resolve_test_paths(
     return tested, untested
 
 
-def _run_pytest(test_paths: List[Path], hooks_dir: Path, logger) -> "tuple[bool, str]":
-    """跑指定測試檔清單，回傳 (是否通過, 輸出末段供 deny 訊息附帶)。"""
+def _run_pytest(
+    test_paths: List[Path], hooks_dir: Path, logger, timeout: Optional[float] = None
+) -> "tuple[str, str]":
+    """跑指定測試檔清單，回傳 (狀態, 輸出末段)。狀態為 pass / red / timeout。"""
+    limit = PER_FILE_TIMEOUT if timeout is None else timeout
     cmd = ["uv", "run", "--project", str(hooks_dir), "pytest", "-q"] + [
         str(p) for p in test_paths
     ]
-    logger.info("執行目標測試: %s", cmd)
+    logger.info("執行目標測試（timeout=%ss）: %s", limit, cmd)
     try:
         result = subprocess.run(
             cmd,
@@ -283,15 +306,39 @@ def _run_pytest(test_paths: List[Path], hooks_dir: Path, logger) -> "tuple[bool,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=PYTEST_TIMEOUT,
+            timeout=limit,
         )
     except subprocess.TimeoutExpired:
-        logger.warning("目標測試執行逾時（%ss），保守判定為失敗", PYTEST_TIMEOUT)
-        return False, f"測試逾時（{PYTEST_TIMEOUT}s）"
+        logger.warning("目標測試執行逾時（%ss），保守判定為失敗", limit)
+        return _STATUS_TIMEOUT, f"測試逾時（{limit:g}s）"
     output_tail = "\n".join((result.stdout + result.stderr).splitlines()[-20:])
-    passed = result.returncode == 0
+    status = _STATUS_PASS if result.returncode == 0 else _STATUS_RED
     logger.info("目標測試結果: returncode=%d", result.returncode)
-    return passed, output_tail
+    return status, output_tail
+
+
+def _run_all_tests(
+    tested: Dict[str, Path], hooks_dir: Path, logger
+) -> "Dict[str, tuple[str, str]]":
+    """逐檔執行，回傳 {hook檔名: (狀態, 輸出末段)}。
+
+    每檔逾時 = min(PER_FILE_TIMEOUT, 剩餘總預算)；預算耗盡後其餘檔案標記
+    skipped（保守方向：視同未通過，不放行）。最壞總耗時 <= TOTAL_BUDGET。
+    """
+    deadline = time.monotonic() + TOTAL_BUDGET
+    results = {}
+    for hook_filename, test_path in sorted(tested.items()):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            logger.warning("總預算 %ss 耗盡，未執行: %s", TOTAL_BUDGET, hook_filename)
+            results[hook_filename] = (
+                _STATUS_SKIPPED,
+                f"總預算 {TOTAL_BUDGET}s 耗盡，未執行",
+            )
+            continue
+        timeout = min(PER_FILE_TIMEOUT, remaining)
+        results[hook_filename] = _run_pytest([test_path], hooks_dir, logger, timeout)
+    return results
 
 
 _BOUNDARY_NOTE = (
@@ -300,16 +347,33 @@ _BOUNDARY_NOTE = (
 )
 
 
-def _build_deny_message(failing: Dict[str, Path], output_tail: str) -> str:
-    files_block = "\n".join(f"  - {f} -> {p}" for f, p in sorted(failing.items()))
+_STATUS_LABELS = {
+    _STATUS_RED: "測試紅燈（未通過）",
+    _STATUS_TIMEOUT: "測試逾時（單檔超過上限，疑似卡住）",
+    _STATUS_SKIPPED: "未執行（總預算耗盡，保守視為未通過）",
+}
+
+
+def _build_deny_message(tested: Dict[str, Path], results: dict) -> str:
+    """區分測試紅、單檔逾時、總預算耗盡未執行，並指名檔案。"""
+    lines = []
+    tails = []
+    for hook_filename, (status, tail) in sorted(results.items()):
+        if status == _STATUS_PASS:
+            continue
+        lines.append(
+            f"  - {hook_filename} -> {tested[hook_filename]} : {_STATUS_LABELS[status]}"
+        )
+        tails.append(f"[{hook_filename}]\n{tail}")
     return (
         "Hooks 目標測試 gate：commit 被阻止\n\n"
         "以下被改動的 hook 檔對應測試未通過：\n"
-        f"{files_block}\n\n"
-        "測試輸出（末段）：\n"
-        f"{output_tail}\n\n"
-        f"{_BOUNDARY_NOTE}\n"
+        + "\n".join(lines)
+        + "\n\n測試輸出（末段）：\n"
+        + "\n\n".join(tails)
+        + f"\n\n{_BOUNDARY_NOTE}\n"
         "請修正對應測試後再重試 commit。"
+        f"（單檔上限 {PER_FILE_TIMEOUT}s，總預算 {TOTAL_BUDGET}s）"
     )
 
 
@@ -363,13 +427,14 @@ def main() -> int:
     tested, untested = _resolve_test_paths(touched, hooks_dir)
 
     if tested:
-        passed, output_tail = _run_pytest(list(tested.values()), hooks_dir, logger)
-        if not passed:
-            logger.info("目標測試紅燈，阻擋 commit: %s", sorted(tested.keys()))
+        results = _run_all_tests(tested, hooks_dir, logger)
+        failing = {f: r[0] for f, r in results.items() if r[0] != _STATUS_PASS}
+        if failing:
+            logger.info("目標測試未通過，阻擋 commit: %s", sorted(failing.items()))
             emit_hook_output(
                 "PreToolUse",
                 permission_decision="deny",
-                permission_decision_reason=_build_deny_message(tested, output_tail),
+                permission_decision_reason=_build_deny_message(tested, results),
                 input_data=input_data,
             )
             return 0
