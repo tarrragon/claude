@@ -13,6 +13,7 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
+from ticket_system.lib import git_utils
 from ticket_system.lib.plan_parser import parse_plan
 from ticket_system.lib.ticket_generator import generate, GeneratedTicket
 from ticket_system.lib.ticket_loader import get_tickets_dir, save_ticket, get_ticket_path
@@ -77,9 +78,16 @@ def execute(args: argparse.Namespace) -> int:
 
     # 若非預演模式，保存 Tickets
     if not dry_run:
-        saved_count = _save_tickets(gen_result, version)
+        saved_paths: list = []
+        saved_count = _save_tickets(gen_result, version, saved_paths)
         print()
         print(format_info(GenerateMessages.TICKETS_SAVED_FORMAT, saved=saved_count, total=gen_result.total))
+        # 新生成的票檔以單一 commit 提交；最終失敗以 75 反映（寫入已落 working tree）
+        if git_utils.commit_ticket_mds_reporting(
+            "generate", saved_paths, Path(saved_paths[0]).stem if saved_paths else "",
+            "generate", operation="generate",
+        ):
+            return git_utils.EXIT_AUTO_COMMIT_FAILED
 
     return 0
 
@@ -139,12 +147,13 @@ def _print_checklist_warnings(gen_result) -> None:
         )
 
 
-def _save_tickets(gen_result, version: str) -> int:
+def _save_tickets(gen_result, version: str, saved_paths_out: Optional[list] = None) -> int:
     """保存生成的 Tickets 到檔案。
 
     Args:
         gen_result: GenerationResult 物件
         version: 版本號
+        saved_paths_out: 若提供，成功保存的票檔路徑（str）依序追加於此，供呼叫端提交
 
     Returns:
         成功保存的 Ticket 數量
@@ -174,6 +183,8 @@ def _save_tickets(gen_result, version: str) -> int:
             ticket_path = get_ticket_path(version, ticket.id)
             save_ticket(frontmatter, ticket_path)
             saved_count += 1
+            if saved_paths_out is not None:
+                saved_paths_out.append(str(ticket_path))
 
         except Exception as e:
             print(format_warning(WarningMessages.BACKUP_FAILED, error=str(e)))

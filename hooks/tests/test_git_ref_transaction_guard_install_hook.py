@@ -122,5 +122,81 @@ class TestInstall:
         assert not (non_repo / ".git").exists()
 
 
+def _install_shim_with_fake_uv(repo, tmp_path, uv_rc):
+    """安裝 shim，並讓 repo 內存在 guard 檔、PATH 內的 uv 以 uv_rc 結束。
+    uv_rc 為 None 時 PATH 不含 uv（模擬 rc=127）。回傳 env。"""
+    _run_installer(repo)
+    guard = repo / ".claude" / "hooks" / "git-ref-transaction-content-guard.py"
+    guard.parent.mkdir(parents=True, exist_ok=True)
+    guard.write_text("", encoding="utf-8")
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    if uv_rc is not None:
+        uv = fakebin / "uv"
+        uv.write_text(f"#!/bin/sh\nexit {uv_rc}\n", encoding="utf-8")
+        uv.chmod(0o755)
+    # 系統路徑不含 uv（uv 在 homebrew / ~/.local），故 None 即 127
+    return {"PATH": f"{fakebin}:/usr/bin:/bin", "HOME": str(tmp_path),
+            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+
+
+def _commit(repo, env):
+    (repo / "f.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "f.txt"], cwd=str(repo), env=env, check=True)
+    return subprocess.run(["git", "commit", "-qm", "m"], cwd=str(repo),
+                          capture_output=True, text=True, env=env)
+
+
+class TestShimExitSemantics:
+    def test_guard_block_code_aborts_ref_write(self, scratch_repo, tmp_path):
+        env = _install_shim_with_fake_uv(
+            scratch_repo, tmp_path, hook_module.GUARD_BLOCK_EXIT_CODE)
+        result = _commit(scratch_repo, env)
+        assert result.returncode != 0
+        head = subprocess.run(["git", "rev-parse", "--verify", "-q", "HEAD"],
+                              cwd=str(scratch_repo), capture_output=True, env=env)
+        assert head.returncode != 0
+
+    @pytest.mark.parametrize("rc", [1, 2, 101])
+    def test_uv_failure_fails_open_with_warning(self, scratch_repo, tmp_path, rc):
+        env = _install_shim_with_fake_uv(scratch_repo, tmp_path, rc)
+        result = _commit(scratch_repo, env)
+        assert result.returncode == 0, result.stderr
+        assert "reference-transaction" in result.stderr
+
+    def test_uv_missing_fails_open_with_warning(self, scratch_repo, tmp_path):
+        env = _install_shim_with_fake_uv(scratch_repo, tmp_path, None)
+        result = _commit(scratch_repo, env)
+        assert result.returncode == 0, result.stderr
+        assert "reference-transaction" in result.stderr
+
+
+class TestShimVersion:
+    def test_body_carries_version_marker(self):
+        assert f"shim-version: {hook_module.SHIM_VERSION}" in hook_module._shim_body()
+
+    def test_old_shim_without_version_is_upgraded(self, scratch_repo):
+        target = scratch_repo / ".git" / "hooks" / hook_module.HOOK_FILENAME
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            f"#!/bin/sh\n{hook_module.SHIM_MARKER} -- old\nexec uv run --quiet x\n",
+            encoding="utf-8")
+        _run_installer(scratch_repo)
+        assert f"shim-version: {hook_module.SHIM_VERSION}" in target.read_text(encoding="utf-8")
+
+
+class TestShimWarningRcExpansion:
+    def test_rc_is_brace_delimited_before_fullwidth_punctuation(self):
+        """警告訊息中 rc 須寫成 ${rc}。
+
+        bash 在 C locale 會把緊接的全形標點位元組併入變數名，`$rc）` 展開為空值並輸出亂碼，
+        使「guard 啟動失敗（rc=...）」看不到實際離開碼。
+        """
+        body = hook_module._shim_body()
+        assert "rc=${rc}" in body
+        assert "rc=$rc）" not in body
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

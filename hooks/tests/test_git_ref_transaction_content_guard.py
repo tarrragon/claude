@@ -151,7 +151,7 @@ class TestMainIntegration:
 
         result = _run_guard(scratch_repo, "prepared", stdin_text)
 
-        assert result.returncode == 1
+        assert result.returncode == 87
         assert "reference-stability-rule8-guard" in result.stderr
         assert "git-ref-transaction-content-guard" in result.stderr
 
@@ -283,7 +283,7 @@ class TestMergeExemption:
 
         result = _run_guard(scratch_repo, "prepared", stdin_text)
 
-        assert result.returncode == 1
+        assert result.returncode == 87
         assert "branch-verify" in result.stderr
 
     def test_merge_with_other_guard_violation_includes_residue_cleanup_note(
@@ -301,7 +301,7 @@ class TestMergeExemption:
 
         result = _run_guard(scratch_repo, "prepared", stdin_text)
 
-        assert result.returncode == 1
+        assert result.returncode == 87
         assert "reference-stability-rule8-guard" in result.stderr
         assert "merge 殘局提醒" in result.stderr
         assert "git merge --abort" in result.stderr
@@ -322,6 +322,233 @@ class TestMergeExemption:
         result = _run_guard(scratch_repo, "prepared", stdin_text)
 
         assert result.returncode == 0, result.stderr
+
+
+# ============================================================================
+# 批次化（子程序數與 F 無關）與新舊路徑等價性
+#
+# 「舊路徑」= 檔內保留的逐檔實作（`_build_scan_files_legacy` +
+# `_check_branch_verify` 不帶 ctx），同時是批次化失敗時的 fallback；
+# 「新路徑」= 批次化實作。同一輸入兩者的 StagedFile 與 findings 必須逐項相同。
+# ============================================================================
+
+
+def _make_commit_from_files(repo, base_sha, files, extra_parents=()):
+    """在 base_sha 之上以 commit-tree 建立含多檔變更的懸空 commit。
+    files: {相對路徑: bytes | None}，None 表示刪除。回傳新 commit SHA。"""
+    for rel, data in files.items():
+        target = repo / rel
+        if data is None:
+            if target.exists():
+                target.unlink()
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    _run_git(["add", "-A"], cwd=repo)
+    tree = _capture(["write-tree"], cwd=repo)
+    parent_args = []
+    for parent in (base_sha,) + tuple(extra_parents):
+        parent_args += ["-p", parent]
+    new_sha = _capture(["commit-tree", tree] + parent_args + ["-m", "multi"], cwd=repo)
+    _run_git(["reset", "-q", "--hard", base_sha], cwd=repo)
+    return new_sha
+
+
+def _commit_on_main(repo, files):
+    for rel, data in files.items():
+        target = repo / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    _run_git(["add", "-A"], cwd=repo)
+    _run_git(["commit", "-q", "-m", "setup"], cwd=repo)
+    return _capture(["rev-parse", "HEAD"], cwd=repo)
+
+
+_OLD_NOTE = "".join(f"line {i} of the original note\n" for i in range(12)).encode()
+
+
+def _scenario_violation(repo):
+    head = _capture(["rev-parse", "HEAD"], cwd=repo)
+    return head, _make_commit_from_files(
+        repo, head, {".claude/references/y.md": "既有內容。\n引用 W9-501 的分析結論。\n".encode()}
+    ), False
+
+
+def _scenario_clean(repo):
+    head = _capture(["rev-parse", "HEAD"], cwd=repo)
+    return head, _make_commit_from_files(
+        repo, head, {".claude/notes/clean.md": b"plain content\n"}
+    ), False
+
+
+def _scenario_multi_file(repo):
+    """多檔：新增（豁免與非豁免路徑）、修改、刪除、改名+微改、CRLF、
+    尾端多重換行、含違規檔。"""
+    head = _commit_on_main(
+        repo,
+        {
+            ".claude/notes/old.md": _OLD_NOTE,
+            ".claude/notes/edit.md": b"before\n",
+            ".claude/notes/gone.md": b"to be deleted\n",
+        },
+    )
+    return head, _make_commit_from_files(
+        repo,
+        head,
+        {
+            ".claude/notes/old.md": None,
+            ".claude/notes/renamed.md": _OLD_NOTE + b"one more line\n",
+            ".claude/notes/edit.md": b"after\r\nsecond\r\n\n\n",
+            ".claude/notes/gone.md": None,
+            "lib/app.dart": b"void main() {}\n",
+            ".claude/references/v.md": "引用 W9-502 的分析結論。\n".encode(),
+            ".claude/notes/crlf.md": b"a\r\nb\r\n",
+        },
+    ), False
+
+
+def _scenario_root_commit(repo):
+    head = _capture(["rev-parse", "HEAD"], cwd=repo)
+    tree_file = repo / ".claude" / "notes" / "root.md"
+    tree_file.parent.mkdir(parents=True, exist_ok=True)
+    tree_file.write_text("root content\n", encoding="utf-8")
+    _run_git(["add", "-A"], cwd=repo)
+    tree = _capture(["write-tree"], cwd=repo)
+    new_sha = _capture(["commit-tree", tree, "-m", "root"], cwd=repo)
+    _run_git(["reset", "-q", "--hard", head], cwd=repo)
+    return head, new_sha, False
+
+
+def _scenario_merge(repo):
+    main_head, merge_sha = _prepare_merge_commit(repo, "lib/app.dart", "void main() {}\n")
+    return main_head, merge_sha, True
+
+
+_SCENARIOS = {
+    "violation": _scenario_violation,
+    "clean": _scenario_clean,
+    "multi_file": _scenario_multi_file,
+    "root_commit": _scenario_root_commit,
+    "merge": _scenario_merge,
+}
+
+
+class _Logger:
+    def info(self, *a, **k): pass
+    def debug(self, *a, **k): pass
+    def warning(self, *a, **k): pass
+
+
+def _legacy_findings(files, project_root, is_merge):
+    """舊路徑的 findings：逐檔呼叫不帶 ctx 的 _check_branch_verify（每檔自行
+    重查專案根與分支），其餘 per-file 檢查與 wrap 一致性檢查照舊。"""
+    from lib import commit_content_guards as ccg
+
+    findings, wrap_checked = [], False
+    for sf in files:
+        for check in ccg._PER_FILE_CHECKS:
+            findings.extend(check(sf, _Logger()))
+        findings.extend(ccg._check_branch_verify(sf, _Logger(), is_merge_commit=is_merge))
+        if not wrap_checked:
+            wrap_findings = ccg._check_wrap_skill_yaml(sf, _Logger(), project_root)
+            if wrap_findings:
+                findings.extend(wrap_findings)
+                wrap_checked = True
+    return findings
+
+
+class TestBatchedEquivalence:
+    @pytest.mark.parametrize("name", sorted(_SCENARIOS))
+    def test_staged_files_identical_to_legacy(self, scratch_repo, monkeypatch, name):
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(scratch_repo)
+        _base, new_sha, _merge = _SCENARIOS[name](scratch_repo)
+
+        legacy = hook_module._build_scan_files_legacy(new_sha, scratch_repo)
+        commits = hook_module._collect_new_commits_with_parents([new_sha], scratch_repo)
+        batched = hook_module._build_scan_files_batched(commits, scratch_repo)
+
+        assert legacy, "情境應至少有一個變更檔"
+        assert batched[new_sha] == legacy
+
+    @pytest.mark.parametrize("name", sorted(_SCENARIOS))
+    def test_findings_identical_to_legacy(self, scratch_repo, monkeypatch, name):
+        from lib import commit_content_guards as ccg
+
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(scratch_repo)
+        _base, new_sha, is_merge = _SCENARIOS[name](scratch_repo)
+        files = hook_module._build_scan_files_legacy(new_sha, scratch_repo)
+
+        old = _legacy_findings(files, scratch_repo, is_merge)
+        new = ccg._run_all_checks(files, scratch_repo, _Logger(), is_merge_commit=is_merge)
+
+        assert new == old
+
+    def test_scenarios_cover_both_verdicts(self, scratch_repo, monkeypatch):
+        """對照輸入（規則 E2）：情境集合必須同時含有 deny 與無 deny，否則
+        等價性測試可能在「兩邊都空」的情況下空轉通過。"""
+        from lib import commit_content_guards as ccg
+
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(scratch_repo)
+        _b, violating, _m = _scenario_violation(scratch_repo)
+        _b, clean, _m = _scenario_clean(scratch_repo)
+        v = ccg._run_all_checks(
+            hook_module._build_scan_files_legacy(violating, scratch_repo), scratch_repo, _Logger()
+        )
+        c = ccg._run_all_checks(
+            hook_module._build_scan_files_legacy(clean, scratch_repo), scratch_repo, _Logger()
+        )
+        assert any(f.severity == "deny" for f in v)
+        assert not any(f.severity == "deny" for f in c)
+
+    def test_fallback_to_legacy_when_patch_sections_mismatch(self, scratch_repo, monkeypatch):
+        """全量 patch 區段數與 name-status 條目數不符時，批次路徑必須退回
+        逐檔實作，結果仍與舊路徑相同。"""
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(scratch_repo)
+        _b, new_sha, _m = _scenario_multi_file(scratch_repo)
+        legacy = hook_module._build_scan_files_legacy(new_sha, scratch_repo)
+        commits = hook_module._collect_new_commits_with_parents([new_sha], scratch_repo)
+        monkeypatch.setattr(hook_module, "_split_patch_sections", lambda text: [])
+        assert hook_module._build_scan_files_batched(commits, scratch_repo)[new_sha] == legacy
+
+
+def _count_git_subprocesses(repo, stdin_text, tmp_path):
+    trace = tmp_path / f"trace-{repo.name}.log"
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "GIT_TRACE": str(trace)}
+    result = subprocess.run(
+        [sys.executable, str(HOOKS_DIR / "git-ref-transaction-content-guard.py"), "prepared"],
+        input=stdin_text, cwd=str(repo), capture_output=True, text=True, env=env,
+    )
+    lines = trace.read_text(encoding="utf-8").splitlines()
+    return result, sum(1 for line in lines if "trace: built-in: git" in line)
+
+
+class TestSubprocessCountConstant:
+    """git 子程序數不得隨變更檔數 F 成長（持鎖時間與子程序數成正比）。"""
+
+    def _run_with_f(self, tmp_path, n_files):
+        repo = tmp_path / f"r{n_files}"
+        repo.mkdir()
+        _run_git(["init", "-q", "-b", "main"], cwd=repo)
+        _run_git(["config", "user.email", "t@e.com"], cwd=repo)
+        _run_git(["config", "user.name", "T"], cwd=repo)
+        (repo / "README.md").write_text("b\n", encoding="utf-8")
+        _run_git(["add", "."], cwd=repo)
+        _run_git(["commit", "-q", "-m", "b"], cwd=repo)
+        head = _capture(["rev-parse", "HEAD"], cwd=repo)
+        files = {f".claude/notes/n{i}.md": b"plain content\n" for i in range(n_files)}
+        new_sha = _make_commit_from_files(repo, head, files)
+        return _count_git_subprocesses(repo, f"{head} {new_sha} refs/heads/main\n", tmp_path)
+
+    def test_count_independent_of_changed_file_count(self, tmp_path):
+        r1, n1 = self._run_with_f(tmp_path, 1)
+        r21, n21 = self._run_with_f(tmp_path, 21)
+        assert r1.returncode == 0 and r21.returncode == 0
+        assert n21 == n1, f"F=1 -> {n1} 個子程序，F=21 -> {n21} 個"
+        assert n21 <= 20
 
 
 if __name__ == "__main__":

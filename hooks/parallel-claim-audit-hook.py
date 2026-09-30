@@ -73,6 +73,11 @@ def parse_claim_command(command: str):
     return candidate
 
 
+EXIT_AUTO_COMMIT_FAILED = 75  # ticket CLI：動作已完成、僅 auto-commit 失敗
+# format_write_command_commit_failure 的固定片語；exit_code 欄位缺席時的後備判讀
+AUTO_COMMIT_WARNING_MARK = "已寫入 working tree 但 auto-commit 失敗"
+
+
 def is_claim_successful(tool_result) -> bool:
     """判斷 claim 是否成功。
 
@@ -81,6 +86,12 @@ def is_claim_successful(tool_result) -> bool:
     其餘視為成功（observability 寧可多記，不影響 claim）。
     """
     if not isinstance(tool_result, dict):
+        return True
+    # 75（EXIT_AUTO_COMMIT_FAILED）：claim 已寫入、僅 auto-commit 失敗。其 stderr 的
+    # 原因文字可能含 "failed"，不可被下列子字串比對誤判為 claim 失敗。
+    if tool_result.get("exit_code") == EXIT_AUTO_COMMIT_FAILED:
+        return True
+    if AUTO_COMMIT_WARNING_MARK in str(tool_result.get("stderr", "")):
         return True
     combined = "{}\n{}".format(
         tool_result.get("stdout", ""), tool_result.get("stderr", "")

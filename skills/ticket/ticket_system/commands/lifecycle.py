@@ -61,6 +61,7 @@ from ticket_system.lib.command_tracking_messages import (
 )
 from ticket_system.lib.claude_lib_loader import load_claude_lib
 from ticket_system.lib.git_ops import commit_files_isolated
+from ticket_system.lib import git_utils
 from ticket_system.lib.git_utils import (
     EXIT_AUTO_COMMIT_FAILED,
     format_write_command_commit_failure,
@@ -2505,6 +2506,24 @@ def _apply_auto_tdd_phase(ticket: Dict[str, Any], as_agent: Optional[str]) -> No
     ticket["tdd_phase_source"] = TDD_PHASE_SOURCE_AUTO
 
 
+def _commit_lifecycle_write(label: str, version: str, ticket_id: str, rc: int) -> int:
+    """claim/release/close 成功寫入後的 auto-commit 收尾，回傳最終 exit code。
+
+    rc 非 0 表命令本身未寫入（驗證失敗等），原樣回傳；提交最終失敗以 75 反映。
+    """
+    if rc != 0:
+        return rc
+    ticket = load_ticket(version, ticket_id)
+    if not ticket:
+        return rc
+    ticket_path = resolve_ticket_path(ticket, version, ticket_id)
+    if git_utils.commit_ticket_md_reporting(
+        label, str(ticket_path), ticket_id, "status", operation=label,
+    ):
+        return EXIT_AUTO_COMMIT_FAILED
+    return rc
+
+
 def execute_claim(args: argparse.Namespace, version: str) -> int:
     """
     認領 Ticket - 函式包裝層（向後相容）
@@ -2567,7 +2586,8 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
             json_output=bool(getattr(args, "json_output", False)),
         )
 
-    return rc
+    # Context Bundle 抽取也會改票面，故提交置於其後，讓 claim 的全部寫入一次入庫
+    return _commit_lifecycle_write("claim", version, args.ticket_id, rc)
 
 
 def _auto_extract_context_bundle_post_claim(
@@ -2655,13 +2675,14 @@ def execute_close(args: argparse.Namespace, version: str) -> int:
     reason_note = getattr(args, "reason_note", "") or ""
     retrospective = bool(getattr(args, "retrospective", False))
     lifecycle = TicketLifecycle(version)
-    return lifecycle.close(
+    rc = lifecycle.close(
         args.ticket_id,
         resolved_by,
         reason_code,
         reason_note=reason_note,
         retrospective=retrospective,
     )
+    return _commit_lifecycle_write("close", version, args.ticket_id, rc)
 
 
 def execute_release(args: argparse.Namespace, version: str) -> int:
@@ -2671,4 +2692,5 @@ def execute_release(args: argparse.Namespace, version: str) -> int:
     使用 TicketLifecycle 物件執行實際操作。
     """
     lifecycle = TicketLifecycle(version)
-    return lifecycle.release(args.ticket_id)
+    rc = lifecycle.release(args.ticket_id)
+    return _commit_lifecycle_write("release", version, args.ticket_id, rc)

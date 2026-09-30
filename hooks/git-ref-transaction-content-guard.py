@@ -117,9 +117,10 @@ guard 載入失敗或程式錯誤全域擋下團隊所有 git 操作，同時符
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -139,7 +140,9 @@ from lib.commit_content_guards import (  # noqa: E402
 )
 
 EXIT_ALLOW = 0
-EXIT_BLOCK = 1  # `prepared` 狀態任何非零離開碼皆中止該次 ref transaction
+# 專用離開碼，須與 install hook 的 GUARD_BLOCK_EXIT_CODE 一致；shim 只在收到
+# 此碼時中止 ref transaction，其他非零（uv 失敗等）一律 fail-open。
+EXIT_BLOCK = 87
 
 _HEADS_PREFIX = "refs/heads/"
 _HEAD_REF = "HEAD"
@@ -275,22 +278,183 @@ def _build_commit_scan_file(
     return StagedFile(rel_path, pre_text, post_text, added_text)
 
 
-def _scan_new_commit(
-    commit_sha: str, project_root: Path, logger, is_merge_commit: bool = False
-) -> List[Finding]:
+def _build_scan_files_legacy(commit_sha: str, project_root: Path) -> List[StagedFile]:
+    """逐檔實作：每個變更檔各自 `git show` 兩次 + `git diff` 一次。
+
+    批次路徑（`_build_scan_files_batched`）無法確認結果與此等價時的 fallback，
+    同時是等價性測試的對照基準——兩者對同一輸入必須產生逐項相同的 StagedFile。
+    """
     parent = _first_parent(commit_sha, project_root)
     pre_rev = parent if parent is not None else _EMPTY_TREE_SHA
     changed = _changed_files(pre_rev, commit_sha, project_root)
     if not changed:
         return []
     rename_map = _rename_map(pre_rev, commit_sha, project_root)
-    staged_files = [
+    return [
         _build_commit_scan_file(p, pre_rev, commit_sha, project_root, rename_map)
         for p in changed
     ]
-    return _run_all_checks(
-        staged_files, project_root, logger, is_merge_commit=is_merge_commit
+
+
+# ----------------------------------------------------------------------------
+# 批次路徑：git 子程序數與變更檔數 F 無關
+#
+# 逐檔實作的子程序數為 O(F)，而本 hook 在 `prepared` 階段執行、期間持有 ref
+# 鎖，所有並行 git 寫入都在等它。批次後每個新 commit 固定 2 個 diff
+# （name-status、全量 patch），全部 blob 共用 1 個 `cat-file --batch`。
+# ----------------------------------------------------------------------------
+
+_DIFF_HEADER_PREFIX = "diff --git "
+_GIT_BATCH_TIMEOUT_SECONDS = 30
+
+
+def _collect_new_commits_with_parents(
+    new_oids: List[str], project_root: Path
+) -> Dict[str, Optional[str]]:
+    """`git rev-list --parents <oids...> --not --all`：一次取得新 commit 集合
+    與各自的第一個 parent（根 commit 為 None），取代逐 commit 的
+    `rev-parse <sha>^`。多個 oid 的聯集等於逐 oid 結果的聯集。
+    """
+    if not new_oids:
+        return {}
+    ok, out = run_git_command(
+        ["rev-list", "--parents"] + list(new_oids) + ["--not", "--all"],
+        cwd=str(project_root),
     )
+    if not ok:
+        if len(new_oids) == 1:
+            return {}  # 單一 oid 已是同一查詢，失敗即無新內容（與逐 oid 版相同）
+        # 合併查詢失敗（如其中一個 oid 不可解析）：退回逐 oid 查詢，維持
+        # 「單一 oid 失敗只影響該 oid」的原語意。
+        merged: Dict[str, Optional[str]] = {}
+        for oid in new_oids:
+            merged.update(_collect_new_commits_with_parents([oid], project_root))
+        return merged
+    commits: Dict[str, Optional[str]] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if parts:
+            commits[parts[0]] = parts[1] if len(parts) > 1 else None
+    return commits
+
+
+def _split_patch_sections(patch_text: str) -> List[str]:
+    """把全量 patch 依 `diff --git ` 標頭切成每個檔案一段（順序即 diff 佇列
+    順序，與 name-status 的條目一一對應）。
+
+    只以 "\\n" 切行：hunk 內容行必有 ` `/`+`/`-`/`\\` 前綴，以 `diff --git `
+    開頭的行只可能是真標頭；若用 splitlines() 會被內容中的 U+2028 等分隔字元
+    切出假標頭。
+    """
+    sections: List[List[str]] = []
+    for line in patch_text.split("\n"):
+        if line.startswith(_DIFF_HEADER_PREFIX):
+            sections.append([])
+        if sections:
+            sections[-1].append(line)
+    return ["\n".join(lines) for lines in sections]
+
+
+def _added_text_from_section(section: str) -> str:
+    return "\n".join(
+        line[1:]
+        for line in section.splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    )
+
+
+def _cat_file_batch(specs: List[str], project_root: Path) -> Optional[List[str]]:
+    """單一 `git cat-file --batch` 取回所有 `<rev>:<path>` 的文字內容。
+
+    回傳與 specs 等長的清單；不存在 / 非 blob / 無法解碼者為 ""。文字正規化
+    與逐檔實作的 `git show` + run_git_command 一致（換行統一為 \\n、去除尾端
+    換行）。子程序失敗回傳 None，由呼叫端退回逐檔實作。
+    """
+    if not specs:
+        return []
+    try:
+        result = subprocess.run(
+            ["git", "--no-optional-locks", "-c", "core.quotepath=false", "cat-file", "--batch"],
+            input=("\n".join(specs) + "\n").encode("utf-8"),
+            cwd=str(project_root),
+            capture_output=True,
+            timeout=_GIT_BATCH_TIMEOUT_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    data = result.stdout
+    texts: List[str] = []
+    pos = 0
+    for _ in specs:
+        newline = data.find(b"\n", pos)
+        if newline < 0:
+            return None
+        header = data[pos:newline].split(b" ")
+        pos = newline + 1
+        if len(header) == 3 and header[1] == b"blob" and header[2].isdigit():
+            size = int(header[2])
+            raw = data[pos:pos + size]
+            pos += size + 1  # 內容之後固定多一個換行
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                texts.append("")
+                continue
+            texts.append(text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n"))
+        elif len(header) == 3 and header[2].isdigit():
+            pos += int(header[2]) + 1  # 非 blob（tree 等）：跳過內容，視為空
+            texts.append("")
+        else:
+            texts.append("")  # missing / ambiguous
+    return texts
+
+
+def _build_scan_files_batched(
+    commits: Dict[str, Optional[str]], project_root: Path
+) -> Dict[str, List[StagedFile]]:
+    """批次建立各新 commit 的 StagedFile；任何一步無法確認與逐檔實作等價時，
+    該 commit（或整批）退回 `_build_scan_files_legacy`。"""
+    result: Dict[str, List[StagedFile]] = {}
+    pending = []  # (commit, pre_rev, entries, added_texts)
+    for commit_sha, parent in commits.items():
+        pre_rev = parent if parent is not None else _EMPTY_TREE_SHA
+        ok, out = run_git_command(
+            ["diff", "-M", "--name-status", "-z", pre_rev, commit_sha],
+            cwd=str(project_root),
+        )
+        if not ok or not out:
+            result[commit_sha] = []
+            continue
+        entries = parse_name_status_z(out)
+        ok, patch = run_git_command(["diff", "-M", pre_rev, commit_sha], cwd=str(project_root))
+        sections = _split_patch_sections(patch) if ok else []
+        if len(sections) != len(entries):
+            result[commit_sha] = _build_scan_files_legacy(commit_sha, project_root)
+            continue
+        pending.append((commit_sha, pre_rev, entries, [_added_text_from_section(s) for s in sections]))
+
+    specs: List[str] = []
+    for commit_sha, pre_rev, entries, _added in pending:
+        for _status, old_path, new_path in entries:
+            specs.append(f"{pre_rev}:{old_path if old_path is not None else new_path}")
+            specs.append(f"{commit_sha}:{new_path}")
+    texts = None if any("\n" in spec for spec in specs) else _cat_file_batch(specs, project_root)
+    if texts is None:
+        for commit_sha, _pre, _entries, _added in pending:
+            result[commit_sha] = _build_scan_files_legacy(commit_sha, project_root)
+        return result
+
+    cursor = 0
+    for commit_sha, _pre_rev, entries, added_texts in pending:
+        files = []
+        for (_status, _old_path, new_path), added in zip(entries, added_texts):
+            pre_text, post_text = texts[cursor], texts[cursor + 1]
+            cursor += 2
+            files.append(StagedFile(new_path, pre_text, post_text, added))
+        result[commit_sha] = files
+    return result
 
 
 def main() -> int:
@@ -307,25 +471,31 @@ def main() -> int:
 
     project_root = get_project_root()
 
-    new_commit_shas: Set[str] = set()
+    new_oids: List[str] = []
     for old_oid, new_oid, ref_name in ref_lines:
         if not (ref_name.startswith(_HEADS_PREFIX) or ref_name == _HEAD_REF):
             continue
         if _is_zero_oid(new_oid):
             continue  # 刪除，無新內容
-        new_commit_shas.update(_collect_new_commits(new_oid, project_root))
+        if new_oid not in new_oids:
+            new_oids.append(new_oid)
 
-    if not new_commit_shas:
+    new_commits = _collect_new_commits_with_parents(new_oids, project_root)
+
+    if not new_commits:
         logger.debug("本次 transaction 無新 commit（純 ref 重新指向），放行")
         return EXIT_ALLOW
 
     is_merge = _merge_in_progress(project_root)
 
+    scan_files = _build_scan_files_batched(new_commits, project_root)
     findings: List[Finding] = []
-    for commit_sha in sorted(new_commit_shas):
-        findings.extend(
-            _scan_new_commit(commit_sha, project_root, logger, is_merge_commit=is_merge)
-        )
+    for commit_sha in sorted(new_commits):
+        files = scan_files.get(commit_sha, [])
+        if files:
+            findings.extend(
+                _run_all_checks(files, project_root, logger, is_merge_commit=is_merge)
+            )
 
     deny_findings = [f for f in findings if f.severity == "deny"]
     warn_findings = [f for f in findings if f.severity == "warn"]
@@ -333,7 +503,7 @@ def main() -> int:
     if deny_findings:
         logger.warning(
             "ref transaction 被阻擋：deny=%d warn=%d new_commits=%d is_merge=%s",
-            len(deny_findings), len(warn_findings), len(new_commit_shas), is_merge,
+            len(deny_findings), len(warn_findings), len(new_commits), is_merge,
         )
         header = (
             "[git-ref-transaction-content-guard] ref 寫入被阻擋：新提交內容經"
@@ -361,13 +531,13 @@ def main() -> int:
     if warn_findings:
         logger.info(
             "ref transaction 放行但有 WARN 發現：warn=%d new_commits=%d",
-            len(warn_findings), len(new_commit_shas),
+            len(warn_findings), len(new_commits),
         )
         header = f"[git-ref-transaction-content-guard] 提醒：新提交內容命中 {len(warn_findings)} 項 WARN 級發現（不阻擋）：\n"
         sys.stderr.write(_build_warn_message(warn_findings, header) + "\n")
         return EXIT_ALLOW
 
-    logger.debug("新 commit 內容無發現，放行：new_commits=%d", len(new_commit_shas))
+    logger.debug("新 commit 內容無發現，放行：new_commits=%d", len(new_commits))
     return EXIT_ALLOW
 
 

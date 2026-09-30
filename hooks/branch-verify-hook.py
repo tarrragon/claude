@@ -103,6 +103,7 @@ def is_exempt_path_on_protected_branch(
     file_path: str,
     cwd: "str | None" = None,
     target_repo: "str | None" = None,
+    host_root: "str | None" = None,
 ) -> bool:
     """
     判斷此路徑是否在保護分支上被豁免（允許編輯）
@@ -113,12 +114,15 @@ def is_exempt_path_on_protected_branch(
         file_path: 要編輯的檔案路徑
         cwd: 用於 host project 偵測的 cwd
         target_repo: 目標檔案所屬的 repo 根目錄（從 find_target_repo 取得）
+        host_root: 已解析的 host project 根目錄；批次呼叫端（一次判斷多個檔案）
+            預先解析後傳入，避免每個檔案各付一個 git 子程序。未提供時由 cwd 解析。
 
     Returns:
         bool: True 表示豁免（允許編輯），False 表示不豁免
     """
     # get_project_root 回傳 Path（SSOT），本函式後續以 str 操作（startswith/len），故轉 str
-    host_root = str(get_project_root(cwd=cwd))
+    if host_root is None:
+        host_root = str(get_project_root(cwd=cwd))
     same_repo = _is_same_repo(target_repo, host_root)
 
     if not same_repo:

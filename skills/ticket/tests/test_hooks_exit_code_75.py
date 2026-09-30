@@ -111,3 +111,28 @@ def test_dispatch_identity_bind_hook_set_who_rc(rc, expected_bound, tmp_path):
     with patch.object(hook.subprocess, "run", side_effect=fake_run):
         bound = hook.bind_dispatch_identity("0.1.0-W1-001", "some-agent", tmp_path, _LOGGER)
     assert bound is expected_bound
+
+
+_COMMIT_FAIL_STDERR = (
+    "[WARNING] [claim] 0.1.0-W1-001 已寫入 working tree 但 auto-commit 失敗"
+    "（嘗試 1 次）；尚未入庫，exit code 75。\n"
+    "失敗原因：git update-ref failed: cannot lock ref\n"
+)
+
+
+@pytest.mark.parametrize(
+    "result, expected",
+    [
+        # 對照：同樣含 "failed" 字樣的 stderr，但 claim 本身失敗（無 exit_code 75、無 WARNING 片語）
+        ({"stdout": "", "stderr": "update-ref failed"}, False),
+        # claim 已寫入但提交失敗：exit_code 75 為權威
+        ({"exit_code": 75, "stdout": "", "stderr": _COMMIT_FAIL_STDERR}, True),
+        # exit_code 欄位缺席時，以 WARNING 固定片語後備判讀
+        ({"stdout": "", "stderr": _COMMIT_FAIL_STDERR}, True),
+        ({"exit_code": 0, "stdout": "認領成功", "stderr": ""}, True),
+    ],
+)
+def test_parallel_claim_audit_hook_claim_rc75_is_success(result, expected):
+    """claim 回 75 表示已認領、只是提交失敗；stderr 內的 failed 字樣不得使審計漏記。"""
+    hook = _load(_CLAUDE / "hooks" / "parallel-claim-audit-hook.py", "pca_hook")
+    assert hook.is_claim_successful(result) is expected

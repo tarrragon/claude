@@ -56,6 +56,7 @@ from ticket_system.lib.dispatch_skeleton import (
 )
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.section_locator import find_section
+from ticket_system.lib import git_utils
 from ticket_system.lib.ticket_loader import get_ticket_path, load_ticket, save_ticket
 from ticket_system.lib.messages import ErrorMessages, format_error
 from ticket_system.lib.ticket_ops import resolve_ticket_path
@@ -363,6 +364,7 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     commit_policy = getattr(args, "commit_policy", "agent") or "agent"
     dry_run = getattr(args, "dry_run", False)
     needs_commit_section = args.kind == "normal" and commit_policy == "agent"
+    commit_failed = False
 
     if dry_run:
         # --dry-run：僅唯讀確認票存在，避免對不存在的票輸出骨架造成誤
@@ -396,6 +398,10 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
                 ticket["_body"] = updated_body
                 save_path = resolve_ticket_path(ticket, version, args.ticket_id)
                 save_ticket(ticket, save_path)
+                commit_failed = git_utils.commit_ticket_md_reporting(
+                    "dispatch", str(save_path), args.ticket_id, "dispatch-log",
+                    operation="dispatch",
+                )
 
     block_message = _directory_declaration_block_message(ticket, args.ticket_id, version)
     if block_message:
@@ -409,7 +415,7 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     if dry_run:
         skeleton = f"{DRY_RUN_WATERMARK}\n{skeleton}"
     print(skeleton)
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def register_dispatch_command(subparsers: "argparse._SubParsersAction") -> None:

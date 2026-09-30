@@ -64,7 +64,8 @@ def file_lock(target_path: Path) -> Iterator[None]:
     Lock file:
         ``{target_path}{suffix}.lock``，例如 `foo.md` → `foo.md.lock`。
         Crash 後 OS 自動回收 fd 釋鎖；殘留 lock file 不影響後續 reuse
-        （已加入 .gitignore，並由 reap_stale_locks 收割）。
+        （.gitignore 涵蓋由 session-start-gitignore-check-hook 依 WORK_LOGS_DIR
+        推導 `{票庫}/**/*.md.lock` 必要項並在缺少時提示；由 reap_stale_locks 收割）。
 
     Args:
         target_path: 要保護的目標檔案路徑（不會被開啟，只用於決定 lock

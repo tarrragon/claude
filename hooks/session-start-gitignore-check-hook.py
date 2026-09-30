@@ -24,6 +24,7 @@ SessionStart 事件觸發時，檢查專案 .gitignore 是否涵蓋 .claude/ run
 來源 Ticket：0.19.0-W3-077
 """
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -134,6 +135,78 @@ def check_missing_entries(gitignore_entries: Set[str], logger) -> List[str]:
         missing.append(required)
     logger.info("gitignore-check: missing %d entry(ies)", len(missing))
     return missing
+
+
+# ticket 票庫根目錄的框架預設（與 ticket_system/constants.py 的 WORK_LOGS_DIR 預設一致；
+# 僅在無法讀取 constants 時作 fail-open 退路）
+DEFAULT_TICKET_ROOT_DIR = "docs/work-logs"
+_TICKET_CONSTANTS_RELATIVE = ".claude/skills/ticket/ticket_system/constants.py"
+
+# 無目錄前綴、可涵蓋任意位置票庫 *.md.lock 的全域寫法（前導 `/` 可選）。
+# 不用 _normalize_ignore_token：它為 .claude 內項目設計，會把 `.claude/**/*.lock`
+# 剝成 `*.lock` 而誤判為全域涵蓋。
+_LOCK_GLOBAL_PATTERNS = frozenset({"*.lock", "*.md.lock", "**/*.lock", "**/*.md.lock"})
+_LOCK_SUFFIXES = ("/**/*.md.lock", "/**/*.lock")
+
+
+def resolve_ticket_root_dir(project_root: Path, logger) -> str:
+    """由 ticket skill 的 constants.py（WORK_LOGS_DIR）推導票庫根目錄。
+
+    以檔案路徑載入 constants.py（該模組無 yaml 依賴），與 hook 跨 skill 讀取常數的
+    既有慣例一致。任何失敗退回框架預設並寫日誌（fail-open）。
+    """
+    const_path = project_root / _TICKET_CONSTANTS_RELATIVE
+    try:
+        spec = importlib.util.spec_from_file_location("_ticket_constants_probe", const_path)
+        if spec is None or spec.loader is None:
+            raise ImportError("無法建立 spec")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        value = str(getattr(module, "WORK_LOGS_DIR")).strip().strip("/")
+        if not value:
+            raise ValueError("WORK_LOGS_DIR 為空")
+        logger.info("gitignore-check: 票庫根目錄取自 constants: %s", value)
+        return value
+    except Exception as e:  # noqa: BLE001
+        logger.info(
+            "gitignore-check: 讀取票庫設定失敗，退回預設 %s: %s",
+            DEFAULT_TICKET_ROOT_DIR,
+            e,
+        )
+        return DEFAULT_TICKET_ROOT_DIR
+
+
+def check_ticket_lock_entry(gitignore_entries: Set[str], project_root: Path, logger) -> List[str]:
+    """票庫 file_lock sentinel（{ticket}.md.lock）的 gitignore 涵蓋檢查。
+
+    必要項 = `{票庫}/**/*.md.lock`，票庫路徑由 resolve_ticket_root_dir 推導。
+    票庫在 `.claude/` 下時既有 `.claude/**/*.lock` 已涵蓋，不另提示。
+    回傳缺失清單（0 或 1 項）。
+    """
+    root_dir = resolve_ticket_root_dir(project_root, logger)
+    required = f"{root_dir}/**/*.md.lock"
+    if root_dir == ".claude" or root_dir.startswith(".claude/"):
+        logger.info("gitignore-check: 票庫在 .claude/ 下，既有規則已涵蓋 (%s)", required)
+        return []
+    covered = False
+    for raw in gitignore_entries:
+        e = raw[1:] if raw.startswith("/") else raw
+        if e in _LOCK_GLOBAL_PATTERNS:
+            covered = True
+            break
+        # 帶目錄前綴：僅 `<P>/**/*.lock|*.md.lock` 且 P 為票庫根目錄或其祖先才算涵蓋
+        for suffix in _LOCK_SUFFIXES:
+            if e.endswith(suffix):
+                prefix = e[: -len(suffix)]
+                if prefix and (root_dir == prefix or root_dir.startswith(prefix + "/")):
+                    covered = True
+                    break
+        if covered:
+            break
+    logger.info(
+        "gitignore-check: 票庫 lock 必要項 %s -> %s", required, "已涵蓋" if covered else "缺失"
+    )
+    return [] if covered else [required]
 
 
 def check_tracked_runtime_state(project_root: Path, logger) -> List[str]:
@@ -256,6 +329,10 @@ def run_checks(project_root: Path, logger) -> Tuple[List[str], List[str], bool]:
         if gitignore_exists
         else sorted(REQUIRED_GITIGNORE_ENTRIES)
     )
+    if gitignore_exists:
+        missing = missing + check_ticket_lock_entry(entries, project_root, logger)
+    else:
+        missing = missing + [f"{resolve_ticket_root_dir(project_root, logger)}/**/*.md.lock"]
     tracked = check_tracked_runtime_state(project_root, logger)
     return missing, tracked, gitignore_exists
 

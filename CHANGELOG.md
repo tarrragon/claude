@@ -1,3 +1,20 @@
+## [2.70.0] - 2026-10-01
+
+### Summary
+feat: 多票寫入命令 auto-commit 單一提交與失敗可見性（ticket 2.44.11）; feat: gitignore 檢查 hook 推導票庫 lock sentinel 必要項; fix: shim 警告訊息 rc 改 ${rc}（C locale 下全形標點併入變數名），shim-version 3 (+4 more)
+
+Changes: 2 feat, 3 fix, 1 chore, 1 perf
+
+- feat: 多票寫入命令 auto-commit 單一提交與失敗可見性（ticket 2.44.11）
+- feat: gitignore 檢查 hook 推導票庫 lock sentinel 必要項
+- fix: shim 警告訊息 rc 改 ${rc}（C locale 下全形標點併入變數名），shim-version 3
+- fix: reference-transaction shim 僅在 guard 判定阻擋時中止 ref 寫入
+- fix: 票庫 lock 涵蓋判定不再把 .claude/ 範圍規則誤判為全域
+- chore: .claude/VERSION 2.69.0（sync-push：ticket 2.44.10、doc 1.24.0、ANA children 閘門與規則對齊）
+- perf: reference-transaction content guard 批次化 git 子程序
+
+---
+
 ## [2.69.0] - 2026-09-30
 
 ### Summary

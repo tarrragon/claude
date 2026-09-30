@@ -113,7 +113,9 @@ def _check_rule8(sf: StagedFile, logger) -> List[Finding]:
     return findings
 
 
-def _check_uc_reference(sf: StagedFile, logger) -> List[Finding]:
+def _check_uc_reference(
+    sf: StagedFile, logger, project_root: Optional[str] = None
+) -> List[Finding]:
     """轉呼 uc-reference-validation-hook：直接 import doc_system.core.uc_registry
     （原 hook 亦於 main() 內 lazy import 同一模組）。WARN-only，保留原語意
     不升級為 deny。
@@ -135,9 +137,10 @@ def _check_uc_reference(sf: StagedFile, logger) -> List[Finding]:
 
     if not sf.rel_path.lower().endswith(HOOK_SCANNABLE_EXTENSIONS):
         return []
-    from lib.git_utils import get_project_root  # noqa: PLC0415
+    if project_root is None:
+        from lib.git_utils import get_project_root  # noqa: PLC0415
 
-    project_root = str(get_project_root())
+        project_root = str(get_project_root())
     if is_exempt_path(sf.rel_path, project_root):
         return []
     if not sf.added_text:
@@ -242,8 +245,47 @@ def _pure_version_bump(sf: StagedFile) -> Optional[Tuple[str, str]]:
     return _line_version_bump(name, sf.pre_text.splitlines(), sf.post_text.splitlines())
 
 
+class _BranchContext(NamedTuple):
+    """branch-verify 的「與檔案無關」前置判定結果（每次掃描只解析一次）。"""
+
+    module: types.ModuleType
+    project_root: Path
+    current_branch: str
+    host_root: str
+
+
+_CTX_UNSET = object()
+
+
+def _resolve_branch_context(is_merge_commit: bool) -> Optional[_BranchContext]:
+    """解析 branch-verify 與檔案無關的前置條件：專案根、當前分支、是否受保護、
+    是否為合併事件。回傳 None 代表本次掃描 branch-verify 不會產生任何發現
+    （模組載入失敗 / 允許分支 / 非保護分支 / 合併事件），呼叫端可對所有檔案
+    直接略過。
+
+    這些條件都不依賴個別檔案，原本每個檔案各重查一輪（專案根 + 分支 + 豁免
+    判斷內的專案根，共 3 個 git 子程序），變更檔數 F 越大持鎖越久；提到迴圈外
+    後與 F 無關。判斷順序與原逐檔實作相同。
+    """
+    m = _load_module("commit_gate_branch_verify", _HOOKS_DIR / "branch-verify-hook.py")
+    if m is None:
+        return None
+    from lib.git_utils import get_current_branch, get_project_root, is_protected_branch, is_allowed_branch  # noqa: E402,PLC0415
+
+    project_root = get_project_root()
+    current_branch = get_current_branch(cwd=str(project_root))
+    if not current_branch or is_allowed_branch(current_branch):
+        return None
+    if not is_protected_branch(current_branch):
+        return None
+    if is_merge_commit:
+        return None
+    host_root = str(get_project_root(cwd=str(project_root)))
+    return _BranchContext(m, project_root, current_branch, host_root)
+
+
 def _check_branch_verify(
-    sf: StagedFile, logger, is_merge_commit: bool = False
+    sf: StagedFile, logger, is_merge_commit: bool = False, ctx=_CTX_UNSET
 ) -> List[Finding]:
     """轉呼 branch-verify-hook：完整重用 is_protected_branch /
     is_allowed_branch / is_exempt_path_on_protected_branch，內容無關，
@@ -256,34 +298,30 @@ def _check_branch_verify(
     動作，與逐檔直接提交性質不同，豁免對象是「這次 merge 事件」而非個別
     檔案內容——其餘 per-file guard（rule8 等）不受 is_merge_commit 影響，
     仍照常執行。直接提交（is_merge_commit=False，預設值）維持原行為不變。
-    """
-    m = _load_module("commit_gate_branch_verify", _HOOKS_DIR / "branch-verify-hook.py")
-    if m is None:
-        return []
-    from lib.git_utils import get_current_branch, get_project_root, is_protected_branch, is_allowed_branch  # noqa: E402,PLC0415
 
-    project_root = get_project_root()
-    current_branch = get_current_branch(cwd=str(project_root))
-    if not current_branch or is_allowed_branch(current_branch):
+    ctx：`_resolve_branch_context` 的預先解析結果（None 表示已判定無須檢查）。
+    未提供時（單檔呼叫端）於本次呼叫內自行解析，行為與批次前相同。
+    """
+    if ctx is _CTX_UNSET:
+        ctx = _resolve_branch_context(is_merge_commit)
+    if ctx is None:
         return []
-    if not is_protected_branch(current_branch):
-        return []
-    if is_merge_commit:
-        return []
-    if m.is_exempt_path_on_protected_branch(sf.rel_path, cwd=str(project_root)):
+    if ctx.module.is_exempt_path_on_protected_branch(
+        sf.rel_path, cwd=str(ctx.project_root), host_root=ctx.host_root
+    ):
         return []
     bump = _pure_version_bump(sf)
     if bump is not None:
         logger.info(
             "[branch-verify] 保護分支 '%s' 上放行純版本號變動 %s：%s -> %s",
-            current_branch, sf.rel_path, bump[0], bump[1],
+            ctx.current_branch, sf.rel_path, bump[0], bump[1],
         )
         return []
     return [
         Finding(
             "deny",
             "branch-verify",
-            f"[branch-verify] 保護分支 '{current_branch}' 上 commit 非豁免檔案 {sf.rel_path}，"
+            f"[branch-verify] 保護分支 '{ctx.current_branch}' 上 commit 非豁免檔案 {sf.rel_path}，"
             "請切換至 feature 分支後再提交。",
         )
     ]
@@ -504,10 +542,20 @@ def _run_all_checks(
     """
     findings: List[Finding] = []
     wrap_checked = False
+    if not staged_files:
+        return findings
+    # 與檔案無關的解析提到迴圈外，避免每個檔案各付一輪 git 子程序。
+    branch_ctx = _resolve_branch_context(is_merge_commit)
+    root_str = str(project_root)
     for sf in staged_files:
         for check in _PER_FILE_CHECKS:
-            findings.extend(check(sf, logger))
-        findings.extend(_check_branch_verify(sf, logger, is_merge_commit=is_merge_commit))
+            if check is _check_uc_reference:
+                findings.extend(check(sf, logger, project_root=root_str))
+            else:
+                findings.extend(check(sf, logger))
+        findings.extend(
+            _check_branch_verify(sf, logger, is_merge_commit=is_merge_commit, ctx=branch_ctx)
+        )
         if not wrap_checked:
             wrap_findings = _check_wrap_skill_yaml(sf, logger, project_root)
             if wrap_findings:

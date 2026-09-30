@@ -31,6 +31,7 @@ from ticket_system.lib.ticket_loader import (
     save_ticket,
     resolve_version,
 )
+from ticket_system.lib import git_utils
 from ticket_system.lib.file_lock import create_id_allocation_lock
 from ticket_system.lib.messages import (
     ErrorMessages,
@@ -197,12 +198,23 @@ def execute(args: argparse.Namespace) -> int:
                 parent_id=parent_id,
             )
 
+    # 新建的票檔以單一 commit 提交（dry_run 無檔可提交）
+    commit_failed = False
+    if not dry_run and result.created:
+        commit_failed = git_utils.commit_ticket_mds_reporting(
+            "batch-create",
+            [str(get_ticket_path(version, tid)) for tid in result.created],
+            result.created[0], "batch-create", operation="batch-create",
+        )
+
     # 顯示摘要
     _print_batch_summary(result, args.template, version, wave)
 
     # 顯示結果
     _print_batch_result(result)
 
+    if commit_failed:
+        return git_utils.EXIT_AUTO_COMMIT_FAILED
     return 0 if result.failed == [] else 1
 
 

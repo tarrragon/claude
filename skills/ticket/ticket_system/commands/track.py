@@ -283,7 +283,8 @@ def _execute_claim(args: argparse.Namespace, version: str) -> int:  # type: igno
     動作失敗不影響已成功的 claim，見 `claim_lease` 降級語意。
     """
     rc = execute_claim(args, version)
-    if rc == 0:
+    # EXIT_AUTO_COMMIT_FAILED：claim 已寫入、僅未入庫，lease 仍須寫入（與 complete 對稱）
+    if rc in (0, EXIT_AUTO_COMMIT_FAILED):
         claim_lease(version, args.ticket_id)
     return rc
 
@@ -364,7 +365,8 @@ def _execute_release(args: argparse.Namespace, version: str) -> int:
             )
 
     rc = execute_release(args, version)
-    if rc == 0:
+    # EXIT_AUTO_COMMIT_FAILED：release 已寫入、僅未入庫，lease 仍須移除
+    if rc in (0, EXIT_AUTO_COMMIT_FAILED):
         release_lease(version, args.ticket_id)
     return rc
 

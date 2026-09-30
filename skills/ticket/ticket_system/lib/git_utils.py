@@ -171,11 +171,13 @@ def auto_commit_ticket_md_with_retry(*args, **kwargs) -> Dict[str, object]:
 def format_write_command_commit_failure(
     label: str, ticket_path: str, ticket_id: str, section: str,
     operation: str, error: str, attempts: int,
+    extra_paths: Sequence[str] = (),
 ) -> str:
     """寫入命令 auto-commit 最終失敗的可見警告：原因、鎖檔路徑、補救指令。
 
     與 create 的警告同形（見 ``create._format_commit_failure_warning``），差別是
     寫入已落在 working tree 的既有票檔，補救指令的 commit message 依 operation 組出。
+    多票命令以 ``extra_paths`` 傳入其餘票檔，補救指令的 ``git add`` 會列出全部路徑。
     """
     from .git_ops import _lock_paths_from_error
 
@@ -193,7 +195,7 @@ def format_write_command_commit_failure(
             "確認後才可手動移除。"
         )
     lines.append(
-        f"補救指令（鎖排除後）：git add {ticket_path} && "
+        f"補救指令（鎖排除後）：git add {' '.join([ticket_path, *extra_paths])} && "
         f"git commit -m \"chore({ticket_id}): {operation} {section}\""
     )
     return "\n".join(lines) + "\n"
@@ -205,12 +207,15 @@ def commit_ticket_md_reporting(
 ) -> bool:
     """寫入命令共用的 auto-commit 收尾：提交、重試、失敗時輸出 WARNING。
 
+    多票寫入請用 ``commit_ticket_mds_reporting``（單一 commit）。
+
     Returns:
         True 表最終失敗（git_failed 或例外），呼叫端應以 ``EXIT_AUTO_COMMIT_FAILED``
         結束。``not_git_repo`` 印 skipped 訊息但不算失敗（無 repo 可提交）。
     """
     import sys
 
+    extra_paths = tuple(kwargs.get("extra_paths") or ())
     try:
         result = auto_commit_ticket_md_with_retry(
             ticket_path, ticket_id, section, operation=operation, **kwargs
@@ -218,7 +223,7 @@ def commit_ticket_md_reporting(
     except Exception as exc:
         sys.stderr.write(format_write_command_commit_failure(
             label, ticket_path, ticket_id, section, operation,
-            f"{type(exc).__name__}: {exc}", 1,
+            f"{type(exc).__name__}: {exc}", 1, extra_paths,
         ))
         return True
     status = result["status"]
@@ -232,6 +237,31 @@ def commit_ticket_md_reporting(
         sys.stderr.write(format_write_command_commit_failure(
             label, ticket_path, ticket_id, section, operation,
             str(result.get("error") or ""), int(result.get("attempts") or 1),
+            extra_paths,
         ))
         return True
     return False
+
+
+def commit_ticket_mds_reporting(
+    label: str, ticket_paths: Sequence[str], ticket_id: str, section: str,
+    operation: str = "append-log", **kwargs,
+) -> bool:
+    """多票寫入命令的 auto-commit 收尾：所有票檔以單一 commit 提交。
+
+    ``ticket_paths`` 去重、略過空字串並保留順序；第一個路徑為主票（決定 commit
+    訊息的 ``ticket_id`` 與 git cwd），其餘走 ``extra_paths`` 併入同一提交。
+    空清單視為無事可做（回 False，不產生 commit）。回傳語意同
+    ``commit_ticket_md_reporting``。
+
+    為何單一 commit：多票寫入是一個邏輯操作（如 set-parent 同時改舊父、新父、
+    子三張），拆成逐票提交會讓中途失敗留下半套關係於歷史，也放大鎖競爭窗口。
+    """
+    paths = list(dict.fromkeys(str(p) for p in ticket_paths if p))
+    if not paths:
+        return False
+    merged_extra = [*paths[1:], *(kwargs.pop("extra_paths", None) or ())]
+    return commit_ticket_md_reporting(
+        label, paths[0], ticket_id, section, operation=operation,
+        extra_paths=list(dict.fromkeys(merged_extra)), **kwargs,
+    )

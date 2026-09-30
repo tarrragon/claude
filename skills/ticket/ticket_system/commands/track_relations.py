@@ -380,6 +380,12 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
         child_path = resolve_ticket_path(child_ticket, version, child_id)
         save_ticket(child_ticket, child_path)
 
+        # 父子兩張是同一個關係操作，單一 commit 提交
+        commit_failed = git_utils.commit_ticket_mds_reporting(
+            "add-child", [str(child_path), str(parent_path)], child_id,
+            "parent-link", operation="add-child",
+        )
+
     # Step 9：輸出成功訊息
     print(format_info(InfoMessages.CHILD_RELATION_CREATED))
     print(f"{TrackRelationsMessages.RELATION_PARENT_PREFIX} {parent_id}")
@@ -387,7 +393,7 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
     if old_parent:
         print(f"{TrackRelationsMessages.RELATION_OLD_PARENT_PREFIX} {old_parent} {TrackRelationsMessages.RELATION_OLD_PARENT_SUFFIX}")
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def execute_set_parent(args: argparse.Namespace, version: str) -> int:
@@ -472,6 +478,9 @@ def execute_set_parent(args: argparse.Namespace, version: str) -> int:
             print(format_info(InfoMessages.PARENT_RELATION_NOOP, child_id=child_id))
             return 0
 
+        # 三張以內的寫入路徑，結尾以單一 commit 提交
+        written_paths: list[str] = []
+
         # Step 3：從舊 parent 的 children 移除本票（舊 parent 可能已不存在票庫中）
         if old_parent_id:
             old_parent_ticket = load_ticket(version, old_parent_id)
@@ -481,10 +490,11 @@ def execute_set_parent(args: argparse.Namespace, version: str) -> int:
                     old_parent_ticket["children"] = [
                         cid for cid in children if cid != child_id
                     ]
-                    save_ticket(
-                        old_parent_ticket,
-                        resolve_ticket_path(old_parent_ticket, version, old_parent_id),
+                    old_parent_path = resolve_ticket_path(
+                        old_parent_ticket, version, old_parent_id
                     )
+                    save_ticket(old_parent_ticket, old_parent_path)
+                    written_paths.append(str(old_parent_path))
 
         # Step 4：加入新 parent 的 children（去重）
         if new_parent_id and new_parent_ticket is not None:
@@ -492,10 +502,11 @@ def execute_set_parent(args: argparse.Namespace, version: str) -> int:
             if child_id not in children:
                 children.append(child_id)
             new_parent_ticket["children"] = children
-            save_ticket(
-                new_parent_ticket,
-                resolve_ticket_path(new_parent_ticket, version, new_parent_id),
+            new_parent_path = resolve_ticket_path(
+                new_parent_ticket, version, new_parent_id
             )
+            save_ticket(new_parent_ticket, new_parent_path)
+            written_paths.append(str(new_parent_path))
 
         # Step 5：更新本票的 parent_id 與 chain.parent
         child_ticket["parent_id"] = new_parent_id
@@ -506,9 +517,11 @@ def execute_set_parent(args: argparse.Namespace, version: str) -> int:
             chain_info.pop("parent", None)
         child_ticket["chain"] = chain_info
 
-        save_ticket(
-            child_ticket,
-            resolve_ticket_path(child_ticket, version, child_id),
+        child_path = resolve_ticket_path(child_ticket, version, child_id)
+        save_ticket(child_ticket, child_path)
+        commit_failed = git_utils.commit_ticket_mds_reporting(
+            "set-parent", [str(child_path), *written_paths], child_id,
+            "parent-link", operation="set-parent",
         )
 
     if new_parent_id:
@@ -521,7 +534,7 @@ def execute_set_parent(args: argparse.Namespace, version: str) -> int:
     print(f"{TrackRelationsMessages.SET_PARENT_OLD_PREFIX} {old_label}")
     print(f"{TrackRelationsMessages.SET_PARENT_NEW_PREFIX} {new_label}")
 
-    return 0
+    return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
 def _normalize_phase_input(phase: str) -> str:

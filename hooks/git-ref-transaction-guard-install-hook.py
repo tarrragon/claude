@@ -55,6 +55,14 @@ from lib.git_utils import get_project_root  # noqa: E402
 
 SHIM_MARKER = "# git-ref-transaction-content-guard shim"
 HOOK_FILENAME = "reference-transaction"
+SHIM_VERSION = 3  # 3：警告訊息改用 ${rc}，避免 bash 在 C locale 把全形標點併入變數名
+
+# guard 判定阻擋的專用離開碼，須與 git-ref-transaction-content-guard.py 的
+# EXIT_BLOCK 一致。選 87 的理由：避開 uv / python / shell 的一般錯誤碼——
+# 1（python 未捕獲例外、uv 解析失敗）、2（argparse / clap 用法錯誤）、
+# 101（rust panic）、126/127（無法執行 / 找不到）、128+N（訊號）；
+# 87 不在其中，也不屬 sysexits 64-78 慣例區間。
+GUARD_BLOCK_EXIT_CODE = 87
 
 
 def _git_common_dir(project_root: Path) -> Optional[Path]:
@@ -82,13 +90,23 @@ def _git_common_dir(project_root: Path) -> Optional[Path]:
 def _shim_body() -> str:
     return f"""#!/bin/sh
 {SHIM_MARKER} -- 由 .claude/hooks/git-ref-transaction-guard-install-hook.py 產生，勿手動修改。
+# shim-version: {SHIM_VERSION}
 if [ "$1" != "prepared" ]; then
   exit 0
 fi
 root=$(git rev-parse --show-toplevel 2>/dev/null)
 target="$root/.claude/hooks/git-ref-transaction-content-guard.py"
 if [ -n "$root" ] && [ -f "$target" ]; then
-  exec uv run --quiet "$target" "$@"
+  uv run --quiet "$target" "$@"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    exit 0
+  fi
+  if [ "$rc" -eq {GUARD_BLOCK_EXIT_CODE} ]; then
+    exit 1
+  fi
+  # 非判定型失敗（uv 解析失敗 rc=1、uv 不存在 rc=127 等）：fail-open 但必須可見
+  echo "[reference-transaction shim] guard 啟動失敗（rc=${{rc}}），已放行本次 ref 寫入，內容掃描未生效" >&2
 fi
 exit 0
 """
@@ -130,7 +148,7 @@ def main() -> int:
     target.write_text(_shim_body(), encoding="utf-8")
     mode = target.stat().st_mode
     target.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    logger.info("已安裝/更新 reference-transaction shim：%s", target)
+    logger.info("已安裝/更新 reference-transaction shim（version=%s）：%s", SHIM_VERSION, target)
     return 0
 
 

@@ -52,7 +52,9 @@ def _mk_ls_files(stdout: str, returncode: int = 0):
 # ---------------------------------------------------------------------------
 def test_complete_gitignore_passes(tmp_path):
     hook = load_hook_module()
-    complete_content = "\n".join(sorted(hook.REQUIRED_GITIGNORE_ENTRIES)) + "\n"
+    complete_content = (
+        "\n".join(sorted(hook.REQUIRED_GITIGNORE_ENTRIES)) + "\ndocs/**/*.md.lock\n"
+    )
     _make_gitignore(tmp_path, complete_content)
     with patch.object(
         hook.subprocess, "run", return_value=_mk_ls_files("src/main.js\nREADME.md\n")
@@ -135,7 +137,8 @@ def test_no_gitignore_file_warns(tmp_path):
         missing, tracked, exists = hook.run_checks(tmp_path, MagicMock())
     assert exists is False
     # 所有 REQUIRED 都應在 missing
-    assert set(missing) == hook.REQUIRED_GITIGNORE_ENTRIES
+    # REQUIRED 全缺，另加推導出的票庫 lock 必要項
+    assert set(missing) == hook.REQUIRED_GITIGNORE_ENTRIES | {"docs/work-logs/**/*.md.lock"}
     output = hook.build_hook_output(missing, tracked, exists)
     ctx = output["hookSpecificOutput"]["additionalContext"]
     assert "未偵測到" in ctx or "未偵測到 `.gitignore`" in ctx
@@ -198,3 +201,99 @@ def test_required_derived_from_manifest_sot():
     manifest_derived = {f".claude/{n}" for n in GITIGNORE_EXPECTED}
     claude_scoped = {e for e in hook.REQUIRED_GITIGNORE_ENTRIES if e.startswith(".claude/")}
     assert claude_scoped == manifest_derived
+
+
+# ---------------------------------------------------------------------------
+# 票庫 lock sentinel 涵蓋（{票庫}/**/*.md.lock 推導必要項）
+# ---------------------------------------------------------------------------
+def _base_content(hook) -> str:
+    return "\n".join(sorted(hook.REQUIRED_GITIGNORE_ENTRIES)) + "\n"
+
+
+def _lock_missing(hook, tmp_path, extra: str, root_dir="docs/work-logs"):
+    _make_gitignore(tmp_path, _base_content(hook) + extra)
+    with patch.object(hook, "resolve_ticket_root_dir", return_value=root_dir):
+        return hook.check_ticket_lock_entry(
+            hook.parse_gitignore(tmp_path / ".gitignore", MagicMock()),
+            tmp_path,
+            MagicMock(),
+        )
+
+
+def test_ticket_lock_missing_is_detected(tmp_path):
+    """E2 正向對照：缺票庫 lock 涵蓋必須被檢出，且不含寫死 docs/ 以外的推導。"""
+    hook = load_hook_module()
+    assert _lock_missing(hook, tmp_path, "") == ["docs/work-logs/**/*.md.lock"]
+
+
+def test_ticket_lock_custom_root_derived(tmp_path):
+    hook = load_hook_module()
+    assert _lock_missing(hook, tmp_path, "", root_dir="tracking/tix") == [
+        "tracking/tix/**/*.md.lock"
+    ]
+
+
+def test_ticket_lock_covered_variants_not_reported(tmp_path):
+    """E1 對照：直寫與等價寫法皆不提示。"""
+    hook = load_hook_module()
+    for i, line in enumerate(
+        [
+            "docs/work-logs/**/*.md.lock",
+            "docs/**/*.md.lock",
+            "**/*.md.lock",
+            "*.md.lock",
+            "**/*.lock",
+            "*.lock",
+        ]
+    ):
+        sub = tmp_path / f"c{i}"
+        sub.mkdir()
+        assert _lock_missing(hook, sub, line + "\n") == [], line
+
+
+def test_ticket_root_under_claude_not_reported(tmp_path):
+    hook = load_hook_module()
+    assert _lock_missing(hook, tmp_path, "", root_dir=".claude/tickets") == []
+
+
+def test_resolve_ticket_root_dir_failure_falls_back(tmp_path):
+    """設定讀取失敗（constants.py 缺席）：退回預設並寫日誌，不拋例外。"""
+    hook = load_hook_module()
+    logger = MagicMock()
+    assert hook.resolve_ticket_root_dir(tmp_path, logger) == "docs/work-logs"
+    assert logger.info.called or logger.warning.called
+
+
+def test_resolve_ticket_root_dir_reads_constants(tmp_path):
+    hook = load_hook_module()
+    d = tmp_path / ".claude/skills/ticket/ticket_system"
+    d.mkdir(parents=True)
+    (d / "constants.py").write_text('WORK_LOGS_DIR: str = "tracking/tix"\n')
+    assert hook.resolve_ticket_root_dir(tmp_path, MagicMock()) == "tracking/tix"
+
+
+def test_run_checks_includes_ticket_lock(tmp_path):
+    hook = load_hook_module()
+    _make_gitignore(tmp_path, _base_content(hook))
+    with patch.object(hook.subprocess, "run", return_value=_mk_ls_files("")):
+        missing, _, _ = hook.run_checks(tmp_path, MagicMock())
+    assert "docs/work-logs/**/*.md.lock" in missing
+
+
+def test_claude_scoped_lock_rules_do_not_cover_ticket_root(tmp_path):
+    """E2：只含 .claude/ 範圍 lock 規則（框架預設）時，票庫在 docs/ 下必須檢出缺失。"""
+    hook = load_hook_module()
+    for i, line in enumerate(
+        [".claude/**/*.lock", ".claude/*.lock", "/.claude/**/*.lock", "other/**/*.md.lock", "docs/*.lock"]
+    ):
+        sub = tmp_path / f"m{i}"
+        sub.mkdir()
+        assert _lock_missing(hook, sub, line + "\n") == ["docs/work-logs/**/*.md.lock"], line
+
+
+def test_leading_slash_global_forms_cover(tmp_path):
+    hook = load_hook_module()
+    for i, line in enumerate(["/*.lock", "/**/*.md.lock", "docs/work-logs/**/*.lock"]):
+        sub = tmp_path / f"s{i}"
+        sub.mkdir()
+        assert _lock_missing(hook, sub, line + "\n") == [], line

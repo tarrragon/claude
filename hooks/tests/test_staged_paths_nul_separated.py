@@ -150,7 +150,7 @@ class TestGitRefTransactionGuard:
             text=True,
             env={"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"},
         )
-        assert result.returncode == 1
+        assert result.returncode == 87  # guard EXIT_BLOCK 專用碼
         assert "reference-stability-rule8-guard" in result.stderr
 
     def test_rename_map_three_segments(self, repo):

@@ -60,6 +60,7 @@ from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
 )
+from ticket_system.lib import git_utils
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.worklog_appender import append_worklog_progress
 # lease claim/release 寫入（multi-PM 協調層 Phase 3，批次路徑與單票路徑
@@ -334,6 +335,8 @@ def _execute_batch_operation(
     print(format_msg(TrackBatchMessages.BATCH_OPERATION_HEADER, operation_name=operation_name, count=len(ticket_ids)))
 
     success_count = 0
+    saved_paths: list[str] = []
+    saved_ids: list[str] = []
     for ticket_id in ticket_ids:
         # 使用 auto_print_error=False 以支援自訂 BATCH 格式
         ticket, error = load_and_validate_ticket(version, ticket_id, auto_print_error=False)
@@ -348,6 +351,8 @@ def _execute_batch_operation(
             # 保存更改
             ticket_path = resolve_ticket_path(ticket, version, ticket_id)
             save_ticket(ticket, ticket_path)
+            saved_paths.append(str(ticket_path))
+            saved_ids.append(ticket_id)
             # registry lease 附加動作：批次路徑刻意與單票路徑（track.py 的
             # claim_lease/release_lease 裸呼叫）不對稱——單票路徑不攔截，
             # 降級全靠 lease.py 內部 early return + stderr；批次路徑改攔截
@@ -377,6 +382,15 @@ def _execute_batch_operation(
 
     print()
     print(format_info(result_message_key, success=success_count, total=len(ticket_ids)))
+
+    # 成功寫入的票以單一 commit 提交（部分失敗的票未寫入，不在範圍內）。
+    # 提交最終失敗：寫入已落在 working tree 但未入庫，以 75 反映，優先於其餘結束碼。
+    commit_failed = git_utils.commit_ticket_mds_reporting(
+        f"batch-{operation}", saved_paths, saved_ids[0] if saved_ids else "",
+        f"batch-{operation}", operation=f"batch-{operation}",
+    )
+    if commit_failed:
+        return git_utils.EXIT_AUTO_COMMIT_FAILED
 
     # 批量全失敗為業務拒絕（每筆 ticket 處理已個別 print error，不是 internal error）
     return 0 if success_count > 0 else 2

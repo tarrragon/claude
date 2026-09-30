@@ -16,6 +16,19 @@ from ticket_system.commands.track_batch import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _stub_batch_autocommit():
+    """本檔以 mock 取代 save_ticket（票檔不存在），批次尾端的 auto-commit 無檔可提交。
+
+    提交範圍與失敗可見性由 test_multi_ticket_autocommit_scope.py 以真實 git repo 驗證。
+    """
+    with patch(
+        "ticket_system.commands.track_batch.git_utils.commit_ticket_mds_reporting",
+        return_value=False,
+    ):
+        yield
+
+
 class TestBatchClaim:
     """批量認領 Ticket 測試"""
 
