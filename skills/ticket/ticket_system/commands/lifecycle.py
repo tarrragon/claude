@@ -60,7 +60,7 @@ from ticket_system.lib.command_tracking_messages import (
     ClaimWrapMessages,
 )
 from ticket_system.lib.claude_lib_loader import load_claude_lib
-from ticket_system.lib.git_ops import commit_files_isolated
+from ticket_system.lib.git_ops import AppendSpec, commit_files_isolated
 from ticket_system.lib import git_utils
 from ticket_system.lib.git_utils import (
     EXIT_AUTO_COMMIT_FAILED,
@@ -83,6 +83,7 @@ from ticket_system.lib.ticket_ops import (
 )
 from ticket_system.lib.worklog_appender import (
     append_worklog_progress,
+    worklog_append_spec,
     _build_worklog_path,
 )
 
@@ -960,7 +961,7 @@ class TicketLifecycle:
 
         # 自動追加 worklog 進度行
         ticket_title = ticket.get("title", "")
-        worklog_written = append_worklog_progress(
+        worklog_line = append_worklog_progress(
             self.version, ticket_id, ticket_title
         )
 
@@ -1026,18 +1027,21 @@ class TicketLifecycle:
                 modified_paths.append(str(ticket_path))
             except Exception:
                 pass
-            # 只有本次確實寫入工作日誌才列入提交範圍：未寫入的檔案無變更，
-            # 列入會使 commit_files_isolated 自我驗證失敗而整批放棄
-            if worklog_written:
+            # 只有本次確實寫入進度行才提交 worklog，且只提交那一行（行層級，
+            # 不整檔 stage）：工作區 worklog 可能含他人未提交的修改。
+            worklog_append: Dict[str, AppendSpec] = {}
+            if worklog_line:
                 try:
-                    modified_paths.append(_build_worklog_path_for_stage(self.version))
+                    worklog_append[_build_worklog_path_for_stage(self.version)] = (
+                        worklog_append_spec(worklog_line)
+                    )
                 except Exception as exc:
                     sys.stderr.write(
                         f"[auto-commit] worklog 路徑解析失敗（略過）：{exc}\n"
                     )
             modified_paths.extend(unblocked_paths)
             if _auto_commit_completion_files(
-                ticket_id, modified_paths, unblocked_paths
+                ticket_id, modified_paths, unblocked_paths, worklog_append
             ):
                 # 狀態已寫入 working tree 但未入庫：以專用 exit code 反映，
                 # 與 complete 本身失敗（1）區分；WARNING 已由函式輸出。
@@ -1987,6 +1991,7 @@ def _auto_commit_completion_files(
     ticket_id: str,
     modified_paths: List[str],
     unblocked_paths: Optional[List[str]] = None,
+    append_lines: Optional[Dict[str, AppendSpec]] = None,
 ) -> bool:
     """complete 後以隔離索引自動提交已知 modified 路徑，取代原「auto-stage +
     人工裸 commit」流程。
@@ -2024,6 +2029,9 @@ def _auto_commit_completion_files(
         modified_paths: complete 流程實際寫入的檔案路徑清單（含被解鎖票檔）
         unblocked_paths: 其中被 cascade／反向 blockedBy 解鎖的票檔路徑，
             僅用於 commit body 列出被解鎖的票 ID
+        append_lines: 以行層級提交的檔案（worklog 進度行）：路徑 -> AppendSpec。
+            不整檔 stage，工作區內他人未提交的修改不會被帶入；失敗警告的
+            補救指令仍列出這些路徑。
 
     Returns:
         True 表最終提交失敗（含例外），已輸出含原因與補救指令的 WARNING；
@@ -2032,6 +2040,8 @@ def _auto_commit_completion_files(
     deduped: List[str] = list(dict.fromkeys(p for p in modified_paths if p))
     if not deduped:
         return False
+    appended = list(append_lines or {})
+    reported = deduped + [p for p in appended if p not in deduped]
 
     cwd = str(Path(deduped[0]).parent)
     message = f"chore({ticket_id}): metadata sync post-completion"
@@ -2039,10 +2049,12 @@ def _auto_commit_completion_files(
     if unblocked_ids:
         message += "\n\n被解鎖的票：" + "、".join(unblocked_ids)
     try:
-        result = commit_files_isolated(deduped, message, cwd=cwd)
+        # append_lines 僅在有值時才傳入，無 worklog 行時呼叫形態不變
+        extra_kwargs = {"append_lines": append_lines} if append_lines else {}
+        result = commit_files_isolated(deduped, message, cwd=cwd, **extra_kwargs)
     except Exception as exc:
         sys.stderr.write(_format_complete_commit_failure(
-            ticket_id, deduped, f"{type(exc).__name__}: {exc}"
+            ticket_id, reported, f"{type(exc).__name__}: {exc}"
         ))
         return True
 
@@ -2051,17 +2063,17 @@ def _auto_commit_completion_files(
         commit_sha = result.get("commit_sha") or ""
         print()
         print(
-            f"  [Auto-commit] 已隔離提交 {len(deduped)} 個 metadata 檔案 "
+            f"  [Auto-commit] 已隔離提交 {len(reported)} 個 metadata 檔案 "
             f"({commit_sha[:8]})："
         )
-        for path in deduped:
+        for path in reported:
             print(f"    - {path}")
     elif status == "empty":
         # 工作區內容與 HEAD 相同，無需提交（正常情況，非錯誤）
         pass
     else:
         sys.stderr.write(_format_complete_commit_failure(
-            ticket_id, deduped, str(result.get("error") or "")
+            ticket_id, reported, str(result.get("error") or "")
         ))
         return True
     return False

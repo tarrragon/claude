@@ -17,6 +17,8 @@
 
 ### 案例：version_shift.py 的跨版本引用更新
 
+> 歷史案例：`version_shift.py` 與 `ticket version-shift` 命令已移除，案例保留供參考。
+
 `_update_cross_version_refs()` 中的跨 Ticket 掃描：
 
 ```python

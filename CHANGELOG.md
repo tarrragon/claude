@@ -1,3 +1,20 @@
+## [2.72.0] - 2026-10-01
+
+### Summary
+feat: remove ticket version-shift command; feat: reference-transaction 預驗證命中時鎖內不啟動 python; fix: commit_files_isolated 範圍自檢改子集比對 (+4 more)
+
+Changes: 2 feat, 3 fix, 1 chore, 1 test
+
+- feat: remove ticket version-shift command
+- feat: reference-transaction 預驗證命中時鎖內不啟動 python
+- fix: commit_files_isolated 範圍自檢改子集比對
+- fix: add-spawn-request SR 編號只取 Spawn Requests 章節結構化條目
+- fix: worklog 進度行改以行層級提交 (ticket 2.44.19)
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+- test: shim 不命中對照案例移至 e2e 檔，gate 對象檔降至 20 秒內
+
+---
+
 ## [2.71.0] - 2026-10-01
 
 ### Summary

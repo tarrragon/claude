@@ -3,7 +3,7 @@
 
 驗證 handoff.py / resume.py / handoff_gc.py / track_dashboard.py /
 track_dispatch_check.py / checkpoint_state.py / handoff_utils.py /
-track_runqueue.py / version_shift.py / migrate.py / track_query.py /
+track_runqueue.py / migrate.py / track_query.py /
 track_snapshot.py / topic_backfill.py 在 linked worktree cwd 下，讀寫皆落在
 主倉庫（非 worktree 本地副本）。
 
@@ -324,34 +324,6 @@ def _write_minimal_ticket(path: Path, ticket_id: str, **extra_frontmatter: str) 
     lines.append("# body")
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
-
-
-class TestVersionShiftWorktreeRootUnification:
-    """version_shift.py：0.2.1-W4-031，來源版本目錄驗證應讀主倉庫。"""
-
-    def test_dry_run_in_linked_worktree_reads_main_repo_version_dir(
-        self, linked_worktree
-    ):
-        main_root, wt_root = linked_worktree
-        import argparse
-        from ticket_system.commands.version_shift import execute
-
-        from_dir = main_root / WORK_LOGS_DIR / "v0.1.0" / "tickets"
-        from_dir.mkdir(parents=True, exist_ok=True)
-
-        args = argparse.Namespace(
-            from_version="0.1.0",
-            to_version="0.2.0",
-            dry_run=True,
-            no_backup=True,
-            skip_todolist=True,
-        )
-
-        rc = execute(args)
-
-        # 修復前：get_project_root() 回傳 wt_root，wt_root 下無 v0.1.0/，
-        # _validate_versions 判定來源版本不存在，rc == 1。
-        assert rc == 0
 
 
 class TestMigrateWorktreeRootUnification:

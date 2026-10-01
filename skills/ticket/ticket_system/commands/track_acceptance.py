@@ -849,6 +849,15 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
+_SR_ENTRY_PATTERN = re.compile(r"^- \*\*SR-(\d+)\*\*", re.MULTILINE)
+
+
+def _next_spawn_request_number(section_content: str) -> int:
+    """回傳 Spawn Requests 章節內結構化條目（`- **SR-N**` 行首）最大號 +1。"""
+    numbers = [int(n) for n in _SR_ENTRY_PATTERN.findall(section_content)]
+    return max(numbers, default=0) + 1
+
+
 def execute_add_spawn_request(args: argparse.Namespace, version: str) -> int:
     """
     追加結構化 spawn request 至 Spawn Requests 章節
@@ -908,10 +917,9 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     section = "Spawn Requests"
     match = find_section(body, section)
 
-    # 自動編號：掃描既有 body 中 SR-\d+ 最大值 +1
-    existing_ids = [int(n) for n in re.findall(r"SR-(\d+)", body)]
-    next_id = max(existing_ids, default=0) + 1
-    sr_label = f"SR-{next_id}"
+    # 自動編號：只看 Spawn Requests 章節內的結構化條目，不掃正文
+    section_content = match.content if match is not None and match.found else ""
+    sr_label = f"SR-{_next_spawn_request_number(section_content)}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     files_value = ",".join(expand_list_arg(args.files))

@@ -501,6 +501,88 @@ def _stage_appended_blob(
     return None if ok else (err or "update-index 失敗")
 
 
+# ---------------------------------------------------------------------------
+# reference-transaction 預驗證
+#
+# update-ref 持有 ref 鎖期間會執行 reference-transaction hook，hook 內啟動 python
+# 掃描內容佔了持鎖時間的一半以上。本模組在取鎖之前先以「同一份 guard」對同一個
+# commit 試跑；只在無任何發現、非合併時，才於該次 update-ref 的環境帶
+# GUARD_PREVALIDATED=<new>:<old>:<ref>，由 hook shim 以 sh 比對 stdin 全等後放行。
+# 唯一危險方向是錯誤命中，故任何不確定（deny、WARN、載入失敗、合併中、detached
+# HEAD）都不設 env，退回 hook 的完整掃描。
+# ---------------------------------------------------------------------------
+GUARD_PREVALIDATED_ENV = "GUARD_PREVALIDATED"
+_GUARD_PREVALIDATE_ONLY_ENV = "GIT_REF_GUARD_PREVALIDATE_ONLY"
+_GUARD_PREVALIDATE_CLEAN_TOKEN = "PREVALIDATE_CLEAN"
+_GUARD_RELPATH = ".claude/hooks/git-ref-transaction-content-guard.py"
+_GUARD_BLOCK_EXIT_CODE = 87  # 須與 guard 的 EXIT_BLOCK 一致
+_GUARD_PREVALIDATE_TIMEOUT = 300
+_PREVALIDATE_LOG_DIR = os.path.join(".claude", "hook-logs", "git-ops-prevalidate")
+
+
+def _run_guard_prevalidate(repo_root: str, stdin_text: str) -> Tuple[int, str, str]:
+    """以 shim 相同的方式（uv run）在預驗證模式執行 guard，回傳 (rc, stdout, stderr)。"""
+    env = dict(os.environ)
+    env.pop(GUARD_PREVALIDATED_ENV, None)
+    env[_GUARD_PREVALIDATE_ONLY_ENV] = "1"
+    result = subprocess.run(
+        ["uv", "run", "--quiet", os.path.join(repo_root, _GUARD_RELPATH), "prepared"],
+        input=stdin_text,
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=_GUARD_PREVALIDATE_TIMEOUT,
+    )
+    return result.returncode, result.stdout, result.stderr
+
+
+def _report_prevalidate_failure(repo_root: str, reason: str) -> None:
+    """預驗證失敗必須可見：stderr 與日誌檔雙通道；呼叫端隨後退回完整掃描。"""
+    message = f"預驗證失敗，本次 update-ref 退回 hook 完整掃描：{reason}"
+    print(f"[WARNING] {message}", file=sys.stderr)
+    try:
+        log_dir = os.path.join(repo_root, _PREVALIDATE_LOG_DIR)
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "prevalidate-" + time.strftime("%Y%m%d") + ".log")
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] WARNING - {message}\n")
+    except OSError as exc:
+        print(f"[WARNING] 預驗證日誌寫入失敗：{exc}", file=sys.stderr)
+
+
+def _prevalidate_guard_env(repo_root: str, commit_sha: str, old_head: str) -> Optional[str]:
+    """回傳 GUARD_PREVALIDATED 的值；任何條件不成立回傳 None（不設 env）。
+
+    分支以 ``repo_root`` 的 symbolic-ref HEAD 取得（寫入發生的 checkout），不讀
+    CLAUDE_PROJECT_DIR——worktree 情境該變數可能指向別的 checkout。
+    """
+    ok, sym, _err = _run_git(["git", "symbolic-ref", "-q", "HEAD"], cwd=repo_root)
+    ref = sym.strip() if ok else ""
+    if not ref.startswith("refs/heads/"):
+        return None  # detached HEAD 或非分支：hook 自行判定
+    merging, _, _ = _run_git(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], cwd=repo_root)
+    if merging:
+        return None  # 合併中兩端判定不同，一律完整掃描
+    if not os.path.isfile(os.path.join(repo_root, _GUARD_RELPATH)):
+        return None  # 未安裝 guard：shim 本身也不會掃描
+    try:
+        rc, out, err = _run_guard_prevalidate(repo_root, f"{old_head} {commit_sha} {ref}\n")
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        _report_prevalidate_failure(repo_root, f"{type(exc).__name__}: {exc}")
+        return None
+    if rc == _GUARD_BLOCK_EXIT_CODE:
+        return None  # 有 deny：不預驗證，由 hook 阻擋並輸出訊息
+    if rc != 0 or (rc == 0 and "內部錯誤" in err):
+        _report_prevalidate_failure(repo_root, f"guard rc={rc}：{err.strip()[:300]}")
+        return None
+    if out.strip() != _GUARD_PREVALIDATE_CLEAN_TOKEN:
+        return None  # 有 WARN（或其他非乾淨結果）：不命中，由 hook 輸出提醒
+    return f"{commit_sha}:{old_head}:{ref}"
+
+
 def commit_files_isolated(
     paths: List[str],
     message: str,
@@ -641,16 +723,26 @@ def commit_files_isolated(
         if not ok:
             return {"status": "failed", "commit_sha": None, "error": err}
         changed = {line for line in diff_out.split("\0") if line}
-        if changed != set(expected_changes):
+        # 子集比對：列出但淨變更為零的路徑合法；清單外的變更才是越界。
+        # changed 為空已由上方空 tree 短路回報 empty。
+        out_of_scope = changed - set(expected_changes)
+        if out_of_scope:
             return {
                 "status": "failed",
                 "commit_sha": None,
                 "error": (
                     f"提交範圍自我驗證失敗，預期 {sorted(expected_changes)} 實得 "
-                    f"{sorted(changed)}"
+                    f"{sorted(changed)}（範圍外 {sorted(out_of_scope)}）"
                 ),
             }
 
+        # 預驗證在取 ref 鎖之前完成；env 只隨這一次 update-ref 傳遞（不寫入
+        # os.environ，其餘 git 呼叫不帶）。
+        prevalidated = _prevalidate_guard_env(cwd, commit_sha, old_head)
+        update_ref_env = None
+        if prevalidated:
+            update_ref_env = dict(os.environ)
+            update_ref_env[GUARD_PREVALIDATED_ENV] = prevalidated
         locks_before_update_ref = set(_scan_ref_lock_files(cwd))
         # update-ref 持有 HEAD.lock／<branch>.lock 期間會執行 reference-transaction
         # hook；高負載下 hook 可超過 _GIT_TIMEOUT，逾時會殺掉 git，鎖即殘留，其後
@@ -660,6 +752,7 @@ def commit_files_isolated(
         ok, _, err = _run_git_with_lock_retry(
             ["git", "update-ref", "HEAD", commit_sha, old_head],
             cwd=cwd,
+            env=update_ref_env,
             timeout=None,
         )
         if not ok:

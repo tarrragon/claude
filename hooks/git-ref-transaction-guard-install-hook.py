@@ -55,7 +55,7 @@ from lib.git_utils import get_project_root  # noqa: E402
 
 SHIM_MARKER = "# git-ref-transaction-content-guard shim"
 HOOK_FILENAME = "reference-transaction"
-SHIM_VERSION = 3  # 3：警告訊息改用 ${rc}，避免 bash 在 C locale 把全形標點併入變數名
+SHIM_VERSION = 4  # 4：先存整段 stdin，GUARD_PREVALIDATED 全等命中即放行不啟動 python；3：警告訊息改用 ${rc}
 
 # guard 判定阻擋的專用離開碼，須與 git-ref-transaction-content-guard.py 的
 # EXIT_BLOCK 一致。選 87 的理由：避開 uv / python / shell 的一般錯誤碼——
@@ -88,16 +88,43 @@ def _git_common_dir(project_root: Path) -> Optional[Path]:
 
 
 def _shim_body() -> str:
+    # 預驗證命中（GUARD_PREVALIDATED=<new>:<old>:<ref>）：呼叫端在 update-ref 前已
+    # 以同一份 guard 掃過同一個 commit 且無任何發現。命中條件是「整段 stdin 與
+    # `<old> <new> <ref>\n` 逐字全等」，單行、ref、old、new 四項一次綁定；任何
+    # 不符（多 ref 交易、他 ref、old/new 不同）都不命中，原 stdin 原樣交給 python
+    # 完整掃描。命令替換會吞尾端換行，故追加 x 再剝除以保留原字節。
     return f"""#!/bin/sh
 {SHIM_MARKER} -- 由 .claude/hooks/git-ref-transaction-guard-install-hook.py 產生，勿手動修改。
 # shim-version: {SHIM_VERSION}
 if [ "$1" != "prepared" ]; then
   exit 0
 fi
+input=$(cat; printf x)
+input=${{input%x}}
+if [ -n "$GUARD_PREVALIDATED" ]; then
+  pv_new=${{GUARD_PREVALIDATED%%:*}}
+  pv_rest=${{GUARD_PREVALIDATED#*:}}
+  pv_old=${{pv_rest%%:*}}
+  pv_ref=${{pv_rest#*:}}
+  nl='
+'
+  case "$pv_new$pv_old" in
+    ""|*[!0-9a-f]*) ;;
+    *)
+      case "$pv_ref" in
+        refs/heads/?*)
+          if [ "$input" = "$pv_old $pv_new $pv_ref$nl" ]; then
+            exit 0
+          fi
+          ;;
+      esac
+      ;;
+  esac
+fi
 root=$(git rev-parse --show-toplevel 2>/dev/null)
 target="$root/.claude/hooks/git-ref-transaction-content-guard.py"
 if [ -n "$root" ] && [ -f "$target" ]; then
-  uv run --quiet "$target" "$@"
+  printf '%s' "$input" | uv run --quiet "$target" "$@"
   rc=$?
   if [ "$rc" -eq 0 ]; then
     exit 0

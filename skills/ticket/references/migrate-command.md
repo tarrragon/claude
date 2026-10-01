@@ -130,6 +130,18 @@ migrations:
 }
 ```
 
+## 整版改號流程
+
+`ticket version-shift` 已移除（見 CHANGELOG 2.44.21）。把整個版本的票搬到另一個版本號，用 `ticket migrate --config` 搬票，再手動完成三件 migrate 不處理的事。順序固定：
+
+1. **先登記目標版本**：`version-release start --version <目標版本>`（建 todolist 版本條目與 worklog 結構）。須在 migrate 之前，否則 start 因目標目錄已存在而拒絕。驗證：`grep -n 'version: "<目標版本>"' docs/todolist.yaml` 命中，且 `docs/work-logs/` 下目標版本目錄存在。
+2. **產生設定檔並搬票**：列出來源版本全部票，逐張寫 `from` / `to` 進 `migration.yaml`（格式見上節），先 `ticket migrate --config migration.yaml --dry-run`，再實際執行。驗證：`git show --stat --name-status HEAD` 只有來源 `D`、目標 `A`、引用者 `M`、topic 追加行，無目標路徑 `M`（撞號）。
+3. **手動步驟一，todolist 版本條目**：來源版本條目改 `status` 與 `notes` 說明已改號（或依實際需要移除），確認目標條目已有正確 `worklog` 路徑。驗證：`grep -n 'version: "<來源版本>"' docs/todolist.yaml` 與目標版本各看一次；`python3 -c "import yaml;yaml.safe_load(open('docs/todolist.yaml'))"` 無例外。
+4. **手動步驟二，worklog 主檔**：把來源版本 worklog 主檔（`v<版本>-main.md`）內容併入或改名為目標版本主檔。漏做不會報錯，之後每次 `complete` 靜默缺進度行。驗證：目標版本目錄下存在 `v<目標版本>-main.md`，`complete` 一張票後該檔出現進度行。
+5. **手動步驟三，舊目錄**：確認來源版本目錄 `tickets/` 已空且無他人引用後移除。驗證：`ls` 來源版本 `tickets/` 為空；`grep -rl "<來源版本>-W" docs/ .claude/` 無結構欄位殘留（body 內舊 ID 依 migrate 語意保留）。
+
+migrate 不改 todolist、不改 worklog 主檔、不移除舊目錄；這三件不做，整版改號即未完成。
+
 ## 遷移邏輯
 
 遷移會自動更新以下欄位：
@@ -146,6 +158,12 @@ migrations:
 | `blockedBy`      | 更新所有 Ticket ID 引用 |
 | `children`       | 更新子任務 ID 引用      |
 | `source_ticket`  | 更新來源引用            |
+| `discovered_during` | 更新發現來源引用     |
+| `closed_by`      | 更新關閉者引用（字串或清單） |
+| 他票的 `chain.root`／`chain.parent` | 等於舊 ID 者改寫為新 ID |
+| `previous_ids`   | 被遷移票追加舊 ID（有序清單，長度即遷移次數；同 ID 改名不追加） |
+
+topic-assignments 以追加一行「新 ID、原主題」承接，不改寫舊行。遷移以單一隔離提交寫入新檔、舊檔、各引用者與 topic 追加行；提交失敗時 exit 75，`[WARNING]` 列出全部路徑。
 
 ## Collision Detection
 

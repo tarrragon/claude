@@ -940,3 +940,233 @@ class TestScopeCheckRenameAndDirectory:
         assert r["status"] == "failed", r
         assert "目錄" in r["error"]
         assert _run_git(repo, "rev-parse", "HEAD").stdout == head
+
+
+# ---------------------------------------------------------------------------
+# reference-transaction 預驗證（GUARD_PREVALIDATED）
+# ---------------------------------------------------------------------------
+
+import importlib.util
+import sys
+
+_CLAUDE_DIR = Path(__file__).resolve().parents[4]
+_NEW = "a" * 40
+_OLD = "b" * 40
+_BRANCH_REF = "refs/heads/feat/x"
+
+
+@pytest.fixture(autouse=True)
+def _no_prevalidate_in_mock_tests(request, monkeypatch):
+    """既有的 mock/真實 git 測試不涉及預驗證；以 TestPrevalidate 為前綴的類別才啟用。"""
+    cls = request.node.cls
+    if cls is not None and cls.__name__.startswith("TestPrevalidate"):
+        return
+    monkeypatch.setattr(git_ops, "_prevalidate_guard_env", lambda *a, **k: None, raising=False)
+
+
+class TestPrevalidateGuardEnv:
+    """_prevalidate_guard_env 的每個命中條件，各有一個不符即回 None 的對照。"""
+
+    @pytest.fixture()
+    def stub(self, monkeypatch, tmp_path):
+        root = tmp_path / "repo"
+        guard = root / ".claude" / "hooks" / "git-ref-transaction-content-guard.py"
+        guard.parent.mkdir(parents=True)
+        guard.write_text("", encoding="utf-8")
+        state = {"git": {}, "guard": (0, "PREVALIDATE_CLEAN\n", ""), "guard_calls": [], "git_calls": []}
+
+        def fake_git(args, cwd=None, **kw):
+            state["git_calls"].append((args, cwd))
+            if args[:3] == ["git", "symbolic-ref", "-q"]:
+                return state["git"].get("sym", (True, _BRANCH_REF + "\n", ""))
+            if args[:2] == ["git", "rev-parse"] and "MERGE_HEAD" in args:
+                return state["git"].get("merge", (False, "", ""))
+            raise AssertionError(f"未預期的 git 呼叫 {args}")
+
+        def fake_guard(repo_root, stdin_text):
+            state["guard_calls"].append((repo_root, stdin_text))
+            result = state["guard"]
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        monkeypatch.setattr(git_ops, "_run_git", fake_git)
+        monkeypatch.setattr(git_ops, "_run_guard_prevalidate", fake_guard, raising=False)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/somewhere/else")
+        state["root"] = str(root)
+        return state
+
+    def _call(self, stub):
+        return git_ops._prevalidate_guard_env(stub["root"], _NEW, _OLD)
+
+    def test_clean_returns_new_old_ref(self, stub):
+        assert self._call(stub) == f"{_NEW}:{_OLD}:{_BRANCH_REF}"
+        assert stub["guard_calls"] == [(stub["root"], f"{_OLD} {_NEW} {_BRANCH_REF}\n")]
+
+    def test_branch_resolved_in_given_root_not_env_project_dir(self, stub):
+        self._call(stub)
+        assert all(cwd == stub["root"] for _args, cwd in stub["git_calls"])
+
+    def test_guard_block_exit_code_returns_none_silently(self, stub, capsys):
+        stub["guard"] = (87, "", "deny 訊息")
+        assert self._call(stub) is None
+        assert capsys.readouterr().err == ""
+
+    def test_warn_without_clean_token_returns_none(self, stub):
+        stub["guard"] = (0, "", "[git-ref-transaction-content-guard] 提醒：WARN")
+        assert self._call(stub) is None
+
+    def test_merge_head_returns_none_without_running_guard(self, stub):
+        stub["git"]["merge"] = (True, "abc\n", "")
+        assert self._call(stub) is None
+        assert stub["guard_calls"] == []
+
+    def test_detached_head_returns_none(self, stub):
+        stub["git"]["sym"] = (False, "", "fatal: ref HEAD is not a symbolic ref")
+        assert self._call(stub) is None
+        assert stub["guard_calls"] == []
+
+    def test_non_heads_symbolic_ref_returns_none(self, stub):
+        stub["git"]["sym"] = (True, "refs/remotes/origin/x\n", "")
+        assert self._call(stub) is None
+        assert stub["guard_calls"] == []
+
+    def test_missing_guard_script_returns_none(self, stub):
+        Path(stub["root"], ".claude/hooks/git-ref-transaction-content-guard.py").unlink()
+        assert self._call(stub) is None
+        assert stub["guard_calls"] == []
+
+    @pytest.mark.parametrize("bad", [(1, "", "uv 解析失敗"), (127, "", "not found"),
+                                     (0, "", "[x] 內部錯誤（已放行，未阻擋本次 ref 寫入）：boom"),
+                                     OSError("uv 不存在"), subprocess.TimeoutExpired("uv", 1)])
+    def test_load_failure_is_visible_on_stderr_and_log_and_returns_none(self, stub, capsys, bad):
+        stub["guard"] = bad
+        assert self._call(stub) is None
+        assert "[WARNING]" in capsys.readouterr().err
+        logs = list(Path(stub["root"], ".claude", "hook-logs", "git-ops-prevalidate").glob("*.log"))
+        assert logs and logs[0].read_text(encoding="utf-8").strip()
+
+
+class TestPrevalidateEnvPropagation:
+    """env 只隨該次 update-ref 傳遞，不殘留於其他 git 呼叫與行程環境。"""
+
+    def _run(self, prevalidated):
+        envs = []
+
+        def fake_run(args, **kwargs):
+            envs.append((args[:2], kwargs.get("env")))
+            return _fake_run_factory([])(args, **kwargs)
+
+        with patch.object(git_ops, "_prevalidate_guard_env", return_value=prevalidated), \
+                patch.object(git_ops.subprocess, "run", side_effect=fake_run):
+            result = git_ops.commit_files_isolated([_TARGET], "msg")
+        return result, envs
+
+    def test_env_set_only_on_update_ref(self):
+        result, envs = self._run(f"{_NEW}:{_OLD}:{_BRANCH_REF}")
+        assert result["status"] == "committed"
+        with_key = [a for a, e in envs if e and "GUARD_PREVALIDATED" in e]
+        assert with_key == [["git", "update-ref"]]
+        update_env = [e for a, e in envs if a == ["git", "update-ref"]][0]
+        assert update_env["GUARD_PREVALIDATED"] == f"{_NEW}:{_OLD}:{_BRANCH_REF}"
+        assert "GUARD_PREVALIDATED" not in os.environ
+
+    def test_no_env_when_prevalidation_declines(self):
+        result, envs = self._run(None)
+        assert result["status"] == "committed"
+        assert not [a for a, e in envs if e and "GUARD_PREVALIDATED" in e]
+
+
+@pytest.fixture()
+def guard_world(tmp_path, monkeypatch):
+    """真實 git 倉庫 + 真實 shim + 真實 guard（假 uv 記錄每次呼叫後轉交 python 執行）。"""
+    spec = importlib.util.spec_from_file_location(
+        "installer", _CLAUDE_DIR / "hooks" / "git-ref-transaction-guard-install-hook.py")
+    installer = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(_CLAUDE_DIR / "hooks"))
+    sys.path.insert(0, str(_CLAUDE_DIR))
+    spec.loader.exec_module(installer)
+
+    log = tmp_path / "uv.log"
+    fakebin = tmp_path / "bin"
+    fakebin.mkdir()
+    uv = fakebin / "uv"
+    uv.write_text(
+        f'#!/bin/sh\necho "pv=${{GIT_REF_GUARD_PREVALIDATE_ONLY:-0}}" >> {log}\n'
+        f'shift 2\nexec {sys.executable} "$@"\n', encoding="utf-8")
+    uv.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fakebin}:{os.environ['PATH']}")
+    for k in ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"):
+        monkeypatch.setenv(k, "t")
+    for k in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
+        monkeypatch.setenv(k, "t@t")
+
+    def make_repo(path):
+        path.mkdir()
+        _run_git(path, "init", "-q", "-b", "main")
+        (path / "README.md").write_text("base\n", encoding="utf-8")
+        _run_git(path, "add", "README.md")
+        _run_git(path, "commit", "-qm", "base")
+        (path / ".claude").symlink_to(_CLAUDE_DIR)
+        return path
+
+    class World:
+        pass
+
+    w = World()
+    w.log, w.make_repo, w.installer = log, make_repo, installer
+    w.tmp = tmp_path
+
+    def install(repo):
+        hooks = repo / ".git" / "hooks"
+        hooks.mkdir(exist_ok=True)
+        shim = hooks / "reference-transaction"
+        shim.write_text(installer._shim_body(), encoding="utf-8")
+        shim.chmod(0o755)
+
+    w.install = install
+    w.calls = lambda: log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    return w
+
+
+class TestPrevalidateEndToEnd:
+    def test_clean_commit_runs_python_only_in_prevalidation_not_under_lock(self, guard_world):
+        repo = guard_world.make_repo(guard_world.tmp / "r1")
+        _run_git(repo, "checkout", "-q", "-b", "feat/x")
+        guard_world.install(repo)
+        (repo / "docs").mkdir()
+        (repo / "docs" / "n.md").write_text("clean\n", encoding="utf-8")
+        r = git_ops.commit_files_isolated(["docs/n.md"], "c", cwd=str(repo))
+        assert r["status"] == "committed", r
+        assert guard_world.calls() == ["pv=1"]
+
+    def test_violation_on_protected_branch_not_prevalidated_and_blocked_by_hook(self, guard_world):
+        repo = guard_world.make_repo(guard_world.tmp / "r2")
+        guard_world.install(repo)
+        (repo / "src").mkdir()
+        (repo / "src" / "v.txt").write_text("違規\n", encoding="utf-8")
+        head = _run_git(repo, "rev-parse", "HEAD").stdout
+        r = git_ops.commit_files_isolated(["src/v.txt"], "v", cwd=str(repo))
+        assert r["status"] == "failed", r
+        assert "branch-verify" in r["error"]
+        assert guard_world.calls() == ["pv=1", "pv=0"]
+        assert _run_git(repo, "rev-parse", "HEAD").stdout == head
+
+    def test_worktree_protected_branch_violation_blocked_despite_env_project_dir(
+            self, guard_world, monkeypatch):
+        primary = guard_world.make_repo(guard_world.tmp / "r3")
+        _run_git(primary, "checkout", "-q", "-b", "feat/y")
+        guard_world.install(primary)
+        wt = guard_world.tmp / "wt"
+        _run_git(primary, "worktree", "add", "-q", str(wt), "main")
+        (wt / ".claude").symlink_to(_CLAUDE_DIR)
+        (wt / "src").mkdir()
+        (wt / "src" / "v.txt").write_text("違規\n", encoding="utf-8")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(primary))
+        guard_world.log.write_text("", encoding="utf-8")  # 清掉 worktree add 的 hook 觸發
+        head = _run_git(wt, "rev-parse", "HEAD").stdout
+        r = git_ops.commit_files_isolated(["src/v.txt"], "v", cwd=str(wt))
+        assert r["status"] == "failed", r
+        assert "branch-verify" in r["error"]
+        assert guard_world.calls() == ["pv=1", "pv=0"]
+        assert _run_git(wt, "rev-parse", "HEAD").stdout == head

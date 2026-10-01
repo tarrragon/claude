@@ -74,9 +74,10 @@ def _run_complete(
         "error": None,
     }
 
-    def fake_commit_files_isolated(paths, message, cwd=None):
+    def fake_commit_files_isolated(paths, message, cwd=None, append_lines=None):
         captured_calls.append(
-            {"paths": list(paths), "message": message, "cwd": cwd}
+            {"paths": list(paths), "message": message, "cwd": cwd,
+             "append_lines": dict(append_lines or {})}
         )
         return commit_result or default_commit_result
 
@@ -128,7 +129,7 @@ def _run_complete(
         side_effect=fake_resolve_path,
     ), patch(
         "ticket_system.commands.lifecycle.append_worklog_progress",
-        return_value=worklog_written,
+        return_value="- 2026-01-01: t 完成 -- x\n" if worklog_written else None,
     ), patch(
         "ticket_system.commands.lifecycle._build_worklog_path_for_stage",
         return_value=fake_worklog_path,
@@ -172,7 +173,9 @@ class TestCompleteAutoStage:
         assert len(calls) == 1, f"expected 1 commit_files_isolated call, got {calls}"
         committed = calls[0]["paths"]
         assert any("0.18.0-W17-998.md" in p for p in committed), committed
-        assert any("worklog" in p for p in committed), committed
+        # worklog 以行層級提交：不在整檔 paths，改走 append_lines
+        assert not any("worklog" in p for p in committed), committed
+        assert any("worklog" in p for p in calls[0]["append_lines"]), calls[0]
         # W4-026：cwd 錨定為 modified_paths[0]（票面 md）所在目錄
         assert calls[0]["cwd"] == "/tmp", calls[0]
 
@@ -185,11 +188,11 @@ class TestCompleteAutoStage:
             ticket=_build_ticket(), worklog_written=False
         )
 
-        written = calls_written[0]["paths"]
-        skipped = calls_skipped[0]["paths"]
+        written = calls_written[0]["append_lines"]
+        skipped = calls_skipped[0]["append_lines"]
         assert any("worklog" in p for p in written), written
         assert not any("worklog" in p for p in skipped), skipped
-        assert any("0.18.0-W17-998.md" in p for p in skipped), skipped
+        assert any("0.18.0-W17-998.md" in p for p in calls_skipped[0]["paths"])
 
     def test_complete_cascade_commits_children(self, capsys):
         """children 解鎖且 save 成功者進入提交清單，commit body 列出其 ID。"""
@@ -532,3 +535,46 @@ class TestCompleteCommitsUnblockedTickets:
         assert f"{_CHILD}.md" not in names
         assert {f"{_PARENT}.md", f"{_CROSS}.md"} <= names
         assert "disk full" in captured.out + captured.err
+
+
+_WL_REL = "docs/work-logs/v0/v0.0/v0.0.0/v0.0.0-main.md"
+_WL_BASE = "# w\n\n### 2026-01-01\n\n- x\n\n---\n\n## Footer\n\nfooter\n"
+
+
+def _reset_worklog(repo: Path, text: str) -> Path:
+    path = repo / _WL_REL
+    path.write_text(text, encoding="utf-8")
+    _real_git(repo, "add", str(path))
+    _real_git(repo, "commit", "-q", "-m", "worklog seed")
+    return path
+
+
+def _head_worklog_lines(repo: Path) -> list:
+    return _real_git(repo, "show", f"HEAD:{_WL_REL}").splitlines()
+
+
+class TestCompleteWorklogLineLevelCommit:
+    def test_others_uncommitted_worklog_edit_not_committed(
+        self, real_repo, monkeypatch, capsys
+    ):
+        path = _reset_worklog(real_repo, _WL_BASE)
+        path.write_text(_WL_BASE.replace("- x\n", "- x\n- other uncommitted\n"), encoding="utf-8")
+        rc = _cli_complete(monkeypatch, _PARENT)
+        assert rc == 0, capsys.readouterr().err
+        head = _head_worklog_lines(real_repo)
+        assert "- other uncommitted" not in head
+        assert any(f"{_PARENT} 完成" in ln for ln in head)
+        assert "- other uncommitted" in path.read_text(encoding="utf-8").splitlines()
+
+    def test_non_superset_edit_still_lands_in_date_section(
+        self, real_repo, monkeypatch, capsys
+    ):
+        path = _reset_worklog(real_repo, _WL_BASE)
+        path.write_text(_WL_BASE.replace("- x\n", "- x edited\n"), encoding="utf-8")
+        rc = _cli_complete(monkeypatch, _PARENT)
+        assert rc == 0, capsys.readouterr().err
+        head = _head_worklog_lines(real_repo)
+        assert "- x edited" not in head
+        progress = [i for i, ln in enumerate(head) if f"{_PARENT} 完成" in ln]
+        assert len(progress) == 1
+        assert head.index("- x") < progress[0] < head.index("---"), head

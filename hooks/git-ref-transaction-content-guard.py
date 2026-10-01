@@ -117,6 +117,7 @@ guard 載入失敗或程式錯誤全域擋下團隊所有 git 操作，同時符
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -143,6 +144,13 @@ EXIT_ALLOW = 0
 # 專用離開碼，須與 install hook 的 GUARD_BLOCK_EXIT_CODE 一致；shim 只在收到
 # 此碼時中止 ref transaction，其他非零（uv 失敗等）一律 fail-open。
 EXIT_BLOCK = 87
+
+# 預驗證模式（呼叫端在 update-ref 前以同一份 guard 試跑）：設為 "1" 時，
+# 只有「無任何發現（含 WARN）、非合併」才在 stdout 輸出 PREVALIDATE_CLEAN；
+# 其餘判定（deny、WARN、內部錯誤）照常以離開碼與 stderr 表達，呼叫端據此
+# 決定是否為該次 update-ref 帶 GUARD_PREVALIDATED（見 install hook 的 shim）。
+ENV_PREVALIDATE_ONLY = "GIT_REF_GUARD_PREVALIDATE_ONLY"
+PREVALIDATE_CLEAN_TOKEN = "PREVALIDATE_CLEAN"
 
 _HEADS_PREFIX = "refs/heads/"
 _HEAD_REF = "HEAD"
@@ -548,6 +556,8 @@ def main() -> int:
         return EXIT_ALLOW
 
     logger.debug("新 commit 內容無發現，放行：new_commits=%d", len(new_commits))
+    if os.environ.get(ENV_PREVALIDATE_ONLY) == "1" and not is_merge:
+        sys.stdout.write(PREVALIDATE_CLEAN_TOKEN + "\n")
     return EXIT_ALLOW
 
 

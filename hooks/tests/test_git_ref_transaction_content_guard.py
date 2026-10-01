@@ -617,5 +617,46 @@ class TestWorktreeBranchResolution:
         assert result.returncode == 0, result.stderr
 
 
+class TestPrevalidateOnlyMode:
+    """預驗證模式（GIT_REF_GUARD_PREVALIDATE_ONLY=1）：只有「無任何發現」才輸出
+    PREVALIDATE_CLEAN；deny 與 WARN 不得輸出（呼叫端據此不設 GUARD_PREVALIDATED）。"""
+
+    def _run(self, repo, ref, new_sha, old_sha, prevalidate):
+        env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}
+        if prevalidate:
+            env["GIT_REF_GUARD_PREVALIDATE_ONLY"] = "1"
+        return subprocess.run(
+            [sys.executable, str(HOOKS_DIR / "git-ref-transaction-content-guard.py"), "prepared"],
+            input=f"{old_sha} {new_sha} {ref}\n", cwd=str(repo), capture_output=True,
+            text=True, env=env,
+        )
+
+    def test_clean_emits_token_only_in_prevalidate_mode(self, scratch_repo):
+        _capture(["checkout", "-q", "-b", "feat/z"], cwd=scratch_repo)
+        head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        new = _make_dangling_commit(scratch_repo, head, "docs/clean.md", "乾淨\n")
+        on = self._run(scratch_repo, "refs/heads/feat/z", new, head, True)
+        off = self._run(scratch_repo, "refs/heads/feat/z", new, head, False)
+        assert on.returncode == 0 and on.stdout.strip() == "PREVALIDATE_CLEAN", on.stderr
+        assert off.returncode == 0 and off.stdout == ""
+
+    def test_deny_never_emits_token(self, scratch_repo):
+        head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        new = _make_dangling_commit(scratch_repo, head, "src/violation.txt", "違規\n")
+        r = self._run(scratch_repo, "refs/heads/main", new, head, True)
+        assert r.returncode == hook_module.EXIT_BLOCK
+        assert "PREVALIDATE_CLEAN" not in r.stdout
+
+    def test_ref_decides_branch_in_prevalidate_mode(self, scratch_repo):
+        """同一個 commit：寫入 feature 分支為乾淨、寫入 main 為 deny（分支綁定 ref）。"""
+        _capture(["checkout", "-q", "-b", "feat/z"], cwd=scratch_repo)
+        head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        new = _make_dangling_commit(scratch_repo, head, "src/v.txt", "內容\n")
+        ok = self._run(scratch_repo, "refs/heads/feat/z", new, head, True)
+        bad = self._run(scratch_repo, "refs/heads/main", new, head, True)
+        assert ok.stdout.strip() == "PREVALIDATE_CLEAN"
+        assert bad.returncode == hook_module.EXIT_BLOCK and bad.stdout.strip() == ""
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

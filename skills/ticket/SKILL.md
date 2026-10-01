@@ -4,7 +4,7 @@ description: 'Use whenever the user wants to create, track, query, or manage tic
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
-  version: 2.44.17
+  version: 2.44.23
 ---
 
 # Ticket System
@@ -115,11 +115,11 @@ set-who <id> --current <agent>`）——回報 PM 執行該指令重新指派，
 /ticket <subcommand> [options]
 ```
 
-> **命令層級慣例**：`create` / `batch-create` / `show` / `handoff` / `resume` / `migrate` / `generate` / `version-shift` 為**頂層命令**；`claim` / `complete` / `append-log` / `query` / `list` / `set-acceptance` 等狀態操作在 **`track` 之下**（`ticket track <op> ...`）。常見誤打：`ticket track create`、`ticket claim`。本標註僅說明既有慣例，零 CLI 行為變更。
+> **命令層級慣例**：`create` / `batch-create` / `show` / `handoff` / `resume` / `migrate` / `generate` 為**頂層命令**；`claim` / `complete` / `append-log` / `query` / `list` / `set-acceptance` 等狀態操作在 **`track` 之下**（`ticket track <op> ...`）。常見誤打：`ticket track create`、`ticket claim`。本標註僅說明既有慣例，零 CLI 行為變更。
 
 ## 子命令路由表
 
-> 下表以子命令為鍵，合併原三節（子命令總覽／子命令詳細說明／參考資料，WRAP 裁決見 issue tarrragon/claude#94）；跨子命令通用檔案（architecture／field-semantics／ticket-lifecycle-details）殿於相關群組或表尾。涵蓋章節欄與各 `references/*.md` 的 `##` 標題逐字雙向齊全（判準見 `skill-design-guide`〈按需讀取〉前言），僅計 fenced block 外的 `##`（`awk '/^```/{f=!f;next} !f && /^## /'`）；`batch-create`／`show`／`version-shift` 無獨立 reference，見表後小節。`track` 子族僅具獨立 exit code 語意或需要 PM 額外理解流程分支者才獨立成列（如 `dashboard`／`reclaim`／`dispatch-readiness` 等，見下表列）；其餘子命令於 `track-command.md` 以 `##` 子節呈現，不獨立成列。
+> 下表以子命令為鍵，合併原三節（子命令總覽／子命令詳細說明／參考資料，WRAP 裁決見 issue tarrragon/claude#94）；跨子命令通用檔案（architecture／field-semantics／ticket-lifecycle-details）殿於相關群組或表尾。涵蓋章節欄與各 `references/*.md` 的 `##` 標題逐字雙向齊全（判準見 `skill-design-guide`〈按需讀取〉前言），僅計 fenced block 外的 `##`（`awk '/^```/{f=!f;next} !f && /^## /'`）；`batch-create`／`show` 無獨立 reference，見表後小節。`track` 子族僅具獨立 exit code 語意或需要 PM 額外理解流程分支者才獨立成列（如 `dashboard`／`reclaim`／`dispatch-readiness` 等，見下表列）；其餘子命令於 `track-command.md` 以 `##` 子節呈現，不獨立成列。
 
 | 子命令 | 用途 | 範例 | 檔案 | 涵蓋章節 |
 | --- | --- | --- | --- | --- |
@@ -146,12 +146,13 @@ set-who <id> --current <agent>`）——回報 PM 執行該指令重新指派，
 | `handoff` | 需要旗標對照/指向語意/情境細節時讀本檔 |  | `references/handoff-command.md` | 〈移動方向與旗標對照〉〈指向語意：source vs target〉〈用法〉〈自動偵測行為〉〈Session 結束時的使用方式〉〈按 Ticket 狀態選擇命令〉〈任務鏈結束時的替代流程〉〈五種情境〉<!-- rule8-exempt: relocation:自 references/handoff-command.md 逐字搬移 --> |
 | `resume` | 恢復任務：從 handoff 檔案載入 context；SessionStart hook 僅被動提醒，實際觸發見〈無子命令時的預設行為（dashboard-first）〉；`/ticket resume <id>` 可明確恢復指定任務（交接/恢復決策樹與 `handoff` 共用 `references/workflow-handoff.md`，見上列） | `/ticket resume <id>` | `references/resume-command.md` | 〈用法〉〈恢復機制（顯式觸發）〉〈Flag 說明〉〈handoff JSON 格式〉〈相關 Hook〉 |
 | `migrate` | Ticket ID 遷移：支援單一和批量遷移；改名、引用改寫（含 discovered_during／closed_by／子孫 chain）與 topic-assignments 追加新 ID 行以單一隔離 commit 入庫（提交最終失敗 exit 75）；被遷移票的 `previous_ids` 欄位依序記錄曾用 ID（長度即遷移次數，與撞號改號的 `migrated_from` 不同），body 與 Context Bundle 中的舊 ID 不改寫 | `/ticket migrate <old-id> <new-id>` | `references/workflow-migrate.md` | 〈ID 遷移決策樹〉 |
-| `migrate` | 需要前置檢查/批量配置/collision detection 細節時讀本檔 |  | `references/migrate-command.md` | 〈基本用法〉〈前置檢查（強制）〉〈單一遷移範例〉〈批量遷移配置檔案格式〉〈遷移邏輯〉〈Collision Detection〉〈備份機制〉〈Flag 說明〉<!-- rule8-exempt: relocation:自 references/migrate-command.md 逐字搬移 --> |
+| `migrate` | 需要前置檢查/批量配置/collision detection 細節時讀本檔 |  | `references/migrate-command.md` | 〈基本用法〉〈前置檢查（強制）〉〈單一遷移範例〉〈批量遷移配置檔案格式〉〈整版改號流程〉〈遷移邏輯〉〈Collision Detection〉〈備份機制〉〈Flag 說明〉<!-- rule8-exempt: relocation:自 references/migrate-command.md 逐字搬移 --> |
 | `generate` | Plan 轉換為 Tickets：從 Plan 檔案自動生成 Atomic Tickets | `/ticket generate plan.md --version 0.31.0 --wave 5` | `references/generate-command.md` | 〈用法〉〈Flag 說明〉〈範例〉〈流程〉 |
 | `batch-create` | 批次建立 Tickets：從模板 + 目標清單快速建立多個 Tickets，適用大量同質任務場景（如 30 個實作子任務）。詳見表後「batch-create 補充」 | `ticket batch-create --template impl-parsley --targets "a,b,c" --wave 28` | — | — |
 | `show` | 顯示 Ticket（含 Markdown 渲染）。終端閱讀專用，詳見表後「show 補充」 | `ticket show <id>` / `ticket show <id> -r` | — | — |
-| `version-shift` | 版本遷移：批次更新 ticket 版本號與 todolist.yaml | `ticket version-shift <from_version> <to_version>` | — | — |
 | （跨子命令） | 查詢目錄結構、共用模組設計、自動化分析功能、系統模型完整版、multi-PM 協調層與票務術語、CLI 安裝與執行方式，或覆核 skill 測試套件；並行協調入口見 `pm-rules/parallel-dispatch.md`、`.claude/references/cross-session-coordination-details.md` | — | `references/architecture.md` | 〈系統模型（設計自我描述，完整版）〉〈術語〉〈目錄結構〉〈共用模組設計〉〈自動化分析功能〉〈安裝與執行方式〉〈覆核測試指令（skill 自身測試套件）〉 |
+
+**整版改號**（`version-shift` 已於 2.44.21 移除）：`ticket migrate --config` 搬票，再手動完成 todolist 版本條目、worklog 主檔、舊目錄三步，每步驗證方式見 `references/migrate-command.md`〈整版改號流程〉。
 
 不知該進哪一棵 workflow 決策樹時先看此列：新任務 → `workflow-create.md`；已認領待執行 → `workflow-execute.md`；只想查現況 → `workflow-query.md`；交接／恢復 → `workflow-handoff.md`；ID 需要更動 → `workflow-migrate.md`。
 

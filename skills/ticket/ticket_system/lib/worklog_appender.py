@@ -18,9 +18,11 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
 from .constants import WORK_LOGS_DIR
 from .file_lock import file_lock
+from .git_ops import AppendSpec
 from .paths import get_ticket_state_root
 
 # main worklog 檔名格式
@@ -96,7 +98,7 @@ def _find_last_date_section_end(lines: list[str]) -> int | None:
     return insert_at
 
 
-def append_worklog_progress(version: str, ticket_id: str, title: str) -> bool:
+def append_worklog_progress(version: str, ticket_id: str, title: str) -> Optional[str]:
     """
     在 main worklog 的最後一個日期區段末尾追加進度行
 
@@ -114,15 +116,16 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> bool:
         title: Ticket 標題
 
     Returns:
-        bool: True 表示本次確實寫入進度行；False 表示未寫入（檔案不存在、
-        冪等跳過、無日期標題區段、寫後驗證失敗、例外），呼叫端據此決定
-        是否把 worklog 列入提交範圍。
+        實際插入的進度行（含結尾換行）；None 表示未寫入（檔案不存在、
+        冪等跳過、無日期標題區段、寫後驗證失敗、例外）。呼叫端據此決定
+        是否提交，並以 ``worklog_append_spec`` 包成行層級提交（只提交本次
+        的行，不整檔提交 worklog）。
     """
     worklog_path = _build_worklog_path(version)
 
     if not worklog_path.exists():
         print(f"[WARNING] worklog 檔案不存在，跳過進度追加：{worklog_path}")
-        return False
+        return None
 
     completion_marker = f"{ticket_id} 完成"
 
@@ -135,12 +138,12 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> bool:
 
             # 冪等性：若該 ticket 的完成行已存在則跳過，避免重複 append（W8-048）
             if any(completion_marker in line for line in search_lines):
-                return False
+                return None
 
             insert_at = _find_last_date_section_end(search_lines)
             if insert_at is None:
                 print("[WARNING] worklog 中找不到日期標題區段，跳過進度追加")
-                return False
+                return None
 
             lines = content.splitlines(keepends=True)
             today = date.today().isoformat()
@@ -156,10 +159,28 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> bool:
                     f"[WARNING] worklog 進度行寫入後重讀驗證失敗，"
                     f"未在檔案中找到自身行：{ticket_id}（{worklog_path}）\n"
                 )
-                return False
+                return None
 
-            return True
+            return progress_line
 
     except Exception as e:
         print(f"[WARNING] worklog 進度追加失敗：{e}")
-        return False
+        return None
+
+
+def _replay_progress_lines(base: str, text: str) -> str:
+    """在 HEAD 版本全文 ``base`` 的最後日期區段末尾插入 ``text`` 各行。
+
+    工作區不是「HEAD + 本次行」的超集（他人改了既有行）時由 git_ops 呼叫。
+    找不到日期標題區段時接在檔尾（與 AppendSpec 無 replay 的退回一致）。
+    """
+    lines = base.splitlines(keepends=True)
+    insert_at = _find_last_date_section_end([ln.rstrip("\n") for ln in lines])
+    if insert_at is None:
+        return base + text
+    return "".join(lines[:insert_at]) + text + "".join(lines[insert_at:])
+
+
+def worklog_append_spec(progress_text: str) -> AppendSpec:
+    """進度行 -> ``commit_files_isolated`` 的 ``append_lines`` 值（含 HEAD 重放）。"""
+    return AppendSpec(progress_text, _replay_progress_lines)

@@ -62,7 +62,11 @@ from ticket_system.lib.ticket_ops import (
 )
 from ticket_system.lib import git_utils
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
-from ticket_system.lib.worklog_appender import append_worklog_progress
+from ticket_system.lib.worklog_appender import (
+    _build_worklog_path,
+    append_worklog_progress,
+    worklog_append_spec,
+)
 # lease claim/release 寫入（multi-PM 協調層 Phase 3，批次路徑與單票路徑
 # commands/track.py 對稱寫入 registry lease）
 from ticket_system.lib.lease import claim_lease, release_lease
@@ -336,6 +340,7 @@ def _execute_batch_operation(
 
     success_count = 0
     saved_paths: list[str] = []
+    worklog_lines: list[str] = []
     saved_ids: list[str] = []
     for ticket_id in ticket_ids:
         # 使用 auto_print_error=False 以支援自訂 BATCH 格式
@@ -373,7 +378,9 @@ def _execute_batch_operation(
             # 完成操作時自動追加 worklog 進度行
             if operation == "complete":
                 ticket_title = ticket.get("title", "")
-                append_worklog_progress(version, ticket_id, ticket_title)
+                progress_line = append_worklog_progress(version, ticket_id, ticket_title)
+                if progress_line:
+                    worklog_lines.append(progress_line)
             # 使用 format_info 確保一致的訊息格式
             print(f"   {TrackBatchMessages.OK_PREFIX} {message}")
             success_count += 1
@@ -385,9 +392,15 @@ def _execute_batch_operation(
 
     # 成功寫入的票以單一 commit 提交（部分失敗的票未寫入，不在範圍內）。
     # 提交最終失敗：寫入已落在 working tree 但未入庫，以 75 反映，優先於其餘結束碼。
+    # worklog 進度行以行層級併入同一筆提交（不整檔 stage，不帶入他人未提交修改）。
+    extra_kwargs = {}
+    if worklog_lines:
+        extra_kwargs["append_lines"] = {
+            str(_build_worklog_path(version)): worklog_append_spec("".join(worklog_lines))
+        }
     commit_failed = git_utils.commit_ticket_mds_reporting(
         f"batch-{operation}", saved_paths, saved_ids[0] if saved_ids else "",
-        f"batch-{operation}", operation=f"batch-{operation}",
+        f"batch-{operation}", operation=f"batch-{operation}", **extra_kwargs,
     )
     if commit_failed:
         return git_utils.EXIT_AUTO_COMMIT_FAILED

@@ -42,7 +42,6 @@ try:
         batch_create_register,
         show_register,
     )
-    from ticket_system.commands.version_shift import register as version_shift_register
 except ModuleNotFoundError:
     print(SEPARATOR_PRIMARY)
     print("[ERROR] 套件未正確安裝")
@@ -147,7 +146,6 @@ def main() -> int:
     migrate_register(subparsers)
     generate_register(subparsers)
     batch_create_register(subparsers)
-    version_shift_register(subparsers)
     show_register(subparsers)
 
     # 解析命令行參數

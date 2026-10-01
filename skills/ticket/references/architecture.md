@@ -165,9 +165,8 @@ multi-PM 協調層與票務自造詞的一次性定義；SKILL.md／track-comman
 │   │   ├── version.py                     # 版本管理模組
 │   │   ├── audit_version.py               # 版本審計模組
 │   │   └── ambiguous_prefix.py            # 共用的 argparse 縮寫歧義攔截 helper
-│   ├── commands/               # 子命令實作（52 個；各命令的用法與語意見 SKILL.md）
-│   │   ├── __init__.py         # 註冊 8 個頂層子命令（create/track/handoff/resume/migrate/generate/batch-create/show）；version-shift 另於 `ticket_system/scripts/ticket.py:150` 直接註冊
-│   │   │
+│   ├── commands/               # 子命令實作（51 個；各命令的用法與語意見 SKILL.md）
+│   │   ├── __init__.py         # 註冊 8 個頂層子命令（create/track/handoff/resume/migrate/generate/batch-create/show）│   │   │
 │   │   ├── [頂層命令]
 │   │   ├── create.py                      # create 命令模組
 │   │   ├── bulk_create.py                 # 批次建立 Ticket 命令模組
@@ -177,7 +176,6 @@ multi-PM 協調層與票務自造詞的一次性定義；SKILL.md／track-comman
 │   │   ├── migrate.py                     # 遷移命令模組
 │   │   ├── resume.py                      # resume 命令模組
 │   │   ├── show.py                        # ticket show 子命令
-│   │   ├── version_shift.py               # 版本遷移命令模組
 │   │   ├── audit_version.py               # audit-version 子命令實作
 │   │   ├── topic_backfill.py              # 既有 pending 票的主題分批回填入口
 │   │   ├── lifecycle.py                   # lifecycle 操作模組

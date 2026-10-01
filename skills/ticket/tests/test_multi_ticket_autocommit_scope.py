@@ -273,3 +273,73 @@ def test_single_path_api_unchanged(repo):
     p = _touch(repo, _TID)
     assert git_utils.commit_ticket_md_reporting("t", p, _TID, "s") is False
     assert _dirty(repo) == ""
+
+
+# --- worklog 進度行以行層級提交（batch-complete） -----------------------------
+
+_WORKLOG_BASE = (
+    "# w\n\n### 2026-01-01\n\n- x\n\n---\n\n## Footer\n\nfooter\n"
+)
+
+
+def _worklog_file(repo: Path) -> Path:
+    return repo / "docs/work-logs/v0/v0.0/v0.0.0/v0.0.0-main.md"
+
+
+def _reset_worklog(repo: Path, text: str) -> Path:
+    path = _worklog_file(repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    _git(repo, "add", str(path))
+    _git(repo, "commit", "-q", "-m", "worklog seed")
+    return path
+
+
+def _head_worklog(repo: Path) -> list:
+    return _git(repo, "show", "HEAD:docs/work-logs/v0/v0.0/v0.0.0/v0.0.0-main.md").splitlines()
+
+
+def _batch_complete(monkeypatch) -> int:
+    return _run(monkeypatch, "batch-complete", f"{_DONE1},{_DONE2}")
+
+
+def test_batch_complete_worklog_lines_in_same_commit_and_clean(repo, monkeypatch, capsys):
+    _reset_worklog(repo, _WORKLOG_BASE)
+    before = _commit_count(repo)
+    rc = _batch_complete(monkeypatch)
+    cap = capsys.readouterr()
+    assert rc == 0, cap.out + cap.err
+    assert _commit_count(repo) == before + 1
+    assert "v0.0.0-main.md" in _head_files(repo)
+    assert _dirty(repo) == "", "進度行應與票檔同一 commit，工作區不留 M"
+    head = _head_worklog(repo)
+    assert sum(1 for ln in head if f"{_DONE1} 完成" in ln or f"{_DONE2} 完成" in ln) == 2
+
+
+def test_batch_complete_does_not_commit_others_worklog_edit(repo, monkeypatch, capsys):
+    path = _reset_worklog(repo, _WORKLOG_BASE)
+    path.write_text(
+        _WORKLOG_BASE.replace("- x\n", "- x\n- other uncommitted\n"), encoding="utf-8"
+    )
+    rc = _batch_complete(monkeypatch)
+    assert rc == 0, capsys.readouterr().err
+    head = _head_worklog(repo)
+    assert "- other uncommitted" not in head
+    assert any(f"{_DONE1} 完成" in ln for ln in head)
+    assert "- other uncommitted" in path.read_text(encoding="utf-8").splitlines()
+
+
+def test_batch_complete_replays_into_date_section_when_others_edit_existing_line(
+    repo, monkeypatch, capsys
+):
+    path = _reset_worklog(repo, _WORKLOG_BASE)
+    path.write_text(_WORKLOG_BASE.replace("- x\n", "- x edited\n"), encoding="utf-8")
+    rc = _batch_complete(monkeypatch)
+    assert rc == 0, capsys.readouterr().err
+    head = _head_worklog(repo)
+    assert "- x edited" not in head
+    idx_sep = head.index("---")
+    idx_x = head.index("- x")
+    progress = [i for i, ln in enumerate(head) if "完成" in ln]
+    assert len(progress) == 2
+    assert all(idx_x < i < idx_sep for i in progress), head
