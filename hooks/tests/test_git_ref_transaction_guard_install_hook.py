@@ -16,6 +16,7 @@ Source: 0.2.1-W3-1151
 """
 
 import importlib.util
+import shutil
 import stat
 import subprocess
 import sys
@@ -41,11 +42,20 @@ def _run_git(args, cwd):
     return result.returncode, result.stdout, result.stderr
 
 
-@pytest.fixture()
-def scratch_repo(tmp_path):
-    repo = tmp_path / "scratch"
+@pytest.fixture(scope="module")
+def _empty_repo_template(tmp_path_factory):
+    """每個測試檔只 init 一次，各測試以目錄複製取得隔離副本（避免每測試重付
+    git 子程序啟動成本，高負載主機上每個約 70-400ms）。"""
+    repo = tmp_path_factory.mktemp("template") / "repo"
     repo.mkdir()
     _run_git(["init", "-q"], cwd=repo)
+    return repo
+
+
+@pytest.fixture()
+def scratch_repo(tmp_path, _empty_repo_template):
+    repo = tmp_path / "scratch"
+    shutil.copytree(_empty_repo_template, repo, symlinks=True)
     return repo
 
 

@@ -30,6 +30,7 @@ staged 內容」小節的推薦路徑零命中發現）
 """
 
 import importlib.util
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -62,18 +63,35 @@ def _capture(args, cwd):
     return out.strip()
 
 
-@pytest.fixture()
-def scratch_repo(tmp_path):
-    """最小化隔離 git repo，含一個已 commit 的 HEAD 基準。"""
-    repo = tmp_path / "scratch"
+@pytest.fixture(scope="module")
+def _baseline_template(tmp_path_factory):
+    """每個測試檔只建一次基準 repo（含一個已 commit 的 HEAD），各測試以目錄
+    複製取得隔離副本。
+
+    等待來源是 git 子程序的啟動成本（主機高負載時每個約 70-400ms），建 repo
+    的 5 個子程序原本在每個測試重複付一次；複製目錄是檔案系統操作，不啟動
+    子程序。分支固定為 main（測試內有 `checkout main`，不依賴全域預設）。
+    """
+    repo = tmp_path_factory.mktemp("baseline") / "repo"
     repo.mkdir()
-    _run_git(["init", "-q"], cwd=repo)
+    _run_git(["init", "-q", "-b", "main"], cwd=repo)
     _run_git(["config", "user.email", "test@example.com"], cwd=repo)
     _run_git(["config", "user.name", "Test"], cwd=repo)
     (repo / "README.md").write_text("baseline\n", encoding="utf-8")
     _run_git(["add", "README.md"], cwd=repo)
     _run_git(["commit", "-q", "-m", "baseline"], cwd=repo)
     return repo
+
+
+def _clone_baseline(template, dest):
+    shutil.copytree(template, dest, symlinks=True)
+    return dest
+
+
+@pytest.fixture()
+def scratch_repo(tmp_path, _baseline_template):
+    """最小化隔離 git repo，含一個已 commit 的 HEAD 基準。"""
+    return _clone_baseline(_baseline_template, tmp_path / "scratch")
 
 
 def _run_guard(repo, state, stdin_text):
@@ -433,6 +451,33 @@ _SCENARIOS = {
 }
 
 
+@pytest.fixture(scope="module")
+def _scenario_templates(tmp_path_factory, _baseline_template):
+    """情境 repo 每個情境整個測試檔只建一次（建構需十餘個 git 子程序），
+    各測試取目錄副本；commit 物件與 SHA 隨副本帶走，情境語意不變。"""
+    built = {}
+
+    def get(name):
+        if name not in built:
+            repo = _clone_baseline(
+                _baseline_template, tmp_path_factory.mktemp(f"scn-{name}") / "repo"
+            )
+            built[name] = (repo, *_SCENARIOS[name](repo))
+        return built[name]
+
+    return get
+
+
+@pytest.fixture()
+def scenario_repo(tmp_path, _scenario_templates):
+    """回傳 build(name) -> (repo_copy, base_sha, new_sha, is_merge)。"""
+    def build(name):
+        template, base, new_sha, is_merge = _scenario_templates(name)
+        return _clone_baseline(template, tmp_path / f"scn-{name}"), base, new_sha, is_merge
+
+    return build
+
+
 class _Logger:
     def info(self, *a, **k): pass
     def debug(self, *a, **k): pass
@@ -459,10 +504,10 @@ def _legacy_findings(files, project_root, is_merge):
 
 class TestBatchedEquivalence:
     @pytest.mark.parametrize("name", sorted(_SCENARIOS))
-    def test_staged_files_identical_to_legacy(self, scratch_repo, monkeypatch, name):
+    def test_staged_files_identical_to_legacy(self, scenario_repo, monkeypatch, name):
+        scratch_repo, _base, new_sha, _merge = scenario_repo(name)
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
         monkeypatch.chdir(scratch_repo)
-        _base, new_sha, _merge = _SCENARIOS[name](scratch_repo)
 
         legacy = hook_module._build_scan_files_legacy(new_sha, scratch_repo)
         commits = hook_module._collect_new_commits_with_parents([new_sha], scratch_repo)
@@ -472,12 +517,12 @@ class TestBatchedEquivalence:
         assert batched[new_sha] == legacy
 
     @pytest.mark.parametrize("name", sorted(_SCENARIOS))
-    def test_findings_identical_to_legacy(self, scratch_repo, monkeypatch, name):
+    def test_findings_identical_to_legacy(self, scenario_repo, monkeypatch, name):
         from lib import commit_content_guards as ccg
 
+        scratch_repo, _base, new_sha, is_merge = scenario_repo(name)
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
         monkeypatch.chdir(scratch_repo)
-        _base, new_sha, is_merge = _SCENARIOS[name](scratch_repo)
         files = hook_module._build_scan_files_legacy(new_sha, scratch_repo)
 
         old = _legacy_findings(files, scratch_repo, is_merge)
@@ -485,30 +530,31 @@ class TestBatchedEquivalence:
 
         assert new == old
 
-    def test_scenarios_cover_both_verdicts(self, scratch_repo, monkeypatch):
+    def test_scenarios_cover_both_verdicts(self, scenario_repo, monkeypatch):
         """對照輸入（規則 E2）：情境集合必須同時含有 deny 與無 deny，否則
         等價性測試可能在「兩邊都空」的情況下空轉通過。"""
         from lib import commit_content_guards as ccg
 
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
-        monkeypatch.chdir(scratch_repo)
-        _b, violating, _m = _scenario_violation(scratch_repo)
-        _b, clean, _m = _scenario_clean(scratch_repo)
+        v_repo, _b, violating, _m = scenario_repo("violation")
+        c_repo, _b, clean, _m = scenario_repo("clean")
+        monkeypatch.chdir(v_repo)
         v = ccg._run_all_checks(
-            hook_module._build_scan_files_legacy(violating, scratch_repo), scratch_repo, _Logger()
+            hook_module._build_scan_files_legacy(violating, v_repo), v_repo, _Logger()
         )
+        monkeypatch.chdir(c_repo)
         c = ccg._run_all_checks(
-            hook_module._build_scan_files_legacy(clean, scratch_repo), scratch_repo, _Logger()
+            hook_module._build_scan_files_legacy(clean, c_repo), c_repo, _Logger()
         )
         assert any(f.severity == "deny" for f in v)
         assert not any(f.severity == "deny" for f in c)
 
-    def test_fallback_to_legacy_when_patch_sections_mismatch(self, scratch_repo, monkeypatch):
+    def test_fallback_to_legacy_when_patch_sections_mismatch(self, scenario_repo, monkeypatch):
         """全量 patch 區段數與 name-status 條目數不符時，批次路徑必須退回
         逐檔實作，結果仍與舊路徑相同。"""
+        scratch_repo, _b, new_sha, _m = scenario_repo("multi_file")
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
         monkeypatch.chdir(scratch_repo)
-        _b, new_sha, _m = _scenario_multi_file(scratch_repo)
         legacy = hook_module._build_scan_files_legacy(new_sha, scratch_repo)
         commits = hook_module._collect_new_commits_with_parents([new_sha], scratch_repo)
         monkeypatch.setattr(hook_module, "_split_patch_sections", lambda text: [])
@@ -529,23 +575,16 @@ def _count_git_subprocesses(repo, stdin_text, tmp_path):
 class TestSubprocessCountConstant:
     """git 子程序數不得隨變更檔數 F 成長（持鎖時間與子程序數成正比）。"""
 
-    def _run_with_f(self, tmp_path, n_files):
-        repo = tmp_path / f"r{n_files}"
-        repo.mkdir()
-        _run_git(["init", "-q", "-b", "main"], cwd=repo)
-        _run_git(["config", "user.email", "t@e.com"], cwd=repo)
-        _run_git(["config", "user.name", "T"], cwd=repo)
-        (repo / "README.md").write_text("b\n", encoding="utf-8")
-        _run_git(["add", "."], cwd=repo)
-        _run_git(["commit", "-q", "-m", "b"], cwd=repo)
+    def _run_with_f(self, tmp_path, n_files, template):
+        repo = _clone_baseline(template, tmp_path / f"r{n_files}")
         head = _capture(["rev-parse", "HEAD"], cwd=repo)
         files = {f".claude/notes/n{i}.md": b"plain content\n" for i in range(n_files)}
         new_sha = _make_commit_from_files(repo, head, files)
         return _count_git_subprocesses(repo, f"{head} {new_sha} refs/heads/main\n", tmp_path)
 
-    def test_count_independent_of_changed_file_count(self, tmp_path):
-        r1, n1 = self._run_with_f(tmp_path, 1)
-        r21, n21 = self._run_with_f(tmp_path, 21)
+    def test_count_independent_of_changed_file_count(self, tmp_path, _baseline_template):
+        r1, n1 = self._run_with_f(tmp_path, 1, _baseline_template)
+        r21, n21 = self._run_with_f(tmp_path, 21, _baseline_template)
         assert r1.returncode == 0 and r21.returncode == 0
         assert n21 == n1, f"F=1 -> {n1} 個子程序，F=21 -> {n21} 個"
         assert n21 <= 20

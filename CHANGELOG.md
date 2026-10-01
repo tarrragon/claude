@@ -1,3 +1,23 @@
+## [2.70.1] - 2026-10-01
+
+### Summary
+fix: append-only 檔提交依工作區行序投影 HEAD 各行加本次各行; fix: add-spawned 一併寫反向 source_ticket，與 remove-spawned 對稱; fix: 提交步驟 git 寫入失敗時中止，不再打 tag (+7 more)
+
+Changes: 3 fix, 4 docs, 1 chore, 2 test
+
+- fix: append-only 檔提交依工作區行序投影 HEAD 各行加本次各行
+- fix: add-spawned 一併寫反向 source_ticket，與 remove-spawned 對稱
+- fix: 提交步驟 git 寫入失敗時中止，不再打 tag
+- docs: agent-dispatch-template 新增終止長時間測試後驗證子程序已退出約束句
+- docs: PC-GPD-029 代理人終止背景測試後憑記憶回報，子程序仍在執行
+- docs: 絆腳索指名偵測承擔者，移除 consumer 實測數字
+- docs: 版本生命週期規則落地 canonical #114 方案 1-5
+- chore: .claude/VERSION 2.70.0（sync-push：ticket 2.44.11、ref-transaction 守衛 fail-open 與批次化、票庫 lock 的 gitignore 檢查）
+- test: git-ref-transaction 兩支 hook 測試以模板 repo 複製取代逐測試建 repo
+- test: 暫時鎖測試改以呼叫邊界釋放鎖，消除計時器造成的修正前偽綠
+
+---
+
 ## [2.70.0] - 2026-10-01
 
 ### Summary

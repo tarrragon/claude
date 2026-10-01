@@ -732,3 +732,83 @@ class TestSharedIndexSyncAfterCommit:
         self._run_deferred_sync(first)
         assert not lock.exists()
         assert self._index_blob(repo) == self._head_blob(repo)
+
+
+class TestStageAppendedBlobProjection:
+    """append-only 檔依工作區順序投影：HEAD 各行 + 本次各行，multiset 配對。"""
+
+    @pytest.fixture
+    def repo(self, tmp_path):
+        _run_git(tmp_path, "init", "-q")
+        _run_git(tmp_path, "config", "user.email", "t@example.com")
+        _run_git(tmp_path, "config", "user.name", "t")
+        (tmp_path / "log.txt").write_text("base\n", encoding="utf-8")
+        (tmp_path / "wa.md").write_text("0\n", encoding="utf-8")
+        (tmp_path / "wb.md").write_text("0\n", encoding="utf-8")
+        _run_git(tmp_path, "add", "-A")
+        _run_git(tmp_path, "commit", "-q", "-m", "init")
+        return tmp_path
+
+    @staticmethod
+    def _append(repo, line):
+        with open(repo / "log.txt", "a", encoding="utf-8") as fh:
+            fh.write(line)
+
+    @staticmethod
+    def _commit(repo, writer, line):
+        ticket = repo / f"w{writer.lower()}.md"
+        ticket.write_text(ticket.read_text(encoding="utf-8") + "x\n", encoding="utf-8")
+        result = git_ops.commit_files_isolated(
+            [str(ticket)], f"commit {writer}", cwd=str(repo),
+            append_lines={str(repo / "log.txt"): line},
+        )
+        assert result["status"] == "committed", result
+
+    @staticmethod
+    def _head_text(repo):
+        return _run_git(repo, "show", "HEAD:log.txt").stdout
+
+    @pytest.mark.parametrize("order", [
+        ("aA", "aB", "cA", "cB"),
+        ("aA", "aB", "cB", "cA"),
+        ("aA", "cA", "aB", "cB"),
+        ("aB", "aA", "cA", "cB"),
+        ("aB", "aA", "cB", "cA"),
+        ("aB", "cB", "aA", "cA"),
+    ])
+    def test_two_writers_interleaving_clean(self, repo, order):
+        lines = {"A": "lineA\n", "B": "lineB\n"}
+        for step in order:
+            if step[0] == "a":
+                self._append(repo, lines[step[1]])
+            else:
+                self._commit(repo, step[1], lines[step[1]])
+        status = _run_git(repo, "status", "--porcelain", "--", "log.txt").stdout
+        assert status.strip() == ""
+
+    def test_uncommitted_foreign_line_in_middle_not_absorbed(self, repo):
+        self._append(repo, "lineA\n")
+        self._append(repo, "foreign\n")
+        self._append(repo, "lineB\n")
+        self._commit(repo, "A", "lineA\n")
+        assert self._head_text(repo) == "base\nlineA\n"
+        self._commit(repo, "B", "lineB\n")
+        assert self._head_text(repo) == "base\nlineA\nlineB\n"
+
+    def test_duplicate_lines_multiset(self, repo):
+        for _ in range(3):
+            self._append(repo, "dup\n")
+        self._commit(repo, "A", "dup\n")
+        assert self._head_text(repo) == "base\ndup\n"
+        self._commit(repo, "B", "dup\n")
+        assert self._head_text(repo) == "base\ndup\ndup\n"
+
+    def test_missing_workfile_falls_back(self, repo):
+        (repo / "log.txt").unlink()
+        self._commit(repo, "A", "lineA\n")
+        assert self._head_text(repo) == "base\nlineA\n"
+
+    def test_non_superset_falls_back(self, repo):
+        (repo / "log.txt").write_text("other\n", encoding="utf-8")
+        self._commit(repo, "A", "lineA\n")
+        assert self._head_text(repo) == "base\nlineA\n"

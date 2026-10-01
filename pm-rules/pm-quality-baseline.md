@@ -29,13 +29,25 @@
 | 禁止 | 原因 |
 |------|------|
 | 以「專案進度緊迫」為由延後框架修改 | 框架債務會在每個後續 Ticket 重複支付成本 |
-| 將框架改善排入「下個版本」 | 延後 = 累積，每延後一次就多 N 個 Ticket 受影響 |
-| 框架問題只記錄不立即處理 | 記錄不等於解決，必須當前 Wave 內處理 |
+| 建票時將框架改善排入「下個版本」 | 延後 = 累積，每延後一次就多 N 個 Ticket 受影響；本禁令只管建票時點，finish 時的前移見下方〈finish 時的框架票處置〉 |
+| 框架問題只記錄不立即處理 | 記錄不等於解決，必須當前 Wave 內建票並優先執行 |
 
 **執行原則**：
 - 發現框架可改善時，**當前 Wave 內**建立 Ticket 並執行
 - 框架修改 Ticket 的優先級自動提升為 P1（至少）
 - 唯一允許延後的情況：框架修改依賴尚未完成的前置工作（技術阻塞，非時間阻塞）
+
+**延後禁令的射程（收窄為建票時）**：規則 6 的延後禁令管「發現當下的建票時點與排序」，不管版本 finish 時未完成票的去向。**Why**：禁令若延伸到 finish，框架票無法前移，會無上限地滯留在當期版本並阻擋其 finish；阻擋的根源是本規則而非 `version-release` 工具，該工具本來就只擋帶 `scope_blocker` 的票。**Consequence**：禁令不收窄，所有 consumer 的版本收尾都會被未完成的框架票卡住，只能以 `--force` 或關票繞過，規則失去可信度。**Action**：依下方〈finish 時的框架票處置〉執行。
+
+**finish 時的框架票處置**：
+
+| 情境 | 處置 |
+|------|------|
+| 版本 finish 時框架票未完成，且版本契約不依賴它 | 與其他票同樣前移；前移目標依 `version-progression.md`〈版本生命週期〉「minor 完成後的分診與去向」由分診指定 |
+| 版本契約依賴該框架票（例：修的是本版發版要用的工具） | 加 `scope_blocker`（`ticket track set-scope-blocker <id> --reason <對應契約項>`），阻擋 finish 直到完成 |
+| 同一張框架票前移第 2 次 | 絆腳索：把票內容收束進 canonical framework issue（見 `framework-issue` skill），然後關票，不再隨版本滾動 |
+
+**Why 絆腳索設在第 2 次**：第 1 次前移是版本容量的正常結果；第 2 次表示該票在連續兩個版本都不是契約必要項，繼續滾動等同無 trigger 延後。**Consequence**：不設絆腳索，框架票可能永遠前移，重演單版本框架票累積的原症狀。**Action**：偵測承擔者是 finish 執行者，在前移清單中逐張判定該框架票是否已前移過一次，已前移過者改走收束。判定依據：ticket 系統提供原 ID 或前移次數欄位時讀該欄位；尚未提供時，人工比對票面的 migrate 記錄（票檔在版本目錄之間的改名歷史）。欄位缺席不構成略過絆腳索的理由。
 
 ---
 
@@ -43,7 +55,7 @@
 
 **scope 開放的 active 版本內，框架 ticket 應建在當前版本，禁止以主題不符為由改建在 planned 狀態的未來版本**
 
-> **已由 scope 凍結模型部分取代**：本條款原以「.claude 工件一律歸活躍版本、免除判斷」為前提。`.claude/pm-rules/version-progression.md`〈版本生命週期〉已改為：active 版本 scope 開放時，本條款「禁止改建未來 planned 版本」的核心主張仍成立；active 版本 scope **凍結**時，框架問題不再進入本地任一版本的判斷，改路由至 canonical framework issue（見 `framework-issue` skill），只有落地實作票才回頭建本地票。以下情境表與 Action 步驟針對 scope 開放情境撰寫，scope 凍結時改依 `version-progression.md` 分流。
+> **已由 scope 凍結模型部分取代**：本條款原以「.claude 工件一律歸活躍版本、免除判斷」為前提。`.claude/pm-rules/version-progression.md`〈版本生命週期〉已改為：active 版本 scope 開放時，本條款「禁止改建未來 planned 版本」的核心主張仍成立；active 版本 scope **凍結**時，框架問題不再進入本地任一版本的判斷，改路由至 canonical framework issue（見 `framework-issue` skill），只有落地實作票才回頭建本地票。以下情境表與 Action 步驟針對 scope 開放情境撰寫，scope 凍結時改依 `version-progression.md` 分流。本條款同受規則 6〈延後禁令的射程〉約束：「禁止改建未來 planned 版本」管建票時點，不管 finish 時的前移。
 >
 > **來源**：規則 6 原條款規定「當前 Wave 內建立」但未明示「Wave 必須屬於 active 版本」。當 active 版本主題與框架 ticket 不符時，PM 易傾向放主題吻合的 planned 版本（如一次框架 ticket 設計時 PM 內心傾向未來版本），實質延後框架改善並違反規則 6 本意。`version-progression.md` 舊制曾強制框架工件免判斷收入 active 版本，但規則 6 未交叉引用，造成 PM 漏看。
 
@@ -162,7 +174,7 @@
 
 以下兩項為 PM 專屬檢查（規則 1-5 的通用清單見 `quality-baseline.md`）：
 
-- [ ] 發現框架可改善時，是否已在當前 Wave 建立 Ticket？（規則 6）
+- [ ] 發現框架可改善時，是否已在當前 Wave 建立 Ticket？finish 時框架票是否已依〈finish 時的框架票處置〉前移或阻擋？（規則 6）
 - [ ] 記錄經驗教訓前已執行捕獲時分流判準？（規則 7，PC-061 / PC-160）
 
 > **Auto-load 鏡像**：規則 7 的分流檢查項已鏡像至 `.claude/rules/core/quality-baseline.md` 通用檢查清單末端（W3-060），確保 PM auto-load context 含此檢查項。本檔為完整分流判準定義的權威來源；auto-load 層僅含指向本檔的提醒項。修改本規則時必須同步檢查 quality-baseline.md 鏡像項是否需更新。
@@ -188,7 +200,8 @@
 
 ---
 
-**Last Updated**: 2026-09-23
+**Last Updated**: 2026-10-01
+**Version**: 2.5.0 — 規則 6 延後禁令收窄為建票時：新增〈延後禁令的射程〉與〈finish 時的框架票處置〉（未完成框架票與其他票同樣前移、版本契約依賴者加 `scope_blocker` 阻擋、同票前移第 2 次收束進 canonical issue 後關票）；禁止行為表兩列措辭限定建票時點；規則 6.1 補同受射程約束一句；檢查清單同步。來源 canonical #114 方案 4（consumer 裁決：改規則不改工具）。
 **Version**: 2.4.0 — 規則 6.1 補「已由 scope 凍結模型部分取代」註記：scope 開放時「禁止改建未來 planned 版本」的核心主張不變，scope 凍結時框架問題改路由至 canonical framework issue，不進本地版本判斷；「當前 active 版本」定義表與〈與其他規則邊界〉表同步改引 `version-progression.md`〈版本生命週期〉，移除已由該模型取代的「.claude 工件歸活躍版本」字面引用。
 **Version**: 2.3.0 - 規則 7 三處修正（文字審查發現）：Action 層原指向不存在的發版 checklist 落點，改為指向 `version-release/SKILL.md` 使用流程檢查清單新增的對應勾選項（該勾選項同一次變更中同步新增）；memory 排除列補涵蓋邊界（PreToolUse deny 僅覆蓋 Write/Edit/MultiEdit/NotebookEdit，Bash 路徑由事後稽核承接）；Consequence 補標「400 筆樣本為本專案實測，機制主張可攜但量測值不可攜」；移除「選配資訊性掃描的處置」過去式過程紀錄段落（依 spec 與 process record 分離原則，過程細節屬 ticket/worklog 範疇），改為不含過程與識別符的一句現況陳述。
 **Version**: 2.2.0 - 規則 7「驗證方式」段落改寫：移除對不存在的 version-release 稽核項的字面宣稱，改為如實描述現況（memory 排除已 hook 化；三分流語意分類無機械稽核、依賴人工抽查），並補三明示（Why 三分流本質為語意判斷 / Consequence 400 ticket 樣本關鍵字比對偽陽性率 100% 實測 / Action 版本發布前人工抽查 checklist）；新增選配資訊性掃描（方案 C）處置說明，判定不隨本次併入並已提出 follow-up spawn request，避免無 trigger 延後。

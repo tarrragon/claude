@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.10.1 - 修復發版提交步驟的 git 寫入失敗只 WARN 就繼續、仍打 tag 並推送：Step 3 的 `git add` 撞並行 session 留下的 index.lock 時，定版內容未進 commit 卻被 tag 指向。`commit_changes` 的 `git add`／`git commit` 與 tag 建立改走 `run_git_with_lock_retry`（鎖競爭以固定間隔退避重試，預設 5 次 x 2 秒，絕不刪鎖），任一步用盡或其他失敗即回傳 False；`git_merge_and_push` 在打 tag 之前中止並以非 0 退出，stderr 列出失敗命令、路徑、git 原始錯誤、已完成步驟與補救指令。盤點同函式其他寫入點：`git checkout main` 失敗原本被完全忽略，現在中止；`pull`／`merge`／`tag`／`push main`／`push tag` 原本已 return False，補上 git stderr 與統一中止訊息；`branch -d`／遠端分支刪除屬 tag 與推送完成後的清理，維持僅警告。rename 舊路徑側 `git add` 的 pathspec 不匹配（路徑已不存在）視為正常，不當失敗。新增 tmp repo 測試涵蓋持續鎖、暫時鎖、無鎖對照、add 失敗而 commit 成功、checkout 失敗。
+**Last Updated**: 2026-10-01
+
 **Version**: 2.10.0 - 本地變更，指向 tarrragon/claude#55：`finish` 的 Commit Version Activation 在裝有 git 層 reference-transaction 守衛的 repo 內不再被擋。`.claude/lib/commit_content_guards.py` 的 `_check_branch_verify` 新增純版本號變動放行：版本檔（`pubspec.yaml`、`package.json`、`pyproject.toml`，含 monorepo 子目錄）且前後差異只有版本欄位那一行時放行並寫 info 日誌（含前後版本值），依賴或其他行的變動（含版本行與依賴行同改）維持 deny，不使用環境變數旁路。新增整合測試，fixture repo 安裝真實 reference-transaction hook 後在 main 上跑啟用與提交。修復根因：守衛對保護分支上的非豁免檔案一律 deny，未區分版本欄位變動與其他變動，而前一版把版本檔併入啟用提交時的測試 fixture 未安裝該 hook，沒測到此路徑。
 **Last Updated**: 2026-09-30
 

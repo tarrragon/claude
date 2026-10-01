@@ -27,6 +27,7 @@ import re
 import json
 import subprocess
 import logging
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Tuple, Dict
@@ -3666,6 +3667,61 @@ def resolve_activation_version_paths(root: Path) -> set:
         return set()
 
 
+GIT_LOCK_MAX_ATTEMPTS = 5
+GIT_LOCK_WAIT_SECONDS = 2.0
+
+
+def _is_git_lock_contention(stderr: str) -> bool:
+    """git 的鎖競爭錯誤文字（index.lock 與 ref 鎖皆為 `.lock': File exists`）。"""
+    return ".lock" in stderr and "File exists" in stderr
+
+
+def run_git_with_lock_retry(
+    args: List[str], root: Path, timeout: int = 10
+) -> subprocess.CompletedProcess:
+    """執行 git 寫入命令；遇鎖競爭以固定間隔重試，用盡即回傳最後一次結果。
+
+    絕不刪除鎖檔：鎖屬於留下它的 session，刪除會破壞對方正在進行的寫入。
+    非鎖競爭的失敗不重試，直接回傳。
+    """
+    attempt = 1
+    while True:
+        result = subprocess.run(
+            ["git", *args], cwd=root, capture_output=True, text=True, timeout=timeout
+        )
+        if (
+            result.returncode == 0
+            or not _is_git_lock_contention(result.stderr or "")
+            or attempt >= GIT_LOCK_MAX_ATTEMPTS
+        ):
+            return result
+        time.sleep(GIT_LOCK_WAIT_SECONDS)
+        attempt += 1
+
+
+def report_git_failure(
+    step: str, command: str, result: subprocess.CompletedProcess
+) -> None:
+    """失敗細節寫 stderr（命令、退出碼、git 原始錯誤），供發版流程中止時查閱。"""
+    detail = (result.stderr or "").strip() or "(git 無 stderr 輸出)"
+    sys.stderr.write(
+        f"[FAIL] {step}：{command}（exit {result.returncode}）\n{detail}\n"
+    )
+
+
+def abort_release_git_step(step: str, completed: List[str], remedy: str) -> bool:
+    """git 步驟中止訊息：已完成步驟 + 補救指令；回傳 False 供呼叫端直接 return。"""
+    done = "、".join(completed) if completed else "（無）"
+    tagged = any(item.startswith("建立 tag") for item in completed)
+    state = "tag 已在本地建立" if tagged else "未建立 tag、未推送"
+    sys.stderr.write(
+        f"[ABORT] {step} 失敗，發版中止（{state}）。\n"
+        f"  已完成步驟：{done}\n"
+        f"  補救：{remedy}\n"
+    )
+    return False
+
+
 def commit_changes(
     version: str,
     dry_run: bool = False,
@@ -3703,29 +3759,27 @@ def commit_changes(
                 print_info(f"[SYNC] [預覽] 將提交檔案變更: {stage_targets}", 2)
                 return True
 
+            # add 失敗即中止：漏 stage 的檔案不會進 commit，後續 tag 會指向
+            # 不含該檔變更的 commit（定版內容缺漏卻已打 tag 並推送）。
             for path in stage_targets:
-                add_result = subprocess.run(
-                    ["git", "add", "--", path],
-                    cwd=root,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
+                add_result = run_git_with_lock_retry(["add", "--", path], root)
+                # rename 的舊路徑側已不在工作區與 index，pathspec 不匹配屬正常
+                # （刪除已隨新路徑 staged），不是失敗。
+                vanished_rename_side = (
+                    "did not match any files" in (add_result.stderr or "")
+                    and not (root / path).exists()
                 )
-                if add_result.returncode != 0:
-                    print_warning(
-                        f"git add 失敗（{path}）：{(add_result.stderr or '').strip()}"
-                    )
+                if add_result.returncode != 0 and not vanished_rename_side:
+                    report_git_failure("提交變更", f"git add -- {path}", add_result)
+                    print_error(f"git add 失敗（{path}）")
+                    return False
 
-            result = subprocess.run(
-                ["git", "commit", "-m", message],
-                cwd=root,
-                capture_output=True,
-                timeout=10,
-            )
+            result = run_git_with_lock_retry(["commit", "-m", message], root)
 
             if result.returncode == 0:
                 print_success("檔案變更已提交")
                 return True
+            report_git_failure("提交變更", "git commit", result)
             print_error("提交變更失敗")
             return False
 
@@ -3742,22 +3796,19 @@ def commit_changes(
             if dry_run:
                 print_info("[SYNC] [預覽] 將提交檔案變更", 2)
             else:
-                subprocess.run(
-                    ["git", "add", "docs/todolist.yaml", "CHANGELOG.md"],
-                    cwd=root,
-                    timeout=10,
-                )
+                add_cmd = ["add", "docs/todolist.yaml", "CHANGELOG.md"]
+                add_result = run_git_with_lock_retry(add_cmd, root)
+                if add_result.returncode != 0:
+                    report_git_failure("提交變更", "git " + " ".join(add_cmd), add_result)
+                    print_error("git add 失敗")
+                    return False
 
-                result = subprocess.run(
-                    ["git", "commit", "-m", message],
-                    cwd=root,
-                    capture_output=True,
-                    timeout=10,
-                )
+                result = run_git_with_lock_retry(["commit", "-m", message], root)
 
                 if result.returncode == 0:
                     print_success("檔案變更已提交")
                 else:
+                    report_git_failure("提交變更", "git commit", result)
                     print_error("提交變更失敗")
                     return False
 
@@ -3790,22 +3841,36 @@ def git_merge_and_push(
     )
     # trunk = all-on-main，跳過 feature-branch merge 與分支清理
     use_feature_branch = release_workflow == "feature-branch"
+    completed: List[str] = []
 
     try:
         # 3.1 提交變更
         print_info("[SYNC] 提交所有變更")
         if not commit_changes(version, dry_run, baseline=baseline):
-            return False
+            return abort_release_git_step(
+                "提交變更",
+                completed,
+                "排除上方 stderr 的 git 錯誤後，手動 git add 失敗的檔案並 git commit，"
+                f"再重跑發版；tag {tag_name} 須在該 commit 之後才建立",
+            )
+        completed.append("提交變更")
 
         # 3.2 切換到 main 分支
         print_info("[SHUFFLE] 切換到 main 分支")
         if not dry_run:
-            subprocess.run(
+            result = subprocess.run(
                 ["git", "checkout", "main"],
                 cwd=root,
                 capture_output=True,
+                text=True,
                 timeout=10,
             )
+            if result.returncode != 0:
+                report_git_failure("切換 main", "git checkout main", result)
+                return abort_release_git_step(
+                    "切換 main", completed, "切換到 main 後重跑發版"
+                )
+            completed.append("切換 main")
         else:
             print_info("   [預覽] git checkout main", 2)
 
@@ -3816,13 +3881,18 @@ def git_merge_and_push(
                 ["git", "pull", "origin", "main"],
                 cwd=root,
                 capture_output=True,
+                text=True,
                 timeout=10,
             )
             if result.returncode == 0:
                 print_success("main 分支已更新到最新", )
+                completed.append("拉取 main")
             else:
                 print_error("拉取 main 失敗")
-                return False
+                report_git_failure("拉取 main", "git pull origin main", result)
+                return abort_release_git_step(
+                    "拉取 main", completed, "解決 pull 問題後重跑發版"
+                )
         else:
             print_info("   [預覽] git pull origin main", 2)
 
@@ -3843,38 +3913,42 @@ def git_merge_and_push(
                     ],
                     cwd=root,
                     capture_output=True,
+                    text=True,
                     timeout=10,
                 )
                 if result.returncode == 0:
                     print_success(f"已合併 {feature_branch} 到 main")
+                    completed.append("合併 feature 分支")
                 else:
                     print_error(f"合併 {feature_branch} 失敗")
+                    # 無共同歷史是既有的刻意容忍（首次發版的新分支）；其餘失敗中止
                     if "fatal: refusing to merge unrelated histories" not in result.stderr:
-                        return False
+                        report_git_failure(
+                            "合併 feature 分支", f"git merge {feature_branch}", result
+                        )
+                        return abort_release_git_step(
+                            "合併 feature 分支",
+                            completed,
+                            "解決合併衝突或 git merge --abort 後重跑發版",
+                        )
             else:
                 print_info(f"   [預覽] git merge {feature_branch} --no-ff", 2)
 
         # 3.5 建立 Tag
         print_info(f"[TAG]️ 建立 Tag: {tag_name}")
         if not dry_run:
-            result = subprocess.run(
-                [
-                    "git",
-                    "tag",
-                    "-a",
-                    tag_name,
-                    "-m",
-                    f"Release {tag_name}",
-                ],
-                cwd=root,
-                capture_output=True,
-                timeout=10,
+            result = run_git_with_lock_retry(
+                ["tag", "-a", tag_name, "-m", f"Release {tag_name}"], root
             )
             if result.returncode == 0:
                 print_success(f"Tag 已建立: {tag_name}")
+                completed.append(f"建立 tag {tag_name}")
             else:
-                print_error(f"建立 Tag 失敗")
-                return False
+                print_error("建立 Tag 失敗")
+                report_git_failure("建立 Tag", f"git tag -a {tag_name}", result)
+                return abort_release_git_step(
+                    "建立 Tag", completed, f"確認 {tag_name} 是否已存在後重跑發版"
+                )
         else:
             print_info(f"   [預覽] git tag -a {tag_name}", 2)
 
@@ -3886,26 +3960,37 @@ def git_merge_and_push(
                 ["git", "push", "origin", "main"],
                 cwd=root,
                 capture_output=True,
+                text=True,
                 timeout=10,
             )
             if result.returncode == 0:
                 print_success("main 已推送")
+                completed.append("推送 main")
             else:
                 print_error("推送 main 失敗")
-                return False
+                report_git_failure("推送 main", "git push origin main", result)
+                return abort_release_git_step(
+                    "推送 main",
+                    completed,
+                    f"排除推送問題後 git push origin main，再 git push origin {tag_name}",
+                )
 
             # 推送 tag
             result = subprocess.run(
                 ["git", "push", "origin", tag_name],
                 cwd=root,
                 capture_output=True,
+                text=True,
                 timeout=10,
             )
             if result.returncode == 0:
                 print_success(f"Tag {tag_name} 已推送")
             else:
-                print_error(f"推送 Tag 失敗")
-                return False
+                print_error("推送 Tag 失敗")
+                report_git_failure("推送 Tag", f"git push origin {tag_name}", result)
+                return abort_release_git_step(
+                    "推送 Tag", completed, f"git push origin {tag_name}"
+                )
         else:
             print_info("   [預覽] git push origin main", 2)
             print_info(f"   [預覽] git push origin {tag_name}", 2)

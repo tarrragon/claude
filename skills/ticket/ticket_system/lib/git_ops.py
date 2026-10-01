@@ -51,6 +51,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
 _GIT_TIMEOUT = 10
@@ -424,14 +425,38 @@ def _sync_shared_index_after_commit(
             _warn_sync_failed(missing, "force-remove", err)
 
 
+def _project_in_worktree_order(work_path: str, base: str, text: str) -> str:
+    """依工作區行序取出「base 各行 + text 各行」；缺檔或非超集回傳空字串。"""
+    try:
+        with open(work_path, encoding="utf-8") as fh:
+            work_lines = fh.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return ""  # 缺檔或不可讀：由呼叫端退回 base + text
+    needed = Counter(base.splitlines()) + Counter(text.splitlines())
+    picked: List[str] = []
+    for line in work_lines:
+        if needed[line] > 0:
+            needed[line] -= 1
+            picked.append(line)
+    if +needed:  # 仍有未配對的行：工作區不是超集
+        return ""
+    return "\n".join(picked) + "\n" if picked else ""
+
+
 def _stage_appended_blob(
     rel_path: str, text: str, old_head: str, cwd: str, env: dict
 ) -> Optional[str]:
-    """在隔離 index 中把 ``rel_path`` 設為「old_head 版本 + text」。
+    """在隔離 index 中設定 ``rel_path`` 的內容：HEAD 各行 + 本次 ``text`` 各行。
 
     多寫入者 append-only 檔（如 topic-assignments.txt）不可整檔 add：工作區
-    版本可能含他人未提交的行。以 old_head 版本為基底追加，提交內容只多出
-    本次的 ``text``。HEAD 版本末尾無換行時先補一個換行，與寫入端一致。
+    版本可能含他人未提交的行。提交內容的行集合恆為「HEAD 各行 + 本次各行」
+    （multiset，重複行按次數計），不含他人未提交的行。
+
+    行序契約：工作區檔存在且為該 multiset 的超集（每行出現次數都不少於所需）
+    時，依工作區的行序投影，使提交後 HEAD 與工作區行序一致（兩寫入者的提交
+    順序與追加順序相反時，工作區不再持續顯示已修改）。工作區缺檔或不是超集
+    時，退回「HEAD 版本 + text」（本次行接在 HEAD 末尾）。HEAD 版本末尾無
+    換行時先補一個換行，與寫入端一致。
 
     Returns:
         None 表成功；字串為失敗原因。
@@ -442,8 +467,11 @@ def _stage_appended_blob(
     base = base if ok else ""  # HEAD 尚無此檔：以空內容為基底
     if base and not base.endswith("\n"):
         base += "\n"
+    content = _project_in_worktree_order(
+        os.path.join(cwd, rel_path), base, text
+    ) or base + text
     ok, blob_out, err = _run_git_with_lock_retry(
-        ["git", "hash-object", "-w", "--stdin"], cwd=cwd, input_text=base + text
+        ["git", "hash-object", "-w", "--stdin"], cwd=cwd, input_text=content
     )
     if not ok:
         return err or "hash-object 失敗"
@@ -469,7 +497,8 @@ def commit_files_isolated(
         message: commit message。
         cwd: git 命令執行目錄，預設為目前工作目錄所屬 repo。
         append_lines: 路徑 -> 本次追加文字。這些檔案不整檔 stage，提交內容為
-            「HEAD 版本 + 追加文字」，不帶入工作區內他人未提交的內容；
+            「HEAD 各行 + 追加各行」（行序依工作區，非超集或缺檔時
+            退回 HEAD 版本 + 追加文字），不帶入工作區內他人未提交的內容；
             用於多寫入者 append-only 檔。與 ``paths`` 重疊的路徑以整檔為準。
 
     Returns:

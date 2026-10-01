@@ -720,6 +720,43 @@ def execute_remove_acceptance(args: argparse.Namespace, version: str) -> int:
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
+def _set_reverse_source_if_unset(
+    target_ticket_id: str, parent_ticket_id: str
+) -> Optional[str]:
+    """target_ticket 的 source_ticket 為空時寫入 parent_ticket_id（remove 的對稱操作）。
+
+    Best-effort：target 不存在、版本無法解析、已有 source_ticket（無論是否為
+    parent）一律不改，已有不同值時由呼叫端的 `check_reverse_source_conflict`
+    發 WARNING。只寫檔不 commit，commit 由呼叫端合併為單一提交。
+
+    Returns:
+        已寫入時回傳 target ticket 檔路徑；否則 None。
+    """
+    import sys
+
+    from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
+
+    target_version = extract_version_from_ticket_id(target_ticket_id)
+    if target_version is None:
+        return None
+
+    target_path = Path(get_ticket_path(target_version, target_ticket_id))
+    with file_lock(target_path):
+        target_ticket = ticket_loader.load_ticket(target_version, target_ticket_id)
+        if not target_ticket or target_ticket.get("source_ticket"):
+            return None
+        target_ticket["source_ticket"] = parent_ticket_id
+        actual_path = Path(target_ticket.get("_path", target_path))
+        try:
+            ticket_loader.save_ticket(target_ticket, actual_path)
+        except (IOError, OSError) as exc:
+            sys.stderr.write(
+                f"[add-spawned] 反向 source_ticket 寫入失敗 {target_ticket_id}: {exc}\n"
+            )
+            return None
+    return str(actual_path)
+
+
 def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
     """追加 spawned_tickets 項目（支援多 ID，對齊 Unix 慣例）。
 
@@ -756,19 +793,30 @@ def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         ticket_loader.save_ticket(ticket, ticket_path)
 
-        # 與 add-acceptance 同保護等級的 auto-commit（path-limited + graceful
-        # degrade）：spawned_tickets 是 ticket 血緣欄位，寫入後若停在未 commit
-        # 的 working tree，可能被 git checkout/reset/stash 覆蓋回舊版本。
-        commit_failed = git_utils.commit_ticket_md_reporting(
-            "add-spawned", str(ticket_path), args.ticket_id, "spawned_tickets",
-            operation="add-spawned",
-        )
+    # 反向欄位寫入在本票 file_lock 釋放後進行（各目標票獨立上鎖，不巢狀持有，
+    # 理由同 execute_remove_spawned）。本票與被寫入的目標票以單一 commit 提交
+    # （commit_ticket_mds_reporting）：spawned_tickets 是血緣欄位，寫入後若停在
+    # 未 commit 的 working tree，可能被 git checkout/reset/stash 覆蓋回舊版本。
+    commit_paths = [str(ticket_path)]
+    reverse_written: list[str] = []
+    for value in added:
+        target_path = _set_reverse_source_if_unset(value, args.ticket_id)
+        if target_path:
+            reverse_written.append(value)
+            commit_paths.append(target_path)
+    commit_failed = git_utils.commit_ticket_mds_reporting(
+        "add-spawned", commit_paths, args.ticket_id, "spawned_tickets",
+        operation="add-spawned",
+    )
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
     if added:
         print(f"   新增: {', '.join(added)}")
+    if reverse_written:
+        print(f"   已同步寫入反向欄位 source_ticket: {', '.join(reverse_written)}")
     if skipped:
         print(f"   已存在略過: {', '.join(skipped)}")
+    # target 已有不同 source_ticket 時保留原值，只提示
     for value in added:
         warning = check_reverse_source_conflict(value, args.ticket_id)
         if warning:
