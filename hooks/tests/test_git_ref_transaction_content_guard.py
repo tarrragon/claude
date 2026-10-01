@@ -502,8 +502,13 @@ def _legacy_findings(files, project_root, is_merge):
     return findings
 
 
+# gate（hooks-test-gate）只跑本檔：代表情境取成本最低且含 deny 發現者；
+# 其餘情境與重量級變體在 test_git_ref_transaction_content_guard_batched.py
+_GATE_SCENARIOS = ("violation",)
+
+
 class TestBatchedEquivalence:
-    @pytest.mark.parametrize("name", sorted(_SCENARIOS))
+    @pytest.mark.parametrize("name", _GATE_SCENARIOS)
     def test_staged_files_identical_to_legacy(self, scenario_repo, monkeypatch, name):
         scratch_repo, _base, new_sha, _merge = scenario_repo(name)
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
@@ -516,7 +521,7 @@ class TestBatchedEquivalence:
         assert legacy, "情境應至少有一個變更檔"
         assert batched[new_sha] == legacy
 
-    @pytest.mark.parametrize("name", sorted(_SCENARIOS))
+    @pytest.mark.parametrize("name", _GATE_SCENARIOS)
     def test_findings_identical_to_legacy(self, scenario_repo, monkeypatch, name):
         from lib import commit_content_guards as ccg
 
@@ -530,64 +535,86 @@ class TestBatchedEquivalence:
 
         assert new == old
 
-    def test_scenarios_cover_both_verdicts(self, scenario_repo, monkeypatch):
-        """對照輸入（規則 E2）：情境集合必須同時含有 deny 與無 deny，否則
-        等價性測試可能在「兩邊都空」的情況下空轉通過。"""
+
+class TestWorktreeBranchResolution:
+    """W1-028：分支判定以寫入的 ref 與寫入發生的 worktree 為準，不受
+    CLAUDE_PROJECT_DIR 指向別的 checkout 影響。走真實 reference-transaction
+    路徑（hook 安裝於共用 hooks 目錄，由 git update-ref 觸發）。"""
+
+    _ENV_BASE = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": "/nonexistent"}
+
+    @pytest.fixture()
+    def wt_repo(self, tmp_path, _baseline_template):
+        main = _clone_baseline(_baseline_template, tmp_path / "main")
+        wt = tmp_path / "feat-wt"
+        _capture(["worktree", "add", "-q", "-b", "feat/x", str(wt)], cwd=main)
+        hook = main / ".git" / "hooks" / "reference-transaction"
+        hook.parent.mkdir(exist_ok=True)
+        hook.write_text(
+            "#!/bin/sh\nexec %s %s \"$1\"\n"
+            % (sys.executable, HOOKS_DIR / "git-ref-transaction-content-guard.py"),
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+        return main, wt
+
+    def _dangling(self, repo, rel_path):
+        head = _capture(["rev-parse", "HEAD"], cwd=repo)
+        return _make_dangling_commit(repo, head, rel_path, "非豁免路徑內容\n")
+
+    def _update_ref(self, cwd, args, project_dir):
+        env = dict(self._ENV_BASE, CLAUDE_PROJECT_DIR=str(project_dir))
+        return subprocess.run(
+            ["git", "update-ref"] + args, cwd=str(cwd), capture_output=True, text=True, env=env
+        )
+
+    def test_b_protected_branch_write_denied_when_env_points_to_feature_worktree(self, wt_repo):
+        main, wt = wt_repo
+        new_sha = self._dangling(main, "src/violation.txt")
+        result = self._update_ref(main, ["refs/heads/main", new_sha], project_dir=wt)
+        assert result.returncode != 0, result.stderr
+        assert "branch-verify" in result.stderr
+
+    def test_ref_decides_branch_not_worktree_head(self, wt_repo):
+        """寫入的 ref 為 refs/heads/main，即使 cwd 在 feature worktree（HEAD=feat/x）也應判為保護分支。"""
+        main, wt = wt_repo
+        new_sha = self._dangling(wt, "src/violation.txt")
+        result = self._update_ref(wt, ["refs/heads/main", new_sha], project_dir=wt)
+        assert result.returncode != 0, result.stderr
+
+    def _scan(self, root, monkeypatch, project_dir, rel_path, **kw):
         from lib import commit_content_guards as ccg
 
-        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
-        v_repo, _b, violating, _m = scenario_repo("violation")
-        c_repo, _b, clean, _m = scenario_repo("clean")
-        monkeypatch.chdir(v_repo)
-        v = ccg._run_all_checks(
-            hook_module._build_scan_files_legacy(violating, v_repo), v_repo, _Logger()
-        )
-        monkeypatch.chdir(c_repo)
-        c = ccg._run_all_checks(
-            hook_module._build_scan_files_legacy(clean, c_repo), c_repo, _Logger()
-        )
-        assert any(f.severity == "deny" for f in v)
-        assert not any(f.severity == "deny" for f in c)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(project_dir))
+        monkeypatch.chdir(root)
+        sf = ccg.StagedFile(rel_path, "", "內容\n", "內容\n")
+        return ccg._run_all_checks([sf], root, _Logger(), **kw)
 
-    def test_fallback_to_legacy_when_patch_sections_mismatch(self, scenario_repo, monkeypatch):
-        """全量 patch 區段數與 name-status 條目數不符時，批次路徑必須退回
-        逐檔實作，結果仍與舊路徑相同。"""
-        scratch_repo, _b, new_sha, _m = scenario_repo("multi_file")
-        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
-        monkeypatch.chdir(scratch_repo)
-        legacy = hook_module._build_scan_files_legacy(new_sha, scratch_repo)
-        commits = hook_module._collect_new_commits_with_parents([new_sha], scratch_repo)
-        monkeypatch.setattr(hook_module, "_split_patch_sections", lambda text: [])
-        assert hook_module._build_scan_files_batched(commits, scratch_repo)[new_sha] == legacy
+    def test_a_lib_level_feature_worktree_not_judged_by_env_checkout(self, wt_repo, monkeypatch):
+        """A 情境於 lib 層（PreToolUse 呼叫端同路徑）：root=feature worktree，env 指向 main
+        checkout，修正前 branch-verify 取 env 的 main 分支而誤擋。"""
+        main, wt = wt_repo
+        findings = self._scan(wt, monkeypatch, main, "src/legit.txt")
+        assert not [f for f in findings if f.source == "branch-verify"]
 
+    def test_b_lib_level_protected_root_denied_despite_env_on_feature(self, wt_repo, monkeypatch):
+        main, wt = wt_repo
+        findings = self._scan(main, monkeypatch, wt, "src/violation.txt")
+        assert [f for f in findings if f.source == "branch-verify" and f.severity == "deny"]
 
-def _count_git_subprocesses(repo, stdin_text, tmp_path):
-    trace = tmp_path / f"trace-{repo.name}.log"
-    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "GIT_TRACE": str(trace)}
-    result = subprocess.run(
-        [sys.executable, str(HOOKS_DIR / "git-ref-transaction-content-guard.py"), "prepared"],
-        input=stdin_text, cwd=str(repo), capture_output=True, text=True, env=env,
-    )
-    lines = trace.read_text(encoding="utf-8").splitlines()
-    return result, sum(1 for line in lines if "trace: built-in: git" in line)
+    def test_explicit_branch_overrides_head_branch(self, wt_repo, monkeypatch):
+        main, wt = wt_repo
+        findings = self._scan(wt, monkeypatch, wt, "src/violation.txt", branch="main")
+        assert [f for f in findings if f.source == "branch-verify" and f.severity == "deny"]
 
-
-class TestSubprocessCountConstant:
-    """git 子程序數不得隨變更檔數 F 成長（持鎖時間與子程序數成正比）。"""
-
-    def _run_with_f(self, tmp_path, n_files, template):
-        repo = _clone_baseline(template, tmp_path / f"r{n_files}")
-        head = _capture(["rev-parse", "HEAD"], cwd=repo)
-        files = {f".claude/notes/n{i}.md": b"plain content\n" for i in range(n_files)}
-        new_sha = _make_commit_from_files(repo, head, files)
-        return _count_git_subprocesses(repo, f"{head} {new_sha} refs/heads/main\n", tmp_path)
-
-    def test_count_independent_of_changed_file_count(self, tmp_path, _baseline_template):
-        r1, n1 = self._run_with_f(tmp_path, 1, _baseline_template)
-        r21, n21 = self._run_with_f(tmp_path, 21, _baseline_template)
-        assert r1.returncode == 0 and r21.returncode == 0
-        assert n21 == n1, f"F=1 -> {n1} 個子程序，F=21 -> {n21} 個"
-        assert n21 <= 20
+    def test_detached_head_write_keeps_head_based_verdict(self, wt_repo):
+        """detached HEAD 寫入（ref 為 HEAD，不帶分支名）：維持讀該 worktree HEAD 的現行判定，
+        detached 無分支名 -> 不檢查；env 指向 main checkout 不得改變結論。"""
+        main, wt = wt_repo
+        _capture(["checkout", "-q", "--detach"], cwd=wt)
+        new_sha = self._dangling(wt, "src/detached.txt")
+        result = self._update_ref(wt, ["--no-deref", "HEAD", new_sha], project_dir=main)
+        assert result.returncode == 0, result.stderr
 
 
 if __name__ == "__main__":

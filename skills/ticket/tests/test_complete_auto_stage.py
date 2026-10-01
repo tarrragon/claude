@@ -9,8 +9,8 @@ index 中過期 index 快照寫進 HEAD 的事故顯示，留 staged 狀態本�
 
 驗證情境：
 1. 正常 complete：ticket md + worklog md 交由 commit_files_isolated 提交
-2. cascade complete：unblocked children 正確落盤，但不進入提交清單
-3. blockedBy 反向解鎖的 siblings 正確落盤，但不進入提交清單
+2. cascade complete：unblocked children 落盤且 save 成功者進入提交清單
+3. blockedBy 反向解鎖的 siblings 落盤且 save 成功者進入提交清單
 4. --no-stage flag：跳過自動提交
 5. stdout 含 commit SHA（成功時），不再印出「建議裸 commit」指令
 6. 不誤觸提交範圍外的 WIP 檔案（僅提交已知 modified 路徑）
@@ -81,12 +81,14 @@ def _run_complete(
         return commit_result or default_commit_result
 
     # cascade fake：模擬 _post_complete_cascade 解鎖 children
-    def fake_cascade(parent_ticket, version, ticket_map):
+    def fake_cascade(parent_ticket, version, ticket_map, saved_paths=None):
         unblocked = []
         if cascade_unblocked:
             for child_id in cascade_unblocked:
                 if child_id in ticket_map:
                     ticket_map[child_id]["status"] = "pending"
+                if saved_paths is not None:
+                    saved_paths.append(f"/tmp/{child_id}.md")
                 unblocked.append({"id": child_id, "title": ""})
         return unblocked
 
@@ -189,8 +191,8 @@ class TestCompleteAutoStage:
         assert not any("worklog" in p for p in skipped), skipped
         assert any("0.18.0-W17-998.md" in p for p in skipped), skipped
 
-    def test_complete_cascade_does_not_commit_children(self, capsys):
-        """children 解鎖仍落盤（save_ticket 被呼叫），但不進入提交清單。"""
+    def test_complete_cascade_commits_children(self, capsys):
+        """children 解鎖且 save 成功者進入提交清單，commit body 列出其 ID。"""
         captured_saves = []
         ticket = _build_ticket(children=["0.18.0-W17-998.1"])
         result, calls = _run_complete(
@@ -202,13 +204,11 @@ class TestCompleteAutoStage:
         assert result == 0
         assert len(calls) == 1
         committed = calls[0]["paths"]
-        assert not any("0.18.0-W17-998.1.md" in p for p in committed), committed
-        # cascade fake 不經 save_ticket（本測試用 fake_cascade 直接模擬解鎖，
-        # 落盤驗證見 test_complete_reverse_unblock_does_not_commit_siblings
-        # 的真實 _reverse_unblock_blockedby 路徑）
+        assert any("0.18.0-W17-998.1.md" in p for p in committed), committed
+        assert "0.18.0-W17-998.1" in calls[0]["message"], calls[0]
 
-    def test_complete_reverse_unblock_does_not_commit_siblings(self, capsys):
-        """blockedBy 反向解鎖的兄弟 Ticket 正確落盤，但不進入提交清單。"""
+    def test_complete_reverse_unblock_commits_siblings(self, capsys):
+        """blockedBy 反向解鎖的兄弟 Ticket 落盤且進入提交清單。"""
         parent_id = "0.18.0-W17-994"
         sibling_id = "0.18.0-W17-993"
         ticket = _build_ticket(ticket_id=parent_id)
@@ -233,10 +233,11 @@ class TestCompleteAutoStage:
         sibling_saves = [s for s in captured_saves if s["id"] == sibling_id]
         assert len(sibling_saves) == 1, captured_saves
         assert sibling_saves[0]["status"] == "pending", captured_saves
-        # 但不進入提交清單
+        # 且進入提交清單
         assert len(calls) == 1
         committed = calls[0]["paths"]
-        assert not any(sibling_id in p for p in committed), committed
+        assert any(sibling_id in p for p in committed), committed
+        assert sibling_id in calls[0]["message"], calls[0]
 
     def test_no_stage_flag_skips_commit(self, capsys):
         ticket = _build_ticket()
@@ -322,3 +323,212 @@ class TestCompleteAutoStage:
         # 所有提交路徑都應是 .md 結尾
         for arg in committed:
             assert arg.endswith(".md"), f"unexpected committed path: {arg}"
+
+
+# ---------------------------------------------------------------------------
+# 真實 repo、真實 CLI 入口：complete 連帶解鎖的票併入同一筆 commit
+# ---------------------------------------------------------------------------
+
+import subprocess
+import sys
+from pathlib import Path
+
+from ticket_system.lib import git_ops, git_utils
+from ticket_system.lib.paths import get_ticket_path
+
+_REAL_VER = "0.0.0"
+_OTHER_VER = "0.0.1"
+_PARENT = "0.0.0-W0-001"
+_CHILD = "0.0.0-W0-002"
+_CROSS = "0.0.1-W0-001"
+
+_REAL_FM = """---
+id: {tid}
+title: t-{tid}
+type: IMP
+status: {status}
+version: {ver}
+wave: 0
+priority: P2
+who:
+  current: tester
+  history: {{}}
+what: w
+when: n
+where:
+  layer: Infrastructure
+  files: []
+why: y
+how:
+  task_type: Implementation
+  strategy: s
+children: {children}
+blockedBy: {blocked_by}
+relatedTo: []
+spawned_tickets: []
+source_ticket: null
+acceptance:
+- '[x] a1'
+assigned: true
+tdd_stage: []
+{extra}---
+
+# Execution Log
+
+## Problem Analysis
+
+pa
+
+## Solution
+
+sol
+
+### 自檢結果
+
+- [x] 已自檢
+
+## Test Results
+
+tr
+
+## Spawn Requests
+
+"""
+
+
+def _real_git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True
+    ).stdout
+
+
+def _seed_real(ver, tid, status, children="[]", blocked_by="[]", extra=""):
+    path = get_ticket_path(ver, tid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        _REAL_FM.format(
+            tid=tid, ver=ver, status=status, children=children,
+            blocked_by=blocked_by, extra=extra,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def real_repo(tmp_path, monkeypatch):
+    """父票 in_progress；同版本 child 與跨版本引用者皆 blocked 於父票。"""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("TICKET_SYSTEM_TEST_ISOLATION", "1")
+    _real_git(tmp_path, "init", "-q", "-b", "main")
+    _real_git(tmp_path, "config", "user.email", "t@example.com")
+    _real_git(tmp_path, "config", "user.name", "t")
+    _seed_real(_REAL_VER, _PARENT, "in_progress", children=f"[{_CHILD}]")
+    _seed_real(
+        _REAL_VER, _CHILD, "blocked", blocked_by=f"[{_PARENT}]",
+        extra=f"parent_id: {_PARENT}\n",
+    )
+    _seed_real(_OTHER_VER, _CROSS, "blocked", blocked_by=f"[{_PARENT}]")
+    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs" / "todolist.yaml").write_text(
+        "versions:\n- version: 0.0.0\n  status: active\n"
+        "- version: 0.0.1\n  status: planned\n",
+        encoding="utf-8",
+    )
+    worklog = tmp_path / "docs/work-logs/v0/v0.0/v0.0.0/v0.0.0-main.md"
+    worklog.parent.mkdir(parents=True, exist_ok=True)
+    worklog.write_text("# w\n\n### 2026-01-01\n\n- x\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(".claude/hook-logs/\n", encoding="utf-8")
+    _real_git(tmp_path, "add", "-A")
+    _real_git(tmp_path, "commit", "-q", "-m", "seed")
+    monkeypatch.setattr(git_utils, "_COMMIT_RETRY_BUDGET_SECONDS", 0.0)
+    monkeypatch.setattr(git_ops.time, "sleep", lambda _s: None)
+    return tmp_path
+
+
+def _cli_complete(monkeypatch, tid, ver=_REAL_VER) -> int:
+    from ticket_system.scripts import ticket as cli
+
+    monkeypatch.setattr(
+        sys, "argv", ["ticket", "track", "complete", tid, "--version", ver, "--as", "tester",
+         "--force"]  # 有未完成 children 時 complete 預設阻擋；cascade 路徑須 --force
+    )
+    try:
+        return cli.main() or 0
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+
+def _head_names(repo: Path) -> set:
+    out = _real_git(repo, "show", "--name-only", "--pretty=format:", "HEAD")
+    return {Path(line).name for line in out.splitlines() if line.strip()}
+
+
+class TestCompleteCommitsUnblockedTickets:
+    def test_unblocked_child_and_cross_version_in_same_commit(
+        self, real_repo, monkeypatch, capsys
+    ):
+        before = int(_real_git(real_repo, "rev-list", "--count", "HEAD"))
+        rc = _cli_complete(monkeypatch, _PARENT)
+        captured = capsys.readouterr()
+
+        assert rc == 0, captured.out + captured.err
+        assert _real_git(real_repo, "status", "--porcelain", "--untracked-files=no") == "", captured.out
+        assert int(_real_git(real_repo, "rev-list", "--count", "HEAD")) == before + 1
+        assert _head_names(real_repo) == {
+            f"{_PARENT}.md", f"{_CHILD}.md", f"{_CROSS}.md", "v0.0.0-main.md",
+        }
+        body = _real_git(real_repo, "log", "-1", "--pretty=%B")
+        assert _CHILD in body and _CROSS in body
+
+    def test_no_unblock_targets_commit_scope_is_ticket_plus_worklog(
+        self, real_repo, monkeypatch, capsys
+    ):
+        """E1 對照：同 fixture 但無人 blocked 於本票，範圍僅本票加 worklog。"""
+        _seed_real(_REAL_VER, _CHILD, "pending")
+        _seed_real(_OTHER_VER, _CROSS, "pending")
+        _real_git(real_repo, "add", "-A")
+        _real_git(real_repo, "commit", "-q", "-m", "no-blockers")
+
+        rc = _cli_complete(monkeypatch, _PARENT)
+        captured = capsys.readouterr()
+
+        assert rc == 0, captured.out + captured.err
+        assert _real_git(real_repo, "status", "--porcelain", "--untracked-files=no") == ""
+        assert _head_names(real_repo) == {f"{_PARENT}.md", "v0.0.0-main.md"}
+        assert "解鎖" not in _real_git(real_repo, "log", "-1", "--pretty=%B")
+
+    def test_residual_ref_lock_exit_75_lists_all_paths(
+        self, real_repo, monkeypatch, capsys
+    ):
+        (real_repo / ".git" / "refs" / "heads" / "main.lock").write_text("residue\n")
+        rc = _cli_complete(monkeypatch, _PARENT)
+        captured = capsys.readouterr()
+
+        assert rc == 75, captured.err
+        assert "[WARNING]" in captured.err
+        for name in (_PARENT, _CHILD, _CROSS):
+            assert f"{name}.md" in captured.err, captured.err
+
+    def test_failed_save_unblocked_ticket_not_in_commit(
+        self, real_repo, monkeypatch, capsys
+    ):
+        """被解鎖票 save 失敗：不列入提交範圍，原 WARNING 照常。"""
+        from ticket_system.commands import lifecycle
+
+        real_save = lifecycle.save_ticket
+
+        def flaky_save(ticket, path):
+            if ticket.get("id") == _CHILD and ticket.get("status") == "pending":
+                raise OSError("disk full")
+            return real_save(ticket, path)
+
+        monkeypatch.setattr(lifecycle, "save_ticket", flaky_save)
+        rc = _cli_complete(monkeypatch, _PARENT)
+        captured = capsys.readouterr()
+
+        assert rc == 0, captured.out + captured.err
+        names = _head_names(real_repo)
+        assert f"{_CHILD}.md" not in names
+        assert {f"{_PARENT}.md", f"{_CROSS}.md"} <= names
+        assert "disk full" in captured.out + captured.err

@@ -992,15 +992,19 @@ class TicketLifecycle:
 
         # W5-019：父 complete → 子 cascade 解鎖 + 未完成 children 警告
         # 置於 _auto_handoff_if_needed 之前，讓解鎖後的子狀態可影響 handoff 建議
-        # 0.2.1-W3-246：cascade 解鎖（frontmatter 落盤 + stdout 訊息）由下列
-        # 兩個函式呼叫本身的副作用完成，回傳值不再併入 auto-stage 範圍——
-        # children/siblings 的 frontmatter 仍正確寫入磁碟，只是不進入
-        # staging（理由見下方 auto-stage 區塊）。
-        _post_complete_cascade(ticket, self.version, ticket_map)
+        # 被解鎖且 save 成功的票檔路徑（可跨版本）經 unblocked_paths 帶回，
+        # 併入下方 post-completion commit：解鎖寫入屬 complete 的連帶寫入，
+        # 留在工作區會被他人提交吸入或被 restore 回 blocked。
+        unblocked_paths: List[str] = []
+        _post_complete_cascade(
+            ticket, self.version, ticket_map, saved_paths=unblocked_paths
+        )
 
         # W1-082：children cascade 之外，反向掃描 blockedBy 引用者解鎖非 children
         # 關係的兄弟 Ticket（W1-081 根因修復）。
-        _reverse_unblock_blockedby(ticket_id, self.version, ticket_map)
+        _reverse_unblock_blockedby(
+            ticket_id, self.version, ticket_map, saved_paths=unblocked_paths
+        )
 
         # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
         _print_source_ana_complete_hint(ticket, self.version)
@@ -1011,9 +1015,9 @@ class TicketLifecycle:
         # 自動 handoff：若有後續任務，自動建立 handoff 檔案
         _auto_handoff_if_needed(ticket, analysis, self.version)
 
-        # 自動以隔離索引提交 metadata：範圍收斂為本票 md + worklog index 兩類，
-        # 不含 children 與 siblings 路徑（0.2.1-W3-246 定案範圍，理由見下方
-        # 函式 docstring）。改用 commit_files_isolated（GIT_INDEX_FILE 隔離
+        # 自動以隔離索引提交 metadata：範圍為本票 md + worklog index + 本次
+        # 被解鎖且 save 成功的票檔（children 與 blockedBy 引用者，可跨版本）。
+        # 改用 commit_files_isolated（GIT_INDEX_FILE 隔離
         # + 提交前自檢），不再把 staged 狀態留在共用 index 等人工裸 commit——
         # 留 staged 狀態曾造成同儕誤把過期 index 快照裸 commit 進 HEAD。
         if not no_stage:
@@ -1031,7 +1035,10 @@ class TicketLifecycle:
                     sys.stderr.write(
                         f"[auto-commit] worklog 路徑解析失敗（略過）：{exc}\n"
                     )
-            if _auto_commit_completion_files(ticket_id, modified_paths):
+            modified_paths.extend(unblocked_paths)
+            if _auto_commit_completion_files(
+                ticket_id, modified_paths, unblocked_paths
+            ):
                 # 狀態已寫入 working tree 但未入庫：以專用 exit code 反映，
                 # 與 complete 本身失敗（1）區分；WARNING 已由函式輸出。
                 return EXIT_AUTO_COMMIT_FAILED
@@ -1979,6 +1986,7 @@ def _clear_dispatch_for_completed_ticket(ticket_id: str) -> None:
 def _auto_commit_completion_files(
     ticket_id: str,
     modified_paths: List[str],
+    unblocked_paths: Optional[List[str]] = None,
 ) -> bool:
     """complete 後以隔離索引自動提交已知 modified 路徑，取代原「auto-stage +
     人工裸 commit」流程。
@@ -2013,7 +2021,9 @@ def _auto_commit_completion_files(
 
     Args:
         ticket_id: 主 ticket id（用於 commit 訊息）
-        modified_paths: complete 流程實際寫入的檔案路徑清單
+        modified_paths: complete 流程實際寫入的檔案路徑清單（含被解鎖票檔）
+        unblocked_paths: 其中被 cascade／反向 blockedBy 解鎖的票檔路徑，
+            僅用於 commit body 列出被解鎖的票 ID
 
     Returns:
         True 表最終提交失敗（含例外），已輸出含原因與補救指令的 WARNING；
@@ -2025,6 +2035,9 @@ def _auto_commit_completion_files(
 
     cwd = str(Path(deduped[0]).parent)
     message = f"chore({ticket_id}): metadata sync post-completion"
+    unblocked_ids = [Path(p).stem for p in dict.fromkeys(unblocked_paths or [])]
+    if unblocked_ids:
+        message += "\n\n被解鎖的票：" + "、".join(unblocked_ids)
     try:
         result = commit_files_isolated(deduped, message, cwd=cwd)
     except Exception as exc:
@@ -2070,20 +2083,21 @@ def _post_complete_cascade(
     parent_ticket: Dict[str, Any],
     version: str,
     ticket_map: Dict[str, Any],
+    saved_paths: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     complete() 後處理：cascade 解鎖子 Ticket + 印出解鎖/警告訊息。
 
     W11-002.1 從 complete() 抽出，讓 complete() 主體只做編排。
     W11-035：回傳 unblocked 清單供呼叫端顯示或未來擴充（先前無回傳）。
-    0.2.1-W3-246：呼叫端 complete() 已不再把此回傳值併入 auto-stage 範圍
-    （children 路徑不進入 staging，僅落盤）。
+    被解鎖且 save 成功的票檔路徑經 ``saved_paths`` 帶回，由呼叫端併入提交範圍。
     若 parent 無 children，回傳空 list。
 
     Args:
         parent_ticket: 已完成的父 Ticket dict
         version: 版本字串
         ticket_map: 預先載入的 {ticket_id: ticket_dict} map（complete 流程已載入）
+        saved_paths: 選用，save 成功的被解鎖票檔路徑會 append 於此
 
     Returns:
         unblocked list of {id, title}（與 _cascade_unblock_children 第一回傳值同型）
@@ -2093,7 +2107,7 @@ def _post_complete_cascade(
         return []
 
     unblocked, pending = _cascade_unblock_children(
-        parent_ticket, version, ticket_map=ticket_map
+        parent_ticket, version, ticket_map=ticket_map, saved_paths=saved_paths
     )
     if unblocked:
         _print_cascade_unblocked(unblocked)
@@ -2175,6 +2189,7 @@ def _cascade_unblock_children(
     parent_ticket: Dict[str, Any],
     version: str,
     ticket_map: Optional[Dict[str, Any]] = None,
+    saved_paths: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     對 parent 的 blocked children 執行 cascade 解鎖，並收集未完成 children 清單。
@@ -2216,6 +2231,7 @@ def _cascade_unblock_children(
             此 fallback 路徑下 parent 必須已落盤，否則讀到舊 status。
             注意：傳入的 map 中 child dict 在 dispatch unblock 時會被原地 mutate
             （status → pending），caller 不應在 cascade 後重用同一 map 做後續決策。
+        saved_paths: 選用，save 成功的 child 票檔路徑會 append 於此（save 失敗不列入）
 
     Returns:
         (unblocked_list, warnings_list)
@@ -2248,10 +2264,10 @@ def _cascade_unblock_children(
             child = ticket_map[outcome.id]
             child["status"] = STATUS_PENDING
             try:
-                save_ticket(
-                    child,
-                    resolve_ticket_path(child, version, outcome.id),
-                )
+                child_path = resolve_ticket_path(child, version, outcome.id)
+                save_ticket(child, child_path)
+                if saved_paths is not None:
+                    saved_paths.append(str(child_path))
                 unblocked.append({"id": outcome.id, "title": outcome.title})
             except Exception as err:
                 # §6.7 non-fail-fast：列入 warnings 而非隱藏
@@ -2305,6 +2321,7 @@ def _reverse_unblock_blockedby(
     completed_ticket_id: str,
     version: str,
     ticket_map: Dict[str, Any],
+    saved_paths: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     complete() 後反向掃描 blockedBy 引用者，解鎖非 children 關係的兄弟 Ticket。
@@ -2324,6 +2341,7 @@ def _reverse_unblock_blockedby(
         version: 版本字串
         ticket_map: 預先載入的 {ticket_id: ticket_dict} map（可能已被
             `_post_complete_cascade` 原地 mutate）
+        saved_paths: 選用，save 成功的被解鎖票檔路徑（可跨版本）會 append 於此
 
     Returns:
         unblocked list of {id, title}（與 `_cascade_unblock_children` 第一
@@ -2347,7 +2365,10 @@ def _reverse_unblock_blockedby(
 
         candidate["status"] = STATUS_PENDING
         try:
-            save_ticket(candidate, resolve_ticket_path(candidate, cand_version, tid))
+            cand_path = resolve_ticket_path(candidate, cand_version, tid)
+            save_ticket(candidate, cand_path)
+            if saved_paths is not None:
+                saved_paths.append(str(cand_path))
             unblocked.append({"id": tid, "title": candidate.get("title", "")})
         except Exception as err:
             # §6.7 non-fail-fast：列入 stderr 警告而非隱藏

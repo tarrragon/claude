@@ -17,6 +17,7 @@ import shutil
 import yaml
 from datetime import datetime
 from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
@@ -53,6 +54,30 @@ from ticket_system.lib.command_tracking_messages import (
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
 )
+from ticket_system.lib.git_utils import (
+    EXIT_AUTO_COMMIT_FAILED,
+    commit_ticket_mds_reporting,
+)
+from ticket_system.lib.topic_assignments import (
+    assignments_file_path,
+    inherit_assignment,
+)
+
+# 被遷移票記錄「曾用 ID」的欄位名（由舊到新的有序清單）。與 migrated_from 語意不同：
+# migrated_from 是撞號改號前的原目標；本欄位是票自己走過的 ID，長度即遷移（前移）次數。
+PREVIOUS_IDS_FIELD = "previous_ids"
+
+
+@dataclass
+class _MigrationRecord:
+    """一次成功遷移寫入工作區的檔案集合，供呼叫端併成單一提交。"""
+
+    old_id: str
+    new_id: str
+    target_path: Path
+    source_path: Path
+    referrers: List[Path] = field(default_factory=list)
+    topic_line: Optional[str] = None
 
 
 def _update_ticket_id_references(ticket: Dict[str, Any], old_id: str, new_id: str) -> None:
@@ -101,7 +126,37 @@ def _update_ticket_id_references(ticket: Dict[str, Any], old_id: str, new_id: st
         ticket["parent_id"] = new_id
 
 
+def _replace_scalar_or_list_ref(value: Any, old_id: str, new_id: str):
+    """替換字串或字串清單欄位中的舊 ID，回傳 (新值, 是否變更)。"""
+    if value == old_id:
+        return new_id, True
+    if isinstance(value, list) and old_id in value:
+        return [new_id if ref == old_id else ref for ref in value], True
+    return value, False
+
+
+def _rewrite_extra_structural_refs(ticket: Dict[str, Any], old_id: str, new_id: str) -> bool:
+    """改寫 discovered_during、closed_by 與 chain.root／chain.parent 中的舊 ID。"""
+    updated = False
+    for key in ("discovered_during", "closed_by"):
+        if key in ticket:
+            ticket[key], changed = _replace_scalar_or_list_ref(ticket[key], old_id, new_id)
+            updated = updated or changed
+    chain = ticket.get("chain")
+    if isinstance(chain, dict):
+        for key in ("root", "parent"):
+            if chain.get(key) == old_id:
+                chain[key] = new_id
+                updated = True
+    return updated
+
+
 def _update_cross_references(old_id: str, new_id: str) -> int:
+    """更新交叉引用並回傳更新的檔案數（相容舊介面，實作見 collecting 版）。"""
+    return len(_update_cross_references_collecting(old_id, new_id))
+
+
+def _update_cross_references_collecting(old_id: str, new_id: str) -> List[Path]:
     """
     搜尋所有 Ticket 文件並更新對舊 ID 的交叉引用
 
@@ -113,15 +168,17 @@ def _update_cross_references(old_id: str, new_id: str) -> int:
     - source_ticket: 來源 Ticket
     - parent_id: 父 Ticket ID
     - spawned_tickets: 衍生 Ticket 列表
+    - discovered_during、closed_by: 發現來源與關閉來源
+    - chain.root、chain.parent: 子孫的任務鏈位置
 
     Args:
         old_id: 舊 Ticket ID
         new_id: 新 Ticket ID
 
     Returns:
-        int: 更新的檔案數量
+        List[Path]: 實際更新（已寫入）的檔案路徑
     """
-    updated_count = 0
+    updated_paths: List[Path] = []
     # 根目錄改用 get_ticket_state_root()（非 get_project_root()，2026-09-02）：
     # 掃描對象是所有版本的 ticket 檔案（ticket 狀態），linked worktree 內
     # 執行時必須統一解析主倉庫，理由見 get_ticket_state_root docstring。
@@ -195,11 +252,14 @@ def _update_cross_references(old_id: str, new_id: str) -> int:
                             ticket["spawned_tickets"][i] = new_id
                             updated = True
 
+            if _rewrite_extra_structural_refs(ticket, old_id, new_id):
+                updated = True
+
             # 儲存修改
             if updated:
                 try:
                     save_ticket(ticket, ticket_file)
-                    updated_count += 1
+                    updated_paths.append(ticket_file)
                 except (IOError, OSError) as e:
                     print(format_warning(
                         WarningMessages.FILE_UPDATE_FAILED,
@@ -207,7 +267,7 @@ def _update_cross_references(old_id: str, new_id: str) -> int:
                         error=str(e)
                     ))
 
-    return updated_count
+    return updated_paths
 
 
 def _load_ticket_from_path(ticket_path: Path) -> Optional[Dict[str, Any]]:
@@ -368,16 +428,16 @@ def _validate_target_version(target_id: str, version: str) -> Optional[str]:
     return ErrorMessages.VERSION_NOT_REGISTERED.format(version=target_version)
 
 
-def _migrate_single_ticket(
+def _migrate_ticket_files(
     version: str,
     source_id: str,
     target_id: str,
     dry_run: bool = False,
     backup: bool = True,
     force_overwrite: bool = False,
-) -> int:
+) -> tuple:
     """
-    遷移單一 Ticket
+    遷移單一 Ticket 的檔案（寫入工作區，不提交）
 
     Args:
         version: 版本號
@@ -388,18 +448,19 @@ def _migrate_single_ticket(
         force_overwrite: 明示授權覆寫目標 ID 既有 Ticket（W14-048）
 
     Returns:
-        int: exit code (0 成功, 1 失敗, 2 來源 Ticket 不存在)
+        (exit code, _MigrationRecord | None)：exit code 0 成功, 1 失敗, 2 來源 Ticket
+        不存在；僅實際寫入成功時帶 record（預覽與失敗為 None）。
     """
     # 驗證 ID 格式
     if not validate_ticket_id(source_id) or not validate_ticket_id(target_id):
         print(MigrateMessages.INVALID_TICKET_ID_FORMAT)
-        return 1
+        return 1, None
 
     # W9-002: 目標版本合法性守衛（未註冊阻擋；dry-run 同樣須過守衛）
     version_error = _validate_target_version(target_id, version)
     if version_error:
         print(format_error(version_error))
-        return 1
+        return 1, None
 
     # 從 source_id 提取版本號，支援跨版本遷移
     source_components = extract_id_components(source_id)
@@ -410,12 +471,12 @@ def _migrate_single_ticket(
     #  導致冪等性 re-run 場景誤判 source 仍存在）
     source_path_check = get_ticket_path(source_version, source_id)
     if not source_path_check.exists():
-        return 2
+        return 2, None
 
     # 載入來源 Ticket
     ticket, error = load_and_validate_ticket(source_version, source_id)
     if error:
-        return 2
+        return 2, None
 
     # W14-048: collision detection（target 已存在）
     # 例外：source == target（同 ID rename，等同 in-place 更新）不視為 collision
@@ -436,7 +497,7 @@ def _migrate_single_ticket(
                     existing_title=collision["title"],
                     existing_status=collision["status"],
                 ))
-                return 0
+                return 0, None
             # 發版前移撞號改號機制：dry-run 對碰撞判 FAIL 並印改號預覽，
             # 不再視為可放行的預覽（避免 finish --dry-run 對碰撞誤判 [OK]）。
             resolved_id = _resolve_available_target_id(target_id, version)
@@ -448,8 +509,8 @@ def _migrate_single_ticket(
                 existing_status=collision["status"],
                 resolved_id=resolved_id,
             ))
-            return 1
-        return 0
+            return 1, None
+        return 0, None
 
     # 實際執行階段：碰撞時預設改取下一可用序號（migrated_from 記錄原目標）；
     # --force-overwrite 旗標語意不變，仍記錄 audit log 後覆寫既有 Ticket。
@@ -484,6 +545,8 @@ def _migrate_single_ticket(
     # 更新 Ticket 資料
     old_id = ticket.get("id")
     ticket["id"] = target_id
+    if old_id and old_id != target_id:
+        ticket[PREVIOUS_IDS_FIELD] = [*(ticket.get(PREVIOUS_IDS_FIELD) or []), old_id]
 
     # 更新 wave
     components = extract_id_components(target_id)
@@ -525,17 +588,86 @@ def _migrate_single_ticket(
             print(format_info(InfoMessages.FILE_DELETED, path=str(source_path)))
 
         # 更新其他 Ticket 中的交叉引用
-        cross_ref_count = _update_cross_references(old_id, target_id)
-        if cross_ref_count > 0:
-            print(format_info(MigrateMessages.CROSS_REFERENCES_UPDATED, count=cross_ref_count))
+        referrers = _update_cross_references_collecting(old_id, target_id)
+        if referrers:
+            print(format_info(MigrateMessages.CROSS_REFERENCES_UPDATED, count=len(referrers)))
 
-        return 0
+        # topic-assignments 追加新 ID 行（舊行保留，append-only）；同 ID 改名無需處理
+        topic_line = inherit_assignment(old_id, target_id) if old_id != target_id else None
+
+        return 0, _MigrationRecord(
+            old_id=old_id,
+            new_id=target_id,
+            target_path=target_path,
+            source_path=source_path,
+            referrers=referrers,
+            topic_line=topic_line,
+        )
 
     except (IOError, OSError) as e:
         print(format_error(ErrorMessages.FILE_CREATION_FAILED, error=str(e)))
         if backup_path:
             print(format_info(MigrationMessages.BACKUP_LOCATION, path=str(backup_path)))
-        return 1
+        return 1, None
+
+
+def _commit_migrations(records: List[_MigrationRecord]) -> bool:
+    """把成功遷移的全部檔案以單一隔離提交入庫。
+
+    路徑含新檔、舊檔（刪除）與各引用者；主路徑取仍存在的新檔（git 錨點）。
+    topic-assignments 以 append_lines 只提交本次追加行。
+
+    Returns:
+        True 表提交最終失敗（呼叫端應回 EXIT_AUTO_COMMIT_FAILED）。
+    """
+    if not records:
+        return False
+    targets = [r.target_path for r in records if r.target_path.exists()]
+    paths = [str(p) for p in targets]
+    for record in records:
+        paths.append(str(record.source_path))
+        paths.extend(str(p) for p in record.referrers)
+    topic_lines = "".join(r.topic_line for r in records if r.topic_line)
+    first = records[0]
+    single = len(records) == 1
+    failed = commit_ticket_mds_reporting(
+        "migrate",
+        paths,
+        ticket_id=first.new_id,
+        section=f"from {first.old_id}" if single else f"{len(records)} tickets",
+        operation="migrate",
+        append_lines={str(assignments_file_path()): topic_lines} if topic_lines else None,
+    )
+    if failed and topic_lines:
+        import sys
+
+        sys.stderr.write(
+            f"[WARNING] [migrate] 尚未入庫的追加行（{assignments_file_path()}），"
+            "補救時一併 git add 該檔：\n" + topic_lines
+        )
+    return failed
+
+
+def _migrate_single_ticket(
+    version: str,
+    source_id: str,
+    target_id: str,
+    dry_run: bool = False,
+    backup: bool = True,
+    force_overwrite: bool = False,
+) -> int:
+    """遷移單一 Ticket 並以單一 commit 入庫。
+
+    Returns:
+        int: exit code (0 成功, 1 失敗, 2 來源 Ticket 不存在,
+        EXIT_AUTO_COMMIT_FAILED 檔案已寫入但提交最終失敗)
+    """
+    rc, record = _migrate_ticket_files(
+        version, source_id, target_id, dry_run, backup, force_overwrite
+    )
+    if rc == 0 and record and _commit_migrations([record]):
+        return EXIT_AUTO_COMMIT_FAILED
+    return rc
 
 
 def _load_migration_config(config_file: str) -> Optional[List[Dict[str, str]]]:
@@ -615,6 +747,7 @@ def _batch_migrate(
     success_count = 0
     fail_count = 0
     skip_count = 0
+    records: List[_MigrationRecord] = []
 
     for migration in migrations:
         if not isinstance(migration, dict):
@@ -631,12 +764,14 @@ def _batch_migrate(
             continue
 
         print()
-        result = _migrate_single_ticket(
+        result, record = _migrate_ticket_files(
             version, source_id, target_id, dry_run, backup, force_overwrite
         )
 
         if result == 0:
             success_count += 1
+            if record:
+                records.append(record)
         elif result == 2:
             skip_count += 1
         else:
@@ -651,6 +786,9 @@ def _batch_migrate(
     print(format_info(MigrationMessages.SKIP_COUNT, count=skip_count))
     print(SEPARATOR_PRIMARY)
 
+    # 整批只把成功項以單一 commit 提交；提交失敗的 75 優先於其餘結果
+    if _commit_migrations(records):
+        return EXIT_AUTO_COMMIT_FAILED
     if fail_count > 0:
         return 1 if success_count > 0 else 2
     return 0

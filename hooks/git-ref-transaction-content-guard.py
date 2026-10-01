@@ -469,9 +469,13 @@ def main() -> int:
         logger.debug("state=%s 非 prepared，略過（無需實質檢查）", state)
         return EXIT_ALLOW
 
-    project_root = get_project_root()
+    # 本 hook 由寫入發生的 worktree 為 cwd 呼叫；根以 cwd 的 toplevel 為準，
+    # 不讓 CLAUDE_PROJECT_DIR 指向別的 checkout。
+    ok, top = run_git_command(["rev-parse", "--show-toplevel"])
+    project_root = Path(top) if ok and top else get_project_root()
 
     new_oids: List[str] = []
+    written_branch: Optional[str] = None
     for old_oid, new_oid, ref_name in ref_lines:
         if not (ref_name.startswith(_HEADS_PREFIX) or ref_name == _HEAD_REF):
             continue
@@ -479,6 +483,9 @@ def main() -> int:
             continue  # 刪除，無新內容
         if new_oid not in new_oids:
             new_oids.append(new_oid)
+        # 分支以本次寫入的 ref 為準；HEAD（detached）不帶分支名，維持讀 HEAD。
+        if ref_name.startswith(_HEADS_PREFIX) and written_branch is None:
+            written_branch = ref_name[len(_HEADS_PREFIX):]
 
     new_commits = _collect_new_commits_with_parents(new_oids, project_root)
 
@@ -494,7 +501,10 @@ def main() -> int:
         files = scan_files.get(commit_sha, [])
         if files:
             findings.extend(
-                _run_all_checks(files, project_root, logger, is_merge_commit=is_merge)
+                _run_all_checks(
+                    files, project_root, logger,
+                    is_merge_commit=is_merge, branch=written_branch,
+                )
             )
 
     deny_findings = [f for f in findings if f.severity == "deny"]

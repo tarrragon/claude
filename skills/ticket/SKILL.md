@@ -4,7 +4,7 @@ description: 'Use whenever the user wants to create, track, query, or manage tic
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
-  version: 2.44.13
+  version: 2.44.17
 ---
 
 # Ticket System
@@ -145,7 +145,7 @@ set-who <id> --current <agent>`）——回報 PM 執行該指令重新指派，
 | `handoff` | 任務鏈管理與 Context 交接：支援自動判斷方向、指定交接到父/子/兄弟任務，含絕對指向（`--next`）與從 worklog 批次補建（`--from-worklog`）。五種交接情境 | `/ticket handoff <id> --to-sibling <id2>` | `references/workflow-handoff.md` | 〈交接流程決策樹〉〈狀態-命令映射規則〉〈任務鏈結束決策樹〉〈恢復流程決策樹〉 |
 | `handoff` | 需要旗標對照/指向語意/情境細節時讀本檔 |  | `references/handoff-command.md` | 〈移動方向與旗標對照〉〈指向語意：source vs target〉〈用法〉〈自動偵測行為〉〈Session 結束時的使用方式〉〈按 Ticket 狀態選擇命令〉〈任務鏈結束時的替代流程〉〈五種情境〉<!-- rule8-exempt: relocation:自 references/handoff-command.md 逐字搬移 --> |
 | `resume` | 恢復任務：從 handoff 檔案載入 context；SessionStart hook 僅被動提醒，實際觸發見〈無子命令時的預設行為（dashboard-first）〉；`/ticket resume <id>` 可明確恢復指定任務（交接/恢復決策樹與 `handoff` 共用 `references/workflow-handoff.md`，見上列） | `/ticket resume <id>` | `references/resume-command.md` | 〈用法〉〈恢復機制（顯式觸發）〉〈Flag 說明〉〈handoff JSON 格式〉〈相關 Hook〉 |
-| `migrate` | Ticket ID 遷移：支援單一和批量遷移，自動更新所有 ID 引用和 chain 資訊 | `/ticket migrate <old-id> <new-id>` | `references/workflow-migrate.md` | 〈ID 遷移決策樹〉 |
+| `migrate` | Ticket ID 遷移：支援單一和批量遷移；改名、引用改寫（含 discovered_during／closed_by／子孫 chain）與 topic-assignments 追加新 ID 行以單一隔離 commit 入庫（提交最終失敗 exit 75）；被遷移票的 `previous_ids` 欄位依序記錄曾用 ID（長度即遷移次數，與撞號改號的 `migrated_from` 不同），body 與 Context Bundle 中的舊 ID 不改寫 | `/ticket migrate <old-id> <new-id>` | `references/workflow-migrate.md` | 〈ID 遷移決策樹〉 |
 | `migrate` | 需要前置檢查/批量配置/collision detection 細節時讀本檔 |  | `references/migrate-command.md` | 〈基本用法〉〈前置檢查（強制）〉〈單一遷移範例〉〈批量遷移配置檔案格式〉〈遷移邏輯〉〈Collision Detection〉〈備份機制〉〈Flag 說明〉<!-- rule8-exempt: relocation:自 references/migrate-command.md 逐字搬移 --> |
 | `generate` | Plan 轉換為 Tickets：從 Plan 檔案自動生成 Atomic Tickets | `/ticket generate plan.md --version 0.31.0 --wave 5` | `references/generate-command.md` | 〈用法〉〈Flag 說明〉〈範例〉〈流程〉 |
 | `batch-create` | 批次建立 Tickets：從模板 + 目標清單快速建立多個 Tickets，適用大量同質任務場景（如 30 個實作子任務）。詳見表後「batch-create 補充」 | `ticket batch-create --template impl-parsley --targets "a,b,c" --wave 28` | — | — |

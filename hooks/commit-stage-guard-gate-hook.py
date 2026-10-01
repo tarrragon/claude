@@ -282,7 +282,10 @@ def main() -> int:
         logger.debug("命令不含 git commit 呼叫，或無法安全解析，放行")
         return EXIT_ALLOW
 
-    project_root = get_project_root()
+    # 提交發生處的 toplevel 優先於 CLAUDE_PROJECT_DIR（後者在 worktree 情境可能
+    # 指向別的 checkout，staged 清單與分支判定都會取錯）。
+    ok, top = run_git_command(["rev-parse", "--show-toplevel"])
+    project_root = Path(top) if ok and top else get_project_root()
     staged_paths = _get_staged_file_list(project_root)
     if not staged_paths:
         logger.debug("無 staged 檔案，放行")

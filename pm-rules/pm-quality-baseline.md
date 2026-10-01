@@ -47,7 +47,7 @@
 | 版本契約依賴該框架票（例：修的是本版發版要用的工具） | 加 `scope_blocker`（`ticket track set-scope-blocker <id> --reason <對應契約項>`），阻擋 finish 直到完成 |
 | 同一張框架票前移第 2 次 | 絆腳索：把票內容收束進 canonical framework issue（見 `framework-issue` skill），然後關票，不再隨版本滾動 |
 
-**Why 絆腳索設在第 2 次**：第 1 次前移是版本容量的正常結果；第 2 次表示該票在連續兩個版本都不是契約必要項，繼續滾動等同無 trigger 延後。**Consequence**：不設絆腳索，框架票可能永遠前移，重演單版本框架票累積的原症狀。**Action**：偵測承擔者是 finish 執行者，在前移清單中逐張判定該框架票是否已前移過一次，已前移過者改走收束。判定依據：ticket 系統提供原 ID 或前移次數欄位時讀該欄位；尚未提供時，人工比對票面的 migrate 記錄（票檔在版本目錄之間的改名歷史）。欄位缺席不構成略過絆腳索的理由。
+**Why 絆腳索設在第 2 次**：第 1 次前移是版本容量的正常結果；第 2 次表示該票在連續兩個版本都不是契約必要項，繼續滾動等同無 trigger 延後。**Consequence**：不設絆腳索，框架票可能永遠前移，重演單版本框架票累積的原症狀。**Action**：偵測承擔者是 finish 執行者，在前移清單中逐張判定該框架票是否已前移過一次，已前移過者改走收束。判定依據：讀票面 frontmatter 的 `previous_ids`（`ticket migrate` 每次遷移追加一個舊 ID，finish 前移即經由 migrate，因此清單長度即前移次數；清單長度大於等於 1 者已前移過）。該欄位出現之前就遷移過的票沒有此紀錄，改以人工比對票檔在版本目錄之間的改名歷史（`git log --follow --name-only -- <票檔>`）。欄位缺席不構成略過絆腳索的理由。
 
 ---
 
@@ -201,6 +201,7 @@
 ---
 
 **Last Updated**: 2026-10-01
+**Version**: 2.5.1 — 〈finish 時的框架票處置〉絆腳索的判定依據改為具體欄位 `previous_ids`（ticket skill 2.44.16 起 migrate 每次遷移追加舊 ID，長度即前移次數）；欄位出現前已遷移的票以 `git log --follow` 人工比對。
 **Version**: 2.5.0 — 規則 6 延後禁令收窄為建票時：新增〈延後禁令的射程〉與〈finish 時的框架票處置〉（未完成框架票與其他票同樣前移、版本契約依賴者加 `scope_blocker` 阻擋、同票前移第 2 次收束進 canonical issue 後關票）；禁止行為表兩列措辭限定建票時點；規則 6.1 補同受射程約束一句；檢查清單同步。來源 canonical #114 方案 4（consumer 裁決：改規則不改工具）。
 **Version**: 2.4.0 — 規則 6.1 補「已由 scope 凍結模型部分取代」註記：scope 開放時「禁止改建未來 planned 版本」的核心主張不變，scope 凍結時框架問題改路由至 canonical framework issue，不進本地版本判斷；「當前 active 版本」定義表與〈與其他規則邊界〉表同步改引 `version-progression.md`〈版本生命週期〉，移除已由該模型取代的「.claude 工件歸活躍版本」字面引用。
 **Version**: 2.3.0 - 規則 7 三處修正（文字審查發現）：Action 層原指向不存在的發版 checklist 落點，改為指向 `version-release/SKILL.md` 使用流程檢查清單新增的對應勾選項（該勾選項同一次變更中同步新增）；memory 排除列補涵蓋邊界（PreToolUse deny 僅覆蓋 Write/Edit/MultiEdit/NotebookEdit，Bash 路徑由事後稽核承接）；Consequence 補標「400 筆樣本為本專案實測，機制主張可攜但量測值不可攜」；移除「選配資訊性掃描的處置」過去式過程紀錄段落（依 spec 與 process record 分離原則，過程細節屬 ticket/worklog 範疇），改為不含過程與識別符的一句現況陳述。

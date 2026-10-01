@@ -348,7 +348,7 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 
 > **Why**：`ticket track complete` 呼叫當下即以隔離索引**自動提交**本票 md / worklog index（精準路徑，不夾帶 WIP，不觸碰共用 index，成功時 stdout 印出 commit SHA），不需 PM 手動執行 commit；但**仍不會清理已合併的 worktree**（見 `.claude/skills/ticket/references/track-command.md`〈complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit〉）。session 邊界處長期累積會造成 worktree 殘留缺口（W11-018 審計發現 8 個 worktree 殘留，最久 35 天）。
 >
-> **範圍排除 children/siblings**：auto-commit 僅涵蓋本票 md 與 worklog index 兩類，不含 cascade children 或同層 sibling ticket 的 md——此排除是後續收斂修復的核心，非遺漏。高並行下若一併提交這些檔案，可能誤攬另一位代理人尚未提交的 body 變更。本節下方「父 Ticket complete 前置檢查」所述的 cascade 狀態解鎖（父子完成狀態轉移）屬另一機制，與此處的自動提交範圍無關，不受本收斂影響。
+> **範圍含本次被解鎖的票**：auto-commit 涵蓋本票 md、worklog index，以及本次 complete 以 cascade 或反向 blockedBy 解鎖、且 save 成功的票檔（可跨版本），commit body 列出被解鎖的票 ID。**Why**：解鎖寫入屬於 complete 的連帶寫入；若只寫磁碟不提交，被解鎖的票會一直留在工作區，可能被他人的提交吸入，或被 restore 回 blocked，使歷史留下半套關係。**邊界**：只收本次寫入的票檔；未被本次寫入的 children 與 siblings 不進入提交範圍。被解鎖票整檔提交時，若該票有他人未提交的修改，會一併帶入；所有 CLI 寫入都會自動提交，且直接 Edit 票檔被 hook 擋下，這種殘留只會來自提交失敗的票，風險低。
 >
 > **Consequence**：未清理 worktree 會造成 disk / 視圖污染；PM 若對已由 CLI 自動提交的檔案再手動 `git commit`，會在共用 index 上裸 commit，正是隔離索引機制要消除的路徑（禁止此動作）。
 >
@@ -706,7 +706,8 @@ how:
 
 ---
 
-**Last Updated**: 2026-09-30
+**Last Updated**: 2026-10-01
+**Version**: 6.5.0 — 「Complete 後 cleanup checklist」的範圍說明改為「含本次被解鎖的票」：complete 的 auto-commit 併入本次 cascade 與反向 blockedBy 解鎖、且 save 成功的票檔（可跨版本），未被本次寫入的 children／siblings 仍不進入提交範圍；與 ticket skill 2.44.15 的行為變更同步。
 **Version**: 6.4.0 — 「ANA 子分類」節新增「防護性 ANA 與 blockedBy 下游的耦合，以及 --force 使用條件」子節（三明示）。
 **Version**: 6.3.0 — 新增「ANA Solution Spawn 規劃落地（強制）」章節（W17-167 L3 落地，含 Why/Consequence/Action 三明示 + 強制/Schema/規則層交叉引用，配合 W17-168 hook + W17-169 quality-baseline 規則 5 / ticket-body-schema 同步修訂）
 

@@ -1,3 +1,23 @@
+## [2.71.0] - 2026-10-01
+
+### Summary
+feat: append_lines 非超集回退支援呼叫端提供的 HEAD 重放插入; feat: migrate 自動提交並補齊結構欄位改寫與曾用 ID 記錄 (某票.2); fix: content guard 分支判定改用提交發生處的根與本次寫入的 ref (+7 more)
+
+Changes: 2 feat, 3 fix, 3 docs, 1 chore, 1 test
+
+- feat: append_lines 非超集回退支援呼叫端提供的 HEAD 重放插入
+- feat: migrate 自動提交並補齊結構欄位改寫與曾用 ID 記錄 (某票.2)
+- fix: content guard 分支判定改用提交發生處的根與本次寫入的 ref
+- fix: complete 的 cascade 與反向 blockedBy 解鎖併入 post-completion commit
+- fix: commit_files_isolated 範圍自檢關閉 rename 偵測並拒絕目錄路徑
+- docs: agent-dispatch-template 終止後驗證約束句補 ps 確認與等已知 PID
+- docs: PC-GPD-029 補 pgrep -f 互相比對的等待迴圈陷阱
+- docs: PC-GPD-029 補同日再現五例與孤兒程序
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+- test: split heavy batched tests out of gate-run content guard test
+
+---
+
 ## [2.70.1] - 2026-10-01
 
 ### Summary

@@ -812,3 +812,131 @@ class TestStageAppendedBlobProjection:
         (repo / "log.txt").write_text("other\n", encoding="utf-8")
         self._commit(repo, "A", "lineA\n")
         assert self._head_text(repo) == "base\nlineA\n"
+
+
+class TestAppendReplayFallback:
+    """非超集時，呼叫端提供的重放方式在 HEAD 版本上插入（E5-D）。"""
+
+    @pytest.fixture
+    def repo(self, tmp_path):
+        _run_git(tmp_path, "init", "-q")
+        _run_git(tmp_path, "config", "user.email", "t@example.com")
+        _run_git(tmp_path, "config", "user.name", "t")
+        (tmp_path / "log.txt").write_text("h1\nh2\nfooter\n", encoding="utf-8")
+        (tmp_path / "t.md").write_text("0\n", encoding="utf-8")
+        _run_git(tmp_path, "add", "-A")
+        _run_git(tmp_path, "commit", "-q", "-m", "init")
+        return tmp_path
+
+    @staticmethod
+    def _insert_before_footer(base, text):
+        lines = base.splitlines(keepends=True)
+        return "".join(lines[:-1]) + text + lines[-1]
+
+    @staticmethod
+    def _commit(repo, value):
+        (repo / "t.md").write_text("1\n", encoding="utf-8")
+        result = git_ops.commit_files_isolated(
+            [str(repo / "t.md")], "c", cwd=str(repo),
+            append_lines={str(repo / "log.txt"): value},
+        )
+        assert result["status"] == "committed", result
+
+    @staticmethod
+    def _head(repo):
+        return _run_git(repo, "show", "HEAD:log.txt").stdout
+
+    def test_non_superset_replays_on_head(self, repo):
+        (repo / "log.txt").write_text("H1\nh2\nfooter\nnew\n", encoding="utf-8")
+        self._commit(repo, git_ops.AppendSpec("new\n", self._insert_before_footer))
+        assert self._head(repo) == "h1\nh2\nnew\nfooter\n"
+
+    def test_non_superset_without_replay_keeps_tail_fallback(self, repo):
+        (repo / "log.txt").write_text("H1\nh2\nfooter\nnew\n", encoding="utf-8")
+        self._commit(repo, "new\n")
+        assert self._head(repo) == "h1\nh2\nfooter\nnew\n"
+
+    def test_superset_ignores_replay_and_drops_foreign(self, repo):
+        (repo / "log.txt").write_text(
+            "h1\nh2\nnew\nfooter\nforeign\n", encoding="utf-8")
+        self._commit(repo, git_ops.AppendSpec("new\n", self._insert_before_footer))
+        assert self._head(repo) == "h1\nh2\nnew\nfooter\n"
+
+    def test_non_superset_foreign_edit_not_absorbed(self, repo):
+        (repo / "log.txt").write_text("H1\nh2\nfooter\nforeign\n", encoding="utf-8")
+        self._commit(repo, git_ops.AppendSpec("new\n", self._insert_before_footer))
+        head = self._head(repo)
+        assert "H1" not in head and "foreign" not in head
+
+
+_BODY = "".join(f"line {i} of the shared body\n" for i in range(30))
+
+
+class TestScopeCheckRenameAndDirectory:
+    """範圍自檢不受 diff.renames 影響；目錄路徑明確拒絕。"""
+
+    @pytest.fixture
+    def repo(self, tmp_path):
+        _run_git(tmp_path, "init", "-q")
+        _run_git(tmp_path, "config", "user.email", "t@example.com")
+        _run_git(tmp_path, "config", "user.name", "t")
+        _run_git(tmp_path, "config", "diff.renames", "true")
+        (tmp_path / "old.md").write_text(_BODY, encoding="utf-8")
+        (tmp_path / "other.md").write_text("other\n", encoding="utf-8")
+        (tmp_path / "d1").mkdir()
+        (tmp_path / "d1" / "f.md").write_text(_BODY + "d1\n", encoding="utf-8")
+        _run_git(tmp_path, "add", "-A")
+        _run_git(tmp_path, "commit", "-q", "-m", "init")
+        return tmp_path
+
+    @staticmethod
+    def _porcelain(repo):
+        return _run_git(repo, "status", "--porcelain").stdout
+
+    def test_delete_old_add_new(self, repo):
+        (repo / "old.md").rename(repo / "new.md")
+        r = git_ops.commit_files_isolated(["new.md", "old.md"], "mv", cwd=str(repo))
+        assert r["status"] == "committed", r
+        assert self._porcelain(repo) == ""
+
+    def test_rename_with_edit_plus_other_file(self, repo):
+        (repo / "old.md").rename(repo / "new.md")
+        with open(repo / "new.md", "a", encoding="utf-8") as fh:
+            fh.write("extra\n")
+        (repo / "other.md").write_text("other2\n", encoding="utf-8")
+        r = git_ops.commit_files_isolated(
+            ["new.md", "old.md", "other.md"], "mv", cwd=str(repo))
+        assert r["status"] == "committed", r
+        assert self._porcelain(repo) == ""
+
+    def test_cross_directory_per_file(self, repo):
+        (repo / "d2").mkdir()
+        (repo / "d1" / "f.md").rename(repo / "d2" / "f.md")
+        r = git_ops.commit_files_isolated(
+            ["d2/f.md", "d1/f.md"], "mv", cwd=str(repo))
+        assert r["status"] == "committed", r
+        assert self._porcelain(repo) == ""
+
+    def test_out_of_scope_change_still_fails_without_update_ref(self, repo):
+        head = _run_git(repo, "rev-parse", "HEAD").stdout
+        (repo / "other.md").write_text("changed\n", encoding="utf-8")
+        real_stage = git_ops._run_git_with_lock_retry
+
+        def sneaky(args, **kw):
+            if args[:2] == ["git", "write-tree"]:
+                real_stage(["git", "add", "--", "other.md"], **kw)
+            return real_stage(args, **kw)
+
+        (repo / "old.md").write_text(_BODY + "x\n", encoding="utf-8")
+        with patch.object(git_ops, "_run_git_with_lock_retry", sneaky):
+            r = git_ops.commit_files_isolated(["old.md"], "x", cwd=str(repo))
+        assert r["status"] == "failed", r
+        assert _run_git(repo, "rev-parse", "HEAD").stdout == head
+
+    def test_directory_path_rejected_with_reason(self, repo):
+        (repo / "d1" / "f.md").write_text("changed\n", encoding="utf-8")
+        head = _run_git(repo, "rev-parse", "HEAD").stdout
+        r = git_ops.commit_files_isolated(["d1"], "dir", cwd=str(repo))
+        assert r["status"] == "failed", r
+        assert "目錄" in r["error"]
+        assert _run_git(repo, "rev-parse", "HEAD").stdout == head

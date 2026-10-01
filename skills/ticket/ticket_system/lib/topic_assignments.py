@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.topic_registry import append_topic
@@ -58,6 +58,26 @@ def _assignments_path() -> Path:
     票面 md 卻已落在主倉庫）。
     """
     return get_ticket_state_root() / TOPIC_ASSIGNMENTS_RELATIVE_PATH
+
+
+def assignments_file_path() -> Path:
+    """assignment log 的絕對路徑（供呼叫端把它納入 git 提交範圍）。"""
+    return _assignments_path()
+
+
+def inherit_assignment(old_id: str, new_id: str) -> Optional[str]:
+    """票號遷移時讓新 ID 承接舊 ID 的主題：追加一行，舊行保留（append-only）。
+
+    Returns:
+        本次追加的文字（`new_id\\ttopic\\n`）；舊 ID 無指派或新 ID 已有指派時
+        回傳 None（不寫入）。回傳值供呼叫端以 append_lines 只提交這一行。
+    """
+    assignments = list_assignments()
+    topic = assignments.get(old_id.strip())
+    if not topic or new_id.strip() in assignments:
+        return None
+    _append_line(new_id.strip(), topic)
+    return f"{new_id.strip()}\t{topic}\n"
 
 
 def list_assignments() -> Dict[str, str]:

@@ -60,34 +60,29 @@ Ticket ID 遷移（支援單一和批量遷移）。
    # 碰撞時 dry-run 判 FAIL（exit 1）並印改號預覽，非可放行的 warning
    ```
 
-4. **實際執行後、commit 前必看 git status**：
+4. **實際執行後必看 migrate 產生的 commit**：migrate 會自動以單一隔離提交寫入新檔、舊檔、各引用者與 topic 追加行（exit 0 即已提交；exit 75 代表檔案已寫入工作區但提交失敗，stderr 的 `[WARNING]` 列出全部路徑）。檢查該 commit 的檔案狀態：
 
    ```bash
-   git status
+   git show --stat --name-status HEAD
    ```
 
-   | git status 訊號 | 判別 | 處置 |
-   |----------------|------|------|
-   | 目標路徑 `untracked` | 正常，新建 ticket | 繼續 |
-   | 來源路徑 `deleted` | 正常，來源被刪除（ID 替換） | 繼續 |
-   | 目標路徑 `modified` | **撞號警示**，既有 ticket 被覆寫 | 立即還原（見下） |
+   | 檔案狀態 | 判別 | 處置 |
+   |---------|------|------|
+   | 目標路徑 `A` | 正常，新建 ticket | 繼續 |
+   | 來源路徑 `D` | 正常，來源被刪除（ID 替換） | 繼續 |
+   | 目標路徑 `M` | **撞號警示**，既有 ticket 被覆寫 | 立即還原（見下） |
 
-**撞號後的還原步驟**：
+**撞號後的還原步驟**：migrate 已自動提交時，以 `git revert` 撤回整筆遷移 commit（舊檔、新檔、引用者與 topic 行一次還原），不要逐檔 `git restore`，因為逐檔還原會漏掉引用者的改寫：
 
 ```bash
-# 還原被覆寫的目標版本既有 ticket
-git restore docs/work-logs/v<目標版本>/tickets/<被覆寫 ID>.md
-
-# 刪除不應建立的遷移 ticket（未撞號但目標 ID 已被占用的新增項）
-rm docs/work-logs/v<目標版本>/tickets/<誤建 ID>.md
-
-# 還原被刪除的來源 ticket
-git restore docs/work-logs/v<來源版本>/tickets/<來源 ID>.md
+git revert --no-edit <migrate 產生的 commit>
 
 # 重新確認 ID 範圍後，以不撞號的目標 ID 重新 migrate
 ```
 
-如 commit 已執行，從備份還原：
+exit 75（提交失敗、檔案留在工作區）時，先依 `[WARNING]` 列出的路徑以 `git restore` 還原引用者與來源檔，並刪除誤建的目標檔，再重新 migrate。
+
+如 revert 不可用（例如遷移 commit 之後已有依賴它的提交），從備份還原：
 
 ```bash
 ls .claude/migration-backups/

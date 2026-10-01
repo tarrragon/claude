@@ -52,7 +52,8 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 _GIT_TIMEOUT = 10
 # 哨兵：呼叫端未指定 timeout 時，於呼叫當下讀取模組層 _GIT_TIMEOUT（而非定義當下綁定
@@ -425,6 +426,21 @@ def _sync_shared_index_after_commit(
             _warn_sync_failed(missing, "force-remove", err)
 
 
+@dataclass(frozen=True)
+class AppendSpec:
+    """``append_lines`` 的進階值：追加文字 + 非超集時的 HEAD 重放方式。
+
+    ``replay(base, text)`` 收 HEAD 版本全文與本次追加文字，回傳插入後的全文。
+    僅在工作區缺檔或不是「HEAD + 本次行」的超集時使用；超集時仍依工作區行序投影。
+    """
+
+    text: str
+    replay: Optional[Callable[[str, str], str]] = None
+
+
+AppendValue = Union[str, AppendSpec]
+
+
 def _project_in_worktree_order(work_path: str, base: str, text: str) -> str:
     """依工作區行序取出「base 各行 + text 各行」；缺檔或非超集回傳空字串。"""
     try:
@@ -444,7 +460,8 @@ def _project_in_worktree_order(work_path: str, base: str, text: str) -> str:
 
 
 def _stage_appended_blob(
-    rel_path: str, text: str, old_head: str, cwd: str, env: dict
+    rel_path: str, text: str, old_head: str, cwd: str, env: dict,
+    replay: Optional[Callable[[str, str], str]] = None,
 ) -> Optional[str]:
     """在隔離 index 中設定 ``rel_path`` 的內容：HEAD 各行 + 本次 ``text`` 各行。
 
@@ -455,7 +472,8 @@ def _stage_appended_blob(
     行序契約：工作區檔存在且為該 multiset 的超集（每行出現次數都不少於所需）
     時，依工作區的行序投影，使提交後 HEAD 與工作區行序一致（兩寫入者的提交
     順序與追加順序相反時，工作區不再持續顯示已修改）。工作區缺檔或不是超集
-    時，退回「HEAD 版本 + text」（本次行接在 HEAD 末尾）。HEAD 版本末尾無
+    時，若呼叫端提供 ``replay`` 則在 HEAD 版本上重放插入（行落在呼叫端指定位置），
+    否則退回「HEAD 版本 + text」（本次行接在 HEAD 末尾）。HEAD 版本末尾無
     換行時先補一個換行，與寫入端一致。
 
     Returns:
@@ -467,9 +485,9 @@ def _stage_appended_blob(
     base = base if ok else ""  # HEAD 尚無此檔：以空內容為基底
     if base and not base.endswith("\n"):
         base += "\n"
-    content = _project_in_worktree_order(
-        os.path.join(cwd, rel_path), base, text
-    ) or base + text
+    content = _project_in_worktree_order(os.path.join(cwd, rel_path), base, text)
+    if not content:
+        content = replay(base, text) if replay else base + text
     ok, blob_out, err = _run_git_with_lock_retry(
         ["git", "hash-object", "-w", "--stdin"], cwd=cwd, input_text=content
     )
@@ -487,19 +505,22 @@ def commit_files_isolated(
     paths: List[str],
     message: str,
     cwd: Optional[str] = None,
-    append_lines: Optional[Dict[str, str]] = None,
+    append_lines: Optional[Dict[str, AppendValue]] = None,
 ) -> Dict[str, Optional[str]]:
     """在獨立臨時 index 中精確 stage ``paths`` 後以 plumbing 提交。
 
     Args:
         paths: 欲提交的檔案路徑清單，須獨立於共用 index（見 module docstring
-            要件 1），呼叫端自帶（如 ticket md 絕對路徑）。
+            要件 1），呼叫端自帶（如 ticket md 絕對路徑）。須逐檔列出：目錄路徑
+            會被明確拒絕（failed）；刪除或改名時舊路徑與新路徑都要列入（範圍
+            自檢關閉 rename 偵測、逐路徑比對）；主路徑（第一個）須為存在的檔案。
         message: commit message。
         cwd: git 命令執行目錄，預設為目前工作目錄所屬 repo。
         append_lines: 路徑 -> 本次追加文字。這些檔案不整檔 stage，提交內容為
             「HEAD 各行 + 追加各行」（行序依工作區，非超集或缺檔時
             退回 HEAD 版本 + 追加文字），不帶入工作區內他人未提交的內容；
-            用於多寫入者 append-only 檔。與 ``paths`` 重疊的路徑以整檔為準。
+            用於多寫入者 append-only 檔。值為 ``str`` 或 ``AppendSpec``，
+            後者的 ``replay`` 取代非超集時「接在 HEAD 末尾」的退回。與 ``paths`` 重疊的路徑以整檔為準。
 
     Returns:
         dict，含三個鍵：
@@ -530,12 +551,30 @@ def commit_files_isolated(
         abs_path = path if os.path.isabs(path) else os.path.join(base_dir, path)
         return os.path.relpath(os.path.abspath(abs_path), repo_root).replace(os.sep, "/")
 
+    dir_paths = [
+        p for p in raw_deduped
+        if os.path.isdir(p if os.path.isabs(p) else os.path.join(base_dir, p))
+    ]
+    if dir_paths:
+        return {
+            "status": "failed",
+            "commit_sha": None,
+            "error": (
+                f"paths 含目錄路徑 {dir_paths}：範圍自我驗證逐檔比對，"
+                "目錄會展開為多個檔案而判定不符，請改列各檔案路徑"
+            ),
+        }
+
     deduped: List[str] = list(dict.fromkeys(_to_repo_relative(p) for p in raw_deduped))
     appended: Dict[str, str] = {}
-    for raw_path, text in (append_lines or {}).items():
+    replays: Dict[str, Callable[[str, str], str]] = {}
+    for raw_path, value in (append_lines or {}).items():
+        spec = value if isinstance(value, AppendSpec) else AppendSpec(value)
         rel = _to_repo_relative(raw_path)
-        if rel not in deduped and text:
-            appended[rel] = appended.get(rel, "") + text
+        if rel not in deduped and spec.text:
+            appended[rel] = appended.get(rel, "") + spec.text
+            if spec.replay:
+                replays[rel] = spec.replay
     expected_changes: List[str] = deduped + list(appended)
     cwd = repo_root
 
@@ -566,7 +605,9 @@ def commit_files_isolated(
             return {"status": "failed", "commit_sha": None, "error": err}
 
         for rel, text in appended.items():
-            stage_err = _stage_appended_blob(rel, text, old_head, cwd, env)
+            stage_err = _stage_appended_blob(
+                rel, text, old_head, cwd, env, replays.get(rel)
+            )
             if stage_err is not None:
                 return {"status": "failed", "commit_sha": None, "error": stage_err}
 
@@ -595,7 +636,7 @@ def commit_files_isolated(
 
         # 提交範圍自我驗證（要件 3）：不符即放棄，不 update-ref。
         ok, diff_out, err = _run_git_with_lock_retry(
-            ["git", "diff", "--name-only", "-z", old_head, commit_sha], cwd=cwd
+            ["git", "diff", "--no-renames", "--name-only", "-z", old_head, commit_sha], cwd=cwd
         )
         if not ok:
             return {"status": "failed", "commit_sha": None, "error": err}

@@ -390,5 +390,59 @@ class TestMainIntegration:
         assert result.returncode == 0
 
 
+class TestWorktreeBranchResolution:
+    """W1-028：PreToolUse 路徑在 worktree 情境的雙向判定。cwd 為提交發生處，
+    CLAUDE_PROJECT_DIR 刻意指向另一個 checkout。"""
+
+    @pytest.fixture()
+    def wt_repo(self, scratch_repo, tmp_path):
+        _run_git(["branch", "-M", "main"], cwd=scratch_repo)
+        wt = tmp_path / "feat-wt"
+        rc, _o, err = _run_git(["worktree", "add", "-q", "-b", "feat/x", str(wt)], cwd=scratch_repo)
+        assert rc == 0, err
+        return scratch_repo, wt
+
+    def _commit_check(self, cwd, project_dir):
+        payload = {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}
+        return subprocess.run(
+            [sys.executable, str(HOOKS_DIR / "commit-stage-guard-gate-hook.py")],
+            input=json.dumps(payload), cwd=str(cwd), capture_output=True, text=True,
+            env={"PATH": "/usr/bin:/bin:/usr/local/bin", "CLAUDE_PROJECT_DIR": str(project_dir)},
+        )
+
+    def _stage(self, repo, rel):
+        target = repo / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("內容\n", encoding="utf-8")
+        _run_git(["add", rel], cwd=repo)
+
+    def test_feature_worktree_commit_allowed_when_env_points_to_main(self, wt_repo):
+        main, wt = wt_repo
+        self._stage(wt, "src/legit.txt")
+        # 對照：env 指向的 main checkout 自己有違規 staged，錯用 env 根即被擋
+        self._stage(main, "src/violation.txt")
+        result = self._commit_check(wt, project_dir=main)
+        assert result.returncode == 0, result.stderr
+
+    def test_protected_branch_violation_denied_when_env_points_to_feature_worktree(self, wt_repo):
+        main, wt = wt_repo
+        self._stage(main, "src/violation.txt")
+        result = self._commit_check(main, project_dir=wt)
+        assert result.returncode == 2
+        assert "branch-verify" in result.stderr
+
+    def test_control_protected_branch_violation_denied_with_matching_env(self, wt_repo):
+        main, wt = wt_repo
+        self._stage(main, "src/violation.txt")
+        result = self._commit_check(main, project_dir=main)
+        assert result.returncode == 2
+
+    def test_control_feature_worktree_violation_free_commit_with_matching_env(self, wt_repo):
+        main, wt = wt_repo
+        self._stage(wt, "src/legit.txt")
+        result = self._commit_check(wt, project_dir=wt)
+        assert result.returncode == 0, result.stderr
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

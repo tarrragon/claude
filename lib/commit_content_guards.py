@@ -257,7 +257,11 @@ class _BranchContext(NamedTuple):
 _CTX_UNSET = object()
 
 
-def _resolve_branch_context(is_merge_commit: bool) -> Optional[_BranchContext]:
+def _resolve_branch_context(
+    is_merge_commit: bool,
+    project_root: Optional[Path] = None,
+    branch: Optional[str] = None,
+) -> Optional[_BranchContext]:
     """解析 branch-verify 與檔案無關的前置條件：專案根、當前分支、是否受保護、
     是否為合併事件。回傳 None 代表本次掃描 branch-verify 不會產生任何發現
     （模組載入失敗 / 允許分支 / 非保護分支 / 合併事件），呼叫端可對所有檔案
@@ -266,21 +270,31 @@ def _resolve_branch_context(is_merge_commit: bool) -> Optional[_BranchContext]:
     這些條件都不依賴個別檔案，原本每個檔案各重查一輪（專案根 + 分支 + 豁免
     判斷內的專案根，共 3 個 git 子程序），變更檔數 F 越大持鎖越久；提到迴圈外
     後與 F 無關。判斷順序與原逐檔實作相同。
+
+    project_root：呼叫端已解析的專案根。提供時不再於內部重新解析
+    （CLAUDE_PROJECT_DIR 優先會在 worktree 情境取到別的 checkout，造成誤擋
+    或誤放）；host_root 同取此值。未提供時維持舊行為（單檔呼叫端相容）。
+    branch：本次實際寫入的分支（reference-transaction 取 stdin 的 ref）。
+    提供時以之為準；未提供（None，含 detached HEAD 寫入）時退回讀
+    project_root 的 HEAD 分支。
     """
     m = _load_module("commit_gate_branch_verify", _HOOKS_DIR / "branch-verify-hook.py")
     if m is None:
         return None
     from lib.git_utils import get_current_branch, get_project_root, is_protected_branch, is_allowed_branch  # noqa: E402,PLC0415
 
-    project_root = get_project_root()
-    current_branch = get_current_branch(cwd=str(project_root))
+    explicit_root = project_root is not None
+    project_root = Path(project_root) if explicit_root else get_project_root()
+    current_branch = branch or get_current_branch(cwd=str(project_root))
     if not current_branch or is_allowed_branch(current_branch):
         return None
     if not is_protected_branch(current_branch):
         return None
     if is_merge_commit:
         return None
-    host_root = str(get_project_root(cwd=str(project_root)))
+    host_root = (
+        str(project_root) if explicit_root else str(get_project_root(cwd=str(project_root)))
+    )
     return _BranchContext(m, project_root, current_branch, host_root)
 
 
@@ -531,6 +545,7 @@ def _run_all_checks(
     project_root: Path,
     logger,
     is_merge_commit: bool = False,
+    branch: Optional[str] = None,
 ) -> List[Finding]:
     """對每個變更檔案跑過 per-file 轉呼函式，另跑一次全域的
     wrap-skill-yaml 一致性檢查（該 guard 語意上是「專案狀態一致性」而非
@@ -539,13 +554,16 @@ def _run_all_checks(
     is_merge_commit：轉呼 _check_branch_verify（見該函式 docstring）；預設
     False，既有呼叫端（commit-stage-guard-gate-hook.py 的 PreToolUse 掃
     index 路徑）不帶此參數即維持原行為不變。
+
+    branch：本次寫入的分支名（見 _resolve_branch_context）；分支判定的專案根
+    一律採呼叫端傳入的 project_root，不再重新解析 CLAUDE_PROJECT_DIR。
     """
     findings: List[Finding] = []
     wrap_checked = False
     if not staged_files:
         return findings
     # 與檔案無關的解析提到迴圈外，避免每個檔案各付一輪 git 子程序。
-    branch_ctx = _resolve_branch_context(is_merge_commit)
+    branch_ctx = _resolve_branch_context(is_merge_commit, project_root, branch)
     root_str = str(project_root)
     for sf in staged_files:
         for check in _PER_FILE_CHECKS:

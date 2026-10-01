@@ -473,7 +473,7 @@ Live in_progress 票（非 stale，`staleness.is_live_occupied` 判準）以 see
 
 > **worktree 分支已合併（不在上表，無 CLI 檢查）**：代理人在 linked worktree 內完成工作後 `complete`，票面轉 `completed`、metadata 進主倉庫，但該 worktree 分支是否已合併回主分支不受任何上表項目檢查——`stuck-anas`／`stale-list` 亦不看分支合併狀態。**Action**：worktree 場景下 complete 前，於 Completion Info 記錄分支名並人工確認已合併，避免票已收尾但程式碼變更停留在未合併分支形成靜默遺失。
 
-`complete` 通過上表全部檢查後，自動以隔離索引提交本票 md + 主 worklog index，另有三項不在上表、但直接影響提交結果的副作用語意：**排除 children/siblings**（隔離索引僅收本票與 worklog 路徑，不夾帶他票尚未 commit 的 WIP 內容）、**不留 staged 殘留於共用 index**（全程走隔離索引，共用 index 提交前後狀態不變，非「先 add 進共用 index 再 commit」）、**成功時 stdout 印出 commit SHA**（`[OK] 已提交 <sha>` 格式，供呼叫端核對是否真正落地，見下方 `track commit` 子命令「Exit code」表的同款判讀原則）。
+`complete` 通過上表全部檢查後，自動以隔離索引提交本票 md + 主 worklog index，另有三項不在上表、但直接影響提交結果的副作用語意：**被解鎖的票併入同一 commit**（本次 cascade 解鎖的 children 與反向 blockedBy 引用者，save 成功者整檔併入同一筆 post-completion commit，可跨版本，commit body 列出其票 ID；save 失敗者不列入並照常印 WARNING。其他未被本次寫入的票不進入提交範圍）、**不留 staged 殘留於共用 index**（全程走隔離索引，共用 index 提交前後狀態不變，非「先 add 進共用 index 再 commit」）、**成功時 stdout 印出 commit SHA**（`[OK] 已提交 <sha>` 格式，供呼叫端核對是否真正落地，見下方 `track commit` 子命令「Exit code」表的同款判讀原則）。
 
 ### complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit
 
