@@ -19,11 +19,18 @@
 """
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Dict, Optional, Sequence
 
-from .git_ops import _is_lock_contention, commit_files_isolated
+from .git_ops import (
+    _is_cas_rejection,
+    _is_lock_contention,
+    _lock_paths_from_error,
+    _run_git,
+    commit_files_isolated,
+)
 from .lease import resolve_current_session_id
 
 # ``ticket create`` 建票成功但 auto-commit 最終失敗時的專用 exit code。取 75
@@ -33,9 +40,20 @@ EXIT_AUTO_COMMIT_FAILED = 75
 # git_ops._stale_lock_diagnosis 附在過期殘骸鎖錯誤文字內的標記；出現即不重試。
 _STALE_DIAGNOSIS_MARK = "[殘骸診斷]"
 
-# 暫時性鎖競爭的退避重試：等待總和上限約 5 秒（依序等 0.5、1、2 秒，其後每次 2 秒，超出預算即停）。
+# 暫時性鎖競爭的退避重試：等待（sleep）總和上限 5 秒，依序等 0.5、1、2 秒，其後每次 2 秒，
+# 超出預算即停；預算只計 sleep，不含 git 嘗試本身耗時。
 _COMMIT_RETRY_BUDGET_SECONDS = 5.0
+# 重試等待的接縫：測試只替換此名稱，不改寫全域 ``time.sleep``
+# （後者會被 subprocess 輪詢呼叫，污染測試假時鐘）。
+_sleep = time.sleep
 _COMMIT_RETRY_BACKOFF_SECONDS = (0.5, 1.0, 2.0)
+# 可重試失敗至少重試的次數，不受牆鐘影響（高負載下單次嘗試可耗時數秒，
+# 若牆鐘先用盡會在零重試下放棄）。
+_COMMIT_MIN_RETRIES = 3
+# 最少重試次數之外的額外重試，其牆鐘（自首次嘗試起算）上限；須遠小於呼叫端 hook timeout（30 秒）。
+_COMMIT_RETRY_WALL_CAP_SECONDS = 20.0
+# 時鐘接縫：測試可注入假時鐘，使重試判定不受 git 子程序實際耗時影響。
+_clock = time.monotonic
 
 # git_ops.commit_files_isolated 回傳的 status（committed/empty/failed）轉譯為
 # 本模組既有呼叫端（ticket_system.commands.*）慣用的狀態字串。「not_git_repo」
@@ -140,19 +158,71 @@ def _auto_commit_ticket_md(
 
 
 def _is_retryable_commit_failure(error: str) -> bool:
-    """暫時性鎖競爭才值得重試；已判為過期殘骸的鎖重試只是空等。"""
-    return _is_lock_contention(error) and _STALE_DIAGNOSIS_MARK not in error
+    """暫時性競爭（鎖或 HEAD 前進的 CAS 拒絕）才值得重試；殘骸鎖重試只是空等。"""
+    if _STALE_DIAGNOSIS_MARK in error:
+        return False
+    return _is_lock_contention(error) or _is_cas_rejection(error)
+
+
+_RETRY_LOG_DIR = os.path.join(".claude", "hook-logs", "ticket-commit-retry")
+
+
+def _failure_reason(error: str) -> str:
+    """日誌用失敗原因：CAS 拒絕與鎖名分開記，供統計並行失敗率。"""
+    if _is_cas_rejection(error):
+        return "cas_rejected"
+    locks = _lock_paths_from_error(error)
+    return "lock:" + ",".join(os.path.basename(p) for p in locks) if locks else "other"
+
+
+def _log_commit_event(
+    ticket_path: str, event: str, ticket_id: str, attempt: int, waited_s: float, error: str
+) -> None:
+    """重試／最終失敗寫入檔案日誌；寫入失敗只寫 stderr，不影響提交結果。"""
+    import sys
+
+    cwd = str(Path(ticket_path).parent)
+    ticket_file_exists = Path(ticket_path).is_file()
+
+    detail = (error or "").splitlines()[0] if error else ""
+    line = (
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {event} ticket={ticket_id} "
+        f"attempt={attempt} waited_s={waited_s:.2f} reason={_failure_reason(error)} "
+        f"detail={detail}\n"
+    )
+    try:
+        # 票檔不存在或解析不到 repo root 時不退回 process cwd（會寫進無關 repo
+        # 的日誌），只寫 stderr
+        ok, root, _err = _run_git(["git", "rev-parse", "--show-toplevel"], cwd=cwd)
+        if not (ticket_file_exists and ok and root.strip()):
+            sys.stderr.write(f"[WARNING] 提交重試日誌未寫檔（無法解析 repo）：{line}")
+            return
+        base = root.strip()
+        log_dir = os.path.join(base, _RETRY_LOG_DIR)
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "retry-" + time.strftime("%Y%m%d") + ".log")
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write(line)
+    except OSError as exc:
+        sys.stderr.write(f"[WARNING] 提交重試日誌寫入失敗：{exc}\n")
 
 
 def auto_commit_ticket_md_with_retry(*args, **kwargs) -> Dict[str, object]:
-    """呼叫 ``_auto_commit_ticket_md``，git_failed 且屬暫時性鎖競爭時退避重試。
+    """呼叫 ``_auto_commit_ticket_md``，git_failed 且屬暫時性競爭時退避重試。
 
-    總等待上限 ``_COMMIT_RETRY_BUDGET_SECONDS``（另加各次 git 呼叫本身耗時）。
-    絕不移除任何鎖檔。回傳 ``{"status", "error", "attempts"}``；``error`` 僅在
-    最終 status 為 git_failed 時有值，供呼叫端輸出失敗原因。
+    重試預算語意：前 ``_COMMIT_MIN_RETRIES`` 次重試必做，不受牆鐘與等待預算限制；
+    其後的額外重試須同時滿足「累計 sleep 不超過 ``_COMMIT_RETRY_BUDGET_SECONDS``」
+    （只計等待，不含 git 嘗試耗時）與「自首次嘗試起的牆鐘不超過
+    ``_COMMIT_RETRY_WALL_CAP_SECONDS``」。
+    絕不移除任何鎖檔。每次重試與最終失敗各寫一筆檔案日誌。回傳
+    ``{"status", "error", "attempts"}``；``error`` 僅在最終 status 為
+    git_failed 時有值，供呼叫端輸出失敗原因。
     """
-    deadline = time.monotonic() + _COMMIT_RETRY_BUDGET_SECONDS
+    start = _clock()
     attempts = 0
+    waited = 0.0
+    ticket_id = str(args[1]) if len(args) > 1 else str(kwargs.get("ticket_id", ""))
+    log_cwd = str(args[0] if args else kwargs["path"])
     while True:
         detail: Dict[str, Optional[str]] = {}
         status = _auto_commit_ticket_md(*args, result_out=detail, **kwargs)
@@ -163,9 +233,17 @@ def auto_commit_ticket_md_with_retry(*args, **kwargs) -> Dict[str, object]:
         delay = _COMMIT_RETRY_BACKOFF_SECONDS[
             min(attempts - 1, len(_COMMIT_RETRY_BACKOFF_SECONDS) - 1)
         ]
-        if not _is_retryable_commit_failure(error) or time.monotonic() + delay > deadline:
+        within_extra_budget = (
+            waited + delay <= _COMMIT_RETRY_BUDGET_SECONDS
+            and _clock() - start + delay <= _COMMIT_RETRY_WALL_CAP_SECONDS
+        )
+        may_retry = attempts <= _COMMIT_MIN_RETRIES or within_extra_budget
+        if not _is_retryable_commit_failure(error) or not may_retry:
+            _log_commit_event(log_cwd, "final_failure", ticket_id, attempts, waited, error)
             return {"status": status, "error": error, "attempts": attempts}
-        time.sleep(delay)
+        _log_commit_event(log_cwd, "retry", ticket_id, attempts, delay, error)
+        _sleep(delay)
+        waited += delay
 
 
 def format_write_command_commit_failure(
@@ -197,6 +275,7 @@ def format_write_command_commit_failure(
     lines.append(
         f"補救指令（鎖排除後）：git add {' '.join([ticket_path, *extra_paths])} && "
         f"git commit -m \"chore({ticket_id}): {operation} {section}\""
+        "（或 `ticket track commit` 以隔離索引提交）"
     )
     return "\n".join(lines) + "\n"
 

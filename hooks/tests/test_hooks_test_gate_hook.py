@@ -416,6 +416,144 @@ class TestMainIntegration:
         assert any("分段" in r.getMessage() for r in warns)
         assert not [r for r in records if r.levelname in ("ERROR", "CRITICAL")]
 
+    # ---- 0.4.1-W1-035.4：細化分段計時（四段 + 兩次 load1）----
+
+    def _fake_run_with_timing(self, monkeypatch, marks, returncode=0,
+                              stdout="1 passed in 0.01s\n"):
+        """假 subprocess.run：依 env 計時檔路徑寫入 marks（相對 spawn 的秒偏移）。"""
+        import subprocess as sp
+
+        def _run(cmd, **kw):
+            path = kw["env"][hook_module.TIMING_ENV]
+            now = time.time()
+            payload = {k: (now + v if k in ("configure", "unconfigure", "atexit") else v)
+                       for k, v in marks.items()}
+            Path(path).write_text(json.dumps(payload), encoding="utf-8")
+            time.sleep(0.05)
+            return sp.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _run)
+
+    _FULL_MARKS = {"configure": 0.01, "unconfigure": 0.03, "atexit": 0.04,
+                   "load1_start": 1.5, "load1_end": 2.25}
+
+    def test_segments_logged_sum_equals_total(self, monkeypatch, tmp_path):
+        self._fake_run_with_timing(monkeypatch, self._FULL_MARKS)
+        lg, records = self._capture_logger("t-seg4-sum")
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg)
+        assert status == "pass"
+        msg = self._timing_records(records)[0].getMessage()
+        import re
+
+        def _f(name):
+            return float(re.search(name + r"=(-?\d+\.\d+)s", msg).group(1))
+
+        parts = [_f(n) for n in ("spawn_to_configure", "configure_to_summary",
+                                 "summary_to_pyexit", "pyexit_to_uvexit")]
+        assert all(p >= 0 for p in parts)
+        assert abs(sum(parts) - _f("total")) < 0.05  # 牆鐘 vs monotonic 差
+        assert abs(_f("segment_sum") - sum(parts)) < 0.011  # 各段四捨五入
+        assert abs(_f("sum_residual")) < 0.05
+        assert "load1_start=1.50" in msg and "load1_end=2.25" in msg
+
+    def test_timing_file_missing_warns_verdict_unchanged(self, monkeypatch, tmp_path):
+        """E2：外掛沒寫時刻檔（外掛失敗）只記 warning，細分 n/a，判定不變。"""
+        self._fake_run(monkeypatch, 0, "1 passed in 0.01s\n")
+        lg, records = self._capture_logger("t-seg4-missing")
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg)
+        assert status == "pass"
+        msg = self._timing_records(records)[0].getMessage()
+        assert "spawn_to_configure=n/a" in msg and "load1_start=n/a" in msg
+        assert any(r.levelname == "WARNING" and "計時檔" in r.getMessage()
+                   for r in records)
+        assert not [r for r in records if r.levelname in ("ERROR", "CRITICAL")]
+
+    def test_timing_file_corrupt_warns_verdict_unchanged(self, monkeypatch, tmp_path):
+        import subprocess as sp
+
+        def _run(cmd, **kw):
+            Path(kw["env"][hook_module.TIMING_ENV]).write_text("{not json", encoding="utf-8")
+            return sp.CompletedProcess(cmd, 1, stdout="1 failed in 0.01s\n", stderr="")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _run)
+        lg, records = self._capture_logger("t-seg4-corrupt")
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg)
+        assert status == "red"
+        assert any("計時檔" in r.getMessage() for r in records if r.levelname == "WARNING")
+
+    def test_timeout_path_reads_partial_marks_verdict_unchanged(self, monkeypatch, tmp_path):
+        import subprocess as sp
+
+        def _run(cmd, **kw):
+            Path(kw["env"][hook_module.TIMING_ENV]).write_text(
+                json.dumps({"configure": time.time(), "load1_start": 3.0}), encoding="utf-8")
+            raise sp.TimeoutExpired(cmd, 1)
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _run)
+        lg, records = self._capture_logger("t-seg4-timeout")
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg, 1)
+        assert status == "timeout"
+        msg = self._timing_records(records)[0].getMessage()
+        assert "load1_start=3.00" in msg and "summary_to_pyexit=n/a" in msg
+
+    def test_timing_file_cleaned_up(self, monkeypatch, tmp_path):
+        seen = []
+        import subprocess as sp
+
+        def _run(cmd, **kw):
+            seen.append(kw["env"][hook_module.TIMING_ENV])
+            return sp.CompletedProcess(cmd, 0, stdout="1 passed in 0.01s\n", stderr="")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _run)
+        lg, _ = self._capture_logger("t-seg4-clean")
+        hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg)
+        assert seen and not Path(seen[0]).exists()
+
+    # ---- conftest 計時外掛：E1 傳與不傳對照 + 真實 pytest 子程序 liveness ----
+
+    @staticmethod
+    def _load_conftest(monkeypatch, env_value):
+        if env_value is None:
+            monkeypatch.delenv("HOOKS_TEST_GATE_TIMING_FILE", raising=False)
+        else:
+            monkeypatch.setenv("HOOKS_TEST_GATE_TIMING_FILE", env_value)
+        spec = importlib.util.spec_from_file_location(
+            "conftest_probe", Path(__file__).parent.parent / "conftest.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_plugin_not_loaded_without_env(self, monkeypatch):
+        mod = self._load_conftest(monkeypatch, None)
+        assert not hasattr(mod, "pytest_configure")
+        assert not hasattr(mod, "pytest_unconfigure")
+
+    def test_plugin_loaded_with_env(self, monkeypatch, tmp_path):
+        mod = self._load_conftest(monkeypatch, str(tmp_path / "t.json"))
+        assert callable(mod.pytest_configure) and callable(mod.pytest_unconfigure)
+
+    def test_plugin_write_failure_only_stderr(self, monkeypatch, tmp_path, capsys):
+        mod = self._load_conftest(monkeypatch, str(tmp_path / "no_dir" / "t.json"))
+        mod.pytest_unconfigure(None)  # 不得拋例外
+        assert "gate-timing-plugin" in capsys.readouterr().err
+
+    def test_real_pytest_subprocess_writes_ordered_marks(self, tmp_path):
+        import os
+        import subprocess as sp
+
+        out = tmp_path / "marks.json"
+        hooks_dir = Path(__file__).parent.parent
+        env = dict(os.environ, HOOKS_TEST_GATE_TIMING_FILE=str(out))
+        r = sp.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+             "tests/test_hooks_test_gate_hook.py::TestFastReject::test_empty_command_rejected"],
+            cwd=str(hooks_dir), env=env, capture_output=True, text=True, timeout=50,
+        )
+        assert r.returncode == 0, r.stdout + r.stderr
+        marks = json.loads(out.read_text(encoding="utf-8"))
+        assert marks["configure"] <= marks["unconfigure"] <= marks["atexit"]
+        assert isinstance(marks["load1_start"], float) and isinstance(marks["load1_end"], float)
+
     def test_commit_touching_hook_without_test_reminds(self, monkeypatch, tmp_path):
         hooks_dir = tmp_path / ".claude" / "hooks"
         tests_dir = hooks_dir / "tests"

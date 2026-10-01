@@ -163,6 +163,20 @@ migrate 不改 todolist、不改 worklog 主檔、不移除舊目錄；這三件
 | 他票的 `chain.root`／`chain.parent` | 等於舊 ID 者改寫為新 ID |
 | `previous_ids`   | 被遷移票追加舊 ID（有序清單，長度即遷移次數；同 ID 改名不追加） |
 
+**有子孫的票連帶遷移整個子樹**：子孫以 ID 前綴（`<來源 ID>.`）收集（parent_id 指向來源但 ID 不在前綴下者無法映射新 ID，不屬子樹，僅其 parent_id 引用被改寫），新 ID 為「目標 ID + 原相對後綴」。上表欄位對每個成員（含已 completed）各做一次；引用改寫以 old 到 new 映射單趟完成（重疊映射如 A 到 B 且 B 也在遷移時，不會二次改寫）；子樹外票檔的引用同樣單趟改寫。
+
+| 子樹遷移項目 | 語意 |
+| --- | --- |
+| `previous_ids` | 每個成員各自追加自己的舊 ID（舊 ID 散見 commit message、worklog、issue，不會被改寫） |
+| `parent_id` | 根票依新 ID 重算；子孫對應新父 |
+| preflight | 碰撞（任一新 ID 已被佔用）、深度（任一成員遷移後超過 MAX_TICKET_DEPTH，訊息列出票 ID 與深度）、目標版本註冊；任一項失敗整體拒絕、零寫入、exit 非 0，訊息列出全部失敗項 |
+| 碰撞處理 | 子樹遷移不自動改號（單票碰撞才自動取下一可用序號）；`--force-overwrite` 可放行碰撞 |
+| `--dry-run` | 列出完整 old 到 new 映射表，不寫入 |
+| 提交 | 整個子樹、子樹外引用者、舊檔刪除與 topic 追加行為單一隔離提交 |
+| 中途寫入失敗 | exit 1，輸出已寫入的檔案集合（不自動回滾） |
+
+沒有子孫的票維持單票路徑，行為不變。
+
 topic-assignments 以追加一行「新 ID、原主題」承接，不改寫舊行。遷移以單一隔離提交寫入新檔、舊檔、各引用者與 topic 追加行；提交失敗時 exit 75，`[WARNING]` 列出全部路徑。
 
 ## Collision Detection

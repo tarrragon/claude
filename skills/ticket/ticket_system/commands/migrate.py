@@ -20,6 +20,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 
+from ticket_system.constants import MAX_TICKET_DEPTH
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.constants import WORK_LOGS_DIR, TICKETS_DIR
 from ticket_system.lib.ticket_loader import (
@@ -78,6 +79,8 @@ class _MigrationRecord:
     source_path: Path
     referrers: List[Path] = field(default_factory=list)
     topic_line: Optional[str] = None
+    # 有子孫的票連帶遷移時，根票 record 帶其餘成員的 record（與根票併成同一提交）
+    subtree: List["_MigrationRecord"] = field(default_factory=list)
 
 
 def _update_ticket_id_references(ticket: Dict[str, Any], old_id: str, new_id: str) -> None:
@@ -494,6 +497,210 @@ def _sync_parent_children(
     return written
 
 
+# ---------------------------------------------------------------------------
+# 有子孫的票：連帶遷移整個子樹（preflight 任一項失敗整體拒絕、零寫入）
+# ---------------------------------------------------------------------------
+
+_SUBTREE_PREFLIGHT_FAILED = "[ERROR] 子樹遷移 preflight 失敗（零寫入），共 {count} 項："
+_SUBTREE_DRY_RUN_HEADER = "預覽子樹遷移：{source_id} → {target_id}，共 {count} 張票"
+_SUBTREE_MIDWAY_FAILED = "[ERROR] 子樹遷移中途失敗：{error}；以下檔案已寫入工作區："
+_STRUCTURAL_REF_FIELDS = (
+    "blockedBy", "relatedTo", "spawned_tickets", "children", "source_ticket",
+    "parent_id", "discovered_during", "closed_by",
+)
+
+
+def _map_ref(value: Any, mapping: Dict[str, str]):
+    """單趟映射字串或清單（含 children 的 dict 形式）引用，回傳 (新值, 是否變更)。"""
+    if isinstance(value, str):
+        new = mapping.get(value, value)
+        return new, new != value
+    if not isinstance(value, list):
+        return value, False
+    out, changed = [], False
+    for item in value:
+        if isinstance(item, dict) and item.get("id") in mapping:
+            item, changed = {**item, "id": mapping[item["id"]]}, True
+        elif isinstance(item, str) and item in mapping:
+            item, changed = mapping[item], True
+        out.append(item)
+    return out, changed
+
+
+def _remap_ticket_refs(ticket: Dict[str, Any], mapping: Dict[str, str]) -> bool:
+    """以 old->new 映射一次改寫票內所有結構引用（不逐對替換，重疊映射不會二次改寫）。"""
+    changed = False
+    for key in _STRUCTURAL_REF_FIELDS:
+        if key in ticket:
+            ticket[key], hit = _map_ref(ticket[key], mapping)
+            changed = changed or hit
+    chain = ticket.get("chain")
+    if isinstance(chain, dict):
+        for key in ("root", "parent"):
+            chain[key], hit = _map_ref(chain.get(key), mapping)
+            changed = changed or hit
+    return changed
+
+
+def _iter_all_ticket_files() -> List[Path]:
+    """所有版本目錄（扁平與三層）下的票檔，路徑排序。"""
+    work_logs_root = get_ticket_state_root() / "docs" / "work-logs"
+    dirs = set(work_logs_root.glob("v*/tickets")) | set(work_logs_root.glob("v*/v*/v*/tickets"))
+    return [f for d in sorted(dirs) for f in sorted(d.glob("*.md"))]
+
+
+def _collect_subtree(source_id: str) -> List[tuple]:
+    """收集 source 的子孫：ID 前綴 `source.` 者，回傳 [(id, path, ticket)]（依 ID 排序）。
+
+    parent_id 指向 source 但 ID 不在前綴下的票無法由前綴映射新 ID，不屬子樹成員；
+    其 parent_id 引用由子樹外引用改寫一併更新。
+    """
+    prefix = source_id + "."
+    found = {}
+    for path in _iter_all_ticket_files():
+        ticket = _load_ticket_from_path(path)
+        tid = (ticket or {}).get("id") or extract_core_ticket_id(path.stem)
+        if ticket and tid.startswith(prefix):
+            found[tid] = (path, ticket)
+    return [(tid, *found[tid]) for tid in sorted(found)]
+
+
+def _subtree_preflight(mapping: Dict[str, str], version: str,
+                       force_overwrite: bool) -> List[str]:
+    """子樹遷移的全部前置檢查，回傳失敗項訊息清單（空表示通過）。"""
+    failures: List[str] = []
+    old_ids = set(mapping)
+    version_error = _validate_target_version(mapping[next(iter(mapping))], version)
+    if version_error:
+        failures.append(version_error)
+    for old_id, new_id in mapping.items():
+        if not validate_ticket_id(new_id):
+            failures.append(f"{new_id}：Ticket ID 格式無效（來源 {old_id}）")
+            continue
+        info = calculate_chain_info(new_id)
+        new_depth = (info or {}).get("depth", 0) + 1
+        if new_depth > MAX_TICKET_DEPTH:
+            failures.append(
+                f"{new_id}：遷移後深度 {new_depth} 超過 MAX_TICKET_DEPTH={MAX_TICKET_DEPTH}"
+                f"（來源 {old_id}）")
+        collision = _check_target_collision(new_id, version) if new_id not in old_ids else None
+        if collision and not force_overwrite:
+            failures.append(f"{new_id}：目標已存在（{collision['path']}，來源 {old_id}）")
+    return failures
+
+
+def _prepare_member(ticket: Dict[str, Any], old_id: str, new_id: str,
+                    mapping: Dict[str, str]) -> None:
+    """依映射改寫成員票：先改引用（舊值），再設新 ID／previous_ids／wave／chain／parent_id。"""
+    _remap_ticket_refs(ticket, mapping)
+    ticket["id"] = new_id
+    ticket[PREVIOUS_IDS_FIELD] = [*(ticket.get(PREVIOUS_IDS_FIELD) or []), old_id]
+    components = extract_id_components(new_id)
+    if components:
+        ticket["version"] = components["version"]
+        ticket["wave"] = components["wave"]
+    chain_info = calculate_chain_info(new_id)
+    if chain_info:
+        ticket["chain"] = chain_info
+        ticket["parent_id"] = chain_info.get("parent")
+
+
+def _member_path(new_id: str, fallback_version: str) -> Path:
+    components = extract_id_components(new_id)
+    return get_ticket_path(components["version"] if components else fallback_version, new_id)
+
+
+def _rewrite_external_refs(mapping: Dict[str, str], skip_paths: set) -> List[Path]:
+    """單趟改寫子樹以外票檔的引用；子樹成員已改寫，跳過以免重疊映射二次改寫。"""
+    written: List[Path] = []
+    for path in _iter_all_ticket_files():
+        if path in skip_paths:
+            continue
+        ticket = _load_ticket_from_path(path)
+        if not ticket or not _remap_ticket_refs(ticket, mapping):
+            continue
+        try:
+            save_ticket(ticket, path)
+            written.append(path)
+        except (IOError, OSError) as e:
+            print(format_warning(WarningMessages.FILE_UPDATE_FAILED, path=str(path), error=str(e)))
+    return written
+
+
+def _migrate_subtree(
+    version: str,
+    source_id: str,
+    target_id: str,
+    root: Dict[str, Any],
+    descendants: List[tuple],
+    dry_run: bool,
+    backup: bool,
+    force_overwrite: bool,
+) -> tuple:
+    """連帶遷移 source 與其整個子樹，回傳 (exit code, 根票 record | None)。"""
+    source_path = get_ticket_path(
+        (extract_id_components(source_id) or {}).get("version", version), source_id)
+    members = [(source_id, source_path, root), *descendants]
+    mapping = {tid: target_id + tid[len(source_id):] for tid, _p, _t in members}
+    failures = _subtree_preflight(mapping, version, force_overwrite)
+    if failures:
+        print(format_error(_SUBTREE_PREFLIGHT_FAILED, count=len(failures)))
+        for failure in failures:
+            print(f"  - {failure}")
+        return 1, None
+    if dry_run:
+        print(format_info(_SUBTREE_DRY_RUN_HEADER, source_id=source_id,
+                          target_id=target_id, count=len(members)))
+        for old_id, new_id in mapping.items():
+            print(f"  {old_id} → {new_id}")
+        return 0, None
+
+    old_parent_id = root.get("parent_id")
+    new_paths = {tid: _member_path(mapping[tid], version) for tid, _p, _t in members}
+    if backup:
+        for tid, _p, _t in members:
+            _backup_ticket((extract_id_components(tid) or {}).get("version", version), tid)
+    written: List[Path] = []
+    try:
+        for tid, _path, ticket in members:
+            _prepare_member(ticket, tid, mapping[tid], mapping)
+            new_paths[tid].parent.mkdir(parents=True, exist_ok=True)
+            save_ticket(ticket, new_paths[tid])
+            written.append(new_paths[tid])
+    except (IOError, OSError) as e:
+        print(format_error(_SUBTREE_MIDWAY_FAILED, error=str(e)))
+        for path in written:
+            print(f"  {path}")
+        return 1, None
+
+    produced = set(new_paths.values())
+    for _tid, old_path, _t in members:
+        if old_path not in produced and old_path.exists():
+            old_path.unlink()
+    referrers = _rewrite_external_refs(mapping, produced | {p for _i, p, _t in members})
+    new_parent_id = root.get("parent_id")
+    if old_parent_id != new_parent_id:
+        target_parent = None if new_parent_id in mapping else new_parent_id
+        for path in _sync_parent_children(source_id, target_id, old_parent_id, target_parent):
+            if path not in referrers:
+                referrers.append(path)
+    records = [
+        _MigrationRecord(old_id=tid, new_id=mapping[tid], target_path=new_paths[tid],
+                         source_path=old_path, topic_line=inherit_assignment(tid, mapping[tid]))
+        for tid, old_path, _t in members
+    ]
+    records[0].referrers = referrers
+    records[0].subtree = records[1:]
+    print(format_info(InfoMessages.TICKET_MIGRATED, source_id=source_id, target_id=target_id)
+          + f"（含子孫共 {len(records)} 張）")
+    return 0, records[0]
+
+
+def _flatten_records(records: List[_MigrationRecord]) -> List[_MigrationRecord]:
+    """展開根票 record 帶的子樹成員，供併成單一提交。"""
+    return [item for record in records for item in (record, *record.subtree)]
+
+
 def _migrate_ticket_files(
     version: str,
     source_id: str,
@@ -543,6 +750,14 @@ def _migrate_ticket_files(
     ticket, error = load_and_validate_ticket(source_version, source_id)
     if error:
         return 2, None
+
+    # 有子孫的票：連帶遷移整個子樹（同 ID 改名不涉及子孫，沿用單票路徑）
+    if source_id != target_id:
+        descendants = _collect_subtree(source_id)
+        if descendants:
+            root = _load_ticket_from_path(source_path_check) or ticket
+            return _migrate_subtree(version, source_id, target_id, root, descendants,
+                                    dry_run, backup, force_overwrite)
 
     # W14-048: collision detection（target 已存在）
     # 例外：source == target（同 ID rename，等同 in-place 更新）不視為 collision
@@ -697,6 +912,7 @@ def _commit_migrations(records: List[_MigrationRecord]) -> bool:
     Returns:
         True 表提交最終失敗（呼叫端應回 EXIT_AUTO_COMMIT_FAILED）。
     """
+    records = _flatten_records(records)
     if not records:
         return False
     targets = [r.target_path for r in records if r.target_path.exists()]

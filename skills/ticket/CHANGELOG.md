@@ -2,6 +2,16 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.30（本地變更）— `ticket migrate` 遷移有子孫的票時連帶遷移整個子樹。子孫以 ID 前綴收集，建 old 到 new 映射，引用改寫單趟完成（重疊映射不二次改寫）；每個成員（含 completed）更新 id、追加 `previous_ids`、重算 chain 與 parent_id，topic 各追加一行（舊行保留）。preflight（碰撞、深度不超過 MAX_TICKET_DEPTH 且訊息列出超限票 ID 與遷移後深度、目標版本註冊）任一失敗整體拒絕、零寫入；dry-run 列出完整映射表；整個子樹與子樹外引用者走單一隔離提交；寫入中途失敗輸出已寫入集合。子樹遷移碰撞不自動改號。無子孫的票行為不變。測試 `tests/test_migrate_subtree_cascade.py`：E1 對照有子孫與無子孫兩路徑產物不同。
+
+**Version**: 2.44.29（本地變更）— 修復 `test_commit_cas_retry.py` 假時鐘不穩定：測試改寫全域 `time.sleep`，`subprocess` 在子程序未退出時以 `time.sleep` 輪詢，該呼叫也推進假時鐘，推進量取決於 git 實際耗時，wall_cap 測試的 relaxed 次數隨機器負載漂移。現行：`git_utils` 新增模組層接縫 `_sleep = time.sleep`，提交重試迴圈改呼叫 `_sleep`；測試只替換 `git_utils._sleep`，不再改寫全域 `time.sleep`。產品重試判定不變。測試：wall_cap 測試改斷言精確次數（capped==3、relaxed==5）並保留 capped<relaxed 對照；新增 E2 正向對照（全域 patch 會被 subprocess 輪詢推進假時鐘，接縫則推進量為 0）。
+
+**Version**: 2.44.28（本地變更）— 提交重試預算改為「最少重試次數 + 只計 sleep 的等待預算 + 牆鐘上限」：此前 deadline 在首次 git 呼叫前起算且含 git 耗時，高負載下單次嘗試即可吃完 5 秒預算，CAS 被拒後零重試。現行：前 3 次重試必做（`_COMMIT_MIN_RETRIES`，不受牆鐘限制）；其後額外重試須累計 sleep 不超過 5 秒（`_COMMIT_RETRY_BUDGET_SECONDS`，不含 git 嘗試耗時）且自首次嘗試起牆鐘不超過 20 秒（`_COMMIT_RETRY_WALL_CAP_SECONDS`，須小於呼叫端 hook timeout 30 秒）。新增時鐘接縫 `git_utils._clock`，測試以假時鐘隔離機器負載。測試（`tests/test_commit_cas_retry.py`）：慢首次嘗試仍重試、最少重試次數後依牆鐘停止、預算只計 sleep、額外重試受牆鐘約束；對照為快嘗試同一競爭。
+
+**Version**: 2.44.27（本地變更）— `requires-python` 由 `>=3.9` 提高為 `>=3.10`，`uv.lock` 重新鎖定（移除 3.9 專屬分支條目）。原宣告與實際不符：`ticket_system/lib/paths.py` 等模組層 `Path | None` 標註在執行期求值，3.9 下 import 即拋 TypeError，uv 可能選到系統 3.9 使 CLI 啟動即崩潰。採提高宣告而非全面相容 3.9：未見 consumer 依賴 3.9，框架其餘 Python 包皆 `>=3.10` 以上。新增 `tests/test_python_floor_declaration.py`：以 `uv run --python` 實際 import 全部模組，斷言宣告下限成功、下限減一版失敗（宣告不偏高）；無對應直譯器時 skip。
+
+**Version**: 2.44.26（本地變更）— 單一路徑隔離提交的 CAS 重試與檔案日誌：update-ref 因 HEAD 前進被拒（`but expected`）列為可重試，整個提交流程以新 HEAD 重做（原本僅依「含 cannot lock ref」的巧合被外層重試，內層同 old_head 重試必敗卻白等 1 秒，現已略過）；每次重試與最終失敗各寫一筆 `.claude/hook-logs/ticket-commit-retry/retry-YYYYMMDD.log`（欄位 attempt、waited_s、reason=cas_rejected 或 lock:鎖名）；日誌寫入失敗只寫 stderr，不改變提交結果；重試用盡的補救指令加列 `ticket track commit`。總等待上限不變（5 秒）。修正：票檔不存在或解析不到 repo root 時不再退回 process cwd 寫日誌（只寫 stderr），測試由 skill-root conftest 的 autouse fixture 把日誌導向 tmp，避免 mock 值污染真實日誌。測試 `ticket_system/tests/test_commit_cas_retry.py`：E1 對照無競爭不重試且無日誌。
+
 **Version**: 2.44.25（本地變更）— 修復 `ticket migrate` 的 `_sync_parent_children` 回歸：新父 `children` 已列新 ID（字串或 dict 的 `id`）時保留原項、原形式、原順序且不寫父票檔；未列才以字串追加尾端。此前以「剔除後追加」去重，dict 形式與原位置皆遺失（舊父為 None、新父由新 ID 推導時觸發）。
 
 **Version**: 2.44.24（本地變更）— `ticket migrate` 在新 ID 的階層對應到不同父票時，同步舊父與新父的 `children`：舊父移除該票（字串與 dict 形式皆處理）、新父加入新 ID（已存在不重複）；新 ID 為根票時 `parent_id` 清為 null（此前殘留舊父）。新父票缺檔只輸出 `[WARNING]` 不中斷遷移；父票不變（同層改號）維持原行為，dry-run 不寫入。異動的父票檔併入同一個 `_MigrationRecord.referrers`，與遷移走單一隔離提交。測試（`tests/test_migrate_parent_children_sync.py`）：改父、dict children、不重複、根票清 parent_id、同層不回歸、缺檔 warning、dry-run、commit 內容（`git show` 驗證兩父票同 commit）；E1 對照同批 fixture 下父票改變與不變兩路徑產物不同。

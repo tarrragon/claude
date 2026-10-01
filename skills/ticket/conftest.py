@@ -165,3 +165,13 @@ def seeded_repo_root(tmp_path_factory, monkeypatch):
     )
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
     return root
+
+
+@pytest.fixture(autouse=True)
+def _isolate_commit_retry_log(tmp_path_factory, monkeypatch):
+    """提交重試日誌導向 tmp，避免測試的 mock 值污染真實並行失敗率日誌。"""
+    from ticket_system.lib import git_utils
+
+    monkeypatch.setattr(
+        git_utils, "_RETRY_LOG_DIR", str(tmp_path_factory.mktemp("retry-log"))
+    )

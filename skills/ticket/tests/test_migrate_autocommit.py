@@ -23,6 +23,7 @@ _VER = "0.0.0"
 _SRC = "0.0.0-W0-001"
 _NEW = "0.0.0-W0-009"
 _CHILD = "0.0.0-W0-001.1"
+_NEW_CHILD = "0.0.0-W0-009.1"
 _REF = "0.0.0-W0-002"
 _OTHER = "0.0.0-W0-003"
 _OTHER_NEW = "0.0.0-W0-010"
@@ -164,7 +165,8 @@ class TestSingleMigrateCommit:
         assert by_name[f"{_SRC}.md"] == "D"
         assert by_name[f"{_NEW}.md"] == "A"
         assert by_name[f"{_REF}.md"] == "M"
-        assert by_name[f"{_CHILD}.md"] == "M"
+        assert by_name[f"{_CHILD}.md"] == "D"
+        assert by_name[f"{_NEW_CHILD}.md"] == "A"
         assert by_name["topic-assignments.txt"] == "M"
         added = [ln for ln in _git(repo, "show", "HEAD", "--", _ASSIGN).splitlines()
                  if ln.startswith("+") and not ln.startswith("+++")]
@@ -191,7 +193,7 @@ class TestStructuralRewrite:
         assert ref["blockedBy"] == [_NEW]
         assert ref["discovered_during"] == _NEW
         assert ref["closed_by"] == _NEW
-        child = _fm(get_ticket_path(_VER, _CHILD))
+        child = _fm(get_ticket_path(_VER, _NEW_CHILD))
         assert child["chain"]["root"] == _NEW
         assert child["chain"]["parent"] == _NEW
         assert child["parent_id"] == _NEW

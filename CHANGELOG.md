@@ -1,3 +1,24 @@
+## [2.74.0] - 2026-10-02
+
+### Summary
+feat: migrate 有子孫的票連帶遷移整個子樹; feat: hooks-test-gate 細化分段計時（四段 + 兩次 load1）; fix: 假時鐘改用 git_utils._sleep 接縫，不再改寫全域 time.sleep (+8 more)
+
+Changes: 2 feat, 4 fix, 3 docs, 1 chore, 1 test
+
+- feat: migrate 有子孫的票連帶遷移整個子樹
+- feat: hooks-test-gate 細化分段計時（四段 + 兩次 load1）
+- fix: 假時鐘改用 git_utils._sleep 接縫，不再改寫全域 time.sleep
+- fix: 提交重試預算改為最少重試次數加只計 sleep 的預算
+- fix: ticket requires-python 提高為 >=3.10 並加 3.9 直譯器驗證測試
+- fix: 重試日誌不退回 process cwd，測試導向 tmp
+- docs: TEST-GPD-003 替換全域 time.sleep 作假時鐘被 subprocess 等待輪詢呼叫
+- docs: PC-GPD-029 送訊號前加比對 cwd 與啟動時間
+- docs: PC-GPD-029 補 TaskStop 停止背景任務後程序樹仍存活的再現
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+- test: 更新 migrate 既有斷言為子樹連帶遷移語意
+
+---
+
 ## [2.73.0] - 2026-10-01
 
 ### Summary

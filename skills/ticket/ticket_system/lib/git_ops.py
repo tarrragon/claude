@@ -127,6 +127,16 @@ def _is_lock_contention(err: str) -> bool:
     return bool(_LOCK_PATH_RE.search(err))
 
 
+def _is_cas_rejection(err: str) -> bool:
+    """判斷 update-ref 是否因 HEAD 已前進而被 CAS 拒絕（非鎖競爭）。
+
+    git 文字為 ``cannot lock ref 'HEAD': is at X but expected Y``（含 ``cannot
+    lock ref``，與鎖競爭同形，故須獨立判定）；``_describe_update_ref_failure``
+    在 git 未回報原因時補的 fallback 文字亦屬此類。
+    """
+    return bool(err) and ("but expected" in err or "HEAD 於提交期間被並行移動" in err)
+
+
 def _lock_paths_from_error(err: str, cwd: Optional[str] = None) -> List[str]:
     """自錯誤文字取出鎖檔路徑（相對路徑以 ``cwd`` 補齊為絕對路徑）。"""
     paths = []
@@ -227,7 +237,11 @@ def _run_git_with_lock_retry(
     """
     ok, out, err = _run_git(args, cwd=cwd, env=env, timeout=timeout, input_text=input_text)
     attempt = 1
-    while not ok and _is_lock_contention(err) and attempt < max_retries:
+    # CAS 拒絕以同一 old_head 重試必敗，由呼叫端整個流程重做，這裡不空等
+    while (
+        not ok and _is_lock_contention(err) and not _is_cas_rejection(err)
+        and attempt < max_retries
+    ):
         diagnosis = _stale_lock_diagnosis(err, cwd)
         if diagnosis:
             return False, out, f"{err}\n{diagnosis}"

@@ -76,9 +76,12 @@ from __future__ import annotations
 
 import os
 import re
+import json
 import subprocess
 import sys
+import tempfile
 import time
+from time import time as _wall_clock  # 牆鐘（跨程序比對用；與 monotonic 分開引用）
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
@@ -95,6 +98,9 @@ from lib import (  # noqa: E402
 from lib.git_utils import parse_name_status_z, run_git_command  # noqa: E402
 
 HOOK_NAME = "hooks-test-gate"
+
+# gate 以此環境變數把計時檔路徑交給 pytest 端外掛（conftest.py）；未設時外掛不載入。
+TIMING_ENV = "HOOKS_TEST_GATE_TIMING_FILE"
 
 # 逐檔執行：每個對應測試檔各跑一次 pytest，單檔逾時才判失敗。
 # 舊設計把本次提交觸及的全部測試合成一次呼叫並套固定 30s 上限，總耗時隨觸及
@@ -295,19 +301,100 @@ def _resolve_test_paths(
 _PYTEST_SUMMARY_RE = re.compile(r"\bin (\d+(?:\.\d+)?)s\b")
 
 
+_SEGMENT_FIELDS = (
+    "spawn_to_configure",
+    "configure_to_summary",
+    "summary_to_pyexit",
+    "pyexit_to_uvexit",
+)
+
+
+def _read_pytest_side_timing(path: Optional[str], logger) -> Optional[dict]:
+    """讀 pytest 端外掛寫入的時刻檔；缺漏或毀損只記 warning，回 None。"""
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            raise ValueError("計時檔內容不是 JSON 物件")
+        return data
+    except (OSError, ValueError) as exc:
+        logger.warning("計時檔缺漏或毀損（%s: %s），細分欄位記 n/a", type(exc).__name__, exc)
+        return None
+
+
+def _compute_segments(
+    side: Optional[dict], spawn_wall: float, return_wall: float
+) -> dict:
+    """由 gate 端 spawn／return 與 pytest 端 configure／unconfigure／atexit 時刻算四段。
+
+    四段首尾相接，加總 = return_wall - spawn_wall（牆鐘）。與 total（monotonic）的
+    差 sum_residual 來自兩個時鐘源的差異（牆鐘可被校時調整、monotonic 不可），正常 <10ms。
+    任一時刻缺漏的段記 None（例如 pytest 被 timeout 殺掉時無 atexit）。
+    """
+    side = side or {}
+    marks = [
+        spawn_wall,
+        side.get("configure"),
+        side.get("unconfigure"),
+        side.get("atexit"),
+        return_wall,
+    ]
+    segments = {}
+    for name, a, b in zip(_SEGMENT_FIELDS, marks, marks[1:]):
+        ok = isinstance(a, (int, float)) and isinstance(b, (int, float))
+        segments[name] = (b - a) if ok else None
+    segments["load1_start"] = side.get("load1_start")
+    segments["load1_end"] = side.get("load1_end")
+    return segments
+
+
+def _fmt_seconds(value: Optional[float]) -> str:
+    return "n/a" if value is None else "%.2fs" % value
+
+
+def _fmt_load(value) -> str:
+    return "%.2f" % value if isinstance(value, (int, float)) else "n/a"
+
+
+def _segment_detail(segments: Optional[dict], total: float) -> str:
+    """細分欄位字串；segments 為 None 時全部 n/a。"""
+    segments = segments or {}
+    parts = ["%s=%s" % (n, _fmt_seconds(segments.get(n))) for n in _SEGMENT_FIELDS]
+    values = [segments.get(n) for n in _SEGMENT_FIELDS]
+    if all(v is not None for v in values):
+        seg_sum = sum(values)
+        parts.append("segment_sum=%.2fs" % seg_sum)
+        parts.append("sum_residual=%.3fs" % (total - seg_sum))
+    else:
+        parts.append("segment_sum=n/a sum_residual=n/a")
+    parts.append("load1_start=%s" % _fmt_load(segments.get("load1_start")))
+    parts.append("load1_end=%s" % _fmt_load(segments.get("load1_end")))
+    return " ".join(parts)
+
+
 def _log_segment_timing(
-    logger, test_paths: List[Path], status: str, total: float, output: Optional[str]
+    logger,
+    test_paths: List[Path],
+    status: str,
+    total: float,
+    output: Optional[str],
+    segments: Optional[dict] = None,
 ) -> None:
     """記錄每檔分段計時（僅日誌，不影響判定，任何失敗只記 warning）。
 
     uv_and_startup_gap = 總耗時 - pytest 自報；量的是差距（含 uv 解析/同步、
     interpreter 啟動、collection 前後開銷），不是 uv 本身。
+    segments（2026-10 細化計時）把整段拆成 spawn->configure、configure->摘要後、
+    摘要後->python 退出、python 退出->uv 退出四段；缺漏記 n/a。
     """
     names = ",".join(p.name for p in test_paths)
     try:
         load1 = "%.2f" % os.getloadavg()[0]
     except (OSError, AttributeError):
         load1 = "n/a"
+    detail = _segment_detail(segments, total)
     reported = None
     if output is not None:
         matches = _PYTEST_SUMMARY_RE.findall(output)
@@ -316,17 +403,37 @@ def _log_segment_timing(
     if reported is None:
         logger.info(
             "分段計時: file=%s status=%s total=%.2fs pytest_self_reported=n/a "
-            "uv_and_startup_gap=n/a load1=%s",
-            names, status, total, load1,
+            "uv_and_startup_gap=n/a load1=%s %s",
+            names, status, total, load1, detail,
         )
         if status != _STATUS_TIMEOUT:
             logger.warning("分段計時解析失敗（輸出無 pytest 摘要行）: file=%s", names)
         return
     logger.info(
         "分段計時: file=%s status=%s total=%.2fs pytest_self_reported=%.2fs "
-        "uv_and_startup_gap=%.2fs load1=%s",
-        names, status, total, reported, total - reported, load1,
+        "uv_and_startup_gap=%.2fs load1=%s %s",
+        names, status, total, reported, total - reported, load1, detail,
     )
+
+
+def _make_timing_file(logger) -> Optional[str]:
+    """建立空計時檔供外掛寫入；失敗只記 warning（不啟用外掛，判定不變）。"""
+    try:
+        fd, path = tempfile.mkstemp(prefix="hooks-test-gate-timing-", suffix=".json")
+        os.close(fd)
+        return path
+    except OSError as exc:
+        logger.warning("無法建立計時檔（%s: %s），略過細分計時", type(exc).__name__, exc)
+        return None
+
+
+def _remove_quietly(path: Optional[str], logger) -> None:
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError as exc:
+        logger.debug("計時檔清理失敗（%s），略過", exc)
 
 
 def _run_pytest(
@@ -338,6 +445,11 @@ def _run_pytest(
         str(p) for p in test_paths
     ]
     logger.info("執行目標測試（timeout=%ss）: %s", limit, cmd)
+    timing_path = _make_timing_file(logger)
+    env = dict(os.environ)
+    if timing_path:
+        env[TIMING_ENV] = timing_path
+    spawn_wall = _wall_clock()
     started = time.monotonic()
     try:
         result = subprocess.run(
@@ -347,14 +459,20 @@ def _run_pytest(
             encoding="utf-8",
             errors="replace",
             timeout=limit,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         logger.warning("目標測試執行逾時（%ss），保守判定為失敗", limit)
+        total = time.monotonic() - started
+        side = _read_pytest_side_timing(timing_path, logger)
+        _remove_quietly(timing_path, logger)
         _log_segment_timing(
-            logger, test_paths, _STATUS_TIMEOUT, time.monotonic() - started, None
+            logger, test_paths, _STATUS_TIMEOUT, total, None,
+            _compute_segments(side, spawn_wall, _wall_clock()),
         )
         return _STATUS_TIMEOUT, f"測試逾時（{limit:g}s）"
     except OSError as exc:
+        _remove_quietly(timing_path, logger)
         # uv 不存在或 .venv 缺失：無法驗證等同未通過，fail-closed 判 red 走 deny 路徑
         logger.error("無法啟動測試程序（%s），判定為失敗: %s", type(exc).__name__, exc)
         sys.stderr.write(
@@ -363,10 +481,16 @@ def _run_pytest(
         )
         return _STATUS_RED, f"無法啟動測試程序（uv 不存在或環境缺失）: {type(exc).__name__}: {exc}"
     total = time.monotonic() - started
+    return_wall = _wall_clock()
+    side = _read_pytest_side_timing(timing_path, logger)
+    _remove_quietly(timing_path, logger)
     full_output = result.stdout + result.stderr
     output_tail = "\n".join(full_output.splitlines()[-20:])
     status = _STATUS_PASS if result.returncode == 0 else _STATUS_RED
-    _log_segment_timing(logger, test_paths, status, total, full_output)
+    _log_segment_timing(
+        logger, test_paths, status, total, full_output,
+        _compute_segments(side, spawn_wall, return_wall),
+    )
     logger.info("目標測試結果: returncode=%d", result.returncode)
     return status, output_tail
 
