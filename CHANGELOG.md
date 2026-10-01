@@ -1,3 +1,21 @@
+## [2.73.0] - 2026-10-01
+
+### Summary
+feat: 副本一致性測試與全量收集失敗的 stderr 輸出; feat: testpaths 覆蓋警告 conftest 外掛（hooks 與 ticket 兩包）; feat: hooks-test-gate 每檔分段計時日誌 (+5 more)
+
+Changes: 3 feat, 3 fix, 2 chore
+
+- feat: 副本一致性測試與全量收集失敗的 stderr 輸出
+- feat: testpaths 覆蓋警告 conftest 外掛（hooks 與 ticket 兩包）
+- feat: hooks-test-gate 每檔分段計時日誌
+- fix: migrate 新父已列新 ID 時保留 children 原項形式與順序
+- fix: migrate 父票改變時同步舊父/新父 children 並清除根票 parent_id
+- fix: hooks-test-gate uv 啟動失敗改判 red 並 deny
+- chore: hook-exclude-list 排除 conftest 與 testpaths 覆蓋警告模組
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+
+---
+
 ## [2.72.0] - 2026-10-01
 
 ### Summary

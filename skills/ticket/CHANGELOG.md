@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.25（本地變更）— 修復 `ticket migrate` 的 `_sync_parent_children` 回歸：新父 `children` 已列新 ID（字串或 dict 的 `id`）時保留原項、原形式、原順序且不寫父票檔；未列才以字串追加尾端。此前以「剔除後追加」去重，dict 形式與原位置皆遺失（舊父為 None、新父由新 ID 推導時觸發）。
+
+**Version**: 2.44.24（本地變更）— `ticket migrate` 在新 ID 的階層對應到不同父票時，同步舊父與新父的 `children`：舊父移除該票（字串與 dict 形式皆處理）、新父加入新 ID（已存在不重複）；新 ID 為根票時 `parent_id` 清為 null（此前殘留舊父）。新父票缺檔只輸出 `[WARNING]` 不中斷遷移；父票不變（同層改號）維持原行為，dry-run 不寫入。異動的父票檔併入同一個 `_MigrationRecord.referrers`，與遷移走單一隔離提交。測試（`tests/test_migrate_parent_children_sync.py`）：改父、dict children、不重複、根票清 parent_id、同層不回歸、缺檔 warning、dry-run、commit 內容（`git show` 驗證兩父票同 commit）；E1 對照同批 fixture 下父票改變與不變兩路徑產物不同。
+
 **Version**: 2.44.23（本地變更）— `git_ops.commit_files_isolated` 的提交範圍自我驗證由嚴格相等改為子集比對：列出但淨變更為零的路徑合法，僅清單外的變更判 failed（錯誤訊息附範圍外路徑，不 update-ref）；全部列出路徑皆無淨變更仍由空 tree 短路回報 no-op（exit 0、不建 commit）。此前多路徑寫入（如 `add-child` 子票的 parent 本已相同、`set-parent` 往返三檔只有一檔有變更）因嚴格相等誤報 exit 75，真實變更留在工作區。測試（`tests/test_commit_isolated_subset_scope.py`）：兩路徑其一無變更提交只含有變更者（修正前紅）、真實 CLI `add-child` 子票已連結 exit 0 且 commit 只含父票（修正前紅）；E2 對照：清單外路徑有變更時 failed 且 HEAD 不動，真實 CLI 構造同一情境 exit 75；全部無變更為 no-op。
 
 **Version**: 2.44.22（本地變更）— `add-spawn-request` 的 SR 編號改為只取 Spawn Requests 章節內結構化條目（行首 `- **SR-N**`）的最大號加一，不再以全文 regex 掃整份票面。此前 Solution 等正文只要提到 `SR-N`（如草稿寫 SR-9）就被計入，首個 spawn request 會被編為 SR-10，出現空號。`resolve-spawn-request` 定位條目本就限章節內且錨定行首，正文提及不會誤命中，行為不變。E1 對照測試（`tests/test_spawn_request_numbering.py`）：正文含 SR-9 且章節為空時編為 SR-1；章節已有 SR-1、SR-2（條目內另提 SR-40）時編為 SR-3；resolve 定位不命中正文提及。

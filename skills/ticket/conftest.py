@@ -25,6 +25,11 @@ import subprocess
 
 import pytest
 
+# testpaths 覆蓋警告外掛：命令列路徑未涵蓋全部 testpaths 時於終端摘要警告
+from testpaths_coverage_warning import (  # noqa: F401
+    pytest_collection_modifyitems,
+    pytest_terminal_summary,
+)
 from ticket_system.lib.paths import (
     reset_project_root_cache,
     reset_ticket_state_root_cache,

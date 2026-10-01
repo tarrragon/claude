@@ -262,6 +262,160 @@ class TestMainIntegration:
         assert "範疇邊界" in reason
         assert "跨檔破壞" in reason
 
+    def test_uv_launch_failure_denies(self, monkeypatch, tmp_path):
+        """E2 正向對照：uv 啟動失敗（OSError）須判 red 並 deny，不可放行。"""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        tests_dir = hooks_dir / "tests"
+        tests_dir.mkdir(parents=True)
+        (tests_dir / "test_foo_hook.py").write_text("def test_x():\n    assert True\n")
+
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            hook_module,
+            "run_git_command",
+            lambda *a, **k: (True, "M\0.claude/hooks/foo-hook.py\0"),
+        )
+
+        def _raise(*a, **k):
+            raise FileNotFoundError(2, "No such file or directory: 'uv'")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _raise)
+
+        exit_code, captured = _run_main(
+            monkeypatch,
+            {"tool_name": "Bash", "tool_input": {"command": 'git commit -m "x"'}},
+        )
+        assert exit_code == 0
+        assert len(captured) == 1
+        output = json.loads(captured[0])
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "foo-hook.py" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def _raise_fnf(self, monkeypatch):
+        def _raise(*a, **k):
+            raise FileNotFoundError(2, "No such file or directory: 'uv'")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _raise)
+
+    def test_uv_launch_failure_stderr_visible(self, monkeypatch, tmp_path, capsys):
+        """規則 4：uv 啟動失敗須在 stderr 輸出錯誤類型與命令。"""
+        import logging
+
+        self._raise_fnf(monkeypatch)
+        status, tail = hook_module._run_pytest(
+            [tmp_path / "t.py"], tmp_path, logging.getLogger("t-stderr")
+        )
+        err = capsys.readouterr().err
+        assert status == "red"
+        assert "FileNotFoundError" in err
+        assert "uv" in err and "pytest" in err
+
+    def test_uv_launch_failure_written_to_log_file(self, monkeypatch, tmp_path):
+        """uv 啟動失敗須寫入日誌檔，含錯誤類型與訊息。"""
+        import logging
+
+        self._raise_fnf(monkeypatch)
+        log_file = tmp_path / "gate.log"
+        handler = logging.FileHandler(log_file, encoding="utf-8")
+        lg = logging.getLogger("t-logfile")
+        lg.addHandler(handler)
+        lg.setLevel(logging.DEBUG)
+        try:
+            hook_module._run_pytest([tmp_path / "t.py"], tmp_path, lg)
+        finally:
+            handler.close()
+            lg.removeHandler(handler)
+        text = log_file.read_text(encoding="utf-8")
+        assert "FileNotFoundError" in text
+        assert "No such file or directory" in text
+
+    # ---- 0.4.1-W1-035.2：每檔分段計時日誌（只加日誌，不改判定）----
+
+    def _capture_logger(self, name):
+        import logging
+
+        records = []
+
+        class _H(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        lg = logging.getLogger(name)
+        lg.handlers = [_H()]
+        lg.setLevel(logging.DEBUG)
+        lg.propagate = False
+        return lg, records
+
+    def _fake_run(self, monkeypatch, returncode, stdout, delay=0.05):
+        import subprocess as sp
+
+        def _run(cmd, **kw):
+            time.sleep(delay)
+            return sp.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _run)
+
+    @staticmethod
+    def _timing_records(records):
+        return [r for r in records if "分段計時" in r.getMessage()]
+
+    @pytest.mark.parametrize(
+        "returncode,stdout,expected",
+        [
+            (0, "1 passed in 0.01s\n", "pass"),
+            (1, "1 failed in 0.01s\n", "red"),
+        ],
+    )
+    def test_segment_timing_logged_pass_red(
+        self, monkeypatch, tmp_path, returncode, stdout, expected
+    ):
+        """E2 對照：pass／red 路徑記錄分段欄位，判定與修正前相同。"""
+        self._fake_run(monkeypatch, returncode, stdout)
+        lg, records = self._capture_logger("t-seg-%s" % expected)
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg)
+        assert status == expected
+        recs = self._timing_records(records)
+        assert len(recs) == 1
+        msg = recs[0].getMessage()
+        for field in ("test_a.py", "total=", "pytest_self_reported=",
+                      "uv_and_startup_gap=", "load1="):
+            assert field in msg
+        import re
+
+        total = float(re.search(r"total=(\d+\.\d+)s", msg).group(1))
+        assert 0.04 <= total < 5  # fake run 睡 0.05s
+        assert "pytest_self_reported=0.01s" in msg
+        assert recs[0].levelname == "INFO"
+
+    def test_segment_timing_logged_timeout(self, monkeypatch, tmp_path):
+        """E2 對照：timeout 路徑記錄 total，pytest 自報不可得，判定仍為 timeout。"""
+        import subprocess as sp
+
+        def _run(cmd, **kw):
+            raise sp.TimeoutExpired(cmd, 1)
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _run)
+        lg, records = self._capture_logger("t-seg-timeout")
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg, 1)
+        assert status == "timeout"
+        recs = self._timing_records(records)
+        assert len(recs) == 1
+        msg = recs[0].getMessage()
+        assert "total=" in msg and "status=timeout" in msg
+        assert "pytest_self_reported=n/a" in msg
+
+    def test_segment_parse_failure_warns_without_changing_verdict(
+        self, monkeypatch, tmp_path
+    ):
+        """分段解析失敗（無摘要行）只記 warning，判定不變。"""
+        self._fake_run(monkeypatch, 0, "no summary here\n")
+        lg, records = self._capture_logger("t-seg-parsefail")
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg)
+        assert status == "pass"
+        warns = [r for r in records if r.levelname == "WARNING"]
+        assert any("分段" in r.getMessage() for r in warns)
+        assert not [r for r in records if r.levelname in ("ERROR", "CRITICAL")]
+
     def test_commit_touching_hook_without_test_reminds(self, monkeypatch, tmp_path):
         hooks_dir = tmp_path / ".claude" / "hooks"
         tests_dir = hooks_dir / "tests"

@@ -428,6 +428,72 @@ def _validate_target_version(target_id: str, version: str) -> Optional[str]:
     return ErrorMessages.VERSION_NOT_REGISTERED.format(version=target_version)
 
 
+def _children_without(children: Any, *ids: str) -> list:
+    """回傳移除指定 ID 的 children（字串與 dict 形式皆處理）。"""
+    return [
+        c for c in (children or [])
+        if (c.get("id") if isinstance(c, dict) else c) not in ids
+    ]
+
+
+def _load_parent_for_sync(parent_id: str):
+    """載入父票，回傳 (path, ticket)；缺檔或讀取失敗回傳 (path, None)。"""
+    components = extract_id_components(parent_id)
+    version = components["version"] if components else None
+    path = get_ticket_path(version, parent_id) if version else None
+    if path is None or not path.exists():
+        return path, None
+    return path, _load_ticket_from_path(path)
+
+
+def _save_parent_children(path: Path, parent: Dict[str, Any], children: list) -> bool:
+    """寫回父票 children；寫入失敗輸出 warning 並回傳 False。"""
+    parent["children"] = children
+    try:
+        save_ticket(parent, path)
+        return True
+    except (IOError, OSError) as e:
+        print(format_warning(WarningMessages.FILE_UPDATE_FAILED, path=str(path), error=str(e)))
+        return False
+
+
+def _sync_parent_children(
+    old_id: str,
+    new_id: str,
+    old_parent_id: Optional[str],
+    new_parent_id: Optional[str],
+) -> List[Path]:
+    """父票改變時：舊父 children 移除該票，新父 children 加入新 ID（不重複）。
+
+    必須在 _update_cross_references_collecting 之後呼叫（舊父的 children 此時已被
+    原地改為 new_id，這裡一併移除）。父票缺檔只輸出 warning，不中斷遷移。
+
+    Returns:
+        實際寫入的父票檔案路徑。
+    """
+    written: List[Path] = []
+    if old_parent_id:
+        path, parent = _load_parent_for_sync(old_parent_id)
+        if parent is not None:
+            kept = _children_without(parent.get("children"), old_id, new_id)
+            if _save_parent_children(path, parent, kept):
+                written.append(path)
+    if new_parent_id:
+        path, parent = _load_parent_for_sync(new_parent_id)
+        if parent is None:
+            print(format_warning(
+                "[WARNING] [migrate] 新父票 {parent_id} 不存在，未能加入其 children（遷移照常完成）",
+                parent_id=new_parent_id,
+            ))
+        else:
+            children = parent.get("children") or []
+            if len(_children_without(children, new_id)) < len(children):
+                return written  # 已列：保留原項、原形式、原順序，不寫檔
+            if _save_parent_children(path, parent, [*children, new_id]):
+                written.append(path)
+    return written
+
+
 def _migrate_ticket_files(
     version: str,
     source_id: str,
@@ -544,6 +610,7 @@ def _migrate_ticket_files(
 
     # 更新 Ticket 資料
     old_id = ticket.get("id")
+    original_parent_id = ticket.get("parent_id")
     ticket["id"] = target_id
     if old_id and old_id != target_id:
         ticket[PREVIOUS_IDS_FIELD] = [*(ticket.get(PREVIOUS_IDS_FIELD) or []), old_id]
@@ -559,9 +626,13 @@ def _migrate_ticket_files(
         if chain_info:
             ticket["chain"] = chain_info
 
-        # 更新 parent_id
-        if chain_info.get("parent"):
-            ticket["parent_id"] = chain_info["parent"]
+        # 更新 parent_id；新 ID 為根票時清為 null（chain_info 為空時不動）
+        if chain_info:
+            ticket["parent_id"] = chain_info.get("parent")
+
+    # 遷移前的父票（供遷移後同步舊父/新父 children）
+    old_parent_id = original_parent_id
+    new_parent_id = ticket.get("parent_id")
 
     # 更新所有引用
     _update_ticket_id_references(ticket, old_id, target_id)
@@ -591,6 +662,12 @@ def _migrate_ticket_files(
         referrers = _update_cross_references_collecting(old_id, target_id)
         if referrers:
             print(format_info(MigrateMessages.CROSS_REFERENCES_UPDATED, count=len(referrers)))
+
+        # 父票改變時同步舊父/新父 children（異動檔併入同一提交）
+        if old_id != target_id and old_parent_id != new_parent_id:
+            for path in _sync_parent_children(old_id, target_id, old_parent_id, new_parent_id):
+                if path not in referrers:
+                    referrers.append(path)
 
         # topic-assignments 追加新 ID 行（舊行保留，append-only）；同 ID 改名無需處理
         topic_line = inherit_assignment(old_id, target_id) if old_id != target_id else None

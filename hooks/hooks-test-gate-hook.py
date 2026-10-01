@@ -74,6 +74,7 @@ Decision:
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -291,6 +292,43 @@ def _resolve_test_paths(
     return tested, untested
 
 
+_PYTEST_SUMMARY_RE = re.compile(r"\bin (\d+(?:\.\d+)?)s\b")
+
+
+def _log_segment_timing(
+    logger, test_paths: List[Path], status: str, total: float, output: Optional[str]
+) -> None:
+    """記錄每檔分段計時（僅日誌，不影響判定，任何失敗只記 warning）。
+
+    uv_and_startup_gap = 總耗時 - pytest 自報；量的是差距（含 uv 解析/同步、
+    interpreter 啟動、collection 前後開銷），不是 uv 本身。
+    """
+    names = ",".join(p.name for p in test_paths)
+    try:
+        load1 = "%.2f" % os.getloadavg()[0]
+    except (OSError, AttributeError):
+        load1 = "n/a"
+    reported = None
+    if output is not None:
+        matches = _PYTEST_SUMMARY_RE.findall(output)
+        if matches:
+            reported = float(matches[-1])
+    if reported is None:
+        logger.info(
+            "分段計時: file=%s status=%s total=%.2fs pytest_self_reported=n/a "
+            "uv_and_startup_gap=n/a load1=%s",
+            names, status, total, load1,
+        )
+        if status != _STATUS_TIMEOUT:
+            logger.warning("分段計時解析失敗（輸出無 pytest 摘要行）: file=%s", names)
+        return
+    logger.info(
+        "分段計時: file=%s status=%s total=%.2fs pytest_self_reported=%.2fs "
+        "uv_and_startup_gap=%.2fs load1=%s",
+        names, status, total, reported, total - reported, load1,
+    )
+
+
 def _run_pytest(
     test_paths: List[Path], hooks_dir: Path, logger, timeout: Optional[float] = None
 ) -> "tuple[str, str]":
@@ -300,6 +338,7 @@ def _run_pytest(
         str(p) for p in test_paths
     ]
     logger.info("執行目標測試（timeout=%ss）: %s", limit, cmd)
+    started = time.monotonic()
     try:
         result = subprocess.run(
             cmd,
@@ -311,9 +350,23 @@ def _run_pytest(
         )
     except subprocess.TimeoutExpired:
         logger.warning("目標測試執行逾時（%ss），保守判定為失敗", limit)
+        _log_segment_timing(
+            logger, test_paths, _STATUS_TIMEOUT, time.monotonic() - started, None
+        )
         return _STATUS_TIMEOUT, f"測試逾時（{limit:g}s）"
-    output_tail = "\n".join((result.stdout + result.stderr).splitlines()[-20:])
+    except OSError as exc:
+        # uv 不存在或 .venv 缺失：無法驗證等同未通過，fail-closed 判 red 走 deny 路徑
+        logger.error("無法啟動測試程序（%s），判定為失敗: %s", type(exc).__name__, exc)
+        sys.stderr.write(
+            f"[hooks-test-gate] 無法啟動測試程序（{type(exc).__name__}: {exc}），"
+            f"命令: {' '.join(cmd)}\n"
+        )
+        return _STATUS_RED, f"無法啟動測試程序（uv 不存在或環境缺失）: {type(exc).__name__}: {exc}"
+    total = time.monotonic() - started
+    full_output = result.stdout + result.stderr
+    output_tail = "\n".join(full_output.splitlines()[-20:])
     status = _STATUS_PASS if result.returncode == 0 else _STATUS_RED
+    _log_segment_timing(logger, test_paths, status, total, full_output)
     logger.info("目標測試結果: returncode=%d", result.returncode)
     return status, output_tail
 
