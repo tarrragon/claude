@@ -1,3 +1,15 @@
+## [2.74.3] - 2026-10-02
+
+### Summary
+chore: skill-sync 升 1.24.4，涵蓋已加入的 python 下限測試; chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+
+Changes: 2 chore
+
+- chore: skill-sync 升 1.24.4，涵蓋已加入的 python 下限測試
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+
+---
+
 ## [2.74.2] - 2026-10-02
 
 ### Summary
