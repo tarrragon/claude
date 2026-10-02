@@ -2104,6 +2104,63 @@ def _run_ticket_migrate(
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
+def _ticket_id_depth(ticket_id: str) -> int:
+    """ID 階層深度：根票為 0、其直屬子票為 1（版本號佔 2 個 '.'，其餘 '.' 為子序號）。"""
+    return ticket_id.count(".") - 2
+
+
+def _ancestor_ids(ticket_id: str) -> List[str]:
+    """由近到遠列出祖先 ID（去掉最後一段子序號逐層上溯）。"""
+    ancestors = []
+    current = ticket_id
+    while _ticket_id_depth(current) > 0:
+        current = current.rsplit(".", 1)[0]
+        ancestors.append(current)
+    return ancestors
+
+
+def _read_ticket_status(tickets_dir: Path, ticket_id: str) -> Optional[str]:
+    """讀取版本目錄內指定票的 status；檔案不存在或無 status 回傳 None。"""
+    ticket_file = tickets_dir / f"{ticket_id}.md"
+    if not ticket_file.exists():
+        return None
+    frontmatter = parse_ticket_frontmatter(ticket_file.read_text(encoding="utf-8")) or ""
+    match = re.search(r"^status:\s*(\S+)", frontmatter, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def _warn_terminal_ancestors(overflow: List[Dict], tickets_dir: Path) -> None:
+    """前移清單中的票若有 completed／closed 祖先（留在原版本），單獨前移後新父不存在，逐筆警告。"""
+    for ticket in overflow:
+        for ancestor_id in _ancestor_ids(ticket["id"]):
+            status = _read_ticket_status(tickets_dir, ancestor_id)
+            if status in ("completed", "closed"):
+                print_info(
+                    f"[WARNING] {ticket['id']} 將單獨前移，其祖先 {ancestor_id}"
+                    f"（{status}）留在原版本，新版本下將缺少父票"
+                )
+                break
+
+
+def _is_carried_by_subtree_migration(
+    source_id: str, overflow: List[Dict], root: Path, pattern: str
+) -> bool:
+    """來源票是否已隨前一筆子樹遷移搬走：目標版本中有票的 previous_ids 含來源 ID。"""
+    for target_version in sorted({t["target_version"] for t in overflow}):
+        target_dir = resolve_worklog_dir(root, target_version, pattern) / "tickets"
+        if not target_dir.exists():
+            continue
+        for ticket_file in target_dir.glob("*.md"):
+            frontmatter = parse_ticket_frontmatter(ticket_file.read_text(encoding="utf-8")) or ""
+            try:
+                data = yaml.safe_load(frontmatter) or {}
+            except yaml.YAMLError:
+                continue
+            if source_id in (data.get("previous_ids") or []):
+                return True
+    return False
+
+
 def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
     """對前移清單逐張執行 ticket migrate 至目標版本。
 
@@ -2154,9 +2211,20 @@ def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
         )
         return False
 
+    # 父票先於子票：父票的子樹遷移會帶走仍為 pending 的子孫，子孫先移則新父尚不存在、
+    # 新父 children 漏列。sorted 為穩定排序，同深度維持原序。
+    overflow = sorted(overflow, key=lambda t: _ticket_id_depth(t["id"]))
+    _warn_terminal_ancestors(overflow, tickets_dir)
+
     for ticket in overflow:
         source_id = ticket["id"]
         target_version = ticket["target_version"]
+        if not dry_run and not (tickets_dir / ticket["file"]).exists():
+            if _is_carried_by_subtree_migration(source_id, overflow, root, pattern):
+                print_info(f"[INFO] 略過 {source_id}：已隨父票子樹遷移搬到目標版本")
+                continue
+            print_error(f"前移失敗，中止：{source_id} 來源不存在，且不在任何目標版本票的 previous_ids 中")
+            return False
         target_id = re.sub(r"^\d+\.\d+\.\d+", target_version, source_id, count=1)
         print_info(f"前移 {source_id} -> {target_id} ...")
         result = _run_ticket_migrate(source_id, target_id, target_version, dry_run)

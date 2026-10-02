@@ -504,6 +504,7 @@ def _sync_parent_children(
 _SUBTREE_PREFLIGHT_FAILED = "[ERROR] 子樹遷移 preflight 失敗（零寫入），共 {count} 項："
 _SUBTREE_DRY_RUN_HEADER = "預覽子樹遷移：{source_id} → {target_id}，共 {count} 張票"
 _SUBTREE_MIDWAY_FAILED = "[ERROR] 子樹遷移中途失敗：{error}；以下檔案已寫入工作區："
+_TERMINAL_STATUSES = ("completed", "closed")
 _STRUCTURAL_REF_FIELDS = (
     "blockedBy", "relatedTo", "spawned_tickets", "children", "source_ticket",
     "parent_id", "discovered_during", "closed_by",
@@ -550,10 +551,11 @@ def _iter_all_ticket_files() -> List[Path]:
 
 
 def _collect_subtree(source_id: str) -> List[tuple]:
-    """收集 source 的子孫：ID 前綴 `source.` 者，回傳 [(id, path, ticket)]（依 ID 排序）。
+    """收集 source 的待搬子孫：ID 前綴 `source.` 且 status 非終態者，回傳 [(id, path, ticket)]（依 ID 排序）。
 
-    parent_id 指向 source 但 ID 不在前綴下的票無法由前綴映射新 ID，不屬子樹成員；
-    其 parent_id 引用由子樹外引用改寫一併更新。
+    completed／closed 的子孫留在原版本、ID 不變（歷史紀錄穩定），不屬成員；其祖先鏈上
+    有被留下者的子孫也一併留下（搬走會失去父票）。留下者的 parent 參照由子樹外引用改寫
+    更新。parent_id 指向 source 但 ID 不在前綴下的票無法由前綴映射新 ID，同樣不屬成員。
     """
     prefix = source_id + "."
     found = {}
@@ -562,7 +564,16 @@ def _collect_subtree(source_id: str) -> List[tuple]:
         tid = (ticket or {}).get("id") or extract_core_ticket_id(path.stem)
         if ticket and tid.startswith(prefix):
             found[tid] = (path, ticket)
-    return [(tid, *found[tid]) for tid in sorted(found)]
+    kept: List[str] = []
+    moved = []
+    for tid in sorted(found):  # 祖先 ID 必排在後代之前
+        path, ticket = found[tid]
+        under_kept = any(tid.startswith(k + ".") for k in kept)
+        if under_kept or ticket.get("status") in _TERMINAL_STATUSES:
+            kept.append(tid)
+        else:
+            moved.append((tid, path, ticket))
+    return moved
 
 
 def _subtree_preflight(mapping: Dict[str, str], version: str,

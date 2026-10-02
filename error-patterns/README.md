@@ -715,6 +715,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-GPD-027 | 範例的驗證段承載判準而條文未回寫，範例存在被誤判為約束存在 | 高 | 0.1.0 |
 | PC-GPD-028 | context 壓縮後以工作區空目錄推斷在飛代理人已停擺，接手並污染其共用器材 | 高 | 0.1.0 |
 | PC-GPD-029 | 代理人終止背景測試後憑記憶回報已終止，實際由它啟動的子程序仍在執行 | 中 | 0.4.1 |
+| PC-GPD-030 | 把 linked worktree 當成票務 CLI 的實驗沙盒，寫入命令實際改到主 checkout 的真票 | 高 | 0.4.1 |
 
 ---
 

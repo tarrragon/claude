@@ -163,7 +163,15 @@ migrate 不改 todolist、不改 worklog 主檔、不移除舊目錄；這三件
 | 他票的 `chain.root`／`chain.parent` | 等於舊 ID 者改寫為新 ID |
 | `previous_ids`   | 被遷移票追加舊 ID（有序清單，長度即遷移次數；同 ID 改名不追加） |
 
-**有子孫的票連帶遷移整個子樹**：子孫以 ID 前綴（`<來源 ID>.`）收集（parent_id 指向來源但 ID 不在前綴下者無法映射新 ID，不屬子樹，僅其 parent_id 引用被改寫），新 ID 為「目標 ID + 原相對後綴」。上表欄位對每個成員（含已 completed）各做一次；引用改寫以 old 到 new 映射單趟完成（重疊映射如 A 到 B 且 B 也在遷移時，不會二次改寫）；子樹外票檔的引用同樣單趟改寫。
+**有子孫的票連帶遷移整個子樹**：子孫以 ID 前綴（`<來源 ID>.`）收集（parent_id 指向來源但 ID 不在前綴下者無法映射新 ID，不屬子樹，僅其 parent_id 引用被改寫），新 ID 為「目標 ID + 原相對後綴」。上表欄位對每個搬移成員各做一次；
+
+| 子孫狀態 | 處置 |
+| --- | --- |
+| pending／in_progress 等非終態 | 改號搬移 |
+| completed／closed | 留在原版本、ID 不變、不追加 `previous_ids`；`parent_id` 與 `chain.parent`／`chain.root` 中指向被搬移票者改寫為新 ID |
+| 祖先鏈上有被留下者的子孫 | 跟著留下（搬走會失去父票），parent 不變，僅 `chain.root` 改寫 |
+
+取捨：已完成歷史票的 ID 前綴與新父不一致，換取歷史紀錄（worklog、CHANGELOG、版本完成清單）的穩定；新父 `children` 同時列出搬移者的新 ID 與留下者的原 ID。引用改寫以 old 到 new 映射單趟完成（重疊映射如 A 到 B 且 B 也在遷移時，不會二次改寫）；子樹外票檔的引用同樣單趟改寫。
 
 | 子樹遷移項目 | 語意 |
 | --- | --- |

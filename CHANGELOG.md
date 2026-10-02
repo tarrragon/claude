@@ -1,7 +1,22 @@
+## [2.74.2] - 2026-10-02
+
+### Summary
+fix: finish 前移改父票先移，略過已隨子樹搬走的票並對終態祖先警告; fix: migrate 子樹遷移只搬非終態子孫，completed/closed 留原版本; docs: PC-GPD-030 依 Layer 2 審查修正 (+2 more)
+
+Changes: 2 fix, 2 docs, 1 chore
+
+- fix: finish 前移改父票先移，略過已隨子樹搬走的票並對終態祖先警告
+- fix: migrate 子樹遷移只搬非終態子孫，completed/closed 留原版本
+- docs: PC-GPD-030 依 Layer 2 審查修正
+- docs: 新增 PC-GPD-030 linked worktree 不隔離票務 CLI 寫入
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push --clean）
+
+---
+
 ## [2.74.1] - 2026-10-02
 
 ### Summary
-chore: 傳播 version-shift 實作與測試的刪除（W1-010.7 已於本地移除，v2.72.0 推送時未帶 --clean）
+chore: 傳播 version-shift 實作與測試的刪除（某票.7 已於本地移除，某版本 推送時未帶 --clean）
 
 ---
 

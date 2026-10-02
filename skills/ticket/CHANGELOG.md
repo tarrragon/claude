@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.31（本地變更）— 修復 `ticket migrate` 子樹連帶遷移把已完成的子孫一併改號搬離原版本：子樹收集只納入非終態（pending、in_progress 等）子孫；completed／closed 的子孫留在原版本、ID 不變，其 `parent_id` 與 `chain.parent`／`chain.root` 中指向被搬移票者改寫為新 ID（經子樹外引用單趟改寫）。祖先鏈上有被留下者的子孫跟著留下（搬走會失去父票）。取捨：已完成歷史票的 ID 前綴與新父不一致，換取歷史紀錄穩定。新父 `children` 同時列搬移者新 ID 與留下者原 ID；dry-run 只列搬移成員；全部子孫皆終態時走單票路徑並同樣改寫 parent 參照。測試 `tests/test_migrate_subtree_cascade.py`：E1 對照同一棵樹 pending 者搬移、completed 者留下（修正前 7 項紅）。
+
 **Version**: 2.44.30（本地變更）— `ticket migrate` 遷移有子孫的票時連帶遷移整個子樹。子孫以 ID 前綴收集，建 old 到 new 映射，引用改寫單趟完成（重疊映射不二次改寫）；每個成員（含 completed）更新 id、追加 `previous_ids`、重算 chain 與 parent_id，topic 各追加一行（舊行保留）。preflight（碰撞、深度不超過 MAX_TICKET_DEPTH 且訊息列出超限票 ID 與遷移後深度、目標版本註冊）任一失敗整體拒絕、零寫入；dry-run 列出完整映射表；整個子樹與子樹外引用者走單一隔離提交；寫入中途失敗輸出已寫入集合。子樹遷移碰撞不自動改號。無子孫的票行為不變。測試 `tests/test_migrate_subtree_cascade.py`：E1 對照有子孫與無子孫兩路徑產物不同。
 
 **Version**: 2.44.29（本地變更）— 修復 `test_commit_cas_retry.py` 假時鐘不穩定：測試改寫全域 `time.sleep`，`subprocess` 在子程序未退出時以 `time.sleep` 輪詢，該呼叫也推進假時鐘，推進量取決於 git 實際耗時，wall_cap 測試的 relaxed 次數隨機器負載漂移。現行：`git_utils` 新增模組層接縫 `_sleep = time.sleep`，提交重試迴圈改呼叫 `_sleep`；測試只替換 `git_utils._sleep`，不再改寫全域 `time.sleep`。產品重試判定不變。測試：wall_cap 測試改斷言精確次數（capped==3、relaxed==5）並保留 capped<relaxed 對照；新增 E2 正向對照（全域 patch 會被 subprocess 輪詢推進假時鐘，接縫則推進量為 0）。

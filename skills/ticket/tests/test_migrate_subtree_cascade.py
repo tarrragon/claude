@@ -100,10 +100,10 @@ def _exists(tid: str) -> bool:
 
 def _seed_tree() -> None:
     _seed(_ROOT, children=f"[{_C1}, {_C2}]")
-    _seed(_C1, children=f"[{_G1}]", status="completed",
+    _seed(_C1, children=f"[{_G1}]",
           extra=_chain(_C1, _ROOT, _ROOT, 1, "[10, 1]"))
     _seed(_C2, extra=_chain(_C2, _ROOT, _ROOT, 1, "[10, 2]"))
-    _seed(_G1, status="completed", blocked=f"[{_C2}]",
+    _seed(_G1, blocked=f"[{_C2}]",
           extra=_chain(_G1, _ROOT, _C1, 2, "[10, 1, 1]"))
     _seed(_EXT, blocked=f"[{_ROOT}, {_C1}]", related=f"[{_G1}]")
     _seed(_LEAF)
@@ -174,13 +174,11 @@ class TestSubtreeCascade:
         assert g1["chain"]["depth"] == 2
         assert g1["id"] == _NEW_G1 and g1["wave"] == 0
 
-    def test_previous_ids_on_every_member_including_completed(self, repo, monkeypatch):
+    def test_previous_ids_on_every_moved_member(self, repo, monkeypatch):
         assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
         expected = {_NEW_ROOT: _ROOT, _NEW_C1: _C1, _NEW_C2: _C2, _NEW_G1: _G1}
         for new, old in expected.items():
             assert _fm(new)["previous_ids"] == [old], new
-        assert _fm(_NEW_C1)["status"] == "completed"
-        assert _fm(_NEW_G1)["status"] == "completed"
 
     def test_topic_lines_appended_old_lines_kept(self, repo, monkeypatch):
         assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
@@ -341,3 +339,99 @@ class TestE1ContrastWithAndWithoutDescendants:
         tree_files = {p.name for p in get_ticket_path(_VER, _LEAF).parent.glob("*.md")}
         assert f"{_NEW_G1}.md" in tree_files and f"{_NEW_G1}.md" not in leaf_files
         assert f"{_G1}.md" in leaf_files and f"{_G1}.md" not in tree_files
+
+
+_G2 = "0.0.0-W0-010.2.1"
+_G2_PENDING = "0.0.0-W0-010.2.2"
+_NEW_G2_PENDING = "0.0.0-W0-020.2.2"
+
+
+def _reseed_mixed_status_tree(repo: Path) -> None:
+    """C1 completed（含 pending 孫 G1）、C2 pending（含 closed 孫 G2、pending 孫）。"""
+    _seed(_ROOT, children=f"[{_C1}, {_C2}]")
+    _seed(_C1, children=f"[{_G1}]", status="completed",
+          extra=_chain(_C1, _ROOT, _ROOT, 1, "[10, 1]"))
+    _seed(_G1, extra=_chain(_G1, _ROOT, _C1, 2, "[10, 1, 1]"))
+    _seed(_C2, children=f"[{_G2}, {_G2_PENDING}]",
+          extra=_chain(_C2, _ROOT, _ROOT, 1, "[10, 2]"))
+    _seed(_G2, status="closed", extra=_chain(_G2, _ROOT, _C2, 2, "[10, 2, 1]"))
+    _seed(_G2_PENDING, extra=_chain(_G2_PENDING, _ROOT, _C2, 2, "[10, 2, 2]"))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "mixed status tree")
+
+
+class TestTerminalDescendantsStayInPlace:
+    """completed／closed 的子孫留在原版本、ID 不變，只改寫 parent 參照。"""
+
+    def test_e1_pending_moves_completed_stays_in_same_run(self, repo, monkeypatch):
+        # E1 對照：C1（completed）與 C2（pending）同為根的直接子，僅 status 不同
+        _reseed_mixed_status_tree(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        assert _exists(_C1) and not _exists(_NEW_C1)
+        c1 = _fm(_C1)
+        assert c1["id"] == _C1 and c1["status"] == "completed"
+        assert c1["parent_id"] == _NEW_ROOT
+        assert c1["chain"]["parent"] == _NEW_ROOT and c1["chain"]["root"] == _NEW_ROOT
+        assert "previous_ids" not in c1
+        assert _exists(_NEW_C2) and not _exists(_C2)
+        assert _fm(_NEW_C2)["previous_ids"] == [_C2]
+
+    def test_new_parent_children_lists_moved_and_kept_ids(self, repo, monkeypatch):
+        _reseed_mixed_status_tree(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        assert _fm(_NEW_ROOT)["children"] == [_C1, _NEW_C2]
+        assert _fm(_C1)["parent_id"] == _NEW_ROOT
+        assert _fm(_NEW_C2)["parent_id"] == _NEW_ROOT
+
+    def test_kept_grandchild_of_moved_parent_gets_moved_parent_id(self, repo, monkeypatch):
+        _reseed_mixed_status_tree(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        g2 = _fm(_G2)
+        assert g2["id"] == _G2 and g2["status"] == "closed"
+        assert g2["parent_id"] == _NEW_C2
+        assert g2["chain"]["parent"] == _NEW_C2 and g2["chain"]["root"] == _NEW_ROOT
+        assert _fm(_NEW_C2)["children"] == [_G2, _NEW_G2_PENDING]
+        assert _exists(_NEW_G2_PENDING) and not _exists(_G2_PENDING)
+
+    def test_pending_under_kept_ancestor_stays_with_its_parent(self, repo, monkeypatch):
+        _reseed_mixed_status_tree(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        # G1 掛在留下的 C1 之下：搬走會失去父票，故跟著留下，parent 仍是 C1
+        assert _exists(_G1) and not _exists(_NEW_G1)
+        g1 = _fm(_G1)
+        assert g1["parent_id"] == _C1 and g1["chain"]["parent"] == _C1
+        assert g1["chain"]["root"] == _NEW_ROOT
+        assert _fm(_C1)["children"] == [_G1]
+
+    def test_dry_run_lists_only_moved_members(self, repo, monkeypatch, capsys):
+        _reseed_mixed_status_tree(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT, "--dry-run") == 0
+        text = capsys.readouterr().out
+        assert f"{_C2} → {_NEW_C2}" in text
+        assert f"{_C1} →" not in text and f"{_G2} →" not in text
+
+    def test_single_commit_covers_moved_and_kept_rewrites(self, repo, monkeypatch):
+        _reseed_mixed_status_tree(repo)
+        before = _commits(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        assert _commits(repo) == before + 1
+        assert _git(repo, "status", "--porcelain") == ""
+        out = _git(repo, "show", "--no-renames", "--name-status", "--format=", "HEAD")
+        status = {Path(p).name: c for c, p in (l.split("\t") for l in out.strip().splitlines())}
+        assert status[f"{_C1}.md"] == "M" and status[f"{_G2}.md"] == "M"
+        assert status[f"{_C2}.md"] == "D" and status[f"{_NEW_C2}.md"] == "A"
+
+    def test_only_terminal_descendants_keeps_all_and_rewrites_parent(self, repo, monkeypatch):
+        _reseed_mixed_status_tree(repo)
+        for tid in (_C2, _G2_PENDING, _G1):
+            path = get_ticket_path(_VER, tid)
+            path.write_text(path.read_text(encoding="utf-8").replace(
+                "status: pending", "status: completed"), encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", "all terminal")
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        for tid in (_C1, _C2, _G1, _G2, _G2_PENDING):
+            assert _exists(tid), tid
+        assert _fm(_C1)["parent_id"] == _NEW_ROOT
+        assert _fm(_C2)["chain"]["parent"] == _NEW_ROOT
+        assert _fm(_NEW_ROOT)["children"] == [_C1, _C2]

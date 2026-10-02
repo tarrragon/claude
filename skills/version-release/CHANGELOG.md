@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.10.2 - 修復 `finish` 前移順序：`migrate_overflow_tickets` 依 ID 階層深度排序，父票先於子票遷移（修正前沿用 glob 字典序，`.3` 排在父票之前，子票單獨遷移時新父尚不存在，新父 `children` 漏列前移子票）。改順序後父票的子樹遷移會帶走仍為 pending 的子孫，逐張遷移前檢查來源是否仍存在：已不存在且目標版本有票的 `previous_ids` 含該來源 ID 者輸出 `[INFO]` 略過；已不存在且無任何新票指向者仍判失敗並中止（不把真實缺檔誤判為已搬移）。前移清單中的票若有 completed／closed 祖先（依 ticket skill 的子樹遷移規則留在原版本），輸出 `[WARNING]` 列出該票與留下的祖先。新增 `tests/test_finish_forward_migration_order.py`。
+**Last Updated**: 2026-10-02
+
 **Version**: 2.10.1 - 修復發版提交步驟的 git 寫入失敗只 WARN 就繼續、仍打 tag 並推送：Step 3 的 `git add` 撞並行 session 留下的 index.lock 時，定版內容未進 commit 卻被 tag 指向。`commit_changes` 的 `git add`／`git commit` 與 tag 建立改走 `run_git_with_lock_retry`（鎖競爭以固定間隔退避重試，預設 5 次 x 2 秒，絕不刪鎖），任一步用盡或其他失敗即回傳 False；`git_merge_and_push` 在打 tag 之前中止並以非 0 退出，stderr 列出失敗命令、路徑、git 原始錯誤、已完成步驟與補救指令。盤點同函式其他寫入點：`git checkout main` 失敗原本被完全忽略，現在中止；`pull`／`merge`／`tag`／`push main`／`push tag` 原本已 return False，補上 git stderr 與統一中止訊息；`branch -d`／遠端分支刪除屬 tag 與推送完成後的清理，維持僅警告。rename 舊路徑側 `git add` 的 pathspec 不匹配（路徑已不存在）視為正常，不當失敗。新增 tmp repo 測試涵蓋持續鎖、暫時鎖、無鎖對照、add 失敗而 commit 成功、checkout 失敗。
 **Last Updated**: 2026-10-01
 

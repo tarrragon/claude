@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 2.10.1
+  version: 2.10.2
 ---
 
 # Version Release Skill
@@ -87,6 +87,12 @@ metadata:
 --version <target_version>`，任一張失敗即中止、不留半搬狀態。**目標版本
 必須已在 `docs/todolist.yaml` 登記**（planned 或 active 皆可），未登記時
 整批阻擋並提示先登記，`finish` 不自動登記。
+
+**前移順序**：依 ID 階層深度排序，父票先於子票（同深度維持原序）。父票的子樹遷移會
+連帶搬走仍為 pending 的子孫，輪到該子孫時來源已不存在：若目標版本有票的
+`previous_ids` 含該來源 ID，輸出 `[INFO]` 略過；否則仍判失敗並中止。前移清單中的票
+若有 completed／closed 祖先（留在原版本），單獨前移後新版本缺父票，輸出 `[WARNING]`
+列出該票與留下的祖先。
 
 **前移清單與 `check` 建議、`release` 前置條件**：前移屬 `finish` 的職責，`release`
 不做前移，在前移清單非空時照做會把 pending 票留在已 completed 的版本下成為懸空票。
