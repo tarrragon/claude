@@ -83,6 +83,7 @@ SMOKE_TEST_LOCK_STALE_SECONDS = 60
 
 SMOKE_TEST_CACHE_FILENAME = "_smoke_test_cache.json"
 SMOKE_TEST_LOCK_FILENAME = "_smoke_test.lock"
+TEST_SESSION_ID_PREFIX = "pytest-"  # 測試 session 專屬 id 前綴，選取最近索引檔時略過
 
 # PEP 723 inline metadata 區塊（與 hook-dependency-isolation-check-hook.py
 # 的同名正則獨立維護，非共用匯入——本檔案的 where.files 範圍不含該檔，
@@ -223,13 +224,18 @@ def _covered_by_run_hook_safely(root: Path, hook_names: set) -> set:
 
 
 def _most_recent_completed_liveness_file(root: Path, exclude_session_id: str):
-    """取得最近修改的 liveness 檔案，排除當前 session 自己的檔案"""
+    """取得最近修改的 liveness 檔案，排除當前 session 自己的檔案與測試 session 檔。
+
+    pytest- 前綴為測試 session 專屬 id（見 liveness_session_isolation.py）；
+    該類檔案不代表真實 session 的 hook 載入狀態，即使 mtime 最新也不可選。
+    """
     liveness_dir = root / ".claude" / "hook-logs" / LIVENESS_SUBDIR
     if not liveness_dir.is_dir():
         return None
     candidates = [
         p for p in liveness_dir.glob("*.jsonl")
         if p.stem != exclude_session_id
+        and not p.stem.startswith(TEST_SESSION_ID_PREFIX)
     ]
     if not candidates:
         return None

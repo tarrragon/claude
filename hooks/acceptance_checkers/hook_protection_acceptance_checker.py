@@ -85,7 +85,9 @@ _TOP_LEVEL_HOOKS_PREFIX = PurePosixPath(".claude/hooks")
 # 是偵測用的寬鬆網，不是對撰寫者的填法建議；建議在 label 與 _format_block_message
 # 的範例段給出。
 _CATEGORY_KEYWORDS = {
-    "本 session 實地觸發確認": ["session", "重啟", "生效", "restart"],
+    # 「實地觸發」為後補字面：實地觸發與 liveness 合寫一條的條目不含
+    # 其餘字面時會被誤判缺項；只放寬（不會使既有通過者翻為被擋）。
+    "本 session 實地觸發確認": ["session", "重啟", "生效", "restart", "實地觸發"],
     "liveness 驗證方式": ["liveness", "存活驗證", "存活探針"],
     "失敗語意（fail-open/fail-closed）": [
         "fail-open",
@@ -382,6 +384,16 @@ def check_hook_protection_acceptance(
     return True, msg
 
 
+def _format_accepted_literals(missing: List[str]) -> str:
+    """列出缺項各自可命中的字面（僅前三項；第四項為表格判定，不適用）。"""
+    lines = []
+    for label in missing:
+        keywords = _CATEGORY_KEYWORDS.get(label)
+        if keywords:
+            lines.append(f"  - {label}：{'、'.join(keywords)}\n")
+    return "".join(lines)
+
+
 def _format_block_message(ticket_id: str, missing: List[str]) -> str:
     missing_list = "\n".join(f"  - {label}" for label in missing)
     msg = (
@@ -391,6 +403,10 @@ def _format_block_message(ticket_id: str, missing: List[str]) -> str:
         f"where.files 觸及 .claude/hooks/ 或 .claude/skills/<skill>/hooks/，"
         f"依規範必須補齊以下項目，缺少：\n"
         f"{missing_list}\n"
+        f"\n"
+        f"判定方式：以字面（不分大小寫的子字串）比對 acceptance 全文，非語意判斷；"
+        f"語意相同但未含下列任一字面仍會被視為缺項。各項可命中的字面：\n"
+        f"{_format_accepted_literals(missing)}"
         f"\n"
         f"合格填法範例（前三項寫在 acceptance）：\n"
         f"  - 本 session 實地觸發確認：明示已於本 session 實地觸發該 hook 並"

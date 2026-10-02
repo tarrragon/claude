@@ -10,6 +10,69 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+from lib import liveness_session_isolation as _liveness_iso
+
+
+_ISOLATED = {"root": None, "patch": None}
+
+
+def pytest_configure(config):
+    """collection 之前就重導專案根。
+
+    Why：部分 hook 在模組層以 get_project_root() 計算日誌路徑常數
+    （例：agent-dispatch-validation-hook 的 _EVENTS_JSONL_PATH），test 檔 import
+    它時發生於 collection 階段，早於任何 fixture；只靠 session fixture 設環境變數
+    會讓這類常數仍指向真實 hook-logs（同族 IMP-BAL-018）。
+    """
+    import tempfile
+
+    root = Path(tempfile.mkdtemp(prefix="hook_project_root_"))
+    (root / "CLAUDE.md").write_text("# isolated test project root\n", encoding="utf-8")
+    mp = pytest.MonkeyPatch()
+    mp.setenv("CLAUDE_PROJECT_DIR", str(root))
+    mp.setenv("HOOK_TEST_ISOLATION", "1")
+    # 測試 session 專屬 id：漏網的 _liveness 寫入落在 pytest- 前綴檔，不併入呼叫者 session 檔
+    mp.setenv(_liveness_iso.ENV_SESSION_ID, _liveness_iso.new_test_session_id())
+    _ISOLATED["root"], _ISOLATED["patch"] = root, mp
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """洩漏哨兵：真實 _liveness 出現 pytest- 前綴檔即令套件失敗（fail-closed）。"""
+    _liveness_iso.apply_leak_sentinel(session, Path(__file__).resolve().parents[3])
+
+
+def pytest_unconfigure(config):
+    import shutil
+
+    if _ISOLATED["patch"] is not None:
+        _ISOLATED["patch"].undo()
+    if _ISOLATED["root"] is not None:
+        shutil.rmtree(_ISOLATED["root"], ignore_errors=True)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolate_project_root():
+    """session 級：回傳 pytest_configure 建立的隔離專案根（含 CLAUDE.md 的 tmp 目錄）。
+
+    Why：subprocess 執行的 hook 與自行解析根目錄的模組會繞過 isolate_hook_logs
+    的 monkeypatch，把測試記錄（含 _liveness）寫進真實 .claude/hook-logs，
+    污染 hook 健康檢查與 liveness 判斷。
+    機制：CLAUDE_PROJECT_DIR 指向 tmp，HOOK_TEST_ISOLATION=1 使
+    hook_base.get_project_root 略過 linked worktree 偵測；子程序繼承環境。
+    環境變數由 pytest_configure 設定（見其 docstring），本 fixture 僅斷言其存在。
+    斷言真實專案根的測試用 real_project_root。
+    """
+    assert _ISOLATED["root"] is not None, "pytest_configure 未建立隔離專案根"
+    return _ISOLATED["root"]
+
+
+@pytest.fixture
+def real_project_root(monkeypatch):
+    """顯式 opt-out：本測試斷言真實專案根的解析行為，暫時移除 session 級重導。"""
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+    return Path(__file__).resolve().parents[3]
+
 
 @pytest.fixture(autouse=True)
 def isolate_hook_logs(tmp_path, monkeypatch):
@@ -26,10 +89,10 @@ def isolate_hook_logs(tmp_path, monkeypatch):
     其他模組（hook 主程式、ticket validator 等）各自 import 的 get_project_root
     或 CLAUDE_PROJECT_DIR 環境變數。
 
-    為何不改 CLAUDE_PROJECT_DIR：環境變數會被 get_project_root 全域優先採用，
-    連帶改變所有以相對路徑 / Path.cwd / 真實 repo 路徑解析的測試（路徑分類、
-    handoff cache glob、cross-repo 判定），造成大量誤傷。僅綁定日誌模組的
-    get_project_root 可精準隔離日誌寫入路徑。
+    與 session 級 isolate_project_root 的分工：本 fixture 只處理同程序內
+    lib.hook_logging 的解析；subprocess hook 與自行拼 hook-logs 路徑的模組由
+    session 級 fixture 以環境變數重導專案根（實測全套件僅 5 項
+    斷言「真實專案根」的測試需 opt-out，見 real_project_root）。
 
     覆蓋語意：唯有當原 get_project_root 解析結果指向**真實 production repo**
     （即會污染 .claude/hook-logs/ 的情形）時，才改寫為隔離目錄。若測試已透過

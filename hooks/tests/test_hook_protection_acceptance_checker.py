@@ -620,3 +620,60 @@ def test_blocked_case_does_not_log_interception_point_hint(logger, caplog):
     assert should_block is True
     info_records = [r.message for r in caplog.records if r.levelno == logging.INFO]
     assert not any("攔截點" in text for text in info_records)
+
+
+# ---------------------------------------------------------------------------
+# (q) 實地觸發條目與 liveness 合寫一條：判定與訊息（字面比對可見性）
+# ---------------------------------------------------------------------------
+
+# 原合寫條目（去除票號後的原句，語意涵蓋實地觸發與 liveness，但不含
+# 「session／重啟／生效／restart」任一字面）。
+_MERGED_TRIGGER_LIVENESS = (
+    "[ ] 實地觸發與 liveness：合併後 PM 於主 repo 以 synthetic PreToolUse "
+    "payload 觸發 gate，確認 hook 被 runtime 載入並依新行為判定"
+)
+
+
+def test_e1_merged_trigger_and_liveness_entry_passes(logger):
+    """E1：合寫條目（僅含「實地觸發」字面）須被認得，不再誤報缺第一項。"""
+    fm = _fm(
+        "IMP",
+        [".claude/hooks/new-guard-hook.py"],
+        [
+            _MERGED_TRIGGER_LIVENESS,
+            "[ ] 異常時 fail-open，僅記錄不阻擋",
+        ],
+    )
+    should_block, msg = check_hook_protection_acceptance(fm, logger)
+    assert should_block is False, msg
+    assert msg is None
+
+
+def test_e2_absent_trigger_entry_still_blocks(logger):
+    """E2 正向對照：完全沒有實地觸發條目（也無 session／生效等字面）仍被擋。"""
+    fm = _fm(
+        "IMP",
+        [".claude/hooks/new-guard-hook.py"],
+        [
+            "[ ] 以 liveness 日誌比對確認 hook 已被載入",
+            "[ ] 異常時 fail-open，僅記錄不阻擋",
+        ],
+    )
+    should_block, msg = check_hook_protection_acceptance(fm, logger)
+    assert should_block is True
+    missing_section = msg.split("依規範必須補齊以下項目，缺少：")[1].split("合格填法範例")[0]
+    assert "本 session 實地觸發確認" in missing_section
+
+
+def test_e3_block_message_states_literal_match_and_accepted_literals(logger):
+    """E3：缺項訊息須說明判定為字面（substring）比對，並列出可命中的字面。"""
+    fm = _fm(
+        "IMP",
+        [".claude/hooks/new-guard-hook.py"],
+        ["[ ] 新增守衛偵測 X"],
+    )
+    should_block, msg = check_hook_protection_acceptance(fm, logger)
+    assert should_block is True
+    assert "字面" in msg
+    for literal in ("實地觸發", "session", "生效"):
+        assert literal in msg.split("合格填法範例")[0], literal

@@ -1466,6 +1466,13 @@ def spawned_complete_env(monkeypatch):
         "ticket_system.commands.lifecycle.list_tickets",
         env.list_tickets,
     )
+    # 終態檢查依 ID 以 load_ticket 跨版本載入：以同一份 list_tickets 資料作答
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.load_ticket",
+        lambda _version, tid: next(
+            (t for t in env.list_tickets.return_value if t.get("id") == tid), None
+        ),
+    )
     monkeypatch.setattr(
         "ticket_system.commands.lifecycle.append_worklog_progress",
         env.append_worklog_progress,
@@ -2136,6 +2143,13 @@ def pending_children_env(monkeypatch):
     monkeypatch.setattr(
         "ticket_system.commands.lifecycle.list_tickets",
         env.list_tickets,
+    )
+    # 終態檢查依 ID 以 load_ticket 跨版本載入：以同一份 list_tickets 資料作答
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.load_ticket",
+        lambda _version, tid: next(
+            (t for t in env.list_tickets.return_value if t.get("id") == tid), None
+        ),
     )
     monkeypatch.setattr(
         "ticket_system.commands.lifecycle.append_worklog_progress",

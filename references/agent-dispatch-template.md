@@ -111,6 +111,29 @@ Ticket: 0.18.0-W17-048.3
 （環境、命令、通過/失敗數）。無 baseline 對照的既有宣稱視為未查證（PC-BAL-022）。
 ```
 
+### 全套件回報規格（TEST-BAL-006）
+
+**觸發條件**：派發任務的驗收含「跑全套件」「全數通過」類回報，且測試框架的收集入口由設定檔決定（如 pytest 的 `testpaths` 含多筆）。
+
+**Why/Consequence**：命令列一帶入任一路徑，設定檔的收集入口整條失效，只跑所指路徑；縮小後的母體照樣 exit 0、照樣顯示 passed，「全數通過」與「少跑一半後全過」在輸出上同形。文字提醒已失效（同日兩次再現，見 `.claude/error-patterns/test/TEST-BAL-006-explicit-test-path-overrides-multi-entry-testpaths.md`），故回報須附可對帳的數字，讓驗收方不靠執行者的自述判斷母體是否完整。
+
+**Action**：prompt 必須含以下句子，且任務段中的「跑全套件」一律改寫為下列無路徑指令，不留「跑全套件」的概括說法：
+
+```
+全套件指令為 (cd <pkg> && uv run pytest -q)，命令列不帶任何測試路徑。
+回報必須附：(1) 所跑命令原文；(2) 同目錄 pytest --collect-only -q 的全量數；
+(3) 執行摘要各結果數（passed / failed / skipped / error 等）與 deselected 數。三者須滿足：執行數 = 全量 - deselected。
+```
+
+對帳時兩種摘要格式都要處理：
+
+| 摘要末行格式 | 全量數 | 對帳 |
+|------|------|------|
+| `N tests collected`（僅 1 項時為單數 `1 test collected`） | N | 執行數（passed + failed + skipped 等）須等於 N |
+| `N/M tests collected (K deselected)` | M | 執行數須等於 M - K，且 N = M - K |
+
+不等即停手查證，不以 exit 0 或「全數通過」收尾；只跑局部時，回報須明寫「局部執行」並列出未涵蓋範圍，不得宣稱全套件通過。`<pkg>` 由 PM 在派發時代入。工具層另有執行當下的提示（conftest 外掛），與本節互補：外掛負責當場警告，本節負責讓事後回報可對帳。
+
 ### 派發裁示不留未定義行為約束句（PC-GPD-026）
 
 **觸發條件**：裁示句（PM／用戶對 prompt 或 ticket 的補充指示）出現「補 X」「並補 Y」「加上 Z 的處理」句型，其中 X／Y／Z 是一個決策點的名稱而非可直接落筆的具體內容。
@@ -160,6 +183,7 @@ pgrep 有命中時，逐一以 ps -o command= -p <pid> 確認命中的是測試�
 - [ ] 防護類 ticket 的產生路徑盤點表已存在於 `how.strategy` / Solution（建票時產出，此處僅確認存在，格式見 `ticket-body-schema.md` 同名節；PC-BAL-035）
 - [ ] 派發對象為 `.claude/` 框架檔案修改時，代理人受 `.claude/rules/core/document-format-rules.md`「引用穩定性規則」約束（禁依賴型 ticket 引用，該層已實測確認每次派發都會注入），無需 prompt 額外重複；AGENT_PRELOAD 規則 12 僅供代理人主動 Read 時參考，不構成無需重複的依據（`.claude/agents/*.md` 主文 `@-import` 已實測不會展開為內容）
 - [ ] 派發任務涉及測試/建置驗收時，已含既有失敗歸因約束句（PC-BAL-022，見上節）
+- [ ] 派發任務的驗收含「跑全套件」時，已改寫為無路徑指令並含全套件回報規格句（命令原文 + `--collect-only -q` 全量數 + 執行數 = 全量 - deselected，TEST-BAL-006，見上節）
 - [ ] 裁示句是否有「補 X」「並補 Y」型句型只指名決策點、未給具體內容？若有，已補齊內容或已明寫「此處未定，停手回報」（PC-GPD-026，見上節）
 - [ ] 派發的代理人會跑長時間或背景測試時，已含終止後 pgrep 驗證約束句（見上節，含 ps 確認命中身分與等待改等已知 PID 兩句）
 
@@ -1088,7 +1112,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-10-01
+**Last Updated**: 2026-10-02
+**Version**: 1.39.0 — 「既有失敗歸因約束句」後新增「全套件回報規格（TEST-BAL-006）」子節：全套件一律用無路徑指令 `(cd <pkg> && uv run pytest -q)`，回報附命令原文、`--collect-only -q` 全量數，對帳公式執行數 = 全量 - deselected，涵蓋 `N tests collected` 與 `N/M tests collected (K deselected)` 兩種摘要格式；「填空檢查清單」同步補一列。文字提醒已兩次失效，本節讓回報可對帳，與 conftest 外掛的執行當下提示互補。
 **Version**: 1.38.0 — 「終止長時間測試後驗證子程序已退出約束句」補兩句：pgrep 命中時以 `ps -o command= -p <pid>` 確認命中的是測試程序本身（macOS pgrep 只排除自身與祖先，會比對到命令列含同字串的其他 shell）；需要等待程序結束時等已知 PID（`kill -0`），不以 `pgrep -f` 樣式作迴圈條件。新增 Why/Consequence 段：兩個 `until ! pgrep -f` 等待迴圈互相比對而永久空等的反例。
 **Version**: 1.37.0 — 「派發裁示不留未定義行為約束句」後新增「終止長時間測試後驗證子程序已退出約束句」子節：觸發條件（派發會跑長時間或背景測試的代理人）+ Why/Consequence（終止的是自己的 shell，執行器長駐子程序不一定隨之結束，後果由並行代理人承擔）+ 句型（`pgrep -f <worktree 絕對路徑>` 驗證並附輸出）。
 **Version**: 1.36.0 — 〈tests/ 修改派發 SOP〉加註已被 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉取代，改路由至〈派發位置判準（強制）〉；push-first 與 finish 兩節內容不變，由該判準表引用（框架 issue 101）。

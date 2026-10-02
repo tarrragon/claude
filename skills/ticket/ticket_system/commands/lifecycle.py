@@ -43,6 +43,7 @@ from ticket_system.lib.ticket_validator import (
     validate_execution_log,
     validate_execution_log_by_type,
     validate_self_check_subsection,
+    extract_version_from_ticket_id,
 )
 from ticket_system.lib.messages import (
     ErrorMessages,
@@ -1717,13 +1718,42 @@ def _can_cascade_unblock(
 # 與 .claude/hooks/acceptance_checkers/children_checker 的檢查同源（W14-004）。
 
 
+def _find_non_terminal_by_id(
+    ticket_ids: List[str], version: str
+) -> List[Tuple[str, str]]:
+    """依票 ID 解析其所屬版本後查詢非 terminal 項目（跨版本）。
+
+    前移規則讓已完成子孫留在舊版本，故不能只載入呼叫端所在版本：
+    先以 ID 前綴推導版本，載入不到再退回呼叫端版本。
+
+    Returns:
+        List[(ticket_id, status)] — 非 terminal 項目；兩處皆載入不到者
+        以 status="not_found" 回報。
+    """
+    non_terminal: List[Tuple[str, str]] = []
+    for tid in ticket_ids:
+        id_version = extract_version_from_ticket_id(tid)
+        candidates = [v for v in (id_version, version) if v]
+        found = None
+        for candidate in dict.fromkeys(candidates):
+            found = load_ticket(candidate, tid)
+            if found is not None:
+                break
+        if found is None:
+            non_terminal.append((tid, "not_found"))
+            continue
+        status = found.get("status", "unknown")
+        if status not in TERMINAL_STATUSES:
+            non_terminal.append((tid, status))
+    return non_terminal
+
+
 def _collect_non_terminal_spawned(
     spawned_ids: List[str], version: str
 ) -> List[Tuple[str, str]]:
     """查詢 spawned ticket 清單中非 terminal 的項目。
 
-    透過 list_tickets 一次性查詢版本下全部 tickets（process-scoped 快取），
-    避免 N 次 load_ticket I/O。
+    依票 ID 跨版本載入（load_ticket 有 process-scoped 快取）。
 
     Args:
         spawned_ids: spawned_tickets 欄位 ID 清單
@@ -1736,19 +1766,7 @@ def _collect_non_terminal_spawned(
     if not spawned_ids:
         return []
 
-    all_tickets = list_tickets(version)
-    ticket_map: Dict[str, Any] = {t.get("id"): t for t in all_tickets}
-
-    non_terminal: List[Tuple[str, str]] = []
-    for sid in spawned_ids:
-        t = ticket_map.get(sid)
-        if t is None:
-            non_terminal.append((sid, "not_found"))
-            continue
-        status = t.get("status", "unknown")
-        if status not in TERMINAL_STATUSES:
-            non_terminal.append((sid, status))
-    return non_terminal
+    return _find_non_terminal_by_id(spawned_ids, version)
 
 
 def _print_spawned_list(non_terminal: List[Tuple[str, str]]) -> None:
@@ -1870,19 +1888,7 @@ def _collect_pending_children(
     if not children_ids:
         return []
 
-    all_tickets = list_tickets(version)
-    ticket_map: Dict[str, Any] = {t.get("id"): t for t in all_tickets}
-
-    pending: List[Tuple[str, str]] = []
-    for cid in children_ids:
-        child = ticket_map.get(cid)
-        if child is None:
-            pending.append((cid, "not_found"))
-            continue
-        status = child.get("status", "unknown")
-        if status not in TERMINAL_STATUSES:
-            pending.append((cid, status))
-    return pending
+    return _find_non_terminal_by_id(children_ids, version)
 
 
 def _handle_pending_children_block(

@@ -3737,6 +3737,14 @@ def resolve_activation_version_paths(root: Path) -> set:
 
 GIT_LOCK_MAX_ATTEMPTS = 5
 GIT_LOCK_WAIT_SECONDS = 2.0
+# git 寫入命令不設逾時：寫入會建立 ref 並觸發 reference-transaction hook（本 repo
+# 的 shim 會跑 uv 內容掃描），負載高時耗時不可預測；逾時殺掉 git 會殘留
+# index.lock／HEAD.lock，擋住所有 session 的 git 寫入。與 ticket 側 update-ref／
+# update-index 不設逾時同機制。
+GIT_WRITE_TIMEOUT: Optional[int] = None
+# 網路命令（fetch／push）保留逾時：傳輸期間被殺不會留下本地鎖（本地 ref 只在
+# 傳輸成功後更新），而網路卡住或認證提示會讓 finish 無限期掛住且無輸出。
+GIT_NETWORK_TIMEOUT: int = 300
 
 
 def _is_git_lock_contention(stderr: str) -> bool:
@@ -3745,7 +3753,7 @@ def _is_git_lock_contention(stderr: str) -> bool:
 
 
 def run_git_with_lock_retry(
-    args: List[str], root: Path, timeout: int = 10
+    args: List[str], root: Path, timeout: Optional[int] = GIT_WRITE_TIMEOUT
 ) -> subprocess.CompletedProcess:
     """執行 git 寫入命令；遇鎖競爭以固定間隔重試，用盡即回傳最後一次結果。
 
@@ -3765,6 +3773,43 @@ def run_git_with_lock_retry(
             return result
         time.sleep(GIT_LOCK_WAIT_SECONDS)
         attempt += 1
+
+
+def run_git_network(args: List[str], root: Path) -> subprocess.CompletedProcess:
+    """執行網路 git 命令（fetch／push）：有逾時、禁用認證提示。
+
+    逾時不拋例外，回傳 rc=124 與可見的 stderr，讓呼叫端走既有失敗路徑。
+    """
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    try:
+        return subprocess.run(
+            ["git", *args], cwd=root, capture_output=True, text=True,
+            timeout=GIT_NETWORK_TIMEOUT, env=env,
+        )
+    except subprocess.TimeoutExpired:
+        message = (
+            f"git {' '.join(args)} 逾時（{GIT_NETWORK_TIMEOUT} 秒），網路卡住或需要認證"
+        )
+        locks = find_git_lock_files(root)
+        if locks:
+            message += (
+                "\n偵測到殘留鎖檔（不自動刪除，可能屬於其他 session 的進行中寫入）：\n"
+                + "\n".join(f"  {p}" for p in locks)
+                + "\n補救：確認沒有其他 git 程序後再手動刪除"
+            )
+        return subprocess.CompletedProcess(["git", *args], 124, stdout="", stderr=message)
+
+
+def find_git_lock_files(root: Path) -> List[str]:
+    """列出 git 目錄下的 *.lock（index.lock、HEAD.lock、refs 底下的鎖）。"""
+    probe = subprocess.run(
+        ["git", "rev-parse", "--git-dir"], cwd=root, capture_output=True, text=True,
+        timeout=5,
+    )
+    git_dir = Path(probe.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = root / git_dir
+    return sorted(str(p) for p in git_dir.rglob("*.lock"))
 
 
 def report_git_failure(
@@ -3931,7 +3976,7 @@ def git_merge_and_push(
                 cwd=root,
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=GIT_WRITE_TIMEOUT,
             )
             if result.returncode != 0:
                 report_git_failure("切換 main", "git checkout main", result)
@@ -3945,13 +3990,14 @@ def git_merge_and_push(
         # 3.3 拉取最新 main
         print_info("[IN] 拉取最新 main")
         if not dry_run:
-            result = subprocess.run(
-                ["git", "pull", "origin", "main"],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            # pull = fetch（網路，有逾時）+ merge（本地寫入，不設逾時）
+            result = run_git_network(["fetch", "origin", "main"], root)
+            if result.returncode == 0:
+                result = subprocess.run(
+                    ["git", "merge", "--no-edit", "FETCH_HEAD"],
+                    cwd=root, capture_output=True, text=True,
+                    timeout=GIT_WRITE_TIMEOUT,
+                )
             if result.returncode == 0:
                 print_success("main 分支已更新到最新", )
                 completed.append("拉取 main")
@@ -3982,7 +4028,7 @@ def git_merge_and_push(
                     cwd=root,
                     capture_output=True,
                     text=True,
-                    timeout=10,
+                    timeout=GIT_WRITE_TIMEOUT,
                 )
                 if result.returncode == 0:
                     print_success(f"已合併 {feature_branch} 到 main")
@@ -4024,13 +4070,7 @@ def git_merge_and_push(
         print_info("[OUT] 推送到遠端")
         if not dry_run:
             # 推送 main
-            result = subprocess.run(
-                ["git", "push", "origin", "main"],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            result = run_git_network(["push", "origin", "main"], root)
             if result.returncode == 0:
                 print_success("main 已推送")
                 completed.append("推送 main")
@@ -4044,13 +4084,7 @@ def git_merge_and_push(
                 )
 
             # 推送 tag
-            result = subprocess.run(
-                ["git", "push", "origin", tag_name],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            result = run_git_network(["push", "origin", tag_name], root)
             if result.returncode == 0:
                 print_success(f"Tag {tag_name} 已推送")
             else:
@@ -4074,7 +4108,7 @@ def git_merge_and_push(
                     ["git", "branch", "-d", feature_branch],
                     cwd=root,
                     capture_output=True,
-                    timeout=10,
+                    timeout=GIT_WRITE_TIMEOUT,
                 )
                 if result.returncode == 0:
                     print_success(f"本地分支已刪除: {feature_branch}")
@@ -4082,11 +4116,8 @@ def git_merge_and_push(
                     print_error(f"刪除本地分支失敗")
 
                 # 遠端刪除
-                result = subprocess.run(
-                    ["git", "push", "origin", "--delete", feature_branch],
-                    cwd=root,
-                    capture_output=True,
-                    timeout=10,
+                result = run_git_network(
+                    ["push", "origin", "--delete", feature_branch], root
                 )
                 if result.returncode == 0:
                     print_success(f"遠端分支已刪除: origin/{feature_branch}")
@@ -4103,8 +4134,36 @@ def git_merge_and_push(
         return False
 
 
-def print_summary(version: str, all_ok: bool, dry_run: bool = False):
-    """打印完成摘要"""
+def publish_activation_commit(root: Path, head_before: str) -> bool:
+    """啟用提交成功後推送 main；HEAD 未前進（無新提交）時無需推送。
+
+    推送失敗時 stderr 列出未推送的提交 hash，回傳 False 供呼叫端以非 0 結束。
+    """
+    head_after = run_git_with_lock_retry(["rev-parse", "HEAD"], root).stdout.strip()
+    if head_after == head_before:
+        return True
+    result = run_git_network(["push", "origin", "main"], root)
+    if result.returncode == 0:
+        print_success("啟用提交已推送到 main")
+        return True
+    report_git_failure("推送啟用提交", "git push origin main", result)
+    unpushed = subprocess.run(
+        ["git", "log", "--format=%H %s", f"{head_before}..HEAD"],
+        cwd=root, capture_output=True, text=True, timeout=10,
+    ).stdout.strip()
+    sys.stderr.write(
+        f"[ABORT] 啟用提交未推送：\n{unpushed}\n補救：排除原因後 git push origin main\n"
+    )
+    return False
+
+
+def print_summary(
+    version: str,
+    all_ok: bool,
+    dry_run: bool = False,
+    activation_pushed: bool = True,
+):
+    """打印完成摘要；結尾的推送狀態依實際推送結果產生"""
     print_section("完成摘要")
 
     if all_ok:
@@ -4119,7 +4178,10 @@ def print_summary(version: str, all_ok: bool, dry_run: bool = False):
             print_info("- 合併提交: 1", 1)
             print_info("- Tag 建立: 1", 1)
             print_info("- 分支清理: 2", 1)
-            print_info("\n[DONE] 版本已推送到 main 分支", 1)
+            if activation_pushed:
+                print_info("\n[DONE] 版本已推送到 main 分支", 1)
+            else:
+                print_warning("啟用提交未推送到遠端（見上方 stderr 的提交 hash）")
     else:
         print_error("發布失敗，請修正上述問題後重新執行")
 
@@ -4382,6 +4444,13 @@ def main():
             # 能讓 exit 前殘留守衛通過。以同一 baseline 差集比對，僅新增的
             # docs/ 或 CHANGELOG.md 才會被納入。
             print_section("Step: Commit Version Activation")
+            head_before_activation = (
+                run_git_with_lock_retry(
+                    ["rev-parse", "HEAD"], finish_root
+                ).stdout.strip()
+                if not dry_run
+                else ""
+            )
             if not commit_changes(
                 version,
                 dry_run,
@@ -4390,6 +4459,11 @@ def main():
                 extra_paths=resolve_activation_version_paths(finish_root),
             ):
                 print_warning("版本啟用變更提交失敗（請手動確認 todolist.yaml 狀態）")
+
+            # 啟用提交建立在 Step 3 推送之後，需自行推送，否則遠端停在啟用前
+            activation_pushed = dry_run or publish_activation_commit(
+                finish_root, head_before_activation
+            )
 
             # exit 前殘留守衛：不自動 add，避免吸入非本次 finish 產生的變更
             if not dry_run:
@@ -4401,7 +4475,10 @@ def main():
                     return 1
 
             # 打印摘要
-            print_summary(version, git_ok, dry_run)
+            print_summary(version, git_ok, dry_run, activation_pushed)
+
+            if not activation_pushed:
+                return 1
 
             if not git_ok:
                 print_warning(

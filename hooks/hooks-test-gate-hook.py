@@ -220,11 +220,17 @@ def _is_host_repo_commit(command: str, host_root: str) -> bool:
         return False
     try:
         return Path(repo_hint).resolve() == Path(host_root).resolve()
-    except OSError:
+    except (OSError, RuntimeError, ValueError):
+        # 符號連結迴圈（RuntimeError）、路徑含 NUL（ValueError）：視為非本專案
         return False
 
 
-def _touched_hook_filenames(command: str, host_root: str, logger) -> Set[str]:
+def _touched_hook_filenames(
+    command: str,
+    host_root: str,
+    logger,
+    diff_failures: Optional[List[str]] = None,
+) -> Set[str]:
     """回傳本次 commit 觸及的 `.claude/hooks/` 直接子層 `*.py` 檔名集合。
 
     兩來源聯集：
@@ -259,6 +265,12 @@ def _touched_hook_filenames(command: str, host_root: str, logger) -> Set[str]:
                 filenames.add(m.group(1))
     elif not success:
         logger.warning("無法讀取 staged 檔案清單（%s），僅依賴命令字面推導", output)
+        sys.stderr.write(
+            f"[hooks-test-gate] 無法讀取 staged 檔案清單（{output}），"
+            "僅依賴命令字面推導，放行但可能漏判\n"
+        )
+        if diff_failures is not None:
+            diff_failures.append(str(output))
 
     for segment in _iter_literal_pathspec_segments(command):
         for m in _HOOK_PY_LITERAL_RE.finditer(segment):
@@ -416,6 +428,21 @@ def _log_segment_timing(
     )
 
 
+def _log_segment_timing_safely(logger, *args) -> None:
+    """計時日誌是純觀測：任何例外 swallow-and-warn，不得改變測試判定。
+
+    同時寫 stderr 與日誌檔，使失效可見而不阻擋綠燈 commit。
+    """
+    try:
+        _log_segment_timing(logger, *args)
+    except Exception as exc:  # noqa: BLE001 - 觀測失效不得翻轉判定
+        logger.warning("分段計時日誌失敗（%s: %s），判定不受影響", type(exc).__name__, exc)
+        sys.stderr.write(
+            f"[hooks-test-gate] 分段計時日誌失敗（{type(exc).__name__}: {exc}），"
+            "測試判定不受影響\n"
+        )
+
+
 def _make_timing_file(logger) -> Optional[str]:
     """建立空計時檔供外掛寫入；失敗只記 warning（不啟用外掛，判定不變）。"""
     try:
@@ -466,7 +493,7 @@ def _run_pytest(
         total = time.monotonic() - started
         side = _read_pytest_side_timing(timing_path, logger)
         _remove_quietly(timing_path, logger)
-        _log_segment_timing(
+        _log_segment_timing_safely(
             logger, test_paths, _STATUS_TIMEOUT, total, None,
             _compute_segments(side, spawn_wall, _wall_clock()),
         )
@@ -487,7 +514,7 @@ def _run_pytest(
     full_output = result.stdout + result.stderr
     output_tail = "\n".join(full_output.splitlines()[-20:])
     status = _STATUS_PASS if result.returncode == 0 else _STATUS_RED
-    _log_segment_timing(
+    _log_segment_timing_safely(
         logger, test_paths, status, total, full_output,
         _compute_segments(side, spawn_wall, return_wall),
     )
@@ -588,41 +615,40 @@ def _build_untested_reminder(untested: List[str]) -> str:
     )
 
 
-def main() -> int:
-    logger = setup_hook_logging(HOOK_NAME)
+def _build_diff_failure_reminder(reason: str) -> str:
+    return (
+        "[Hooks 測試 gate 提醒] 無法讀取 staged 檔案清單"
+        f"（git diff --cached 失敗：{reason}），staged 清單未經驗證。\n"
+        "本次僅依命令字面推導被改動的 hook 檔，已 staged 但字面未列出的 "
+        ".claude/hooks/*.py 可能漏判而未跑對應測試（放行，不阻擋）。\n"
+        "建議確認 git 狀態後，手動執行對應 hooks 測試再 commit。"
+    )
 
-    input_data = read_json_from_stdin(logger)
-    if input_data is None:
-        logger.debug("無有效輸入，允許")
-        return 0
 
-    tool_name = input_data.get("tool_name", "")
-    if tool_name != "Bash":
-        logger.debug("工具 %s 不需要 hooks 測試 gate 檢查", tool_name)
-        return 0
+def _build_verification_error_message(exc: BaseException) -> str:
+    return (
+        "Hooks 目標測試 gate：commit 被阻止（驗證階段發生例外）\n\n"
+        f"例外：{type(exc).__name__}: {exc}\n\n"
+        "無法驗證等同未通過。請先排除 gate 自身的故障（詳見 "
+        ".claude/hook-logs/hooks-test-gate/ 日誌）。\n"
+        "逃生路徑：本 gate 只攔 Claude 的 Bash 工具；若確需提交，"
+        "請改在使用者終端機執行該 commit。\n\n"
+        f"{_BOUNDARY_NOTE}"
+    )
 
-    tool_input = input_data.get("tool_input") or {}
-    command = tool_input.get("command", "")
 
-    if _fast_reject(command):
-        logger.debug("命令不含 'commit' 字樣，零開銷短路允許")
-        return 0
+def _verify_touched_hooks(
+    touched,
+    host_root: str,
+    input_data: dict,
+    logger,
+    extra_reminders: Optional[List[str]] = None,
+) -> int:
+    """驗證階段：解析對應測試、執行、輸出判定。例外由 main 統一轉 deny。
 
-    if not _GIT_COMMIT_RE.search(command):
-        logger.debug("命令含 'commit' 但非 git commit 呼叫，允許")
-        return 0
-
-    host_root = str(get_project_root())
-
-    if not _is_host_repo_commit(command, host_root):
-        logger.debug("commit 目標非本專案，跳過（範疇邊界：不干預跨 repo）")
-        return 0
-
-    touched = _touched_hook_filenames(command, host_root, logger)
-    if not touched:
-        logger.debug("此次 commit 未觸及 .claude/hooks 下直接子層 *.py，允許")
-        return 0
-
+    extra_reminders：偵測階段累積的提醒（如 staged 清單讀取失敗），
+    與本階段提醒合併為單一 additional_context 輸出。
+    """
     hooks_dir = Path(host_root) / ".claude" / "hooks"
     tested, untested = _resolve_test_paths(touched, hooks_dir)
 
@@ -645,7 +671,7 @@ def main() -> int:
             )
             return 0
 
-    reminders = []
+    reminders = list(extra_reminders or [])
     if unverified:
         logger.warning("總預算耗盡，放行但以下檔案未驗證: %s", unverified)
         reminders.append(_build_unverified_reminder(tested, unverified))
@@ -662,6 +688,91 @@ def main() -> int:
 
     logger.debug("所有觸及的 hook 檔對應測試皆通過，允許")
     return 0
+
+
+def main() -> int:
+    logger = setup_hook_logging(HOOK_NAME)
+
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        logger.debug("無有效輸入，允許")
+        return 0
+
+    if not isinstance(input_data, dict):
+        logger.info(
+            "input_data 型別非 dict（%s），偵測階段 fail-open 放行",
+            type(input_data).__name__,
+        )
+        return 0
+
+    tool_name = input_data.get("tool_name", "")
+    if tool_name != "Bash":
+        logger.debug("工具 %s 不需要 hooks 測試 gate 檢查", tool_name)
+        return 0
+
+    tool_input = input_data.get("tool_input") or {}
+    if not isinstance(tool_input, dict):
+        logger.info(
+            "tool_input 型別非 dict（%s），偵測階段 fail-open 放行",
+            type(tool_input).__name__,
+        )
+        return 0
+    command = tool_input.get("command", "")
+    if not isinstance(command, str):
+        logger.info(
+            "command 型別非 str（%s），偵測階段 fail-open 放行",
+            type(command).__name__,
+        )
+        return 0
+
+    if _fast_reject(command):
+        logger.debug("命令不含 'commit' 字樣，零開銷短路允許")
+        return 0
+
+    if not _GIT_COMMIT_RE.search(command):
+        logger.debug("命令含 'commit' 但非 git commit 呼叫，允許")
+        return 0
+
+    host_root = str(get_project_root())
+
+    if not _is_host_repo_commit(command, host_root):
+        logger.debug("commit 目標非本專案，跳過（範疇邊界：不干預跨 repo）")
+        return 0
+
+    diff_failures: List[str] = []
+    touched = _touched_hook_filenames(command, host_root, logger, diff_failures)
+    extra_reminders = [_build_diff_failure_reminder(r) for r in diff_failures]
+    if not touched:
+        if extra_reminders:
+            # staged 清單不可得且無字面來源：fail-open 放行，但提醒必須可見
+            emit_hook_output(
+                "PreToolUse",
+                additional_context="\n\n".join(extra_reminders),
+                input_data=input_data,
+            )
+            return 0
+        logger.debug("此次 commit 未觸及 .claude/hooks 下直接子層 *.py，允許")
+        return 0
+
+    # 以上為偵測階段，維持 fail-open（缺陷不得擋下全部 Bash 呼叫）；
+    # 以下為驗證階段，無法驗證等同未通過，任何例外 fail-closed 為 deny。
+    try:
+        return _verify_touched_hooks(
+            touched, host_root, input_data, logger, extra_reminders
+        )
+    except Exception as exc:  # noqa: BLE001 - 驗證階段 fail-closed
+        logger.critical("驗證階段例外，無法驗證，判定為未通過: %s", exc, exc_info=True)
+        sys.stderr.write(
+            f"[hooks-test-gate] 驗證階段例外（{type(exc).__name__}: {exc}），"
+            "無法驗證，阻擋 commit\n"
+        )
+        emit_hook_output(
+            "PreToolUse",
+            permission_decision="deny",
+            permission_decision_reason=_build_verification_error_message(exc),
+            input_data=input_data,
+        )
+        return 0
 
 
 if __name__ == "__main__":

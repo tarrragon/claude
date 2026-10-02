@@ -13,6 +13,7 @@ Source: ANA 0.18.0-W17-147 → IMP 0.18.0-W17-149
 """
 
 import sys
+import pytest
 import importlib.util
 import tempfile
 import subprocess
@@ -75,6 +76,7 @@ def test_find_target_repo_returns_none_when_no_git_ancestor():
 
 # ---------- is_exempt_path_on_protected_branch: same repo ----------
 
+@pytest.mark.usefixtures("real_project_root")
 def test_same_repo_claude_dir_exempt(tmp_path):
     repo = tmp_path / "host"
     repo.mkdir()
@@ -86,6 +88,7 @@ def test_same_repo_claude_dir_exempt(tmp_path):
     )
 
 
+@pytest.mark.usefixtures("real_project_root")
 def test_same_repo_docs_dir_exempt(tmp_path):
     repo = tmp_path / "host"
     repo.mkdir()

@@ -60,6 +60,7 @@ def test_classify_only_relative_claude_path_counts_as_main_repo():
     assert other is False
 
 
+@pytest.mark.usefixtures("real_project_root")
 def test_classify_absolute_path_in_main_repo_is_main_claude():
     """絕對路徑 .claude/ 落在主 repo 樹內 → has_main_repo_claude。"""
     prompt = f"修改 {_PROJECT_ROOT}/.claude/hooks/foo.py"
@@ -76,6 +77,7 @@ def test_classify_absolute_path_external_is_external_claude():
     assert main_repo is False
 
 
+@pytest.mark.usefixtures("real_project_root")
 def test_classify_absolute_path_with_nested_claude_in_main_repo(monkeypatch):
     """W11-016 案例 A：主 repo 絕對路徑中段含巢狀 .claude 目錄 → 仍應分類為 main_repo=True, external=False。
 

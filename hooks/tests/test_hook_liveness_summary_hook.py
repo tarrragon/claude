@@ -11,7 +11,9 @@ hook-liveness-summary-hook.py 測試
 import importlib.util
 import json
 import logging
+import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -53,9 +55,9 @@ def _write_liveness_file(root: Path, session_id: str, hook_names):
         json.dumps({"hook": name, "session_id": session_id, "pid": 1, "ts": "t"})
         for name in hook_names
     ]
-    (liveness_dir / "{}.jsonl".format(session_id)).write_text(
-        "\n".join(lines) + "\n", encoding="utf-8"
-    )
+    path = liveness_dir / "{}.jsonl".format(session_id)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
 
 
 class TestRegisteredHookNames:
@@ -103,6 +105,28 @@ class TestMostRecentCompletedLivenessFile:
         )
 
         assert result.stem == "prev-session"
+
+    def test_skips_pytest_prefixed_file_even_when_newest(self, tmp_path):
+        _write_liveness_file(tmp_path, "prev-session", ["hook-a"])
+        newest = _write_liveness_file(tmp_path, "pytest-1-abcd", ["hook-a"])
+        os.utime(newest, (time.time() + 100, time.time() + 100))
+
+        result = summary_hook._most_recent_completed_liveness_file(
+            tmp_path, exclude_session_id="current-session"
+        )
+
+        assert result.stem == "prev-session"
+
+    def test_selection_unchanged_without_prefixed_file(self, tmp_path):
+        old = _write_liveness_file(tmp_path, "older", ["hook-a"])
+        os.utime(old, (time.time() - 100, time.time() - 100))
+        _write_liveness_file(tmp_path, "newer", ["hook-a"])
+
+        result = summary_hook._most_recent_completed_liveness_file(
+            tmp_path, exclude_session_id="current-session"
+        )
+
+        assert result.stem == "newer"
 
     def test_returns_none_when_no_liveness_dir(self, tmp_path):
         result = summary_hook._most_recent_completed_liveness_file(

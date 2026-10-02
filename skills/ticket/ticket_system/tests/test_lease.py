@@ -71,9 +71,26 @@ _STALE_THRESHOLD = _stale_threshold()
 _STALE_MARGIN = timedelta(minutes=15)
 
 
+def _utcnow() -> datetime:
+    """測試檔的單一時鐘接縫：每次呼叫取當下時間，不快取 import 時刻。"""
+    return datetime.now(timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _refresh_now():
+    """每個測試開始時把 `NOW` 重設為當下。
+
+    選擇「每次取當下」而非注入固定時鐘：`claim_lease` 等入口讀真實時鐘，
+    固定時鐘無法讓它們與種子對齊；重取後種子與真實時鐘只差單一測試耗時，
+    與套件總耗時無關。`NOW` 在函式內於呼叫時才解析，故全域重指派即生效。
+    """
+    global NOW
+    NOW = _utcnow()
+
+
 def _fresh_ts() -> str:
     """播種一筆 FRESH heartbeat（elapsed = 0，必在門檻內）。"""
-    return _iso(NOW)
+    return _iso(_utcnow())
 
 
 def _stale_ts() -> str:
@@ -82,7 +99,7 @@ def _stale_ts() -> str:
     以門檻常數推導而非硬編碼 45 分鐘，使「這筆是 STALE」由常數關係明示，
     讀者不需心算 45 與 30 的大小關係，門檻調整時亦不需逐點改字面。
     """
-    return _iso(NOW - _STALE_THRESHOLD - _STALE_MARGIN)
+    return _iso(_utcnow() - _STALE_THRESHOLD - _STALE_MARGIN)
 
 
 @pytest.fixture
@@ -1414,3 +1431,39 @@ class TestApplyReclaimErrorPropagation:
         err = capsys.readouterr().err
         assert "票面更新失敗" in err
         assert "：" in err  # 錯誤訊息須帶有具體原因，非僅固定字面
+
+
+# --- E1 對照：長套件（時鐘已前進超過門檻）下種子仍須 FRESH -------------------
+
+
+def _forward_clock(monkeypatch, minutes: int) -> None:
+    """把 pm_registry 與本檔的 `datetime.now` 撥快，模擬套件已跑了 N 分鐘。"""
+    delta = timedelta(minutes=minutes)
+    real_datetime = datetime
+
+    class _ForwardDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime.now(tz) + delta
+
+    pm_registry = lease._load_pm_registry()
+    if pm_registry is None:
+        pytest.skip("pm_registry 不可用")
+    monkeypatch.setattr(pm_registry, "datetime", _ForwardDatetime)
+    monkeypatch.setitem(globals(), "datetime", _ForwardDatetime)
+
+
+class TestSeedSurvivesLongSuite:
+    def test_fresh_seed_is_fresh_after_clock_advances_past_threshold(self, monkeypatch):
+        pm_registry = lease._load_pm_registry()
+        if pm_registry is None:
+            pytest.skip("pm_registry 不可用")
+        _forward_clock(monkeypatch, pm_registry.STALE_THRESHOLD_MINUTES + 1)
+        assert pm_registry.is_fresh(_fresh_ts()) is True
+
+    def test_stale_seed_stays_stale_after_clock_advances(self, monkeypatch):
+        pm_registry = lease._load_pm_registry()
+        if pm_registry is None:
+            pytest.skip("pm_registry 不可用")
+        _forward_clock(monkeypatch, pm_registry.STALE_THRESHOLD_MINUTES + 1)
+        assert pm_registry.is_fresh(_stale_ts()) is False

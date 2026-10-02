@@ -1,3 +1,36 @@
+## [2.75.0] - 2026-10-02
+
+### Summary
+feat: 測試專屬 liveness session id、洩漏哨兵、摘要略過測試索引檔; fix: guard 日誌隔離測試改為只讀 tmp 樹的正向斷言 (2.44.37); fix: 偵測階段非預期輸入記日誌後 exit 0 放行，不再 crash (+20 more)
+
+Changes: 1 feat, 13 fix, 6 docs, 1 chore, 2 test
+
+- feat: 測試專屬 liveness session id、洩漏哨兵、摘要略過測試索引檔
+- fix: guard 日誌隔離測試改為只讀 tmp 樹的正向斷言 (2.44.37)
+- fix: 偵測階段非預期輸入記日誌後 exit 0 放行，不再 crash
+- fix: 真實 pytest 子程序測試移出主套件，改掛 wallclock 標記
+- fix: 防護類 hook 驗收閘門認得合寫的實地觸發條目，並於缺項訊息說明字面比對
+- fix: hooks-test-gate git diff 失敗時輸出可見提醒
+- fix: 隔離 guard_world 測試倉庫的 hook-logs，不再寫入真實目錄
+- fix: 驗證階段例外改 fail-closed deny
+- fix: 某票.2 測試套件 hook 日誌根目錄隔離
+- fix: test_lease 種子時間改每次取當下，長套件不再誤判 STALE
+- fix: complete 的 children 與 spawned 終態檢查改依票 ID 跨版本解析
+- fix: 網路命令保留逾時並報出殘留鎖，pull 拆 fetch+merge
+- fix: git 寫入命令不設逾時，避免殺掉 git 殘留鎖
+- fix: finish 推送啟用下一版本的提交，摘要依實際推送結果
+- docs: checker 註解移除專案版本字樣（框架檔不引用專案版本）
+- docs: 補 2.44.36 CHANGELOG 條目（某票.3 測試 liveness 隔離）
+- docs: 移除測試 docstring 的專案 ticket ID（規則 8）
+- docs: 移除框架檔 docstring 內的專案 ticket ID
+- docs: 依文字審查修正全套件回報規格與 TEST-BAL-006 措辭
+- docs: add full-suite report spec to dispatch template, tool-layer note to TEST-BAL-006
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+- test: 專案根重導提前到 pytest_configure，涵蓋 collection 期的模組層路徑常數
+- test: hooks 測試套件 session 級專案根重導，停止洩漏至真實 hook-logs
+
+---
+
 ## [2.74.3] - 2026-10-02
 
 ### Summary

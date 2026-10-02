@@ -2,6 +2,22 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.37（本地變更）— `test_guard_logs_stay_inside_tmp_repo` 不再以真實 guard 日誌目錄的前後快照判定。原斷言讀取真實 `hook-logs/git-ref-transaction-content-guard` 的檔名與大小，其他 session 的並行寫入會使它翻紅（結果依賴程式以外的因素）。現行為只讀測試自己的 tmp 樹的正向斷言：測試倉庫 `hook-logs` 下的日誌全部 `resolve()` 後落在 tmp 內（日誌若穿過連結寫進真實根，實體位置在 tmp 外即失敗），且其中有本次「被阻擋」的紀錄。產品碼與 guard 不變。測試：E1 把 `link_claude` 改回整目錄 symlink 時新斷言翻紅；E2 以背景執行緒持續寫入真實 guard 日誌目錄時新斷言維持綠燈，同條件下舊快照斷言翻紅。
+
+**Version**: 2.44.36（本地變更）— 測試 session 的 liveness 不再併入呼叫者 session 的索引檔。原因是 `mark_hook_entry` 以 `CLAUDE_CODE_SESSION_ID` 決定 `_liveness` 索引檔名，測試沿用呼叫者的 id 時，測試寫入的紀錄會併入真實 session 的索引，使已失效的 hook 看起來仍存活。修改如下：
+- skill 根 `conftest.py` 在 `pytest_configure` 把該環境變數設為 `pytest-` 前綴值，`pytest_unconfigure` 時還原。
+- 新增 `pytest_sessionfinish` 洩漏哨兵：若真實 `.claude/hook-logs/_liveness` 出現 `pytest-` 前綴檔，套件即失敗（fail-closed）。哨兵只判斷前綴檔是否存在，不比對整個目錄，因為並行的真實 session 也會寫入同一目錄。
+- 輔助模組 `liveness_session_isolation.py` 與 `.claude/lib/` 下的同名檔逐字相同，沿用 `testpaths_coverage_warning.py` 的複本慣例，理由是 skill 自成一個測試根。
+- 測試：新增 `tests/test_liveness_session_isolation.py`，以 E2 驗證繞過重導的寫入會被哨兵判定為失敗、移除後則通過。
+
+**Version**: 2.44.35（本地變更）— 測試套件不再經由 reference-transaction guard 把日誌寫進真實 `.claude/hook-logs`：`guard_world` fixture 把測試倉庫的 `.claude` 整個 symlink 到真實 `.claude`，guard 被阻擋時（日誌根由 `CLAUDE_PROJECT_DIR` 解析，該測試刻意設為測試倉庫）穿過連結寫入真實 `hook-logs/git-ref-transaction-content-guard/`。歸屬：`test_git_ops.py::TestPrevalidateEndToEnd` 的 worktree 受保護分支違規案例（其餘兩案不寫入）。現行：`link_claude` 改為建立真實 `.claude` 目錄並逐項連結資產、排除 `hook-logs`，日誌落在測試倉庫內；採 fixture 自行隔離而非 conftest 設環境變數，因 conftest 的 `CLAUDE_PROJECT_DIR` 隔離早已存在，是該測試刻意覆寫。產品碼與 guard 不變。測試 `test_guard_logs_stay_inside_tmp_repo`：修前紅（真實 guard 目錄新增 `.cleanup_trigger` 與 `.log`）、修後綠且日誌出現在測試倉庫。
+
+**Version**: 2.44.34（本地變更）— 測試套件不再把 hook 日誌寫進真實 `.claude/hook-logs`：`identity_guard` 未設 `HOOK_LOGS_DIR` 時以 `git rev-parse` 回退，`tests/` 樹的測試因此把 identity-guard usage.log 寫進真實 repo；linked worktree 內 in-process hook 因未設 `HOOK_TEST_ISOLATION` 而被 worktree 偵測蓋過 tmp 根，另有四個日誌目錄落到 worktree 根。現行：skill 根 `conftest.py` 的 autouse `_isolate_hook_logs_dir` 同時設 `HOOK_LOGS_DIR`（tmp）與 `HOOK_TEST_ISOLATION=1`，涵蓋兩棵 testpath；原 `ticket_system/tests/conftest.py` 的同名 autouse 移除（整合為單一處）。產品碼不變。測試 `tests/test_hook_logs_isolation.py`：修前紅、修後綠；乾淨 clone 與 clone 內 linked worktree 跑全套件前後 hook-logs 清單相同，E1 移除 autouse 後兩處皆重現洩漏。
+
+**Version**: 2.44.33（本地變更）— 修復 `test_lease.py` 種子時間戳取自 import 時刻：`NOW` 為模組層常數，套件執行超過 `STALE_THRESHOLD_MINUTES`（30 分鐘）後依賴 FRESH 前提的 4 項測試誤判 STALE 而失敗（單檔執行全綠，紅燈不反映產品缺陷）。現行：新增測試檔時鐘接縫 `_utcnow()`，`_fresh_ts`／`_stale_ts` 每次呼叫取當下時間，autouse fixture 在每個測試開始時重設 `NOW`；STALE 種子仍以門檻常數推導，未放寬門檻。測試 `TestSeedSurvivesLongSuite`：E1 把 `pm_registry` 與本檔 `datetime.now` 撥快 31 分鐘，FRESH 種子修前為 STALE（紅）、修後通過，STALE 對照種子兩版皆維持 STALE。
+
+**Version**: 2.44.32（本地變更）— 修復 `ticket complete` 的 children 與 spawned_tickets 終態檢查只載入父票所在版本：前移規則讓已完成子孫留在舊版本，這些子票被判為 not_found 而擋住 complete。現行：`_collect_pending_children` 與 `_collect_non_terminal_spawned` 共用 `_find_non_terminal_by_id`，依票 ID 前綴推導所屬版本並以 `load_ticket` 載入，載入不到再退回父票版本，兩處皆無才記 not_found。舊版本中非終態的票仍阻擋。測試 `tests/test_complete_cross_version_children.py`：E1 同一 fixture（父在新版本、已完成子票在舊版本）修前 not_found、修後通過；E2 舊版本 pending 仍阻擋、不存在 ID 仍 not_found；children 與 spawned 兩條路徑皆覆蓋。
+
 **Version**: 2.44.31（本地變更）— 修復 `ticket migrate` 子樹連帶遷移把已完成的子孫一併改號搬離原版本：子樹收集只納入非終態（pending、in_progress 等）子孫；completed／closed 的子孫留在原版本、ID 不變，其 `parent_id` 與 `chain.parent`／`chain.root` 中指向被搬移票者改寫為新 ID（經子樹外引用單趟改寫）。祖先鏈上有被留下者的子孫跟著留下（搬走會失去父票）。取捨：已完成歷史票的 ID 前綴與新父不一致，換取歷史紀錄穩定。新父 `children` 同時列搬移者新 ID 與留下者原 ID；dry-run 只列搬移成員；全部子孫皆終態時走單票路徑並同樣改寫 parent 參照。測試 `tests/test_migrate_subtree_cascade.py`：E1 對照同一棵樹 pending 者搬移、completed 者留下（修正前 7 項紅）。
 
 **Version**: 2.44.30（本地變更）— `ticket migrate` 遷移有子孫的票時連帶遷移整個子樹。子孫以 ID 前綴收集，建 old 到 new 映射，引用改寫單趟完成（重疊映射不二次改寫）；每個成員（含 completed）更新 id、追加 `previous_ids`、重算 chain 與 parent_id，topic 各追加一行（舊行保留）。preflight（碰撞、深度不超過 MAX_TICKET_DEPTH 且訊息列出超限票 ID 與遷移後深度、目標版本註冊）任一失敗整體拒絕、零寫入；dry-run 列出完整映射表；整個子樹與子樹外引用者走單一隔離提交；寫入中途失敗輸出已寫入集合。子樹遷移碰撞不自動改號。無子孫的票行為不變。測試 `tests/test_migrate_subtree_cascade.py`：E1 對照有子孫與無子孫兩路徑產物不同。

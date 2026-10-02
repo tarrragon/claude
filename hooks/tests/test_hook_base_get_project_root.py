@@ -28,6 +28,7 @@ class TestGetProjectRootHookBase:
                 result = get_project_root()
                 assert result == Path(custom_path)
 
+    @pytest.mark.usefixtures("real_project_root")
     def test_worktree_root_overrides_env_var(self, tmp_path):
         """位於 linked worktree 時，優先回傳 worktree 根目錄（覆蓋環境變數）"""
         worktree_root = tmp_path / "worktree_root"

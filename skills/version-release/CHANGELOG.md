@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.10.4 - 修復 `finish`／`release` 的 git 寫入命令以固定 10 秒逾時殺掉 git、可能殘留 index.lock 或 HEAD.lock：commit 與 tag 會建立 ref 並觸發 reference-transaction hook，hook 耗時（如 uv 內容掃描）在負載高時可超過 10 秒，被殺的 git 留下的鎖會擋住所有 session 的 git 寫入。命令分兩類。本地寫入（add、commit、tag、merge、checkout、branch -d）新增 `GIT_WRITE_TIMEOUT = None`，`run_git_with_lock_retry` 預設改用它，不設逾時（與 ticket 側 update-ref／update-index 同機制）。網路命令（push main、push tag、push --delete、`publish_activation_commit` 的 push，以及取代 `git pull` 的 `git fetch`）改走 `run_git_network`：逾時 `GIT_NETWORK_TIMEOUT = 300` 秒、帶 `GIT_TERMINAL_PROMPT=0`；逾時回傳 rc 124 與可見 stderr，並掃描 `.git` 下的 `*.lock`（index.lock、HEAD.lock、refs 底下）逐一列出路徑與「確認沒有其他 git 程序後再手動刪除」的補救說明，不自動刪鎖，finish 以非 0 結束。`pull origin main` 拆成 `fetch origin main`（網路逾時）加 `merge --no-edit FETCH_HEAD`（本地寫入，不設逾時），語意與 pull 的預設合併一致。唯讀命令（status、log、rev-parse、branch --show-current、describe）維持原逾時。`tests/test_release_git_write_failure.py` 新增慢速 reference-transaction hook 的 tmp repo E1 對照（逾時壓縮 seam：修正前 commit 被殺，修正後完成且無殘留 `*.lock`）、無 hook 對照，以及網路逾時三個測試（push 卡住 rc 非 0 且 stderr 可見、預置鎖檔被列出且仍存在、正常推送不報鎖）。
+
+**Version**: 2.10.3 - 修復 `finish` 啟用下一版本的提交未推送：Step 3 推送 main 與 tag 之後，Activate Next Version 另建的提交（todolist 轉 active、版本檔 bump、CHANGELOG 骨架）原本留在本地，rc=0 且摘要宣稱「版本已推送到 main 分支」。新增 `publish_activation_commit`，啟用提交成功後比照 Step 3 推送 main；推送失敗時 stderr 列出未推送的提交 hash 與補救指令，`finish` 以 rc=1 結束。`print_summary` 新增 `activation_pushed` 參數，摘要結尾依實際推送結果產生。`tests/test_finish_activation_commit.py` 新增以真實 tmp repo 加 bare remote 為 fixture 的 E1 對照（推送成功與 remote 拒絕）。
+
 **Version**: 2.10.2 - 修復 `finish` 前移順序：`migrate_overflow_tickets` 依 ID 階層深度排序，父票先於子票遷移（修正前沿用 glob 字典序，`.3` 排在父票之前，子票單獨遷移時新父尚不存在，新父 `children` 漏列前移子票）。改順序後父票的子樹遷移會帶走仍為 pending 的子孫，逐張遷移前檢查來源是否仍存在：已不存在且目標版本有票的 `previous_ids` 含該來源 ID 者輸出 `[INFO]` 略過；已不存在且無任何新票指向者仍判失敗並中止（不把真實缺檔誤判為已搬移）。前移清單中的票若有 completed／closed 祖先（依 ticket skill 的子樹遷移規則留在原版本），輸出 `[WARNING]` 列出該票與留下的祖先。新增 `tests/test_finish_forward_migration_order.py`。
 **Last Updated**: 2026-10-02
 

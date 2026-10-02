@@ -116,3 +116,86 @@ def test_resolve_paths_monorepo_subdir_version_file(tmp_path: Path) -> None:
     cfg = {"version_source": {"primary": "app/pubspec.yaml"}}
     with patch.object(vr, "load_version_release_config", return_value=cfg):
         assert vr.resolve_activation_version_paths(tmp_path) == {"app/pubspec.yaml"}
+
+
+# ---------------------------------------------------------------------------
+# 0.4.2-W1-045：啟用提交必須推送到遠端，摘要依實際推送結果產生
+# ---------------------------------------------------------------------------
+
+
+def _repo_with_bare_remote(tmp_path: Path):
+    """Flutter fixture 加 bare remote；seed 已推送，啟用提交尚未。"""
+    work = tmp_path / "work"
+    work.mkdir(parents=True)
+    bare = tmp_path / "remote.git"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
+    repo = _flutter_repo(work)
+    _git(repo, "branch", "-M", "main")
+    _git(repo, "remote", "add", "origin", str(bare))
+    _git(repo, "push", "-q", "origin", "main")
+    return repo, bare
+
+
+def _make_activation_commit(repo: Path) -> str:
+    """跑啟用步驟與其提交，回傳提交前的 HEAD。"""
+    baseline = vr.snapshot_git_status_paths(repo)
+    head_before = _git(repo, "rev-parse", "HEAD").strip()
+    _activate_next(repo)
+    with patch.object(vr, "get_project_root", return_value=repo):
+        extra = vr.resolve_activation_version_paths(repo)
+        assert vr.commit_changes(
+            "0.1.0", baseline=baseline, extra_paths=extra,
+            commit_message="docs: 啟用",
+        )
+    return head_before
+
+
+def _remote_main(bare: Path) -> str:
+    return _git(bare, "rev-parse", "main").strip()
+
+
+def _reject_pushes(bare: Path) -> None:
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'rejected by test' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+
+def test_e1_activation_push_success_vs_rejected(tmp_path: Path, capsys) -> None:
+    """E1 對照：同一 fixture，推送成功與 remote 拒絕，HEAD 對遠端的比對結果必須不同。"""
+    ok_repo, ok_bare = _repo_with_bare_remote(tmp_path / "ok")
+    ok_before = _make_activation_commit(ok_repo)
+    with patch.object(vr, "get_project_root", return_value=ok_repo):
+        ok_result = vr.publish_activation_commit(ok_repo, ok_before)
+    ok_synced = _git(ok_repo, "rev-parse", "HEAD").strip() == _remote_main(ok_bare)
+
+    bad_repo, bad_bare = _repo_with_bare_remote(tmp_path / "bad")
+    _reject_pushes(bad_bare)
+    bad_before = _make_activation_commit(bad_repo)
+    capsys.readouterr()
+    with patch.object(vr, "get_project_root", return_value=bad_repo):
+        bad_result = vr.publish_activation_commit(bad_repo, bad_before)
+    bad_err = capsys.readouterr().err
+    bad_head = _git(bad_repo, "rev-parse", "HEAD").strip()
+    bad_synced = bad_head == _remote_main(bad_bare)
+
+    assert (ok_result, ok_synced) == (True, True)
+    assert (bad_result, bad_synced) == (False, False)
+    assert bad_head[:7] in bad_err
+
+
+def test_summary_text_follows_actual_push_result(capsys) -> None:
+    vr.print_summary("0.1.0", True, False, activation_pushed=True)
+    pushed_out = capsys.readouterr().out
+    vr.print_summary("0.1.0", True, False, activation_pushed=False)
+    unpushed_out = capsys.readouterr().out
+    assert "已推送" in pushed_out
+    assert "已推送" not in unpushed_out
+    assert "未推送" in unpushed_out
+
+
+def test_no_new_commit_means_no_push_needed(tmp_path: Path) -> None:
+    repo, bare = _repo_with_bare_remote(tmp_path)
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    _reject_pushes(bare)
+    with patch.object(vr, "get_project_root", return_value=repo):
+        assert vr.publish_activation_commit(repo, head) is True

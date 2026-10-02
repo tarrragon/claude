@@ -15,15 +15,17 @@ W1-050 Phase 4 兩視角發現此重複（linux 判 DRY 違規，docstring 已�
 仍保留於各子 conftest 的 fixture（職責分裂合理，不上提）：
 - `tests/conftest.py`：`_assert_no_repo_pollution`（依賴 `parents[4]` 相對路徑，
   與該檔位置耦合）、ticket data fixtures（`valid_ticket_data` 等）。
-- `ticket_system/tests/conftest.py`：`_isolate_hook_logs_dir`、
-  `_mock_track_snapshot_filesystem_scan`、precondition fixtures（僅該樹消費）。
+- `ticket_system/tests/conftest.py`：`_mock_track_snapshot_filesystem_scan`、precondition fixtures（僅該樹消費）。
 """
 
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
+
+import liveness_session_isolation as _liveness_iso
 
 # testpaths 覆蓋警告外掛：命令列路徑未涵蓋全部 testpaths 時於終端摘要警告
 from testpaths_coverage_warning import (  # noqa: F401
@@ -34,6 +36,31 @@ from ticket_system.lib.paths import (
     reset_project_root_cache,
     reset_ticket_state_root_cache,
 )
+
+
+_SESSION_PATCH = {"mp": None}
+
+
+def pytest_configure(config):
+    """測試 session 專屬 CLAUDE_CODE_SESSION_ID（pytest- 前綴），結束時還原。
+
+    Why：測試觸發的 hook 沿用呼叫者 session id 時，liveness 記錄會併入真實
+    session 的索引檔（見 liveness_session_isolation.py）。
+    """
+    mp = pytest.MonkeyPatch()
+    mp.setenv(_liveness_iso.ENV_SESSION_ID, _liveness_iso.new_test_session_id())
+    _SESSION_PATCH["mp"] = mp
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """洩漏哨兵：真實 _liveness 出現 pytest- 前綴檔即令套件失敗（fail-closed）。"""
+    _liveness_iso.apply_leak_sentinel(session, Path(__file__).resolve().parents[3])
+
+
+def pytest_unconfigure(config):
+    if _SESSION_PATCH["mp"] is not None:
+        _SESSION_PATCH["mp"].undo()
+        _SESSION_PATCH["mp"] = None
 
 
 @pytest.fixture(autouse=True)
@@ -94,6 +121,27 @@ def _isolate_project_root(tmp_path_factory, monkeypatch):
     (root / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
     monkeypatch.setenv("TICKET_SYSTEM_TEST_ISOLATION", "1")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_hook_logs_dir(tmp_path_factory, monkeypatch):
+    """Autouse fixture: hook 日誌根目錄導向 tmp，兩棵 testpath 共用。
+
+    Why（巢狀污染）：`precondition._resolve_hook_logs_dir()` 預設用 cwd-relative
+    `.claude/hook-logs`；從 skill cwd 執行且未設 HOOK_LOGS_DIR 時，日誌落到
+    `.claude/skills/ticket/.claude/hook-logs/`，造成 untracked 巢狀污染。
+
+    Why（真實 repo 洩漏）：`identity_guard` 未設 HOOK_LOGS_DIR 時以
+    `git rev-parse --show-toplevel` 回退，不讀 CLAUDE_PROJECT_DIR，usage.log
+    落到真實 repo；原 autouse 僅在 `ticket_system/tests/`，`tests/` 樹無覆蓋。
+    linked worktree 內 in-process hook 的根目錄解析另受 worktree 偵測蓋過 tmp
+    根，故同步設 `HOOK_TEST_ISOLATION=1`（hook_base 的逃生艙旗標）。
+
+    設計：個別測試／fixture 可 monkeypatch.setenv 覆蓋；後注入者勝出。
+    """
+    logs_dir = tmp_path_factory.mktemp("hook-logs-default")
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(logs_dir))
+    monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
 
 
 @pytest.fixture
