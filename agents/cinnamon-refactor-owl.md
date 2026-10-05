@@ -4,7 +4,7 @@ description: TDD重構設計師專家 - 對應TDD Phase 4b（重構執行）。�
 tools: Edit, Write, Read, Bash, Grep, LS, MultiEdit, Glob, mcp__dart__*
 permissionMode: bypassPermissions
 color: orange
-model: sonnet
+model: sonnet[1m]
 effort: low
 ---
 

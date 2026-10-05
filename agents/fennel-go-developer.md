@@ -4,7 +4,7 @@ description: Go 後端開發專家 (Phase 3b)。從 pepper (Phase 3a) 接收語�
 tools: Edit, Write, Read, Bash, Grep, LS, Glob
 permissionMode: bypassPermissions
 color: cyan
-model: sonnet
+model: sonnet[1m]
 effort: low
 ---
 

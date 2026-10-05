@@ -4,7 +4,7 @@ description: 安全漏洞偵測與修復專家。主動審查涉及用戶輸入�
 allowed-tools: Read, Grep, Glob, Bash
 metadata:
   color: crimson
-model: inherit
+model: opus[1m]
 effort: low
 ---
 

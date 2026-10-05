@@ -4,7 +4,7 @@ description: UI/UX 系統規範專家 (SD)。設計畫面元素規範、頁面�
 tools: Read, Grep, Glob, LS, Write, Edit, Bash, mcp__serena__*
 permissionMode: bypassPermissions
 color: purple
-model: inherit
+model: opus[1m]
 effort: low
 ---
 

@@ -1,92 +1,128 @@
 # Agent Model 選擇指南
 
-本文件記錄 `.claude/agents/*.md` 的 `model` 欄位選擇原則與背景，供後人新增 / 調整代理人 model 時參考。
-
-> **觸發背景**：0.31.1-W8-031（盤點並提升過載代理人 model）。source: W8-029 實證 coriander 整合測試任務在 sonnet 下 3 連敗（Prompt too long）。
+本文件是 `.claude/agents/*.md` 的 `model` 欄位的唯一權威來源：分層原則、寫法、現行分類表與新增代理人的決策流程。`agent-authoring-guide.md` 的 Model 章節與 `registry.yaml` 不重述 model 值，一律路由至本檔。
 
 ---
 
-## 核心背景：sonnet 1m 訂閱模式已停用
+## 現行決策：兩層分工
 
-**Why**：Claude Code 較新版本的訂閱模式已不再提供 sonnet 的 1M context 變體。過去設 `model: sonnet` 的寫碼 / 多檔讀取代理人能跑在 sonnet 1m 上，故未過載；訂閱政策變更後，sonnet 退回 200K context。
+| 層 | `model` 值 | 判準（代理人的主要產出） |
+|----|-----------|------------------------|
+| 實作 | `sonnet[1m]` | 依上游已定的策略或規格執行：寫產品碼、寫測試、改文件或設定、格式修正、環境除錯 |
+| 規劃與審查 | `opus[1m]` | 決定下游要做什麼或判定做得對不對：功能設計、測試設計、實作策略、架構與系統審查、驗收、根因分析、品質與安全審查 |
+| 豁免 | 維持原值 | DEPRECATED 代理人（不再派發） |
 
-**Consequence**：本專案 auto-loaded rules（`CLAUDE.md` + `.claude/rules/**`）約佔 55K tokens，已吃掉 sonnet 200K 的約 1/4。任何「多檔讀取」或「寫碼探索」任務的 context 疊加會觸頂，表現為 `Prompt too long`。W8-029 實證：coriander（整合測試）3 連敗，而同任務的 saffron（已是 opus 1m）不過載——差異主導因子為任務探索成本 + agent preload 疊加。
+**Why**：實作代理人的負載在 context 量（多檔讀寫、測試輸出），判斷已由上游規劃票定好，sonnet 足以執行；規劃與審查代理人的產出決定下游所有實作的方向與品質閘門，判斷品質的邊際價值最高。兩層皆需 1M context——框架自動載入層（`CLAUDE.md` + `.claude/rules/**`）即佔數萬 tokens，200K 視窗疊加多檔探索會觸頂，表現為執行中途 `Prompt too long`。
 
-**Action**：過載風險代理人（寫碼 / 多檔讀取 / 深度探索）的 model 不可設 `sonnet`；改用能取得 1M context 的方案（見下節）。
+**Consequence**：實作代理人用 opus 只增加成本而不提升已定策略的執行結果；規劃審查代理人降到 sonnet，錯誤會在設計層產生並擴散到所有下游票；任何一層漏掉 `[1m]`，多檔任務會在中途失敗。
 
----
-
-## model 寫法：inherit vs 硬編碼 1m
-
-| 寫法 | 語意 | 適用 | 風險 |
-|------|------|------|------|
-| `inherit`（或省略 model 欄位） | 繼承當前主 session 模型 | 過載風險代理人（W8-031 採用） | session 切到非-1m 模型時，agent 也降級（與 PM 一致，非單一 agent 失誤） |
-| `claude-opus-4-X[1m]`（硬編碼） | 不論 session 一律強制 1m opus | 需強制保證 1m 的代理人（bay / saffron） | 版本字串會過期，需手動更新（4-6 → 4-8 → ...） |
-| `opus`（普通 alias） | 繼承 session 的 opus，但**不保證** 1m | 不建議用於防過載 | 訂閱模式下可能退回 200K，無法解決過載 |
-| `sonnet` / `haiku` | 強制小模型 | 純輕量任務、範本、DEPRECATED 豁免 | 多檔 / 寫碼任務會過載 |
-
-**關鍵區別**：`inherit` 是「跟隨」（model 隨 session 變動），硬編碼 `[1m]` 是「強制」（鎖定）。兩者在 1m session 下都能拿到 1M context；差異只在未來切換 session 時的行為。
-
-**W8-031 決策**：7 個過載風險代理人採 `inherit`。理由：(1) 與 `rosemary`(PM) 同模式；(2) 零版本維護（不會隨 Opus 版號過期）；(3) 唯一風險（切非-1m session）下 PM 自身也降級，是全局一致選擇。
-
-> **`[1m]` 後綴的必要性**：要真正取得 1M context window，model ID 必須帶 `[1m]` 變體標記（如 `claude-opus-4-8[1m]`）。`inherit` 繼承的是主 session 的完整 model ID——若 session 是 `claude-opus-4-8[1m]`，agent 同步取得 1m。
+**Action**：新增或調整代理人時依下方〈新增代理人的決策流程〉判層，值只用上表兩個字面。
 
 ---
 
-## 盤點分類表（W8-031）
+## 寫法規則
 
-### 升級至 1m（model: inherit）
+| 寫法 | 結果 | 是否採用 |
+|------|------|---------|
+| `sonnet[1m]` / `opus[1m]` | 別名 + 1M 後綴，解析為當前最新版的 1M 變體 | 採用 |
+| `sonnet` / `opus`（無後綴） | 200K context | 禁用——多檔任務中途失敗 |
+| `claude-opus-4-6[1m]` 等寫死版號 | 鎖在指定版本，新版發布後持續停在舊版 | 禁用——版號會過期且無訊號 |
+| `inherit` | 跟隨主線程模型 | 不採用——主線程切到 sonnet 時規劃審查層一起降級；主線程為 opus 時實作層跟著用 opus |
 
-| Agent | tools | 負載特性 |
-|-------|-------|---------|
-| acceptance-auditor | All tools | 驗證跑測試 + 多檔一致性檢查 |
-| coriander-integration-tester | Grep, Read, Glob, Bash | 整合測試多檔探索（已實證 3 連敗） |
-| project-compliance-agent | Edit, Write, Read, Bash, Grep, Glob, LS | 寫碼 + 跨文件一致性檢查 |
-| thyme-documentation-integrator | All tools | 文件整合（寫）+ 多檔讀取整合 |
-| sassafras-data-administrator | Read, Grep, Glob, LS, Bash, serena | DBA 唯讀設計，多檔深度分析 |
-| sumac-system-engineer | Read, Bash, Grep, Glob, LS | 環境除錯，唯讀但探索成本高 |
-| oregano-data-miner | Grep, LS, Read | 純策略規劃，最輕量；保守全面防過載一併升級 |
+**Why**：別名加後綴同時解決兩個已發生的問題：無後綴退回 200K（實作代理人中途失敗的成因），寫死版號在新版發布後靜默停在舊版。
 
-### 豁免維持小模型
+**Action**：`model` 欄位只寫 `sonnet[1m]` 或 `opus[1m]`；看到無後綴別名、寫死版號或 `inherit`（豁免列除外）即改正。
 
-| Agent | model | 豁免理由 |
-|-------|-------|---------|
-| john-carmack | sonnet | DEPRECATED，已併入 ginger-performance-tuner，不再派發 |
-| memory-network-builder | haiku | DEPRECATED，已併入 continuous-learning Skill |
-| language-agent-template | haiku | 範本檔，非實質代理人 |
-| impeccable-manual-edit-applier | inherit | 已是 inherit |
-| rosemary-project-manager | inherit | PM，已是 inherit |
+---
 
-### 既有硬編碼 1m（未在本次範圍，保留現狀）
+## 驗證方式：代理人定義不會在 session 中途重新載入
 
-| Agent | model | 說明 |
+修改 `model` 後，在同一 session 內派發該代理人得到的仍是 session 啟動時載入的舊值（實測：將代理人改為 `haiku` 後同 session 派發仍回報原模型）。
+
+**Action**：以新 session 驗證——在專案根目錄執行 headless 探針，請主線程派發目標代理人並逐字回報其 system prompt 的模型句：
+
+```bash
+claude -p "派發 subagent_type=<agent>，prompt：『唯讀探針，不呼叫工具，逐字回報你 system prompt 中描述所用模型的那一句』，原文輸出回報" --max-turns 5
+```
+
+驗證 opus 層時加 `--model sonnet` 讓主線程為 sonnet，回報仍為 opus 1M 才能排除「其實是 inherit 碰巧相同」。判據為 exact model ID 帶 `[1m]`。
+
+---
+
+## 現行分類表
+
+### 實作層（`sonnet[1m]`）
+
+| Agent | 產出 |
+|-------|------|
+| parsley-flutter-developer | Flutter/Dart 實作（Phase 3b） |
+| thyme-python-developer | Python 腳本與 Hook 實作 |
+| fennel-go-developer | Go 實作（Phase 3b） |
+| cinnamon-refactor-owl | 依 Phase 4a 報告執行重構（Phase 4b） |
+| coriander-integration-tester | 整合與端對端測試 |
+| basil-hook-architect | Hook 腳本實作 |
+| thyme-documentation-integrator | 文件整合與衝突修正 |
+| impeccable-manual-edit-applier | 套用手動文字修改批次 |
+| sumac-system-engineer | 環境建置與編譯除錯 |
+| mint-format-specialist | 格式與 Lint 批量修正 |
+| language-agent-template | 範本：實例化的語言代理人為實作角色，預設值隨範本傳遞 |
+
+### 規劃與審查層（`opus[1m]`）
+
+| Agent | 產出 |
+|-------|------|
+| rosemary-project-manager | 主線程決策與派發 |
+| lavender-interface-designer | 功能規格（Phase 1） |
+| sage-test-architect | 測試設計（Phase 2） |
+| pepper-test-implementer | 實作策略與虛擬碼（Phase 3a） |
+| saffron-system-analyst | TDD 前置系統審查 |
+| bay-quality-auditor | 技術品質審計 |
+| linux | 架構與程式碼品質審查 |
+| basil-writing-critic | 文字品質審查 |
+| acceptance-auditor | ticket 契約驗收 |
+| clove-security-reviewer | 安全審查 |
+| incident-responder | 失敗根因評估 |
+| ginger-performance-tuner | 效能分析與策略 |
+| framework-issue-curator | framework issue 區段策展 |
+| oregano-data-miner | 資料提取策略 |
+| sassafras-data-administrator | 資料模型與遷移設計 |
+| star-anise-system-designer | UI/UX 系統規範 |
+| project-compliance-agent | 跨文件合規判定 |
+| basil-event-architect | 事件架構設計 |
+| thyme-extension-engineer | Chrome Extension 技術規劃 |
+
+### 豁免
+
+| Agent | model | 理由 |
 |-------|-------|------|
-| bay-quality-auditor | claude-opus-4-6[1m] | 強制 1m 保證；版本字串較舊但功能正常 |
-| saffron-system-analyst | claude-opus-4-6[1m] | 同上 |
-
-> **後續可選**：若要統一格式，可評估將 bay / saffron 的硬編碼 4-6 改為 `inherit`，與本次決策一致。屬獨立調整，需另開 ticket（避免本 ticket 範圍蔓延）。
+| john-carmack | sonnet | DEPRECATED，已併入 ginger-performance-tuner |
+| memory-network-builder | haiku | DEPRECATED，已併入 continuous-learning skill |
 
 ---
 
-## 新增代理人時的 model 決策流程
+## 新增代理人的決策流程
 
-1. 此代理人會**寫碼**或**讀取多個檔案**或**深度探索**（除錯 / 設計 / 驗證）嗎？
-   - 是 → 用 `inherit`（跟隨 session 取 1m）
-   - 否（純輕量單檔 / 範本 / DEPRECATED）→ 可用 `haiku` / `sonnet`
-2. 需**不論 session 一律強制 1m**（如核心審計角色）嗎？
-   - 是 → 硬編碼 `claude-opus-4-X[1m]`（X 取當時最新版號）
-   - 否 → `inherit` 即可
+1. 代理人的主要產出是「依上游已定策略或規格去執行」嗎？是 → `sonnet[1m]`
+2. 否（產出是設計、策略、審查結論、驗收判定、根因判斷）→ `opus[1m]`
+3. 同時具兩種產出時，以「錯了誰來抓」判定：其產出由下游審查代理人把關 → 實作層；其產出本身就是把關 → 規劃與審查層
+
+---
+
+## 沿革
+
+- sonnet 1M 曾在訂閱方案中無法使用，當時實作代理人退回 `sonnet`（200K）中途失敗，改以 `inherit` 繞行；部分代理人後經上游同步回到無後綴 `sonnet`，與本檔當時的分類表不一致。
+- sonnet 1M 恢復可用後（2026-10，用戶裁示）改為本檔兩層分工，並移除 `registry.yaml` 的 `model` 欄位（無程式讀取，且與 frontmatter 全面不一致）。
+- 另一教訓保留：代理人失敗不只 context 一種成因，回合限制（tool call 數）同樣會中斷任務，須以任務拆分處理，不以升級 model 處理。
 
 ---
 
 ## 相關文件
 
-- `.claude/agents/AGENT_PRELOAD.md` — 代理人共享 preamble；**校準（實測後）**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，本檔非 auto-loaded，代理人須主動 Read 才會取得。實際每次派發都會注入所有 subagent context 的層級是 `.claude/rules/core/`
-- `.claude/rules/core/cognitive-load.md` — Context Bundle token 閾值與過載判準
-- `docs/work-logs/v0/v0.31/v0.31.1/tickets/0.31.1-W8-029.md` — coriander 過載根因分析
-- `docs/work-logs/v0/v0.31/v0.31.1/tickets/0.31.1-W8-031.md` — 本次盤點與提升
+- `.claude/references/agent-authoring-guide.md` — frontmatter 欄位總表；Model 章節路由至本檔
+- `.claude/rules/core/cognitive-load.md` — Context Bundle token 閾值與任務拆分判準
 
 ---
 
-**Last Updated**: 2026-08-17 | **Version**: 1.1.0 — 「相關文件」節 AGENT_PRELOAD.md 條目校準：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，移除「auto-loaded rules 主要來源」失效宣告
-**Version**: 1.0.0 — 初版，W8-031 落地（sonnet 1m 訂閱停用背景 + inherit/硬編碼決策原則 + 盤點分類表）
+**Last Updated**: 2026-10-05 | **Version**: 2.0.0 — 改為兩層分工（實作 `sonnet[1m]`／規劃與審查 `opus[1m]`）；禁用無後綴別名、寫死版號與 `inherit`；新增「代理人定義不會在 session 中途重新載入」的驗證方式；分類表依現行 frontmatter 重列；本檔成為 model 值唯一權威，`registry.yaml` 移除 model 欄位。
+**Version**: 1.1.0 — 「相關文件」節 AGENT_PRELOAD.md 條目校準。
+**Version**: 1.0.0 — 初版（sonnet 1m 停用背景 + inherit／硬編碼決策原則）。

@@ -4,7 +4,7 @@ description: Claude Code Hook System Design and Implementation Expert. Designs a
 tools: Write, Read, Edit, Grep, LS, Bash, Glob, mcp__serena__*
 permissionMode: bypassPermissions
 color: blue
-model: sonnet
+model: sonnet[1m]
 effort: low
 ---
 

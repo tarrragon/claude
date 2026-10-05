@@ -4,7 +4,7 @@ description: 文件格式化與品質修正專家。負責文件路徑語意化�
 tools: Grep, LS, Read, Edit, Write, mcp__dart__dart_fix, mcp__dart__dart_format, Bash
 permissionMode: bypassPermissions
 color: mint
-model: haiku
+model: sonnet[1m]
 effort: low
 ---
 

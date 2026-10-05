@@ -13,7 +13,7 @@
 | `name` | 是 | string | 代理人識別名稱（kebab-case） |
 | `description` | 是 | string | 核心職責描述（50-100 字），含觸發條件 |
 | `tools` / `allowed-tools` | 是 | string | 允許使用的工具清單，逗號分隔 |
-| `model` | 建議 | string | 使用的模型（haiku/sonnet/opus/inherit） |
+| `model` | 建議 | string | 使用的模型，只寫 `sonnet[1m]` 或 `opus[1m]`（判層見 `agent-model-selection.md`） |
 | `color` | 建議 | string | 代理人顏色標記（UI 識別用） |
 | `permissionMode` | 條件必填 | string | Runtime 權限模式；含 Edit/Write 的代理人必填 |
 | `effort` | 建議 | string | 推理深度（low/medium/high）；已有的代理人多設 low |
@@ -157,19 +157,19 @@ background: true
 | `medium` | 增強推理 | 複雜架構決策、多步驟分析 |
 | `high` | 最深推理 | 需要最大思考深度的系統設計、根因分析 |
 
-**判斷原則**：`effort` 與 `model` 獨立控制。高難度任務先考慮升級 `model`（opus/opus-1m），`effort: high` 用於同 model 下需要更深思考的場景。
+**判斷原則**：`effort` 與 `model` 獨立控制。`model` 依代理人層級固定（見 `agent-model-selection.md`），`effort: high` 用於同 model 下需要更深思考的場景。
 
 **範例**：
 
 ```yaml
 ---
 name: saffron-system-analyst
-model: claude-opus-4-6[1m]
+model: opus[1m]
 effort: low
 ---
 ```
 
-注意：XL 閱讀量任務（saffron/bay）使用 1m model，`effort` 仍設 `low` — 讀取量問題用 model 解決，推理深度問題才用 effort 解決。
+注意：saffron 的 `effort` 仍設 `low`——讀取量問題由 1M context 解決，推理深度問題才用 effort 解決。
 
 ---
 
@@ -280,7 +280,7 @@ description: Python 開發專家...
 tools: Edit, Write, Read, Bash, Grep, LS, Glob
 permissionMode: bypassPermissions
 color: green
-model: opus
+model: sonnet[1m]
 effort: low
 ---
 ```
@@ -343,50 +343,12 @@ effort: low
 
 ## Model 選擇指南
 
-### 歷史教訓（2026-04-16 更新）
+`model` 值的唯一權威來源是 `.claude/references/agent-model-selection.md`（兩層分工：實作代理人 `sonnet[1m]`、規劃與審查代理人 `opus[1m]`；現行分類表與新增代理人的決策流程皆在該檔）。本節不重述分類，避免兩份清單各自漂移。
 
-早期誤以為代理人失敗主因是「context 不足」，將所有代理人 model 統一升級至 opus 1m。後來確認真正原因是**代理人的回合限制（tool call ~20）**，非 context。統一升級造成簡單任務也用 opus 1m，浪費成本與速度。
+**撰寫時的兩條底線**：
 
-**提醒**：model 選擇解決的是「決策品質 / 成本」問題；回合限制問題需另行處理（任務拆分、cognitive load 降低等）。
-
-### 4 維度評分
-
-新增代理人時，先就以下 4 維度評估該代理人的典型任務：
-
-| 維度 | 評估問題 | 等級 |
-|------|---------|------|
-| **閱讀量** | 每次呼叫需讀取的檔案規模 | S(單檔) / M(數檔) / L(整模組) / XL(跨模組或整 codebase) |
-| **決策複雜度** | 任務本質是機械執行還是設計判斷 | 低(機械) / 中(規則推理) / 高(設計判斷) / 極高(架構決策) |
-| **輸出量** | 典型輸出長度 | 短(摘要/清單) / 中(結構化分析) / 長(完整程式碼/規格) |
-| **對話深度** | subagent 內部輪數 | 單輪 / 2-3 輪 / 多輪 |
-
-### Model 分類標準
-
-| 類別 | model 值 | 適用條件 |
-|------|---------|---------|
-| **D - 1M Context** | `claude-opus-4-6[1m]` | 閱讀量 = XL，系統級審查，需跨模組累積上下文 |
-| **C - Opus** | `opus` | 決策複雜度 ≥ 高，或實作代理人（品質關鍵） |
-| **B - Sonnet** | `sonnet` | 決策複雜度 = 中（規則推理），結構化任務 |
-| **A - Haiku** | `haiku` | 決策複雜度 = 低（機械執行），單檔格式修復類 |
-| **Main** | `inherit` | 主線程代理人（如 rosemary-project-manager） |
-
-### Model 選擇 checklist
-
-- [ ] 代理人是否需要讀取 > 200k tokens 的上下文？→ **D (opus 1m)**
-- [ ] 代理人是否做架構/設計判斷或生產程式碼？→ **C (opus)**
-- [ ] 代理人是否基於明確規則做結構化產出？→ **B (sonnet)**
-- [ ] 代理人是否純機械執行（格式、重命名等）？→ **A (haiku)**
-- [ ] 代理人是主線程 PM？→ **inherit**
-
-### 當前代理人分類（2026-04-16 W9-005 執行結果）
-
-| 類別 | 數量 | 代表代理人 |
-|------|------|-----------|
-| D (1m) | 2 | saffron-system-analyst, bay-quality-auditor |
-| C (opus) | 15 | linux, cinnamon, parsley, fennel, thyme-extension 等實作/設計類 |
-| B (sonnet) | 7 | acceptance-auditor, coriander, project-compliance 等規則驗證類 |
-| A (haiku) | 1 | mint-format-specialist |
-| inherit | 1 | rosemary-project-manager |
+- 只寫 `sonnet[1m]` 或 `opus[1m]`——無後綴別名只有 200K context，多檔任務會中途失敗；寫死版號（如 `claude-opus-4-6[1m]`）會在新版發布後靜默停在舊版。
+- 修改後以新 session 驗證——代理人定義不會在 session 中途重新載入，驗證方式見權威檔〈驗證方式〉。
 
 ---
 
@@ -399,11 +361,11 @@ effort: low
 | `thyme-extension-engineer` | `permissionMode: bypassPermissions` | 目前無 permissionMode，且 `allowed-tools` 格式非標準 `tools`；若背景派發規劃類任務，缺少授權模式會自動拒絕 | 背景派發不卡權限提示；`allowed-tools` 應改為 `tools` 對齊格式規範 |
 | `acceptance-auditor` | `maxTurns: 40` | 驗收流程須逐一讀取多個章節並比對，易達到回合限制；設上限可讓代理人提前回報缺口而非無聲停止 | 超出 ticket 體積時能提前回報而非靜默截斷 |
 | `coriander-integration-tester` | `background: true`、`maxTurns: 50` | 整合測試執行時間長，PM 等待結果浪費前台；`allowed-tools` 應改為標準 `tools` | PM 可並行進行下個 ticket 規劃；測試輪數多時不提前截斷 |
-| `bay-quality-auditor` | `maxTurns: 60` | 跨模組審計需讀取大量檔案，`model: claude-opus-4-6[1m]` 可處理 context 但輪數限制仍可能截斷大型 codebase 審計 | 大型審計不被輪數截斷；`allowed-tools` 應改為標準 `tools` |
+| `bay-quality-auditor` | `maxTurns: 60` | 跨模組審計需讀取大量檔案，`model: opus[1m]` 可處理 context 但輪數限制仍可能截斷大型 codebase 審計 | 大型審計不被輪數截斷；`allowed-tools` 應改為標準 `tools` |
 | `ginger-performance-tuner` | `maxTurns: 40`，`allowed-tools` 改 `tools` | 效能分析需讀取多個效能相關檔案；`allowed-tools` 為非標準格式 | 格式標準化；複雜效能分析輪數不截斷 |
 | `clove-security-reviewer` | `disallowedTools: Edit, Write`，`allowed-tools` 改 `tools` | 安全審查代理人不應修改被審查的程式碼；目前只靠職責說明約束，缺乏 frontmatter 強制層 | 從框架層防止意外寫入，比規則說明更可靠；`allowed-tools` 格式對齊 |
 | `rosemary-project-manager` | `maxTurns: 80` | PM 主線程在複雜 Wave 規劃（多 ticket 分析 + AUQ 決策循環）中可能達到輪數上限；設明確值讓截斷可預期 | 長 session 規劃不無聲截斷；超限時能提前提示用戶 |
-| `oregano-data-miner` | `effort: medium` | 資料提取策略規劃需深度分析 DOM 結構和資料驗證規則，目前 `sonnet` + `low` 組合可能對複雜策略輸出品質不足 | 複雜 DOM 分析策略品質提升；`effort: medium` 在同 model 下加深推理 |
+| `oregano-data-miner` | `effort: medium` | 資料提取策略規劃需深度分析 DOM 結構和資料驗證規則，原 `sonnet` + `low` 組合曾被評估為對複雜策略輸出品質不足（現已為 `opus[1m]`，`effort` 建議待評估） | 複雜 DOM 分析策略品質提升；`effort: medium` 在同 model 下加深推理 |
 | `incident-responder` | `maxTurns: 35` | 事件回應需讀取 error log、相關 ticket、error-pattern；任務體積可控但若不設限當遇複雜 incident 可能截斷 | 複雜 incident 分析不截斷；超出預設輪數能提前警告 |
 | `basil-writing-critic` | `maxTurns: 40` | 文字審查需逐段讀取長文件並對照規則；大型 rules/methodology 文件審查易超出預設輪數 | 長文件審查不截斷；提前知曉輪數預算可分段派發 |
 | `saffron-system-analyst` | `maxTurns: 70` | XL 閱讀量系統分析需讀取整個 codebase + 多份規格文件；1m context 足夠但輪數仍可能截斷多步驟分析流程 | 大型系統分析不被輪數截斷；分析結論完整輸出 |
@@ -429,7 +391,8 @@ effort: low
 
 ---
 
-**Last Updated**: 2026-08-17
+**Last Updated**: 2026-10-05
+**Version**: 1.4.0 — Model 選擇指南改為路由至 `agent-model-selection.md`（移除與權威檔矛盾的分級表與過時分類統計）；frontmatter 範例與欄位表的 model 值改為 `sonnet[1m]`／`opus[1m]`
 **Version**: 1.3.0 — 「檢查清單」的「引用 AGENT_PRELOAD.md？」項改述：單純加 `@-import` 引用行不構成有效載入（已實測不展開為內容），改要求 `initialPrompt` 顯式 `Read` 指令
 **Version**: 1.2.0 — 新增 CC 2.1.x 完整 frontmatter 欄位說明（8 欄位：initialPrompt/memory/permissionMode 確認/hooks/background/effort/maxTurns/disallowedTools，每欄位含場景範例）+ 代理人升級建議清單（13 個代理人，含優先序分級）（0.18.0-W6-005）
 **Version**: 1.1.0 — 新增 Model 選擇指南（W9-005 落地）

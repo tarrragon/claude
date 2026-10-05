@@ -4,7 +4,7 @@ description: Python 開發專家。負責 Python 腳本的新增、編輯、重�
 tools: Edit, Write, Read, Bash, Grep, LS, Glob
 permissionMode: bypassPermissions
 color: green
-model: sonnet
+model: sonnet[1m]
 effort: low
 ---
 

@@ -4,7 +4,7 @@ description: {語言} 開發專家 (Phase 3b)。從 pepper (Phase 3a) 接收語�
 tools: Edit, Write, Read, Bash, Grep, LS, Glob{, 語言特定工具}
 permissionMode: bypassPermissions
 color: {green|cyan|yellow|orange}
-model: haiku
+model: sonnet[1m]
 ---
 
 <!-- yaml-frontmatter-exempt: 範本檔案，frontmatter 刻意保留 {placeholder} 語法供複製後手動替換，非可直接解析的 YAML；衍生出的實際 agent 檔案替換完 placeholder 後即為合法 YAML，複製時請移除本行 -->

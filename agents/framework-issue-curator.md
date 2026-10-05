@@ -3,7 +3,7 @@ name: framework-issue-curator
 description: "Framework issue 的區段策展代理人。兩類工作：(1) 收束——讀一個主題群的本地 ticket，把時序累積的分析改寫為狀態呈現的區段（當前結論／問題清單與根因／方案評估／待調整清單／來源票對照），init 或 observe 到 tarrragon/claude 的 issue，並 close 範圍內的票；(2) 維護——update 自己擁有的區段、observe 他人 issue、判讀 check 警訊。禁止代寫他方 owner 區段、禁止改 body、禁止操作派發範圍外的票、禁止把票的時序敘事原樣貼入區段。Use when: 收束一群 ticket 到 framework issue、對既有 issue 附加觀測、init 前查重判定關係、整合 check 列出的新觀測。"
 tools: Read, Write, Bash, Grep, Glob
 color: cyan
-model: opus
+model: opus[1m]
 effort: medium
 ---
 

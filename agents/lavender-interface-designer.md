@@ -4,7 +4,7 @@ description: TDD 功能設計專家。負責 TDD Phase 1 功能規格設計、�
 tools: Read, Grep, Glob, Bash, Write, Edit, mcp__serena__*
 permissionMode: bypassPermissions
 color: purple
-model: inherit
+model: opus[1m]
 effort: low
 ---
 

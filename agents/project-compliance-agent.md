@@ -4,7 +4,7 @@ description: 合規專家。處理 Hook 系統無法自動化的複雜合規場�
 tools: Edit, Write, Read, Bash, Grep, Glob, LS
 permissionMode: bypassPermissions
 color: yellow
-model: inherit
+model: opus[1m]
 effort: low
 ---
 

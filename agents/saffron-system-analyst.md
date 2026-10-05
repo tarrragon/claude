@@ -3,7 +3,7 @@ name: saffron-system-analyst
 description: TDD 前置審查專家。在 TDD 開始前審查系統一致性、檢視/撰寫需求文件、防止重複造輪子、確保 ticket 與大系統設計一致。負責系統級審查，不負責單一功能設計。
 tools: Read, Grep, Glob, LS, Bash, mcp__serena__*
 color: gold
-model: claude-opus-4-6[1m]
+model: opus[1m]
 effort: low
 ---
 

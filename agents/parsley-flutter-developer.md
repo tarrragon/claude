@@ -4,7 +4,7 @@ description: Phase 3b Flutter 特定實作代理人 - 從 pepper (Phase 3a) 接�
 tools: Edit, Write, Read, Bash, Grep, LS, Glob, mcp__dart__*, mcp__serena__*
 permissionMode: bypassPermissions
 color: green
-model: sonnet
+model: sonnet[1m]
 effort: low
 ---
 

@@ -4,7 +4,7 @@ description: TDD Implementation Planning Specialist - Phase 3a 實作策略規�
 tools: Edit, Write, Grep, LS, Read, Bash, Glob, mcp__dart__*
 permissionMode: bypassPermissions
 color: green
-model: inherit
+model: opus[1m]
 effort: low
 ---
 

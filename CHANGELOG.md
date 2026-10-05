@@ -1,3 +1,16 @@
+## [2.76.0] - 2026-10-05
+
+### Summary
+feat: 代理人 model 分層——實作 sonnet[1m]、規劃與審查 opus[1m]; docs: agent model 權威檔改為兩層分工並移除 registry 重複來源; chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+
+Changes: 1 feat, 1 docs, 1 chore
+
+- feat: 代理人 model 分層——實作 sonnet[1m]、規劃與審查 opus[1m]
+- docs: agent model 權威檔改為兩層分工並移除 registry 重複來源
+- chore: 回寫 .claude/VERSION 為 某版本（canonical sync-push）
+
+---
+
 ## [2.75.0] - 2026-10-02
 
 ### Summary
