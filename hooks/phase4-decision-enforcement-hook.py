@@ -15,8 +15,8 @@ Hook 類型：
 - PreToolUse (Bash): 輔助觸發，匹配 `ticket track complete <id>`（殘留二次掃描）
 
 分級：
-- MUST-block（M1-M3）：Exit 2，stderr 阻擋
-- WARN（W1-W3）：Exit 0，stdout 警告
+- MUST-block（M1-M4）：Exit 2，stderr 阻擋
+- WARN（W1-W4）：Exit 0，stdout 警告
 - INFO（I1-I2）：Exit 0，stdout 提醒
 
 豁免語法：
@@ -200,6 +200,8 @@ class PhraseRule:
     level: str       # BLOCK|WARN|INFO
     pattern: re.Pattern
     rationale: str
+    # True：同一行已含 ticket ID 即視為已綁 trigger，不命中（E 系列句型）
+    exempt_if_ticket_id_on_line: bool = False
 
 
 @dataclass
@@ -229,7 +231,7 @@ class ExemptRef:
 # ============================================================================
 
 def build_regex_table() -> List[PhraseRule]:
-    """構建 3 級 regex 表（8 條：M×3 / W×3 / I×2）。
+    """構建 3 級 regex 表（10 條：M×4 / W×4 / I×2）。
 
     依 Phase 1 §1 設計。IGNORECASE + MULTILINE。
     """
@@ -288,6 +290,18 @@ def build_regex_table() -> List[PhraseRule]:
             ),
             rationale="將「不用」偽裝為「保留」（根因 D）",
         ),
+        # M4: Solution 寫法的無 trigger 延後（「本票不處理」「不另建票」等）。
+        # 同行含 ticket ID 即視為已綁 trigger，不命中。
+        PhraseRule(
+            id="M4",
+            level="BLOCK",
+            pattern=re.compile(
+                r"本票不處理|不另(?:外)?建票|不(?:在|屬)本票範圍[^\n]{0,10}?無後續",
+                flags,
+            ),
+            rationale="未綁 ticket 的延後（PC-093），同行含 ticket ID 豁免",
+            exempt_if_ticket_id_on_line=True,
+        ),
         # W1: 視 X 結果再決定（帶條件延後）
         PhraseRule(
             id="W1",
@@ -317,6 +331,17 @@ def build_regex_table() -> List[PhraseRule]:
                 flags,
             ),
             rationale="根因 C「決策疲勞」口語",
+        ),
+        # W4: 「已知限制…不處理」跨句寫法；同行含 ticket ID 豁免。
+        PhraseRule(
+            id="W4",
+            level="WARN",
+            pattern=re.compile(
+                r"已知限制[^\n]{0,40}?(?:不處理|不修)",
+                flags,
+            ),
+            rationale="已知限制未綁 ticket 的延後，同行含 ticket ID 豁免",
+            exempt_if_ticket_id_on_line=True,
         ),
         # I1: TBD/TODO/FIXME 延後標記
         PhraseRule(
@@ -592,7 +617,10 @@ def scan_lines_for_phrases(
         if REF_LINE_PATTERN.match(raw):
             continue
         stripped = EXEMPT_MARKER_STRIP.sub("", raw)
+        line_has_ticket_id = bool(TICKET_ID_PATTERN.search(stripped))
         for rule in table:
+            if rule.exempt_if_ticket_id_on_line and line_has_ticket_id:
+                continue
             for match in rule.pattern.finditer(stripped):
                 hits.append(
                     Hit(

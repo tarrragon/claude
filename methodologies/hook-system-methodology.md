@@ -81,6 +81,7 @@ Notification / TeammateIdle / ConfigChange / CwdChanged / FileChanged / Worktree
 | Handler 選擇 | 預設順序 `command` -> `http` -> `prompt` -> `agent`，越右成本越高需說明理由 |
 | `if` 條件粗篩 | `if` 用於避免不相關工具觸發（如 `if: "Bash(git *)"`）；詳細判斷交給 handler，不硬塞進 `if` |
 
+> 守衛的失效方向（deny 輸出失敗不得變成放行、fail_closed 適用範圍）見 `.claude/references/hook-architect-technical-reference.md`「deny 輸出失敗語意」章節。
 > Event 選擇完整決策流程、handler 對照表、`if` 條件情境表見衛星檔「Event 選擇決策流程」章節。
 > 完整錯誤模式：`.claude/error-patterns/architecture/ARCH-019-hook-event-timing-mismatch.md`；Event input/output 規範：`.claude/references/hook-architect-technical-reference.md`。
 
@@ -209,5 +210,6 @@ Hook 目錄下建議維護 `hook-lifecycle.yaml`，記錄各 Hook 的 stage、en
 
 ---
 
-**Last Updated**: 2026-06-14
+**Last Updated**: 2026-10-06
+**Version**: 2.1.0 — 原則 0 補互連：指向 technical-reference「deny 輸出失敗語意」章節。
 **Version**: 2.0.0 — 整併 hook 家族 3 檔為 1 主檔 + 2 衛星檔（W8-020.6）：折入 hook-stage-balance-methodology（階段平衡 4 原則 + 密度表）與 hook-downgrade-observation（生命週期 + 降級機制 + 觀察期標準）核心；operations 詳解外移 `hook-system-operations.md`、降級追蹤外移 `hook-system-downgrade-tracking.md`；emoji 全數清理為純文字（document-format-rules 規則 1）。歷史版本見 git log

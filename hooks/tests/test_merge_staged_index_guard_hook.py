@@ -78,6 +78,8 @@ def test_e2_plain_merge_denied_when_staged(monkeypatch, repo, capsys):
 
 
 def test_e2_dash_c_merge_denied_when_staged(monkeypatch, repo, tmp_path):
+    # 全套件負載下逾時會 fail-open 翻掉 deny，放寬逾時以降低負載敏感度
+    monkeypatch.setattr(hook_module, "_GIT_TIMEOUT_SECONDS", 60)
     _stage(repo)
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
@@ -176,3 +178,43 @@ def test_e2_fast_forward_with_no_ff_denied_when_staged(monkeypatch, repo):
 def test_unresolvable_ref_treated_as_staged_denied(monkeypatch, repo):
     _stage(repo)
     assert _run(monkeypatch, "git merge no-such-ref", repo) == 2
+
+
+# ---- 未決路徑：git 逾時 / 非零 returncode 維持 fail-open，但必須留下可見訊號 ----
+# 與上方 E2 deny 測試構成 E1 對照：同一組 staged fixture，正常 git 為 deny（rc=2），
+# 注入 git 故障後為放行（rc=0）且 stderr 有訊息。
+
+def test_e1_git_timeout_allowed_with_visible_message(monkeypatch, repo, capsys):
+    _stage(repo)
+    real_run_git = hook_module._run_git
+
+    def timeout_on_diff(target, args):
+        if "diff" in args:
+            raise subprocess.TimeoutExpired(cmd="git", timeout=1)
+        return real_run_git(target, args)
+
+    monkeypatch.setattr(hook_module, "_run_git", timeout_on_diff)
+    assert _run(monkeypatch, "git merge feature", repo) == 0
+    assert "放行" in capsys.readouterr().err
+
+
+def test_e1_diff_nonzero_allowed_with_visible_message(monkeypatch, repo, capsys):
+    _stage(repo)
+    real_run_git = hook_module._run_git
+
+    def diff_fails(target, args):
+        if "diff" in args:
+            return subprocess.CompletedProcess(
+                args, 128, stdout="", stderr="fatal: injected"
+            )
+        return real_run_git(target, args)
+
+    monkeypatch.setattr(hook_module, "_run_git", diff_fails)
+    assert _run(monkeypatch, "git merge feature", repo) == 0
+    err = capsys.readouterr().err
+    assert "放行" in err
+    assert "128" in err
+
+
+def test_git_timeout_is_module_constant():
+    assert isinstance(hook_module._GIT_TIMEOUT_SECONDS, (int, float))

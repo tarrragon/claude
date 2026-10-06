@@ -528,7 +528,12 @@ class TicketLifecycle:
         """
         self.version = version
 
-    def claim(self, ticket_id: str, as_agent: Optional[str] = None) -> int:
+    def claim(
+        self,
+        ticket_id: str,
+        as_agent: Optional[str] = None,
+        acknowledge: Optional[str] = None,
+    ) -> int:
         """
         認領 Ticket - 將狀態從 pending 變更為 in_progress
 
@@ -599,6 +604,13 @@ class TicketLifecycle:
             # W2-018：申報執行身份時寫入 who.current（與 complete --as 對稱）
             _apply_claim_identity(ticket, as_agent)
 
+            # --acknowledge：兄弟結構警告的顯式確認，理由追加到票面（不改 claim 語意）
+            if acknowledge and acknowledge.strip():
+                ticket["_body"] = (
+                    (ticket.get("_body") or "").rstrip("\n")
+                    + f"\n\n[claim acknowledge] {acknowledge.strip()}\n"
+                )
+
             # W2-009：依 registry agent -> tdd_phases 對應自動推進 tdd_phase
             _apply_auto_tdd_phase(ticket, as_agent)
 
@@ -618,6 +630,7 @@ class TicketLifecycle:
         ticket_id: str,
         auto_yes: bool = False,
         as_agent: Optional[str] = None,
+        acknowledge: Optional[str] = None,
     ) -> int:
         """整合 AC 自動驗證的 claim 主流程入口（PROP-010 方案 2）。
 
@@ -644,6 +657,7 @@ class TicketLifecycle:
         Returns:
             0 / 1 / 130 exit code。
         """
+        ack_kw = {"acknowledge": acknowledge} if acknowledge else {}
         # 非 tty 且無 --yes：fail-closed 拒絕 claim（§B.4）
         if not sys.stdin.isatty() and not auto_yes:
             print(
@@ -661,11 +675,11 @@ class TicketLifecycle:
                 f"[Warning] AC 解析失敗：{err}；降級為直接 claim",
                 file=sys.stderr,
             )
-            return self.claim(ticket_id, as_agent=as_agent)
+            return self.claim(ticket_id, as_agent=as_agent, **ack_kw)
 
         # S1：無 AC
         if not pairs:
-            return self.claim(ticket_id, as_agent=as_agent)
+            return self.claim(ticket_id, as_agent=as_agent, **ack_kw)
 
         # 執行驗證
         cwd = resolve_project_cwd()
@@ -686,7 +700,7 @@ class TicketLifecycle:
                 f"[AC verification] Ticket {ticket_id}：{summary.total} 項 AC "
                 f"皆無法自動驗證（跳過驗證，直接 claim）"
             )
-            return self.claim(ticket_id, as_agent=as_agent)
+            return self.claim(ticket_id, as_agent=as_agent, **ack_kw)
 
         # S4：全部可驗證 AC 已達成 → 拒絕 claim
         if summary.status == "all_passed":
@@ -708,7 +722,7 @@ class TicketLifecycle:
             print(rendered)
         decision = prompt_user_decision(summary, auto_yes)
         if decision == "y":
-            return self.claim(ticket_id, as_agent=as_agent)
+            return self.claim(ticket_id, as_agent=as_agent, **ack_kw)
         return 1
 
     def verify_only(self, ticket_id: str) -> int:
@@ -2609,11 +2623,15 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
     # W4-019: --skip-verify 旗標已移除（兩輪觀察期 trigger 達成）；單獨驗證
     # 請改用 ticket track verify 子命令（與 claim 解耦）。
     if verify_opt_in:
+        acknowledge = getattr(args, "acknowledge", None)
+        ack_kw = {"acknowledge": acknowledge} if acknowledge else {}
         rc = lifecycle.claim_with_verification(
-            args.ticket_id, auto_yes=auto_yes, as_agent=as_agent
+            args.ticket_id, auto_yes=auto_yes, as_agent=as_agent, **ack_kw
         )
     else:
-        rc = lifecycle.claim(args.ticket_id, as_agent=as_agent)
+        acknowledge = getattr(args, "acknowledge", None)
+        ack_kw = {"acknowledge": acknowledge} if acknowledge else {}
+        rc = lifecycle.claim(args.ticket_id, as_agent=as_agent, **ack_kw)
 
     # W17-002.2：claim 成功後自動抽取 Context Bundle（異常降級；idempotent merge 自然防止重複）
     if rc == 0:

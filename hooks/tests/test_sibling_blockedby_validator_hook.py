@@ -348,3 +348,64 @@ def test_d2_main_independent_of_caller_cwd(hook_module, monkeypatch, tmp_path):
 
     assert captured["project_root"] == real_root
     assert captured["project_root"] != nested_cwd
+
+
+# E2：確認方式不得使條件 1 BLOCK 放行（正向對照：已知應被擋的輸入）
+def test_e2_block_not_bypassed_by_acknowledge(hook_module, project_with_tickets, logger, capsys):
+    root, td = project_with_tickets
+    _write_ticket(td, "T-A")
+    _write_ticket(td, "T-B")
+    _write_ticket(td, "T-C", blocked_by=["T-A", "T-B"])
+    cmd = 'ticket track claim T-C --acknowledge "理由"'
+    parsed = hook_module.parse_bash_command(cmd)
+    assert parsed["acknowledge"] == "理由"
+    code = hook_module.run_check(root, "T-C", parsed["acknowledge"], logger)
+    assert code == 2
+    assert "條件 1" in capsys.readouterr().err
+
+
+# E1：條件 3（純 IMP→IMP）的 WARN 必須隨 --acknowledge 調整
+# 同一批 payload 分別帶與不帶 ack，斷言輸出不同，且帶 ack 時不再建議已附的旗標。
+def _imp_to_imp_project(td):
+    _write_ticket(td, "T-A", type="IMP")
+    _write_ticket(td, "T-B", type="IMP", blocked_by=["T-A"])
+
+
+def test_e1_condition3_differs_with_and_without_ack(hook_module, project_with_tickets, logger, capsys):
+    root, td = project_with_tickets
+    _imp_to_imp_project(td)
+    hook_module.run_check(root, "T-B", None, logger)
+    err_without = capsys.readouterr().err
+    hook_module.run_check(root, "T-B", "確認非規格實作關係", logger)
+    err_with = capsys.readouterr().err
+    assert "條件 3" in err_without
+    assert "條件 3" not in err_with
+    assert err_without != err_with
+
+
+def test_e1_ack_present_never_suggests_ack_again(hook_module, project_with_tickets, logger, capsys):
+    root, td = project_with_tickets
+    _imp_to_imp_project(td)
+    code = hook_module.run_check(root, "T-B", "確認非規格實作關係", logger)
+    err = capsys.readouterr().err
+    assert code == 0
+    assert "--acknowledge" not in err
+
+
+def test_e1_inverted_timing_warn_not_offset_by_ack(hook_module, project_with_tickets, logger, capsys):
+    """IMP→spec 時序錯反是不同判定，ack 不抵消（對照：抵消僅限 IMP→IMP）。"""
+    root, td = project_with_tickets
+    _write_ticket(td, "T-A", type="IMP")
+    _write_ticket(td, "T-B", type="ANA", blocked_by=["T-A"])
+    hook_module.run_check(root, "T-B", "理由", logger)
+    assert "條件 3" in capsys.readouterr().err
+
+
+# E2：條件 1 雙向依賴帶 ack 仍 BLOCK（正向對照）
+def test_e2_bidirectional_still_blocks_with_ack(hook_module, project_with_tickets, logger, capsys):
+    root, td = project_with_tickets
+    _write_ticket(td, "T-A", blocked_by=["T-B"])
+    _write_ticket(td, "T-B", blocked_by=["T-A"])
+    code = hook_module.run_check(root, "T-A", "理由", logger)
+    assert code == 2
+    assert "條件 1" in capsys.readouterr().err

@@ -73,6 +73,7 @@ from lib.dispatch_tracker import (
     mark_oldest_active_null_agent_id_entry_turn_ended,
     get_active_dispatches,
     get_state_file_path,
+    leave_turn_ended_tombstone,
 )
 
 HOOK_NAME = "subagent-stop-dispatch-cleanup"
@@ -188,7 +189,12 @@ def main() -> int:
     state_file = get_state_file_path(project_root)
 
     if not state_file.exists():
-        logger.debug("dispatch-active.json 不存在，跳過")
+        # 同步派發首筆：狀態檔尚未建立，記錄稍後才寫入，仍須留墓碑
+        try:
+            leave_turn_ended_tombstone(project_root, agent_id)
+            logger.info("狀態檔不存在，已留回合結束墓碑 agent_id=%s", agent_id)
+        except OSError as e:
+            logger.info("墓碑寫入失敗（不影響主流程）: %s", e)
         return 0
 
     messages = []
@@ -239,6 +245,15 @@ def main() -> int:
                     "SubagentStop agent_id=%s 無法標記回合結束（精準和 FIFO 兩路徑皆失敗）",
                     agent_id,
                 )
+
+    if not marked:
+        # 同步派發時序：SubagentStop 早於 PostToolUse(Agent) 寫入記錄，條目
+        # 尚不存在；留墓碑供 record_dispatch 寫入時消費（TTL + 消費即刪）。
+        try:
+            leave_turn_ended_tombstone(project_root, agent_id)
+            logger.info("無匹配條目，已留回合結束墓碑 agent_id=%s", agent_id)
+        except OSError as e:
+            logger.info("墓碑寫入失敗（不影響主流程）: %s", e)
 
     if marked:
         messages.append(f"已標記回合結束 agent_id={agent_id}")

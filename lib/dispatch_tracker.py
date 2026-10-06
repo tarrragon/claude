@@ -107,6 +107,11 @@ LOCK_FILE_RELATIVE = ".claude/dispatch-active.lock"
 # 不是偵測手段本身——偵測手段是該掃描，不是本 TTL 到期。
 TURN_ENDED_MAX_AGE_HOURS = 24
 
+# 回合結束墓碑 TTL（秒）。同步派發時 SubagentStop 早於 PostToolUse(Agent)
+# 寫入記錄，兩事件相隔實測約數秒；墓碑只需撐過此間隔。10 分鐘留足餘裕，
+# 逾時未被消費的墓碑於下次狀態寫入時剪除，不無限累積。
+TOMBSTONE_TTL_SECONDS = 600
+
 # 跨平台 file lock：Unix 走 fcntl.flock，Windows 走 msvcrt.locking。
 # 目標：_state_lock 的 read-modify-write 互斥保護可在 Windows 執行，
 # 不再以 `import fcntl` 直接失敗 (ModuleNotFoundError)。
@@ -241,6 +246,59 @@ def _write_state(project_root: Path, state: Dict) -> None:
     _state_cache["mtime"] = 0.0
 
 
+def _prune_tombstones(state: Dict, now: datetime) -> None:
+    """剪除逾 TTL 或格式不合的墓碑（就地修改 state，呼叫端須持鎖）。"""
+    kept = []
+    for t in state.get("tombstones", []):
+        try:
+            created = datetime.fromisoformat(t["created_at"])
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if (now - created).total_seconds() <= TOMBSTONE_TTL_SECONDS:
+                kept.append(t)
+        except (KeyError, ValueError, TypeError):
+            continue  # 損毀墓碑直接丟棄（輔助資料，不影響 dispatches）
+    if kept:
+        state["tombstones"] = kept
+    else:
+        state.pop("tombstones", None)
+
+
+def leave_turn_ended_tombstone(project_root: Path, agent_id: str) -> None:
+    """SubagentStop 無匹配條目時留下墓碑，供稍後寫入的記錄消費。
+
+    同步派發（非 run_in_background）時 SubagentStop 先於 PostToolUse(Agent)
+    寫入記錄，標記函式找不到條目；墓碑保存該 agent_id 的回合結束時刻，
+    `record_dispatch` 寫入時若 agent_id 或 agent_handle 匹配則直接帶入
+    `turn_ended_at` 並刪除墓碑。清理條件：消費即刪 + TOMBSTONE_TTL_SECONDS。
+    """
+    with _state_lock(project_root):
+        state = _read_state(project_root)
+        now = datetime.now(timezone.utc)
+        _prune_tombstones(state, now)
+        state.setdefault("tombstones", []).append(
+            {"agent_id": agent_id, "created_at": now.isoformat()}
+        )
+        _write_state(project_root, state)
+
+
+def _consume_tombstone(
+    state: Dict, agent_id: Optional[str], agent_handle: str
+) -> Optional[str]:
+    """若有匹配墓碑則自 state 移除並回傳其 created_at，否則 None。"""
+    for t in state.get("tombstones", []):
+        tid = t.get("agent_id", "")
+        hit = bool(agent_id) and tid == agent_id
+        if not hit and agent_handle:
+            hit = re.match("^a" + re.escape(agent_handle) + "-[0-9a-f]+$", tid) is not None
+        if hit:
+            state["tombstones"].remove(t)
+            if not state["tombstones"]:
+                state.pop("tombstones")
+            return t.get("created_at")
+    return None
+
+
 def record_dispatch(
     project_root: Path,
     agent_description: str,
@@ -306,6 +364,7 @@ def record_dispatch(
     """
     with _state_lock(project_root):
         state = _read_state(project_root)
+        _prune_tombstones(state, datetime.now(timezone.utc))
         entry = {
             "agent_description": agent_description,
             "tool_use_id": tool_use_id,
@@ -317,7 +376,7 @@ def record_dispatch(
             "session_id": session_id,
             "name": name,
             "agent_handle": agent_handle,
-            "turn_ended_at": None,
+            "turn_ended_at": _consume_tombstone(state, agent_id, agent_handle),
         }
         state["dispatches"].append(entry)
         _write_state(project_root, state)

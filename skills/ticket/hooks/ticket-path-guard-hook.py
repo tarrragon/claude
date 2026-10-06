@@ -40,7 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from lib import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, emit_hook_output
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 from datetime import datetime
@@ -175,8 +175,13 @@ def main() -> int:
         else:
             is_allowed, reason = True, "未知工具類型，預設允許"
 
-        hook_output = generate_hook_output(is_allowed, reason, logger)
-        print(json.dumps(hook_output, ensure_ascii=False))
+        # 經 emit_hook_output：deny 輸出失敗時 SystemExit(2) 不被下方
+        # except Exception 吞成 allow（原行為為 fail-open）
+        emit_hook_output(
+            "PreToolUse",
+            permission_decision="allow" if is_allowed else "deny",
+            permission_decision_reason=reason,
+        )
 
         log_entry = f"""[{datetime.now().isoformat()}]
   Tool: {tool_name}

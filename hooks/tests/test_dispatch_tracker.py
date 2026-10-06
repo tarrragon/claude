@@ -966,3 +966,89 @@ class TestPruneDispatches:
         assert final_descriptions == {"concurrent-entry"}, (
             f"record_dispatch 的新記錄應存活；實際: {final_descriptions}"
         )
+
+
+class TestTurnEndedTombstone:
+    """同步派發時序：SubagentStop 早於 PostToolUse(Agent) 寫入記錄。
+
+    SubagentStop 無匹配條目時留墓碑，record_dispatch 寫入時若見墓碑則
+    直接寫入 turn_ended_at 並消費（刪除）墓碑。
+    """
+
+    AGENT_ID = "afix-abc123-73070ca5c1d3f849"
+
+    @staticmethod
+    def _stop(root: Path, agent_id: str, use_tombstone: bool = True) -> bool:
+        """模擬 SubagentStop hook 的標記序列（含/不含墓碑步驟）。"""
+        marked = mark_turn_ended_by_handle(root, agent_id) or mark_turn_ended_by_id(
+            root, agent_id
+        )
+        if not marked and use_tombstone:
+            from lib.dispatch_tracker import leave_turn_ended_tombstone
+
+            leave_turn_ended_tombstone(root, agent_id)
+        return marked
+
+    @staticmethod
+    def _post(root: Path) -> None:
+        record_dispatch(root, "sync dispatch", agent_handle="fix-abc123")
+
+    def test_e1_stop_first_then_record_marks_turn_ended(self, project_root: Path):
+        """E1（Stop 先到）：最終條目 turn_ended_at 非 null。"""
+        self._stop(project_root, self.AGENT_ID)
+        self._post(project_root)
+        entries = get_active_dispatches(project_root)
+        assert len(entries) == 1
+        assert entries[0]["turn_ended_at"] is not None
+
+    def test_e1_record_first_then_stop_marks_turn_ended(self, project_root: Path):
+        """E1（Stop 後到，背景派發順序）：最終條目 turn_ended_at 非 null。"""
+        self._post(project_root)
+        self._stop(project_root, self.AGENT_ID)
+        entries = get_active_dispatches(project_root)
+        assert len(entries) == 1
+        assert entries[0]["turn_ended_at"] is not None
+
+    def test_e2_stop_first_without_tombstone_leaves_null(self, project_root: Path):
+        """E2 正向對照：無墓碑機制時 Stop 先到，條目殘留 null（E1 判準為紅）。"""
+        self._stop(project_root, self.AGENT_ID, use_tombstone=False)
+        self._post(project_root)
+        entries = get_active_dispatches(project_root)
+        assert not all(e["turn_ended_at"] is not None for e in entries)
+
+    def test_background_order_leaves_no_tombstone(self, project_root: Path):
+        """背景派發（記錄先於 Stop）不留墓碑，行為不變。"""
+        self._post(project_root)
+        self._stop(project_root, self.AGENT_ID)
+        state = json.loads(get_state_file_path(project_root).read_text())
+        assert state.get("tombstones", []) == []
+
+    def test_tombstone_consumed_on_record(self, project_root: Path):
+        """墓碑被記錄寫入消費後刪除，第二筆同 handle 派發不受影響。"""
+        self._stop(project_root, self.AGENT_ID)
+        self._post(project_root)
+        state = json.loads(get_state_file_path(project_root).read_text())
+        assert state.get("tombstones", []) == []
+        self._post(project_root)
+        entries = get_active_dispatches(project_root)
+        assert entries[1]["turn_ended_at"] is None
+
+    def test_unrelated_handle_not_marked(self, project_root: Path):
+        """墓碑只對 handle 匹配的記錄生效。"""
+        self._stop(project_root, self.AGENT_ID)
+        record_dispatch(project_root, "other", agent_handle="other-1")
+        assert get_active_dispatches(project_root)[0]["turn_ended_at"] is None
+
+    def test_expired_tombstone_pruned_and_ignored(self, project_root: Path):
+        """逾 TTL 的墓碑不生效且於下次寫入時清除（不無限累積）。"""
+        from lib.dispatch_tracker import leave_turn_ended_tombstone
+
+        leave_turn_ended_tombstone(project_root, self.AGENT_ID)
+        path = get_state_file_path(project_root)
+        state = json.loads(path.read_text())
+        old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        state["tombstones"][0]["created_at"] = old
+        path.write_text(json.dumps(state))
+        self._post(project_root)
+        assert get_active_dispatches(project_root)[0]["turn_ended_at"] is None
+        assert json.loads(path.read_text()).get("tombstones", []) == []

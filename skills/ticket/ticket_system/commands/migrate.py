@@ -18,7 +18,7 @@ import yaml
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 
 from ticket_system.constants import MAX_TICKET_DEPTH
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
@@ -359,6 +359,25 @@ def _check_target_collision(target_id: str, version: str) -> Optional[Dict[str, 
     }
 
 
+RESERVED_PATH_LABEL = "（本批次已預留的預覽目標）"
+MIGRATE_MAP_MARKER = "[MIGRATE-MAP]"
+
+
+def _find_collision(
+    target_id: str, version: str, reserved: Optional[Set[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """撞檔或撞到本批次已預留（dry-run 預覽尚未落地）的目標都算撞號。"""
+    collision = _check_target_collision(target_id, version)
+    if collision or not reserved or target_id not in reserved:
+        return collision
+    return {"path": RESERVED_PATH_LABEL, "title": "N/A", "status": "N/A"}
+
+
+def _print_renumber_map(original_id: str, actual_id: str) -> None:
+    """輸出機器可讀的改號對照行，供 finish 彙整對照表與跨程序保留目標。"""
+    print(f"{MIGRATE_MAP_MARKER} {original_id} -> {actual_id}")
+
+
 def _increment_sequence_str(sequence_str: str) -> str:
     """
     將序號字串（可含點號）最末一段遞增 1，保留原有補零寬度。
@@ -376,7 +395,9 @@ def _increment_sequence_str(sequence_str: str) -> str:
     return ".".join(parts)
 
 
-def _resolve_available_target_id(target_id: str, version: str) -> str:
+def _resolve_available_target_id(
+    target_id: str, version: str, reserved: Optional[Set[str]] = None,
+) -> str:
     """
     碰撞時尋找下一個可用序號（發版前移撞號改號機制）。
 
@@ -387,6 +408,7 @@ def _resolve_available_target_id(target_id: str, version: str) -> str:
     Args:
         target_id: 原本碰撞的目標 Ticket ID
         version: fallback 版本號（若 target_id 無法解析版本時使用）
+        reserved: 本批次已預留的目標 ID（dry-run 預覽尚未落地），候選須避開
 
     Returns:
         str: 下一個可用的目標 Ticket ID
@@ -402,7 +424,7 @@ def _resolve_available_target_id(target_id: str, version: str) -> str:
     while True:
         sequence_str = _increment_sequence_str(sequence_str)
         candidate_id = f"{target_version}-W{wave}-{sequence_str}"
-        if not _check_target_collision(candidate_id, version):
+        if not _find_collision(candidate_id, version, reserved):
             return candidate_id
 
 
@@ -638,6 +660,38 @@ def _rewrite_external_refs(mapping: Dict[str, str], skip_paths: set) -> List[Pat
     return written
 
 
+def _resolve_subtree_root_target(
+    target_id: str, member_ids: set, version: str, force_overwrite: bool,
+    reserved: Optional[Set[str]] = None,
+) -> tuple:
+    """子樹根票目標撞號時沿用單票路徑的改號函式取下一可用序號，回傳 (目標 ID, 原撞號資訊 | None)。
+
+    force-overwrite 不改號（維持覆寫語意）；僅根票撞號觸發，成員撞號仍由 preflight 擋下。
+    目標正是子樹成員自己的 ID（根遷到自己的子位）時，該檔會被搬走，不算撞號。
+    """
+    if force_overwrite or target_id in member_ids:
+        return target_id, None
+    collision = _find_collision(target_id, version, reserved)
+    if not collision:
+        return target_id, None
+    return _resolve_available_target_id(target_id, version, reserved), collision
+
+
+def _print_dry_run_collision(
+    original_id: str, resolved_id: str, collision: Dict[str, Any],
+) -> None:
+    """dry-run 撞號：印改號預覽（rc 維持 0，預告正式執行結果）與對照標記行。"""
+    print(format_warning(
+        MigrateMessages.DRY_RUN_COLLISION_PREVIEW,
+        target_id=original_id,
+        target_path=str(collision["path"]),
+        existing_title=collision["title"],
+        existing_status=collision["status"],
+        resolved_id=resolved_id,
+    ))
+    _print_renumber_map(original_id, resolved_id)
+
+
 def _migrate_subtree(
     version: str,
     source_id: str,
@@ -647,11 +701,20 @@ def _migrate_subtree(
     dry_run: bool,
     backup: bool,
     force_overwrite: bool,
+    reserved: Optional[Set[str]] = None,
 ) -> tuple:
-    """連帶遷移 source 與其整個子樹，回傳 (exit code, 根票 record | None)。"""
+    """連帶遷移 source 與其整個子樹，回傳 (exit code, 根票 record | None)。
+
+    dry-run 撞號時 rc=0 預覽改號後的對照；reserved 記下預覽目標供同批次後續票避開。
+    """
     source_path = get_ticket_path(
         (extract_id_components(source_id) or {}).get("version", version), source_id)
     members = [(source_id, source_path, root), *descendants]
+    original_target_id = target_id
+    target_id, collision = _resolve_subtree_root_target(
+        target_id, {tid for tid, _p, _t in members}, version, force_overwrite, reserved)
+    if collision and dry_run:
+        _print_dry_run_collision(original_target_id, target_id, collision)
     mapping = {tid: target_id + tid[len(source_id):] for tid, _p, _t in members}
     failures = _subtree_preflight(mapping, version, force_overwrite)
     if failures:
@@ -664,8 +727,20 @@ def _migrate_subtree(
                           target_id=target_id, count=len(members)))
         for old_id, new_id in mapping.items():
             print(f"  {old_id} → {new_id}")
+        if reserved is not None:
+            reserved.update(mapping.values())
         return 0, None
 
+    if collision:
+        root["migrated_from"] = original_target_id
+        print(format_info(
+            MigrateMessages.INFO_MIGRATE_RENUMBERED,
+            original_target_id=original_target_id,
+            resolved_id=target_id,
+        ))
+        _print_renumber_map(original_target_id, target_id)
+    if reserved is not None:
+        reserved.update(mapping.values())
     old_parent_id = root.get("parent_id")
     new_paths = {tid: _member_path(mapping[tid], version) for tid, _p, _t in members}
     if backup:
@@ -719,6 +794,7 @@ def _migrate_ticket_files(
     dry_run: bool = False,
     backup: bool = True,
     force_overwrite: bool = False,
+    reserved: Optional[Set[str]] = None,
 ) -> tuple:
     """
     遷移單一 Ticket 的檔案（寫入工作區，不提交）
@@ -730,6 +806,7 @@ def _migrate_ticket_files(
         dry_run: 預覽模式
         backup: 是否備份
         force_overwrite: 明示授權覆寫目標 ID 既有 Ticket（W14-048）
+        reserved: 本批次已預留的目標 ID 集合；本函式把最終目標加入，供同批次後續票避開
 
     Returns:
         (exit code, _MigrationRecord | None)：exit code 0 成功, 1 失敗, 2 來源 Ticket
@@ -768,13 +845,13 @@ def _migrate_ticket_files(
         if descendants:
             root = _load_ticket_from_path(source_path_check) or ticket
             return _migrate_subtree(version, source_id, target_id, root, descendants,
-                                    dry_run, backup, force_overwrite)
+                                    dry_run, backup, force_overwrite, reserved)
 
     # W14-048: collision detection（target 已存在）
     # 例外：source == target（同 ID rename，等同 in-place 更新）不視為 collision
     collision = None
     if source_id != target_id:
-        collision = _check_target_collision(target_id, version)
+        collision = _find_collision(target_id, version, reserved)
 
     # 預覽模式
     if dry_run:
@@ -790,18 +867,15 @@ def _migrate_ticket_files(
                     existing_status=collision["status"],
                 ))
                 return 0, None
-            # 發版前移撞號改號機制：dry-run 對碰撞判 FAIL 並印改號預覽，
-            # 不再視為可放行的預覽（避免 finish --dry-run 對碰撞誤判 [OK]）。
-            resolved_id = _resolve_available_target_id(target_id, version)
-            print(format_error(
-                MigrateMessages.DRY_RUN_COLLISION_FAIL,
-                target_id=target_id,
-                target_path=str(collision["path"]),
-                existing_title=collision["title"],
-                existing_status=collision["status"],
-                resolved_id=resolved_id,
-            ))
-            return 1, None
+            # 發版前移撞號改號機制：dry-run 撞號以 rc=0 預覽改號目標，
+            # 與正式執行同一套改號函式，預告結果而非中止 finish。
+            resolved_id = _resolve_available_target_id(target_id, version, reserved)
+            _print_dry_run_collision(target_id, resolved_id, collision)
+            if reserved is not None:
+                reserved.add(resolved_id)
+            return 0, None
+        if reserved is not None:
+            reserved.add(target_id)
         return 0, None
 
     # 實際執行階段：碰撞時預設改取下一可用序號（migrated_from 記錄原目標）；
@@ -809,13 +883,14 @@ def _migrate_ticket_files(
     if collision:
         if not force_overwrite:
             original_target_id = target_id
-            target_id = _resolve_available_target_id(target_id, version)
+            target_id = _resolve_available_target_id(target_id, version, reserved)
             ticket["migrated_from"] = original_target_id
             print(format_info(
                 MigrateMessages.INFO_MIGRATE_RENUMBERED,
                 original_target_id=original_target_id,
                 resolved_id=target_id,
             ))
+            _print_renumber_map(original_target_id, target_id)
         else:
             # force_overwrite=True：記錄 audit log 後繼續執行
             print(format_info(
@@ -824,6 +899,9 @@ def _migrate_ticket_files(
                 timestamp=datetime.now().isoformat(),
                 existing_title=collision["title"],
             ))
+
+    if reserved is not None:
+        reserved.add(target_id)
 
     # 執行備份
     backup_path = None
@@ -959,6 +1037,7 @@ def _migrate_single_ticket(
     dry_run: bool = False,
     backup: bool = True,
     force_overwrite: bool = False,
+    reserved: Optional[Set[str]] = None,
 ) -> int:
     """遷移單一 Ticket 並以單一 commit 入庫。
 
@@ -967,7 +1046,7 @@ def _migrate_single_ticket(
         EXIT_AUTO_COMMIT_FAILED 檔案已寫入但提交最終失敗)
     """
     rc, record = _migrate_ticket_files(
-        version, source_id, target_id, dry_run, backup, force_overwrite
+        version, source_id, target_id, dry_run, backup, force_overwrite, reserved
     )
     if rc == 0 and record and _commit_migrations([record]):
         return EXIT_AUTO_COMMIT_FAILED
@@ -1022,6 +1101,7 @@ def _batch_migrate(
     dry_run: bool = False,
     backup: bool = True,
     force_overwrite: bool = False,
+    reserved: Optional[Set[str]] = None,
 ) -> int:
     """
     批量遷移 Tickets
@@ -1046,8 +1126,9 @@ def _batch_migrate(
     # 自動改號（force_overwrite=True 時仍記錄 audit log 覆寫，語意不變）。
     # 批量預掃描因此不再需要——各筆遷移各自對當下檔案系統狀態判斷碰撞並
     # 改號，天然支援批次內連環碰撞（前一筆改號後的新目標仍會被下一筆的
-    # 碰撞檢查看見）。
+    # 碰撞檢查看見）。dry-run 不落地，故以 reserved 保留集合讓預覽同樣連環。
 
+    reserved = set(reserved or ())
     success_count = 0
     fail_count = 0
     skip_count = 0
@@ -1069,7 +1150,7 @@ def _batch_migrate(
 
         print()
         result, record = _migrate_ticket_files(
-            version, source_id, target_id, dry_run, backup, force_overwrite
+            version, source_id, target_id, dry_run, backup, force_overwrite, reserved
         )
 
         if result == 0:
@@ -1111,7 +1192,9 @@ def execute(args: argparse.Namespace) -> int:
         dry_run = getattr(args, "dry_run", False)
         backup = not getattr(args, "no_backup", False)
         force_overwrite = getattr(args, "force_overwrite", False)
-        return _batch_migrate(version, args.config, dry_run, backup, force_overwrite)
+        return _batch_migrate(
+            version, args.config, dry_run, backup, force_overwrite,
+            set(getattr(args, "reserve_id", None) or ()))
 
     # 單一 Ticket 遷移
     source_id = getattr(args, "source_id", None)
@@ -1126,7 +1209,8 @@ def execute(args: argparse.Namespace) -> int:
     force_overwrite = getattr(args, "force_overwrite", False)
 
     return _migrate_single_ticket(
-        version, source_id, target_id, dry_run, backup, force_overwrite
+        version, source_id, target_id, dry_run, backup, force_overwrite,
+        set(getattr(args, "reserve_id", None) or ()),
     )
 
 
@@ -1180,6 +1264,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         default=False,
         help=MigrateMessages.ARG_FORCE_OVERWRITE
+    )
+
+    parser.add_argument(
+        "--reserve-id",
+        action="append",
+        metavar="ID",
+        help=MigrateMessages.ARG_RESERVE_ID
     )
 
     parser.set_defaults(func=execute)

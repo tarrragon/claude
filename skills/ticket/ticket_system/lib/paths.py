@@ -6,6 +6,7 @@
 # 防止直接執行此模組
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +25,9 @@ _project_root_cache: Path | None = None
 
 # get_ticket_state_root() 程序內快取（2026-09-02 新增，語意同 _project_root_cache）。
 _ticket_state_root_cache: Path | None = None
+
+# worktree 導回主倉庫的 [INFO] 提示是否已輸出（每程序一次；隨快取一併重置）。
+_worktree_redirect_notice_emitted = False
 
 
 def _git_toplevel() -> Path | None:
@@ -369,8 +373,25 @@ def reset_ticket_state_root_cache() -> None:
     生產路徑不需呼叫——CLI 每次呼叫是獨立 process，快取隨 process 結束
     自然失效。語意與 reset_project_root_cache() 相同（見該函式 docstring）。
     """
-    global _ticket_state_root_cache
+    global _ticket_state_root_cache, _worktree_redirect_notice_emitted
     _ticket_state_root_cache = None
+    _worktree_redirect_notice_emitted = False
+
+
+def _emit_worktree_redirect_notice(main_root: Path) -> None:
+    """linked worktree 導回主倉庫時於 stderr 輸出一行 [INFO]（每程序一次）。
+
+    Why：worktree 對票務寫入不構成隔離，導向無輸出會讓呼叫者誤把 worktree
+    當實驗沙盒，寫入命令直接改到主倉庫的真票。提示只走 stderr，不影響 stdout。
+    """
+    global _worktree_redirect_notice_emitted
+    if _worktree_redirect_notice_emitted:
+        return
+    _worktree_redirect_notice_emitted = True
+    sys.stderr.write(
+        f"[INFO] 偵測到 linked worktree，票務狀態改作用於主倉庫：{main_root}"
+        "（worktree 不隔離票務寫入）\n"
+    )
 
 
 def _resolve_ticket_state_root() -> Path:
@@ -403,6 +424,7 @@ def _resolve_ticket_state_root() -> Path:
         # 其父目錄即主倉庫根目錄。
         common_dir = get_git_common_dir()
         if common_dir is not None:
+            _emit_worktree_redirect_notice(common_dir.parent)
             return common_dir.parent
 
     # 2. 非 worktree（或 git-common-dir 無法解析時的降級）：委派

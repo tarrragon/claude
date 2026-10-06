@@ -686,6 +686,14 @@ def _register_lifecycle_commands(
         help="Context Bundle 抽取結果以 JSON 結構化輸出（W17-002.1）",
     )
     p_claim.add_argument(
+        "--acknowledge",
+        dest="acknowledge",
+        default=None,
+        metavar="REASON",
+        help="顯式確認兄弟結構警告（sibling-blockedby-validator 條件 3/4 WARN 建議的"
+        "確認方式）：理由寫入票面，不改變 claim 語意",
+    )
+    p_claim.add_argument(
         "--as",
         dest="as_agent",
         default=None,

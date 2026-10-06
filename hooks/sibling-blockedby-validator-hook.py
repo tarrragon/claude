@@ -103,8 +103,14 @@ def check_condition_2_acyclic(target: Dict, siblings_map: Dict[str, Dict]) -> Op
     return None
 
 
-def check_condition_3_spec_to_impl(target: Dict, siblings_map: Dict[str, Dict]) -> Optional[Dict]:
-    """條件 3：規格→實作時序啟發式（A7, A8, A9）。"""
+def check_condition_3_spec_to_impl(target: Dict, siblings_map: Dict[str, Dict],
+                                   ack: Optional[str] = None) -> Optional[Dict]:
+    """條件 3：規格→實作時序啟發式（A7, A8, A9）。
+
+    純 IMP→IMP 的 WARN 本身的出路就是 --acknowledge（原建議文字），故已附有效
+    ack 時視為已確認而不輸出；時序錯反（IMP→spec）是另一種判定，ack 不抵消。
+    """
+    ack_given = bool(ack and ack.strip())
     target_type = (target.get("type") or "").upper()
     blocked_by = target.get("blockedBy") or []
 
@@ -116,6 +122,8 @@ def check_condition_3_spec_to_impl(target: Dict, siblings_map: Dict[str, Dict]) 
 
         # 純 IMP→IMP
         if target_type in IMPL_TYPES and dep_type in IMPL_TYPES:
+            if ack_given:
+                continue
             return _violation(3, SEVERITY_WARN,
                               f"純 IMP→IMP 兄弟序列（{dep_id} → {target.get('id')}）",
                               "確認非規格→實作關係，或加 --acknowledge \"理由\"")
@@ -153,7 +161,7 @@ def evaluate(target: Dict, siblings_map: Dict[str, Dict], ack: Optional[str]) ->
     results = [
         check_condition_1_unidirectional(target, siblings_map),
         check_condition_2_acyclic(target, siblings_map),
-        check_condition_3_spec_to_impl(target, siblings_map),
+        check_condition_3_spec_to_impl(target, siblings_map, ack),
         check_condition_4_no_deepening(target, ack),
     ]
     return [r for r in results if r is not None]

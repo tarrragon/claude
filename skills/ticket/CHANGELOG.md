@@ -2,6 +2,20 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.44（本地變更）— `create --blocked-by` 的循環偵測改以跨版本取票建圖：`validate_blocked_by_references` 原只以 `list_tickets(單一版本)` 建圖，環經過其他版本的票時在版本邊界斷開而被漏判（實測：新版本票與舊版本票互為 blockedBy 時驗證通過）。現行：從 blockedBy 沿依賴遍歷，缺席於版本內集合的票以 `resolve_blocker` 跨版本載入後併入圖。純 bug fix，CLI 子命令與旗標語意不變，無文件同步需求。測試 `tests/test_blocked_by_cross_version_cycle.py`：E1 兩節點與三節點跨版本環修前驗證通過、修後回 BLOCKED_BY_CYCLE；E2 跨版本無環仍通過、同版本環仍被擋。
+
+**Version**: 2.44.43（本地變更）— `ticket track tree`／`chain` 補上 `children` 欄位指向的跨版本子票（遞迴），載入不到者以 `(not_found)` 節點標示而非靜默省略；`track full` 的 spawned 遞迴改為先依 ID 前綴推導版本載入、退回目前版本（沿用 `extract_version_from_ticket_id`，與 acceptance 審計同一套推導）。原因：前移規則讓已完成子孫留在舊版本，單一版本解析使舊版本子票從樹中消失、舊版本 spawned 顯示 not_found。同版本樹輸出不變，循環引用防護不變；文件同步檢查：SKILL.md 與 pm-rules 無此輸出細節描述。測試 `tests/test_track_query_cross_version_tree.py`：修前 5 紅 1 綠（E1 舊版本子票與 spawned 缺漏、E2 對照 not_found 標示），修後全綠。
+
+**Version**: 2.44.42（本地變更）— acceptance 審計的 `_has_impl_or_adj_child` 改為跨版本載入 children：先以子票 ID 前綴推導版本，載入不到退回父票版本（比照 `lifecycle._find_non_terminal_by_id`，重用 `extract_version_from_ticket_id`）。原因：前移規則讓已完成子孫留在舊版本，只用父票版本載入會把跨版本 IMP/ADJ 子票誤判為不存在。純 bug fix，CLI 子命令與旗標語意不變，無文件同步需求。測試 `tests/test_acceptance_auditor_cross_version_children.py`：E1 同批 fixture 舊版本 IMP／ADJ 子票修前回 False、修後回 True，且與不存在 ID 的結果不同；E2 舊版本 ANA 子票與不存在 ID 仍回 False；同版本子票行為不變。
+
+**Version**: 2.44.41（本地變更）— `ticket migrate --dry-run` 遇目標撞號改為 rc=0 預覽改號目標（單票與子樹路徑皆然），輸出 `[WARNING]` 改號預覽與機器可讀的 `[MIGRATE-MAP] <原目標> -> <實際目標>` 行，預告正式執行結果而不再中止 finish 的 dry-run。批次內以 `reserved` 保留集合避免兩票預覽到同一目標（批次模式程序內共用；跨程序以新旗標 `--reserve-id <ID>`（可重複）帶入）；正式執行改號時同樣輸出 `[MIGRATE-MAP]` 行。`--force-overwrite` 的 dry-run 語意不變（可放行 `[WARNING]`）。原因：同一撞號輸入 dry-run rc=1 中止、正式執行卻自動改號續行，dry-run 無法預告正式結果。測試：`tests/test_migrate_collision.py::TestDryRunCollisionPreview`——E1 同批 fixture 撞號與不撞號 dry-run 輸出不同（修前撞號案 rc=1）、E2 兩票目標相同的連環撞號預覽目標彼此不同且與正式執行落地 ID 一致（修前預覽目標相同或無標記）；既有斷言 dry-run 撞號 rc=1 的兩個測試依新語意改為 rc=0。
+
+**Version**: 2.44.40（本地變更）— `ticket migrate` 有子孫票的子樹遷移遇目標根票撞號時，與單票路徑對等自動改號：改取下一可用序號（沿用單票路徑的 `_resolve_available_target_id`），成員以新根為前綴改寫 ID／previous_ids／parent_id／外部引用，根票寫入 `migrated_from`；`--dry-run` 對撞號判 FAIL 並印改號預覽；成員撞號仍由 preflight 整體拒絕；`--force-overwrite` 語意不變（不改號）。原因：子樹路徑的 preflight 對根票撞號一律失敗，finish 前移父票遇撞號只能人工 migrate。測試 `tests/test_migrate_subtree_cascade.py::TestRootCollisionAutoRenumber`：修前撞號案三案紅（preflight 失敗），不撞號與 force-overwrite 對照兩案綠；修後全綠。
+
+**Version**: 2.44.39（本地變更）— `ticket track claim` 新增 `--acknowledge REASON`：理由以 `[claim acknowledge] <理由>` 追加到票面，claim 語意不變（`--verify` 路徑同樣傳遞）。原因是 sibling-blockedby-validator hook 對條件 3/4 WARN 建議「加 --acknowledge」，CLI 未定義該旗標而以 rc=2 拒絕，守衛建議的命令被另一端拒絕。測試 `tests/test_claim_acknowledge.py`：修前解析 `--acknowledge` 為 unrecognized arguments（rc=2），修後解析成功並留下理由紀錄；不帶旗標時票面無紀錄。
+
+**Version**: 2.44.38（本地變更）— 票務 CLI 從 linked worktree 導回主倉庫時，stderr 輸出一行 `[INFO]` 標明實際作用的主倉庫路徑（`get_ticket_state_root()` 的回推處，每程序一次，stdout 不受影響；主 checkout 與獨立 clone 不輸出）。原因是 worktree 對票務寫入不構成隔離，導向無輸出會讓呼叫者把 worktree 當實驗沙盒而改到主倉庫真票。`reset_ticket_state_root_cache()` 同時重置一次性旗標。SKILL.md 與派發範本各補一句提醒並路由至 PC-GPD-030。測試 `tests/test_worktree_redirect_notice.py`：修前 worktree 兩案紅、主 checkout 與獨立 clone 兩案綠；修後全綠。
+
 **Version**: 2.44.37（本地變更）— `test_guard_logs_stay_inside_tmp_repo` 不再以真實 guard 日誌目錄的前後快照判定。原斷言讀取真實 `hook-logs/git-ref-transaction-content-guard` 的檔名與大小，其他 session 的並行寫入會使它翻紅（結果依賴程式以外的因素）。現行為只讀測試自己的 tmp 樹的正向斷言：測試倉庫 `hook-logs` 下的日誌全部 `resolve()` 後落在 tmp 內（日誌若穿過連結寫進真實根，實體位置在 tmp 外即失敗），且其中有本次「被阻擋」的紀錄。產品碼與 guard 不變。測試：E1 把 `link_claude` 改回整目錄 symlink 時新斷言翻紅；E2 以背景執行緒持續寫入真實 guard 日誌目錄時新斷言維持綠燈，同條件下舊快照斷言翻紅。
 
 **Version**: 2.44.36（本地變更）— 測試 session 的 liveness 不再併入呼叫者 session 的索引檔。原因是 `mark_hook_entry` 以 `CLAUDE_CODE_SESSION_ID` 決定 `_liveness` 索引檔名，測試沿用呼叫者的 id 時，測試寫入的紀錄會併入真實 session 的索引，使已失效的 hook 看起來仍存活。修改如下：

@@ -21,6 +21,6 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-m 'not wallclock'"
 markers = [
-    "wallclock: 以牆鐘逾時為判準的真實子程序測試，負載敏感，預設主套件排除；執行 uv run pytest -m wallclock",
+    "wallclock: 以牆鐘逾時為判準的真實子程序測試，負載敏感，預設主套件排除；固定執行點為 hooks-test-gate（commit 觸及 gate 本體或 conftest.py 時加跑 -m wallclock），手動執行 uv run pytest -m wallclock",
     "integration: 以生產啟動方式（subprocess uv run）執行，涉及真實 git/檔案 I/O",
 ]

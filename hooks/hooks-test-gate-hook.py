@@ -120,6 +120,16 @@ TOTAL_BUDGET = 100
 # settings.json 中本 hook 註冊的 timeout（單位：秒；測試驗證兩者一致且大於最壞上界）。
 PLATFORM_TIMEOUT_SECONDS = 120
 
+# wallclock 標記測試（pyproject addopts 預設排除）的固定執行點：
+# commit 觸及左側 hook 檔時，額外以 `-m wallclock` 跑右側測試檔。
+# gate 本體與 pytest 計時外掛（conftest.py）都是該測試檔所驗證的真實子程序整合路徑。
+# 逾時與紅燈一律判紅（deny），不 skip。
+WALLCLOCK_TRIGGERS = {
+    "hooks-test-gate-hook.py": "test_hooks_test_gate_hook.py",
+    "conftest.py": "test_hooks_test_gate_hook.py",
+}
+_WALLCLOCK_ARGS = ["-m", "wallclock"]
+
 _STATUS_PASS = "pass"
 _STATUS_RED = "red"
 _STATUS_TIMEOUT = "timeout"
@@ -464,13 +474,20 @@ def _remove_quietly(path: Optional[str], logger) -> None:
 
 
 def _run_pytest(
-    test_paths: List[Path], hooks_dir: Path, logger, timeout: Optional[float] = None
+    test_paths: List[Path],
+    hooks_dir: Path,
+    logger,
+    timeout: Optional[float] = None,
+    extra_args: Optional[List[str]] = None,
 ) -> "tuple[str, str]":
-    """跑指定測試檔清單，回傳 (狀態, 輸出末段)。狀態為 pass / red / timeout。"""
+    """跑指定測試檔清單，回傳 (狀態, 輸出末段)。狀態為 pass / red / timeout。
+
+    extra_args 置於測試路徑之前（如 `-m wallclock`），預設無。
+    """
     limit = PER_FILE_TIMEOUT if timeout is None else timeout
-    cmd = ["uv", "run", "--project", str(hooks_dir), "pytest", "-q"] + [
-        str(p) for p in test_paths
-    ]
+    cmd = ["uv", "run", "--project", str(hooks_dir), "pytest", "-q"] + list(
+        extra_args or []
+    ) + [str(p) for p in test_paths]
     logger.info("執行目標測試（timeout=%ss）: %s", limit, cmd)
     timing_path = _make_timing_file(logger)
     env = dict(os.environ)
@@ -523,14 +540,18 @@ def _run_pytest(
 
 
 def _run_all_tests(
-    tested: Dict[str, Path], hooks_dir: Path, logger
+    tested: Dict[str, Path],
+    hooks_dir: Path,
+    logger,
+    deadline: Optional[float] = None,
 ) -> "Dict[str, tuple[str, str]]":
     """逐檔執行，回傳 {hook檔名: (狀態, 輸出末段)}。
 
     每檔逾時 = min(PER_FILE_TIMEOUT, 剩餘總預算)；預算耗盡後其餘檔案標記
     unverified（不判失敗，由 main 放行並附提醒）。最壞總耗時 <= TOTAL_BUDGET。
     """
-    deadline = time.monotonic() + TOTAL_BUDGET
+    if deadline is None:
+        deadline = time.monotonic() + TOTAL_BUDGET
     results = {}
     for hook_filename, test_path in sorted(tested.items()):
         remaining = deadline - time.monotonic()
@@ -544,6 +565,52 @@ def _run_all_tests(
         timeout = min(PER_FILE_TIMEOUT, remaining)
         results[hook_filename] = _run_pytest([test_path], hooks_dir, logger, timeout)
     return results
+
+
+def _wallclock_test_paths(touched, hooks_dir: Path) -> Dict[str, Path]:
+    """觸及的 hook 檔對應的 wallclock 測試檔（去重；檔案不存在者略過）。"""
+    paths: Dict[str, Path] = {}
+    for hook_filename in sorted(touched):
+        test_name = WALLCLOCK_TRIGGERS.get(hook_filename)
+        candidate = hooks_dir / "tests" / test_name if test_name else None
+        if candidate is not None and candidate.exists():
+            paths[test_name] = candidate
+    return paths
+
+
+def _run_wallclock_tests(
+    paths: Dict[str, Path], hooks_dir: Path, logger, deadline: float
+) -> "Dict[str, tuple[str, str]]":
+    """以 `-m wallclock` 逐檔執行；與一般測試共用總預算，耗盡者標 unverified。"""
+    results = {}
+    for name, path in sorted(paths.items()):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            logger.warning("總預算 %ss 耗盡，未執行 wallclock: %s", TOTAL_BUDGET, name)
+            results[name] = (_STATUS_UNVERIFIED, f"總預算 {TOTAL_BUDGET}s 耗盡，未執行")
+            continue
+        timeout = min(PER_FILE_TIMEOUT, remaining)
+        results[name] = _run_pytest(
+            [path], hooks_dir, logger, timeout, extra_args=_WALLCLOCK_ARGS
+        )
+    return results
+
+
+def _build_wallclock_deny_block(results: dict) -> str:
+    lines, tails = [], []
+    for name, (status, tail) in sorted(results.items()):
+        if status in (_STATUS_PASS, _STATUS_UNVERIFIED):
+            continue
+        lines.append(f"  - {name} (-m wallclock) : {_STATUS_LABELS[status]}")
+        tails.append(f"[{name} -m wallclock]\n{tail}")
+    if not lines:
+        return ""
+    return (
+        "\n\nwallclock 標記測試（真實子程序整合）未通過：\n"
+        + "\n".join(lines)
+        + "\n\n測試輸出（末段）：\n"
+        + "\n\n".join(tails)
+    )
 
 
 _BOUNDARY_NOTE = (
@@ -573,7 +640,9 @@ def _build_unverified_reminder(tested: Dict[str, Path], unverified: List[str]) -
     )
 
 
-def _build_deny_message(tested: Dict[str, Path], results: dict) -> str:
+def _build_deny_message(
+    tested: Dict[str, Path], results: dict, wallclock_block: str = ""
+) -> str:
     """區分測試紅、單檔逾時、總預算耗盡未執行，並指名檔案。"""
     lines = []
     tails = []
@@ -593,10 +662,11 @@ def _build_deny_message(tested: Dict[str, Path], results: dict) -> str:
         unverified_block = "\n\n" + _build_unverified_reminder(tested, unverified)
     return (
         "Hooks 目標測試 gate：commit 被阻止\n\n"
-        "以下被改動的 hook 檔對應測試未通過：\n"
+        + ("以下被改動的 hook 檔對應測試未通過：\n" if lines else "")
         + "\n".join(lines)
-        + "\n\n測試輸出（末段）：\n"
+        + ("\n\n測試輸出（末段）：\n" if tails else "")
         + "\n\n".join(tails)
+        + wallclock_block
         + unverified_block
         + f"\n\n{_BOUNDARY_NOTE}\n"
         "請修正對應測試後再重試 commit。"
@@ -652,29 +722,57 @@ def _verify_touched_hooks(
     hooks_dir = Path(host_root) / ".claude" / "hooks"
     tested, untested = _resolve_test_paths(touched, hooks_dir)
 
+    deadline = time.monotonic() + TOTAL_BUDGET
     unverified: List[str] = []
+    failing: dict = {}
+    results: dict = {}
     if tested:
-        results = _run_all_tests(tested, hooks_dir, logger)
+        results = _run_all_tests(tested, hooks_dir, logger, deadline)
         failing = {
             f: r[0]
             for f, r in results.items()
             if r[0] not in (_STATUS_PASS, _STATUS_UNVERIFIED)
         }
         unverified = sorted(f for f, r in results.items() if r[0] == _STATUS_UNVERIFIED)
-        if failing:
-            logger.info("目標測試未通過，阻擋 commit: %s", sorted(failing.items()))
-            emit_hook_output(
-                "PreToolUse",
-                permission_decision="deny",
-                permission_decision_reason=_build_deny_message(tested, results),
-                input_data=input_data,
-            )
-            return 0
+
+    wallclock_results = _run_wallclock_tests(
+        _wallclock_test_paths(touched, hooks_dir), hooks_dir, logger, deadline
+    )
+    wallclock_failing = {
+        n: r[0]
+        for n, r in wallclock_results.items()
+        if r[0] not in (_STATUS_PASS, _STATUS_UNVERIFIED)
+    }
+    wallclock_unverified = sorted(
+        n for n, r in wallclock_results.items() if r[0] == _STATUS_UNVERIFIED
+    )
+
+    if failing or wallclock_failing:
+        logger.info(
+            "目標測試未通過，阻擋 commit: %s wallclock=%s",
+            sorted(failing.items()), sorted(wallclock_failing.items()),
+        )
+        emit_hook_output(
+            "PreToolUse",
+            permission_decision="deny",
+            permission_decision_reason=_build_deny_message(
+                tested, results, _build_wallclock_deny_block(wallclock_results)
+            ),
+            input_data=input_data,
+        )
+        return 0
 
     reminders = list(extra_reminders or [])
     if unverified:
         logger.warning("總預算耗盡，放行但以下檔案未驗證: %s", unverified)
         reminders.append(_build_unverified_reminder(tested, unverified))
+    if wallclock_unverified:
+        logger.warning("總預算耗盡，放行但 wallclock 未驗證: %s", wallclock_unverified)
+        reminders.append(
+            "[Hooks 測試 gate 提醒] wallclock 測試因總預算耗盡未執行，請補跑：\n"
+            "  uv run --directory .claude/hooks pytest -m wallclock "
+            + " ".join(f"tests/{n}" for n in wallclock_unverified)
+        )
     if untested:
         logger.info("以下觸及的 hook 檔無對應測試: %s", sorted(untested))
         reminders.append(_build_untested_reminder(untested))

@@ -816,7 +816,25 @@ def emit_hook_output(
         hook_event_name, additional_context,
         permission_decision, permission_decision_reason,
     )
-    print(json.dumps(output, ensure_ascii=False))
+    try:
+        print(json.dumps(output, ensure_ascii=False))
+    except Exception as exc:
+        if permission_decision != "deny":
+            raise
+        # deny 輸出失敗不可經 run_hook_safely 回 exit 1 而放行：
+        # 改以 exit 2（阻擋）結束，reason 寫 stderr 供 Claude 讀取。
+        # SystemExit 不被 except Exception 與 run_hook_safely 攔截。
+        try:
+            sys.stderr.write(
+                "[deny 輸出失敗，以 exit 2 阻擋] {}: {}\n".format(
+                    permission_decision_reason or "", exc
+                )
+            )
+            sys.stderr.flush()
+        except Exception:
+            # stderr 亦不可寫：已無可用通道回報，仍須維持 exit 2 阻擋語意
+            pass
+        raise SystemExit(2)
 
 
 # ============================================================================

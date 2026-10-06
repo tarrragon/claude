@@ -536,6 +536,7 @@ class MigrateMessages:
     ARG_BACKUP = "遷移前備份（預設啟用）"
     ARG_NO_BACKUP = "停用備份"
     ARG_FORCE_OVERWRITE = "明示授權覆寫目標 ID 既有 Ticket（預設拒絕；會記錄至 audit log）"
+    ARG_RESERVE_ID = "dry-run 預覽時視為已被佔用的目標 ID（可重複；供 finish 跨程序避免預覽同一目標）"
     HELP_MIGRATE = "遷移 Ticket ID（支援單一和批量遷移）"
 
     # Collision detection 訊息（W14-048）
@@ -548,9 +549,9 @@ class MigrateMessages:
         "  若確認覆寫請執行時加上 --force-overwrite"
     )
     # 發版前移撞號改號機制
-    # dry-run 階段：碰撞判 FAIL 並印改號預覽（不再視為可放行的預覽）
-    DRY_RUN_COLLISION_FAIL = (
-        "[ERROR] dry-run 偵測到目標 Ticket 已存在，正式執行將自動改號:\n"
+    # dry-run 階段：碰撞 rc=0 並印改號預覽（預告正式執行結果，不中止 finish）
+    DRY_RUN_COLLISION_PREVIEW = (
+        "[WARNING] dry-run 偵測到目標 Ticket 已存在，正式執行將自動改號:\n"
         "  原目標: {target_id}\n"
         "  目標路徑: {target_path}\n"
         "  既有標題: {existing_title}\n"

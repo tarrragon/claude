@@ -36,7 +36,8 @@ index 與工作區重設為「merge 開始時的 HEAD」。他方在這段期間
 | git merge --abort / --continue / --quit | 否，放行（收拾中斷合併，擋下會卡住 repo） |
 | CLI 內部 subprocess merge | 否（PreToolUse 看不到字面命令，已知邊界） |
 
-失敗語意: 守衛自身例外 fail-open，寫 stderr 與日誌（quality-baseline 規則 4）。
+失敗語意: 守衛自身例外、逾時、diff 非零 returncode 皆 fail-open（維持 fail_closed=False：
+放行後 merge 可復原，且 hook 自身故障不得使全域卡死），一律寫 stderr 與日誌（quality-baseline 規則 4）。
 """
 
 import os
@@ -54,18 +55,33 @@ from lib.git_command_parse import find_git_invocations
 # 收拾中斷合併的路徑，必須放行
 _RECOVERY_FLAGS = {"--abort", "--continue", "--quit"}
 
+# git 子程序逾時秒數；全套件負載下偏緊，測試可 monkeypatch 放寬
+_GIT_TIMEOUT_SECONDS = 10
+
 
 def _run_git(target: str, args: List[str]) -> "subprocess.CompletedProcess":
     return subprocess.run(
         ["git", "-C", target, *args],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True, text=True, timeout=_GIT_TIMEOUT_SECONDS,
     )
 
 
-def _staged_files(target: str) -> List[str]:
-    """回傳 index 相對 HEAD 的變更檔清單；非 git repo 回傳空清單。"""
+def _staged_files(target: str, logger) -> List[str]:
+    """回傳 index 相對 HEAD 的變更檔清單。
+
+    非零 returncode 時維持 fail-open（回空清單），但寫日誌與 stderr 留下可見訊號。
+    """
     result = _run_git(target, ["diff", "--cached", "--name-only"])
     if result.returncode != 0:
+        detail = (result.stderr or "").strip()
+        logger.warning(
+            "diff --cached 回傳 %d，無法判定 index，fail-open 放行: %s",
+            result.returncode, detail,
+        )
+        sys.stderr.write(
+            f"[merge-staged-index-guard] diff --cached 回傳 {result.returncode}，"
+            f"無法判定 index 狀態，已放行: {detail}\n"
+        )
         return []
     return [line for line in result.stdout.splitlines() if line]
 
@@ -142,7 +158,7 @@ def main() -> int:
             if _is_worktree(target):
                 logger.debug("目標為 worktree，放行: %s", target)
                 continue
-            staged = _staged_files(target)
+            staged = _staged_files(target, logger)
             if not staged:
                 logger.debug("index 乾淨，放行: %s", target)
                 continue

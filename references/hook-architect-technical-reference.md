@@ -804,6 +804,28 @@ if __name__ == "__main__":
 
 ---
 
+## deny 輸出失敗語意
+
+守衛的失效方向必須在設計期決定：「決定擋下、但輸出 deny 的動作失敗」不得退化為放行。以 PreToolUse 為例，Claude Code 只在 exit 0 且 stdout 含 deny JSON、或 exit 2 時才擋下；輸出失敗（stdout 關閉、BrokenPipe、編碼錯誤）的例外由 `run_hook_safely`（預設 `fail_closed=False`）接住並回 exit 1；exit 1 屬非阻擋錯誤，結果仍是放行。
+
+### 三項必載
+
+| 項目 | 要求 | Why / Consequence |
+|------|------|------------------|
+| fail_closed 只用於不可逆守衛 | `run_hook_safely(..., fail_closed=True)` 僅限放行後無法復原的守衛（如破壞性操作、不可逆寫入）；其餘維持預設 `fail_closed=False` | fail_closed 讓 hook 自身 crash 也擋下操作；濫用會使任何 hook bug 變成全域卡死，用戶學會繞過守衛 |
+| deny 輸出失敗由 `emit_hook_output` 兜底 | 輸出 deny 一律走 `lib` 的 `emit_hook_output`：deny 輸出失敗時寫 stderr 後 `SystemExit(2)`；allow 輸出失敗原樣 re-raise。無法改用它的守衛（直接 print、自組輸出）須自行兜底：包住輸出動作，失敗時寫 stderr 並 `sys.exit(2)` | 直接 `print(json.dumps(deny))` 輸出失敗時，例外被 fail-open 路徑吞掉，守衛無聲放行 |
+| 自帶 except-all 的守衛不得吞 SystemExit | `except Exception` 不攔 SystemExit，但 `except BaseException` / 裸 `except:` 會；必須攔時先 `except SystemExit: raise` | 吞掉兜底拋出的 SystemExit(2) 使兜底失效，回到放行 |
+
+測試範例：`.claude/hooks/tests/test_deny_output_failure_exit2.py`。
+
+### 新守衛撰寫檢查項：deny 輸出失敗測試
+
+- [ ] **E1 對照**：同一組 fixture 下各模擬一次「deny 輸出失敗」與「allow 輸出失敗」，斷言結果不同（deny 失敗為 exit 2 且 stderr 有訊息；allow 失敗為原例外 re-raise，不得 exit 2）。只測 deny 單邊時，兜底退化為對所有輸出失敗一律 exit 2 仍全綠
+- [ ] **E2 正向對照輸入**：測試必含一個已知該被擋下的輸入，注入輸出失敗（如 stdout 換成 write 時拋 `BrokenPipeError` 的物件），斷言 exit code 為 2。只餵正常輸入的測試分辨不出兜底在工作還是已死
+- [ ] 自帶 except-all 的守衛：含一個讓兜底拋 SystemExit 的輸入，斷言 SystemExit 穿出 except-all。否則 except-all 吞掉 SystemExit 時，測試照樣全綠
+
+---
+
 ## 常見陷阱
 
 | 陷阱 | 問題 | 解決 |
@@ -841,7 +863,8 @@ if __name__ == "__main__":
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-10-06
+**Version**: 新增「deny 輸出失敗語意」章節：fail_closed 僅限不可逆守衛、deny 輸出失敗由 emit_hook_output 兜底（無法改用者自行 exit 2）、自帶 except-all 不得吞 SystemExit；新守衛檢查項「deny 輸出失敗測試」含 E1 對照與 E2 正向對照輸入要求。
 **Version**: 校正 Stop 8-block cap 段落的過期計數（Hook 改造附帶發現：文件記載 5 個 Stop hook，settings.json 實際已達 10 個）。以 settings.json 為準逐檔確認實際輸出後改寫：本專案註冊 10 個 Stop hook，其中僅 2 個（handoff-auto-resume-stop-hook、malformed-tool-call-detector-hook）具 block 能力，其餘 8 個皆不含 block 決策；最壞情況合計 2 blocks < 8，結論仍在安全範圍內。同步校正變更總覽表（14-23 行）與版本異動表（846-851 行）的對應計數，並調整 Action 段落區分「註冊總數」與「具 block 能力數」
 **Version**: 修正「effort 感知範例」（327-352 行）與同檔設計鐵則（369-391 行）矛盾：舊範例示範 `if effort == "low": return 0` 無條件短路，與鐵則「事實判斷型 hook 核心 block 邏輯永不依 effort 短路」相悖，為 W14-034/036/037 三批次 12 個 hook 複製此缺陷之散播源；改寫範例為 effort 僅控制 audit log 詳細度，並前置交叉引用指向鐵則章節。
 **Source**: basil-hook-architect.md v2.1.0 精簡外移；2026-05-14 同步 Claude Code v2.1.130-2.1.141 hook 系統能力（`args` exec 形式、`continueOnBlock`、`effort.level` payload、`$CLAUDE_EFFORT` / `$CLAUDE_CODE_SESSION_ID` env、`terminalSequence` 通知、MCP stdio `CLAUDE_PROJECT_DIR` 注入）；2026-05-21 同步 v2.1.142-2.1.145 新增能力（W3-026 + W3-031 ANA 結論落地）：

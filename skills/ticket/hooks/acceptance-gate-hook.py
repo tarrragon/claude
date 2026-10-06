@@ -1053,7 +1053,22 @@ def main() -> int:
 
         # 步驟 4: 生成輸出並儲存日誌
         output = generate_hook_output(ticket_id, result, project_dir, logger, is_subagent=is_subagent)
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        try:
+            print(json.dumps(output, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            if not result.should_block:
+                raise
+            # 不改用 emit_hook_output：既有輸出為 indent=2 且 allow/deny 共用
+            # 含 additionalContext 的同一結構，改用會改變輸出位元組。
+            # deny 輸出失敗若沿用原行為會落入下方 except 回 exit 1（放行），
+            # 故在此以 exit 2 阻擋（SystemExit 不被 except Exception 攔截）。
+            logger.critical(f"deny 輸出失敗，以 exit 2 阻擋: {exc}")
+            try:
+                sys.stderr.write(f"[deny 輸出失敗，以 exit 2 阻擋] {exc}\n")
+            except Exception:
+                # stderr 亦不可寫：無通道可回報，仍維持 exit 2 阻擋語意
+                pass
+            raise SystemExit(EXIT_BLOCK)
         status = "BLOCKED" if result.should_block else "ALLOWED"
         log_entry = f"""[{datetime.now().isoformat()}]
   TicketID: {ticket_id}

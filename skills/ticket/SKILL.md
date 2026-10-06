@@ -4,7 +4,7 @@ description: 'Use whenever the user wants to create, track, query, or manage tic
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
-  version: 2.44.37
+  version: 2.44.44
 ---
 
 # Ticket System
@@ -18,6 +18,8 @@ metadata:
 linked worktree 內執行 `ticket track` 系列命令時，ticket 狀態（md 讀寫）與程式碼提交走**兩條不同的 root 解析路徑**：狀態一律反向回推寫入主倉庫，提交依 cwd 或 --worktree 旗標解析——此為刻意設計，非 cwd 解析漏洞，誤判並「修復」會重新引入票面分裂風險。
 
 > 完整設計理由（Why/Consequence/Action）與查證方式：Read `references/track-command.md` 同名章節
+
+提醒：worktree 不隔離票務寫入；票務 CLI 實驗請用獨立 clone 或 tmp_path 測試 repo（導回主倉庫時 stderr 會輸出 `[INFO]`）。詳見 `.claude/error-patterns/process-compliance/PC-GPD-030-worktree-not-isolated-for-ticket-cli-writes.md`。
 
 ---
 

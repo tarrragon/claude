@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 2.10.4
+  version: 2.10.5
 ---
 
 # Version Release Skill
@@ -47,7 +47,7 @@ metadata:
 | `start` | 啟動新版本（Options: `--version`(必填)、`--from`、`--description`、`--dry-run`） |
 | `release` | 完整發布流程（Options: `--version`、`--dry-run`、`--force`、`--defer-td`） |
 | `check` | 只執行 Pre-flight 檢查（發版判準見下方〈發版判準：blocker 阻擋、其餘前移〉） |
-| `finish` | 發版收尾：對前移清單逐張 `ticket migrate` 至目標版本，成功後接續 `release` 同一套流程（Options 同 `release`） |
+| `finish` | 發版收尾：對前移清單逐張 `ticket migrate` 至目標版本，成功後接續 `release` 同一套流程（Options 同 `release`）。前移目標撞號時 `--dry-run` 以 rc=0 預覽改號並續行，finish 結尾列出「原目標 -> 實際目標」對照表 |
 | `update-docs` | 只更新文件 |
 
 ### 發版前置關卡：版本必須已凍結

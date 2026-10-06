@@ -52,6 +52,7 @@ from ticket_system.lib.ticket_loader import (
     load_ticket,
 )
 from ticket_system.lib import lease
+from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.staleness import (
     format_stale_warning,
     format_stale_list_summary,
@@ -307,6 +308,47 @@ def execute_summary(args: argparse.Namespace, version: str) -> int:
     return 0
 
 
+def _load_ticket_cross_version(
+    ticket_id: str, fallback_version: str
+) -> Optional[Dict[str, Any]]:
+    """依 ID 前綴推導版本載入，載入不到退回 fallback 版本（前移規則讓子孫留在舊版本）。"""
+    id_version = extract_version_from_ticket_id(ticket_id)
+    for candidate in dict.fromkeys(v for v in (id_version, fallback_version) if v):
+        loaded = load_ticket(candidate, ticket_id)
+        if loaded is not None:
+            return loaded
+    return None
+
+
+def _with_cross_version_children(
+    tickets: List[Dict[str, Any]], version: str
+) -> List[Dict[str, Any]]:
+    """補上 children 欄位指向、但不在 tickets 內的跨版本子票；載入不到者以 not_found 佔位。"""
+    result = list(tickets)
+    known = {t.get("id") or t.get("ticket_id") for t in result}
+    index = 0
+    while index < len(result):
+        node = result[index]
+        index += 1
+        node_id = node.get("id") or node.get("ticket_id")
+        for child_id in node.get("children") or []:
+            if child_id in known:
+                continue
+            known.add(child_id)
+            child = _load_ticket_cross_version(child_id, version)
+            if child is None:
+                child = {
+                    "id": child_id,
+                    "status": "not_found",
+                    "what": "(not_found)",
+                    "parent_id": node_id,
+                }
+            elif not child.get("parent_id"):
+                child = {**child, "parent_id": node_id}
+            result.append(child)
+    return result
+
+
 def execute_tree(args: argparse.Namespace, version: str) -> int:
     """顯示任務鏈樹狀結構"""
     ticket, error = load_and_validate_ticket(version, args.ticket_id)
@@ -317,7 +359,7 @@ def execute_tree(args: argparse.Namespace, version: str) -> int:
         return 1
 
     # 取得所有 Tickets 用於構建樹狀結構
-    all_tickets = list_tickets(version)
+    all_tickets = _with_cross_version_children(list_tickets(version), version)
 
     # 格式化並輸出樹狀結構
     tree_output = format_ticket_tree(all_tickets, root_id=args.ticket_id)
@@ -345,7 +387,7 @@ def execute_chain(args: argparse.Namespace, version: str) -> int:
         root_id = args.ticket_id
 
     # 取得所有 Tickets 用於構建樹狀結構
-    all_tickets = list_tickets(version)
+    all_tickets = _with_cross_version_children(list_tickets(version), version)
 
     # 格式化並輸出樹狀結構
     tree_output = format_ticket_tree(all_tickets, root_id=root_id)
@@ -377,7 +419,7 @@ def _collect_spawned_tree(
         return
     visited.add(ticket_id)
 
-    sub = load_ticket(version, ticket_id)
+    sub = _load_ticket_cross_version(ticket_id, version)
     if not sub:
         lines.append(f"{indent}- {ticket_id} (not_found)")
         return

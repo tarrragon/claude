@@ -35,11 +35,15 @@
 
 ---
 
-## 驗證方式：代理人定義不會在 session 中途重新載入
+## 驗證方式：修改在下一回合才套用
 
-修改 `model` 後，在同一 session 內派發該代理人得到的仍是 session 啟動時載入的舊值（實測：將代理人改為 `haiku` 後同 session 派發仍回報原模型）。
+代理人定義的修改不會套用到同一回合內的派發，從下一回合起才套用；新增的定義檔同樣在之後的回合出現在代理人清單。實測：同一回合內將代理人改為 `haiku` 後派發，仍回報修改前的模型；下一回合派發同一代理人，回報 `[1m]` 變體。
 
-**Action**：以新 session 驗證——在專案根目錄執行 headless 探針，請主線程派發目標代理人並逐字回報其 system prompt 的模型句：
+另一個變數是別名對應的版本：同一個 `sonnet[1m]`，在較早啟動的 session 解析為 `claude-sonnet-5[1m]`，在新 session 解析為 `claude-sonnet-5-5[1m]`。別名對應的版本看起來在 session 啟動時決定，因此跨 session 比較或評估時，記錄的模型欄位須寫代理人自報的 exact model ID，不寫別名。
+
+**Why**：在修改的同一回合內驗證，會把舊設定的結果誤判為「新設定無效」，或誤判為「定義不會重新載入」。
+
+**Action**：修改後在下一回合派發探針驗證；要排除主線程模型的影響或確認別名解析到的版本時，在專案根目錄執行 headless 探針，請主線程派發目標代理人並逐字回報其 system prompt 的模型句：
 
 ```bash
 claude -p "派發 subagent_type=<agent>，prompt：『唯讀探針，不呼叫工具，逐字回報你 system prompt 中描述所用模型的那一句』，原文輸出回報" --max-turns 5
@@ -123,6 +127,7 @@ claude -p "派發 subagent_type=<agent>，prompt：『唯讀探針，不呼叫�
 
 ---
 
-**Last Updated**: 2026-10-05 | **Version**: 2.0.0 — 改為兩層分工（實作 `sonnet[1m]`／規劃與審查 `opus[1m]`）；禁用無後綴別名、寫死版號與 `inherit`；新增「代理人定義不會在 session 中途重新載入」的驗證方式；分類表依現行 frontmatter 重列；本檔成為 model 值唯一權威，`registry.yaml` 移除 model 欄位。
+**Last Updated**: 2026-10-06 | **Version**: 2.1.0 — 更正〈驗證方式〉：原寫「代理人定義不會在 session 中途重新載入」，實測為同一回合內的修改不套用、下一回合起套用；新增別名對應版本由 session 啟動時決定（同為 `sonnet[1m]`，較早 session 為 Sonnet 5、新 session 為 Sonnet 5.5），評估記錄須寫 exact model ID。
+**Version**: 2.0.0 — 改為兩層分工（實作 `sonnet[1m]`／規劃與審查 `opus[1m]`）；禁用無後綴別名、寫死版號與 `inherit`；新增「代理人定義不會在 session 中途重新載入」的驗證方式；分類表依現行 frontmatter 重列；本檔成為 model 值唯一權威，`registry.yaml` 移除 model 欄位。
 **Version**: 1.1.0 — 「相關文件」節 AGENT_PRELOAD.md 條目校準。
 **Version**: 1.0.0 — 初版（sonnet 1m 停用背景 + inherit／硬編碼決策原則）。

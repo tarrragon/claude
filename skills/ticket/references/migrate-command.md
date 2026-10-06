@@ -57,7 +57,7 @@ Ticket ID 遷移（支援單一和批量遷移）。
 
    ```bash
    ticket migrate --config migration.yaml --dry-run
-   # 碰撞時 dry-run 判 FAIL（exit 1）並印改號預覽，非可放行的 warning
+   # 碰撞時 dry-run 以 exit 0 印改號預覽（[WARNING] + [MIGRATE-MAP] 行），預告正式執行的改號結果
    ```
 
 4. **實際執行後必看 migrate 產生的 commit**：migrate 會自動以單一隔離提交寫入新檔、舊檔、各引用者與 topic 追加行（exit 0 即已提交；exit 75 代表檔案已寫入工作區但提交失敗，stderr 的 `[WARNING]` 列出全部路徑）。檢查該 commit 的檔案狀態：
@@ -178,7 +178,7 @@ migrate 不改 todolist、不改 worklog 主檔、不移除舊目錄；這三件
 | `previous_ids` | 每個成員各自追加自己的舊 ID（舊 ID 散見 commit message、worklog、issue，不會被改寫） |
 | `parent_id` | 根票依新 ID 重算；子孫對應新父 |
 | preflight | 碰撞（任一新 ID 已被佔用）、深度（任一成員遷移後超過 MAX_TICKET_DEPTH，訊息列出票 ID 與深度）、目標版本註冊；任一項失敗整體拒絕、零寫入、exit 非 0，訊息列出全部失敗項 |
-| 碰撞處理 | 子樹遷移不自動改號（單票碰撞才自動取下一可用序號）；`--force-overwrite` 可放行碰撞 |
+| 碰撞處理 | 與單票路徑對等：目標根票撞號時，實際執行改取下一可用序號，成員以新根為前綴改號，根票寫入 `migrated_from: <原目標 ID>`；`--dry-run` 以 exit 0 印 `[WARNING]` 改號預覽。僅根票撞號觸發改號，成員撞號仍由 preflight 整體拒絕；`--force-overwrite` 不改號、維持放行覆寫 |
 | `--dry-run` | 列出完整 old 到 new 映射表，不寫入 |
 | 提交 | 整個子樹、子樹外引用者、舊檔刪除與 topic 追加行為單一隔離提交 |
 | 中途寫入失敗 | exit 1，輸出已寫入的檔案集合（不自動回滾） |
@@ -196,7 +196,7 @@ topic-assignments 以追加一行「新 ID、原主題」承接，不改寫舊�
 
 | 階段       | 行為                                                                                |
 | ---------- | ----------------------------------------------------------------------------------- |
-| `--dry-run`  | 目標已存在時判 `[ERROR]` FAIL（exit 1），印改號預覽（下一可用序號）；不再是可放行的 WARNING |
+| `--dry-run`  | 目標已存在時以 exit 0 印 `[WARNING]` 改號預覽（下一可用序號）與 `[MIGRATE-MAP] <原目標> -> <預覽目標>` 行；預告正式執行結果，不中止 finish 的 dry-run。批次內以保留集合避免兩票預覽到同一目標，跨程序（每票一個 subprocess）以 `--reserve-id <ID>`（可重複）帶入前面各票的預覽目標 |
 | 實際執行   | 預設改取下一可用序號完成遷移（exit 0），改號後的票面 frontmatter 寫入 `migrated_from: <原目標 ID>`；既有的碰撞目標不受影響 |
 | 批量遷移   | 不再預掃描 fail-fast；每筆遷移各自對當下檔案系統狀態判斷碰撞並改號，天然支援批次內連環碰撞（前一筆改號後的新目標仍會被下一筆的碰撞檢查看見） |
 | `--force-overwrite` | 語意不變：明示授權覆寫既有 Ticket，並在 stdout 記錄 `[AUDIT]` log（含時間戳與既有標題）；dry-run 下仍為可放行的 `[WARNING]` |
@@ -219,4 +219,5 @@ topic-assignments 以追加一行「新 ID、原主題」承接，不改寫舊�
 | `--dry-run`     | 預覽遷移結果，不實際執行           |
 | `--backup`      | 遷移前備份（預設啟用）             |
 | `--no-backup`   | 停用備份                           |
+| `--reserve-id ID` | dry-run 預覽時視為已被佔用的目標 ID（可重複；供 finish 跨程序避免預覽同一目標） |
 | `--force-overwrite` | 明示授權覆寫目標 ID 既有 Ticket（W14-048；會記錄 audit log） |

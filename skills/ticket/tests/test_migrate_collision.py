@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ticket_system.commands.migrate import _migrate_single_ticket
+from ticket_system.commands.migrate import _batch_migrate, _migrate_single_ticket
 from ticket_system.lib.parser import parse_frontmatter
 
 
@@ -146,3 +146,102 @@ class TestMigrateNoCollisionUnchanged:
         assert fm["id"] == "0.20.0-W5-021"
         assert "migrated_from" not in fm
         assert not (tickets_dir / "0.20.0-W5-020.md").exists()
+
+
+def _preview_targets(out: str) -> list:
+    """取出輸出中所有 [MIGRATE-MAP] 標記行的 (原目標, 實際目標)。"""
+    import re
+    return re.findall(r"^\[MIGRATE-MAP\] (\S+) -> (\S+)$", out, re.MULTILINE)
+
+
+class TestDryRunCollisionPreview:
+    """dry-run 撞號以 rc=0 預覽改號目標（E1 對照 + E2 連環撞號）"""
+
+    def test_e1_collision_and_clean_dry_run_outputs_differ(self, project, capsys):
+        """
+        Given: 同一批 fixture，001 的目標 002 被佔用，010 的目標 011 空缺
+        When: 各跑一次 dry-run
+        Then: 兩者 rc=0；撞號者輸出含改號預覽與 003，不撞號者無改號標記；輸出不同；
+              dry-run 不寫檔
+        """
+        root, tickets_dir = project
+        _write_ticket(tickets_dir, "0.20.0-W3-001", title="Source")
+        _write_ticket(tickets_dir, "0.20.0-W3-002", title="Occupant")
+        _write_ticket(tickets_dir, "0.20.0-W3-010", title="Clean Source")
+
+        rc_hit = _migrate_single_ticket(
+            "0.20.0", "0.20.0-W3-001", "0.20.0-W3-002", dry_run=True, backup=False
+        )
+        out_hit = capsys.readouterr().out
+        rc_clean = _migrate_single_ticket(
+            "0.20.0", "0.20.0-W3-010", "0.20.0-W3-011", dry_run=True, backup=False
+        )
+        out_clean = capsys.readouterr().out
+
+        assert rc_hit == 0
+        assert rc_clean == 0
+        assert "改號預覽" in out_hit and "0.20.0-W3-003" in out_hit
+        assert "改號預覽" not in out_clean
+        assert "[MIGRATE-MAP]" not in out_clean
+        assert out_hit != out_clean
+        assert (tickets_dir / "0.20.0-W3-001.md").exists()
+        assert not (tickets_dir / "0.20.0-W3-003.md").exists()
+
+    def test_e2_batch_chain_collision_preview_matches_actual(
+        self, project, capsys, tmp_path
+    ):
+        """
+        Given: 兩張票的目標同為已被佔用的 W6-010，改號候選皆為 011（互相衝突）
+        When: 批次 dry-run，再同批次正式執行
+        Then: 預覽目標彼此不同，且與正式執行落地的實際目標逐一一致
+        """
+        root, tickets_dir = project
+        _write_ticket(tickets_dir, "0.20.0-W6-001", title="First")
+        _write_ticket(tickets_dir, "0.20.0-W6-002", title="Second")
+        _write_ticket(tickets_dir, "0.20.0-W6-010", title="Occupant")
+        config = tmp_path / "plan.yaml"
+        config.write_text(yaml.dump({"migrations": [
+            {"from": "0.20.0-W6-001", "to": "0.20.0-W6-010"},
+            {"from": "0.20.0-W6-002", "to": "0.20.0-W6-010"},
+        ]}), encoding="utf-8")
+
+        rc = _batch_migrate("0.20.0", str(config), dry_run=True, backup=False)
+        preview = _preview_targets(capsys.readouterr().out)
+
+        assert rc == 0
+        assert len(preview) == 2
+        previewed = [actual for _orig, actual in preview]
+        assert len(set(previewed)) == 2
+
+        rc = _batch_migrate("0.20.0", str(config), dry_run=False, backup=False)
+        capsys.readouterr()
+        assert rc == 0
+        actual_by_title = {}
+        for path in tickets_dir.glob("*.md"):
+            fm = _read_frontmatter(path)
+            actual_by_title[fm["title"]] = fm["id"]
+        assert [actual_by_title["First"], actual_by_title["Second"]] == previewed
+
+    def test_cross_call_reserved_ids_avoid_same_preview_target(self, project, capsys):
+        """
+        Given: 兩次獨立 dry-run 呼叫（finish 每票一個 subprocess 的形態），第二次帶入第一次的預覽目標
+        When: 兩張票目標相同且已被佔用
+        Then: 第二次預覽避開保留的目標
+        """
+        root, tickets_dir = project
+        _write_ticket(tickets_dir, "0.20.0-W7-001", title="First")
+        _write_ticket(tickets_dir, "0.20.0-W7-002", title="Second")
+        _write_ticket(tickets_dir, "0.20.0-W7-010", title="Occupant")
+
+        _migrate_single_ticket(
+            "0.20.0", "0.20.0-W7-001", "0.20.0-W7-010", dry_run=True, backup=False
+        )
+        first = _preview_targets(capsys.readouterr().out)
+        _migrate_single_ticket(
+            "0.20.0", "0.20.0-W7-002", "0.20.0-W7-010", dry_run=True, backup=False,
+            reserved={first[0][1]},
+        )
+        second = _preview_targets(capsys.readouterr().out)
+
+        assert first[0][1] == "0.20.0-W7-011"
+        assert second[0][1] == "0.20.0-W7-012"

@@ -184,6 +184,25 @@ def check_agent_dispatch(prompt: str, current_agent: str, config: Dict, logger) 
     }
 
 
+def write_deny_or_exit2(output: dict, logger) -> None:
+    """輸出 deny 決定；stdout 寫入失敗時以 exit 2 阻擋。
+
+    不改用 emit_hook_output：其輸出為單行 JSON，本守衛既有輸出為 indent=2
+    （且 strict 模式附 systemMessage），改用會改變輸出位元組。
+    故自行兜底：寫入失敗若沿用原行為會經 run_hook_safely 回 exit 1（放行）。
+    """
+    try:
+        write_hook_output(output)
+    except Exception as exc:
+        logger.critical(f"deny 輸出失敗，以 exit 2 阻擋: {exc}")
+        try:
+            sys.stderr.write(f"[deny 輸出失敗，以 exit 2 阻擋] {exc}\n")
+        except Exception:
+            # stderr 亦不可寫：無通道可回報，仍維持 exit 2 阻擋語意
+            pass
+        raise SystemExit(2)
+
+
 def main() -> None:
     """主執行函式"""
     logger = setup_hook_logging("agent-dispatch-check")
@@ -207,7 +226,7 @@ def main() -> None:
     prompt = tool_input.get("prompt", "")
     if not prompt:
         output = create_pretooluse_output("deny", "Task 工具缺少 prompt 參數")
-        write_hook_output(output)
+        write_deny_or_exit2(output, logger)
         sys.exit(0)
 
     # Handoff 恢復模式：略過所有檢查
@@ -231,7 +250,7 @@ def main() -> None:
                     agent_check_result["error_message"],
                     system_message="代理人分派錯誤，請根據任務類型重新分派"
                 )
-                write_hook_output(output)
+                write_deny_or_exit2(output, logger)
                 sys.exit(0)
             else:
                 log_warning_to_file({

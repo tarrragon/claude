@@ -2094,14 +2094,42 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
     return all_ok, results
 
 
+_MIGRATE_MAP_PATTERN = re.compile(r"^\[MIGRATE-MAP\] (\S+) -> (\S+)$", re.MULTILINE)
+
+
 def _run_ticket_migrate(
-    source_id: str, target_id: str, target_version: str, dry_run: bool = False
+    source_id: str, target_id: str, target_version: str, dry_run: bool = False,
+    reserved: Optional[List[str]] = None,
 ) -> subprocess.CompletedProcess:
-    """呼叫 ticket CLI 執行單一 Ticket 遷移（獨立 subprocess，供 finish 呼叫與測試 mock）。"""
+    """呼叫 ticket CLI 執行單一 Ticket 遷移（獨立 subprocess，供 finish 呼叫與測試 mock）。
+
+    reserved 為 dry-run 時視為已被佔用的目標 ID：每票各跑一個 subprocess，
+    dry-run 不落地，前一張的預覽目標須以此帶給後一張，預覽才與正式執行一致。
+    """
     cmd = ["ticket", "migrate", source_id, target_id, "--version", target_version]
     if dry_run:
         cmd.append("--dry-run")
+    for reserved_id in reserved or ():
+        cmd.extend(["--reserve-id", reserved_id])
     return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def _actual_target_from_output(stdout: str, original_target: str) -> str:
+    """從 ticket migrate 的 [MIGRATE-MAP] 標記行取實際目標；無標記表示未改號。"""
+    for original, actual in _MIGRATE_MAP_PATTERN.findall(stdout):
+        if original == original_target:
+            return actual
+    return original_target
+
+
+def print_overflow_mapping(mapping: List[tuple]) -> None:
+    """列出前移的原目標到實際目標對照表（來源 ID、原目標 -> 實際目標）。"""
+    if not mapping:
+        return
+    print_section("Overflow Ticket Mapping")
+    for source_id, original_target, actual_target in mapping:
+        note = "" if original_target == actual_target else "（撞號改號）"
+        print_info(f"{source_id}: {original_target} -> {actual_target}{note}")
 
 
 def _ticket_id_depth(ticket_id: str) -> int:
@@ -2161,7 +2189,9 @@ def _is_carried_by_subtree_migration(
     return False
 
 
-def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
+def migrate_overflow_tickets(
+    version: str, dry_run: bool = False, mapping_out: Optional[List[tuple]] = None,
+) -> bool:
     """對前移清單逐張執行 ticket migrate 至目標版本。
 
     目標版本必須已在 todolist.yaml 登記（planned 或 active 皆可），未登記時
@@ -2170,7 +2200,8 @@ def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
 
     Args:
         version: 目前被判準阻擋的版本號（無 v 前綴）
-        dry_run: 預覽模式（傳遞給每個 ticket migrate 呼叫）
+        dry_run: 預覽模式（傳遞給每個 ticket migrate 呼叫；撞號時 rc=0 預覽改號）
+        mapping_out: 若提供，逐張追加 (來源 ID, 原目標, 實際目標) 供 finish 結尾列對照表
 
     Returns:
         全部前移成功（或無需前移）回傳 True；任一步驟失敗回傳 False
@@ -2216,6 +2247,7 @@ def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
     overflow = sorted(overflow, key=lambda t: _ticket_id_depth(t["id"]))
     _warn_terminal_ancestors(overflow, tickets_dir)
 
+    reserved_targets: List[str] = []
     for ticket in overflow:
         source_id = ticket["id"]
         target_version = ticket["target_version"]
@@ -2227,8 +2259,9 @@ def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
             return False
         target_id = re.sub(r"^\d+\.\d+\.\d+", target_version, source_id, count=1)
         print_info(f"前移 {source_id} -> {target_id} ...")
-        result = _run_ticket_migrate(source_id, target_id, target_version, dry_run)
-        # 發版前移撞號改號機制：碰撞時 ticket migrate 會判 FAIL（dry-run）
+        migrate_kwargs = {"reserved": list(reserved_targets)} if dry_run and reserved_targets else {}
+        result = _run_ticket_migrate(source_id, target_id, target_version, dry_run, **migrate_kwargs)
+        # 發版前移撞號改號機制：碰撞時 ticket migrate 預覽改號（dry-run，rc=0）
         # 或自動改號（正式執行），改號後的實際目標 ID 與改號預覽只存在於
         # child process 的 stdout；此處原樣轉印，不可沿用固定的 target_id
         # 字串自行組訊息，否則碰撞時會誤報一個未實際使用的目標 ID。
@@ -2240,6 +2273,10 @@ def migrate_overflow_tickets(version: str, dry_run: bool = False) -> bool:
                 + (f"\n{result.stderr}" if result.stderr.strip() else "")
             )
             return False
+        actual_target = _actual_target_from_output(result.stdout, target_id)
+        reserved_targets.append(actual_target)
+        if mapping_out is not None:
+            mapping_out.append((source_id, target_id, actual_target))
         print_success(f"已前移 {source_id}（若發生碰撞改號，實際目標見上方訊息）")
 
     return True
@@ -4382,9 +4419,10 @@ def main():
                     return 1
 
             # finish：先對前移清單逐張 migrate，任一張失敗即中止（不留半搬狀態）
+            overflow_mapping: List[tuple] = []
             if args.command == "finish":
                 print_section("Step 0: Migrate Overflow Tickets")
-                if not migrate_overflow_tickets(version, dry_run):
+                if not migrate_overflow_tickets(version, dry_run, overflow_mapping):
                     print_error("\n前移未完成，發版收尾已中止")
                     return 1
 
@@ -4464,6 +4502,9 @@ def main():
             activation_pushed = dry_run or publish_activation_commit(
                 finish_root, head_before_activation
             )
+
+            # 結尾彙整前移對照表：前段步驟的輸出已捲過，改號結果需在此一併可見
+            print_overflow_mapping(overflow_mapping)
 
             # exit 前殘留守衛：不自動 add，避免吸入非本次 finish 產生的變更
             if not dry_run:

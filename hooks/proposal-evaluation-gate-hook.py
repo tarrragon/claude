@@ -51,7 +51,7 @@ from typing import Optional, List, Dict, Any, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 
 try:
     import yaml
@@ -373,14 +373,12 @@ def get_old_status(tool_name: str, tool_input: Dict[str, Any], file_path: str) -
 
 def emit_decision(decision: str, reason: str) -> None:
     """輸出 PreToolUse 決策 JSON。"""
-    result = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": decision,
-            "permissionDecisionReason": reason,
-        }
-    }
-    print(json.dumps(result, ensure_ascii=False))
+    # 經 emit_hook_output：deny 輸出失敗時以 exit 2 阻擋（本守衛僅靠 JSON 阻擋）
+    emit_hook_output(
+        "PreToolUse",
+        permission_decision=decision,
+        permission_decision_reason=reason,
+    )
 
 
 def main() -> int:

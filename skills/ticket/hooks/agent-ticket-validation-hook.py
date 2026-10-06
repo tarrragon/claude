@@ -417,7 +417,22 @@ def main() -> int:
 
         # 步驟 5: 生成 Hook 輸出
         hook_output = generate_hook_output(is_valid, error_message if not is_valid else None)
-        print(json.dumps(hook_output, ensure_ascii=False, indent=2))
+        try:
+            print(json.dumps(hook_output, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            if is_valid:
+                raise
+            # 不改用 emit_hook_output：既有輸出為 indent=2 且含 checkResult
+            # （timestamp 等額外欄位），改用會改變輸出內容。
+            # deny 輸出失敗若沿用原行為會落入下方 except 回 exit 1（放行），
+            # 故在此以 exit 2 阻擋（SystemExit 不被 except Exception 攔截）。
+            logger.critical(f"deny 輸出失敗，以 exit 2 阻擋: {exc}")
+            try:
+                sys.stderr.write(f"[deny 輸出失敗，以 exit 2 阻擋] {exc}\n")
+            except Exception:
+                # stderr 亦不可寫：無通道可回報，仍維持 exit 2 阻擋語意
+                pass
+            raise SystemExit(EXIT_BLOCK)
 
         # 步驟 6: 儲存日誌
         log_entry = f"""[{datetime.now().isoformat()}]

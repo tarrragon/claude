@@ -435,3 +435,66 @@ class TestTerminalDescendantsStayInPlace:
         assert _fm(_C1)["parent_id"] == _NEW_ROOT
         assert _fm(_C2)["chain"]["parent"] == _NEW_ROOT
         assert _fm(_NEW_ROOT)["children"] == [_C1, _C2]
+
+
+_RENUM_ROOT = "0.0.0-W0-021"
+_RENUM_C1 = "0.0.0-W0-021.1"
+_RENUM_C2 = "0.0.0-W0-021.2"
+_RENUM_G1 = "0.0.0-W0-021.1.1"
+
+
+def _occupy_new_root(repo: Path) -> None:
+    _seed(_NEW_ROOT)  # 020 已被同序號父票佔用
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "occupy new root")
+
+
+class TestRootCollisionAutoRenumber:
+    """目標根票撞號時，子樹改取下一可用序號（與單票路徑對等）。"""
+
+    def test_e1_collision_vs_no_collision_products_differ(self, repo, monkeypatch):
+        # 不撞號：維持原目標序號，且無 migrated_from
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        assert _exists(_NEW_ROOT) and not _exists(_RENUM_ROOT)
+        assert "migrated_from" not in _fm(_NEW_ROOT)
+
+    def test_e1_collision_run_renumbers_whole_subtree(self, repo, monkeypatch):
+        _occupy_new_root(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        for tid in (_RENUM_ROOT, _RENUM_C1, _RENUM_C2, _RENUM_G1):
+            assert _exists(tid), tid
+        assert not _exists(_NEW_C1) and not _exists(_NEW_G1)
+        assert _fm(_RENUM_ROOT)["migrated_from"] == _NEW_ROOT
+
+    def test_e2_fields_rewritten_against_renumbered_root(self, repo, monkeypatch):
+        _occupy_new_root(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT) == 0
+        expected = {_RENUM_ROOT: _ROOT, _RENUM_C1: _C1, _RENUM_C2: _C2, _RENUM_G1: _G1}
+        for new, old in expected.items():
+            assert _fm(new)["previous_ids"] == [old], new
+        assert _fm(_RENUM_C1)["parent_id"] == _RENUM_ROOT
+        assert _fm(_RENUM_C2)["parent_id"] == _RENUM_ROOT
+        assert _fm(_RENUM_G1)["parent_id"] == _RENUM_C1
+        assert _fm(_RENUM_ROOT)["children"] == [_RENUM_C1, _RENUM_C2]
+        ext = _fm(_EXT)
+        assert ext["blockedBy"] == [_RENUM_ROOT, _RENUM_C1]
+        assert ext["relatedTo"] == [_RENUM_G1]
+        assert _fm(_RENUM_G1)["blockedBy"] == [_RENUM_C2]
+        # 佔位的既有 020 票未被觸碰
+        assert _fm(_NEW_ROOT).get("previous_ids") is None
+
+    def test_dry_run_on_collision_previews_renumber_with_zero_writes(
+        self, repo, monkeypatch, capsys
+    ):
+        _occupy_new_root(repo)
+        head = _git(repo, "rev-parse", "HEAD")
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT, "--dry-run") == 0
+        assert _RENUM_ROOT in capsys.readouterr().out
+        _assert_untouched(repo, head)
+        assert not _exists(_RENUM_ROOT)
+
+    def test_force_overwrite_semantics_unchanged(self, repo, monkeypatch):
+        _occupy_new_root(repo)
+        assert _run(monkeypatch, _ROOT, _NEW_ROOT, "--force-overwrite") == 0
+        assert _exists(_NEW_ROOT) and not _exists(_RENUM_ROOT)
+        assert "migrated_from" not in _fm(_NEW_ROOT)

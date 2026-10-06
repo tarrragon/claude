@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "config"))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 from presence_profiles import get_profile_for_path
 
 
@@ -252,14 +252,12 @@ def main() -> int:
 
     # block 模式：阻擋並回饋 Claude
     print(message, file=sys.stderr)
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": message,
-        }
-    }
-    print(json.dumps(output, ensure_ascii=False))
+    # 經 emit_hook_output：stdout 寫入失敗時 deny 以 exit 2 阻擋（不落入 exit 1 放行）
+    emit_hook_output(
+        "PreToolUse",
+        permission_decision="deny",
+        permission_decision_reason=message,
+    )
     return 2
 
 

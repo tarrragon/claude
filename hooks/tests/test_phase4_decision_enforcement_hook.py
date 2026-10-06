@@ -328,6 +328,68 @@ def test_w1_n2_結果已評估完成():
     assert _hits_by_rule(hits, "W1") == []
 
 
+# 假 ticket ID（執行期拼接，避免框架檔出現專案票號字面）
+_FAKE_ID = "W" + "1-999"
+
+# ---------- E 系列：Solution 寫法的無 trigger 延後（M4 / W4） ----------
+#
+# 原句取自兩則 Solution 實例（去除票號）：「本票不處理」、
+# 「判斷為低機率，記錄在此，不另建票」。同行含 ticket ID 視為已綁 trigger，豁免。
+
+def test_e1_p1_本票不處理():
+    hits = _scan_text("本票不處理")
+    assert len(_hits_by_rule(hits, "M4")) == 1
+
+
+def test_e1_p2_記錄在此_不另建票():
+    hits = _scan_text("判斷為低機率，記錄在此，不另建票")
+    assert len(_hits_by_rule(hits, "M4")) == 1
+
+
+def test_e1_p3_不在本票範圍且無後續():
+    hits = _scan_text("此項不在本票範圍，且無後續處理")
+    assert len(_hits_by_rule(hits, "M4")) == 1
+
+
+def test_e1_p4_已知限制_不處理_為_warn():
+    hits = _scan_text("已知限制：跨行拆寫的情形，本次不處理")
+    w4 = _hits_by_rule(hits, "W4")
+    assert len(w4) == 1
+    assert w4[0].level == "WARN"
+
+
+def test_e1_level_m4_為_block():
+    hits = _scan_text("本票不處理")
+    assert _hits_by_rule(hits, "M4")[0].level == "BLOCK"
+
+
+def test_e2_n1_同行含_ticket_id_本票不處理不命中():
+    hits = _scan_text("由 {} 承接，本票不處理".format(_FAKE_ID))
+    assert _hits_by_rule(hits, "M4") == []
+
+
+def test_e2_n2_同行含_完整_ticket_id_不另建票不命中():
+    hits = _scan_text("已知限制，不另建票，追蹤見 0.9.9-{}".format(_FAKE_ID))
+    assert _hits_by_rule(hits, "M4") == []
+    assert _hits_by_rule(hits, "W4") == []
+
+
+def test_e2_n3_已知限制不處理_同行含_ticket_id_不命中():
+    hits = _scan_text("已知限制：本次不處理，由 {} 承接".format(_FAKE_ID))
+    assert _hits_by_rule(hits, "W4") == []
+
+
+def test_e2_p_ticket_id_在不同行時仍命中():
+    hits = _scan_text("本票不處理\n追蹤見 {}".format(_FAKE_ID))
+    assert len(_hits_by_rule(hits, "M4")) == 1
+
+
+def test_e_n_無關句不命中():
+    hits = _scan_text("本票處理完成，測試全綠")
+    assert _hits_by_rule(hits, "M4") == []
+    assert _hits_by_rule(hits, "W4") == []
+
+
 # ---------- W2 未來/以後 可能需要 ----------
 
 def test_w2_p1_未來可能需要():

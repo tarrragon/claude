@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ticket_system.lib.blocker_resolution import resolve_blocker
 from ticket_system.lib.command_lifecycle_messages import CreateMessages
 from ticket_system.lib.constants import (
     STATUS_COMPLETED,
@@ -43,6 +44,34 @@ def resolve_reference_version(fallback_version: str, referenced_id: str) -> str:
     模組層的 load_ticket 執行，以維持既有 patch 點。
     """
     return extract_version_from_ticket_id(referenced_id) or fallback_version
+
+
+def _with_cross_version_dependencies(
+    version_tickets: List[Dict],
+    blocked_by: List[str],
+) -> List[Dict]:
+    """回傳版本內票集合補上 blocked_by 可達的跨版本票，供循環偵測建圖。
+
+    循環偵測的圖只含傳入的票；跨版本的依賴若不在其中，環會在版本邊界斷開而
+    被漏判。從 blocked_by 沿 blockedBy 遍歷，缺席的票以 resolve_blocker 跨版本取得。
+    """
+    ticket_map = {t.get("id"): t for t in version_tickets}
+    extra: List[Dict] = []
+    seen = set()
+    stack = list(blocked_by)
+    while stack:
+        dep_id = stack.pop()
+        if not dep_id or dep_id in seen:
+            continue
+        seen.add(dep_id)
+        dep = resolve_blocker(dep_id, ticket_map)
+        if dep is None:
+            continue
+        if dep_id not in ticket_map:
+            extra.append(dep)
+        next_deps = dep.get("blockedBy") or []
+        stack.extend(next_deps if isinstance(next_deps, list) else [])
+    return version_tickets + extra
 
 
 def validate_blocked_by_references(
@@ -82,7 +111,9 @@ def validate_blocked_by_references(
             return False
 
     # 驗證 2：blockedBy 循環依賴檢測
-    all_tickets = list_tickets(version)
+    all_tickets = _with_cross_version_dependencies(
+        list_tickets(version), blocked_by
+    )
     valid, cycle_msg, cycle_path = validate_blocked_by(
         ticket_id,
         blocked_by,

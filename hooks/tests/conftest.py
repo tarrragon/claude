@@ -66,6 +66,18 @@ def isolate_project_root():
     return _ISOLATED["root"]
 
 
+@pytest.fixture(autouse=True)
+def clear_caller_effort(monkeypatch):
+    """清除呼叫者的 CLAUDE_EFFORT，使測試紅綠不取決於呼叫者環境。
+
+    Why：effort=low 會抑制部分 hook 的 warn/info 輸出，斷言輸出的測試在
+    CLAUDE_EFFORT=low 的環境下會翻紅。
+    測 effort 行為的測試以 setenv / os.environ 賦值 / payload 顯式覆寫，
+    本 fixture 只移除繼承自呼叫者的值，不影響顯式設定。
+    """
+    monkeypatch.delenv("CLAUDE_EFFORT", raising=False)
+
+
 @pytest.fixture
 def real_project_root(monkeypatch):
     """顯式 opt-out：本測試斷言真實專案根的解析行為，暫時移除 session 級重導。"""

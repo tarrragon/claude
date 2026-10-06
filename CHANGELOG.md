@@ -1,3 +1,36 @@
+## [2.77.0] - 2026-10-07
+
+### Summary
+feat: migrate dry-run 撞號 rc=0 預覽改號，finish 結尾列對照表; feat: migrate 子樹遷移遇根票撞號時自動改號（與單票路徑對等）; feat: hooks-test-gate 為 wallclock 標記測試接上固定執行點 (+20 more)
+
+Changes: 5 feat, 9 fix, 7 docs, 1 chore, 1 test
+
+- feat: migrate dry-run 撞號 rc=0 預覽改號，finish 結尾列對照表
+- feat: migrate 子樹遷移遇根票撞號時自動改號（與單票路徑對等）
+- feat: hooks-test-gate 為 wallclock 標記測試接上固定執行點
+- feat: linked worktree 導回主倉庫時於 stderr 輸出 [INFO] 提示
+- feat: phase4 decision enforcement 補 Solution 寫法的無 trigger 延後句型 (M4/W4)
+- fix: 已附 --acknowledge 時條件 3 純 IMP→IMP 不再重複 WARN
+- fix: blockedBy 循環偵測改以跨版本取票建圖
+- fix: merge-staged-index-guard diff 非零時留下可見訊號並常數化逾時
+- fix: track tree/chain/spawned 跨版本載入 children 與 spawned
+- fix: acceptance 審計跨版本載入 children
+- fix: deny 輸出失敗兜底 exit 2，直接 print 的 PreToolUse 守衛遷移或自行兜底
+- fix: 同步派發 SubagentStop 先於記錄寫入時以墓碑補標回合結束
+- fix: emit_hook_output deny 輸出失敗改 exit 2 並寫 reason 到 stderr
+- fix: claim 新增 --acknowledge，與 sibling-blockedby-validator 建議一致
+- docs: deny 輸出失敗語意段三處修飾（事件限定、後果句、用詞統一）
+- docs: 更正 deny 輸出失敗語意開頭段事實（例外回 exit 1 放行）
+- docs: 補 deny 輸出失敗語意規範段與新守衛檢查項
+- docs: SPEC-004 1.65 裁決 某票 兩項 NeedsContext；更正代理人定義載入時機
+- docs: 全套件回報示例的 exit code 於 tail 前取得（複審建議 1）
+- docs: 全套件指令改 -rfE 並重寫 Why 段（審查修正）
+- docs: 全套件回報規格加 -rf 並禁止過濾 FAILED 行
+- chore: 回寫 .claude/VERSION 為 2.76.0（canonical sync-push）
+- test: conftest autouse 統一清除 CLAUDE_EFFORT
+
+---
+
 ## [2.76.0] - 2026-10-05
 
 ### Summary

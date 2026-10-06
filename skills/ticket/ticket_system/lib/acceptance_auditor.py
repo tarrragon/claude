@@ -733,7 +733,14 @@ def _has_impl_or_adj_child(ticket: Dict[str, Any], version: str) -> bool:
         return False
 
     for child_id in children_ids:
-        child_ticket = load_ticket(version, child_id)
+        # 前移規則讓已完成子孫留在舊版本：先以 ID 前綴推導版本，載入不到退回父票版本
+        id_version = extract_version_from_ticket_id(child_id)
+        candidates = [v for v in (id_version, version) if v]
+        child_ticket = None
+        for candidate in dict.fromkeys(candidates):
+            child_ticket = load_ticket(candidate, child_id)
+            if child_ticket is not None:
+                break
         if child_ticket and child_ticket.get("type") in ["IMP", "ADJ"]:
             return True
 

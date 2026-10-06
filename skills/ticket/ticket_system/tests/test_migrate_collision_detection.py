@@ -113,8 +113,8 @@ class Test_DryRun_Collision_Warning:
         Given: source_id 存在，target_id 也存在（既有 ticket）
         When: 以 dry_run=True、force_overwrite=False 呼叫 _migrate_single_ticket
         Then:
-          - exit code 1（碰撞在 dry-run 階段即判 FAIL，不再視為可放行的預覽）
-          - stdout 含 ERROR 字樣、既有 target 標題與改號預覽（下一可用序號）
+          - exit code 0（碰撞在 dry-run 階段預覽改號，預告正式執行結果）
+          - stdout 含 WARNING 字樣、既有 target 標題與改號預覽（下一可用序號）
           - 既有 target 檔案未被覆寫
         """
         _, tickets_dir = project_with_tickets
@@ -129,8 +129,8 @@ class Test_DryRun_Collision_Warning:
         )
         captured = capsys.readouterr()
 
-        assert rc == 1
-        assert "ERROR" in captured.out
+        assert rc == 0
+        assert "WARNING" in captured.out
         assert "Existing Target Title" in captured.out
         assert "0.18.0-W14-002" in captured.out  # 改號預覽：下一可用序號
 

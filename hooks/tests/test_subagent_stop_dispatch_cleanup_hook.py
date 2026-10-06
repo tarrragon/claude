@@ -686,3 +686,25 @@ class TestWaitBroadcastDedup:
         # 寫回後 state 檔恢復為合法 JSON
         recovered = json.loads(state_file.read_text(encoding="utf-8"))
         assert "key-a" in recovered
+
+
+class TestTombstoneOnUnmatchedStop:
+    """同步派發：SubagentStop 先於記錄寫入時，hook 留墓碑，稍後記錄被標記。"""
+
+    def test_stop_before_record_ends_up_marked(self, hook_mod, monkeypatch):
+        from lib.dispatch_tracker import (
+            get_active_dispatches,
+            record_dispatch,
+            reset_cache,
+        )
+
+        root = hook_mod._get_project_root()
+        (root / ".claude").mkdir(parents=True, exist_ok=True)
+        reset_cache()
+        monkeypatch.setattr(
+            sys, "stdin", _stdin({"agent_id": "afix-abc123-73070ca5c1d3f849"})
+        )
+        assert hook_mod.main() == 0
+        record_dispatch(root, "sync", agent_handle="fix-abc123")
+        entries = get_active_dispatches(root)
+        assert len(entries) == 1 and entries[0]["turn_ended_at"] is not None
