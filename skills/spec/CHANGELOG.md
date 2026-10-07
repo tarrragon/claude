@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.9.1 — 〈定位與分工〉補 system-design 一列：它在寫規格之前決定這一版的範圍與時機，/spec 檢查範圍內的需求清晰度
+
 **Version**: 1.9.0 — 本地變更，指向 tarrragon/claude#107：`scripts/check_domain_coverage.py` 的 FR 比對鍵由 FR 編號改為（spec 識別, FR 編號）。spec 識別取 frontmatter id，缺時取檔名 SPEC-NNN；domain map 的每個 FR token 依序歸屬到同行在它之前最近的 SPEC-NNN、最近含 SPEC-NNN 的祖先標題，兩者皆無為未歸屬，map 有任一已歸屬 token 時未歸屬 token 不計入覆蓋。修前同一份 map 覆蓋兩份以上 spec 時，同號 FR 互相遮蔽而被誤判為已覆蓋（守衛放行方向失效）。整份 map 無歸屬或 spec 識別取不到時走相容模式（舊的不分 spec 比對），stderr 說明。判定結果改變：原被遮蔽的 FR 現在會被報為未覆蓋。frontmatter id 只在收尾 `---` 之前的區塊內讀取，且只接受 SPEC-NNN 形式；其他形式（如 SPEC-UI-001）在 map 端的歸屬鍵永遠對不上，改走相容模式並警告，不把該 spec 全部 FR 報成未覆蓋。tests 新增 10 案例（合計 48 綠）。
 
 **Version**: 1.8.1 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來

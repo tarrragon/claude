@@ -4,7 +4,7 @@ description: "寫多篇章節後做多輪 agent reviewer audit 的標準流程�
 license: MIT
 metadata:
   portable: true
-  version: 2.24.0
+  version: 2.25.0
   category: writing-methodology
 ---
 
@@ -105,7 +105,7 @@ Round 1-3 是硬底線，但每一輪裡的 frame 不是全部都跑。主 sessi
 | 2-B‴ 情境可想像性                      | 判讀 / 選型型（給判斷標準、要讀者做決定）            | 非判讀型不跑                                                                                                                                |
 | 2-B⁗ 低階 model 讀者探針               | 一律跑；審查對象是規則類文件時加「第一個具體動作」欄 | 無條件；處置門檻在派發前寫死（`references/round-2-probes.md`〈探針的處置門檻〉）；自評欄與比對欄分開讀 |
 | 2-B⁵ 翻譯探針                          | 中文稿件、且已通過 2-B⁗                              | 非中文稿件不跑；命題層未收斂時先跑 2-B⁗；定義在 `references/round-2-probes.md`                                                              |
-| 2-B⁶ 術語探針                          | 有可疑的高頻用詞或口語譬喻                           | 沒有可疑詞不跑；同批沒有控制詞的結果不採用；定義在 `references/round-2-probes.md`                                                           |
+| 2-B⁶ 術語探針                          | 有可疑的高頻用詞、口語譬喻，或 1-A 拿不準的譯名      | 沒有可疑詞不跑；同批沒有控制詞的結果不採用；定義在 `references/round-2-probes.md`                                                           |
 | 2-B⁷ 類型探針                          | 定位是人類教材、而內容帶操作性材料時                 | 同批沒有兩份控制文件的結果不採用；定義在 `references/round-2-probes.md`                                                                     |
 | 2-B⁸ 集合探針                          | 審查對象是一份拆成多檔的文件、或一組互相引用的檔案   | 單檔不適用（交界是拆分造出來的）；入口檔要另外跑一批只餵入口檔；定義在 `references/round-2-probes.md`                                       |
 | 2-C 題目範圍 + 跨 surface              | 一律跑                                               | 無條件；標題是寬泛傘狀詞時範圍分不開、先收窄標題                                                                                            |

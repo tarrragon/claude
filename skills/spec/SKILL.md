@@ -3,7 +3,7 @@ name: spec
 description: "需求完善度品質閘門。Use for: (1) Phase 1 開始時初始化功能規格骨架 (/spec init), (2) 驗證功能規格的需求完善度 (/spec validate), (3) 判斷需求是否足夠清晰可進入實作。Use when: Phase 1 功能設計代理人在進行功能設計時，作為內部工具使用。不是流程入口——/tdd 管流程編排，/spec 管產出物品質。"
 metadata:
   portable: true
-  version: 1.9.0
+  version: 1.9.1
 
 ---
 
@@ -20,6 +20,7 @@ metadata:
 | /tdd | 「流程走到哪了？下一步做什麼？」 | Phase 0-4 全流程 | 流程編排器 |
 | /spec | 「需求描述得夠不夠清楚？」 | Phase 1 內部 | 產出物品質工具 |
 | SA | 「該不該做？和現有系統一致嗎？」 | Phase 0 | 架構守門人 |
+| system-design | 「這一版要做哪些決定、哪些延後？」 | 寫規格之前 | 決定範圍與時機；/spec 檢查範圍內的需求寫得夠不夠清楚 |
 
 **/spec 不是流程入口**：lavender 在 Phase 1 內部使用 /spec 產出功能規格。/tdd 不呼叫 /spec，/spec 不呼叫 /tdd。兩者完全解耦。
 

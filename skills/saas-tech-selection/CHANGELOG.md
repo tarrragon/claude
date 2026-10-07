@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.6.0 — state-storage 訪談新增「哪些資料永遠不刪、每年增加多少列」（不刪除的表的查詢讀的量、索引與清理成本、批次共用欄位的存放時機）；分片 / 分區的重評條件改以刪除耗時、索引放不放得進記憶體與清理耗時為訊號、補依時間分區的唯一約束前提
+
+**Version**: 1.5.0 — async-queue：idempotency key 由產生端給（寫入時配的序號擋不住重送）、排程工作的最後成功時間記在共用儲存、分散式排程鎖要放在每種實作都看得到的地方；state-storage：訪談新增報表的一天依哪個時區切與事件最晚多晚寫入（摘要以 UTC 時段存、依時區組日、粒度與重算範圍由此決定），延後表新增熱點計數列拆開與摘要改寫入時累加
+
 **Version**: 1.4.1 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來
 
 **Version**: 1.4.0 — 清掉可攜性閘門標的 5 條消費端路徑與 1 條 blog 路由。5 條全指向同一份上游專案的方法論檔，而文字明寫「不重述」「不在本維度」，判準確實不在句內——屬真依賴而非出處引用。修法不是標記也不是內聯（判準是固定方法論、不是各專案自訂的值），而是**改用語意名稱指稱**：`.claude/methodologies/event-flow-load-arbitration-methodology.md` 改成「事件流負載仲裁方法論」。這是同庫 `event-flow-arbitration-design` skill 既有的寫法（它的 `references/interview-questions.md` 指同一份方法論時就只寫名稱不寫路徑），而閘門比對的是 `.claude/` 開頭的路徑樣式，名稱不含路徑因此不需要任何豁免標記。章節名〈到達類別〉〈級別〉〈讓步與卸載順序〉保留——那是方法論自己的章節名，且在該 sibling skill 裡逐字查對過，非憑記憶反推。另移除 `references/dimensions/state-storage.md` 的 blog 路由（AGENTS.md §9 禁 blog-internal route，閘門抓不到這一類），改成描述該去哪類教材查。<!-- portability-allow: 版本歷史陳述被換掉的是什麼，路徑是史實的一部分 -->

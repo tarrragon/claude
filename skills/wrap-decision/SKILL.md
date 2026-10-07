@@ -3,7 +3,7 @@ name: wrap-decision
 description: "WRAP 決策框架 — 認知偏誤防護、選項擴增與資料充足度閘門。用於防護自動駕駛、假選項、證據不足下的倉促決策。內含完整 premortem 流程（失敗原因並行深挖 + 綜合報告），適用版本規劃、提案評估、發版前等高成本決策。Use when: 被困住或連續失敗 2+、準備宣告限制性結論前、偏離核心目標、根因分析、代理人失敗歸因、提案評估、重大架構或規則決策、個人化建議（健康/醫療/金錢/法律）前、Context 沉重時、需要對計畫做事前風險推演時。Triggers: stuck, blocked, loop, no progress, 分析, debug, 限制性解法, 個人化建議, 具體推薦, premortem, 事前驗屍, 事前假設失敗, 壓力測試計畫, 這計畫會怎麼死, 找出盲點。"
 metadata:
   portable: true
-  version: 2.15.0
+  version: 2.15.1
 
 ---
 
@@ -248,6 +248,7 @@ WRAP 每階段之間是切割點，強迫問「是否繼續」：Step 0 完成�
 | 任務認知負擔評估 | 拆分用專用 skill；決策品質用 WRAP |
 | 決策格式模板（5W1H） | 格式負責「怎麼寫」；WRAP 負責「怎麼想」 |
 | 學習捕捉 | WRAP 正面絆腳索串接學習捕捉 skill |
+| 系統設計的範圍與時機（system-design） | system-design 決定這一版要做哪些決定、哪些延後；WRAP 處理其中個別的決定。system-design 的延後項目附帶的觸發指標，就是 WRAP 絆腳索的輸入 |
 
 ---
 

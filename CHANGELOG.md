@@ -1,3 +1,16 @@
+## [2.77.1] - 2026-10-07
+
+### Summary
+chore: 自 skill 發佈庫拉取 spec 1.9.1（用戶授權）; chore: 自 skill 發佈庫拉取 6 個 skill 的較新版本; chore: 回寫 .claude/VERSION 為 2.77.0（canonical sync-push）
+
+Changes: 3 chore
+
+- chore: 自 skill 發佈庫拉取 spec 1.9.1（用戶授權）
+- chore: 自 skill 發佈庫拉取 6 個 skill 的較新版本
+- chore: 回寫 .claude/VERSION 為 2.77.0（canonical sync-push）
+
+---
+
 ## [2.77.0] - 2026-10-07
 
 ### Summary
