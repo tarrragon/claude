@@ -1,0 +1,74 @@
+{
+ "_comment": "W1-105.1 isolation-loss replay: real PreToolUse payloads of agent a8a4e24138605a3d3 (cwd is main repo); irrelevant fields dropped",
+ "dispatch_entry": {
+  "agent_description": "105.1 replay",
+  "agent_id": null,
+  "agent_handle": "",
+  "branch_name": "worktree",
+  "ticket_id": "0.5.0-W1-105.1",
+  "turn_ended_at": null
+ },
+ "mapped_agent_id": "a8a4e24138605a3d3",
+ "payloads": [
+  {
+   "agent_id": "a8a4e24138605a3d3",
+   "agent_type": "thyme-documentation-integrator",
+   "cwd": "/Users/mac-eric/project/graph_project_docs_manager",
+   "hook_event_name": "PreToolUse",
+   "tool_name": "Bash",
+   "tool_input": {
+    "command": "git status --short | head; git log --oneline -1; S=/private/tmp/claude-501/s; doc validate SPEC-006 > $S/b6.txt 2>&1; echo rc6=$?; doc validate SPEC-007 > $S/b7.txt 2>&1; echo rc7=$?; doc validate-filenames > $S/bf.txt 2>&1; echo rcf=$?; doc validate-paths > $S/bp.txt 2>&1; echo rcp=$?; head -c 600 $S/b6.txt; echo; head -c 600 $S/b7.txt; ls docs/test-design 2>&1 | head -2"
+   }
+  },
+  {
+   "agent_id": "a8a4e24138605a3d3",
+   "agent_type": "thyme-documentation-integrator",
+   "cwd": "/Users/mac-eric/project/graph_project_docs_manager",
+   "hook_event_name": "PreToolUse",
+   "tool_name": "Bash",
+   "tool_input": {
+    "command": "mkdir -p docs/test-design && git mv docs/spec/corpus/SPEC-006-test-design.md docs/test-design/SPEC-006-test-design.md && git mv docs/spec/graph/SPEC-007-test-design.md docs/test-design/SPEC-007-test-design.md && sed -i '' 's#docs/spec/corpus/SPEC-006-test-design\\.md#docs/test-design/SPEC-006-test-design.md#g; s#docs/spec/graph/SPEC-007-test-design\\.md#docs/test-design/SPEC-007-test-design.md#g' docs/traceability.yaml test/fixtures/spec006/README.md test/fixtures/spec007/README.md test/integration/corpus_it1_frontmatter_equivalence_test.dart tool/spec007_reference.py && git diff --stat | tail -8; git grep -n \"spec/corpus/SPEC-006-test-design\\|spec/graph/SPEC-007-test-design\" -- . ':!docs/work-logs' ':!test/fixtures/spec007/ticket_detail_samples.json'; echo grep_rc=$?"
+   }
+  },
+  {
+   "agent_id": "a8a4e24138605a3d3",
+   "agent_type": "thyme-documentation-integrator",
+   "cwd": "/Users/mac-eric/project/graph_project_docs_manager",
+   "hook_event_name": "PreToolUse",
+   "tool_name": "Bash",
+   "tool_input": {
+    "command": "S=/private/tmp/claude-501/s; doc validate SPEC-006 > $S/a6.txt 2>&1; echo rc6=$?; doc validate SPEC-007 > $S/a7.txt 2>&1; echo rc7=$?; doc validate-filenames > $S/af.txt 2>&1; echo rcf=$?; doc validate-paths > $S/ap.txt 2>&1; echo rcp=$?; diff $S/b6.txt $S/a6.txt && diff $S/b7.txt $S/a7.txt && echo same67; sed 's#/\\.claude/worktrees/[^/]*##' $S/bf.txt | diff - $S/af.txt; diff $S/bp.txt $S/ap.txt && echo samep; cat $S/ap.txt"
+   }
+  },
+  {
+   "agent_id": "a8a4e24138605a3d3",
+   "agent_type": "thyme-documentation-integrator",
+   "cwd": "/Users/mac-eric/project/graph_project_docs_manager",
+   "hook_event_name": "PreToolUse",
+   "tool_name": "Bash",
+   "tool_input": {
+    "command": "git add docs/test-design/SPEC-006-test-design.md docs/test-design/SPEC-007-test-design.md docs/spec/corpus/SPEC-006-test-design.md docs/spec/graph/SPEC-007-test-design.md docs/traceability.yaml test/fixtures/spec006/README.md test/fixtures/spec007/README.md test/integration/corpus_it1_frontmatter_equivalence_test.dart tool/spec007_reference.py && git diff --cached --name-status"
+   }
+  },
+  {
+   "agent_id": "a8a4e24138605a3d3",
+   "agent_type": "thyme-documentation-integrator",
+   "cwd": "/Users/mac-eric/project/graph_project_docs_manager",
+   "hook_event_name": "PreToolUse",
+   "tool_name": "Bash",
+   "tool_input": {
+    "command": "git add docs/traceability.yaml test/fixtures/spec006/README.md test/fixtures/spec007/README.md test/integration/corpus_it1_frontmatter_equivalence_test.dirt 2>/dev/null; git add docs/traceability.yaml test/fixtures/spec006/README.md test/fixtures/spec007/README.md test/integration/corpus_it1_frontmatter_equivalence_test.dart tool/spec007_reference.py && git diff --cached --name-status"
+   }
+  },
+  {
+   "agent_id": "a8a4e24138605a3d3",
+   "agent_type": "thyme-documentation-integrator",
+   "cwd": "/Users/mac-eric/project/graph_project_docs_manager",
+   "hook_event_name": "PreToolUse",
+   "tool_name": "Bash",
+   "tool_input": {
+    "command": "git commit -q -m \"$(cat <<'EOF'\ndocs(0.5.0-W1-105.1): move test-design docs out of docs/spec to docs/test-design\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01Dfi9nKYikUDgVsSMP7RYHt\nEOF\n)\"; git rev-parse HEAD"
+   }
+  }
+ ]
+}

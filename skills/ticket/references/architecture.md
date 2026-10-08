@@ -34,6 +34,8 @@ scheduler 層類比同樣成立：runqueue／dashboard 對應 Linux `schedule()`
 | idle | agent 完工無新任務，process 保持存活且可定址 | agent 完成回報後 CC runtime 發送 `idle_notification` | warm runner（跑完不銷，省下次冷啟動成本） |
 | stopped | agent process 終止 | SubagentStop（自然結束）/ `shutdown_request` approve / session 結束 | job 完成後 runner 回收 |
 
+經 SendMessage 進入 running 前，先確認 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉。
+
 idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、工作區仍為預設 2 的共享語意），只是擴展 runner 生命週期從「單 job 即銷」到「可選續用多 job」。PM 對 idle agent 的續用/放生判準與回收 SOP 見 `.claude/pm-rules/parallel-dispatch.md`「idle agent 回收 SOP」章節。
 
 > SKILL.md 入口僅留一行指標指向本節，不重複維護三預設內容——本節為完整論證，入口不重述。

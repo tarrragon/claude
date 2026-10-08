@@ -925,17 +925,31 @@ merge 後執行 ls <目標檔案路徑> 或 grep 確認本 ticket 相關檔案�
 
 ### 阻塞回報後：重派新 agent 優先於 SendMessage 恢復
 
-**Why**：無變更的 worktree 在代理人首次結束時會被平台自動回收；此時以 SendMessage 恢復該代理人，worktree 已不存在，cwd 會靜默 fallback 到主 repo，agent 在錯誤的工作目錄繼續執行而無明顯錯誤訊息。
+**原則**：worktree 不在就重新派發新 agent，不以 SendMessage 恢復。
 
-**Consequence**：誤用 SendMessage 恢復已回收 worktree 的 agent，後續操作（Edit / git commit）實際發生在主 repo cwd，可能誤觸 branch-verify-hook 或污染主 repo 工作區，且此偏差不易從 agent 回報文字察覺。
+**射程**：標題沿用初版情境名，射程以本段為準。本段是所有「對已回報過的 `isolation: "worktree"` 代理人再送工作」路徑的共同前置判準，不限快照過舊。涵蓋：阻塞回報後恢復、審查退回後請同一代理人修正、NeedsContext 補料後恢復、idle 代理人續用於另一張票、超時後 SendMessage 催促。各路徑的段落只路由到此處，不各自重述判準。
 
-**Action**：
+**前提事實**（實測）：以 `isolation: "worktree"` 派發的代理人，若第一輪沒有任何變更，其 worktree 與分支在完成通知送達時被 runtime 自動清除；此後以 SendMessage 恢復，代理人的工作目錄落回主 repo 的 main，不報錯。對照組：第一輪已有 commit 的代理人，worktree 保留，恢復後仍在原 worktree。
+
+**Why**：恢復後的代理人仍持有原 prompt 脈絡，自認身處隔離環境；實際上 Edit、`git mv`、`git add` 直接進入共用 working tree 與共用 index，無明顯錯誤訊息。
+
+**Consequence**：branch-verify-hook 只在 commit 時攔下，攔下之前的寫入與暫存已生效，任何 session 的裸 commit 都可能吸入；此偏差不易從代理人回報文字察覺。
+
+**Action**：恢復或續用之前，先以下列兩個判斷訊號確認 worktree 仍在；訊號指出不在，或兩個訊號都取不到，直接重新派發新 agent（前一輪脈絡先寫回 ticket），不恢復。
+
+| 判斷訊號 | 讀法 |
+|---------|------|
+| 上一輪完成通知是否帶 `worktreePath`（及 `worktreeBranch`）欄位 | 有欄位：worktree 保留。無欄位：該輪無變更，worktree 已清除（實測：有 commit 的代理人通知帶此欄位，無變更者不帶） |
+| `git worktree list` 是否列出含該 agent id 的 worktree | 有列出：仍在。未列出：已清除 |
+
+兩個訊號結論不一致時（例如通知帶 `worktreePath`，但 `git worktree list` 未列出），以 `git worktree list` 為準：它反映當下現況，完成通知只是當時的快照。
 
 | 情境 | 判準 |
 |------|------|
-| agent 因快照過舊回報阻塞（未產生變更） | 優先重派新 agent（新 worktree 會以較新快照建立），不用 SendMessage 恢復舊 agent |
-| agent 已產生變更後才阻塞（worktree 有 commit） | worktree 未被回收，可用 SendMessage 恢復 |
-| 不確定 worktree 是否仍存在 | 執行 `ls .claude/worktrees/` 或等效指令確認後再決定 |
+| 任一恢復或續用路徑，兩個訊號顯示 worktree 仍在 | 可用 SendMessage 恢復或續用 |
+| 任一恢復或續用路徑，worktree 不在 | 重派新 agent（新 worktree 會以較新快照建立），不用 SendMessage |
+| agent 因快照過舊回報阻塞（未產生變更） | 屬上一列的特例：worktree 已清除，重派 |
+| 兩個訊號都取不到（例如完成通知已不在 context，且 `git worktree list` 執行失敗） | 直接重派，不恢復 |
 
 **Source**：0.3.6-W2-007（ANA，兩次獨立觀測 + W2-006 三次派發自然對照組）。
 
@@ -1129,6 +1143,9 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
+**Last Updated**: 2026-10-08
+**Version**: 1.42.1 — 〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉二次審查修正：段首補原則句與「標題沿用初版情境名」說明；Action 與判準表末列對「兩個訊號都取不到」統一為直接重派（刪去與 git worktree list 同源、無增量的 ls 後援）；補兩訊號不一致時以 git worktree list 為準
+**Version**: 1.42.0 — 〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉射程由快照過舊擴為所有恢復與續用路徑（審查退回、補料後恢復、idle 續用、超時催促）：補前提事實（無變更 worktree 於完成通知送達時清除，恢復後落回主 repo）與兩個判斷訊號（完成通知 worktreePath 欄位、worktree list 比對 agent id），判準為 worktree 不在則重派；不新增「無變更一律不恢復」禁令
 **Last Updated**: 2026-10-07
 **Version**: 1.41.0 — 「append-log 收尾持久化驗證」Action 新增 worktree 守衛拒收多行參數時分次 append、不得壓成單行的條文：主條文為派發 prompt 明示此條，附通用偵測指令與 PC-GPD-003 引用
 

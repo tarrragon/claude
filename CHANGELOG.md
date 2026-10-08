@@ -1,3 +1,19 @@
+## [2.80.0] - 2026-10-08
+
+### Summary
+feat: isolated-subagent guard denies Edit/Write/NotebookEdit on main repo hit; feat: isolated subagent main-repo write guard hook (warn mode); fix: 守衛 hook 日誌依實際決策標示 deny 或 warn (+3 more)
+
+Changes: 2 feat, 1 fix, 2 docs, 1 chore
+
+- feat: isolated-subagent guard denies Edit/Write/NotebookEdit on main repo hit
+- feat: isolated subagent main-repo write guard hook (warn mode)
+- fix: 守衛 hook 日誌依實際決策標示 deny 或 warn
+- docs: 二次審查修正——統一「兩訊號都取不到」處置、補不一致判準、路由行去除重述
+- docs: widen resume-or-reuse worktree check and route from resume sections
+- chore: 回寫 .claude/VERSION 為 2.79.0（canonical sync-push）
+
+---
+
 ## [2.79.0] - 2026-10-08
 
 ### Summary

@@ -499,7 +499,7 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 |------|------|
 | 逾時門檻 | 該票 `in_progress`，對應 teammate idle 超過 30 分鐘，且期間無新 commit、無票面 append-log |
 | 查核方式 | 對照該票 `where.files` 檢查 `git log --oneline -1 -- <files>`；`ticket track full <id>` 查最後一筆 append-log 時間戳 |
-| 一級處置 | `SendMessage` 喚醒，附具體下一步指令（如「背景任務已完成，請前景確認結果並繼續」） |
+| 一級處置 | `SendMessage` 喚醒，附具體下一步指令（如「背景任務已完成，請前景確認結果並繼續」）；喚醒前先確認 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉 |
 | 二級處置 | 喚醒後仍無回應或無新產出，`TaskStop` 後依現有派發流程重派 |
 
 自動化偵測（掃描 dispatch 記錄、主動提醒而非等 PM 巡查）超出本節範圍，屬獨立的防護類 hook 實作，另立追蹤票處理。
@@ -571,6 +571,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
+**Last Updated**: 2026-10-08
+**Version**: 4.36.0 - 停滯偵測判準表「一級處置」列補路由：SendMessage 喚醒前先確認 worktree 仍在，指向 `agent-dispatch-template.md` 恢復前判準段落
 **Last Updated**: 2026-09-30
 **Version**: 4.35.0 - 〈派發前 where.files 交集檢查〉處置表新增一列：兄弟票之間的同檔序列化只在派發排程處理，不寫 blockedBy，以免觸發 ARCH-017 多兄弟依賴檢查，連 claim 都被擋
 **Version**: 4.34.0 - 〈並行安全檢查〉前新增「派發位置判準（強制）」單一判準表（實作派發含非豁免路徑／全為豁免路徑／唯讀審查三列 × isolation 值、派發前置、收尾指令、禁止事項四欄，每格只引用既有權威條文）與「禁止在共用主工作樹切換或建立分支（強制）」條款（Why／Consequence／分角色 Action，並宣告對既有三處 `git checkout -b` 指引的優先序）。來源：判準原散在風險分級表、template、agent-dispatch-decision 與 `branch-verify-hook.py` 拒絕訊息四處，某 consumer 專案的實作代理人被 hook 擋下後依訊息在共用主工作樹開分支，並行 session 被帶離 main（框架 issue 101）。

@@ -117,6 +117,8 @@ Action：依序判定，命中即停止：
                         +-- 相符，或 session 未持有明確主題 → [Step 2a] 續用：SendMessage 派發新任務
 ```
 
+> 續用前先確認該 agent 的 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉。
+
 **Step 2a 續用範本**：
 
 ```
@@ -199,6 +201,9 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 
 ---
 
+**Last Updated**: 2026-10-08
+**Version**: 1.2.1 — Step 2a 路由行刪去括號內重述的理由，只留路由（二次審查）
+**Version**: 1.2.0 — Step 2a 續用範本前補路由：續用前先確認 worktree 仍在，指向 `agent-dispatch-template.md` 恢復前判準段落
 **Last Updated**: 2026-09-03
 **Version**: 1.1.0 — 新增「跨 session 殘留回收（SessionStart 掃描觸發層）」小節：補上 idle agent 回收 SOP 缺少的觸發層（`session-registry-start-hook.py` 唯讀掃描 `dispatch-active.json` + `pm-registry.json`），含歸屬三分（自有／他 session 存活／孤兒）+ 孤兒兩級判準表、接收方驗證歸屬強制要求、措辭可逆性要求。
 **Version**: 1.0.0 — 從 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」與「idle agent 回收 SOP」兩章節整段外移（熱點檔案叢集拆分），內容未經改寫，僅位置搬移。

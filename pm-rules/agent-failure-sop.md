@@ -81,7 +81,7 @@ git branch | grep feat/
 | 改了錯誤檔案 | 修改了非目標檔案 | 回退變更，調整 prompt 指定檔案，重新派發 |
 | 回合耗盡 | 代理人報告截斷，部分完成 | 簡化 prompt（減少讀取範圍），重新派發 |
 | 改壞既有測試 | 舊測試 FAIL | 回退變更，在 prompt 加入「不可修改測試」約束，重新派發 |
-| 背景代理人超時 | 長時間無回應 | 用 SendMessage 催促摘要，或取消後重新派發 |
+| 背景代理人超時 | 長時間無回應 | 用 SendMessage 催促摘要，或取消後重新派發；催促前先確認 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉 |
 
 ---
 
@@ -146,6 +146,7 @@ git branch | grep feat/
 
 ---
 
-**Last Updated**: 2026-04-16
+**Last Updated**: 2026-10-08
+**Version**: 1.1.0 — 「背景代理人超時」列補路由：SendMessage 催促前先確認 worktree 仍在，指向恢復前判準段落
 **Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（W10-076.2 拆分；原檔 v3.7.0 L162-L292）
 **Source**: PC-045 + PC-050 + PC-070 教訓疊加

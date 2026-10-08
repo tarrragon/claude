@@ -190,7 +190,7 @@ SendMessage(
 │
 ├── 代理人完工後 idle，我該續用還是放生？
 │   └── 先查同 Wave pending ticket（.claude/pm-rules/parallel-dispatch.md idle agent 回收 SOP）
-│       → 續用：SendMessage 新任務 / 放生：SendMessage shutdown_request（章節 5）
+│       → 續用：SendMessage 新任務（續用前先確認 worktree 仍在，見 agent-dispatch-template.md〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉） / 放生：SendMessage shutdown_request（章節 5）
 │
 └── 代理人在執行什麼 tool call / 讀什麼檔案？
     └── 禁止查詢（PC-050 模式 D 防護）
@@ -381,6 +381,8 @@ Claude Code CLI 提供的外部觀察指令，列出當前機器上所有活躍 
 
 ---
 
+**Last Updated**: 2026-10-08
+**Version**: 1.5.2 - 決策樹「續用還是放生」分支補路由：續用前先確認 worktree 仍在
 **Last Updated**: 2026-07-08
 **Version**: 1.5.1 - SendMessage shutdown_request 驗證狀態由兩層（已驗證 PM 端發送 / 間接驗證 agent 端終止）升級為單層「已驗證」——Wave 1 收尾對 8 個 idle agent 批次放生實機 8/8 收到 shutdown_approved 並觀察 teammate_terminated 事件，PM 端與 agent 端皆有直接觀測證據（W1-010 completion 後即時修正）
 
