@@ -229,6 +229,19 @@ def _load_domain_bundles(project_root: str) -> dict[str, dict]:
     return {bid: fm for bid, (_, fm) in _scan_domain_bundles(project_root).items()}
 
 
+def _find_duplicate_domains(project_root: str) -> dict[str, list[Path]]:
+    """回傳 domain 值 → 宣告該值的 bundle 載體路徑（僅含出現兩次以上者）。"""
+    by_domain: dict[str, list[Path]] = {}
+    for path, fm in _scan_domain_bundles(project_root).values():
+        if fm.get("domain"):
+            by_domain.setdefault(str(fm["domain"]), []).append(path)
+    return {d: paths for d, paths in by_domain.items() if len(paths) > 1}
+
+
+def _format_duplicate_domain(domain: str, paths: list[Path]) -> str:
+    return f"domain {domain!r} 被多份 DomainBundle 宣告: " + "、".join(str(p) for p in paths)
+
+
 def _find_reachable_cycles(graph: dict[str, list[str]], start: str) -> list[list[str]]:
     """自 start 深度優先走訪，回傳遇到的環（每個環為首尾同節點的路徑）。
 
@@ -267,9 +280,20 @@ def _execute_domain_bundle_validation(project_root: str, doc_id: str) -> None:
     targets = find_dangling_bundle_dependencies(bundles).get(doc_id, [])
     cycles = _find_bundle_dependency_cycles(bundles, doc_id)
     path_problems = _collect_path_pattern_problems(project_root, bundles, doc_id)
-    if not targets and not cycles and not path_problems:
-        print(f"通過: {doc_id} 的 depends_on_bundles 出邊與 path_patterns 皆有效")
+    own_path = _scan_domain_bundles(project_root)[doc_id][0]
+    duplicates = [
+        _format_duplicate_domain(d, paths)
+        for d, paths in _find_duplicate_domains(project_root).items()
+        if own_path in paths
+    ]
+    if not targets and not cycles and not path_problems and not duplicates:
+        print(f"通過: {doc_id} 的 depends_on_bundles 出邊、path_patterns 與 domain 唯一性皆有效")
         sys.exit(0)
+
+    if duplicates:
+        print(f"驗證失敗: {doc_id} 的 domain 與其他 DomainBundle 重複")
+        for item in duplicates:
+            print(f"  - {item}")
 
     if cycles:
         print(f"驗證失敗: {doc_id} 的 depends_on_bundles 成環")
@@ -332,11 +356,15 @@ def _collect_all_path_problems(project_root: str) -> list[str]:
 
 def execute_paths(args: argparse.Namespace) -> None:
     """doc validate-paths：一次檢查全部 path_patterns 與非 domain 路徑清單檔（供 CI）。"""
-    problems = _collect_all_path_problems(FileLocator.get_project_root())
+    project_root = FileLocator.get_project_root()
+    duplicates = [
+        _format_duplicate_domain(d, paths) for d, paths in _find_duplicate_domains(project_root).items()
+    ]
+    problems = duplicates + _collect_all_path_problems(project_root)
     if not problems:
-        print("通過: 全部 path_patterns 與非 domain 路徑清單皆有效")
+        print("通過: 全部 path_patterns、非 domain 路徑清單與 domain 唯一性皆有效")
         sys.exit(0)
-    print("驗證失敗: path_patterns／非 domain 路徑清單無效")
+    print("驗證失敗: path_patterns／非 domain 路徑清單／domain 唯一性無效")
     for item in problems:
         print(f"  - {item}")
     sys.exit(1)

@@ -1,3 +1,17 @@
+## [2.81.0] - 2026-10-08
+
+### Summary
+revert: 撤回 e074dcce5 誤夾帶的 doc skill 四檔 (原 commit: e074dcce5); feat: 某票.1 doc validate 擋下重複宣告的 domain (1.24.10); docs: ticket skill 補升 2.44.47（architecture.md 路由行漏升版號） (+1 more)
+
+Changes: 1 revert, 1 feat, 1 docs, 1 chore
+
+- revert: 撤回 e074dcce5 誤夾帶的 doc skill 四檔 (原 commit: e074dcce5)
+- feat: 某票.1 doc validate 擋下重複宣告的 domain (1.24.10)
+- docs: ticket skill 補升 2.44.47（architecture.md 路由行漏升版號）
+- chore: 回寫 .claude/VERSION 為 2.80.0（canonical sync-push）
+
+---
+
 ## [2.80.0] - 2026-10-08
 
 ### Summary

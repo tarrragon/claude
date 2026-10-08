@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.47（本地變更）— `references/architecture.md` 在 named agent 三態表後補一行路由：經 SendMessage 進入 running 前，先確認 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉。純文件路由，CLI 行為不變。此變更原本隨派發範本的恢復判準一起修改時漏升版號，導致本地與發佈庫出現版號相同但內容不同，本版補升。
+
 **Version**: 2.44.46（本地變更）— `ticket track depth` 輸出補一行 `[用途]` 說明：`can_descend` 供持有該票的呼叫者判斷能否再往下派發，不用於判斷該票能否被派發（被派發票僅在 depth > MAX_TICKET_DEPTH 時被擋）。can_descend 判準與守衛邏輯不變，僅輸出文案與文件。文件同步：`references/track-command.md` depth 段、`.claude/agents/AGENT_PRELOAD.md` D3 單一判準段。測試 `tests/test_depth_command_and_warning.py::TestTrackDepthPurposeNote`：E1 改前 can_descend true／false 兩案輸出皆不含用途說明（2 紅），改後含（綠）。
 
 **Version**: 2.44.45（本地變更）— 派發深度守衛改為被派發票 depth > MAX_TICKET_DEPTH 才 deny（原 depth >= MAX 即擋，使深度 3 的票不論誰派都被擋，「3 層可用」實際只有 2 層）；`create --parent` 建立端警告門檻同改為 new_depth > MAX。兩端訊息改述同一判準（超過上限），不再寫「已達上限即不可派發」。深度模組不可用或計算異常的 fail-open 分支補 stderr 警告與 warning 日誌（原僅 logger.info）。依用戶裁決 E（2026-10-08），不以 agent_id 判別呼叫者。文件同步：`references/track-command.md` create --parent 警告門檻段。測試：`tests/test_agent_ticket_validation_depth.py`（E1 深度 3 改前 deny 改後 allow、E2 深度 4 仍 deny、fail-open 可見）、`tests/test_depth_command_and_warning.py`（深度 3 不 warn、深度 4 warn）。
