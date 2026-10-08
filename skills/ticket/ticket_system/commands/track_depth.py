@@ -53,6 +53,8 @@ def execute_depth(args: argparse.Namespace, version: str) -> int:
     print(f"  depth = {depth}")
     print(f"  max_depth = {MAX_TICKET_DEPTH}")
     print(f"  can_descend = {'true' if descend else 'false'}")
+    print("  [用途] can_descend 供持有此票的呼叫者判斷能否再往下派發；"
+          "不用於判斷此票能否被派發（被派發票僅在 depth > max_depth 時被擋）")
     if not descend:
         print("  [Note] 已達深度上限，不應再往下嵌套派發子任務（協議 v2 A-6）")
     return 0

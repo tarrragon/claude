@@ -369,6 +369,13 @@ def _collect_domain_references(doc_id: str, file_path: str, frontmatter: dict) -
     return []
 
 
+def _declared_domains(project_root: str) -> set[str]:
+    """所有 DomainBundle 宣告的 domain 名稱；空集合代表語料沒有宣告來源。"""
+    return {
+        str(fm["domain"]) for fm in _load_domain_bundles(project_root).values() if fm.get("domain")
+    }
+
+
 def _find_undeclared_domain_references(
     project_root: str, doc_id: str, file_path: str, frontmatter: dict
 ) -> list[str]:
@@ -376,9 +383,7 @@ def _find_undeclared_domain_references(
 
     語料沒有任何 DomainBundle 時不檢查（舊版語料沒有宣告來源可比對）。
     """
-    declared = {
-        str(fm["domain"]) for fm in _load_domain_bundles(project_root).values() if fm.get("domain")
-    }
+    declared = _declared_domains(project_root)
     if not declared:
         return []
     references = _collect_domain_references(doc_id, file_path, frontmatter)
@@ -399,6 +404,12 @@ def _fail_on_undeclared_domains(project_root: str, doc_id: str, file_path: str, 
     for item in problems:
         print(f"  - {item}")
     sys.exit(1)
+
+
+def _read_flow_steps(file_path: str) -> list:
+    """讀取 UC 結構化 flow 區塊的步驟；沒有 flow 區塊回傳空清單。"""
+    with open(file_path, encoding="utf-8") as f:
+        return _extract_structured_flow_steps(f.read().splitlines()) or []
 
 
 def _find_flow_order_problems(steps: list) -> list[str]:
@@ -449,9 +460,7 @@ def _fail_on_branch_from_structure(doc_id: str, file_path: str) -> None:
     """UC 結構化 flow 區塊 branch_from 懸空、自指或成環時列出位置並 exit 1。"""
     if not doc_id.upper().startswith("UC-"):
         return
-    with open(file_path, encoding="utf-8") as f:
-        steps = _extract_structured_flow_steps(f.read().splitlines()) or []
-    problems = _find_branch_from_problems(steps)
+    problems = _find_branch_from_problems(_read_flow_steps(file_path))
     if not problems:
         return
     print(f"驗證失敗: {doc_id} 的 branch_from 結構無效")
@@ -464,15 +473,48 @@ def _fail_on_flow_order(doc_id: str, file_path: str) -> None:
     """UC 結構化 flow 區塊主線 next 與清單順序不一致時列出位置並 exit 1。"""
     if not doc_id.upper().startswith("UC-"):
         return
-    with open(file_path, encoding="utf-8") as f:
-        steps = _extract_structured_flow_steps(f.read().splitlines()) or []
-    problems = _find_flow_order_problems(steps)
+    problems = _find_flow_order_problems(_read_flow_steps(file_path))
     if not problems:
         return
     print(f"驗證失敗: {doc_id} 主線 next 與 flow 清單順序不一致")
     for item in problems:
         print(f"  - {file_path}: {item}")
     sys.exit(1)
+
+
+def _report_non_data_contract_pass(project_root: str, doc_id: str, file_path: str, subdomain) -> None:
+    """非 data-contract 文件通過時：依文件型別列出實際執行的檢查，再列略過與不適用項。
+
+    「通過」只列真正檢查過內容的項目；前提不成立而未檢查的項目列為「略過」。
+    只有 SPEC 印 /spec validate 路由提示，UC 與其他型別都不印。
+    """
+    prefix = doc_id.upper()
+    is_uc, is_spec = prefix.startswith("UC-"), prefix.startswith("SPEC-")
+    if not (is_uc or is_spec):
+        print(f"通過: {doc_id} 沒有適用的檢查（doc validate 的內容檢查僅涵蓋 UC／SPEC／EVT／DOMAIN-MAP）")
+        return
+    field = "flow 的 traverses" if is_uc else "depends_on_domains"
+    passed: list[str] = []
+    skipped: list[str] = []
+    if _declared_domains(project_root):
+        passed.append(f"domain 引用宣告（{field}）")
+    else:
+        skipped.append(f"domain 引用宣告（{field}）：語料沒有 DomainBundle，無宣告來源可比對")
+    if is_uc:
+        if _read_flow_steps(file_path):
+            passed += ["flow branch_from 結構", "flow 主線 next 與清單順序"]
+        else:
+            skipped.append("flow branch_from 結構、主線 next 順序：文件沒有結構化 flow 區塊")
+    print(f"已執行的檢查: {doc_id}")
+    for item in passed:
+        print(f"通過: {item}")
+    for item in skipped:
+        print(f"略過: {item}")
+    if is_uc:
+        print("不適用: data-contract 章節 schema（僅適用 subdomain 為 data-contract 的 SPEC）")
+        return
+    print(f"不適用: UC flow 檢查（僅適用 UC）；data-contract 章節 schema（subdomain={subdomain!r}）")
+    print("SPEC 章節驗證請用 /spec validate")
 
 
 def execute(args: argparse.Namespace) -> None:
@@ -506,7 +548,7 @@ def execute(args: argparse.Namespace) -> None:
 
     subdomain = frontmatter.get("subdomain")
     if subdomain != "data-contract":
-        print(f"非 data-contract 文件，請用 /spec validate（subdomain={subdomain!r}）")
+        _report_non_data_contract_pass(project_root, doc_id, file_path, subdomain)
         sys.exit(0)
 
     with open(file_path, encoding="utf-8-sig") as f:

@@ -1,3 +1,17 @@
+## [2.79.0] - 2026-10-08
+
+### Summary
+feat: doc validate 通過時先列已執行檢查再說明不適用項; feat: track depth 輸出補 can_descend 用途說明; fix: validate 通過輸出只列實際執行的檢查，略過與型別分流 (+1 more)
+
+Changes: 2 feat, 1 fix, 1 chore
+
+- feat: doc validate 通過時先列已執行檢查再說明不適用項
+- feat: track depth 輸出補 can_descend 用途說明
+- fix: validate 通過輸出只列實際執行的檢查，略過與型別分流
+- chore: 回寫 .claude/VERSION 為 2.78.0（canonical sync-push）
+
+---
+
 ## [2.78.0] - 2026-10-08
 
 ### Summary

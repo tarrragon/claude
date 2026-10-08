@@ -2,7 +2,7 @@
 name: doc
 description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、建立、導航和管理。Use for: (1) 查詢提案、規格、用例文件, (2) 建立新提案/規格/用例（從模板）, (3) 跨文件導航（從 UC 找 spec/ticket）, (4) Domain 地圖查詢, (5) 追蹤索引管理, (6) UC 測試對應驗證, (7) 提案評估與審查, (8) 測試追溯矩陣查詢（UC↔測試覆蓋狀態）, (9) UC 編號治理（uc list 列合法 UC / uc verify 白名單驗證可掛 CI / uc trace 引用追溯 / uc context 派發 UC 定位）。Use when: user mentions PROP-, UC-, SPEC-, 功能, 需求, feature, issue, 提案, 用例, 規格, 需求文件, 需求追蹤, 測試覆蓋, 追溯, traceability, test-map, UC 編號, 編號驗證, uc verify, 偽 UC, 合法 UC 清單"
 metadata:
-  version: 1.24.8
+  version: 1.24.9
 ---
 
 # Doc SKILL
@@ -50,7 +50,7 @@ metadata:
 | `uc verify [path]` | 驗證路徑內 UC token 白名單合規（可掛 CI） | `/doc uc verify lib`（exit 0=pass / 1=violation；相對路徑以呼叫者 cwd 解析，不存在回 exit 2） |
 | `uc trace <UC-XX>` | 列出指定 UC 的 code 引用位置 | `/doc uc trace UC-01` |
 | `uc context <UC-XX\|ticket-id>` | 輸出 UC 標題+spec 位置+code 引用 top-N，供派發 Context Bundle 引用 | `/doc uc context UC-01` 或 `/doc uc context <ticket-id>` |
-| `validate <UC-ID\|SPEC-ID\|EVT-ID\|DOMAIN-MAP-ID>` | 依 ID 前綴分派驗證：`UC-*`／`SPEC-*` 先檢查 domain 引用（UC flow 區塊的 `traverses`、SPEC frontmatter 的 `depends_on_domains` 每個值須為某份 DomainBundle 宣告的 domain，未宣告則 exit 1 並列出檔案與欄位；語料無任何 DomainBundle 時不檢查），`SPEC-*` 再依 subdomain 分派章節 schema（目前僅 data-contract）/ `EVT-*`（必填欄位 + producer/consumer 交叉驗證）/ `DOMAIN-MAP-*`（`depends_on_bundles` 出邊目標須為已存在的 domain-map id，不存在則 exit 1 並列出懸空目標） | `/doc validate SPEC-002`、`/doc validate EVT-LIBRARY-001` 或 `/doc validate DOMAIN-MAP-{domain}`（exit 0=通過 / 1=章節缺失或欄位缺失 / 2=文件不存在或 frontmatter 不可解析） |
+| `validate <UC-ID\|SPEC-ID\|EVT-ID\|DOMAIN-MAP-ID>` | 依 ID 前綴分派驗證：`UC-*`／`SPEC-*` 先檢查 domain 引用（UC flow 區塊的 `traverses`、SPEC frontmatter 的 `depends_on_domains` 每個值須為某份 DomainBundle 宣告的 domain，未宣告則 exit 1 並列出檔案與欄位；語料無任何 DomainBundle 時不檢查），`SPEC-*` 再依 subdomain 分派章節 schema（目前僅 data-contract）；非 data-contract 文件通過時只列實際檢查過的項目為「通過」（前提不成立者如語料無 DomainBundle、UC 無 flow 區塊列「略過」），再說明不適用項（UC 不出現 /spec 路由，非 data-contract SPEC 保留 `/spec validate` 提示，PROP 等其他型別兩者皆無，exit 0）/ `EVT-*`（必填欄位 + producer/consumer 交叉驗證）/ `DOMAIN-MAP-*`（`depends_on_bundles` 出邊目標須為已存在的 domain-map id，不存在則 exit 1 並列出懸空目標） | `/doc validate SPEC-002`、`/doc validate EVT-LIBRARY-001` 或 `/doc validate DOMAIN-MAP-{domain}`（exit 0=通過 / 1=章節缺失或欄位缺失 / 2=文件不存在或 frontmatter 不可解析） |
 | `validate-paths` | 一次檢查全部 DomainBundle 的 `path_patterns` 與非 domain 路徑清單檔 `docs/non-domain-paths.yaml`（路徑由 `tracking_schema.py` 的 `NON_DOMAIN_PATHS_FILE` 宣告，`doc schema export` 匯出；模板 `templates/non-domain-paths-template.yaml`）。檔案缺席合法（未宣告），`non_domain_path_patterns: []` 為宣告無非 domain 路徑，檔案存在但缺鍵或值非清單則 exit 1。檢查格式、同檔重複、與任一 `path_patterns` 同字串、路徑存在 | `/doc validate-paths`（exit 0=通過 / 1=列出檔案、值與原因；供 CI） |
 
 ---

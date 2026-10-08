@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.24.9 — `doc validate` 對非 data-contract 文件通過時的輸出改為先列「已執行且通過的檢查」，再依文件型別說明不適用項：UC 列出 domain 引用、`branch_from` 結構、主線 `next` 順序三項並說明 data-contract 章節 schema 不適用，輸出不再出現 `/spec validate`；SPEC（非 data-contract）列出 domain 引用檢查，保留改用 `/spec validate` 的路由提示。列為「通過」的只含實際檢查過內容的項目：語料沒有 DomainBundle 時 domain 引用檢查、UC 沒有結構化 flow 區塊時 flow 兩項檢查改列「略過」並寫明原因；PROP 等其他型別不印 `/spec validate` 與 UC flow 字樣，只說明沒有適用的檢查。僅改輸出文字，檢查邏輯與 exit code 不變，`doc schema export` 輸出不變。測試：E1（同一 UC 改前只印路由、改後列檢查項且無 `/spec`）、E2（flow 順序錯誤的 UC 仍 exit 1）、SPEC 路由保留對照。
+
 **Version**: 1.24.8 — `doc validate DOMAIN-MAP-*` 新增 `depends_on_bundles` 成環檢查（自該 bundle 可達的環，含自指；exit 1 並列出
 `A -> B -> A` 路徑）。`doc validate UC-*` 新增 flow `branch_from` 結構檢查：指向不存在的步驟、自指、成環各自 exit 1 並列出檔案、
 `flow[<id>].branch_from` 位置或環路徑。測試：E2（bundle 二環／自指／三環且入口不在環上、branch_from 懸空／自指／二環各一個該紅 fixture）、

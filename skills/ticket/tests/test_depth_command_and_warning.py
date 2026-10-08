@@ -93,3 +93,23 @@ class TestCreateParentDepthWarning:
         assert "嵌套上限" in out
         # 不硬擋：仍回傳有效 tuple（version, ticket_id, wave）
         assert result is not None
+
+
+class TestTrackDepthPurposeNote:
+    """can_descend 用途說明（0.5.0-W1-109）：呼叫者自檢，不用於判斷被派發票"""
+
+    PURPOSE = "供持有此票的呼叫者判斷能否再往下派發"
+
+    def _out(self, descend, depth, capsys):
+        with patch("ticket_system.commands.track_depth.load_ticket",
+                   return_value={"id": "1.0.0-W1-056.5", "parent_id": "1.0.0-W1-056"}), \
+             patch("ticket_system.commands.track_depth.compute_depth", return_value=depth), \
+             patch("ticket_system.commands.track_depth.can_descend", return_value=descend):
+            execute_depth(argparse.Namespace(ticket_id="1.0.0-W1-056.5", version=None), "1.0.0")
+        return capsys.readouterr().out
+
+    @pytest.mark.parametrize("descend,depth", [(True, 2), (False, 3)])
+    def test_purpose_note_present_on_can_descend(self, descend, depth, capsys):
+        out = self._out(descend, depth, capsys)
+        assert self.PURPOSE in out
+        assert "不用於判斷此票能否被派發" in out

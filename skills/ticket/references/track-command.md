@@ -829,7 +829,7 @@ ticket track deps <ticket-id>
 ticket track depth <ticket-id>
 ```
 
-沿 `parent_id` 鏈計算嵌套深度（**非** ID 字串數點，避免完整版本前綴如 `<version>-W<wave>-<seq>.<sub>` 本身即含 3 個點，被誤算為 depth 4 的 fatal bug）。輸出 `depth` / `max_depth`（= `MAX_TICKET_DEPTH=3`）/ `can_descend`（`depth < MAX_TICKET_DEPTH`）。深度定義：根任務（`parent_id: null`）= depth 1，每往下一層 +1。用途：agent 自檢層級自覺（協議 v2 D3），無需上層 prompt 傳遞層級資訊。
+沿 `parent_id` 鏈計算嵌套深度（**非** ID 字串數點，避免完整版本前綴如 `<version>-W<wave>-<seq>.<sub>` 本身即含 3 個點，被誤算為 depth 4 的 fatal bug）。輸出 `depth` / `max_depth`（= `MAX_TICKET_DEPTH=3`）/ `can_descend`（`depth < MAX_TICKET_DEPTH`）。深度定義：根任務（`parent_id: null`）= depth 1，每往下一層 +1。用途：agent 自檢層級自覺（協議 v2 D3），無需上層 prompt 傳遞層級資訊。輸出附一行 `[用途]` 說明：`can_descend` 供持有該票的呼叫者判斷能否再往下派發，不用於判斷該票能否被派發（被派發票僅在 depth > `MAX_TICKET_DEPTH` 時被派發守衛擋下）。
 
 > **與 frontmatter `chain.depth` 的基數差異**：本命令輸出的 `depth` 是即時沿 `parent_id` 鏈計算的動態值，根任務 = 1（1-based）。`ticket-lifecycle-details.md`〈chain 欄位說明〉的 frontmatter `chain.depth` 是建立當下依 ID 序號點數寫入的靜態快照，根任務 = 0（0-based），與本命令為同名不同來源的獨立量測值，不可互換代入（詳見該節注記）。`can_descend` 與 `MAX_TICKET_DEPTH` 比較一律以本命令輸出為準。
 

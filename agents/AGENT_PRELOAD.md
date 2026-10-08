@@ -341,6 +341,8 @@ MAX_TICKET_DEPTH = 3
 can_descend(ticket) = depth(ticket) < MAX_TICKET_DEPTH
 ```
 
+`can_descend` 供持有該票的呼叫者判斷能否再往下派發，不用於判斷該票能否被派發（被派發票僅在 depth > MAX_TICKET_DEPTH 時被派發守衛擋下）。
+
 ##### 五步自檢流程（claim 後執行）
 
 ```
