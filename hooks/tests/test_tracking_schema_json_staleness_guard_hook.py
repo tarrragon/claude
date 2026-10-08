@@ -373,3 +373,17 @@ def test_production_launch_unrelated_commit_not_affected(tmp_repo):
     result = _run_hook_as_subprocess('git commit -m "test: unrelated"', tmp_repo)
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+
+
+def test_scenario_hand_edited_compat_version_key_blocks(monkeypatch, capsys):
+    """正向對照：手改 schema_generated_at_framework_version 的 commit 必須被攔下。"""
+    key = "schema_generated_at_framework_version"
+    exit_code = _run_main_with(
+        monkeypatch,
+        command='git commit -m "chore: regen"',
+        staged_files=[_hook.SCHEMA_PY_REL_PATH, _hook.SCHEMA_JSON_REL_PATH],
+        expected_schema={"node_types": {"a": 1}, key: "2.77.0"},
+        disk_schema={"node_types": {"a": 1}, key: "2.99.0"},
+    )
+    assert exit_code == 2
+    assert "tracking_schema.json 過期" in capsys.readouterr().err

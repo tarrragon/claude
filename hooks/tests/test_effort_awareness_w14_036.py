@@ -55,16 +55,16 @@ class Test5w1hComplianceEffort:
     HOOK = HOOKS_DIR / "5w1h-compliance-check-hook.py"
 
     def test_low_effort_does_not_short_circuit(self):
-        # content 存在但缺少 Who 欄位 → 應與 medium/high 同樣被 block（rc=1），
-        # 證明移除短路後 low effort 也執行完整 5W1H 檢查。
+        # content 存在但缺少 Who 欄位 → 應與 medium/high 同樣被阻擋
+        # （permissionDecision deny，rc=0），證明移除短路後 low effort 也執行完整 5W1H 檢查。
         payload = {
             "tool_name": "Write",
             "tool_input": {"file_path": "x.md", "content": "hi"},
             "effort": {"level": "low"},
         }
         rc, stdout, _ = _run_hook(self.HOOK, payload)
-        assert rc == 1
-        assert "block" in stdout.lower()
+        assert rc == 0
+        assert "deny" in stdout.lower()
 
     def test_medium_effort_runs_full_path(self):
         payload = {

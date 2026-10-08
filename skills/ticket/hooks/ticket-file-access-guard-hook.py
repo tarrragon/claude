@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import (
     setup_hook_logging, run_hook_safely, get_project_root, save_check_log,
-    read_json_from_stdin, emit_hook_output
+    read_json_from_stdin, emit_hook_output, get_handoff_recovery_ticket_ids
 )
 
 from datetime import datetime
@@ -130,43 +130,12 @@ def is_internal_call() -> bool:
 
 # 共用 lib.is_handoff_recovery_mode() 只檢查 pending 目錄有無任何 handoff，
 # 命中即對所有 ticket 全域放行，範圍過廣（未恢復 handoff 為常態非例外，見
-# Problem Analysis）。本檔改用下列兩個本地函式，將放行範圍收窄至該 handoff
-# 實際指向的 ticket。共用函式仍由 task-dispatch-readiness-check.py 和
-# agent-ticket-validation-hook.py 使用，本票不變更其行為（不處理其他 hook）。
+# Problem Analysis）。本檔改用 lib.get_handoff_recovery_ticket_ids（與兩支
+# 派發守衛共用同一解析實作），將放行範圍收窄至該 handoff 實際指向的 ticket。
 
 def extract_ticket_id_from_path(file_path: str) -> str:
     """從 ticket 檔案路徑萃取 ticket ID（檔名去除副檔名）"""
     return Path(file_path).stem
-
-
-def get_handoff_recovery_ticket_ids(logger) -> set:
-    """掃描 handoff pending 目錄，回傳目前有效恢復流程涉及的 ticket ID 集合
-
-    每筆 handoff 記錄同時納入來源 ticket_id 與 target_ticket_id：恢復流程可能
-    需要讀取來源 ticket（已完成，作為交接背景）或目標 ticket（待接手），兩者
-    都屬合法恢復範圍；範圍外的 ticket 一律視為與本次恢復無關。
-    """
-    project_root = get_project_root()
-    handoff_pending_dir = project_root / ".claude" / "handoff" / "pending"
-    ticket_ids = set()
-
-    if not handoff_pending_dir.exists() or not handoff_pending_dir.is_dir():
-        return ticket_ids
-
-    for handoff_file in handoff_pending_dir.glob("*.json"):
-        try:
-            with open(handoff_file, "r", encoding="utf-8") as f:
-                record = json.load(f)
-        except (OSError, json.JSONDecodeError) as e:
-            logger.warning(f"讀取 handoff 檔案失敗，略過: {handoff_file.name}: {e}")
-            continue
-
-        for key in ("ticket_id", "target_ticket_id"):
-            value = record.get(key)
-            if value:
-                ticket_ids.add(value)
-
-    return ticket_ids
 
 
 def is_body_section_edit(old_string: str, logger) -> bool:
@@ -229,7 +198,9 @@ def check_read_permission(file_path: str, logger) -> Tuple[bool, str]:
         return True, "非 ticket 檔案，允許讀取"
 
     ticket_id = extract_ticket_id_from_path(file_path)
-    recovery_ticket_ids = get_handoff_recovery_ticket_ids(logger)
+    recovery_ticket_ids = get_handoff_recovery_ticket_ids(
+        logger, project_root=get_project_root()
+    )
     if ticket_id and ticket_id in recovery_ticket_ids:
         logger.debug(f"Handoff 恢復模式（限定 {ticket_id}）: 允許讀取 {file_path}")
         return True, f"Handoff 恢復模式允許（限定 {ticket_id}）"

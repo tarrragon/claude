@@ -6,6 +6,10 @@ Domain Map 模板 — 複製到對應 domain 目錄並重新命名。
 用途：界定 DDD domain bundle 邊界（水平視角），作為切層、派發、測試策略的權威依據。
 正交於 UC（使用者行為，垂直視角）與 spec 目錄分組（feature grouping）。
 
+跨 domain 的決策（bundle 間依賴方向、共用通道、跨 domain 邊界、容錯、待決）不寫在本檔，
+寫在系統層文件（`system-layer-template.md` -> `docs/system-layer.md`）；本檔 frontmatter 的
+`depends_on_bundles` 是兩者的連結點。
+
 填寫來源：spec FR 列表 + 現有/規劃程式碼結構。domain 派生自 FR（系統計算什麼），
 與 UC 場景（誰怎麼用）正交。切分判準見 .claude/methodologies/domain-bundle-mapping-methodology.md。
 -->
@@ -15,6 +19,7 @@ id: DOMAIN-MAP-{domain}
 domain: "{domain 名稱}"
 source_specs: []                 # 本 map 覆蓋的 spec，如 [SPEC-001]
 related_usecases: []             # 相關 UC，如 [UC-01]
+depends_on_bundles: []           # 選填：本 bundle 依賴的其他 domain-map id，如 [DOMAIN-MAP-{domain}]；彙整見系統層模板
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 ---
@@ -193,6 +198,7 @@ Step 5 測試設計逐條列舉為 domain unit test，不靠「剛好出現於 U
 ---
 
 **Last Updated**: YYYY-MM-DD | **Source**: {規劃波 ticket ID}
+**Template Updated**: 2026-10-07 | **Version**: 2.4.0 — frontmatter 新增選填欄位 `depends_on_bundles`（DomainBundle 出邊，B 層 proposed 邊型 `bundle_dependency`）；檔頭補指向 `system-layer-template.md`，跨 domain 決策改寫在系統層文件
 **Template Updated**: 2026-09-09 | **Version**: 2.3.0 — §2 依賴方向節之後新增「§2.5 通道與協調圖」（三個子項：通道清單、協調圖、到達類別與級別實例），節號用小數點插入不佔用既有 §3-§7 編號；判準以標題文字引用《事件流負載仲裁方法論》，範本內只留欄位與填寫提示
 **Template Updated**: 2026-07-25 | **Version**: 2.2.0 — §3 Bundle 界定表新增「資料契約文件引用連結」欄，僅 data/infrastructure 列需填，連結至 doc skill data-contract-template 產出文件（PROP-002 In Scope 3，0.2.0-W2-003）
 **Template Updated**: 2026-07-24 | **Version**: 2.1.0 — §3 Bundle 界定表新增「實作狀態」欄，防止未接線概念被誤標已實作（PC-APP-012，0.38.1-W9-003）

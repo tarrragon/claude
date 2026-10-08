@@ -224,8 +224,10 @@ class TestGraphTypeTablesWellFormed:
         a_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["layer"] == GRAPH_LAYER_ESTABLISHED}
         b_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["layer"] == GRAPH_LAYER_PROPOSED}
         assert len(a_layer) == 12, f"A 層邊應為 12 條，實得 {len(a_layer)}：{sorted(a_layer)}"
-        assert len(b_layer) == 4, f"B 層邊應為 4 條，實得 {len(b_layer)}：{sorted(b_layer)}"
-        assert b_layer == {"emission", "consumption", "branching", "returning"}
+        assert len(b_layer) == 5, f"B 層邊應為 5 條，實得 {len(b_layer)}：{sorted(b_layer)}"
+        assert b_layer == {
+            "emission", "consumption", "branching", "returning", "bundle_dependency",
+        }
 
     def test_every_edge_type_has_five_required_fields(self):
         """每條邊的 class / 正向欄位 / 反向欄位 / 維護方 / layer 皆可程式取用。"""

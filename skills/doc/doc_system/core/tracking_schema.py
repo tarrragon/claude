@@ -161,6 +161,14 @@ GRAPH_EDGE_MAINTAINERS = frozenset({"手動", "CLI 自動", "手動/CLI"})
 # 可能重疊的型別在兩項打平，須調整路徑深度或縮小重疊範圍化解，不得用
 # 額外比對層次掩蓋。
 
+# 型別表相容版本：`doc schema export` 寫入 JSON 鍵
+# `schema_generated_at_framework_version` 的值，取自本常數，不讀 .claude/VERSION。
+# 語意是「型別表最後一次變更時的框架版本」，只在 GRAPH_NODE_TYPES /
+# GRAPH_EDGE_TYPES 等型別表內容變更時手動升版，升為變更當下的框架版本。
+# 鍵名不改的理由：改名會影響所有舊 consumer；舊 consumer 照舊寫入的框架
+# 版本與本常數落在同一條遞增序列，消費端閘門無需修改即可比較。
+TYPE_TABLE_COMPAT_VERSION = "2.77.1"
+
 # 節點型別表：A 層 5 節點 + B 層 2 節點。FR 與 Test 不列為獨立節點型別
 # （無獨立檔案/ID 空間，語意由 SPEC / traceability 節點欄位承載）。
 GRAPH_NODE_TYPES = {
@@ -388,7 +396,7 @@ def find_edge_types_with_invalid_direction(edge_types: dict) -> dict[str, str]:
     return invalid
 
 
-# 語意邊表：A 層 12 條 + B 層 4 條，欄位齊全：class / 正向欄位（儲存
+# 語意邊表：A 層（established）+ B 層（proposed），欄位齊全：class / 正向欄位（儲存
 # 側）/ 正向基數 / 方向性 / 反向欄位 / 維護方 / status。
 GRAPH_EDGE_TYPES = {
     # --- A 層（12 條，established）---
@@ -540,4 +548,194 @@ GRAPH_EDGE_TYPES = {
         "maintainer": "手動",
         "layer": GRAPH_LAYER_PROPOSED,
     },
+    "bundle_dependency": {
+        # DomainBundle → DomainBundle：bundle 層級（跨 domain-map 檔）的
+        # 依賴方向。與 domain_dependency（domain 名稱層級、established）
+        # 並存且不取代；欄位為選填，缺欄位或 null 皆視為無出邊。
+        "class": "ordering",
+        "forward_field": "depends_on_bundles",
+        "forward_cardinality": "many",
+        "direction": "directed",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "layer": GRAPH_LAYER_PROPOSED,
+    },
 }
+
+BUNDLE_DEPENDENCY_FIELD = GRAPH_EDGE_TYPES["bundle_dependency"]["forward_field"]
+
+
+def extract_bundle_dependencies(frontmatter: dict) -> list[str]:
+    """回傳 DomainBundle frontmatter 的 depends_on_bundles 出邊目標清單。
+
+    欄位缺失或值為 None 代表無出邊；純量視為只有一項的清單（正向基數 many
+    的通則，見 EDGE_CARDINALITY_MANY 說明）。
+    """
+    value = frontmatter.get(BUNDLE_DEPENDENCY_FIELD)
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
+def find_undeclared_domain_names(names: list[str], declared: set[str]) -> list[str]:
+    """回傳 names 中不在 declared（DomainBundle 宣告的 domain）內的名稱，保留順序。
+
+    比對為精確字串，不做大小寫或別名正規化：domain 名稱以 DomainBundle 的
+    domain 欄位為權威字面。
+    """
+    return [name for name in names if name not in declared]
+
+
+# DomainBundle 選填欄位 `path_patterns`：該 bundle 擁有的專案路徑前綴。
+# - 值為字串清單。三態：欄位缺席＝該 bundle 未宣告（不得正規化為 []）；顯式 `[]` ＝
+#   宣告該 bundle 不擁有任何路徑（無目錄的 bundle 如 History，不得宣告不存在的路徑）；
+#   非空清單＝宣告其擁有的前綴。缺席與 `[]` 對 validate 同為合法，差異由
+#   `read_path_patterns` 保留給消費端（含「語料全部缺席」整體狀態的判定）。
+# - 每個值是專案根目錄相對的字面前綴，不是 glob：POSIX 斜線、不得以 `/` 或 `./`
+#   開頭、不得含 `..`、`*`、`?`、`[`、反斜線；以 `/` 結尾為目錄前綴，否則為單一檔案。
+# - 比對語意（消費端實作，本模組不比對）：路徑對全部 bundle 的 pattern 取最長前綴
+#   命中，由最長者決定歸屬；不同 bundle 的巢狀前綴合法。同一字串不得出現於兩個以上
+#   bundle（含同 bundle 內重複），否則最長前綴仍無法決定歸屬。
+PATH_PATTERNS_FIELD = "path_patterns"
+_PATH_PATTERN_FORBIDDEN_CHARS = frozenset("*?[\\")
+
+
+def read_path_patterns(frontmatter: dict) -> list | None:
+    """讀取 path_patterns：欄位缺席（或值為 None）回傳 None，顯式 `[]` 回傳 `[]`。
+
+    兩者語意不同，不可用 `or []` 之類寫法合併。非清單的值原樣回傳，交由格式檢查報錯。
+    """
+    return frontmatter.get(PATH_PATTERNS_FIELD)
+
+
+def check_path_pattern_format(value: object) -> str | None:
+    """回傳單一 path_patterns 值的格式問題描述；合法回傳 None。"""
+    if not isinstance(value, str) or not value:
+        return "必須是非空字串"
+    if value.startswith("/") or value.startswith("./"):
+        return "不得以 `/` 或 `./` 開頭（須為專案根目錄相對路徑）"
+    if ".." in value.split("/"):
+        return "不得含 `..` 段"
+    if any(ch in _PATH_PATTERN_FORBIDDEN_CHARS for ch in value):
+        return "不得含 glob 字元 `*` `?` `[` 或反斜線（字面前綴，非 glob）"
+    return None
+
+
+def find_path_pattern_problems(bundles: dict[str, dict]) -> dict[str, list[str]]:
+    """回傳各 bundle 的 path_patterns 格式與重複問題（bundle id → 問題描述清單）。
+
+    bundles：bundle id → frontmatter。跨 bundle 重複會同時回報給所有涉及的 bundle。
+    欄位缺席、None 與空清單皆合法。路徑存在性需檔案系統，由呼叫端檢查。
+    """
+    problems: dict[str, list[str]] = {}
+    owners: dict[str, list[str]] = {}
+    for bundle_id, frontmatter in bundles.items():
+        raw = read_path_patterns(frontmatter)
+        if raw is None:
+            continue
+        if not isinstance(raw, list):
+            problems.setdefault(bundle_id, []).append(f"{PATH_PATTERNS_FIELD} 必須是字串清單")
+            continue
+        for value in raw:
+            reason = check_path_pattern_format(value)
+            if reason:
+                problems.setdefault(bundle_id, []).append(f"{PATH_PATTERNS_FIELD} 值 {value!r}: {reason}")
+            else:
+                owners.setdefault(value, []).append(bundle_id)
+    for value, ids in owners.items():
+        if len(ids) < 2:
+            continue
+        for bundle_id in dict.fromkeys(ids):
+            problems.setdefault(bundle_id, []).append(
+                f"{PATH_PATTERNS_FIELD} 值 {value!r}: 重複宣告（出現於 {', '.join(ids)}）"
+            )
+    return problems
+
+
+def find_missing_path_patterns(frontmatter: dict, exists) -> list[str]:
+    """回傳 path_patterns 中指向不存在路徑的值；exists(value) 由呼叫端提供。
+
+    目錄前綴（`/` 結尾）須為目錄，其餘須為檔案。格式不合法的值略過（由格式檢查負責）。
+    """
+    raw = read_path_patterns(frontmatter)
+    if not isinstance(raw, list):
+        return []
+    return [v for v in raw if check_path_pattern_format(v) is None and not exists(v)]
+
+
+# 非 domain 路徑清單：不屬任何 DomainBundle、但專案明確宣告的路徑前綴（如 `.claude/`）。
+# 載體是專案根目錄相對的獨立設定檔（不是圖節點），位置與鍵名在此宣告，消費端
+# （含 App，經 `doc schema export` 匯出）不得寫死。值格式與 path_patterns 完全相同
+# （`check_path_pattern_format`）。三態：檔案缺席＝非 domain 側未宣告（合法，
+# `read_non_domain_paths` 回 None）；檔案存在且鍵值為 `[]` ＝宣告無非 domain 路徑
+# （回 `[]`）；檔案存在但缺鍵或值非清單＝格式錯誤（拋 NonDomainPathsFormatError，
+# 不當成缺席）。不正規化缺席與 `[]`，顯示狀態的判定屬消費端。
+NON_DOMAIN_PATHS_FILE = "docs/non-domain-paths.yaml"
+NON_DOMAIN_PATHS_KEY = "non_domain_path_patterns"
+
+
+class NonDomainPathsFormatError(ValueError):
+    """非 domain 路徑清單檔存在但結構不合法（無法解析、缺鍵、值非清單）。"""
+
+
+def read_non_domain_paths(project_root) -> list | None:
+    """讀取非 domain 路徑清單：檔案缺席回 None，顯式 `[]` 回 `[]`，壞檔拋格式錯誤。"""
+    import yaml
+    from pathlib import Path
+
+    path = Path(project_root) / NON_DOMAIN_PATHS_FILE
+    if not path.is_file():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise NonDomainPathsFormatError(f"YAML 無法解析: {exc}") from exc
+    if not isinstance(data, dict) or NON_DOMAIN_PATHS_KEY not in data:
+        raise NonDomainPathsFormatError(f"缺少必要鍵 `{NON_DOMAIN_PATHS_KEY}`")
+    value = data[NON_DOMAIN_PATHS_KEY]
+    if not isinstance(value, list):
+        raise NonDomainPathsFormatError(f"`{NON_DOMAIN_PATHS_KEY}` 必須是字串清單")
+    return value
+
+
+def find_non_domain_path_problems(values: list, bundle_patterns: dict[str, list]) -> list[str]:
+    """回傳非 domain 路徑清單的格式、同檔重複、與 DomainBundle path_patterns 同字串問題。
+
+    bundle_patterns：bundle id → 該 bundle 的 path_patterns（缺席者不放入）。
+    路徑存在性需檔案系統，由呼叫端檢查。
+    """
+    problems: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        reason = check_path_pattern_format(value)
+        if reason:
+            problems.append(f"{NON_DOMAIN_PATHS_KEY} 值 {value!r}: {reason}")
+            continue
+        if value in seen:
+            problems.append(f"{NON_DOMAIN_PATHS_KEY} 值 {value!r}: 同檔重複宣告")
+        seen.add(value)
+        owners = [bid for bid, pats in bundle_patterns.items() if value in pats]
+        if owners:
+            problems.append(
+                f"{NON_DOMAIN_PATHS_KEY} 值 {value!r}: 與 DomainBundle path_patterns 同字串（{', '.join(owners)}）"
+            )
+    return problems
+
+
+def find_dangling_bundle_dependencies(bundles: dict[str, dict]) -> dict[str, list[str]]:
+    """回傳出邊指向不存在 bundle 的來源（bundle id → 懸空目標清單）。
+
+    bundles：bundle id → 該 bundle 的 frontmatter；「存在」以此映射的鍵為準。
+    """
+    dangling: dict[str, list[str]] = {}
+    for bundle_id, frontmatter in bundles.items():
+        missing = [
+            target
+            for target in extract_bundle_dependencies(frontmatter)
+            if target not in bundles
+        ]
+        if missing:
+            dangling[bundle_id] = missing
+    return dangling

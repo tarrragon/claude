@@ -5,16 +5,18 @@ tracking_schema.py（GRAPH_NODE_TYPES / GRAPH_EDGE_TYPES）是唯一 SSOT，本�
 .claude/ 框架版本）。本模組**不裁決** schema 內容，發現內容需修改時走 ticket
 spawn-request 流程，不在此處自行改值（tracking_schema.py 檔頭同精神）。
 
-version 語意見 `_read_framework_version_at_generation()` docstring：JSON 內
-`schema_generated_at_framework_version` 承載的是「本次產生時讀到的框架版
-本」，非「消費端讀取當下的框架版本」——兩者在 sync-push 前後有時序落差，
-鍵名刻意避免使用容易被誤讀為後者的 `framework_version`。
+version 語意（用戶裁決 A）：JSON 內 `schema_generated_at_framework_version` 承載
+「型別表相容版本」，值取自 tracking_schema.py 的 `TYPE_TABLE_COMPAT_VERSION`，
+為型別表最後一次變更時的框架版本，只在型別表變更時才升；不再讀重產當下的
+.claude/VERSION，故 sync-push 後重產不會讓值在零內容變更下升高。鍵名不改的理由：
+改名會影響所有舊 consumer（舊 consumer 照舊寫入的框架版本與常數同屬一條遞增序列）。
 """
 
 import argparse
 import json
 from pathlib import Path
 
+from doc_system.core import tracking_schema
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.tracking_schema import (
     CARRIER_PATH_TYPES,
@@ -65,23 +67,6 @@ SCHEMA_EDIT_NOTICE = (
 )
 
 
-def _read_framework_version_at_generation(project_root: Path) -> str:
-    """讀取產生當下的 .claude/VERSION 值。
-
-    此值不等於「消費端讀取本 JSON 當下的框架版本」——.claude/VERSION 的
-    bump 時機在 sync-push，晚於本檔的產生與 commit（見 Context Bundle
-    陷阱一：改 schema → 重產 JSON → commit → sync-push 才 bump VERSION）。
-    因此本函式讀到的值恆為「上一次 push 後」的版本，語意是「schema 最後
-    一次產生時的框架版本」，非當前框架版本。消費端若要當前框架版本，應
-    直接讀取隨框架同步的 .claude/VERSION，不透過本 JSON。
-    """
-    version_file = project_root / ".claude" / "VERSION"
-    try:
-        return version_file.read_text(encoding="utf-8").strip()
-    except OSError:
-        return "unknown"
-
-
 def build_schema_dict(project_root: Path | None = None) -> dict:
     """從 GRAPH_NODE_TYPES / GRAPH_EDGE_TYPES 建構可序列化為 JSON 的 dict。
 
@@ -89,10 +74,8 @@ def build_schema_dict(project_root: Path | None = None) -> dict:
     持續維護的第二判斷，其錯誤形態是消費端缺欄位且無紅燈（見 Context
     Bundle「消費端已確認的欄位用途」表）。
     """
-    root = project_root or Path(FileLocator.get_project_root())
-
     return {
-        "schema_generated_at_framework_version": _read_framework_version_at_generation(root),
+        "schema_generated_at_framework_version": tracking_schema.TYPE_TABLE_COMPAT_VERSION,
         "id_pattern_dialect": ID_PATTERN_DIALECT,
         "notice": SCHEMA_EDIT_NOTICE,
         "node_types": {
@@ -107,6 +90,8 @@ def build_schema_dict(project_root: Path | None = None) -> dict:
         "completeness_semantics": COMPLETENESS_SEMANTICS,
         "carrier_path_types": sorted(CARRIER_PATH_TYPES),
         "carrier_path_specificity_semantics": CARRIER_PATH_SPECIFICITY_SEMANTICS,
+        "non_domain_paths_file": tracking_schema.NON_DOMAIN_PATHS_FILE,
+        "non_domain_paths_key": tracking_schema.NON_DOMAIN_PATHS_KEY,
     }
 
 

@@ -568,6 +568,78 @@ How: [Task Type: Implementation] TDD"""
 
 
 # ============================================================================
+# 真實 payload 形狀 + main 入口（E2 正向對照 / E1 合規對照）
+# ============================================================================
+
+import subprocess
+
+_HOOK_PATH = hook_dir / "5w1h-compliance-check-hook.py"
+
+_VIOLATING_CONTENT = (
+    "Who: rosemary-project-manager (自行執行 - 分派/驗收)\n"
+    "How: [Task Type: Implementation] 建立 Domain 事件類別"
+)
+_COMPLIANT_CONTENT = (
+    "Who: parsley-flutter-developer (執行者) | rosemary-project-manager (分派者)\n"
+    "How: [Task Type: Implementation] TDD 實作策略"
+)
+
+
+def _run_main(payload):
+    """以子行程經 main 入口執行 hook，回傳 (returncode, stdout, stderr)"""
+    proc = subprocess.run(
+        [sys.executable, str(_HOOK_PATH)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _todo_payload(*contents):
+    return {
+        "tool_name": "TodoWrite",
+        "tool_input": {
+            "todos": [
+                {"content": c, "status": "pending", "activeForm": "處理中"}
+                for c in contents
+            ]
+        },
+    }
+
+
+class TestMainEntryRealPayload:
+    """經 main 入口、以真實 todos[] 形狀驗證阻擋與放行"""
+
+    def test_E2_violating_todos_denied_via_main(self):
+        rc, out, _ = _run_main(_todo_payload(_VIOLATING_CONTENT))
+        assert rc == 0
+        decision = json.loads(out)["hookSpecificOutput"]
+        assert decision["hookEventName"] == "PreToolUse"
+        assert decision["permissionDecision"] == "deny"
+        assert "主線程不應執行 Implementation" in decision["permissionDecisionReason"]
+
+    def test_E2_violation_in_second_item_denied(self):
+        rc, out, _ = _run_main(_todo_payload(_COMPLIANT_CONTENT, _VIOLATING_CONTENT))
+        assert rc == 0
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_E1_compliant_todos_allowed_via_main(self):
+        rc, out, _ = _run_main(_todo_payload(_COMPLIANT_CONTENT))
+        assert rc == 0
+        decision = json.loads(out).get("hookSpecificOutput", {})
+        assert decision.get("permissionDecision", "allow") != "deny"
+
+    def test_E1_todos_without_5w1h_markers_not_denied(self):
+        """一般待辦項（不含 Who/How 欄位）不屬 5W1H 決策，不應被阻擋"""
+        rc, out, _ = _run_main(_todo_payload("修正 README 錯字"))
+        assert rc == 0
+        decision = json.loads(out).get("hookSpecificOutput", {})
+        assert decision.get("permissionDecision", "allow") != "deny"
+
+
+# ============================================================================
 # 測試執行入口
 # ============================================================================
 

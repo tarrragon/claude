@@ -77,7 +77,7 @@ def shim_body(cli: str) -> str:
 root=$(git rev-parse --show-toplevel 2>/dev/null)
 skill_dir="$root/.claude/skills/{cli}"
 if [ -n "$root" ] && [ -d "$skill_dir" ]; then
-  exec uv run --quiet --directory "$skill_dir" {cli} "$@"
+  SKILL_CLI_CALLER_CWD=$(pwd) exec uv run --quiet --directory "$skill_dir" {cli} "$@"
 fi
 echo "{cli}: 找不到當前專案的 .claude/skills/{cli}（cwd 不在已配置專案內，或非 git 倉庫）" >&2
 exit 1

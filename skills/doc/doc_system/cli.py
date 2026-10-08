@@ -1,6 +1,7 @@
 """CLI 入口模組 — 定義 /doc 的 argparse 結構和子命令路由。"""
 
 import argparse
+import os
 import sys
 
 from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init, uc, validate, schema
@@ -101,6 +102,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_parser.add_argument("doc_id", help="文件 ID（如 SPEC-002）")
 
+    # validate-paths
+    subparsers.add_parser(
+        "validate-paths",
+        help="檢查全部 DomainBundle path_patterns 與 docs/non-domain-paths.yaml（供 CI）",
+    )
+
     # validate-filenames
     subparsers.add_parser(
         "validate-filenames",
@@ -183,12 +190,29 @@ COMMAND_HANDLERS = {
     "uc": uc.execute,
     "validate": validate.execute,
     "validate-filenames": validate.execute_filenames,
+    "validate-paths": validate.execute_paths,
     "schema": schema.execute,
 }
 
 
+CALLER_CWD_ENV = "SKILL_CLI_CALLER_CWD"
+
+
+def restore_caller_cwd() -> None:
+    """還原呼叫者的 cwd，使相對路徑引數以呼叫者所在目錄解析。
+
+    shim 以 `uv run --directory <skill_dir>` 啟動，行程 cwd 被改為 skill 目錄
+    （PWD 也被 uv 改寫，不可信）。shim 在切換前把呼叫者 cwd 放進
+    SKILL_CLI_CALLER_CWD，此處讀回；未設定（非 shim 啟動）時不動 cwd。
+    """
+    caller = os.environ.get(CALLER_CWD_ENV)
+    if caller and os.path.isabs(caller) and os.path.isdir(caller):
+        os.chdir(caller)
+
+
 def main() -> None:
     """CLI 主入口。無子命令時預設執行 status。"""
+    restore_caller_cwd()
     parser = build_parser()
     args = parser.parse_args()
 

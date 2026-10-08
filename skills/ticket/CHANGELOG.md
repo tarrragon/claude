@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.45（本地變更）— 派發深度守衛改為被派發票 depth > MAX_TICKET_DEPTH 才 deny（原 depth >= MAX 即擋，使深度 3 的票不論誰派都被擋，「3 層可用」實際只有 2 層）；`create --parent` 建立端警告門檻同改為 new_depth > MAX。兩端訊息改述同一判準（超過上限），不再寫「已達上限即不可派發」。深度模組不可用或計算異常的 fail-open 分支補 stderr 警告與 warning 日誌（原僅 logger.info）。依用戶裁決 E（2026-10-08），不以 agent_id 判別呼叫者。文件同步：`references/track-command.md` create --parent 警告門檻段。測試：`tests/test_agent_ticket_validation_depth.py`（E1 深度 3 改前 deny 改後 allow、E2 深度 4 仍 deny、fail-open 可見）、`tests/test_depth_command_and_warning.py`（深度 3 不 warn、深度 4 warn）。
+
 **Version**: 2.44.44（本地變更）— `create --blocked-by` 的循環偵測改以跨版本取票建圖：`validate_blocked_by_references` 原只以 `list_tickets(單一版本)` 建圖，環經過其他版本的票時在版本邊界斷開而被漏判（實測：新版本票與舊版本票互為 blockedBy 時驗證通過）。現行：從 blockedBy 沿依賴遍歷，缺席於版本內集合的票以 `resolve_blocker` 跨版本載入後併入圖。純 bug fix，CLI 子命令與旗標語意不變，無文件同步需求。測試 `tests/test_blocked_by_cross_version_cycle.py`：E1 兩節點與三節點跨版本環修前驗證通過、修後回 BLOCKED_BY_CYCLE；E2 跨版本無環仍通過、同版本環仍被擋。
 
 **Version**: 2.44.43（本地變更）— `ticket track tree`／`chain` 補上 `children` 欄位指向的跨版本子票（遞迴），載入不到者以 `(not_found)` 節點標示而非靜默省略；`track full` 的 spawned 遞迴改為先依 ID 前綴推導版本載入、退回目前版本（沿用 `extract_version_from_ticket_id`，與 acceptance 審計同一套推導）。原因：前移規則讓已完成子孫留在舊版本，單一版本解析使舊版本子票從樹中消失、舊版本 spawned 顯示 not_found。同版本樹輸出不變，循環引用防護不變；文件同步檢查：SKILL.md 與 pm-rules 無此輸出細節描述。測試 `tests/test_track_query_cross_version_tree.py`：修前 5 紅 1 綠（E1 舊版本子票與 spawned 缺漏、E2 對照 not_found 標示），修後全綠。

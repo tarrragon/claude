@@ -35,14 +35,16 @@ session 開始
 
 子 shell 執行完畢後，父 shell 的工作目錄保持不變。這是最通用的方法，適用任何指令。
 
-**方法 2：uv -d 參數（適用 uv 指令）**
+**方法 2：uv --directory 參數（適用 uv 指令）**
 
 ```bash
-# uv 支援 -d 指定目錄，不改變 shell 工作目錄
-uv -d .claude/skills/ticket run ticket track list
+# uv 支援 --directory 指定目錄，不改變 shell 工作目錄
+uv --directory .claude/skills/ticket run ticket track list
 ```
 
 uv 原生支援指定目錄參數，比子 shell 更精簡，但僅限 uv 指令。
+
+實測（uv 0.8.13）：`uv -d /tmp --version` 報 `error: unexpected argument '-d' found`，`uv --directory /tmp --version` 正常；uv 無 `-d` 短旗標，一律寫長旗標。
 
 **方法 3：絕對路徑還原**
 
@@ -80,7 +82,7 @@ cd /deep/nested/dir && grep "x" file  # chpwd ls 可能大於 grep 結果
 |---------|---------|---------|
 | 需要在其他目錄執行 | `cd /path && command` | `(cd /path && command)` — 子 shell 不觸發父 shell 的 chpwd |
 | 讀取/編輯檔案 | `cd /path && cat file` | 使用 Read/Edit/Write 工具搭配絕對路徑 |
-| uv 指令 | `cd /path && uv run ...` | `uv -d /path run ...` |
+| uv 指令 | `cd /path && uv run ...` | `uv --directory /path run ...` |
 
 **為什麼子 shell 不觸發 chpwd**：子 shell 是獨立 process，即使有 chpwd 設定，其輸出不會污染父 shell 的工具結果空間（透過 `()` 包裹的命令結束後，子 shell 整體退出，chpwd 的 ls 輸出通常會被 shell 直接丟棄或只影響子 shell 內部）。
 
@@ -752,6 +754,8 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 
 ---
 
+**Last Updated**: 2026-10-07
+**Version**: 1.15.0 — 規則一詳細 uv 方法由不存在的 `-d` 短旗標改為 `--directory`，附 uv 0.8.13 實測錯誤訊息。
 **Last Updated**: 2026-09-08
 **Version**: 1.14.0 — 隔離索引 CAS 配方補步驟 10（CAS 成功後檢查共用 index 過期 entry，附三平面比對可執行版本）；三要件章節後新增平行小節「隔離索引 CAS 的時間維度要件：基準釘選與收尾清理」，含要件 A（基準必須釘選 `$OLD_HEAD` 變數，禁用 `HEAD` 符號，附失效機制、為何三要件擋不住、CAS 舊值為唯一偵測點、已實測最小重現）與要件 B（CAS 後清理過期 entry，附三平面判定準則與處置表）；既有三要件表格與內容未變動。實證：commit `4bd0e2ac`（tree 取舊基準、parent 指新基準，靜默回滾 `eab601b2`）、`f7bd7fa0`（正向修復），三者皆已以 `git cat-file -t` 驗證存在。
 **Version**: 1.13.0 — 規則七詳細「隔離索引 CAS」適用條件表與「與規則七主文的關係」段改寫：代理人票務提交（`ticket track commit`）已改為預設路徑，規則七三步降為其 fallback；PM 手動／無票務 CLI 之一般低頻 commit，規則七三步仍為預設不變。與 `bash-tool-usage-rules.md` 規則七、`parallel-dispatch.md`、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步。

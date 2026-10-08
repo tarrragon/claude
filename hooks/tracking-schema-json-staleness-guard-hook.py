@@ -47,18 +47,6 @@ SCHEMA_PY_REL_PATH = ".claude/skills/doc/doc_system/core/tracking_schema.py"
 SCHEMA_JSON_REL_PATH = ".claude/skills/doc/doc_system/core/tracking_schema.json"
 DOC_SKILL_PROJECT_DIR = ".claude/skills/doc"
 
-# 此鍵記錄「產生當下讀到的 .claude/VERSION」，其 bump 時機在 sync-push、晚於
-# schema 產生與 commit（見 schema.py docstring）。同一份 tracking_schema.py
-# 在兩次不同時間點產生 JSON，此鍵值可能因 VERSION 已變動而不同，屬與
-# schema.py 內容無關的正常波動，比對時必須排除，否則會對「schema.py 完全
-# 未改動」的 commit 產生誤報。
-VOLATILE_KEYS = frozenset({"schema_generated_at_framework_version"})
-
-
-def _strip_volatile_keys(schema: dict) -> dict:
-    return {k: v for k, v in schema.items() if k not in VOLATILE_KEYS}
-
-
 def is_commit_command(command: str) -> bool:
     """判斷是否為 git commit 命令（排除唯讀/amend 變體）。"""
     if "git commit" not in command:
@@ -165,7 +153,7 @@ def main() -> int:
 
     actual = load_disk_schema(project_root, logger)
 
-    if actual is not None and _strip_volatile_keys(actual) == _strip_volatile_keys(expected):
+    if actual is not None and actual == expected:
         logger.debug("tracking_schema.json 與 tracking_schema.py 內容一致，放行")
         return 0
 

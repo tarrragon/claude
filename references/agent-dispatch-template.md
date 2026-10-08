@@ -509,6 +509,9 @@ final message 僅指向 ticket ID，不承載結論本體。
 
 - 唯有 CLI 回 `[OK] 已追加日誌到 '<section>'` 才算寫入成功；輸出僅見 heredoc 內容被 echo 出來代表指令 malformed、CLI 未執行，須修正 Bash 指令重發。
 - 收尾關鍵 section（Test Results / Exit Status）後以 `grep -c "<唯一片語>" <ticket-md-path>` 確認實際持久化（固定值驗證，不信 CLI 旁白）。
+- 派發 prompt 要求被派發 agent 寫入含子章節（`###`）的 ticket body 時，須明示「守衛拒收多行參數時分次 append，不得壓成單行」（PC-GPD-003 預防節主條文）。
+- worktree 內多行內容被守衛拒收時，分次 append（每次一個章節或段落），不得把 Markdown 章節壓成單行：壓成單行後 `###` 不在行首，寫入看似成功，但 complete gate 判定必填章節缺失而擋下。
+- 偵測是否已壓平：`grep -n '^### <本次寫入的子章節名>' <ticket-md-path>`（例：子章節為「自檢結果」時用 `grep -n '^### 自檢結果' <ticket-md-path>`）；ticket 內已有該章節內容卻無行首命中，即為壓平，須重新分次 append。無此子章節的票不會命中，不可據此判定未壓平。
 - 引用既有規則不重複定義：heredoc 傳長文字見 `bash-tool-usage-rules` 規則 5；「只信 raw stdout、帶旁白視為自身雜訊」見 `tool-output-trust-rules` 規則 2；CLI args 跳脫見 PC-079。
 
 ---
@@ -1125,6 +1128,9 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 - `.claude/rules/core/quality-baseline.md` — 規則 6 失敗案例學習原則
 
 ---
+
+**Last Updated**: 2026-10-07
+**Version**: 1.41.0 — 「append-log 收尾持久化驗證」Action 新增 worktree 守衛拒收多行參數時分次 append、不得壓成單行的條文：主條文為派發 prompt 明示此條，附通用偵測指令與 PC-GPD-003 引用
 
 **Last Updated**: 2026-10-06
 **Version**: 1.40.0 — 「全套件回報規格（TEST-BAL-006）」指令改為 `uv run pytest -q -rfE`，回報規格補第 4 項：有 failed 或 error 時附完整 FAILED / ERROR 行，不得被 tail、grep、grep -v 過濾；只看尾段時先 tee 留全量日誌再取尾段。動機：回報須保留失敗項與錯誤項的 nodeid，驗收方才能不重跑就定位；`-rfE` 讓摘要區固定列出兩類 nodeid（`-r` 取代預設 reportchars，單寫 `-rf` 會漏 ERROR 行）；遺失主因是 tail 行數不足或 grep 過濾。審查後修正（同版未發佈，版號沿用）：初稿誤用 `-rf` 並誤述「缺 -r 時只剩計數」，已更正。「填空檢查清單」對應列同步。

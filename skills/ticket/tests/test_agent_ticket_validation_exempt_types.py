@@ -42,7 +42,7 @@ def _run_main(payload: dict, module) -> tuple[int, dict]:
     """以注入 payload 執行 hook main，回傳 (exit_code, parsed_stdout_json)。"""
     buf = io.StringIO()
     with patch.object(module, "read_json_from_stdin", return_value=payload), \
-            patch.object(module, "is_handoff_recovery_mode", return_value=False), \
+            patch.object(module, "prompt_references_handoff_ticket", return_value=False), \
             patch.object(module, "save_check_log"), \
             redirect_stdout(buf):
         rc = module.main()

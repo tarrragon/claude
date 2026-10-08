@@ -18,6 +18,7 @@ REF_FIELDS = [
     "consumers",
     "implements_requirements",
     "depends_on_domains",
+    "depends_on_bundles",
     "source_specs",
 ]
 

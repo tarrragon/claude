@@ -4,7 +4,7 @@ Bash Edit Guard Hook - 測試程式碼
 
 涵蓋:
 - 裸 cd 偵測各命中形式（行首 / && cd / ; cd / || cd）
-- 各排除分支（子 shell (cd ...) / git -C / uv -d / 絕對路徑還原）
+- 各排除分支（子 shell (cd ...) / git -C / uv --directory / 絕對路徑還原）
 - 既有原地編輯偵測 regression（sed -i / perl -pi）
 - 非 Bash 工具跳過
 """
@@ -86,8 +86,8 @@ class TestBareCdDetectionExclusions:
         assert _detect_bare_cd("git -C /Users/tarragon/repo status") is False
 
     def test_uv_d_flag(self):
-        """uv -d <path> 不含 cd 指令，排除。"""
-        assert _detect_bare_cd("uv -d .claude/skills/ticket run pytest") is False
+        """uv --directory <path> 不含 cd 指令，排除。"""
+        assert _detect_bare_cd("uv --directory .claude/skills/ticket run pytest") is False
 
     def test_repo_root_restore(self, monkeypatch):
         """還原至專案根 cd /<repo-root> 排除（污染補救合法用途）。"""
@@ -311,7 +311,7 @@ class TestMainBehavior:
         # reason 含命中 target + 三種替代指引
         assert "subdir" in reason
         assert "git -C" in reason
-        assert "uv -d" in reason
+        assert "uv --directory" in reason
         assert "cd <dir>" in reason or "(cd" in reason
 
     def test_clean_command_no_warning(self, monkeypatch, capsys):

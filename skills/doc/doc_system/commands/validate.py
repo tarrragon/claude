@@ -15,8 +15,20 @@ from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
 from doc_system.core.tracking_schema import (
     EVT_REQUIRED_FIELDS,
+    NON_DOMAIN_PATHS_FILE,
+    NonDomainPathsFormatError,
+    check_path_pattern_format,
+    find_non_domain_path_problems,
+    read_non_domain_paths,
+    read_path_patterns,
+    extract_bundle_dependencies,
+    find_dangling_bundle_dependencies,
     find_missing_completeness_fields,
+    find_missing_path_patterns,
+    find_path_pattern_problems,
+    find_undeclared_domain_names,
 )
+from doc_system.core.uc_registry import _extract_structured_flow_steps
 
 
 # 錨點關鍵字：容忍章節標題的合理變體（如「A.1 表/欄位語意」「A.1：xxx」等），
@@ -198,10 +210,279 @@ def _execute_event_validation(project_root: str, doc_id: str) -> None:
     sys.exit(1)
 
 
+def _scan_domain_bundles(project_root: str) -> dict[str, tuple[Path, dict]]:
+    """掃描所有 domain-map 檔，回傳 bundle id → (實際載體路徑, frontmatter)。"""
+    root = Path(project_root)
+    paths = [root / "docs" / "domain-map.md", *sorted(root.glob("docs/spec/*/domain-map.md"))]
+    bundles: dict[str, tuple[Path, dict]] = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        frontmatter = parse_frontmatter(str(path))
+        if frontmatter and frontmatter.get("id"):
+            bundles[str(frontmatter["id"])] = (path, frontmatter)
+    return bundles
+
+
+def _load_domain_bundles(project_root: str) -> dict[str, dict]:
+    """回傳 bundle id → frontmatter。"""
+    return {bid: fm for bid, (_, fm) in _scan_domain_bundles(project_root).items()}
+
+
+def _find_reachable_cycles(graph: dict[str, list[str]], start: str) -> list[list[str]]:
+    """自 start 深度優先走訪，回傳遇到的環（每個環為首尾同節點的路徑）。
+
+    只沿 graph 內存在的節點走；指向不存在節點的邊不屬於環，由其他檢查負責。
+    """
+    cycles: list[list[str]] = []
+    done: set[str] = set()
+
+    def visit(node: str, trail: list[str]) -> None:
+        if node in trail:
+            cycles.append(trail[trail.index(node):] + [node])
+            return
+        if node in done or node not in graph:
+            return
+        for target in graph[node]:
+            visit(target, trail + [node])
+        done.add(node)
+
+    visit(start, [])
+    return cycles
+
+
+def _find_bundle_dependency_cycles(bundles: dict[str, dict], doc_id: str) -> list[str]:
+    """回傳自 doc_id 可達的 depends_on_bundles 成環路徑（空清單代表通過）。"""
+    graph = {bid: extract_bundle_dependencies(fm) for bid, fm in bundles.items()}
+    return [" -> ".join(cycle) for cycle in _find_reachable_cycles(graph, doc_id)]
+
+
+def _execute_domain_bundle_validation(project_root: str, doc_id: str) -> None:
+    """DomainBundle 的 validate 分派路徑：depends_on_bundles 出邊目標須存在且不成環。"""
+    bundles = _load_domain_bundles(project_root)
+    if doc_id not in bundles:
+        print(f"找不到文件: {doc_id}")
+        sys.exit(2)
+
+    targets = find_dangling_bundle_dependencies(bundles).get(doc_id, [])
+    cycles = _find_bundle_dependency_cycles(bundles, doc_id)
+    path_problems = _collect_path_pattern_problems(project_root, bundles, doc_id)
+    if not targets and not cycles and not path_problems:
+        print(f"通過: {doc_id} 的 depends_on_bundles 出邊與 path_patterns 皆有效")
+        sys.exit(0)
+
+    if cycles:
+        print(f"驗證失敗: {doc_id} 的 depends_on_bundles 成環")
+        for item in cycles:
+            print(f"  - {item}")
+    if targets:
+        print(f"驗證失敗: {doc_id} 的 depends_on_bundles 指向不存在的 bundle")
+        for target in targets:
+            print(f"  - {target}")
+    if path_problems:
+        print(f"驗證失敗: {doc_id} 的 path_patterns 無效")
+        for item in path_problems:
+            print(f"  - {item}")
+    sys.exit(1)
+
+
+def _collect_path_pattern_problems(project_root: str, bundles: dict[str, dict], doc_id: str) -> list[str]:
+    """回傳該 bundle 的 path_patterns 問題（格式、重複、路徑不存在），含檔案位置。"""
+    root = Path(project_root)
+    frontmatter = bundles[doc_id]
+    location = str(_scan_domain_bundles(project_root)[doc_id][0])
+    problems = find_path_pattern_problems(bundles).get(doc_id, [])
+    missing = find_missing_path_patterns(frontmatter, lambda v: _path_matches_kind(root, v))
+    problems += [f"path_patterns 值 {v!r}: 專案根目錄下不存在對應的目錄或檔案" for v in missing]
+    return [f"{location}: {item}" for item in problems]
+
+
+def _path_matches_kind(root: Path, pattern: str) -> bool:
+    """`/` 結尾的前綴須為目錄，否則須為檔案。"""
+    target = root / pattern
+    return target.is_dir() if pattern.endswith("/") else target.is_file()
+
+
+def _collect_all_path_problems(project_root: str) -> list[str]:
+    """全部 DomainBundle 的 path_patterns 問題，加上非 domain 路徑清單檔的問題。"""
+    root = Path(project_root)
+    scanned = _scan_domain_bundles(project_root)
+    bundles = {bid: fm for bid, (_, fm) in scanned.items()}
+    problems = []
+    for bid in bundles:
+        problems += _collect_path_pattern_problems(project_root, bundles, bid)
+    bundle_patterns = {
+        bid: raw for bid, fm in bundles.items() if isinstance(raw := read_path_patterns(fm), list)
+    }
+    location = str(root / NON_DOMAIN_PATHS_FILE)
+    try:
+        values = read_non_domain_paths(root)
+    except NonDomainPathsFormatError as exc:
+        return problems + [f"{location}: {exc}"]
+    if values is None:
+        return problems
+    found = find_non_domain_path_problems(values, bundle_patterns)
+    found += [
+        f"non_domain_path_patterns 值 {v!r}: 專案根目錄下不存在對應的目錄或檔案"
+        for v in values
+        if isinstance(v, str) and check_path_pattern_format(v) is None and not _path_matches_kind(root, v)
+    ]
+    return problems + [f"{location}: {item}" for item in found]
+
+
+def execute_paths(args: argparse.Namespace) -> None:
+    """doc validate-paths：一次檢查全部 path_patterns 與非 domain 路徑清單檔（供 CI）。"""
+    problems = _collect_all_path_problems(FileLocator.get_project_root())
+    if not problems:
+        print("通過: 全部 path_patterns 與非 domain 路徑清單皆有效")
+        sys.exit(0)
+    print("驗證失敗: path_patterns／非 domain 路徑清單無效")
+    for item in problems:
+        print(f"  - {item}")
+    sys.exit(1)
+
+
+def _as_name_list(value) -> list[str]:
+    """frontmatter／flow 欄位值正規化為字串清單（缺失或 None 為空）。"""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(item) for item in value]
+
+
+def _collect_domain_references(doc_id: str, file_path: str, frontmatter: dict) -> list[tuple[str, str]]:
+    """回傳文件內的 (欄位位置, domain 名稱) 引用；僅 UC 與 SPEC 帶此類欄位。"""
+    prefix = doc_id.upper()
+    if prefix.startswith("SPEC-"):
+        names = _as_name_list(frontmatter.get("depends_on_domains"))
+        return [("depends_on_domains", name) for name in names]
+    if prefix.startswith("UC-"):
+        with open(file_path, encoding="utf-8") as f:
+            steps = _extract_structured_flow_steps(f.read().splitlines()) or []
+        return [
+            (f"flow[{step.get('id')}].traverses", name)
+            for step in steps
+            if isinstance(step, dict)
+            for name in _as_name_list(step.get("traverses"))
+        ]
+    return []
+
+
+def _find_undeclared_domain_references(
+    project_root: str, doc_id: str, file_path: str, frontmatter: dict
+) -> list[str]:
+    """回傳未被任何 DomainBundle 宣告的 domain 引用（空清單代表通過）。
+
+    語料沒有任何 DomainBundle 時不檢查（舊版語料沒有宣告來源可比對）。
+    """
+    declared = {
+        str(fm["domain"]) for fm in _load_domain_bundles(project_root).values() if fm.get("domain")
+    }
+    if not declared:
+        return []
+    references = _collect_domain_references(doc_id, file_path, frontmatter)
+    undeclared = set(find_undeclared_domain_names([name for _, name in references], declared))
+    return [
+        f"{file_path}: {location} 值 {name!r} 不是已宣告的 domain"
+        for location, name in references
+        if name in undeclared
+    ]
+
+
+def _fail_on_undeclared_domains(project_root: str, doc_id: str, file_path: str, frontmatter: dict) -> None:
+    """有未宣告的 domain 引用時列出位置並 exit 1。"""
+    problems = _find_undeclared_domain_references(project_root, doc_id, file_path, frontmatter)
+    if not problems:
+        return
+    print(f"驗證失敗: {doc_id} 引用了未宣告的 domain（須為 DomainBundle 的 domain）")
+    for item in problems:
+        print(f"  - {item}")
+    sys.exit(1)
+
+
+def _find_flow_order_problems(steps: list) -> list[str]:
+    """主線步驟（branch_from 為空）的 next 須等於清單中下一個主線步驟（末步為空）。
+
+    分支步的 next 不受限。回傳問題描述清單（空清單代表通過）。
+    """
+    mainline = [s for s in steps if isinstance(s, dict) and not s.get("branch_from")]
+    problems: list[str] = []
+    for index, step in enumerate(mainline):
+        expected = [str(mainline[index + 1].get("id"))] if index + 1 < len(mainline) else []
+        actual = _as_name_list(step.get("next"))
+        if actual != expected:
+            problems.append(f"flow[{step.get('id')}].next 為 {actual}，依清單順序應為 {expected}")
+    return problems
+
+
+def _find_branch_from_problems(steps: list) -> list[str]:
+    """branch_from 須指向 flow 內存在的其他步驟，且沿 branch_from 不成環。
+
+    回傳問題描述清單（空清單代表通過）；自指與成環分開描述。
+    """
+    dict_steps = [s for s in steps if isinstance(s, dict)]
+    ids = {str(s.get("id")) for s in dict_steps}
+    graph: dict[str, list[str]] = {}
+    problems: list[str] = []
+    for step in dict_steps:
+        step_id, parent = str(step.get("id")), step.get("branch_from")
+        if not parent:
+            continue
+        location = f"flow[{step_id}].branch_from"
+        if str(parent) == step_id:
+            problems.append(f"{location} 自指（{step_id}）")
+        elif str(parent) not in ids:
+            problems.append(f"{location} 指向不存在的步驟 {str(parent)!r}")
+        else:
+            graph[step_id] = [str(parent)]
+    reported: set[frozenset] = set()
+    for step_id in graph:
+        for cycle in _find_reachable_cycles(graph, step_id):
+            if frozenset(cycle) not in reported:
+                reported.add(frozenset(cycle))
+                problems.append("branch_from 成環：" + " -> ".join(cycle))
+    return problems
+
+
+def _fail_on_branch_from_structure(doc_id: str, file_path: str) -> None:
+    """UC 結構化 flow 區塊 branch_from 懸空、自指或成環時列出位置並 exit 1。"""
+    if not doc_id.upper().startswith("UC-"):
+        return
+    with open(file_path, encoding="utf-8") as f:
+        steps = _extract_structured_flow_steps(f.read().splitlines()) or []
+    problems = _find_branch_from_problems(steps)
+    if not problems:
+        return
+    print(f"驗證失敗: {doc_id} 的 branch_from 結構無效")
+    for item in problems:
+        print(f"  - {file_path}: {item}")
+    sys.exit(1)
+
+
+def _fail_on_flow_order(doc_id: str, file_path: str) -> None:
+    """UC 結構化 flow 區塊主線 next 與清單順序不一致時列出位置並 exit 1。"""
+    if not doc_id.upper().startswith("UC-"):
+        return
+    with open(file_path, encoding="utf-8") as f:
+        steps = _extract_structured_flow_steps(f.read().splitlines()) or []
+    problems = _find_flow_order_problems(steps)
+    if not problems:
+        return
+    print(f"驗證失敗: {doc_id} 主線 next 與 flow 清單順序不一致")
+    for item in problems:
+        print(f"  - {file_path}: {item}")
+    sys.exit(1)
+
+
 def execute(args: argparse.Namespace) -> None:
     """依 frontmatter subdomain 分派章節 schema 驗證。"""
     doc_id = args.doc_id
     project_root = FileLocator.get_project_root()
+
+    if doc_id.startswith("DOMAIN-MAP-"):
+        _execute_domain_bundle_validation(project_root, doc_id)
+        return
 
     if doc_id.upper().startswith("EVT-"):
         _execute_event_validation(project_root, doc_id)
@@ -218,6 +499,10 @@ def execute(args: argparse.Namespace) -> None:
     if frontmatter is None:
         print(f"無法解析 frontmatter: {file_path}")
         sys.exit(2)
+
+    _fail_on_undeclared_domains(project_root, doc_id, file_path, frontmatter)
+    _fail_on_branch_from_structure(doc_id, file_path)
+    _fail_on_flow_order(doc_id, file_path)
 
     subdomain = frontmatter.get("subdomain")
     if subdomain != "data-contract":

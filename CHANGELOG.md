@@ -1,3 +1,28 @@
+## [2.78.0] - 2026-10-08
+
+### Summary
+feat: doc validate 擋下 bundle 依賴成環與 branch_from 懸空/自指/成環; feat: doc validate-paths 與非 domain 路徑清單載體; feat: doc validate 檢查 UC 主線 next 與 flow 順序一致，修正 path_patterns 錯誤位置 (+12 more)
+
+Changes: 6 feat, 5 fix, 3 docs, 1 chore
+
+- feat: doc validate 擋下 bundle 依賴成環與 branch_from 懸空/自指/成環
+- feat: doc validate-paths 與非 domain 路徑清單載體
+- feat: doc validate 檢查 UC 主線 next 與 flow 順序一致，修正 path_patterns 錯誤位置
+- feat: DomainBundle 新增選填 path_patterns 與 doc validate 檢查
+- feat: validate 檢查 traverses 與 depends_on_domains 須為已宣告的 domain (1.24.3)
+- feat: handoff 恢復模式放行時輸出可見訊號
+- fix: 派發深度守衛改為被派發票深度超過 MAX_TICKET_DEPTH 才擋（裁決 E）
+- fix: 5w1h-compliance-check 讀 todos[] 並以 permissionDecision deny 阻擋
+- fix: 相對路徑引數以呼叫者 cwd 解析（shim 傳遞 SKILL_CLI_CALLER_CWD）(1.24.4)
+- fix: 產生版本改由型別表相容版本常數決定，守衛不再排除該鍵
+- fix: handoff 恢復模式放行限縮至 handoff 指向的票
+- docs: 修正版本號撞號並重整 PC-GPD-003 條文
+- docs: append-log 指引落地 PC-GPD-003 預防條文
+- docs: uv -d 改為 uv --directory
+- chore: 回寫 .claude/VERSION 為 2.77.1（canonical sync-push）
+
+---
+
 ## [2.77.1] - 2026-10-07
 
 ### Summary

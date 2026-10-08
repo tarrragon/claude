@@ -208,7 +208,7 @@ def task_dispatch():
 
 
 def _strict_dispatch_setup(mod, monkeypatch):
-    monkeypatch.setattr(mod, "is_handoff_recovery_mode", lambda logger: False)
+    monkeypatch.setattr(mod, "prompt_references_handoff_ticket", lambda prompt, logger=None, project_root=None: False)
     monkeypatch.setattr(mod, "load_agents_config", lambda: {})
     monkeypatch.setattr(mod, "get_hook_mode", lambda logger: mod.HOOK_MODE_STRICT)
     monkeypatch.setattr(

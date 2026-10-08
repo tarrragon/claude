@@ -69,11 +69,17 @@ class TestCreateParentDepthWarning:
         out = self._run("1.0.0-W1-056", parent_depth=1, capsys=capsys)
         assert "嵌套上限" not in out
 
-    def test_warning_when_new_child_reaches_limit(self, capsys):
-        """parent depth 2 → 新子任務 depth 3 >= 3，warn"""
+    def test_no_warning_when_new_child_reaches_limit(self, capsys):
+        """parent depth 2 → 新子任務 depth 3 == 3，合法最深層，不 warn（裁決 E）"""
         out = self._run("1.0.0-W1-056.5", parent_depth=2, capsys=capsys)
-        assert "嵌套上限" in out
+        assert "嵌套上限" not in out
+
+    def test_warning_text_states_exceed_criterion(self, capsys):
+        """parent depth 3 → depth 4，訊息說明「超過上限」判準"""
+        out = self._run("1.0.0-W1-056.5.1", parent_depth=3, capsys=capsys)
+        assert "超過" in out
         assert f"MAX_TICKET_DEPTH={MAX_TICKET_DEPTH}" in out
+        assert "已達/超過" not in out
 
     def test_warning_when_new_child_exceeds_limit(self, capsys):
         """parent depth 3 → 新子任務 depth 4 > 3，warn（不硬擋，仍回傳 ticket_id）"""

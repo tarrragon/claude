@@ -2,6 +2,68 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.24.8 — `doc validate DOMAIN-MAP-*` 新增 `depends_on_bundles` 成環檢查（自該 bundle 可達的環，含自指；exit 1 並列出
+`A -> B -> A` 路徑）。`doc validate UC-*` 新增 flow `branch_from` 結構檢查：指向不存在的步驟、自指、成環各自 exit 1 並列出檔案、
+`flow[<id>].branch_from` 位置或環路徑。測試：E2（bundle 二環／自指／三環且入口不在環上、branch_from 懸空／自指／二環各一個該紅 fixture）、
+E1 對照（無環依賴、合法分支鏈）。`test_schema_export.py` 的 E2 測試改對照 `TYPE_TABLE_COMPAT_VERSION`，不再寫死版本字面
+（調高 VERSION 後產生版本仍為常數的鑑別力保留）。型別表 JSON 內容不變。
+
+**Version**: 1.24.7 — 新增 `doc validate-paths` 子命令與非 domain 路徑清單載體 `docs/non-domain-paths.yaml`（路徑與鍵名
+`non_domain_path_patterns` 宣告於 `tracking_schema.py`，值格式沿用 `check_path_pattern_format`）。一次檢查全部 DomainBundle
+的 `path_patterns` 與本檔（exit 1 列出檔案、值與原因）：格式、同檔重複、與任一 `path_patterns` 同字串、路徑不存在。三態：檔案缺席
+＝未宣告（`read_non_domain_paths` 回 None）、`[]` ＝宣告無非 domain 路徑、缺鍵或非清單＝格式錯誤（不當成缺席）。`doc schema export`
+新增 `non_domain_paths_file`／`non_domain_paths_key` 兩鍵，`TYPE_TABLE_COMPAT_VERSION` 升為 2.77.1 並重產
+`tracking_schema.json`。新增 `templates/non-domain-paths-template.yaml`。測試：E2（格式、同檔重複、與 path_patterns 同字串、路徑不存在、缺鍵各一個該紅 fixture）、
+缺席／顯式 `[]`／缺鍵三者讀取對照。
+
+**Version**: 1.24.6 — `doc validate UC-*` 新增 flow 區塊順序一致性檢查：主線步驟（`branch_from` 為空）的
+`next` 須等於清單中下一個主線步驟（末步為空），分支步 `next` 不受限；不一致時 exit 1 並列出檔案與
+`flow[<id>].next` 位置。修正 `doc validate DOMAIN-MAP-*` 的 `path_patterns` 錯誤位置：原固定組為
+`docs/spec/{domain}/domain-map.md`，根層載體 `docs/domain-map.md` 會印錯路徑，改輸出 bundle 實際載體路徑。
+測試：E2（主線 next 跳過／末步帶 next／根層載體各一個該紅 fixture）、E1 對照（順序一致、分支步任意 next、
+主線跳過分支步合法）。
+
+**Version**: 1.24.5 — DomainBundle 新增選填 frontmatter 欄位 `path_patterns`（專案根目錄相對的字面路徑前綴清單，
+非 glob；`/` 結尾為目錄前綴）。三態：欄位缺席＝未宣告（`read_path_patterns` 回傳 None，不得正規化為 `[]`），
+顯式 `[]` ＝宣告不擁有任何路徑，兩者對 validate 皆合法。`doc validate DOMAIN-MAP-*` 新增檢查（exit 1 並列出檔案、
+值與原因）：型別非字串清單、格式（絕對路徑、`./` 開頭、含 `..`、glob 字元與反斜線）、同字串跨 bundle 或同 bundle
+內重複、指向的目錄／檔案在專案根目錄不存在；不同 bundle 的巢狀前綴合法（比對語意為最長前綴命中，由消費端實作，
+註解寫在 `tracking_schema.py`）。型別表 JSON 內容不變，`TYPE_TABLE_COMPAT_VERSION` 維持 2.77.0。測試：E2（每條
+檢查各一個該紅 fixture）、E1 對照（缺席、空清單、巢狀前綴合法）、缺席與顯式 `[]` 讀取結果不同的對照。
+
+**Version**: 1.24.4 — 修正相對路徑引數被解析到 skill 目錄的問題：shim 以 `uv run --directory <skill_dir>` 啟動，
+行程 cwd 與 PWD 皆被改成 skill 目錄，`doc uc verify docs/usecases` 回報「指定路徑不存在」（rc=2），絕對路徑才通過。
+shim（`install-skill-clis.py` 的 `shim_body`）改在切換目錄前把呼叫者 cwd 放入 `SKILL_CLI_CALLER_CWD`；
+`doc_system/cli.py` 新增 `restore_caller_cwd()`，`main()` 起始時讀回並 chdir，未設定（非 shim 啟動）時不動 cwd。
+既有 shim 需重跑 `install-skill-clis.py` 才生效。測試：E1（主倉庫與 worktree 情境各一，相對與絕對路徑結果一致）、
+正向對照（不存在路徑仍 exit 2）、無環境變數時 cwd 不變。
+
+**Version**: 1.24.3 — `doc validate` 對 `UC-*` 與 `SPEC-*` 新增 domain 引用檢查：UC 結構化 flow 區塊的 `traverses`
+與 SPEC frontmatter 的 `depends_on_domains`，每個值須為某份 DomainBundle（`docs/spec/*/domain-map.md`）已宣告的
+`domain`，精確字串比對；未宣告回 exit 1 並列出檔案、欄位位置與值。語料沒有任何 DomainBundle 時不檢查。
+新增 `tracking_schema.find_undeclared_domain_names`。測試：E2（未宣告值 exit 1 並列出位置）、E1 對照（同批
+fixture 換成已宣告名稱 exit 0）、無 DomainBundle 語料不報錯。
+
+**Version**: 1.24.2 — `schema_generated_at_framework_version` 語意改為「型別表相容版本」（用戶裁決 A）：
+值取自 `tracking_schema.py` 新增常數 `TYPE_TABLE_COMPAT_VERSION`（初值 2.77.0，即型別表最後一次變更時的
+框架版本），`doc schema export` 不再讀重產當下的 `.claude/VERSION`；只在型別表變更時手動升版。
+鍵名不改：改名會影響所有舊 consumer，舊 consumer 照舊寫入的框架版本與常數同屬一條遞增序列，App 閘門
+無需修改。`tracking-schema-json-staleness-guard-hook.py` 移除 `VOLATILE_KEYS`，此鍵的值變動現在會被
+內容比對偵測。重產 JSON 零差異。測試：E2（調高 VERSION 後重產，產生版本維持常數）、E1 對照（常數變更則
+產生版本跟著變）、守衛正向對照（手改該鍵須被攔下）。
+
+**Version**: 1.24.1 — DomainBundle 新增選填出邊 `depends_on_bundles`（bundle 層級依賴，目標為另一份
+domain-map 的 id）與對應 B 層 proposed 邊型 `bundle_dependency`（class `ordering`、many、
+`directed`、無反向欄位）；established 12 條與其他既有邊型不變，與 `domain_dependency`（domain 名稱層級）
+並存不取代。`tracking_schema.py` 新增 `extract_bundle_dependencies()`（缺欄位／null 為無出邊、純量
+正規化為清單）與 `find_dangling_bundle_dependencies()`；`doc validate DOMAIN-MAP-*` 檢查出邊
+目標存在（懸空則 exit 1，找不到來源文件 exit 2）。`REF_FIELDS` 補列 `depends_on_bundles`。新增
+`templates/system-layer-template.md`（跨 domain 的分層與依賴方向、通道、邊界決策、容錯策略、待決事項），
+`domain-map-template.md` 升 2.4.0（frontmatter 補欄位並互連）。`tracking_schema.json` 已用正式指令重產，
+`schema_generated_at_framework_version` 由 2.60.13 升為 2.77.0：新邊型使 `edge_types` 多一個鍵，
+以產生版本作為相容閘門的消費端須同步內建副本（本專案由其內建副本票承接）。測試：新增
+`test_bundle_dependency.py`（E1 帶與不帶出邊產物不同、E2 懸空出邊報錯含正向對照）；B 層邊期望由 4 條改為 5 條。
+
 **Version**: 1.24.0 — `GRAPH_EDGE_TYPES` 每個邊型新增方向性欄位 `direction`
 （值域 `directed`／`undirected`，常數 `EDGE_DIRECTION_VALUES`），`doc schema export` 匯出的
 `edge_types` 全欄位帶出，`tracking_schema.json` 已用正式指令重產。欄位採字串列舉而非布林，

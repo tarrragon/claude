@@ -31,7 +31,10 @@ from typing import Dict, Any, Optional, List
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
+from lib import (
+    setup_hook_logging, run_hook_safely, read_json_from_stdin,
+    get_effort_level, emit_hook_output,
+)
 
 # Who 欄位正則模式
 # 格式 1（代理人執行）: "{agent} (執行者) | {dispatcher} (分派者)"
@@ -563,6 +566,44 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any], logger) -> Dict[st
 
 
 # ============================================================================
+# payload 適配：todos[] 逐項檢查 + deny reason 組裝
+# ============================================================================
+
+def _has_5w1h_marker(content: str) -> bool:
+    """內容含 Who:/How: 欄位標記才視為 5W1H 決策項（一般待辦不檢查）"""
+    return bool(re.search(r'^\s*(?:Who|How):', content, re.MULTILINE))
+
+
+def decide_for_payload(tool_name: Optional[str], tool_input: Dict[str, Any], logger) -> Dict[str, Any]:
+    """
+    依 payload 形狀決策：tool_input.todos[] 逐項取 content 檢查，
+    首個違規項即回傳 block；無 todos 時沿用頂層 content 路徑。
+    """
+    todos = tool_input.get("todos")
+    if not isinstance(todos, list):
+        return make_decision(tool_name, tool_input, logger)
+
+    for index, item in enumerate(todos):
+        content = item.get("content") if isinstance(item, dict) else None
+        if not isinstance(content, str) or not _has_5w1h_marker(content):
+            continue
+        result = make_decision(tool_name, {"content": content}, logger)
+        if result["decision"] == "block":
+            result["reason"] = f"todos[{index}]: {result['reason']}"
+            return result
+
+    return {"decision": "allow", "reason": "todos 各項 5W1H 檢查通過或無 5W1H 欄位"}
+
+
+def format_block_reason(result: Dict[str, Any]) -> str:
+    """將 block 結果組成給 Claude 讀的 deny reason（含修復建議）"""
+    lines = [f"5W1H 檢查未通過：{result['reason']}"]
+    for suggestion in result.get("suggestions", []):
+        lines.append(f"- {suggestion}")
+    return "\n".join(lines)
+
+
+# ============================================================================
 # 主程式入口
 # ============================================================================
 
@@ -583,18 +624,22 @@ def main() -> int:
         tool_name = input_data.get("tool_name")
         tool_input = input_data.get("tool_input") or {}
 
-        # 執行決策邏輯
-        result = make_decision(tool_name, tool_input, logger)
+        # 執行決策邏輯（TodoWrite 真實形狀為 tool_input.todos[]，逐項檢查）
+        result = decide_for_payload(tool_name, tool_input, logger)
 
-        # 輸出結果
+        if result["decision"] == "block":
+            # 阻擋走 permissionDecision deny（exit 0）；輸出失敗由 lib 兜底 exit 2
+            emit_hook_output(
+                "PreToolUse",
+                permission_decision="deny",
+                permission_decision_reason=format_block_reason(result),
+            )
+            logger.info("Hook 決策: deny")
+            return 0
+
         print(json.dumps(result, ensure_ascii=False, indent=2))
         logger.info(f"Hook 決策: {result['decision']}")
-
-        # 設置正確的退出碼
-        if result["decision"] == "block":
-            return 1
-        else:
-            return 0
+        return 0
 
     except json.JSONDecodeError as e:
         logger.error(f"JSON 解析錯誤: {e}")

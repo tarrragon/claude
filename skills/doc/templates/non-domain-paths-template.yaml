@@ -1,0 +1,4 @@
+# 非 domain 路徑清單。值為專案根目錄相對的字面前綴（目錄以 / 結尾，非 glob）。
+# 三態：檔案缺席＝未宣告；non_domain_path_patterns: [] ＝宣告無非 domain 路徑；缺鍵或非清單＝格式錯誤。
+non_domain_path_patterns:
+  - .claude/

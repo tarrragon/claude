@@ -35,7 +35,7 @@ first_seen: 2026-04-11
 2. **指導使用替代方案**：
    - 讀取/編輯/建立檔案：使用 Read/Edit/Write 工具搭配**絕對路徑**
    - 執行命令：使用子 shell `(cd /path && command)` — 子 shell 的 cd 不觸發 chpwd
-   - uv 指令：使用 `uv -d /path run ...`
+   - uv 指令：使用 `uv --directory /path run ...`
 
 ### Prompt 模板
 
@@ -95,3 +95,5 @@ git -C /path/to/worktree status
 **Last Updated**: 2026-06-10 — 禁用詞修正：變體標題與本 footer 共 2 處用詞改為「假資料」+ 自稱「本 PC」→「本 pattern」（IMP 類非 PC 類）（W1-032 文件交叉引用稽核）。
 
 **Last Updated**: 2026-06-07 — 新增「變體：chpwd 輸出被捕獲進 redirect 致 comm 假資料」（W1-018 near-miss：假 2610 孤兒差點誤報災難性刪除，實為 751）+ `git -C` 正確做法。
+
+**Last Updated**: 2026-10-07 — 方法 uv 旗標由不存在的 `-d` 改為 `--directory`（uv 0.8.13 實測）。

@@ -22,14 +22,14 @@ Bash Edit Guard Hook - PreToolUse Hook
   - pushd 與 cd 同樣改變持久 cwd 並觸發 chpwd（IMP-056），一併偵測
   - 排除子 shell 形式：以括號深度追蹤，未閉合子 shell 內的所有 cd/pushd
     （不論 connector 為 (、&& 或 ;）皆不改變持久 cwd，一致排除
-  - 排除 git -C / uv -d（不含 cd 指令，天然不命中）
+  - 排除 git -C / uv --directory（不含 cd 指令，天然不命中）
   - 排除還原至專案根 cd /<repo-root>（污染後補救的合法用途）
 
 行為:
   - 模式 A（sed/perl 原地編輯）: 輸出警告訊息（permission_decision=allow），允許繼續執行。
   - 模式 B（裸 cd / pushd）: permission_decision=deny（IMP-008 三度復發後根治）。
     命中即在命令送出前擋下，cwd 不因該次命令改變；reason 附 git -C / 子 shell /
-    uv -d 替代指引。兩個已知放行面（皆非缺陷，但「永不改變 cwd」不成立）：
+    uv --directory 替代指引。兩個已知放行面（皆非缺陷，但「永不改變 cwd」不成立）：
     還原至專案根的 cd 屬刻意排除（見上）；偵測為正則掃描字面命令，
     `bash -c 'cd x'`、`eval`、變數展開、`builtin cd` 等非字面形式不在範圍。
     cd + edit 同時命中以 deny 為準。
@@ -259,7 +259,7 @@ def _find_bare_cd_target(command: str, literal_ranges=None) -> str | None:
     - 子 shell 內的 cd / pushd：以括號深度追蹤命中位置，凡命中點落在未閉合
       子 shell 內（depth > 0）一律排除，不論該命中 connector 為 (、&& 或 ;。
       修復前 (cd a && cd b) 第二個 cd 因 connector 為 && 誤報，現一致排除。
-    - git -C <path> / uv -d <path>：不含 cd 指令，天然不命中
+    - git -C <path> / uv --directory <path>：不含 cd 指令，天然不命中
     - 還原至專案根 cd /<repo-root>：污染後補救的合法用途（CLAUDE_PROJECT_DIR）
 
     收窄修正（W1-026）:
@@ -312,7 +312,7 @@ def _find_bare_cd_target(command: str, literal_ranges=None) -> str | None:
         # 命中：裸 cd / pushd（行首或串接後，且非專案根還原、非子 shell）
         return target
 
-    # 排除 3 & 4: git -C / uv -d 不含 cd 指令，天然不命中上方掃描
+    # 排除 3 & 4: git -C / uv --directory 不含 cd 指令，天然不命中上方掃描
     return None
 
 
@@ -365,7 +365,7 @@ def _bare_cd_deny_reason(target: str) -> str:
 
     DENY 在命令送出前擋下，cwd 不因該次命令改變（IMP-008 三度復發後由 warn
     升級為 DENY）。已知放行面見檔頭「行為」段——本函式不宣稱涵蓋所有改變
-    cwd 的形式。reason 提供 git -C / 子 shell / uv -d 三種合法替代。
+    cwd 的形式。reason 提供 git -C / 子 shell / uv --directory 三種合法替代。
 
     Args:
         target: 命中的裸 cd/pushd target 路徑
@@ -378,7 +378,7 @@ def _bare_cd_deny_reason(target: str) -> str:
         "（IMP-008）。請改用以下合法替代：\n"
         "  - git 操作：git -C <abs> <cmd>（首選，完全不換 cwd）\n"
         "  - 一般命令：子 shell (cd <dir> && <cmd>)\n"
-        "  - uv 專案：uv -d <dir> run <cmd>\n"
+        "  - uv 專案：uv --directory <dir> run <cmd>\n"
         "詳見 .claude/rules/core/bash-tool-usage-rules.md 規則一"
     ).format(target)
 

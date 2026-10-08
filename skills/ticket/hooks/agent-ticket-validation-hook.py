@@ -20,8 +20,8 @@ Agent Ticket Validation Hook
 - 從 prompt 中提取 Ticket ID 引用
 - 驗證 Ticket 是否存在
 - 驗證 Ticket 是否包含決策樹欄位
-- 嵌套深度檢查（W1-056.9 / 協議 v2 D3）：被引用 ticket depth 達 MAX_TICKET_DEPTH
-  時禁止再以其派發嵌套 Agent（複用 ticket_system.lib.depth.can_descend）
+- 嵌套深度檢查（W1-056.9 / 協議 v2 D3，裁決 E）：被引用 ticket depth 超過 MAX_TICKET_DEPTH
+  才禁止派發（複用 ticket_system.lib.depth.compute_depth）
 - 無效時拒絕派發
 - 支援豁免機制：特定代理人類型（如 Explore）可跳過 Ticket 與深度驗證
 
@@ -54,13 +54,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root,
     find_ticket_files, find_ticket_file, validate_ticket_has_decision_tree, save_check_log,
-    is_handoff_recovery_mode, validate_hook_input, validate_ticket_unified
+    prompt_references_handoff_ticket, emit_handoff_recovery_signal, validate_hook_input, validate_ticket_unified
 )
 
 # ----------------------------------------------------------------------------
 # 嵌套深度檢查模組（W1-056.9 / 協議 v2 D3 強制層）
 #
-# 複用 ticket_system.lib.depth 的 can_descend / compute_depth（禁止平行實作，
+# 複用 ticket_system.lib.depth 的 compute_depth（禁止平行實作，
 # ARCH-020）。MAX_TICKET_DEPTH 為深度上限 SSOT（constants.py）。
 #
 # fail-open 設計（Never break userspace）：若 depth 模組無法載入（如 ticket_system
@@ -74,7 +74,7 @@ from lib import (
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 try:
-    from ticket_system.lib.depth import can_descend, compute_depth
+    from ticket_system.lib.depth import compute_depth
     from ticket_system.constants import MAX_TICKET_DEPTH
     DEPTH_AVAILABLE = True
     _DEPTH_IMPORT_ERROR: Optional[str] = None
@@ -84,7 +84,6 @@ except Exception as _depth_import_err:  # pragma: no cover - 環境缺套件時�
     # 驗證不受影響；MAX_TICKET_DEPTH 強制層在此 runtime 從未生效，須讓 PM/開發者
     # 立即看見，不可靜默吞掉（quality-baseline 規則 4）。stderr 立即可見，
     # 日誌檔寫入延後至 main() 內用已建立的 logger 補寫（見 main() 開頭）。
-    can_descend = None  # type: ignore[assignment]
     compute_depth = None  # type: ignore[assignment]
     MAX_TICKET_DEPTH = 3  # fallback，僅供訊息顯示；實際判斷由 DEPTH_AVAILABLE gate
     DEPTH_AVAILABLE = False
@@ -193,7 +192,7 @@ def validate_ticket(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
 # 派發驗證
 # ============================================================================
 
-# is_handoff_recovery_mode 已遷移至 hook_utils
+# handoff 恢復範圍判斷由 lib.prompt_references_handoff_ticket 提供
 
 def is_exempt_agent_type(subagent_type: str, logger) -> bool:
     """
@@ -219,14 +218,13 @@ def is_exempt_agent_type(subagent_type: str, logger) -> bool:
 
 def check_depth_descend(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
     """
-    檢查以 ticket_id 派發嵌套 Agent 是否未超出深度上限（協議 v2 D3）。
+    檢查被派發引用的 ticket 深度是否未超出上限（協議 v2 D3，裁決 E）。
 
-    判準（D2 條件 D-3 / D3 機制）：
-        每層 agent 從 ticket depth 推算層級。被引用 ticket 的 depth 達 MAX_TICKET_DEPTH
-        時，代表它已處框架允許的最深層（can_descend = False），不應再以其派發嵌套
-        Agent（會嘗試 descend 到超限深度）。此時 deny 並輸出 ascend / NeedsContext 指引。
+    判準：被派發票 depth > MAX_TICKET_DEPTH 才 deny。depth == MAX_TICKET_DEPTH 是
+        框架允許的最深層，可被派發執行（與 AGENT_PRELOAD D3 對齊：can_descend 判斷的是
+        呼叫者持有的票，不是被派發的票）。
 
-    複用 ticket_system.lib.depth.can_descend（禁止平行實作，ARCH-020）。
+    深度計算複用 ticket_system.lib.depth.compute_depth（禁止平行實作，ARCH-020）。
 
     Args:
         ticket_id: 被派發引用的 Ticket ID
@@ -234,35 +232,44 @@ def check_depth_descend(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
 
     Returns:
         tuple - (is_ok, error_message)
-            - is_ok: True 表示深度合規（可 descend）或檢查不適用（fail-open）
+            - is_ok: True 表示深度合規或檢查不適用（fail-open）
             - error_message: 超限時的 deny 指引；合規時為 None
 
-    fail-open：DEPTH_AVAILABLE = False 時直接回傳 (True, None)，不阻擋既有派發。
+    fail-open：DEPTH_AVAILABLE = False 或計算異常時回傳 (True, None)，
+    同時寫 stderr 警告與日誌（品質基線規則 4），不靜默。
     """
     if not DEPTH_AVAILABLE:
-        logger.info("深度檢查模組不可用（DEPTH_AVAILABLE=False），跳過深度檢查（fail-open）")
+        logger.warning("深度檢查模組不可用（DEPTH_AVAILABLE=False），跳過深度檢查（fail-open）")
+        sys.stderr.write(
+            "[agent-ticket-validation-hook] 深度檢查模組不可用，深度檢查停用（fail-open）\n"
+        )
         return True, None
 
     try:
-        if can_descend(ticket_id):
-            logger.info(f"Ticket {ticket_id} 深度合規，允許嵌套派發")
+        depth = compute_depth(ticket_id)
+        if depth <= MAX_TICKET_DEPTH:
+            logger.info(f"Ticket {ticket_id} 深度 {depth} 未超過上限 {MAX_TICKET_DEPTH}，允許派發")
             return True, None
 
-        depth = compute_depth(ticket_id)
         msg = (
             f"嵌套深度超限：Ticket {ticket_id} 深度 = {depth}，"
-            f"已達框架最大深度上限（MAX_TICKET_DEPTH = {MAX_TICKET_DEPTH}），"
-            f"不可再以其派發嵌套 Agent（會 descend 至超限深度）。\n"
+            f"超過框架最大深度上限（MAX_TICKET_DEPTH = {MAX_TICKET_DEPTH}），"
+            f"不可派發深度超過上限的 ticket。\n"
             f"建議處理方向：\n"
             f"  1. ascend 回報：以 Exit Status (status: blocked, reason: 深度上限) 將需拆分的工作回報上層 PM\n"
             f"  2. NeedsContext：在 ticket 的 NeedsContext 章節記錄需拆分的子任務，由 PM 在較淺層重新組織\n"
             f"  3. 確認任務無法在本層完成時，由 PM 評估是否調整 ticket 階層結構"
         )
-        logger.warning(f"深度超限 deny: {ticket_id} (depth={depth} >= {MAX_TICKET_DEPTH})")
+        logger.warning(f"深度超限 deny: {ticket_id} (depth={depth} > {MAX_TICKET_DEPTH})")
         return False, msg
-    except Exception as e:  # pragma: no cover - 深度計算異常時 fail-open
-        # 深度計算過程異常（如 ticket 載入失敗）不應阻擋既有派發，fail-open。
-        logger.info(f"深度檢查過程異常，fail-open 放行: {type(e).__name__}: {e}")
+    except Exception as e:
+        # 深度計算過程異常（如 ticket 載入失敗）不應阻擋既有派發，fail-open；
+        # stderr + 日誌雙通道可見（品質基線規則 4）。
+        logger.warning(f"深度檢查過程異常，fail-open 放行: {type(e).__name__}: {e}")
+        sys.stderr.write(
+            f"[agent-ticket-validation-hook] 深度檢查異常，fail-open 放行: "
+            f"{type(e).__name__}: {e}\n"
+        )
         return True, None
 
 
@@ -290,8 +297,9 @@ def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, Op
     prompt = tool_input.get("prompt", "")
     subagent_type = tool_input.get("subagent_type", "")
 
-    # 步驟 0: 檢查 Handoff 恢復模式
-    if is_handoff_recovery_mode(logger):
+    # 步驟 0: Handoff 恢復模式（僅 prompt 引用 handoff 指向的票時放行）
+    if prompt_references_handoff_ticket(prompt, logger):
+        emit_handoff_recovery_signal(prompt, logger)  # 只加可見訊號，不影響放行判定
         logger.info("Handoff 恢復模式: 略過 Ticket 驗證")
         return True, None, None
 

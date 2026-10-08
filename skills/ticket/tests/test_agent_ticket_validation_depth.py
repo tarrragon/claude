@@ -46,7 +46,7 @@ def _run_main(payload: dict, module) -> tuple[int, dict]:
     """以注入 payload 執行 hook main，回傳 (exit_code, parsed_stdout_json)。"""
     buf = io.StringIO()
     with patch.object(module, "read_json_from_stdin", return_value=payload), \
-            patch.object(module, "is_handoff_recovery_mode", return_value=False), \
+            patch.object(module, "prompt_references_handoff_ticket", return_value=False), \
             patch.object(module, "save_check_log"), \
             redirect_stdout(buf):
         rc = module.main()
@@ -60,26 +60,37 @@ def _payload(prompt: str, subagent_type: str = "thyme-python-developer") -> dict
 
 
 class TestDepthSuperLimitDeny:
-    """AC1：depth 達上限的 ticket 不可再 descend 嵌套派發，故 deny。"""
+    """AC1（裁決 E）：被派發票 depth > MAX_TICKET_DEPTH 才 deny；depth == MAX 為合法最深層。"""
 
-    def test_depth_at_limit_denies_dispatch(self):
+    def test_depth_equal_to_limit_allows_dispatch(self):
+        """E1：深度 3 的票（== MAX）改前 deny、改後 allow。"""
         module = _load_hook_module()
         with patch.object(module, "validate_ticket", return_value=(True, None)), \
-                patch.object(module, "can_descend", return_value=False), \
-                patch.object(module, "compute_depth", return_value=3):
+                patch.object(module, "compute_depth", return_value=module.MAX_TICKET_DEPTH), \
+                patch("ticket_system.lib.depth.compute_depth", return_value=module.MAX_TICKET_DEPTH):
             rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1"), module)
 
+        assert rc == module.EXIT_SUCCESS
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    def test_depth_above_limit_denies_dispatch(self):
+        """E2：深度 4 的票（> MAX）改後仍 deny，訊息說明同一判準。"""
+        module = _load_hook_module()
+        with patch.object(module, "validate_ticket", return_value=(True, None)), \
+                patch.object(module, "compute_depth", return_value=module.MAX_TICKET_DEPTH + 1), \
+                patch("ticket_system.lib.depth.compute_depth", return_value=module.MAX_TICKET_DEPTH + 1):
+            rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1.1"), module)
+
         assert rc == module.EXIT_BLOCK
-        decision = parsed["hookSpecificOutput"]["permissionDecision"]
-        assert decision == "deny"
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
         reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
         assert "深度" in reason
-        assert str(module.MAX_TICKET_DEPTH) in reason
+        assert "超過" in reason
+        assert "已達框架最大深度上限" not in reason
 
     def test_depth_within_limit_allows_dispatch(self):
         module = _load_hook_module()
         with patch.object(module, "validate_ticket", return_value=(True, None)), \
-                patch.object(module, "can_descend", return_value=True), \
                 patch.object(module, "compute_depth", return_value=2):
             rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5"), module)
 
@@ -87,12 +98,35 @@ class TestDepthSuperLimitDeny:
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
+class TestDepthFailOpenVisible:
+    """AC4：深度計算異常 fail-open 放行，同時寫 stderr 警告（不靜默）。"""
+
+    def test_compute_error_allows_and_warns_stderr(self, capsys):
+        module = _load_hook_module()
+        with patch.object(module, "validate_ticket", return_value=(True, None)), \
+                patch.object(module, "compute_depth", side_effect=RuntimeError("boom")):
+            rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1"), module)
+
+        assert rc == module.EXIT_SUCCESS
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "fail-open" in capsys.readouterr().err
+
+    def test_depth_unavailable_warns_stderr(self, capsys):
+        module = _load_hook_module()
+        with patch.object(module, "validate_ticket", return_value=(True, None)), \
+                patch.object(module, "DEPTH_AVAILABLE", False):
+            rc, _ = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1"), module)
+
+        assert rc == module.EXIT_SUCCESS
+        assert "fail-open" in capsys.readouterr().err
+
+
 class TestExemptAgentUnaffected:
     """AC2：豁免 agent type 行為完全不變（深度檢查不觸發）。"""
 
     def test_explore_skips_depth_check(self):
         module = _load_hook_module()
-        with patch.object(module, "can_descend", return_value=False) as mock_cd:
+        with patch.object(module, "compute_depth", return_value=9) as mock_cd:
             rc, parsed = _run_main(
                 _payload("Ticket: 1.0.0-W1-056.5.1", subagent_type="Explore"),
                 module,
@@ -103,7 +137,7 @@ class TestExemptAgentUnaffected:
 
     def test_general_purpose_skips_depth_check(self):
         module = _load_hook_module()
-        with patch.object(module, "can_descend", return_value=False) as mock_cd:
+        with patch.object(module, "compute_depth", return_value=9) as mock_cd:
             rc, parsed = _run_main(
                 _payload("Ticket: 1.0.0-W1-056.5.1", subagent_type="general-purpose"),
                 module,
@@ -114,7 +148,7 @@ class TestExemptAgentUnaffected:
 
     def test_plan_skips_depth_check(self):
         module = _load_hook_module()
-        with patch.object(module, "can_descend", return_value=False) as mock_cd:
+        with patch.object(module, "compute_depth", return_value=9) as mock_cd:
             rc, parsed = _run_main(
                 _payload("Ticket: 1.0.0-W1-056.5.1", subagent_type="Plan"),
                 module,
@@ -151,7 +185,7 @@ class TestExistingPathsUnchanged:
         module = _load_hook_module()
         with patch.object(
             module, "validate_ticket", return_value=(False, "Ticket 不存在")
-        ), patch.object(module, "can_descend", return_value=True) as mock_cd:
+        ), patch.object(module, "compute_depth", return_value=1) as mock_cd:
             rc, parsed = _run_main(_payload("Ticket: 9.9.9-W9-999"), module)
         assert rc == module.EXIT_BLOCK
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"

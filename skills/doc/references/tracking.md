@@ -66,6 +66,14 @@ proposals:
 - `directed`：其餘全部邊型。判準是上游是否明文宣告對稱，不由 `class` 推導：`spec_association`／`uc_association`／`proposal_association` 與 `association` 同為 `see-also`，但上游未宣告對稱，故為 `directed`。
 - 消費端不以鍵名寫死無向判定，讀 `direction` 欄位；缺該欄位的舊版 JSON，消費端以自身內建型別表補值。
 
+### 型別表相容版本（schema_generated_at_framework_version）
+
+`doc schema export` 匯出 JSON 的鍵 `schema_generated_at_framework_version` 承載「型別表相容版本」：值取自 `tracking_schema.py` 的 `TYPE_TABLE_COMPAT_VERSION`，為型別表最後一次變更時的框架版本，不讀重產當下的 `.claude/VERSION`。
+
+- 升版時機：只在型別表內容變更時（節點型別、邊型、欄位值域等）手動把常數升為變更當下的框架版本；`.claude/VERSION` 變動、sync-push 後重產皆不改此值。
+- 不改鍵名的理由：改名會影響所有舊 consumer；舊 consumer 照舊寫入的框架版本與新常數落在同一條遞增序列，App 閘門不需修改即可比較。
+- 守衛：staleness 守衛不再排除此鍵，鍵值被手改或未隨型別表變更升版，會與重產結果不一致而被攔下。
+
 ## 查詢方式
 
 | 方式 | 工具 | 範例 |

@@ -221,6 +221,7 @@ EXPECTED_FORWARD_CARDINALITY = {
     "consumption": "many",
     "branching": "one",
     "returning": "one",
+    "bundle_dependency": "many",
 }
 
 
@@ -298,3 +299,46 @@ class TestEdgeDirection:
         broken = dict(GRAPH_EDGE_TYPES)
         broken["mutant_bad"] = {**GRAPH_EDGE_TYPES["blood"], "direction": "both"}
         assert "mutant_bad" in find_edge_types_with_invalid_direction(broken)
+
+
+class TestCompatVersionDecoupledFromFrameworkVersion:
+    """產生版本鍵承載「型別表相容版本」常數，不隨 .claude/VERSION 變動。"""
+
+    KEY = "schema_generated_at_framework_version"
+
+    def _write_version(self, root: Path, value: str) -> Path:
+        (root / ".claude").mkdir(parents=True, exist_ok=True)
+        (root / ".claude" / "VERSION").write_text(value + "\n", encoding="utf-8")
+        return root
+
+    def test_e2_bumping_version_file_does_not_change_generated_version(self, tmp_path):
+        """E2：調高 VERSION 後重產，產生版本仍為常數值（改回讀 VERSION 即翻紅）。"""
+        from doc_system.core import tracking_schema
+
+        compat = tracking_schema.TYPE_TABLE_COMPAT_VERSION
+        root = self._write_version(tmp_path, compat)
+        before = build_schema_dict(root)[self.KEY]
+        self._write_version(tmp_path, "9.99.0")
+        after = build_schema_dict(root)[self.KEY]
+
+        assert before == after == compat
+
+    def test_e1_changing_constant_changes_generated_version(self, tmp_path, monkeypatch):
+        """E1 對照：VERSION 相同、常數不同，產生版本跟著常數變。"""
+        from doc_system.core import tracking_schema
+
+        root = self._write_version(tmp_path, tracking_schema.TYPE_TABLE_COMPAT_VERSION)
+        base = build_schema_dict(root)[self.KEY]
+        monkeypatch.setattr(tracking_schema, "TYPE_TABLE_COMPAT_VERSION", "3.0.0")
+        changed = build_schema_dict(root)[self.KEY]
+
+        assert changed == "3.0.0"
+        assert base != changed
+
+    def test_disk_json_carries_constant(self):
+        from doc_system.core import tracking_schema
+
+        assert (
+            _load_schema_json_from_disk()[self.KEY]
+            == tracking_schema.TYPE_TABLE_COMPAT_VERSION
+        )

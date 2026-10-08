@@ -83,6 +83,15 @@
       "maintainer": "手動",
       "reverse_field": null
     },
+    "bundle_dependency": {
+      "class": "ordering",
+      "direction": "directed",
+      "forward_cardinality": "many",
+      "forward_field": "depends_on_bundles",
+      "layer": "proposed",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
     "consumption": {
       "class": "dataflow",
       "direction": "directed",
@@ -291,6 +300,8 @@
       "layer": "established"
     }
   },
+  "non_domain_paths_file": "docs/non-domain-paths.yaml",
+  "non_domain_paths_key": "non_domain_path_patterns",
   "notice": "本檔為 tracking_schema.py 的衍生產物，唯一 SSOT 為該 .py 檔。禁止直接編輯本 JSON，修改型別表請改 tracking_schema.py 後重新執行`doc schema export` 產生。",
-  "schema_generated_at_framework_version": "2.60.13"
+  "schema_generated_at_framework_version": "2.77.1"
 }

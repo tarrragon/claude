@@ -144,8 +144,8 @@ class TestValidateTaskDispatchExemption:
             "prompt": "請分析專案架構並提供建議",  # 無 Ticket ID
             "subagent_type": agent_type,
         }
-        # is_handoff_recovery_mode 需 mock 回 False，確保走豁免分支
-        with patch.object(hook_module, "is_handoff_recovery_mode", return_value=False):
+        # prompt_references_handoff_ticket 需 mock 回 False，確保走豁免分支
+        with patch.object(hook_module, "prompt_references_handoff_ticket", return_value=False):
             is_valid, error_msg, ticket_id = hook_module.validate_task_dispatch(
                 tool_input, mock_logger
             )
@@ -160,7 +160,7 @@ class TestValidateTaskDispatchExemption:
             "prompt": "Ticket: 0.18.0-W17-046.1\n請分析並實作",
             "subagent_type": agent_type,
         }
-        with patch.object(hook_module, "is_handoff_recovery_mode", return_value=False):
+        with patch.object(hook_module, "prompt_references_handoff_ticket", return_value=False):
             is_valid, error_msg, ticket_id = hook_module.validate_task_dispatch(
                 tool_input, mock_logger
             )
@@ -180,7 +180,7 @@ class TestValidateTaskDispatchNonExempt:
             "prompt": "請實作功能 X",  # 無 Ticket ID
             "subagent_type": agent_type,
         }
-        with patch.object(hook_module, "is_handoff_recovery_mode", return_value=False):
+        with patch.object(hook_module, "prompt_references_handoff_ticket", return_value=False):
             is_valid, error_msg, ticket_id = hook_module.validate_task_dispatch(
                 tool_input, mock_logger
             )
@@ -196,7 +196,7 @@ class TestValidateTaskDispatchNonExempt:
             "subagent_type": "thyme-python-developer",
         }
         # Mock 掉 handoff 檢查 + validate_ticket 回成功
-        with patch.object(hook_module, "is_handoff_recovery_mode", return_value=False), \
+        with patch.object(hook_module, "prompt_references_handoff_ticket", return_value=False), \
              patch.object(hook_module, "validate_ticket", return_value=(True, None)):
             is_valid, error_msg, ticket_id = hook_module.validate_task_dispatch(
                 tool_input, mock_logger
@@ -211,7 +211,7 @@ class TestValidateTaskDispatchNonExempt:
             "prompt": "Ticket: 9.99.9-W999-999\n實作",
             "subagent_type": "thyme-python-developer",
         }
-        with patch.object(hook_module, "is_handoff_recovery_mode", return_value=False), \
+        with patch.object(hook_module, "prompt_references_handoff_ticket", return_value=False), \
              patch.object(hook_module, "validate_ticket", return_value=(False, "找不到 Ticket")):
             is_valid, error_msg, ticket_id = hook_module.validate_task_dispatch(
                 tool_input, mock_logger
@@ -234,7 +234,7 @@ class TestHandoffRecoveryMode:
             "prompt": "恢復中斷的任務",
             "subagent_type": "thyme-python-developer",
         }
-        with patch.object(hook_module, "is_handoff_recovery_mode", return_value=True):
+        with patch.object(hook_module, "prompt_references_handoff_ticket", return_value=True):
             is_valid, error_msg, ticket_id = hook_module.validate_task_dispatch(
                 tool_input, mock_logger
             )
@@ -248,7 +248,7 @@ class TestHandoffRecoveryMode:
             "prompt": "恢復",
             "subagent_type": "Explore",  # 白名單
         }
-        with patch.object(hook_module, "is_handoff_recovery_mode", return_value=True):
+        with patch.object(hook_module, "prompt_references_handoff_ticket", return_value=True):
             is_valid, error_msg, ticket_id = hook_module.validate_task_dispatch(
                 tool_input, mock_logger
             )

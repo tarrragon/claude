@@ -62,10 +62,10 @@ def resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Option
         ticket_id = format_child_ticket_id(args.parent, child_seq)
 
         # 深度上限檢查（W1-056.5 協議 v2 D3）：沿 parent_id 鏈計算新子任務深度，
-        # 達/超過 MAX_TICKET_DEPTH 時 warn（不硬擋，留旁路）。深度沿 parent_id 鏈
+        # 超過 MAX_TICKET_DEPTH 時 warn（深度 == MAX 為合法最深層，裁決 E）（不硬擋，留旁路）。深度沿 parent_id 鏈
         # 而非 ID 字串數點（linux F1 fatal 教訓）。
         new_depth = compute_depth(args.parent, version) + 1
-        if new_depth >= MAX_TICKET_DEPTH:
+        if new_depth > MAX_TICKET_DEPTH:
             print(format_warning(
                 WarningMessages.DEPTH_LIMIT_REACHED,
                 ticket_id=ticket_id,
