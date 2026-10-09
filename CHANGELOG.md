@@ -1,3 +1,15 @@
+## [2.81.1] - 2026-10-09
+
+### Summary
+docs: PC-BAL-004 補「決策選項的後果說明內嵌未查證前提」形態; chore: 回寫 .claude/VERSION 為 2.81.0（canonical sync-push）
+
+Changes: 1 docs, 1 chore
+
+- docs: PC-BAL-004 補「決策選項的後果說明內嵌未查證前提」形態
+- chore: 回寫 .claude/VERSION 為 2.81.0（canonical sync-push）
+
+---
+
 ## [2.81.0] - 2026-10-08
 
 ### Summary
