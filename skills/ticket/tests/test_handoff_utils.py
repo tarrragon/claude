@@ -212,3 +212,33 @@ class TestIsHandoffStaleNotStale:
 
         assert is_stale is False
         assert reason == ""
+
+
+class TestIsTicketMissingObservability:
+    """is_ticket_missing 吞例外時必須留 warning 日誌（可觀測性規則 1）。"""
+
+    def test_query_exception_logs_warning_and_returns_false(self, caplog):
+        from ticket_system.lib.handoff_utils import is_ticket_missing
+
+        with patch(
+            "ticket_system.lib.handoff_utils._find_ticket_file",
+            side_effect=OSError("boom"),
+        ):
+            with caplog.at_level("WARNING"):
+                result = is_ticket_missing("0.1.0-W1-001")
+
+        assert result is False
+        assert any(
+            r.levelname == "WARNING" and "0.1.0-W1-001" in r.getMessage() and "boom" in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_normal_query_emits_no_log(self, caplog):
+        from ticket_system.lib.handoff_utils import is_ticket_missing
+
+        with patch("ticket_system.lib.handoff_utils._find_ticket_file", return_value=None):
+            with caplog.at_level("DEBUG"):
+                result = is_ticket_missing("0.1.0-W1-001")
+
+        assert result is True
+        assert caplog.records == []

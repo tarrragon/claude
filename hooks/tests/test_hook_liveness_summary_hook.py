@@ -453,8 +453,12 @@ class TestSmokeTestLock:
 
 
 class TestRunSingleSmokeTest:
-    """真實透過 uv run 呼叫子行程，驗證 liveness 條目有無的崩潰判準。"""
+    """真實透過 uv run 呼叫子行程，驗證 liveness 條目有無的崩潰判準。
 
+    真實子程序測試標記 wallclock（預設主套件排除，見 hooks/pyproject.toml）；
+    三態判定邏輯由 TestRunSingleSmokeTestVerdicts 以 monkeypatch 驗證。"""
+
+    @pytest.mark.wallclock
     def test_healthy_hook_not_flagged_as_crashed(self, tmp_path):
         _write_pep723_hook_file(tmp_path, "healthy-hook", deps=[])
         sentinel_file = (
@@ -469,6 +473,7 @@ class TestRunSingleSmokeTest:
         assert status == "ok"
         assert summary == ""
 
+    @pytest.mark.wallclock
     def test_pins_project_dir_env_to_root(self, tmp_path, monkeypatch):
         """實機驗證撈到的真實案例：子行程若繼承呼叫端（本 hook 自身）
         的 CLAUDE_PROJECT_DIR 環境變數，`get_project_root()` 判準優先序
@@ -500,6 +505,7 @@ class TestRunSingleSmokeTest:
         )
         assert not other_sentinel.exists()
 
+    @pytest.mark.wallclock
     def test_import_crash_is_flagged(self, tmp_path):
         _write_pep723_hook_file(
             tmp_path,
@@ -540,6 +546,82 @@ class TestRunSingleSmokeTest:
 
         assert status == "timeout"
         assert "逾時" in summary
+
+
+class TestRunSingleSmokeTestVerdicts:
+    """以 monkeypatch 取代 subprocess.run，驗證 ok/timeout/crashed 判定，
+    不啟動真實 uv 子程序，結果與機器負載無關。"""
+
+    @staticmethod
+    def _sentinel(root):
+        return (
+            root / ".claude" / "hook-logs" / summary_hook.LIVENESS_SUBDIR
+            / "{}.jsonl".format(summary_hook.SMOKE_TEST_SENTINEL_SESSION_ID)
+        )
+
+    @staticmethod
+    def _append_line(sentinel):
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(sentinel), "a", encoding="utf-8") as f:
+            f.write("{}\n")
+
+    def test_completed_with_new_liveness_line_is_ok(self, tmp_path, monkeypatch):
+        sentinel = self._sentinel(tmp_path)
+
+        def _fake_run(*args, **kwargs):
+            self._append_line(sentinel)
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(summary_hook.subprocess, "run", _fake_run)
+        status, summary = summary_hook._run_single_smoke_test(tmp_path, "h", sentinel)
+        assert (status, summary) == ("ok", "")
+
+    def test_completed_without_liveness_line_is_crashed(self, tmp_path, monkeypatch):
+        sentinel = self._sentinel(tmp_path)
+
+        def _fake_run(*args, **kwargs):
+            return subprocess.CompletedProcess(
+                args, 1, stdout="", stderr="ModuleNotFoundError: no module xyz\n"
+            )
+
+        monkeypatch.setattr(summary_hook.subprocess, "run", _fake_run)
+        status, summary = summary_hook._run_single_smoke_test(tmp_path, "h", sentinel)
+        assert status == "crashed"
+        assert "ModuleNotFoundError" in summary
+
+    def test_timeout_without_new_line_is_timeout(self, tmp_path, monkeypatch):
+        """E2 正向對照：逾時且 sentinel 未增行者必須判為 timeout。"""
+        sentinel = self._sentinel(tmp_path)
+
+        def _fake_run(*args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd="uv run", timeout=0.01)
+
+        monkeypatch.setattr(summary_hook.subprocess, "run", _fake_run)
+        status, summary = summary_hook._run_single_smoke_test(tmp_path, "h", sentinel)
+        assert status == "timeout"
+        assert "逾時" in summary
+
+    def test_timeout_with_new_line_is_ok(self, tmp_path, monkeypatch):
+        sentinel = self._sentinel(tmp_path)
+
+        def _fake_run(*args, **kwargs):
+            self._append_line(sentinel)
+            raise subprocess.TimeoutExpired(cmd="uv run", timeout=0.01)
+
+        monkeypatch.setattr(summary_hook.subprocess, "run", _fake_run)
+        status, summary = summary_hook._run_single_smoke_test(tmp_path, "h", sentinel)
+        assert (status, summary) == ("ok", "")
+
+    def test_oserror_is_crashed(self, tmp_path, monkeypatch):
+        sentinel = self._sentinel(tmp_path)
+
+        def _fake_run(*args, **kwargs):
+            raise OSError("uv not found")
+
+        monkeypatch.setattr(summary_hook.subprocess, "run", _fake_run)
+        status, summary = summary_hook._run_single_smoke_test(tmp_path, "h", sentinel)
+        assert status == "crashed"
+        assert "uv not found" in summary
 
 
 class TestSmokeTestRegisteredHooksOrchestration:
@@ -656,3 +738,46 @@ class TestReportSmokeTestCrashes:
         summary_hook._report_smoke_test_crashes(tmp_path, {}, _test_logger, None)
 
         assert call_count["n"] == 0
+
+
+from lib.hook_registry import merge_dispatch_registry  # noqa: E402
+
+
+class TestDispatchRegistryMerge:
+    """分派程序合併後，被併入的 hook 仍須在『已註冊』監控內。"""
+
+    def _write_registry(self, root, paths):
+        reg = root / ".claude" / "hooks"
+        reg.mkdir(parents=True)
+        (reg / "hook-dispatch-registry.json").write_text(json.dumps(
+            {"groups": {"PreToolUse:Bash": {"hooks": [{"path": p} for p in paths]}}}), encoding="utf-8")
+
+    def test_dispatched_hooks_counted_as_registered(self, tmp_path):
+        self._write_registry(tmp_path, [".claude/hooks/merged-a-hook.py", ".claude/hooks/merged-b-hook.py"])
+        settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command", "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dispatcher.py --group PreToolUse:Bash"}]}]}}
+        before = summary_hook._registered_hook_names(settings)
+        merge_dispatch_registry(settings, tmp_path, _test_logger)
+        after = summary_hook._registered_hook_names(settings)
+        assert "merged-a-hook" not in before
+        assert {"merged-a-hook", "merged-b-hook"} <= after
+
+    def test_dispatched_hooks_counted_as_uv_registered(self, tmp_path):
+        self._write_registry(tmp_path, [".claude/hooks/merged-a-hook.py"])
+        (tmp_path / ".claude" / "hooks" / "merged-a-hook.py").write_text(
+            "# /// script\n# dependencies = [\"pyyaml\"]\n# ///\n", encoding="utf-8")
+        settings = {}
+        merge_dispatch_registry(settings, tmp_path, _test_logger)
+        assert "merged-a-hook" in summary_hook._uv_registered_hook_names(tmp_path, settings)
+
+    def test_missing_registry_keeps_settings_unchanged(self, tmp_path):
+        settings = {"hooks": {}}
+        merge_dispatch_registry(settings, tmp_path, _test_logger)
+        assert settings == {"hooks": {}}
+
+    def test_unreadable_registry_is_logged_and_ignored(self, tmp_path):
+        (tmp_path / ".claude" / "hooks").mkdir(parents=True)
+        (tmp_path / ".claude" / "hooks" / "hook-dispatch-registry.json").write_text("{bad", encoding="utf-8")
+        settings = {"hooks": {}}
+        merge_dispatch_registry(settings, tmp_path, _test_logger)
+        assert settings == {"hooks": {}}

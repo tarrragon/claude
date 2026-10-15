@@ -42,9 +42,9 @@ class CoreMessages:
 
 
 class GateMessages:
-    """Gate Hook 阻擋訊息 - 5 個 gate hooks 使用
+    """Gate Hook 阻擋訊息
 
-    包含：command-entrance-gate, acceptance-gate, creation-acceptance-gate,
+    包含：command-entrance-gate, acceptance-gate,
     main-thread-edit-restriction, ticket-path-guard
     """
 
@@ -203,28 +203,6 @@ Ticket: {ticket_id}
 
 ANA complete 要求所有衍生 IMP/ANA 先完成，以確保分析結論已落實。
 請先推進未完成的 spawned tickets，或若為純研究性 ANA，請移除不相關的 spawned_tickets 欄位。"""
-
-    # 建立後品質驗收未通過錯誤訊息（creation-acceptance-gate-hook.py）
-    CREATION_NOT_ACCEPTED_ERROR = """錯誤：Ticket {ticket_id} 尚未通過建立後品質驗收
-
-為什麼阻止執行：
-  Ticket 必須通過建立後品質驗收才能認領，確保 Task Summary 完整且 Solution 已評估並行化。
-
-建議操作:
-  1. 派發 acceptance-auditor 執行建立後品質驗收
-  2. 驗收通過後執行 `ticket track accept-creation {ticket_id}`
-  3. 再次執行 `ticket track claim {ticket_id}`
-
-詳見: .claude/rules/flows/ticket-lifecycle.md（建立後品質驗收）"""
-
-    CONTRADICTORY_STATE_WARNING = """[WARNING] Ticket {ticket_id} 存在矛盾狀態（in_progress + creation_accepted: false）
-
-說明：
-  此 Ticket 已被認領（status: in_progress），但建立後品質驗收尚未通過（creation_accepted: false）。
-  此狀態通常發生在 Ticket 於建立審核機制加入前就已認領，系統允許繼續執行。
-
-建議操作：
-  執行 `ticket track accept-creation {ticket_id}` 修正矛盾狀態"""
 
     # ========================================================================
     # Main Thread Edit Restriction Hook - 路徑類型細分

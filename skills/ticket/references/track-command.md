@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | `claim` | 認領 Ticket | 〈UPDATE 操作〉 |
 | `complete` | 標記完成 | 〈UPDATE 操作〉 |
-| `finish` | `complete` 別名（worktree 派發避開 runtime guard 對 `complete` 的 basename 誤判） | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
+| `finish` | `complete` 別名（CLI 仍保留；隔離代理人不以它收尾，收尾止於 `ticket track commit`，complete 由 PM 於合併後執行） | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `close` | 關閉 Ticket（已在其他 Ticket 一併解決） | --help |
 | `set-closed-by` | 修正已 closed 票的 `closed_by` 欄位 | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `restore` | 還原 closed 票為 pending（closed 態唯一合法出邊，需 `--reason`） | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
@@ -61,13 +61,12 @@
 | `add-spawn-request` | 追加結構化 spawn request 至 Spawn Requests 章節 | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `resolve-spawn-request` | 標記 spawn request 狀態並回填 `spawned_tickets` | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `add-exempt-marker` | 對既有行補上 PC-093-exempt marker | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
-| `fix-multi-view-status` | 覆寫 ANA Solution 的 `multi_view_status` 行值 | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
+| `fix-multi-view-status` | 覆寫 ANA Solution 的 `multi_view_status` 行值；skipped／n_a 同步寫入平鋪 `reason:` 行，章節缺欄位行時於章節末新增兩行 | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `register-artifact` | 登記實驗器材至 Solution 章節 | 〈track register-artifact / resolve-artifact / list-artifacts 子命令〉 |
 | `resolve-artifact` | 標記實驗器材狀態為 removed/kept | 〈track register-artifact / resolve-artifact / list-artifacts 子命令〉 |
 | `list-artifacts` | 列出 ticket 已登記的實驗器材 | 〈track register-artifact / resolve-artifact / list-artifacts 子命令〉 |
 | `set-exit-status` | 設定 Exit Status 章節（CLI 生成 fenced YAML） | 〈track set-exit-status 子命令〉 |
 | `set-completion-info` | 設定 Completion Info 章節（CLI 生成格式） | --help |
-| `accept-creation` | 標記 Ticket 建立後驗收已通過 | 〈UPDATE 操作〉 |
 | `audit` | 執行驗收檢查 | 〈track audit 子命令〉 |
 | `audit-version` | 掃描並驗證 Ticket 版本歸屬一致性 | --help |
 | `board` | 顯示樹狀看板視圖 | 〈track board 子命令〉 |
@@ -418,9 +417,6 @@ Live in_progress 票（非 stale，`staleness.is_live_occupied` 判準）以 see
 # 驗證 frontmatter 合規性
 /ticket track validate <id>                            # 檢查 status/completed_at/acceptance/who 4 欄位
 
-# 標記建立後驗收已通過
-/ticket track accept-creation <id>
-
 # 執行驗收檢查
 /ticket track audit <id>
 
@@ -473,6 +469,8 @@ Live in_progress 票（非 stale，`staleness.is_live_occupied` 判準）以 see
 
 > **worktree 分支已合併（不在上表，無 CLI 檢查）**：代理人在 linked worktree 內完成工作後 `complete`，票面轉 `completed`、metadata 進主倉庫，但該 worktree 分支是否已合併回主分支不受任何上表項目檢查——`stuck-anas`／`stale-list` 亦不看分支合併狀態。**Action**：worktree 場景下 complete 前，於 Completion Info 記錄分支名並人工確認已合併，避免票已收尾但程式碼變更停留在未合併分支形成靜默遺失。
 
+主 worklog 的進度行插在最後一個 `### YYYY-MM-DD` 區段末尾；日誌尚無任何日期標題時，於 `## 開發日誌` 章節末尾建立當日標題再追加（冪等）；連 `## 開發日誌` 章節也沒有時印 WARNING（含日誌路徑與缺少的結構）並跳過，不自動建章節。
+
 `complete` 通過上表全部檢查後，自動以隔離索引提交本票 md + 主 worklog 進度行（行層級：只提交本次插入的那一行，不整檔提交 worklog，工作區內他人未提交的 worklog 修改不被帶入；`batch-complete` 同，各票進度行併入同一批次 commit），另有三項不在上表、但直接影響提交結果的副作用語意：**被解鎖的票併入同一 commit**（本次 cascade 解鎖的 children 與反向 blockedBy 引用者，save 成功者整檔併入同一筆 post-completion commit，可跨版本，commit body 列出其票 ID；save 失敗者不列入並照常印 WARNING。其他未被本次寫入的票不進入提交範圍）、**不留 staged 殘留於共用 index**（全程走隔離索引，共用 index 提交前後狀態不變，非「先 add 進共用 index 再 commit」）、**成功時 stdout 印出 commit SHA**（`[OK] 已提交 <sha>` 格式，供呼叫端核對是否真正落地，見下方 `track commit` 子命令「Exit code」表的同款判讀原則）。
 
 ### complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit
@@ -519,7 +517,7 @@ ticket track restore <id> --reason <text> [--as <agent>]
 
 `complete` / `check-acceptance` / `set-acceptance` 三個寫入命令支援選用 `--as <agent-name>`，與 ticket `who.current` 精確對照。**Why**：防 generic agent 收 Ticket ID 即越權收尾（PC-V1-002 前提一，探針實證）。**判定邏輯**：`--as` 值 ≠ `who.current`（含空值）→ deny（exit 1，純前置檢查不寫入狀態）；`--as rosemary-project-manager` 一律放行（PM bookkeeping 豁免，如代收尾 / stale cleanup）；未提供 `--as` 時 `complete`（`finish` 別名同列）已轉強制 deny，`check-acceptance` / `set-acceptance` 仍維持 warn-only（僅輸出 stderr 訊息，不阻擋；過渡期設計，見 `identity_guard.py` 的 `ENFORCED_COMMANDS`）。**Action**：subagent 收尾時帶自身身份，例 `ticket track complete <id> --as thyme-python-developer`；其餘 warn-only 命令轉強制的結束條件與偵測承擔者已明訂（7 日滾動 warn 率 < 5% 且樣本數 >= 30，由 PM 於 `version-release` 發布前檢查階段執行 `identity_guard_adoption.py` 判定），非待評估的無 trigger 狀態。
 
-**接手者收尾身份**（SKILL.md〈dashboard-first〉步驟 1「無標記 in_progress 任務」情境——票已 `in_progress`、非新 `claim`，接手者不必然是 `who.current` 原持有者）：維持原 `who.current` 不變逕行 `complete --as <self>` 會因情境 4（`--as` 與 `who.current` 不符）被 deny。**Action**：PM 前台接手裸 `/ticket` 用 `--as rosemary-project-manager` 走情境 2 豁免收尾；代理人接手（非原 `who.current` 者）須先 `ticket track set-who <id> --current <self>` 把 `who.current` 改為自身（`set-who` 不在 `ENFORCED_COMMANDS`，不受本節 `--as` 檢查），再以 `--as <self>` 收尾走情境 3 對稱通過。`set-who` 只覆寫 `who.current` 子欄位、不動 `who.history`（見 `execute_set_who`），接手事實須自行於 Solution 或 append-log 記一行「接手自 <原 who.current>」留痕，否則身份轉移在 `who.history` 上無痕跡。
+**接手者收尾身份**（SKILL.md〈dashboard-first〉步驟 1「無標記 in_progress 任務」情境——票已 `in_progress`、非新 `claim`，接手者不必然是 `who.current` 原持有者）：維持原 `who.current` 不變逕行 `complete --as <self>` 會因情境 4（`--as` 與 `who.current` 不符）被 deny。**Action**：PM 前台接手裸 `/ticket` 用 `--as rosemary-project-manager` 走情境 2 豁免收尾；代理人接手（非原 `who.current` 者）須先 `ticket track set-who <id> --current <self>` 把 `who.current` 改為自身（`set-who` 不在 `ENFORCED_COMMANDS`，不受本節 `--as` 檢查），再以 `--as <self>` 收尾走情境 3 對稱通過。`set-who` 只覆寫 `who.current` 子欄位，並把原 current 追加進 `who.history`（`{ISO 時間: 原 current}`，current 未變不追加）；`complete` 以 current 或 history 中最後一個非 PM 者覆寫 Completion Info 的 Executing Agent，並依 Phase 4 證據寫 Review Status（IMP 有證據為 `reviewed`，ANA／DOC 為 `n/a`，其餘維持 `pending`）、非 manual 來源的 `tdd_phase` 推進為 `tdd_stage` 最後一項。
 
 ### claim 推薦用法（subagent 派發時的身份申報）
 
@@ -539,11 +537,11 @@ ticket track restore <id> --reason <text> [--as <agent>]
 | 不申報身份的裸認領（向後相容） | `ticket track claim <id>` | 不碰 who.current；收尾若需 complete --as 須自行 set-who |
 | 除錯時想 claim 並同時跑 AC 驗證 | `ticket track claim <id> --verify --yes` | `--yes` 在非互動環境短路驗證 prompt 為 y，避免 fail-closed |
 | 只想看 AC 驗證結果不 claim | `ticket track verify <id>` | 與 claim 解耦（`--skip-verify` 已移除，改用此子命令） |
-| 接手既有 in_progress 票（非新 claim，dashboard-first「無標記 in_progress」情境） | 代理人：`ticket track set-who <id> --current <self>` 後 `complete --as <self>`；PM：直接 `--as rosemary-project-manager` | 見上方「接手者收尾身份」；`set-who` 不動 `who.history`，須自行記接手留痕 |
+| 接手既有 in_progress 票（非新 claim，dashboard-first「無標記 in_progress」情境） | 代理人：`ticket track set-who <id> --current <self>` 後 `complete --as <self>`；PM：直接 `--as rosemary-project-manager` | 見上方「接手者收尾身份」；`set-who` 會在 `who.history` 追加原 current |
 
 ### 補標記 — `add-exempt-marker`
 
-`append-log` 預設追加，`--replace` 可整段覆寫但會連同原文字一併取代（不可逆，執行前印摘要供核對），不適合只補一行 marker——該區段不在 `ticket-file-access-guard-hook` 白名單內故 Edit 工具被拒，兩者疊加使 `PC-093-exempt` 這類行級標記無法在不動原文的前提下事後補上。`add-exempt-marker` 補這條路，且**僅追加獨立標記行、不修改原文字**：
+`append-log` 預設追加，`--replace` 可整段覆寫但會連同原文字一併取代（CLI 管理的 H3 子節「派發日誌」「Commit 規範」會保留並接在新內容之後；摘要列出將被取代的人寫 H3 標題，清單見 `track_dispatch.CLI_MANAGED_H3_HEADINGS`）（不可逆，執行前印摘要供核對），不適合只補一行 marker——該區段不在 `ticket-file-access-guard-hook` 白名單內故 Edit 工具被拒，兩者疊加使 `PC-093-exempt` 這類行級標記無法在不動原文的前提下事後補上。`add-exempt-marker` 補這條路，且**僅追加獨立標記行、不修改原文字**：
 
 ```bash
 ticket track add-exempt-marker <id> --section "Solution" --match "命中行的文字子字串" \
@@ -616,11 +614,17 @@ ticket track commit <ticket_id> -m "<commit message>" --worktree <worktree 絕�
 
 ### files 子集規則
 
-`files` 必須落在該 ticket `where.files`（寫入意圖，即無 `::read` 標記或帶 `::write` 標記的路徑）宣告範圍內；任一項超出範圍即拒絕整批提交，並列出超出項與宣告範圍供核對。目錄型宣告（結尾 `/` 或指向既有目錄）會展開為該目錄下實際變更（`git status --porcelain`）的具體檔案再提交。ANA 型票 `where.files` 預設全唯讀，`write_files()` 恆回空集合；需要寫入的路徑須額外標 `::write`。`::read`／`::write` 後綴語法與 type 預設意圖的完整規則見 `field-semantics.md`〈where.files 宣告語意〉。
+`files` 必須落在該 ticket `where.files`（寫入意圖，即無 `::read` 標記或帶 `::write` 標記的路徑）宣告範圍內；任一項超出範圍即拒絕整批提交，並列出超出項與宣告範圍供核對。**隱含可寫（CLI 自己寫入的檔，不需列入 where.files）**：票自身 md、票所屬版本的工作日誌、`docs/work-logs/topic-assignments.txt`，由 `track_commit._cli_managed_paths` 集中定義；complete／create 收尾 CAS 失敗的補救指令會同時帶這幾個檔。他票票檔與一般 docs 檔不在此列，仍須宣告。目錄型宣告（結尾 `/` 或指向既有目錄）會展開為該目錄下實際變更（`git status --porcelain`）的具體檔案再提交。ANA 型票 `where.files` 預設全唯讀，`write_files()` 恆回空集合；需要寫入的路徑須額外標 `::write`。`::read`／`::write` 後綴語法與 type 預設意圖的完整規則見 `field-semantics.md`〈where.files 宣告語意〉。
 
 **目錄展開的並行過濾**：展開時另讀取 `.claude/dispatch-active.json`，凡命中其他活躍派發（`ticket_id` 不同於本票）宣告路徑的變更檔一律排除，避免並行環境下把他 session 的變更一併吸入本次目錄展開（本票或無人宣告皆保留，僅排除已知歸屬他票者）。此過濾為並行防護的加強層，非安全邊界本身——安全邊界仍是上段的 `where.files` 子集檢查；registry 讀取失敗（檔案不存在／JSON 格式錯誤）視為無其他派發，fail-open 不擋下正常提交。
 
 **同檔邊界（隔離索引不防同檔內容夾帶）**：上述並行過濾與 `where.files` 子集檢查防的是「誤觸他票宣告路徑之外的檔案」；當兩票 `where.files` 都宣告**同一檔案**時，兩者皆不提供保護。隔離索引（`git_ops.commit_files_isolated`）只隔離「不觸碰共用 git index」，`git add -- <path>` 取用的仍是該檔案當下的工作區內容——先提交者會把他票尚未提交的同檔編輯整檔一併寫入本次 commit。此邊界與 `.claude/rules/core/bash-tool-usage-rules.md` 規則七「核對步驟的粒度邊界（檔案內夾帶）」同根因：`git add` 的最小可定址單位是整個檔案，無法區分「誰寫的哪一行」；該條文原僅論及裸 commit 的核對步驟，本命令的隔離索引提交同樣適用（配方步驟見 `.claude/references/bash-tool-usage-details.md`「隔離索引提交」步驟 4）。**偵測**：提交後以 `git show <sha>:<path>` 對照自己實際編輯的內容範圍，出現非自己寫入的變更即為夾帶。**處置**：依上方 Commit 規範不 revert / reset / amend，記錄 commit SHA 與受影響檔案回報 PM。**Action**：兩票 `where.files` 宣告同一檔案時必須序列化，不因改用本命令而豁免；派發前以 `ticket track conflicts --for <本票>` 確認無其他 in_progress 票宣告該檔（見 `.claude/pm-rules/parallel-dispatch.md`「派發前 where.files 交集檢查」）。
+
+**append-only 共用檔只提交本票的行**：輸入含 `docs/work-logs/topic-assignments.txt` 或票所屬版本工作日誌時，這兩檔不整檔 stage，改以 `commit_files_isolated` 的 `append_lines` 提交「HEAD 各行 + 本票新增的行」。本票的行 = 工作區相對 HEAD 新增、且 topic 行首欄等於票 ID／工作日誌行含票 ID（整詞比對，不命中較長 ID 前綴與 `.N` 子票）者；他票未提交的行留在工作區。共用檔無本票的行時不提交該檔並輸出 `[INFO]`；整批只剩這類檔且全無本票的行時 exit 0 不提交。只剩共用檔有本票的行時，以票自身 md 作主路徑（`commit_files_isolated` 在 paths 為空時直接回 empty、不處理 `append_lines`）；票面不存在於 repo root（例如 `--worktree`）則報錯。副作用：共用檔內對 HEAD 既有行的修改或刪除不會被本命令提交。
+
+### 歸屬 trailer 自動補全
+
+訊息缺 `Co-Authored-By:` 行時，CLI 讀 transcript 最後一則 assistant 訊息的 `model`，依通則 `claude-<family>-<major>-<minor>` 推為 `Claude <Family> <major>.<minor>`（`lib/commit_attribution.py` 的 `MODEL_DISPLAY_NAMES` 只收通則不正確的例外項），補在訊息最末段（`Co-Authored-By: <顯示名稱> <noreply@anthropic.com>`）。已含該行時不動；有 `Claude-Session:` 行但與 Co-Authored-By 不相鄰時，移到其後相鄰。transcript 位置：主 session 為 `~/.claude/projects/<專案目錄編碼>/<CLAUDE_CODE_SESSION_ID>.jsonl`；子代理人（以 cwd 的 git toplevel 位於 `.claude/worktrees/agent-<id>` 判定，不看 `AI_AGENT`）為 `.../<父 session id>/subagents/agent-<id>.jsonl`。共用 checkout 內的子代理人會被當成主 session（實作代理人由 hook 強制用 worktree，共用 checkout 者僅唯讀審查、不提交）。讀不到 transcript、或 model id 無法推導顯示名稱時，只印 `[WARNING]` 不補，提交照常成立（exit code 不變）；不使用父 session 的值。
 
 ### `--worktree` 條件
 
@@ -632,7 +636,7 @@ ticket track commit <ticket_id> -m "<commit message>" --worktree <worktree 絕�
 
 ### Fallback 條件
 
-僅當本命令因故失敗或不可用時，才降級為「精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`」（無 pathspec / `--only` / `-o` / `-a`），見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七。本命令走隔離索引、全程不觸碰共用 index，是本框架消除「共用 index 被反覆吸入他票內容」風險的權威路徑，非 fallback 的替代品，不因方便而優先選 fallback。**並行度註記**：fallback 一旦選用即回到共用 index，`append-log`／`complete` 的隔離索引 CAS 可能已在同一視窗把 HEAD 往前推進，使 fallback 前已 `git add` 的 entry 相對新 HEAD 過期；裸 commit 前須先比對 `git show :<path>` 與 `git show HEAD:<path>`，判定過期則 `git restore --staged <path>` 後重新 add，見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七「版本邊界（過期 index 快照）」。
+僅當本命令發生**環境性失敗**（隔離索引的 git 步驟失敗、update-ref 撞鎖或 HEAD 競爭；先重跑本命令，持續失敗才降級）或不可用時，才降級為「精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`」（無 pathspec / `--only` / `-o` / `-a`），見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七。**判準性拒絕不適用 fallback**（worktree 票面、where.files 未宣告、範圍外檔案、提交範圍自我驗證失敗）：這是命令在執行範圍保護，改走裸 commit 等於繞過；應停手回報 PM 以 set-where 補宣告或移除檔案。輸入錯誤（ticket 不存在、`--worktree` 非 git 目錄）修正輸入後重跑本命令。拒絕訊息尾端的 `[NEXT]` 行即依此分類給出指示。本命令走隔離索引、全程不觸碰共用 index，是本框架消除「共用 index 被反覆吸入他票內容」風險的權威路徑，非 fallback 的替代品，不因方便而優先選 fallback。**並行度註記**：fallback 一旦選用即回到共用 index，`append-log`／`complete` 的隔離索引 CAS 可能已在同一視窗把 HEAD 往前推進，使 fallback 前已 `git add` 的 entry 相對新 HEAD 過期；裸 commit 前須先比對 `git show :<path>` 與 `git show HEAD:<path>`，判定過期則 `git restore --staged <path>` 後重新 add，見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七「版本邊界（過期 index 快照）」。
 
 ### Exit code
 
@@ -799,6 +803,7 @@ ticket track set-exit-status <ticket_id> --status needs_context --reason "缺少
 | frontmatter 驗證            | `validate <id>`                                 | 檢查 status/completed_at/acceptance/who 4 欄位合規性 |
 | blockedBy                   | `set-blocked-by <id> <value> [--add\|--remove]` | 建立時用 `--blocked-by`；之後用 CLI 更新             |
 | relatedTo                   | `set-related-to <id> <value> [--add\|--remove]` | 建立時用 `--related-to`；之後用 CLI 更新             |
+| creation_accepted           | 無（`accept-creation` 已移除）                  | 建票通過硬閘門後由 `create` 直接寫 `true`，認領不再檢查；2026-10-14 之前建立的票此欄位不具意義（多為 false），不回填 |
 | title                       | `set-title <id> <value>`                        | 清單顯示用短標籤，與 `what` 刻意分離；範圍變更時兩者需個別更新（見「UPDATE 操作補充」章節） |
 | priority                    | `set-priority <id> <value>`                     | value 限 `PRIORITY_LEVELS`（P0-P3）                  |
 | closed_by                   | `set-closed-by <id> --value <ticket-id>`        | 僅 `status=closed` 適用，修正 close 時填錯的值        |
@@ -833,7 +838,7 @@ ticket track depth <ticket-id>
 
 > **與 frontmatter `chain.depth` 的基數差異**：本命令輸出的 `depth` 是即時沿 `parent_id` 鏈計算的動態值，根任務 = 1（1-based）。`ticket-lifecycle-details.md`〈chain 欄位說明〉的 frontmatter `chain.depth` 是建立當下依 ID 序號點數寫入的靜態快照，根任務 = 0（0-based），與本命令為同名不同來源的獨立量測值，不可互換代入（詳見該節注記）。`can_descend` 與 `MAX_TICKET_DEPTH` 比較一律以本命令輸出為準。
 
-`create --parent <id>` 時，若新子任務深度 > `MAX_TICKET_DEPTH`（3）會 emit warning（**不硬擋**，留旁路；深度 == 3 為合法最深層，不 warn）。此為嵌套派發深度上限的 CLI 強制層，使協議深度上限不只是文件建議。派發端的 `agent-ticket-validation-hook` 同判準：被派發票 depth > `MAX_TICKET_DEPTH` 才 deny（裁決 E）；`can_descend`（`depth < MAX`）是呼叫者判斷自己能否再往下派發，不用於被派發票。
+`create --parent <id>` 時，若新子任務深度 > `MAX_TICKET_DEPTH`（3）會 emit warning（**不硬擋**，留旁路；深度 == 3 為合法最深層，不 warn）。此為嵌套派發深度上限的預警：主線程派發此票不受影響，子代理人持有此票時不可再往下派發。派發端的 `agent-ticket-validation-hook` 對子代理人派發以派發者持有票的 `can_descend` 判定（持有票映射缺失時退回被派發票 depth > `MAX_TICKET_DEPTH` 才 deny，裁決 E）；`can_descend`（`depth < MAX`）是呼叫者判斷自己能否再往下派發，不用於被派發票。
 
 ---
 
@@ -1279,7 +1284,7 @@ ticket track dispatch <ticket_id> --as <agent_name> --dry-run   # 只看骨架�
 | `--review-perspective` | 無 | `--kind review` 專用：審查視角 |
 | `--decision-question` | 無 | `--kind review` 專用：裁決問題 |
 | `--commit-policy` | `agent` | `agent`（骨架嵌入精準 staging 制式句權威版全文，冪等寫入**票面 body**的「Commit 規範」子章節，非本檔章節）／`pm`（PM 統一 commit，agent 不執行）／`none`（本次派發不涉及 commit） |
-| `--isolation` | 無 | `worktree`（normal 骨架收尾句改 `ticket track commit`（於 worktree 路徑）→ `ticket track finish`，並註明 finish 被隔離守衛拒絕時於 Exit Status 記錄後交還 PM 代跑）／`none`（收尾 `complete`，與不帶逐字相同）。未帶且 where.files 寫入路徑含非豁免路徑（豁免清單同 `branch-verify-hook.py`：`.claude/`、`docs/`、`scripts/experiments/` 前綴與頂層檔）時 stderr 印 WARNING、照常輸出、exit 0；帶任一值視為 PM 已明示，不警告。判準見 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉 |
+| `--isolation` | 無 | `worktree`（normal 骨架收尾句為 `ticket track commit <id> -m "..." --worktree <路徑> -- <檔案>`，只提交產品檔，收尾到 commit 為止並回報 PM；不含 complete 與 finish，complete 由 PM 於合併後在主 checkout 執行，權威為 `CLOSING_BY_ISOLATION`）／`none`（收尾 `complete`，與不帶逐字相同）。未帶且 where.files 寫入路徑含非豁免路徑（豁免清單同 `branch-verify-hook.py`：`.claude/`、`docs/`、`scripts/experiments/` 前綴與頂層檔）時 stderr 印 WARNING、照常輸出、exit 0；帶任一值視為 PM 已明示，不警告。判準見 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉 |
 | `--dry-run` | 關閉 | 只輸出骨架，不寫入票面（不落 `--note`、不冪等寫入「Commit 規範」子節、不呼叫派發前檢查）；輸出首行加浮水印 `[DRY-RUN 未落票]`；預設行為（非 dry-run）不變 |
 | `--version` | 無 | 指定版本（預設自動偵測 active 版本） |
 

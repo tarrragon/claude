@@ -71,6 +71,19 @@ def _run_hook(
     return main()
 
 
+def _context(captured) -> str:
+    """取出觸發分支輸出的 PreToolUse additionalContext；提醒不得再走 stderr。"""
+    assert captured.err == ""
+    hso = json.loads(captured.out)["hookSpecificOutput"]
+    assert hso["hookEventName"] == "PreToolUse"
+    return hso["additionalContext"]
+
+
+def _is_silent(captured) -> bool:
+    """非觸發分支：stdout 與 stderr 皆無輸出（E2 對照）。"""
+    return captured.out == "" and captured.err == ""
+
+
 # ----------------------------------------------------------------------------
 # 案例 1：合法 token 靜默通過
 # ----------------------------------------------------------------------------
@@ -87,8 +100,7 @@ def test_valid_uc_token_passes_silently(monkeypatch, capsys, tmp_path):
         },
     )
     assert exit_code == 0
-    captured = capsys.readouterr()
-    assert captured.err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 # ----------------------------------------------------------------------------
@@ -107,12 +119,12 @@ def test_undefined_uc_token_emits_warning_but_passes(monkeypatch, capsys, tmp_pa
         },
     )
     assert exit_code == 0
-    captured = capsys.readouterr()
-    assert "UC-99" in captured.err
-    assert "uc-reference-validation" in captured.err
+    ctx = _context(capsys.readouterr())
+    assert "UC-99" in ctx
+    assert "uc-reference-validation" in ctx
     # 合法清單提示必須出現
-    assert "UC-01" in captured.err
-    assert "UC-05" in captured.err
+    assert "UC-01" in ctx
+    assert "UC-05" in ctx
 
 
 # ----------------------------------------------------------------------------
@@ -132,7 +144,7 @@ def test_exempt_uc_pattern_token_no_warning(monkeypatch, capsys, tmp_path):
         tool_name="Write",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 def test_exempt_worklog_path_no_warning(monkeypatch, capsys, tmp_path):
@@ -153,7 +165,7 @@ def test_exempt_worklog_path_no_warning(monkeypatch, capsys, tmp_path):
         tool_name="Write",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 def test_exempt_spec_self_path_no_warning(monkeypatch, capsys, tmp_path):
@@ -169,7 +181,7 @@ def test_exempt_spec_self_path_no_warning(monkeypatch, capsys, tmp_path):
         tool_name="Write",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
     # docs/app-use-cases.md 非 SCANNABLE_EXTENSIONS（.md），本案例同時驗證副檔名跳過路徑
 
 
@@ -188,7 +200,7 @@ def test_exempt_test_fixtures_path_no_warning(monkeypatch, capsys, tmp_path):
         tool_name="Write",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 def test_exempt_docs_spec_path_no_warning(monkeypatch, capsys, tmp_path):
@@ -206,7 +218,7 @@ def test_exempt_docs_spec_path_no_warning(monkeypatch, capsys, tmp_path):
         tool_name="Write",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 # ----------------------------------------------------------------------------
@@ -225,7 +237,7 @@ def test_non_code_file_skipped(monkeypatch, capsys, tmp_path):
         tool_name="Write",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 def test_non_write_edit_tool_skipped(monkeypatch, capsys, tmp_path):
@@ -237,7 +249,7 @@ def test_non_write_edit_tool_skipped(monkeypatch, capsys, tmp_path):
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     assert main() == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 # ----------------------------------------------------------------------------
@@ -260,9 +272,9 @@ def test_multiedit_with_violation_in_any_edit_emits_warning(monkeypatch, capsys,
         tool_name="MultiEdit",
     )
     assert exit_code == 0
-    captured = capsys.readouterr()
-    assert "UC-99" in captured.err
-    assert "uc-reference-validation" in captured.err
+    ctx = _context(capsys.readouterr())
+    assert "UC-99" in ctx
+    assert "uc-reference-validation" in ctx
 
 
 def test_multiedit_all_valid_tokens_passes_silently(monkeypatch, capsys, tmp_path):
@@ -281,7 +293,7 @@ def test_multiedit_all_valid_tokens_passes_silently(monkeypatch, capsys, tmp_pat
         tool_name="MultiEdit",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 def test_multiedit_empty_edits_no_error(monkeypatch, capsys, tmp_path):
@@ -297,7 +309,7 @@ def test_multiedit_empty_edits_no_error(monkeypatch, capsys, tmp_path):
         tool_name="MultiEdit",
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 # ----------------------------------------------------------------------------
@@ -321,8 +333,7 @@ def test_lowercase_uc_token_variant_emits_warning(monkeypatch, capsys, tmp_path)
         },
     )
     assert exit_code == 0
-    captured = capsys.readouterr()
-    assert "UC-99" in captured.err
+    assert "UC-99" in _context(capsys.readouterr())
 
 
 def test_fullwidth_uc_token_variant_emits_warning(monkeypatch, capsys, tmp_path):
@@ -338,8 +349,7 @@ def test_fullwidth_uc_token_variant_emits_warning(monkeypatch, capsys, tmp_path)
         },
     )
     assert exit_code == 0
-    captured = capsys.readouterr()
-    assert "UC-99" in captured.err
+    assert "UC-99" in _context(capsys.readouterr())
 
 
 def test_plain_text_mentioning_uc_command_not_misdetected(monkeypatch, capsys, tmp_path):
@@ -355,7 +365,7 @@ def test_plain_text_mentioning_uc_command_not_misdetected(monkeypatch, capsys, t
         },
     )
     assert exit_code == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 def test_worktree_style_path_outside_project_root_still_exempted(monkeypatch, capsys, tmp_path):
@@ -377,7 +387,7 @@ def test_worktree_style_path_outside_project_root_still_exempted(monkeypatch, ca
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
 
     assert main() == 0
-    assert capsys.readouterr().err == ""
+    assert _is_silent(capsys.readouterr())
 
 
 def test_explicit_project_root_override_wins_over_worktree_autodetection(monkeypatch, capsys, tmp_path):
@@ -403,9 +413,9 @@ def test_explicit_project_root_override_wins_over_worktree_autodetection(monkeyp
         },
     )
     assert exit_code == 0
-    captured = capsys.readouterr()
-    assert "匯入書庫資料" in captured.err
-    assert "盤點資產負債" not in captured.err
+    ctx = _context(capsys.readouterr())
+    assert "匯入書庫資料" in ctx
+    assert "盤點資產負債" not in ctx
 
 
 def test_uc_registry_import_failure_fails_open(monkeypatch, capsys, tmp_path):

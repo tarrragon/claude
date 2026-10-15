@@ -181,10 +181,16 @@ class TestOverwriteValidValue:
     def test_overwrite_preserves_line_count(self, patch_paths_to_repo):
         repo = patch_paths_to_repo
         before_count = len(_read_md(repo).splitlines())
-        rc = _call("0.0.0-W0-MVS", value="n_a")
+        rc = _call("0.0.0-W0-MVS", value="reviewed", reason="改為已審查並附上足夠長度理由")
         assert rc == 0
         after_count = len(_read_md(repo).splitlines())
         assert after_count == before_count
+
+    def test_skipped_adds_exactly_one_reason_line(self, patch_paths_to_repo):
+        repo = patch_paths_to_repo
+        before_count = len(_read_md(repo).splitlines())
+        assert _call("0.0.0-W0-MVS", value="n_a") == 0
+        assert len(_read_md(repo).splitlines()) == before_count + 1
 
 
 # ============================================================
@@ -232,13 +238,14 @@ class TestInvalidValueRejected:
 
 
 class TestLocatePattern:
-    def test_field_not_found_rejects(self, patch_paths_to_repo):
+    def test_field_not_found_appends_flat_lines(self, patch_paths_to_repo):
         repo = patch_paths_to_repo
         _write_custom_section(repo, _SOLUTION_SECTION_NO_FIELD)
-        before = _read_md(repo)
         rc = _call("0.0.0-W0-MVS")
-        assert rc == 1
-        assert _read_md(repo) == before
+        assert rc == 0
+        md = _read_md(repo)
+        assert "\nmulti_view_status: skipped\nreason: 修正為合法值並附上足夠長度的理由\n" in md
+        assert md.count("multi_view_status:") == 1
 
     def test_multiple_field_lines_rejects(self, patch_paths_to_repo, capsys):
         repo = patch_paths_to_repo
@@ -253,7 +260,7 @@ class TestLocatePattern:
     def test_section_not_found_rejects(self, patch_paths_to_repo):
         repo = patch_paths_to_repo
         before = _read_md(repo)
-        rc = _call("0.0.0-W0-MVS", section="Test Results")
+        rc = _call("0.0.0-W0-MVS", section="Nonexistent Section")
         assert rc == 1
         assert _read_md(repo) == before
 
@@ -341,3 +348,57 @@ class TestStatusPrecondition:
         _write_custom_section(repo, _SOLUTION_SECTION, status="pending")
         rc = _call("0.0.0-W0-MVS", value="skipped", force=True)
         assert rc == 0
+
+
+# ============================================================
+# 074.1: reason 落地與 gate 對照（E1：修正前同輸入不通過）
+# ============================================================
+
+
+def _gate_check(repo: Path):
+    """以 acceptance-gate 使用的 multi_view_checker 判定票面。"""
+    import importlib.util
+    import logging
+
+    claude_dir = Path(__file__).resolve().parents[4]
+    spec = importlib.util.spec_from_file_location(
+        "multi_view_checker", claude_dir / "hooks" / "acceptance_checkers" / "multi_view_checker.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    content = _read_md(repo)
+    fm, _ = parse_frontmatter(content)
+    return mod.check_multi_view_status(content, fm, claude_dir.parent, logging.getLogger("gate"))
+
+
+class TestReasonWrittenForGate:
+    @pytest.mark.parametrize("value", ["skipped", "n_a"])
+    def test_fix_then_gate_passes(self, patch_paths_to_repo, value):
+        repo = patch_paths_to_repo
+        # 對照：修正前（非法值、無 reason）gate 不通過
+        assert _gate_check(repo)[0] is True
+        assert _call("0.0.0-W0-MVS", value=value) == 0
+        assert _gate_check(repo) == (False, None)
+
+    def test_missing_field_fix_then_gate_passes(self, patch_paths_to_repo):
+        repo = patch_paths_to_repo
+        _write_custom_section(repo, _SOLUTION_SECTION_NO_FIELD)
+        assert _gate_check(repo)[0] is True
+        assert _call("0.0.0-W0-MVS") == 0
+        assert _gate_check(repo) == (False, None)
+
+    def test_existing_reason_line_replaced_not_duplicated(self, patch_paths_to_repo):
+        repo = patch_paths_to_repo
+        _write_custom_section(
+            repo, "## Solution\nmulti_view_status: bad\nreason: 舊理由內容很長很長\n尾行。\n"
+        )
+        assert _call("0.0.0-W0-MVS", reason="新的理由內容夠長了確認") == 0
+        md = _read_md(repo)
+        assert md.count("reason:") == 1
+        assert "新的理由內容夠長了確認" in md and "舊理由" not in md
+        assert "尾行。" in md
+
+    def test_reviewed_value_writes_no_reason(self, patch_paths_to_repo):
+        repo = patch_paths_to_repo
+        assert _call("0.0.0-W0-MVS", value="reviewed", reason="改為已審查並附上足夠長度理由") == 0
+        assert "reason:" not in _read_md(repo)

@@ -47,6 +47,7 @@ from lib import (  # noqa: E402
     read_json_from_stdin,
     get_project_root,
 )
+from lib.git_command_parse import match_git_commit  # noqa: E402
 
 
 EXIT_OK = 0
@@ -63,18 +64,8 @@ SKIP_MARKER = "[skip homoglyph]"
 
 def _is_git_commit_command(command: str) -> bool:
     """判斷是否為新建 commit 命令（排除 amend / log / diff / show / status）。"""
-    if "git commit" not in command:
-        return False
-    for excluded in (
-        "git commit --amend",
-        "git log",
-        "git show",
-        "git diff",
-        "git status",
-    ):
-        if excluded in command:
-            return False
-    return True
+    # 三態中 None（無法解析）：視為未命中
+    return match_git_commit(command, scan=True) is True
 
 
 def _get_staged_diff(project_dir: Path, logger) -> str:

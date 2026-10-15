@@ -157,7 +157,19 @@ def patch_paths_to_repo(git_repo: Path, monkeypatch):
     tickets_dir = git_repo / "tickets"
     tickets_dir.mkdir()
     _install_common_mocks(monkeypatch, tickets_dir)
-    return git_repo
+    # 專案根指向自建 git repo：autouse 的非 git tmp 根會讓建票鎖落在非 git 目錄，
+    # 觸發 152.1 的降級警告（刻意行為），與本 fixture 要驗證的 git 情境不符
+    from ticket_system.lib.paths import (
+        reset_project_root_cache,
+        reset_ticket_state_root_cache,
+    )
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(git_repo))
+    reset_project_root_cache()
+    reset_ticket_state_root_cache()
+    yield git_repo
+    reset_project_root_cache()
+    reset_ticket_state_root_cache()
 
 
 def _commit_count(repo: Path) -> int:

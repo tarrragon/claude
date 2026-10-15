@@ -49,13 +49,17 @@ def _make_porcelain(*worktrees):
         *worktrees: (path, branch) tuples; branch=None 表示 detached
     """
     lines = []
-    for path, branch in worktrees:
+    for entry in worktrees:
+        path, branch = entry[0], entry[1]
+        locked = len(entry) > 2 and entry[2] == "locked"
         lines.append(f"worktree {path}")
         lines.append("HEAD abc123def456")
         if branch:
             lines.append(f"branch refs/heads/{branch}")
         else:
             lines.append("detached")
+        if locked:
+            lines.append("locked")
         lines.append("")
     return "\n".join(lines)
 
@@ -65,6 +69,8 @@ def _mk_subprocess_side_effect(
     worktree_porcelain: str = "",
     unmerged_per_branch: dict | None = None,
     dirty_per_path: dict | None = None,
+    zero_commit_branches: tuple = (),
+    rev_parse_fails: bool = False,
 ):
     """建立 subprocess.run side_effect，依命令類型分派回傳。
 
@@ -90,6 +96,19 @@ def _mk_subprocess_side_effect(
 
         if "worktree" in cmd and "list" in cmd:
             result.stdout = worktree_porcelain
+            return result
+
+        if "rev-parse" in cmd:
+            if rev_parse_fails:
+                result.returncode = 128
+                return result
+            result.stdout = f"tip-{cmd[-1]}\n"
+            return result
+
+        if "rev-list" in cmd:
+            # main 的 first-parent 歷史；零提交分支的 tip 落在其上
+            tips = [f"tip-{b}" for b in zero_commit_branches]
+            result.stdout = "\n".join(["maintip"] + tips)
             return result
 
         if "log" in cmd:
@@ -327,3 +346,115 @@ def test_main_merged_clean_excludes_main_branch(hook_module, capsys):
         # 但 feat/W1-001 應出現
         assert "git worktree remove" in message
         assert "feat/W1-001" in message or "/tmp/wt-merged" in message
+
+
+# ============================================================
+# 0.5.0-W1-270.8：完成命令辨識（finish 別名）
+# ============================================================
+
+def test_finish_triggers_unmerged_warning(hook_module, capsys):
+    """E2：finish 觸發原本對 complete 的處理（未合併警告含分支與 commit 數）"""
+    input_data = {"tool_input": {"command": "ticket track finish 0.18.0-W1-001"}}
+    porcelain = _make_porcelain(("/tmp/wt-A", "feat/W1-001"))
+    side_effect = _mk_subprocess_side_effect(
+        worktree_porcelain=porcelain,
+        unmerged_per_branch={"feat/W1-001": ["abc111 first commit"]},
+    )
+    rc = _run_main(hook_module, input_data, side_effect)
+    lines = _extract_message(capsys.readouterr().out).splitlines()
+    assert rc == 0
+    assert "  分支: feat/W1-001" in lines
+    assert "  待合併 commit: 1 個" in lines
+
+
+def test_batch_complete_recognized(hook_module):
+    assert hook_module.is_ticket_complete_command(
+        {"tool_input": {"command": "ticket track batch-complete A B"}}
+    ) is True
+
+
+def test_quoted_literal_not_recognized(hook_module):
+    assert hook_module.is_ticket_complete_command(
+        {"tool_input": {"command": "echo 'ticket track complete X'"}}
+    ) is False
+
+
+def _classify(hook_module, porcelain, **kwargs):
+    side_effect = _mk_subprocess_side_effect(worktree_porcelain=porcelain, **kwargs)
+    logger = MagicMock()
+    with patch("subprocess.run", side_effect=side_effect):
+        worktrees = hook_module.parse_worktree_list(logger)
+        return hook_module.classify_worktrees(worktrees, logger)
+
+
+def _branches(entries):
+    return [e[1] for e in entries]
+
+
+def test_classify_locked_worktree_not_in_merged(hook_module):
+    """正向對照：locked（進行中派發）舊實作列入 merged，新實作歸 in_progress"""
+    porcelain = _make_porcelain(("/tmp/wt-run", "agent-run", "locked"))
+    unmerged, merged, in_progress = _classify(hook_module, porcelain)
+    assert "agent-run" not in _branches(merged)
+    assert _branches(in_progress) == ["agent-run"]
+
+
+def test_classify_zero_commit_worktree_not_in_merged(hook_module):
+    """正向對照：零提交（tip 在 main first-parent 上）未 locked 也歸 in_progress"""
+    porcelain = _make_porcelain(("/tmp/wt-zero", "agent-zero"))
+    unmerged, merged, in_progress = _classify(
+        hook_module, porcelain, zero_commit_branches=("agent-zero",)
+    )
+    assert "agent-zero" not in _branches(merged)
+    assert _branches(in_progress) == ["agent-zero"]
+
+
+def test_classify_finished_merged_worktree_still_in_merged(hook_module):
+    """liveness：未 locked、tip 不在 first-parent（merge commit 親代）→ 仍列 merged"""
+    porcelain = _make_porcelain(("/tmp/wt-done", "agent-done"))
+    unmerged, merged, in_progress = _classify(hook_module, porcelain)
+    assert _branches(merged) == ["agent-done"]
+    assert in_progress == []
+
+
+def test_classify_unknown_tip_fail_open_not_in_merged(hook_module):
+    """失敗語意：rev-parse 失敗 → 不列入建議清理（歸 in_progress）"""
+    porcelain = _make_porcelain(("/tmp/wt-x", "agent-x"))
+    unmerged, merged, in_progress = _classify(
+        hook_module, porcelain, rev_parse_fails=True
+    )
+    assert merged == []
+    assert _branches(in_progress) == ["agent-x"]
+
+
+def test_classify_locked_read_failure_not_in_merged(hook_module):
+    """失敗語意：locked 狀態讀取失敗 → 全部歸 in_progress"""
+    logger = MagicMock()
+    failed = MagicMock(returncode=1, stdout="", stderr="")
+    with patch("subprocess.run", return_value=failed):
+        unmerged, merged, in_progress = hook_module.classify_worktrees(
+            [("/tmp/wt-y", "agent-y")], logger
+        )
+    assert merged == []
+    assert _branches(in_progress) == ["agent-y"]
+
+
+def test_main_locked_worktree_not_suggested_for_removal(hook_module, capsys):
+    """main 層：locked worktree 不帶 git worktree remove 建議"""
+    input_data = {"tool_input": {"command": "ticket track complete X"}}
+    porcelain = _make_porcelain(("/tmp/wt-run", "agent-run", "locked"))
+    rc = _run_main(
+        hook_module, input_data,
+        _mk_subprocess_side_effect(worktree_porcelain=porcelain),
+    )
+    message = _extract_message(capsys.readouterr().out)
+    assert rc == 0
+    assert "git worktree remove" not in message
+    assert "不建議清理" in message
+
+
+def test_unparseable_command_fail_open(hook_module):
+    """未閉合引號 → 不觸發（提示類不阻擋）"""
+    assert hook_module.is_ticket_complete_command(
+        {"tool_input": {"command": "echo 'ticket track finish X"}}
+    ) is False

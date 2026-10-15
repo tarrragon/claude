@@ -14,6 +14,7 @@ import argparse
 import json
 import re
 import shutil
+import sys
 import yaml
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,12 @@ from typing import Optional, Dict, Any, List, Set
 
 from ticket_system.constants import MAX_TICKET_DEPTH
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
-from ticket_system.lib.constants import WORK_LOGS_DIR, TICKETS_DIR
+from ticket_system.lib.constants import (
+    WORK_LOGS_DIR,
+    TICKETS_DIR,
+    HANDOFF_DIR,
+    HANDOFF_PENDING_SUBDIR,
+)
 from ticket_system.lib.ticket_loader import (
     get_ticket_path,
     get_tickets_dir,
@@ -764,6 +770,7 @@ def _migrate_subtree(
         if old_path not in produced and old_path.exists():
             old_path.unlink()
     referrers = _rewrite_external_refs(mapping, produced | {p for _i, p, _t in members})
+    _rewrite_handoff_pending(mapping)
     new_parent_id = root.get("parent_id")
     if old_parent_id != new_parent_id:
         target_parent = None if new_parent_id in mapping else new_parent_id
@@ -780,6 +787,72 @@ def _migrate_subtree(
     print(format_info(InfoMessages.TICKET_MIGRATED, source_id=source_id, target_id=target_id)
           + f"（含子孫共 {len(records)} 張）")
     return 0, records[0]
+
+
+# handoff pending JSON 內存放 ticket ID 的欄位（direction 後綴另行處理）
+_HANDOFF_ID_FIELDS = ("ticket_id", "from_ticket", "target_ticket_id")
+
+
+def _remap_handoff_record(data: Dict[str, Any], mapping: Dict[str, str]) -> bool:
+    """依 mapping 改寫 handoff record 內的 ticket ID，回傳是否有變動。"""
+    changed = False
+    for key in _HANDOFF_ID_FIELDS:
+        value = data.get(key)
+        if isinstance(value, str) and value in mapping:
+            data[key] = mapping[value]
+            changed = True
+    direction = data.get("direction")
+    if isinstance(direction, str) and ":" in direction:
+        head, _, suffix = direction.partition(":")
+        if suffix in mapping:
+            data["direction"] = f"{head}:{mapping[suffix]}"
+            changed = True
+    return changed
+
+
+def _rewrite_handoff_pending(mapping: Dict[str, str]) -> List[Path]:
+    """改寫 handoff pending JSON 內的舊 ticket ID，並將以舊 ID 命名的檔案改名。
+
+    Why：migrate 若不處理 pending，舊 ID 殘留使 handoff 指向不存在的票。
+    pending 屬跨 agent 協調狀態且被版控忽略，root 以 get_ticket_state_root() 為準，
+    異動不併入 ticket 提交。無 pending 目錄或無命中時不做任何事。
+
+    Returns:
+        被改寫（或改名）後的檔案路徑清單
+    """
+    pending_dir = get_ticket_state_root() / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
+    if not pending_dir.is_dir():
+        return []
+    touched: List[Path] = []
+    for path in sorted(pending_dir.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            # 損壞檔不屬 migrate 範圍，保留供 handoff gc 診斷；僅告知
+            sys.stderr.write(f"[WARNING] [migrate] 略過無法解析的 handoff {path.name}: {e}\n")
+            continue
+        if not isinstance(data, dict):
+            continue
+        changed = _remap_handoff_record(data, mapping)
+        new_path = path
+        if path.stem in mapping:
+            new_path = path.with_name(f"{mapping[path.stem]}{path.suffix}")
+            if new_path.exists():
+                sys.stderr.write(f"[WARNING] [migrate] handoff 目標檔已存在，不改名: {new_path.name}\n")
+                new_path = path
+        if not changed and new_path == path:
+            continue
+        try:
+            new_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            if new_path != path:
+                path.unlink()
+        except OSError as e:
+            sys.stderr.write(f"[WARNING] [migrate] handoff 改寫失敗 {path.name}: {e}\n")
+            continue
+        touched.append(new_path)
+    if touched:
+        print(f"[migrate] 已同步改寫 {len(touched)} 個 handoff pending 檔")
+    return touched
 
 
 def _flatten_records(records: List[_MigrationRecord]) -> List[_MigrationRecord]:
@@ -966,6 +1039,10 @@ def _migrate_ticket_files(
         referrers = _update_cross_references_collecting(old_id, target_id)
         if referrers:
             print(format_info(MigrateMessages.CROSS_REFERENCES_UPDATED, count=len(referrers)))
+
+        # handoff pending 內的舊 ID 同步改寫（pending 被版控忽略，不入 referrers）
+        if old_id != target_id:
+            _rewrite_handoff_pending({old_id: target_id})
 
         # 父票改變時同步舊父/新父 children（異動檔併入同一提交）
         if old_id != target_id and old_parent_id != new_parent_id:

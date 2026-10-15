@@ -29,7 +29,7 @@ pending → claim → in_progress → complete → completed
 | 階段 | 強制規則 | AskUserQuestion |
 |------|---------|----------------|
 | **建立** | 必須用 `/ticket create`，禁止直接寫 .md | 任務拆分確認（認知 > 10） |
-| **建立後** | 強制並行審核：acceptance-auditor（品質）+ system-analyst（設計）→ creation_accepted: true | - |
+| **建立後** | 建立通過硬閘門即寫 `creation_accepted: true`；品質審核（acceptance-auditor + system-analyst 並行）對命中觸發條件的票為必審（P0/P1、跨模組、框架資產、ANA 落地 IMP），其餘由 PM 判斷，無機械閘門 | - |
 | **認領** | 阻塞依賴檢查 + **5W1H 待定義欄位補全（強制）** + **簡化 WRAP 三問（W/A/P，強制）** | - |
 | **執行** | 錯誤強制派發 incident-responder；日誌必填 | - |
 | **驗收** | **主動勾選驗收條件**（`check-acceptance`）→ acceptance-gate-hook 事後驗證 | **驗收方式確認**（標準/簡化/先完成後補） |
@@ -75,14 +75,27 @@ pending → claim → in_progress → complete → completed
 
 ---
 
-## 建立後強制審核流程
+## 建立後審核流程
 
-Ticket 建立後、認領前，強制並行派發多代理人審核。
+`/ticket create` 通過硬閘門（欄位清單驗證、可攜問題查重、重複偵測）後，直接寫入 `creation_accepted: true`；認領不再有 `creation_accepted` 閘門（原 UserPromptSubmit 閘門只解析使用者輸入文字，從未檢查到代理人經 Bash 執行的 claim，已於 2026-10-14 移除，`track accept-creation` 同步移除）。2026-10-14 之前建立的票，此欄位值不具意義（多為 false），不回填。
+
+以下審核不再由閘門強制。符合下列任一條件的票，PM 必須在派發前完成審核並將結果記入票面；其餘的票由 PM 依風險判斷是否派發。審核結果不影響認領。
+
+**Why**：原條文寫明強制，但唯一的機械強制點（認領前的 creation_accepted 閘門）從未檢查到真實的 claim；一個版本共 397 張票，實測無一張有審核紀錄。條文與實際不一致時，讀者無從分辨哪些「強制」是真的。改為以具體條件界定必審範圍，讓義務可以查核。
+
+**Consequence**：只寫「視需要」而不列條件，等同刪除本流程；高風險票的設計缺陷（範圍錯、驗收不可驗）會到執行中才被發現，屆時必須改範圍或重開。
 
 ### 觸發條件
 
-- Ticket 建立完成（`/ticket create` 執行成功）
-- `creation_accepted` 為 false（預設）
+| 條件 | 必審 |
+|------|------|
+| 優先級為 P0 或 P1 | 是 |
+| where.files 跨兩個以上模組或架構層 | 是 |
+| 修改 `.claude/` 框架資產（rules／pm-rules／skills／hooks／lib） | 是 |
+| 由 ANA 結論落地的 IMP（`--parent` 指向 ANA） | 是 |
+| 其他 | PM 判斷 |
+
+**Action**：建票後對照上表；命中任一列即並行派發下方兩位審核者，未通過依「判定標準」處理後再派發執行。
 
 ### 審核內容
 
@@ -94,13 +107,13 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 ### 審核流程
 
 ```
-/ticket create → creation_accepted: false
+/ticket create → creation_accepted: true（硬閘門已通過）
     |
     v
-[強制] 並行派發 acceptance-auditor + system-analyst
+[命中觸發條件：必審／其餘：PM 判斷] 並行派發 acceptance-auditor + system-analyst
     |
     v
-彙整結果 → 通過（無高/中缺陷）→ creation_accepted: true → 可認領
+彙整結果 → 通過（無高/中缺陷）→ 可認領
          → 未通過 → 修正 → 重新審核
 ```
 
@@ -108,7 +121,7 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 
 | 缺陷等級 | 判定 | 處理 |
 |---------|------|------|
-| 無/僅低缺陷 | 通過 | creation_accepted: true |
+| 無/僅低缺陷 | 通過 | 可認領 |
 | 中缺陷 | 不通過 | PM 修正後重新審核或確認 |
 | 高缺陷 | 不通過 | 必須修正後重新審核 |
 
@@ -706,7 +719,8 @@ how:
 
 ---
 
-**Last Updated**: 2026-10-01
+**Last Updated**: 2026-10-14
+**Version**: 6.6.0 — 「建立後審核流程」：移除 creation_accepted 認領閘門（該閘門註冊於 UserPromptSubmit，從未檢查到真實 claim），建票通過硬閘門即寫 true；審核由「強制」改為依觸發條件必審（P0/P1、跨模組、框架資產、ANA 落地 IMP），其餘由 PM 判斷，並補 Why／Consequence／Action（用戶經 WRAP 裁決）。
 **Version**: 6.5.0 — 「Complete 後 cleanup checklist」的範圍說明改為「含本次被解鎖的票」：complete 的 auto-commit 併入本次 cascade 與反向 blockedBy 解鎖、且 save 成功的票檔（可跨版本），未被本次寫入的 children／siblings 仍不進入提交範圍；與 ticket skill 2.44.15 的行為變更同步。
 **Version**: 6.4.0 — 「ANA 子分類」節新增「防護性 ANA 與 blockedBy 下游的耦合，以及 --force 使用條件」子節（三明示）。
 **Version**: 6.3.0 — 新增「ANA Solution Spawn 規劃落地（強制）」章節（W17-167 L3 落地，含 Why/Consequence/Action 三明示 + 強制/Schema/規則層交叉引用，配合 W17-168 hook + W17-169 quality-baseline 規則 5 / ticket-body-schema 同步修訂）

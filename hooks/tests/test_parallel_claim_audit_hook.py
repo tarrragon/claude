@@ -231,3 +231,75 @@ def test_internal_failure_still_exits_zero(monkeypatch, project_tree):
 )
 def test_parse_claim_command(command, expected):
     assert _hook.parse_claim_command(command) == expected
+
+
+# ---------------------------------------------------------------------------
+# 286.3：不論遮蔽與否，以票面確認「這次發生了認領轉換」
+# ---------------------------------------------------------------------------
+
+_CLAIM_TID = "0.19.0-W3-048"
+
+
+def _claim_tree(monkeypatch, project_tree, started_seconds_ago):
+    from datetime import datetime, timedelta
+    import lib.ticket_claim_verifier as claim_verifier
+
+    project_root, tickets_dir = project_tree
+    stamp = (datetime.now() - timedelta(seconds=started_seconds_ago)).isoformat()
+    (tickets_dir / "{}.md".format(_CLAIM_TID)).write_text(
+        "---\nid: {}\nstatus: in_progress\nstarted_at: '{}'\nwho:\n  current: pm\n---\n# t\n".format(
+            _CLAIM_TID, stamp),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(claim_verifier, "get_shared_state_root", lambda: project_root)
+    return project_root
+
+
+def _real_input(command, stdout):
+    return {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "tool_response": {"stdout": stdout, "stderr": "", "interrupted": False},
+    }
+
+
+def test_repeat_claim_unmasked_does_not_write_audit(monkeypatch, project_tree):
+    """已認領的票再 claim：結束碼 0、輸出「已被接手」警告；started_at 為舊值 -> 不入 audit。"""
+    root = _claim_tree(monkeypatch, project_tree, started_seconds_ago=3600)
+    code, _ = _run_main(
+        monkeypatch, root,
+        _real_input("ticket track claim " + _CLAIM_TID, "[Warning] {} 已被接手".format(_CLAIM_TID)),
+    )
+    assert code == 0
+    assert _read_audit(root) == []
+
+
+def test_fresh_claim_unmasked_with_swallowed_output_writes_audit(monkeypatch, project_tree):
+    """E1 對照：同樣的未遮蔽命令，started_at 在窗內且輸出被吸走 -> 入 audit。"""
+    root = _claim_tree(monkeypatch, project_tree, started_seconds_ago=2)
+    code, _ = _run_main(
+        monkeypatch, root,
+        _real_input("ticket track claim {} > /dev/null 2>&1".format(_CLAIM_TID), ""),
+    )
+    assert code == 0
+    assert [e["ticket_id"] for e in _read_audit(root)] == [_CLAIM_TID]
+
+
+def test_fresh_claim_masked_by_command_substitution_writes_audit(monkeypatch, project_tree):
+    root = _claim_tree(monkeypatch, project_tree, started_seconds_ago=2)
+    code, _ = _run_main(
+        monkeypatch, root,
+        _real_input("out=$(ticket track claim {} 2>&1); rc=$?".format(_CLAIM_TID), ""),
+    )
+    assert code == 0
+    assert [e["ticket_id"] for e in _read_audit(root)] == [_CLAIM_TID]
+
+
+def test_repeat_claim_masked_does_not_write_audit(monkeypatch, project_tree):
+    root = _claim_tree(monkeypatch, project_tree, started_seconds_ago=3600)
+    code, _ = _run_main(
+        monkeypatch, root,
+        _real_input("out=$(ticket track claim {} 2>&1); rc=$?".format(_CLAIM_TID), ""),
+    )
+    assert code == 0
+    assert _read_audit(root) == []

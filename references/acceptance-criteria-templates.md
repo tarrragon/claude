@@ -101,7 +101,7 @@
 ### 品質驗收
 | # | 項目 | 來源 | 確認方法 | 狀態 |
 |---|------|------|---------|------|
-| 1 | 單元測試通過 | quality-baseline | 執行 `flutter test`，0 failures | [ ] |
+| 1 | 單元測試通過 | quality-baseline | 本票相關測試檔通過（0 failures）；全套件由合併閘門驗證（`[合併閘門] 結束` 行結果為寫入） | [ ] |
 | 2 | 無 lint 錯誤 | quality-baseline | 執行 `dart analyze`，0 issues | [ ] |
 
 ### 文件驗收
@@ -341,5 +341,6 @@ acceptance:
 
 ---
 
-**Last Updated**: 2026-06-14
+**Last Updated**: 2026-10-15
+**Version**: 1.1.0 - 品質驗收「單元測試通過」改為相關測試檔通過、全套件由合併閘門驗證
 **Version**: 1.0.0 - 從 acceptance-criteria-methodology.md 外移標準格式三式、好/壞範例 6 組、各系統整合完整模板與轉換範例（W8-020.2 方法論瘦身校準）

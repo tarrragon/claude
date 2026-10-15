@@ -172,3 +172,22 @@ class TestRetryWrapper:
         monkeypatch.setattr(git_utils, "_auto_commit_ticket_md", fake)
         assert git_utils.auto_commit_ticket_md_with_retry("p", "id", "s")["attempts"] == 1
         assert git_utils.auto_commit_ticket_md_with_retry("p", "id", "s")["attempts"] == 1
+
+
+class TestNonGitRootKeepsDegradeWarning:
+    def test_non_git_root_create_lock_prints_degrade_warning(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """對照 0.5.0-W1-152.1：專案根為非 git 目錄時，建票鎖降級必須可見。"""
+        from tests.test_create_auto_commit import _install_common_mocks
+        from ticket_system.commands.create import execute
+
+        root = tmp_path / "plain"
+        tickets_dir = root / "tickets"
+        tickets_dir.mkdir(parents=True)
+        _install_common_mocks(monkeypatch, tickets_dir)
+
+        execute(_make_args())
+
+        err = capsys.readouterr().err
+        assert "[WARNING] create_id_allocation_lock" in err

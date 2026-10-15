@@ -8,30 +8,19 @@
 Ticket 生命週期合併 Hook - PostToolUse Hook
 
 合併自:
-- session-context-guard-hook.py（session 內 Ticket 完成計數與 handoff 警告）
 - post-ticket-complete-checkpoint-hook.py（Ticket complete 後的 Checkpoint 1/1.5 提醒）
 
-觸發時機: Bash 工具執行後，command 包含 ticket track complete/batch-complete
-執行順序:
-  1. update_session_counter — 更新 session 完成計數器（先執行，因為 checkpoint 可能參考計數）
-  2. output_checkpoint_reminder — 輸出 Checkpoint 1/1.5 提醒
+session 完成計數不在此 hook：同一次 complete 只由 session-context-guard-hook.py 計數。
+
+觸發時機: Bash 工具執行後，command 含 ticket track complete/finish/batch-complete
+執行內容:
+  output_checkpoint_reminder — 輸出 Checkpoint 1/1.5 提醒
 
 行為: 不阻擋（exit 0），僅在 additionalContext 輸出提醒訊息
-
-HOOK_METADATA (JSON):
-{
-  "event_type": "PostToolUse",
-  "matcher": "Bash",
-  "timeout": 5000,
-  "description": "Ticket 完成後生命週期處理（合併 session-context-guard + post-ticket-complete-checkpoint）",
-  "dependencies": [],
-  "version": "1.0.0"
-}
 """
 
 import sys
 import json
-import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -47,6 +36,11 @@ from lib import (
     is_subagent_environment,
 )
 from lib.hook_messages import AskUserQuestionMessages
+from lib.ticket_command_parse import has_complete_command
+from lib.bash_tool_response import (
+    FAILURE_EVENT_NAME, is_failure_event, auto_commit_failure_as_success, is_bash_success,
+)
+from lib.ticket_completed_verifier import make_completed_verifier, is_complete_transition_success
 
 # ============================================================================
 # 常數定義
@@ -61,23 +55,11 @@ DEFAULT_OUTPUT = {
     }
 }
 
-# 完成指令關鍵字
-COMPLETE_COMMAND_PATTERNS = [
-    "ticket track complete",
-    "ticket track batch-complete",
-    "ticket complete",
-]
-
 # 完成成功標記
 COMPLETE_SUCCESS_MARKERS = [
     "已完成",
 ]
 
-# --- Session Context Guard 常數 ---
-
-COUNTER_FILE_TEMPLATE = "/tmp/claude-session-completed-tickets-{ppid}"
-SOFT_WARN_THRESHOLD = 2
-STRONG_WARN_THRESHOLD = 3
 
 
 # ============================================================================
@@ -85,95 +67,29 @@ STRONG_WARN_THRESHOLD = 3
 # ============================================================================
 
 def is_ticket_complete_command(command: str) -> bool:
-    """判斷是否為 ticket track complete 命令"""
-    return any(pattern in command for pattern in COMPLETE_COMMAND_PATTERNS)
+    """判斷是否為完成類命令（complete／finish／batch-complete），走共用解析器。
+
+    無法解析（未閉合引號）時視為非完成命令：本 hook 不阻擋，漏計數優於誤計數。
+    """
+    return has_complete_command(command) is True
 
 
-def is_complete_successful(stdout: str) -> bool:
-    """判斷 ticket complete 是否成功"""
-    return any(marker in stdout for marker in COMPLETE_SUCCESS_MARKERS)
+def is_complete_successful(tool_response, command: str) -> bool:
+    """判斷 ticket complete 是否成功（分層：未遮蔽即成功、遮蔽以票面驗證、其餘比對標記）"""
+    return is_complete_transition_success(
+        tool_response,
+        COMPLETE_SUCCESS_MARKERS,
+        command,
+        make_completed_verifier(command),
+    )
 
 
 # ============================================================================
 # 子邏輯 1: Session Context Guard（來自 session-context-guard-hook）
 # ============================================================================
 
-def get_counter_file() -> Path:
-    """取得計數器檔案路徑（以 ppid 識別 session）"""
-    ppid = os.getppid()
-    return Path(COUNTER_FILE_TEMPLATE.format(ppid=ppid))
-
-
-def read_counter() -> int:
-    """讀取當前 session 完成的 Ticket 計數"""
-    counter_file = get_counter_file()
-    if not counter_file.exists():
-        return 0
-    try:
-        return int(counter_file.read_text().strip())
-    except (ValueError, IOError):
-        return 0
-
-
-def increment_counter() -> int:
-    """遞增計數器並回傳新值"""
-    counter_file = get_counter_file()
-    count = read_counter() + 1
-    try:
-        counter_file.write_text(str(count))
-    except IOError:
-        pass
-    return count
-
-
-def build_soft_warning(count: int) -> str:
-    """建立輕度提醒訊息（2 個 Ticket）"""
-    return (
-        f"============================================================\n"
-        f"[Session Context Guard] 本 session 已完成 {count} 個 Ticket\n"
-        f"============================================================\n"
-        f"\n"
-        f"Context 正在累積。每次 commit 後請考慮 handoff 以保持清晰的思考品質。\n"
-        f"\n"
-        f"核心原則（PC-009）：Handoff first，繼續 session 是例外，不是預設。\n"
-        f"============================================================"
-    )
-
-
-def build_strong_warning(count: int) -> str:
-    """建立強烈建議訊息（3 個以上 Ticket）"""
-    return (
-        f"============================================================\n"
-        f"[Session Context Guard] 本 session 已完成 {count} 個 Ticket - 強烈建議 Handoff\n"
-        f"============================================================\n"
-        f"\n"
-        f"本 session 已執行多個 Ticket，context 累積可能影響後續任務的思考品質。\n"
-        f"\n"
-        f"建議：下次 commit 後選擇 Handoff，在新 session 以乾淨 context 繼續工作。\n"
-        f"\n"
-        f"核心原則（PC-009）：Context 是有限資源。Handoff first，繼續 session 是例外。\n"
-        f"============================================================"
-    )
-
-
-def update_session_counter(input_data: Dict[str, Any], logger) -> Optional[str]:
-    """
-    更新 session 完成計數器並回傳警告訊息（來自 session-context-guard-hook）
-
-    Returns:
-        警告訊息字串，或 None 表示不需要警告
-    """
-    count = increment_counter()
-    logger.info("session-counter: Ticket 完成計數：%d", count)
-
-    if count >= STRONG_WARN_THRESHOLD:
-        logger.info("session-counter: 強烈建議 handoff（%d 個 Ticket）", count)
-        return build_strong_warning(count)
-    elif count >= SOFT_WARN_THRESHOLD:
-        logger.info("session-counter: 輕度提醒 handoff（%d 個 Ticket）", count)
-        return build_soft_warning(count)
-
-    return None
+# Session 完成計數已移除：同一次 complete 只由 session-context-guard-hook 計數
+# （該 hook 另有 PM-only 受眾過濾；兩 hook 同註冊於 PostToolUse:Bash 時重複計數）。
 
 
 # ============================================================================
@@ -225,6 +141,17 @@ def main() -> int:
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
+    # PostToolUseFailure：僅結束碼 75（動作完成、auto-commit 失敗）沿用完成後處理
+    if is_failure_event(input_data):
+        input_data = auto_commit_failure_as_success(input_data)
+        if input_data is None:
+            logger.debug("失敗事件非結束碼 75，不處理")
+            print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+            return EXIT_SUCCESS
+        event_name = FAILURE_EVENT_NAME
+    else:
+        event_name = DEFAULT_OUTPUT["hookSpecificOutput"]["hookEventName"]
+
     # 驗證工具類型
     tool_name = input_data.get("tool_name", "")
     if tool_name != "Bash":
@@ -237,25 +164,16 @@ def main() -> int:
     command = tool_input.get("command", "")
 
     tool_response = extract_tool_response(input_data, logger)
-    stdout = tool_response.get("stdout", "")
 
     # 檢查是否為 ticket complete 成功
-    if not (is_ticket_complete_command(command) and is_complete_successful(stdout)):
+    if not (is_ticket_complete_command(command) and is_complete_successful(tool_response, command)):
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
     # 收集所有子邏輯的輸出
     messages: List[str] = []
 
-    # 子邏輯 1: Session Counter（先執行）
-    try:
-        counter_msg = update_session_counter(input_data, logger)
-        if counter_msg:
-            messages.append(counter_msg)
-    except Exception as e:
-        logger.error("update_session_counter 例外: %s", e, exc_info=True)
-
-    # 子邏輯 2: Checkpoint Reminder
+    # Checkpoint Reminder
     try:
         checkpoint_msg = output_checkpoint_reminder(input_data, logger)
         if checkpoint_msg:
@@ -267,7 +185,7 @@ def main() -> int:
     if messages:
         output = {
             "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
+                "hookEventName": event_name,
                 "additionalContext": "\n\n".join(messages)
             }
         }

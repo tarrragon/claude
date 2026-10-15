@@ -36,18 +36,17 @@ SKELETON_TEMPLATE_NORMAL = """Ticket: {ticket_id}
 {closing}"""
 
 # normal 變體收尾句（依 isolation 對表選用，不在 format 字串內寫條件分支）。
-# worktree：隔離環境下 complete 受守衛限制，改 finish，被拒時交還 PM 代跑。
+# worktree：代理人收尾止於 ticket track commit 並回報 PM，complete 由 PM 於合併並驗證後執行。
 CLOSING_BY_ISOLATION = {
     "none": (
-        "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution / "
+        "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution（含 ### 自檢結果與 Phase 4 評估）/ "
         "Test Results → commit → `ticket track complete {ticket_id} --as {agent_name}`。"
     ),
     "worktree": (
-        "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution / "
-        "Test Results → commit（`ticket track commit`，於 worktree 路徑，只提交產品檔；"
-        "票面由主 repo CLI 寫入並自動提交，禁止複製或提交票面副本）→ "
-        "`ticket track finish {ticket_id} --as {agent_name}`；finish 若被隔離守衛拒絕，"
-        "於 Exit Status 記錄後交還 PM 於主 repo 代跑，禁止改寫命令形式規避。"
+        "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution（含 ### 自檢結果與 Phase 4 評估）/ "
+        "Test Results → `ticket track commit {ticket_id} -m \"<描述>\" --worktree <worktree 絕對路徑> -- <檔案>`"
+        "（只提交產品檔；票面由主 repo CLI 寫入並自動提交，禁止複製或提交票面副本）。"
+        "收尾到 ticket track commit 為止，回報 PM。"
     ),
 }
 
@@ -106,8 +105,9 @@ ticket's where.files; never touches the shared index):
   ticket track commit <ticket-id> -m "..." -- {exact files}
 In a linked worktree (files changed under a worktree dir, not the main repo):
 add `--worktree <abs-worktree-path>` to the command above.
-Fallback (not recommended; only if `ticket track commit` fails or is
-unavailable) — use precise staging + verified bare commit only (no pathspec):
+Fallback (not recommended; only if `ticket track commit` hits an environmental
+failure that persists after re-running it, or is unavailable. Scope/criteria
+rejections must NOT use fallback: stop and report to PM) — use precise staging + verified bare commit only (no pathspec):
   git add {exact files}
   git diff --cached --name-only   # confirm index contains ONLY {exact files}
   git commit -m "..."             # bare commit; no -- <paths> / --only / -o / -a
@@ -138,12 +138,12 @@ actions above would also undo the peer's legitimate work."""
 # 的顧慮不適用於本取向：本取向未對 agent-prompt-length-guard 的 Layer 1
 # 硬上限新增豁免路徑，純粹是縮短骨架本體行數，判準仍是唯一的行數比較。
 STAGING_PHRASE_AGENT_PROMPT = """Commit: prefer `ticket track commit <ticket-id> -m "..." -- {exact files}`
-  (isolated index, precise staging; in a linked worktree add `--worktree
-  <abs-worktree-path>`). Fallback: `git add {exact files}` ->
-  `git diff --cached --name-only` to verify -> verified bare commit, no
-  pathspec (forbid `-- <paths>` / `--only` / `-o` / `-a` / `git add .` /
-  `git add -A`). Swept-in content: forbid revert/reset/amend, stop & report.
-Full text: this ticket's "### Commit 規範" section (`ticket track full <ticket-id>`)."""
+  (isolated index, precise staging; linked worktree: add `--worktree <abs-path>`).
+  Scope/criteria rejection: no fallback, stop & report PM. Environmental failure:
+  re-run first; if it persists, fallback `git add {exact files}` -> `git diff --cached --name-only` to verify -> verified bare commit, no
+  pathspec (forbid `-- <paths>` / `--only` / `-o` / `-a` / `git add .` / `git add -A`).
+  Swept-in content: forbid revert/reset/amend, stop & report. Full text: this
+  ticket's "### Commit 規範" section (`ticket track full <ticket-id>`)."""
 
 # --commit-policy pm/none 的對應一行輸出。
 STAGING_PHRASE_PM = "Commit policy: PM 統一 commit，agent 不執行 git commit（完成後回報變更檔案清單）。"
@@ -154,13 +154,13 @@ STAGING_PHRASE_NONE = "Commit policy: none（本次派發不涉及 git commit）
 # liveness 驗證方式 / 失敗語意 fail-open/fail-closed / 產生路徑盤點表寫入
 # how.strategy）。文字與該 checker 的關鍵詞判準保持語意一致，供代理人在
 # 執行中即填妥，避免代理人未填四項、complete 被 gate 擋下、PM 事後補料重演。
-HOOK_TICKET_REMINDER = """本票 where.files 觸及 hooks 目錄，acceptance-gate 要求 acceptance 含四項必含：
-  1. 本 session 實地觸發確認（含落檔驗證，或說明何以暫不驗證）
-  2. liveness 驗證方式（如何確認 hook 被 runtime 載入並執行）
-  3. 失敗語意（fail-open 或 fail-closed）
-  4. 產生路徑盤點表（寫入 how.strategy，缺則 Solution；格式見
-     .claude/pm-rules/ticket-body-schema.md「防護類 hook ticket 額外
-     acceptance」節）
+HOOK_TICKET_REMINDER = """本票 where.files 觸及 hooks 目錄，acceptance-gate 檢查證據（非 acceptance 字句）：
+  1. 實地觸發確認：Test Results/Solution 引用 hook-logs/ 下的日誌行
+  2. liveness：同上，或貼 ticket track hook-liveness 輸出
+  3. 失敗語意：Solution 寫 fail-open 或 fail-closed，並附「觸發條件：...」
+  4. 產生路徑盤點表（寫入 how.strategy，缺則 Solution；格式與限制見
+     .claude/pm-rules/ticket-body-schema.md「防護類 ticket：威脅事件寫
+     acceptance，攔截點寫 how.strategy」節的「格式限制」段）
 執行中請一併填寫，勿留到 complete 前才補。"""
 
 

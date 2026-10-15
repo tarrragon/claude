@@ -79,7 +79,9 @@ class TestDepthSuperLimitDeny:
         with patch.object(module, "validate_ticket", return_value=(True, None)), \
                 patch.object(module, "compute_depth", return_value=module.MAX_TICKET_DEPTH + 1), \
                 patch("ticket_system.lib.depth.compute_depth", return_value=module.MAX_TICKET_DEPTH + 1):
-            rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1.1"), module)
+            # 子代理人派發且持有票映射缺失 -> 退回被派發票深度判準
+            payload = {**_payload("Ticket: 1.0.0-W1-056.5.1.1"), "agent_id": "sub-1"}
+            rc, parsed = _run_main(payload, module)
 
         assert rc == module.EXIT_BLOCK
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -105,7 +107,9 @@ class TestDepthFailOpenVisible:
         module = _load_hook_module()
         with patch.object(module, "validate_ticket", return_value=(True, None)), \
                 patch.object(module, "compute_depth", side_effect=RuntimeError("boom")):
-            rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1"), module)
+            # 子代理人派發才會進入深度計算（主線程不計算）
+            payload = {**_payload("Ticket: 1.0.0-W1-056.5.1"), "agent_id": "sub-1"}
+            rc, parsed = _run_main(payload, module)
 
         assert rc == module.EXIT_SUCCESS
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"

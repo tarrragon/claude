@@ -66,14 +66,14 @@ class TestDeleteBranchIfMerged:
         calls = []
 
         def fake_run(cmd, **kwargs):
+            return FakeProc(returncode=0, stdout="")  # log 查詢：ahead=0
+
+        def fake_graceful(cmd, timeout, **kwargs):
             calls.append(cmd)
-            if "log" in cmd:
-                return FakeProc(returncode=0, stdout="")  # ahead=0
-            if "branch" in cmd and "-d" in cmd:
-                return FakeProc(returncode=0, stdout="Deleted branch")
-            return FakeProc(returncode=0)
+            return FakeProc(returncode=0, stdout="Deleted branch")
 
         monkeypatch.setattr(hook.subprocess, "run", fake_run)
+        monkeypatch.setattr(hook, "run_with_graceful_timeout", fake_graceful)
         deleted = hook.delete_branch_if_merged(
             Path("/repo"), "worktree-agent-abc", "agent-abc", logger
         )
@@ -102,18 +102,23 @@ class TestDeleteBranchIfMerged:
         assert deleted is False
 
     def test_returns_false_when_delete_fails(self, monkeypatch, logger):
+        calls = []
+
         def fake_run(cmd, **kwargs):
-            if "log" in cmd:
-                return FakeProc(returncode=0, stdout="")  # ahead=0
-            if "branch" in cmd and "-d" in cmd:
-                return FakeProc(returncode=1, stderr="error: cannot delete")
-            return FakeProc(returncode=0)
+            return FakeProc(returncode=0, stdout="")  # log 查詢：ahead=0
+
+        def fake_graceful(cmd, timeout, **kwargs):
+            calls.append(cmd)
+            return FakeProc(returncode=1, stderr="error: cannot delete")
 
         monkeypatch.setattr(hook.subprocess, "run", fake_run)
+        monkeypatch.setattr(hook, "run_with_graceful_timeout", fake_graceful)
         deleted = hook.delete_branch_if_merged(
             Path("/repo"), "worktree-agent-abc", "agent-abc", logger
         )
         assert deleted is False
+        # 替身確實被呼叫，False 來自替身的 returncode=1 而非真 git 對不存在路徑失敗
+        assert any("branch" in c and "-d" in c for c in calls)
 
 
 class TestProcessWorktreeBranchDeletion:

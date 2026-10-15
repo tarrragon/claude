@@ -267,3 +267,52 @@ class TestHookLogsObservability:
             if line.strip()
         ]
         assert any(e.get("hook") == "homoglyph-guard-hook" for e in entries)
+
+
+# ----------------------------------------------------------------------------
+# E2：解析器判定（正向 -C 寫法命中、反向 echo 不命中）
+# ----------------------------------------------------------------------------
+
+
+def test_is_git_commit_command_dash_c_hits_e2():
+    assert _is_git_commit_command("git -C x commit -m y") is True
+
+
+def test_is_git_commit_command_echo_not_hit_e2():
+    assert _is_git_commit_command("echo git commit") is False
+
+
+def test_is_git_commit_command_unparseable_not_hit():
+    assert _is_git_commit_command("git commit -m 'unclosed") is False
+
+
+# ============================================================================
+# scan=True（0.5.0-W1-120.7.9.3）：僅掃描命中的 git commit 與位置命中同等處置
+# ============================================================================
+
+
+def test_scan_only_setsid_commit_denied_with_homoglyph(monkeypatch, tmp_path, capsys):
+    repo = _make_repo_with_staged_change(tmp_path, "這是汙染的說明", "這是汲染的說明")
+    exit_code = _run_hook(monkeypatch, 'setsid git commit -m "x"', project_root=repo)
+    assert exit_code == 2
+    assert "Homoglyph Guard" in capsys.readouterr().err
+
+
+def test_scan_only_commit_allowed_with_clean_diff(monkeypatch, tmp_path):
+    repo = _make_repo_with_staged_change(tmp_path, "舊說明文字", "新說明文字")
+    assert _run_hook(monkeypatch, 'setsid git commit -m "x"', project_root=repo) == 0
+
+
+def test_grep_quoted_commit_not_hit_even_with_homoglyph(monkeypatch, tmp_path):
+    repo = _make_repo_with_staged_change(tmp_path, "這是汙染的說明", "這是汲染的說明")
+    cmd = "grep 'git commit' notes.txt"
+    assert _run_hook(monkeypatch, cmd, project_root=repo) == 0
+
+
+def test_mutation_without_scan_flips_to_allow(monkeypatch, tmp_path):
+    orig = hook_module.match_git_commit
+    monkeypatch.setattr(
+        hook_module, "match_git_commit", lambda command, *a, **k: orig(command)
+    )
+    repo = _make_repo_with_staged_change(tmp_path, "這是汙染的說明", "這是汲染的說明")
+    assert _run_hook(monkeypatch, 'setsid git commit -m "x"', project_root=repo) == 0

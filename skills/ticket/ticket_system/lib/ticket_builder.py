@@ -801,7 +801,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         - tdd_phase: config.get("tdd_phase")
         - tdd_stage: config.get("tdd_stage") or []
         - assigned: False（固定值）
-        - creation_accepted: False（固定值，建立後品質驗收狀態）
+        - creation_accepted: True（固定值；create 流程的硬閘門全數通過後才呼叫本函式，故建立即視為已驗收）
         - started_at: None
         - completed_at: None
         - created: 當前日期（YYYY-MM-DD）
@@ -869,7 +869,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         "tdd_phase": config.get("tdd_phase"),
         "tdd_stage": config.get("tdd_stage") or [],
         "assigned": False,
-        "creation_accepted": False,
+        "creation_accepted": True,
         "started_at": None,
         "completed_at": None,
         "created": datetime.now().strftime("%Y-%m-%d"),

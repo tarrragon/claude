@@ -57,7 +57,9 @@ try:
         parse_ticket_frontmatter,
         find_ticket_file,
         get_effort_level,
+        emit_hook_output,
     )
+    from lib.ticket_id_pattern import extract_ticket_id_anchored
     _LIB_AVAILABLE = True
 except ImportError:
     # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
@@ -120,6 +122,11 @@ class SignalDef:
     message_template: str = ""
     # context-aware filter（黑名單版）。None 表示未啟用。
     context_blacklist: Optional[ContextBlacklist] = None
+    # 非使用者撰寫回合的框架標記（選填）。prompt 去除前導空白後以任一前綴開頭，
+    # 該訊號整個跳過（代理人交回報告、跨 session 訊息中的字樣是引述，非 PM 結論）。
+    skip_prompt_prefixes: List[str] = field(default_factory=list)
+    # 只檢查 prompt 開頭幾行（框架會在標記前加一行固定引導句）。
+    skip_prompt_scan_lines: int = 3
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -200,6 +207,13 @@ def _parse_signals(signals_raw: Any, logger) -> List[SignalDef]:
         sd.ticket_type_filter = item.get("ticket_type_filter")
         sd.reset_conditions = list(item.get("reset_conditions", []))
         sd.message_template = item.get("message_template", "")
+        prefixes = item.get("skip_prompt_prefixes") or []
+        if isinstance(prefixes, list):
+            sd.skip_prompt_prefixes = [str(p) for p in prefixes if str(p)]
+        try:
+            sd.skip_prompt_scan_lines = int(item.get("skip_prompt_scan_lines", 3))
+        except (TypeError, ValueError):
+            sd.skip_prompt_scan_lines = 3
         # 解析 context_blacklist（選填）
         cb_raw = item.get("context_blacklist")
         if isinstance(cb_raw, dict):
@@ -288,6 +302,51 @@ def load_state(state_path: Path, logger) -> Dict[str, Any]:
         return _initial_state()
 
 
+def resolve_state_path(base_path: Path, event: Dict[str, Any], logger) -> Path:
+    """依 stdin payload 的 session_id 把狀態檔分檔；缺值時退回共用檔（fail-open）。
+
+    分檔命名：<stem>-<session_id><suffix>（session_id 經檔名消毒，僅保留
+    英數、底線、連字號）。只讀 stdin payload，不 fallback 環境變數：
+    環境變數屬 hook 行程自身而非事件來源，與 payload 不一致時會造成同一
+    事件寫入不同檔。
+    """
+    raw = event.get("session_id")
+    sid = re.sub(r"[^A-Za-z0-9_-]", "_", raw) if isinstance(raw, str) else ""
+    if not sid:
+        logger.info("payload 無可用 session_id；退回共用狀態檔: %s", base_path)
+        return base_path
+    return base_path.with_name("%s-%s%s" % (base_path.stem, sid, base_path.suffix))
+
+
+# 他 session 狀態檔的保留天數：S1/cooldown 狀態只在 session 存活期間有意義，
+# 長時間 session 偶爾閒置數日，取 7 天以避免誤刪仍在使用的 session 檔。
+STALE_STATE_DAYS = 7
+
+
+def prune_stale_state_files(base_path: Path, current_path: Path, logger) -> int:
+    """刪除狀態目錄下 mtime 超過 STALE_STATE_DAYS 的他 session 分檔，回傳刪除數。
+
+    不刪當下 session 檔與共用檔；任何失敗只記日誌（fail-open）。
+    不節流：目錄僅含 session 分檔，清理後規模受 7 天內 session 數限制，glob 成本可忽略。
+    """
+    removed = 0
+    try:
+        cutoff = _now().timestamp() - STALE_STATE_DAYS * 86400
+        for p in base_path.parent.glob("%s-*%s" % (base_path.stem, base_path.suffix)):
+            if p == current_path or p == base_path:
+                continue
+            try:
+                if p.stat().st_mtime < cutoff:
+                    p.unlink()
+                    removed += 1
+                    logger.info("stale state file removed: %s", p)
+            except OSError as exc:
+                logger.info("stale state cleanup failed for %s: %s", p, exc)
+    except Exception as exc:  # fail-open：清理不得影響主流程
+        logger.info("stale state cleanup aborted: %s", exc)
+    return removed
+
+
 def _initial_state() -> Dict[str, Any]:
     return {
         "version": "1.0.0",
@@ -330,27 +389,38 @@ def save_state_atomic(state_path: Path, state: Dict[str, Any], logger) -> None:
 # Ticket 推導 fallback chain
 # ============================================================================
 
+def _ticket_from_agent_payload(event: Dict[str, Any]) -> Optional[str]:
+    """從 Agent/Task 事件 tool_input.prompt 首行取票號（派發 hook 已強制含 Ticket 行）。
+
+    PostToolUse / PostToolUseFailure 的 payload 皆帶 tool_input（與
+    active-dispatch-tracker-hook 讀同一欄位）；UserPromptSubmit 無此欄位，返回 None。
+    """
+    if event.get("tool_name") not in ("Agent", "Task"):
+        return None
+    tool_input = event.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return None
+    prompt = tool_input.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        return None
+    return extract_ticket_id_anchored(prompt.strip().splitlines()[0])
+
+
 def derive_ticket(event: Dict[str, Any], cwd: Path, logger) -> Optional[str]:
-    """四層 fallback 推導當前 ticket。全部失敗返回 None。"""
+    """五層 fallback 推導當前 ticket。全部失敗返回 None。"""
+    # 層 0：事件 payload（Agent 派發 prompt 首行的 Ticket 標籤）
+    t = _ticket_from_agent_payload(event)
+    if t:
+        return t
+
     # 層 1：環境變數
     t = os.environ.get("TICKET_ID")
     if t:
         return t
 
-    # 層 2：dispatch-active.json
-    dispatch_path = cwd / ".claude" / "dispatch-active.json"
-    try:
-        data = json.loads(dispatch_path.read_text(encoding="utf-8"))
-        if isinstance(data, list) and data:
-            latest = max(data, key=lambda x: x.get("dispatched_at", "") if isinstance(x, dict) else "")
-            if isinstance(latest, dict):
-                t = latest.get("ticket_id")
-                if t:
-                    return t
-    except FileNotFoundError:
-        logger.info("dispatch-active.json not found (normal in many sessions)")
-    except (json.JSONDecodeError, OSError) as e:
-        logger.info("dispatch-active.json unreadable: %s", e)
+    # 原層 2（讀 dispatch-active.json 取最新派發）已移除：實檔形狀為
+    # {"dispatches": [...]}，且全域狀態在並行派發或派發已結束時會取到別張票，
+    # 語意不正確；Agent 事件已由層 0 涵蓋。
 
     # 層 3：git branch
     try:
@@ -385,11 +455,21 @@ def is_manual_wrap_invocation(event: Dict[str, Any]) -> bool:
     event_name = event.get("hook_event_name", "")
     if event_name == "UserPromptSubmit":
         prompt = event.get("prompt", "") or ""
-        return "/wrap-decision" in prompt
+        return _starts_with_wrap_command(prompt)
     if event_name == "PostToolUse" and event.get("tool_name") == "Bash":
-        cmd = _extract_bash_command(event)
-        return "/wrap-decision" in cmd
+        return _starts_with_wrap_command(_extract_bash_command(event))
     return False
+
+
+_WRAP_COMMAND_RE = re.compile(r"^/wrap-decision(\s|$)")
+
+
+def _starts_with_wrap_command(text: str) -> bool:
+    """命令形式比對：去除前導空白後以 /wrap-decision 開頭，其後為空白或結尾。
+
+    路徑中的 /wrap-decision（如 .claude/skills/wrap-decision/...）不算手動執行。
+    """
+    return _WRAP_COMMAND_RE.match(text.lstrip()) is not None
 
 
 def _extract_bash_command(event: Dict[str, Any]) -> str:
@@ -464,12 +544,13 @@ class ConsecutiveFailuresStrategy:
     # B-1 + C3-1: 失敗判定條件改讀 YAML signals[S1].failure_detection（
     # source-of-truth 原則）。當 YAML 未提供 failure_detection 時，使用以下 backward-compatible
     # 預設值（避開破壞既有測試 fixture）。生產 YAML 已明確列出，故實際 source-of-truth 由 YAML 決定。
-    _DEFAULT_FAILURE_KEYWORDS = ("error", "exception", "failed", "timeout")
     _DEFAULT_FAILURE_STATUSES = ("failed", "error")
 
     def detect(self, event: Dict[str, Any], state: Dict[str, Any],
                sd: SignalDef, current_ticket: Optional[str], logger) -> DetectResult:
-        if event.get("tool_name") != (sd.tool_matcher or "Task"):
+        # 平台代理人派發工具名為 Agent（舊名 Task），兩者皆認
+        accepted = {sd.tool_matcher or "Agent", "Agent", "Task"}
+        if event.get("tool_name") not in accepted:
             return DetectResult(hit=False, signal_id=sd.id)
         is_failure = self._is_failure(event, sd)
         sig_state = state.setdefault("signals", {}).setdefault(sd.id, {})
@@ -486,22 +567,17 @@ class ConsecutiveFailuresStrategy:
             return DetectResult(hit=False, reset=True, signal_id=sd.id)
 
     def _is_failure(self, event: Dict[str, Any], sd: SignalDef) -> bool:
-        # 從 YAML 讀取失敗判定條件（source-of-truth）
+        # 失敗來源一：PostToolUseFailure 事件即工具層失敗（派發本身失敗）
+        if event.get("hook_event_name") == "PostToolUseFailure":
+            return True
+        # 失敗來源二：PostToolUse 的結構化 status 欄位（YAML 為 source-of-truth）。
+        # 不比對 tool_response 全文關鍵字：前景代理人報告常含 error、failed 字樣。
         failure_cfg = sd.raw.get("failure_detection") or {}
         statuses = failure_cfg.get("structured_statuses") or list(self._DEFAULT_FAILURE_STATUSES)
-        keywords = failure_cfg.get("keywords") or list(self._DEFAULT_FAILURE_KEYWORDS)
-
         tr = event.get("tool_response")
-        # 結構化失敗標記
         if isinstance(tr, dict):
             status = str(tr.get("status", "")).lower()
             if status in {str(s).lower() for s in statuses}:
-                return True
-        # 字串關鍵字（fallback）
-        text = json.dumps(tr, ensure_ascii=False) if tr is not None else ""
-        low = text.lower()
-        for kw in keywords:
-            if str(kw).lower() in low:
                 return True
         return False
 
@@ -525,6 +601,9 @@ class RestrictiveKeywordsStrategy:
         prompt = str(event.get("prompt", "") or "")
         if len(prompt) < sd.min_prompt_length:
             return DetectResult(hit=False, signal_id=sd.id)
+        if self._is_framework_message(prompt, sd, logger):
+            logger.info("signal %s skipped: framework-marked non-user turn", sd.id)
+            return DetectResult(hit=False, log_reason="framework_message", signal_id=sd.id)
         haystack = prompt if sd.case_sensitive else prompt.lower()
         matched = None
         for kw in sd.keywords:
@@ -546,6 +625,27 @@ class RestrictiveKeywordsStrategy:
             )
             return DetectResult(hit=False, log_reason="context_blacklist", signal_id=sd.id)
         return DetectResult(hit=True, matched_keyword=matched, should_warn=True, signal_id=sd.id)
+
+    @staticmethod
+    def _is_framework_message(prompt: str, sd: SignalDef, logger) -> bool:
+        """開頭數行內是否有以框架標記開頭的行（行首比對，非全文子字串）。
+
+        判定失敗時 fail-open：視為使用者回合照常比對關鍵字，
+        同時寫 stderr 與日誌，不阻擋。
+        """
+        try:
+            lines = prompt.lstrip().splitlines()[:sd.skip_prompt_scan_lines]
+            return any(
+                ln.lstrip().startswith(p)
+                for ln in lines for p in sd.skip_prompt_prefixes
+            )
+        except Exception as exc:  # noqa: BLE001 - fail-open，已雙通道記錄
+            logger.info("signal %s framework marker check failed: %s", sd.id, exc)
+            sys.stderr.write(
+                "[wrap-decision-tripwire] framework marker check failed "
+                "(fail-open): %s\n" % exc
+            )
+            return False
 
     @staticmethod
     def _check_context_blacklist(
@@ -711,9 +811,13 @@ def render_message(sd: SignalDef, result: DetectResult,
         def __missing__(self, key):
             return "{" + key + "}"
     try:
-        return sd.message_template.format_map(_Safe(**safe))
+        text = sd.message_template.format_map(_Safe(**safe))
     except Exception:
         return sd.message_template
+    if not safe["ticket_id"]:
+        # 推不出票號：不顯示空的 Ticket 欄位
+        text = re.sub(r"[（(]Ticket:\s*[）)]", "", text)
+    return text
 
 
 # ============================================================================
@@ -851,7 +955,9 @@ def main() -> int:
     if config is None:
         return 0
 
-    state_path = project_root / config.state_file
+    base_state_path = project_root / config.state_file
+    state_path = resolve_state_path(base_state_path, event, logger)
+    prune_stale_state_files(base_state_path, state_path, logger)
     state = load_state(state_path, logger)
     cwd = Path(event.get("cwd") or project_root)
 
@@ -860,7 +966,7 @@ def main() -> int:
 
     if is_manual_wrap_invocation(event):
         state = reset_all_signals(state)
-        logger.info("manual /wrap-decision detected; all signals reset")
+        logger.info("manual /wrap-decision detected; signals of this state file reset")
 
     event_name = event.get("hook_event_name", "")
     warnings = _process_signals(event, event_name, state, config, current_ticket, logger)
@@ -868,7 +974,13 @@ def main() -> int:
     save_state_atomic(state_path, state, logger)
 
     if warnings:
-        sys.stderr.write("\n".join(warnings) + "\n")
+        message = "\n".join(warnings)
+        # stderr 保留作日誌；exit 0 時 stderr 不進模型 context（305 實測），
+        # 故另以 additionalContext 輸出。audience 用預設 "all"：訊號偵測的是
+        # 當前執行緒自身的決策過程（PM 的派發失敗/限制性語句，代理人的 ANA
+        # claim），兩者皆為提醒對象，pm_only 會讓代理人端的 S3 提醒被丟棄。
+        sys.stderr.write(message + "\n")
+        emit_hook_output(event_name, additional_context=message)
 
     return 0
 

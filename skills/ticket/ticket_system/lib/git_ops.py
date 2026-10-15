@@ -59,6 +59,10 @@ _GIT_TIMEOUT = 10
 # 哨兵：呼叫端未指定 timeout 時，於呼叫當下讀取模組層 _GIT_TIMEOUT（而非定義當下綁定
 # 的預設值），使 timeout 可被測試與設定覆寫。None 代表不設 timeout。
 _DEFAULT_TIMEOUT = object()
+# 逾時後先送 SIGTERM，等待此秒數仍未結束才 SIGKILL。取值依據：實驗顯示 SIGKILL
+# 終止持鎖 git 必殘留 0 位元組 index.lock，SIGTERM/SIGINT 則 git 自行清鎖；清鎖為毫秒級，
+# 5 秒足夠且不致讓呼叫端無限等待。
+_TERMINATE_GRACE_SECONDS = 5  # 僅降級備援使用；lib 版有自己的寬限值
 _MAX_RETRIES = 2
 _RETRY_WAIT_SECONDS = 1
 
@@ -80,6 +84,55 @@ _STALE_LOCK_AGE_SECONDS = 60
 _OWN_HISTORY_LOOKBACK = 50
 
 
+def _run_with_graceful_timeout(args, timeout, grace=None, **popen_kwargs):
+    """委派 .claude/lib/git_utils 的單一實作（逾時終止整個行程群組）。
+
+    lib 載入失敗時降級為 _fallback_run_with_graceful_timeout 並寫 stderr，不阻擋提交。
+    """
+    # 延遲匯入：本檔可能被以檔案路徑單獨載入（sys.path 無 ticket_system），
+    # 頂層匯入失敗會使降級備援根本執行不到
+    try:
+        from ticket_system.lib.claude_lib_loader import load_claude_lib
+
+        lib = load_claude_lib("git_utils")
+        reason = "找不到 .claude/lib/git_utils"
+    except Exception as e:  # 降級備援：載入失敗不得讓 git 命令無法執行
+        lib = None
+        reason = f"載入 lib.git_utils 失敗：{e}"
+    if lib is None:
+        sys.stderr.write(f"[git_ops] {reason}，降級為備援實作\n")
+        return _fallback_run_with_graceful_timeout(args, timeout, grace, **popen_kwargs)
+    return lib.run_with_graceful_timeout(args, timeout, grace, **popen_kwargs)
+
+
+def _fallback_run_with_graceful_timeout(args, timeout, grace=None, **popen_kwargs):
+    """降級備援：執行子程序並在逾時時先 SIGTERM、寬限後才 SIGKILL（僅終止直接子行程）。
+
+    支援參數：args、timeout（None 為不設）、grace（預設 _TERMINATE_GRACE_SECONDS）、
+    input（字串；有值才開 stdin）、其餘 popen_kwargs（cwd、env、text、encoding、errors）。
+    stdout / stderr 一律擷取。回傳 CompletedProcess；逾時拋 subprocess.TimeoutExpired。
+    逾時後只等行程本身結束，不等輸出管線 EOF（孫程序可能仍握著管線）。
+    """
+    if grace is None:
+        grace = _TERMINATE_GRACE_SECONDS
+    input_text = popen_kwargs.pop("input", None)
+    stdin = subprocess.PIPE if input_text is not None else None
+    with subprocess.Popen(
+        args, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **popen_kwargs
+    ) as proc:
+        try:
+            out, err = proc.communicate(input_text, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                proc.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            raise
+        return subprocess.CompletedProcess(args, proc.returncode, out, err)
+
+
 def _run_git(
     args: List[str],
     cwd: Optional[str] = None,
@@ -91,14 +144,13 @@ def _run_git(
     if timeout is _DEFAULT_TIMEOUT:
         timeout = _GIT_TIMEOUT
     try:
-        result = subprocess.run(
+        result = _run_with_graceful_timeout(
             args,
+            timeout=timeout,
             cwd=cwd,
-            capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=timeout,
             env=env,
             input=input_text,
         )
@@ -359,9 +411,39 @@ def _warn_sync_failed(paths: List[str], step: str, err: str) -> None:
     )
 
 
+def _run_sync_step_with_budget(
+    args: List[str], cwd: str, anchor_path: str, input_text: Optional[str] = None
+) -> Tuple[bool, str]:
+    """共用 index 同步步驟：鎖競爭時沿用提交重試的退避預算（``retry_commit_attempt``）。
+
+    HEAD 已推進，同步失敗會留下過期 entry；預算與提交路徑一致，不另訂一套。
+    延遲匯入（本檔可能以檔案路徑單獨載入）；匯入失敗退回單次嘗試。
+    """
+    def attempt_once() -> Tuple[bool, str, str]:
+        return _run_git_with_lock_retry(
+            args, cwd=cwd, input_text=input_text, max_retries=1,
+            timeout=None,  # 持 index.lock 期間被 timeout 殺掉會殘留鎖，比照 update-ref
+        )
+
+    try:
+        from ticket_system.lib.git_utils import retry_commit_attempt
+    except ImportError:
+        ok, _, err = attempt_once()
+        return ok, err
+
+    last = {"ok": False, "err": ""}
+
+    def attempt() -> Tuple[str, str]:
+        last["ok"], _, last["err"] = attempt_once()
+        return ("committed" if last["ok"] else "git_failed"), last["err"]
+
+    retry_commit_attempt(attempt, anchor_path, os.path.basename(anchor_path))
+    return bool(last["ok"]), str(last["err"])
+
+
 def _sync_shared_index_after_commit(
     paths: List[str], tree_sha: str, cwd: str, old_head: Optional[str] = None
-) -> None:
+) -> List[str]:
     """提交成功（update-ref 已推進 HEAD）後，將本次 ``paths`` 同步至共用
     index，避免共用 index 對這些路徑停留在舊 HEAD 狀態（凍結累積），日後
     任何裸 commit 回退這些路徑。
@@ -382,17 +464,21 @@ def _sync_shared_index_after_commit(
     update-ref 已成功，此步驟失敗不應讓呼叫端誤判整體提交失敗（那會導致
     重試造成重複提交）。此函式全程不帶 ``GIT_INDEX_FILE``（env 用行程預設
     環境），寫入對象即共用 index。
+
+    Returns:
+        最終同步失敗的路徑（預算耗盡仍撞鎖等）；空清單表同步完成或無須同步。
     """
+    failed: List[str] = []
     head_entries = _blob_entries("HEAD", paths, cwd)
     if head_entries is None:
         _warn_sync_failed(paths, "ls-tree HEAD", "無法讀取當下 HEAD")
-        return
+        return list(paths)
     tree_entries = _blob_entries(tree_sha, paths, cwd) or {}
     parent_entries = (_blob_entries(old_head, paths, cwd) or {}) if old_head else {}
     index_entries = _shared_index_entries(paths, cwd)
     if index_entries is None:
         _warn_sync_failed(paths, "ls-files", "無法讀取共用 index")
-        return
+        return list(paths)
 
     to_sync: List[str] = []
     foreign: List[str] = []
@@ -423,21 +509,24 @@ def _sync_shared_index_after_commit(
         "{} {} 0\t{}\n".format(*head_entries[p].split(), p) for p in present
     )
     if index_info:
-        ok, _, err = _run_git_with_lock_retry(
-            ["git", "update-index", "--index-info"], cwd=cwd, input_text=index_info,
-            timeout=None,  # 持 index.lock 期間被 timeout 殺掉會殘留鎖，比照 update-ref
+        ok, err = _run_sync_step_with_budget(
+            ["git", "update-index", "--index-info"], cwd, os.path.join(cwd, present[0]),
+            input_text=index_info,
         )
         if not ok:
             _warn_sync_failed(present, "update-index", err)
+            failed.extend(present)
 
     missing = [p for p in to_sync if p not in head_entries]
     if missing:
-        ok, _, err = _run_git_with_lock_retry(
-            ["git", "update-index", "--force-remove", "--"] + missing, cwd=cwd,
-            timeout=None,  # 同上：持鎖步驟不設會殺行程的 timeout
+        ok, err = _run_sync_step_with_budget(
+            ["git", "update-index", "--force-remove", "--"] + missing, cwd,
+            os.path.join(cwd, missing[0]),
         )
         if not ok:
             _warn_sync_failed(missing, "force-remove", err)
+            failed.extend(missing)
+    return failed
 
 
 @dataclass(frozen=True)
@@ -597,7 +686,30 @@ def _prevalidate_guard_env(repo_root: str, commit_sha: str, old_head: str) -> Op
     return f"{commit_sha}:{old_head}:{ref}"
 
 
+# commit_files_isolated 失敗結果的 failure_kind 取值（status == "failed" 時恆存在）
+FAILURE_SELF_VERIFICATION = "self_verification"  # 範圍自我驗證不符（判準）
+FAILURE_CAS = "cas"  # update-ref 帶舊值被拒（HEAD 被並行移動）
+FAILURE_GIT_STEP = "git_step"  # 其餘 git 步驟失敗（環境）
+
+
 def commit_files_isolated(
+    paths: List[str],
+    message: str,
+    cwd: Optional[str] = None,
+    append_lines: Optional[Dict[str, AppendValue]] = None,
+) -> Dict[str, Optional[str]]:
+    """提交並在失敗時補上結構化 ``failure_kind``；語意見 ``_commit_files_isolated_impl``。
+
+    ``status == "failed"`` 時結果多帶 ``failure_kind``（FAILURE_* 常數之一），
+    供呼叫端分類失敗而不必比對 ``error`` 文字。實作端未明示者歸 git_step。
+    """
+    result = _commit_files_isolated_impl(paths, message, cwd, append_lines)
+    if result.get("status") == "failed":
+        result.setdefault("failure_kind", FAILURE_GIT_STEP)
+    return result
+
+
+def _commit_files_isolated_impl(
     paths: List[str],
     message: str,
     cwd: Optional[str] = None,
@@ -744,6 +856,7 @@ def commit_files_isolated(
             return {
                 "status": "failed",
                 "commit_sha": None,
+                "failure_kind": FAILURE_SELF_VERIFICATION,
                 "error": (
                     f"提交範圍自我驗證失敗，預期 {sorted(expected_changes)} 實得 "
                     f"{sorted(changed)}（範圍外 {sorted(out_of_scope)}）"
@@ -773,13 +886,21 @@ def commit_files_isolated(
             return {
                 "status": "failed",
                 "commit_sha": None,
+                "failure_kind": FAILURE_CAS,
                 "error": _describe_update_ref_failure(
                     err, commit_sha, cwd, locks_before_update_ref
                 ),
             }
 
-        _sync_shared_index_after_commit(expected_changes, tree_sha, cwd, old_head)
-        return {"status": "committed", "commit_sha": commit_sha, "error": None}
+        sync_failed = _sync_shared_index_after_commit(
+            expected_changes, tree_sha, cwd, old_head
+        )
+        # rc 維持成功：HEAD 已推進，回報失敗會讓呼叫端重試造成重複提交；
+        # 以欄位明示過期 entry 路徑，WARNING 已附補救指令（restore --staged）
+        return {
+            "status": "committed", "commit_sha": commit_sha, "error": None,
+            "index_sync_failed": sync_failed or [],
+        }
     finally:
         try:
             if os.path.exists(temp_index_path):

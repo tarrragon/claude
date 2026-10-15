@@ -44,6 +44,7 @@ from ticket_system.lib.command_lifecycle_messages import (
     FieldsMessages,
 )
 from ticket_system.lib.ticket_loader import get_ticket_path
+from ticket_system.lib.who_history import record_who_change
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
@@ -165,6 +166,23 @@ def _sync_where_files(where_dict: Dict[str, Any], new_value: Any) -> Optional[li
     return path_entries
 
 
+def _apply_hook_template_to_ticket(ticket: Dict[str, Any], files: Optional[list]) -> bool:
+    """set-where 寫入的 files 觸及 hook 本體時，於 ticket 追加 acceptance 模板。
+
+    回傳是否觸及（呼叫端據此在鎖外印出提醒）。
+    """
+    from ticket_system.commands.create import apply_hook_acceptance_template
+
+    how_field = ticket.get("how")
+    how_strategy = str(how_field.get("strategy") or "") if isinstance(how_field, dict) else ""
+    new_acceptance, touches = apply_hook_acceptance_template(
+        files or [], ticket.get("acceptance"), how_strategy
+    )
+    if touches:
+        ticket["acceptance"] = new_acceptance
+    return touches
+
+
 def _get_str_arg(args: argparse.Namespace, name: str) -> Optional[str]:
     """安全讀取可選 CLI flag 的字串值（W1-009：子欄位寫入路徑）。
 
@@ -208,6 +226,11 @@ def _execute_set_dict_subfields(
         existing = ticket.get(field_name)
         working = dict(existing) if isinstance(existing, dict) else dict(_DICT_FIELD_DEFAULTS[field_name])
 
+        if field_name == "who":
+            new_current = subfields.get("current", value)
+            if new_current is not None:
+                record_who_change(working, new_current)
+
         applied: Dict[str, Any] = {}
         if value is not None:
             working[subkey] = value
@@ -218,6 +241,9 @@ def _execute_set_dict_subfields(
 
         ticket[field_name] = working
         ticket_type = ticket.get("type")
+        hook_touched = field_name == "where" and "files" in applied and (
+            _apply_hook_template_to_ticket(ticket, applied["files"])
+        )
 
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         ticket_loader.save_ticket(ticket, ticket_path)
@@ -231,6 +257,10 @@ def _execute_set_dict_subfields(
     for key, val in applied.items():
         display = ", ".join(val) if isinstance(val, list) else val
         print(f"   {key}: {display}")
+    if hook_touched:
+        from ticket_system.commands.create import print_hook_ticket_reminder
+
+        print_hook_ticket_reminder()
 
     # 目錄級 where.files 宣告 WARNING（PC-BAL-040）：--files 子欄位路徑不經過
     # execute_set_field 的 _sync_where_files 啟發式，需在此另行檢查。
@@ -376,10 +406,16 @@ def execute_set_field(
             # layer 已有誤填樣本而整個放棄層級跨度指標。要設定 layer 請用
             # --layer 子欄位旗標（execute_set_where 的子欄位路徑）。
             if synced_files is None:
+                if actual_field_name == "who":
+                    record_who_change(existing, new_value)
                 existing[subkey] = new_value
             ticket[actual_field_name] = existing
         else:
             ticket[actual_field_name] = new_value
+
+        hook_touched = actual_field_name == "where" and synced_files is not None and (
+            _apply_hook_template_to_ticket(ticket, synced_files)
+        )
 
         # 儲存
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
@@ -412,6 +448,10 @@ def execute_set_field(
         print(FieldsMessages.WHERE_FILES_SYNCED.format(count=len(synced_files)))
         for entry in synced_files:
             print(f"      - {entry}")
+        if hook_touched:
+            from ticket_system.commands.create import print_hook_ticket_reminder
+
+            print_hook_ticket_reminder()
         # 目錄級 where.files 宣告 WARNING（PC-BAL-040）
         from ticket_system.lib.field_validators import (
             directory_declaration_warnings,

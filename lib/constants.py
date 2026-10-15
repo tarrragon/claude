@@ -25,8 +25,8 @@ DISPATCH_MULTI_KEYWORDS = [
 ]
 
 # 派發計數狀態檔路徑模板
-# {ppid} 會被替換為父進程 ID，以識別當前 session
-DISPATCH_BATCH_STATE_TEMPLATE = "/tmp/claude-dispatch-batch-{ppid}.json"
+# {session_id} 會被替換為 hook 輸入的 session_id（見 lib/session_state_key.py）
+DISPATCH_BATCH_STATE_TEMPLATE = "/tmp/claude-dispatch-batch-{session_id}.json"
 
 # 派發計數狀態檔過期時間（秒）
 # 超過此時間的狀態檔視為已過期，不再累加計數
@@ -46,17 +46,17 @@ SESSION_SOFT_WARN_THRESHOLD = 2
 SESSION_STRONG_WARN_THRESHOLD = 3
 
 # Session 完成計數檔路徑模板
-SESSION_COMPLETED_TICKETS_COUNTER_TEMPLATE = "/tmp/claude-session-completed-tickets-{ppid}"
+SESSION_COMPLETED_TICKETS_COUNTER_TEMPLATE = "/tmp/claude-session-completed-tickets-{session_id}"
 
 # ============================================================================
 # Handoff 自動接手 Hook（handoff-prompt-reminder-hook.py）
 # ============================================================================
 
 # Handoff 已提醒標誌檔路徑模板
-HANDOFF_REMINDED_FLAG_TEMPLATE = "/tmp/claude-handoff-reminded-{ppid}"
+HANDOFF_REMINDED_FLAG_TEMPLATE = "/tmp/claude-handoff-reminded-{session_id}"
 
 # Handoff session 狀態檔路徑模板
-HANDOFF_SESSION_STATE_TEMPLATE = "/tmp/claude-handoff-state-{ppid}.json"
+HANDOFF_SESSION_STATE_TEMPLATE = "/tmp/claude-handoff-state-{session_id}.json"
 
 # ============================================================================
 # 通用常數

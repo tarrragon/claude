@@ -1045,7 +1045,7 @@ def test_generate_hook_output_suppresses_in_subagent_context(monkeypatch):
         raise AssertionError("subagent context 不應掃描 pending（不應注入恢復指令）")
 
     monkeypatch.setattr(hook, "scan_pending_handoff_tasks", _should_not_be_called)
-    monkeypatch.setattr(hook, "read_session_state", lambda logger: None)
+    monkeypatch.setattr(hook, "read_session_state", lambda logger, input_data=None: None)
 
     output = hook.generate_hook_output(MagicMock(), input_data={"agent_id": "agt-1"})
 
@@ -1060,7 +1060,7 @@ def test_generate_hook_output_pm_session_behavior_unchanged(monkeypatch):
     hook = load_hook_module()
 
     monkeypatch.setattr(hook, "has_been_triggered_this_session", lambda logger: False)
-    monkeypatch.setattr(hook, "read_session_state", lambda logger: None)
+    monkeypatch.setattr(hook, "read_session_state", lambda logger, input_data=None: None)
     scan_called = {"count": 0}
 
     def _scan(project_root, logger, input_data=None):

@@ -54,25 +54,40 @@ def repo(tmp_path):
     return tmp_path
 
 
-def _commit_files(repo: Path, rel_paths: List[str]) -> None:
+def _commit_files(repo: Path, rel_paths: List[str], message: str = "add") -> None:
     for rel in rel_paths:
         target = repo / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("x", encoding="utf-8")
     _git(repo, "add", "--", *rel_paths)
-    _git(repo, "commit", "-q", "-m", "add")
+    _git(repo, "commit", "-q", "-m", message)
 
 
 NAMES = [ASCII_NAME, PLAIN_CJK_NAME, QUOTED_CJK_NAME]
 
 
+TICKET_ID = "0.0.0-W9-001"
+
+
+def test_parallel_dispatch_verification_diff_tree_reads_raw_paths(repo, logger):
+    """路徑 1：票相關 commit 範圍走 diff-tree -z。"""
+    hook = _load("parallel-dispatch-verification-hook.py", "pdv_hook_e2")
+    _commit_files(repo, [f"docs/{n}" for n in NAMES], message=f"feat({TICKET_ID}): add")
+
+    changed = hook.get_git_changed_files(repo, logger, TICKET_ID)
+
+    for n in NAMES:
+        assert hook.normalize_path(f"docs/{n}") in changed
+
+
 def test_parallel_dispatch_verification_diff_head_reads_raw_paths(repo, logger):
+    """路徑 2：票號不匹配任何 commit，僅經未提交變更的 diff HEAD -z 取得。"""
     hook = _load("parallel-dispatch-verification-hook.py", "pdv_hook_e2")
     _commit_files(repo, [f"docs/{n}" for n in NAMES])
     for n in NAMES:
         (repo / "docs" / n).write_text("changed", encoding="utf-8")
 
-    changed = hook.get_git_changed_files(repo, logger)
+    changed = hook.get_git_changed_files(repo, logger, TICKET_ID)
 
     for n in NAMES:
         assert hook.normalize_path(f"docs/{n}") in changed

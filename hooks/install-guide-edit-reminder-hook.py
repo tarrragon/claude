@@ -12,7 +12,7 @@ Edit/Write 修改時，輸出 fresh shell 驗證 INFO reminder（不阻擋）。
 Hook 類型: PostToolUse (matcher: Edit|Write)
 觸發條件: tool_input.file_path 含 "development-setup" 或 "environment-recovery"
 節流: 同檔案 THROTTLE_MINUTES 分鐘內只提示一次
-行為: stderr 提示 + 檔案日誌（雙通道可見性，quality-baseline 規則 4）
+行為: additionalContext 提示（模型可見）+ 檔案日誌
 
 參考: PC-159（安裝指令短名假設未驗證相關 ANA 結論）
 """
@@ -22,12 +22,19 @@ import re
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from lib import setup_hook_logging, read_json_from_stdin, run_hook_safely, get_project_root
+    from lib import (
+        setup_hook_logging,
+        read_json_from_stdin,
+        run_hook_safely,
+        get_project_root,
+        emit_model_reminder,
+    )
 except ImportError as e:
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
     sys.exit(0)
@@ -126,15 +133,14 @@ def prune_expired(cache: dict, now: float) -> dict:
     return {k: v for k, v in cache.items() if (now - float(v)) < THROTTLE_SECONDS}
 
 
-def emit_reminder(file_path: str, logger) -> None:
-    """輸出提示到 stderr 並記錄日誌（雙通道）。"""
+def emit_reminder(file_path: str, logger, input_data: Optional[dict] = None) -> None:
+    """以 additionalContext 輸出提醒（模型可見）並記錄日誌。"""
     filename = Path(file_path).name
     message = MESSAGES["REMINDER_TEMPLATE"].format(
         filename=filename,
         throttle_minutes=THROTTLE_MINUTES,
     )
-    sys.stderr.write(message)
-    sys.stderr.flush()
+    emit_model_reminder("PostToolUse", message, input_data=input_data)
     logger.info(f"已發出 fresh shell 驗證提醒：{filename}")
 
 
@@ -169,7 +175,7 @@ def main() -> int:
         return 0
 
     logger.info(MESSAGES["TRIGGERED"].format(file_path=file_path))
-    emit_reminder(file_path, logger)
+    emit_reminder(file_path, logger, input_data)
 
     cache = prune_expired(cache, now)
     cache[file_path] = now

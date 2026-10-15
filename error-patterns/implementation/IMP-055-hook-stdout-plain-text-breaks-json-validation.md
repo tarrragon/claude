@@ -80,3 +80,7 @@ print(json.dumps(output, ensure_ascii=False))
 ## 行為模式
 
 Hook 開發者習慣用 `print()` 輸出提醒，但 Claude Code CLI 的 Hook 系統有特定的 JSON 協議。這在 SessionStart Hook 中不會出問題（SessionStart 的 stdout 直接作為 additionalContext），但 PreToolUse/PostToolUse 需要 JSON 封裝。
+
+## 相鄰模式
+
+- IMP-GPD-004：方向相反的同族缺陷。本模式是 stdout 格式錯誤而 CLI 報錯；IMP-GPD-004 是提醒寫 stderr 加 exit 0 而模型靜默收不到。兩者共同正確解為 `additionalContext`。

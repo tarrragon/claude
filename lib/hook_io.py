@@ -952,6 +952,49 @@ def emit_hook_output(
         raise SystemExit(2)
 
 
+MODEL_REMINDER_EVENTS = (
+    "UserPromptSubmit",
+    "SessionStart",
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "Stop",
+)
+"""emit_model_reminder 接受的事件（實測：六事件的
+hookSpecificOutput.additionalContext 皆進入模型 context）。"""
+
+
+def emit_model_reminder(
+    event: str,
+    text: str,
+    *,
+    audience: str = "all",
+    input_data: "dict | None" = None,
+) -> None:
+    """提醒類 hook 的統一入口：以 additionalContext 讓模型讀到提醒。
+
+    emit_hook_output 的薄包裝（不複製受眾過濾，ARCH-020）；僅多做事件名
+    驗證，避免拼字錯誤使提醒落入模型不可見的管道。輸出恆為 JSON，不輸出
+    純文字 stdout（Pre/Post 類事件純文字 stdout 模型不可見且有 JSON
+    validation 風險，IMP-055）；exit 0 stderr 與 systemMessage 亦模型不可見。
+
+    注意（Stop）：Stop 事件的 additionalContext 會讓模型續跑，僅在確實
+    要模型接續處理時使用。
+
+    Raises:
+        ValueError: event 不在 MODEL_REMINDER_EVENTS
+    """
+    if event not in MODEL_REMINDER_EVENTS:
+        raise ValueError(
+            "event 必須為 {} 之一，收到: {!r}".format(
+                "/".join(MODEL_REMINDER_EVENTS), event
+            )
+        )
+    emit_hook_output(
+        event, text, audience=audience, input_data=input_data
+    )
+
+
 # ============================================================================
 # SubagentStop additionalContext 輸出（含版本相容 graceful fallback）
 # ============================================================================

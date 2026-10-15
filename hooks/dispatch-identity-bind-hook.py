@@ -64,18 +64,20 @@ EXIT_SUCCESS = 0
 
 # PM 身份字面值，須與 .claude/skills/ticket/ticket_system/lib/identity_guard.py
 # 的 PM_AGENT_NAME 保持一致（兩檔分屬 hook / skill 套件邊界，無法互相 import，
-# 依 skill-cli-sync-check 規則同步）。
+# 依 skill-cli-sync-check 規則同步；test_pm_name_constant_matches_identity_guard
+# 以原始碼比對守住）。本 hook 現僅用於說明，不再參與綁定判斷。
 PM_AGENT_NAME = "rosemary-project-manager"
 
 # who.current 無主態值：create 未指定 --who 時為字面 "pending"，
-# PM 建票模板慣用 "待派發"；execute_get_field 對缺值輸出 "?"。併入
-# PM_AGENT_NAME——PM 依 pm-role 流程先 claim 再派發時，若 claim --as
-# 申報為 PM 自己，who.current 會被寫成 PM 名稱；此狀態語意是「PM 暫代管、
-# 尚待指派給實際執行者」而非「已指派給 PM 本人執行」，故納入可覆蓋範圍，
-# 派發時才能正確重新綁定給實際 subagent_type（多起同型死結收斂後的修復：
-# 多名代理人各自撞上 who.current 停在 PM 而無法 complete 的死結）。
+# PM 建票模板慣用 "待派發"；execute_get_field 對缺值輸出 "?"。
+#
+# 刻意不含 PM_AGENT_NAME：PM 持有的票派發唯讀審查者
+# （linux、acceptance-auditor 等）時，若把 PM 視為無主態，審查者名稱會整體
+# 覆寫 who 而成為不實的執行者。PM 持有的票改由實作代理人首次帶 --as 的寫入
+# 命令讓出（identity_guard.check_identity 內呼叫
+# reassign_who_from_pm_if_takeover），派發不再預綁。
 EXIT_AUTO_COMMIT_FAILED = 75  # ticket CLI：動作已完成、僅 auto-commit 失敗
-UNBOUND_WHO_VALUES ={"pending", "待派發", "?", "", PM_AGENT_NAME}
+UNBOUND_WHO_VALUES = {"pending", "待派發", "?", ""}
 
 # ticket CLI 逾時秒數（shim 經 uv run 解析，冷啟動可達數秒）
 TICKET_CLI_TIMEOUT = 15
@@ -161,7 +163,7 @@ def bind_dispatch_identity(
         return False
 
     set_stdout = _run_ticket_cli(
-        ["set-who", ticket_id, subagent_type], project_root, logger
+        ["set-who", ticket_id, "--current", subagent_type], project_root, logger
     )
     if set_stdout is None:
         return False

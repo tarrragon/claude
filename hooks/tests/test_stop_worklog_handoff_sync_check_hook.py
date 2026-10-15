@@ -833,3 +833,75 @@ class TestW1044SubagentContext:
             root, 0.0, MagicMock(), input_data={"agent_id": "agt-1"}
         )
         assert result is None, "subagent stop 應跳過 sync check，不注入漂移警告"
+
+
+def test_session_incremental_diff_has_no_optional_locks_before_subcommand(hook_mod, monkeypatch, tmp_path):
+    """0.5.0-W1-164.6.1：工作樹 diff 須帶 --no-optional-locks 且位於子命令前。"""
+    monkeypatch.setattr(hook_mod, "_resolve_git_base_commit", lambda *a, **kw: "abc123")
+    fake = MagicMock(returncode=0, stdout="", stderr="")
+    seen = []
+
+    def _fake_run(argv, **kw):
+        seen.append(argv)
+        return fake
+
+    monkeypatch.setattr(hook_mod.subprocess, "run", _fake_run)
+    hook_mod._extract_session_incremental_content(
+        tmp_path, tmp_path / "wl.md", 1.0, MagicMock()
+    )
+    assert len(seen) == 1
+    argv = seen[0]
+    assert "--no-optional-locks" in argv
+    assert argv.index("--no-optional-locks") < argv.index("diff")
+
+
+# hook_mod.subprocess 與 subprocess 是同一模組，monkeypatch 會一併替換；
+# 效果層測試需要真實執行 argv，故在 patch 前保留原函式。
+_REAL_RUN = subprocess.run
+
+
+def _stat_dirty_repo_with_worklog(root: Path) -> Path:
+    """建 repo、提交 worklog，再只改 mtime 使其 stat-dirty（內容不變）。"""
+    _init_git_repo(root)
+    worklog = root / "wl.md"
+    worklog.write_text("baseline\n", encoding="utf-8")
+    _commit_all(root, "init")
+    st = worklog.stat()
+    os.utime(worklog, (st.st_atime, st.st_mtime + 100))
+    return worklog
+
+
+def _run_hook_diff_argv(hook_mod, monkeypatch, root: Path, worklog: Path) -> list:
+    """呼叫被測函式，攔下其組出的 diff argv（不在測試內另抄命令字串）。"""
+    monkeypatch.setattr(hook_mod, "_resolve_git_base_commit", lambda *a, **kw: "HEAD")
+    seen = []
+    def _spy(argv, **kw):
+        seen.append(list(argv))
+        return _REAL_RUN(["git", "--version"], capture_output=True, text=True)
+
+    monkeypatch.setattr(hook_mod.subprocess, "run", _spy)
+    hook_mod._extract_session_incremental_content(root, worklog, 1.0, MagicMock())
+    assert len(seen) == 1
+    return seen[0]
+
+
+def test_session_incremental_diff_leaves_index_untouched(hook_mod, monkeypatch, tmp_path):
+    """0.5.0-W1-164.6.1 效果層：hook 實際 argv 在 stat-dirty repo 執行，index 位元組不變。"""
+    worklog = _stat_dirty_repo_with_worklog(tmp_path)
+    argv = _run_hook_diff_argv(hook_mod, monkeypatch, tmp_path, worklog)
+    index = tmp_path / ".git" / "index"
+    before = index.read_bytes()
+    _REAL_RUN(argv, check=True, capture_output=True)
+    assert index.read_bytes() == before
+
+
+def test_session_incremental_diff_control_without_flag_rewrites_index(hook_mod, monkeypatch, tmp_path):
+    """對照：拿掉 -c diff.autoRefreshIndex=false 的同一命令會改寫 index（fixture 鑑別力）。"""
+    worklog = _stat_dirty_repo_with_worklog(tmp_path)
+    argv = _run_hook_diff_argv(hook_mod, monkeypatch, tmp_path, worklog)
+    stripped = [a for a in argv if a not in ("-c", "diff.autoRefreshIndex=false")]
+    assert stripped != argv, "hook argv 未含 -c diff.autoRefreshIndex=false"
+    index = tmp_path / ".git" / "index"
+    before = index.read_bytes()
+    _REAL_RUN(stripped, check=True, capture_output=True)
+    assert index.read_bytes() != before, "對照不成立：fixture 無鑑別力"

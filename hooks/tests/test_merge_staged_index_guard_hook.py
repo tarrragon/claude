@@ -218,3 +218,41 @@ def test_e1_diff_nonzero_allowed_with_visible_message(monkeypatch, repo, capsys)
 
 def test_git_timeout_is_module_constant():
     assert isinstance(hook_module._GIT_TIMEOUT_SECONDS, (int, float))
+
+
+# ---- scan=True（0.5.0-W1-120.7.9.3）：僅掃描命中的 merge 與位置命中同等處置 ----
+
+def test_e2_scan_only_setsid_merge_denied_when_staged(monkeypatch, repo):
+    _stage(repo)
+    assert _run(monkeypatch, "setsid git merge feature", repo) == 2
+
+
+def test_e2_scan_only_find_exec_merge_denied_when_staged(monkeypatch, repo):
+    _stage(repo)
+    cmd = "find . -maxdepth 0 -exec git merge feature \\;"
+    assert _run(monkeypatch, cmd, repo) == 2
+
+
+def test_e1_scan_only_merge_allowed_when_clean(monkeypatch, repo):
+    assert _run(monkeypatch, "setsid git merge feature", repo) == 0
+
+
+def test_e1_grep_quoted_merge_allowed_when_staged(monkeypatch, repo):
+    _stage(repo)
+    assert _run(monkeypatch, "grep 'git merge' notes.txt", repo) == 0
+
+
+def test_e1_unparseable_still_allowed_when_staged(monkeypatch, repo):
+    _stage(repo)
+    assert _run(monkeypatch, 'git merge "unclosed', repo) == 0
+
+
+def test_mutation_without_scan_flips_to_allow(monkeypatch, repo):
+    orig = hook_module.find_git_invocations
+    monkeypatch.setattr(
+        hook_module,
+        "find_git_invocations",
+        lambda command, subs, *a, **k: orig(command, subs),
+    )
+    _stage(repo)
+    assert _run(monkeypatch, "setsid git merge feature", repo) == 0

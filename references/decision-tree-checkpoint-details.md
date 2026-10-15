@@ -15,7 +15,7 @@
 
 | 情況 | 路由 |
 |------|------|
-| 建立了子任務或獨立 Ticket，且可並行派發（creation_accepted + 檔案無重疊 + 敘述完善 + 符合並行安全條件） | 留在當前 session → 並行派發代理人 → 進入 Checkpoint 1 |
+| 建立了子任務或獨立 Ticket，且可並行派發（檔案無重疊 + 敘述完善 + 符合並行安全條件） | 留在當前 session → 並行派發代理人 → 進入 Checkpoint 1 |
 | 建立了子任務且不可並行派發 | commit → handoff → 新 session 逐一處理子任務 |
 | 建立了獨立 Ticket（非子任務，不可並行） | commit → handoff → 新 session 認領執行 |
 | 非建立/拆分場景（執行完成、Phase 完成等） | 跳過，進入 Checkpoint 1 |

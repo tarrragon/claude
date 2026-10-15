@@ -111,10 +111,11 @@ def _is_fast_forward(target: str, args: List[str]) -> bool:
     return result.returncode == 0
 
 
-def _resolve_target(cwd: str, dash_c: Optional[str]) -> str:
-    if not dash_c:
+def _target_dir(inv, cwd: str) -> str:
+    """目標目錄取 lib 解析的 effective_dir；目錄不可知（變數、命令替換等）退回 payload cwd。"""
+    if inv.dir_unknown or not inv.effective_dir:
         return cwd
-    return str(Path(cwd) / dash_c)  # 絕對 -C 路徑會覆蓋 cwd
+    return inv.effective_dir
 
 
 def _build_deny_message(command: str, staged: List[str]) -> str:
@@ -145,16 +146,16 @@ def main() -> int:
         if not command:
             return 0
 
-        invocations = find_git_invocations(command, {"merge"})
+        cwd = input_data.get("cwd") or os.getcwd()
+        invocations = find_git_invocations(command, {"merge"}, cwd, scan=True)
         if not invocations:
             return 0  # None（無法解析）或無 merge 呼叫
 
-        cwd = input_data.get("cwd") or os.getcwd()
         for inv in invocations:
             if any(a in _RECOVERY_FLAGS for a in inv.args):
                 logger.debug("merge 收拾旗標，放行")
                 continue
-            target = _resolve_target(cwd, inv.dash_c_path)
+            target = _target_dir(inv, cwd)
             if _is_worktree(target):
                 logger.debug("目標為 worktree，放行: %s", target)
                 continue

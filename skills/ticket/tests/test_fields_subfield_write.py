@@ -197,7 +197,7 @@ def test_execute_set_who_current_only_preserves_history(tmp_path, monkeypatch):
     assert result == 0
     fm = _load_frontmatter(ticket_path)
     assert fm["who"]["current"] == "agent-b"
-    assert fm["who"]["history"] == {"phase1": "agent-a"}
+    assert fm["who"]["history"].get("phase1") == "agent-a"  # 既有項保留；改派另追加一筆（見 test_complete_metadata_sync）
 
 
 def test_execute_set_who_neither_value_nor_current_errors(tmp_path, monkeypatch):
@@ -422,7 +422,7 @@ def test_execute_set_who_value_only_unchanged_legacy_behavior(tmp_path, monkeypa
     assert result == 0
     fm = _load_frontmatter(ticket_path)
     assert fm["who"]["current"] == "agent-c"
-    assert fm["who"]["history"] == {"t0": "agent-a"}
+    assert fm["who"]["history"].get("t0") == "agent-a"  # 既有項保留；改派另追加一筆（見 test_complete_metadata_sync）
 
 
 def test_execute_set_where_value_only_still_syncs_files(tmp_path, monkeypatch):

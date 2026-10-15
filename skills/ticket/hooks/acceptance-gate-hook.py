@@ -68,8 +68,14 @@ from lib import (
     validate_hook_input,
     is_subagent_environment,
 )
+from lib.hook_base import get_shared_state_root
 from lib.hook_messages import GateMessages, CoreMessages, AskUserQuestionMessages, format_message
 from lib.git_command_parse import parse_command_statements
+from lib.ticket_command_parse import (
+    COMPLETE_VERBS,
+    find_complete_invocations,
+    is_complete_statement,
+)
 
 from acceptance_checkers import (
     collect_incomplete_descendants_from_frontmatter,
@@ -243,41 +249,80 @@ def _strip_quoted_spans(command: str) -> str:
     return re.sub(r'"[^"]*"|\'[^\']*\'', "", command)
 
 
-def extract_ticket_id_from_command(command: str, logger) -> Optional[str]:
-    """從命令中提取 Ticket ID"""
-    stripped = _strip_quoted_spans(command)
-    if "ticket track complete" not in stripped and "ticket track batch-complete" not in stripped:
-        return None
+_RAW_COMPLETE_VERB_RE = re.compile(
+    r"ticket\s+track\s+(?:complete|finish|batch-complete)\b(.*)", re.DOTALL
+)
 
-    match = re.search(TICKET_ID_PATTERN, stripped)
-    if match:
-        ticket_id = match.group(0)
-        logger.info(f"從命令中提取 Ticket ID: {ticket_id}")
-        return ticket_id
+
+def _dedupe(ids: List[str]) -> List[str]:
+    """保序去重。"""
+    return list(dict.fromkeys(ids))
+
+
+def extract_ticket_ids_from_command(command: str, logger) -> List[str]:
+    """從命令中提取全部 Ticket ID（保序、去重）。
+
+    能解析：每個完成類語句（`;`／`&&` 串接、shell -c 巢狀皆已由掃描展開）動詞之後
+    所有符合 TICKET_ID_PATTERN 的 token 都收集；batch-complete 的逗號清單
+    （`A,B`）拆開後逐項比對，空白分隔的多個參數本就是多個 token。
+    無法解析（含 stdin shell）：在原始命令文字上找完成類動詞字樣，收集其後全部 ID
+    （fail-closed，誤判只會多擋）；找不到再沿用既有行為（legacy 辨識 + 剝引號後
+    收集全部 ID）。
+    """
+    ids: List[str] = []
+    invocations = find_complete_invocations(command)
+    if invocations is not None:
+        for _verb, args in invocations:
+            for token in args:
+                for part in token.split(","):
+                    if re.fullmatch(TICKET_ID_PATTERN, part):
+                        ids.append(part)
+    else:
+        raw = _RAW_COMPLETE_VERB_RE.search(command)
+        if raw:
+            ids = [m.group(0) for m in re.finditer(TICKET_ID_PATTERN, raw.group(1))]
+            if ids:
+                logger.info(f"從無法解析的命令原文提取 Ticket ID: {ids}")
+    if ids:
+        ids = _dedupe(ids)
+        logger.info(f"從命令中提取 Ticket ID: {ids}")
+        return ids
+    if not is_complete_command(command):
+        return []
+    stripped = _strip_quoted_spans(command)
+    ids = _dedupe([m.group(0) for m in re.finditer(TICKET_ID_PATTERN, stripped)])
+    if ids:
+        logger.info(f"從命令中提取 Ticket ID: {ids}")
+        return ids
 
     logger.debug(f"無法從命令中提取 Ticket ID: {command}")
-    return None
+    return []
+
+
+def extract_ticket_id_from_command(command: str, logger) -> Optional[str]:
+    """從命令中提取第一個 Ticket ID（單一 ID 相容介面；閘門改用複數版）。"""
+    ids = extract_ticket_ids_from_command(command, logger)
+    return ids[0] if ids else None
 
 
 def has_force_flag_on_complete(command: str, ticket_id: str) -> bool:
-    """命令中引號外的 `ticket track complete <ticket_id> ... --force` 語句是否存在。
+    """命令中 `ticket track complete <ticket_id> ... --force` 語句是否存在。
 
-    只認「complete 語句本身」的 --force：先剝除引號內文字（--why 等參數值），
-    再以共用解析管線切成語句（涵蓋 `&&`／`;`／`|`／子 shell 括號），比對
-    含 `ticket track complete` 與該票 ID 的語句是否帶 `--force` token。同鏈其他
+    只認「complete 語句本身」的 --force：以共用掃描函式 find_complete_invocations
+    找出完成類語句（任意位置，如前綴包裝、串接），比對含該票 ID 的語句是否帶
+    `--force` token；引號內文字（--why 等參數值）先剝除。同鏈其他
     命令的 --force（如推送旗標）不算。無法解析（未閉合引號）回傳 False，
     由呼叫端維持 deny（fail-closed）；解析例外向上拋出，由呼叫端處置。
     """
-    statements = parse_command_statements(_strip_quoted_spans(command))
-    if statements is None:
+    # 先剝引號：shlex 會去引號，`--why '--force'` 的值會與旗標同形。代價是
+    # bash -c '...' 內的 --force 也被剝除而不旁路，方向為維持 deny（安全側）。
+    invocations = find_complete_invocations(_strip_quoted_spans(command))
+    if invocations is None:
         return False
-    for tokens in statements:
-        for i in range(len(tokens) - 2):
-            if tokens[i:i + 3] == ["ticket", "track", "complete"]:
-                rest = tokens[i + 3:]
-                if ticket_id in rest and "--force" in rest:
-                    return True
-    return False
+    return any(
+        verb in ("complete", "finish") and ticket_id in rest and "--force" in rest
+        for verb, rest in invocations
+    )
 
 
 def _resolve_force_bypass(
@@ -311,13 +356,25 @@ def _resolve_force_bypass(
         return None
 
 
-def is_complete_command(command: str) -> bool:
-    """判斷是否為 ticket track complete 命令
-
-    引號內文字（如 --why 參數的字面引用）不列入判斷，見 _strip_quoted_spans。
-    """
+def _legacy_complete_substring(command: str) -> bool:
+    """解析失敗時的保守後備：沿用字面比對（含 finish 別名），維持 fail-closed。"""
     stripped = _strip_quoted_spans(command)
-    return "ticket track complete" in stripped or "ticket track batch-complete" in stripped
+    return any("ticket track " + v in stripped for v in COMPLETE_VERBS)
+
+
+def is_complete_command(command: str) -> bool:
+    """判斷是否為完成類命令（ticket track complete／finish／batch-complete）。
+
+    走共用掃描函式 find_complete_invocations（任意位置、shell -c 巢狀；引號內
+    字面、heredoc 內文與 echo／printf 之後不算命令）。
+    無法解析（未閉合引號）時退回字面比對，維持阻擋類 hook 的 fail-closed。
+    """
+    invocations = find_complete_invocations(command)
+    if invocations is None:
+        # 後備先剝引號會漏掉 `echo "ticket track complete X" | bash` 這類引號內字面；
+        # 原文再比對一次，fail-closed 方向，誤判只會多擋
+        return _legacy_complete_substring(command) or bool(_RAW_COMPLETE_VERB_RE.search(command))
+    return bool(invocations)
 
 
 # 0.4.1-W2-006：complete 前段串接後可能改變驗收狀態的寫入操作。
@@ -342,14 +399,14 @@ def detect_chained_pre_complete_write(command: str) -> bool:
     只檢查 complete 命令「之前」的片段：出現在 complete 之後的寫入操作
     （例如同鏈接續的收尾動作）不影響本次 complete 讀到的檔案狀態，不列入判定。
     """
-    complete_pos = command.find("ticket track complete")
-    if complete_pos == -1:
-        complete_pos = command.find("ticket track batch-complete")
-    if complete_pos == -1:
+    statements = parse_command_statements(command)
+    if statements is None:
         return False
-
-    preceding = command[:complete_pos]
-    return any(pattern.search(preceding) for pattern in _CHAINED_WRITE_TRIGGERS)
+    for idx, tokens in enumerate(statements):
+        if is_complete_statement(tokens):
+            preceding = " ".join(" ".join(t) for t in statements[:idx])
+            return any(pattern.search(preceding) for pattern in _CHAINED_WRITE_TRIGGERS)
+    return False
 
 
 # ============================================================================
@@ -951,28 +1008,34 @@ def _parse_and_validate_input(input_data: Dict[str, Any], logger) -> Optional[Tu
     return tool_name, command
 
 
-def _extract_ticket_or_skip(tool_name: str, command: str, logger) -> Optional[str]:
-    """識別 complete 命令並提取 Ticket ID。"""
+def _extract_ticket_ids_or_skip(tool_name: str, command: str, logger) -> List[str]:
+    """識別 complete 命令並提取全部 Ticket ID；非 complete 或無 ID 時輸出 allow 並回空清單。"""
     if tool_name != "Bash":
         logger.debug(f"非 Bash 工具: {tool_name}，直接放行")
         _output_allow_json()
-        return None
+        return []
 
     if not is_complete_command(command):
         logger.debug(f"非 ticket track complete 命令: {command}")
         _output_allow_json()
-        return None
+        return []
 
     logger.info(f"識別到 ticket track complete 命令: {command}")
 
-    ticket_id = extract_ticket_id_from_command(command, logger)
-    if not ticket_id:
+    ticket_ids = extract_ticket_ids_from_command(command, logger)
+    if not ticket_ids:
         logger.error("無法從命令中提取 Ticket ID")
         _output_allow_json()
-        return None
+        return []
 
-    logger.info(f"提取 Ticket ID: {ticket_id}")
-    return ticket_id
+    logger.info(f"提取 Ticket ID: {ticket_ids}")
+    return ticket_ids
+
+
+def _extract_ticket_or_skip(tool_name: str, command: str, logger) -> Optional[str]:
+    """單一 ID 相容介面：回傳第一個 Ticket ID。"""
+    ticket_ids = _extract_ticket_ids_or_skip(tool_name, command, logger)
+    return ticket_ids[0] if ticket_ids else None
 
 
 # ============================================================================
@@ -1037,13 +1100,22 @@ def main() -> int:
         tool_name, command = parsed
 
         # 步驟 2: 識別命令並提取 Ticket ID
-        ticket_id = _extract_ticket_or_skip(tool_name, command, logger)
-        if ticket_id is None:
+        ticket_ids = _extract_ticket_ids_or_skip(tool_name, command, logger)
+        if not ticket_ids:
             return EXIT_SUCCESS
 
-        # 步驟 3: 檢查驗收狀態
-        project_dir = get_project_root()
-        result = check_acceptance_status(ticket_id, project_dir, logger, command)
+        # 步驟 3: 逐一檢查驗收狀態，任一張應擋即以該張為輸出依據並阻擋
+        # 讀票面走共用狀態根：linked worktree 內讀主倉庫票面，非 worktree 同 get_project_root
+        project_dir = get_shared_state_root(get_project_root())
+        ticket_id = ticket_ids[0]
+        result = None
+        for candidate in ticket_ids:
+            candidate_result = check_acceptance_status(candidate, project_dir, logger, command)
+            if result is None:
+                ticket_id, result = candidate, candidate_result
+            if candidate_result.should_block:
+                ticket_id, result = candidate, candidate_result
+                break
         logger.info(
             f"驗收結果: should_block={result.should_block}, "
             f"has_acceptance={result.has_acceptance}, "

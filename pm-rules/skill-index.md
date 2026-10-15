@@ -34,6 +34,7 @@
 | `/error-pattern` | 錯誤模式知識庫（query/add） |
 | `/scope-confirmation` | 功能範圍確認 |
 | `/dispatch-strategy-review` | 派發策略檢討 |
+| `/multi-session-orchestration` | 多 session 分線協調（主控 PM 統籌同儕工作線） |
 | `/dart-style-guardian` | Design System 規範執行 |
 | `/dart-test-async-guardian` | 測試異步資源管理 |
 | `/test-effectiveness` | 測試有效性驗證（覆蓋是否真實、變異測試） |

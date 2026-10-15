@@ -46,3 +46,11 @@ related:
 - worktree 內產生非預期的狀態檔副本
 
 `hook_base` 的 worktree 優先序為先前一張票的刻意修正（避免 worktree 內的 hook 動作洩漏至主 repo），故三個分析皆選擇不動共用模組，改在各自呼叫端顯式指定——此為正確處置，但也顯示問題會持續複製到下一個呼叫端。
+
+**實例二：讀共用狀態的 hook 在 linked worktree 內讀到舊副本**
+
+在 linked worktree 內，`hook_base` 版忽略 `CLAUDE_PROJECT_DIR` 而回 worktree 根。讀 ticket md 的收尾閘門（acceptance-gate）因此讀到 worktree 內的舊票面副本（主倉庫那份已全數勾選、副本未勾選），錯擋收尾；讀 `dispatch-active.json` 的並行期守衛則因 worktree 內不存在該檔而判為無派發。兩者輸出與「真的未勾選」「真的無派發」同形，無任何訊號。同一批 hook 中，改走 `git_utils` 版的讀取者在 hook 環境有 `CLAUDE_PROJECT_DIR` 時指向主倉庫而正常，使分歧只在部分 hook 顯現。
+
+處置依 Action 表第二列的邊界延伸：**不改同名函式的優先序**（`hook_base` 版仍服務日誌與 worktree 內寫檔，統一會撤銷其修正），也不只靠改名，而是**依狀態類別分流**——另立 `get_shared_state_root` 專供 shared 狀態，per-worktree 狀態維持原函式。選擇依據由「呼叫端的 import 習慣」改為「狀態屬於哪一類」，對照表見 `.claude/references/hook-system-reference.md`「Hook 狀態類別與根解析對照」。
+
+**對本模式的補充**：兩份解析規則各自合法、差異來自被解析對象的屬性（shared 或 per-worktree）時，改名只標示優先序，不足以告訴呼叫端該選哪一個；需再補一張「狀態類別 → 函式」對照表，使選擇可由狀態屬性推出。此修法的未完成範圍：`get_active_dispatches` 仍由呼叫端傳入根，承接中。

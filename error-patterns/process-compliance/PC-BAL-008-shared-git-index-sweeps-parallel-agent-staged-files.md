@@ -141,7 +141,7 @@ created: 2026-07-26
 
 | 時機 | 動作 |
 |------|------|
-| 衝突解決完畢、準備收尾提交 | 精確 `git add <衝突檔>` → `git diff --cached --name-only` 核對 index 僅含衝突檔與本次合併應有的變更 → 裸 `git commit`（`git merge --continue` 亦讀 index，同樣受此核對保護） |
+| 衝突解決完畢、準備收尾提交 | 精確 `git add <衝突檔>` → `git diff --cached --name-only` 核對 index 僅含衝突檔與本次合併應有的變更 → `GIT_EDITOR=true git merge --continue`（存在 MERGE_HEAD 時裸 `git commit` 被 `bare-commit-guard-hook.py` 拒絕） |
 | 合併前工作區已有未暫存的無關編輯 | 合併前先處置（提交或 `git stash`），不留在工作區等合併結束 |
 | 已發生捲入 | 依本檔既有條款：**不得** `revert` / `reset --soft` / `commit --amend` / 反向套用。被捲入的內容與他方同窗口的合法寫入在 diff 上不可區分，任一還原動作都會連帶撤銷後者。記錄 commit SHA 與檔案清單，上報 PM |
 

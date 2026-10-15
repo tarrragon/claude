@@ -14,6 +14,7 @@ from doc_system.commands.create import DOC_TYPE_CONFIG, _get_templates_dir
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
 from doc_system.core.tracking_schema import (
+    EVT_CATEGORIES,
     EVT_REQUIRED_FIELDS,
     NON_DOMAIN_PATHS_FILE,
     NonDomainPathsFormatError,
@@ -55,8 +56,12 @@ _PLACEHOLDER_PATTERN = re.compile(r"^\{.*\}$")
 
 # EVT 型別必填 frontmatter 欄位改讀 tracking_schema.EVT_REQUIRED_FIELDS
 # （單一 SSOT，見 #99 第三項裁決：完整性集合語意為「欄位必須存在，值可
-# 為 null 或 []」）。category 值域維持本檔獨立常數，不在本票範圍調整。
-EVENT_VALID_CATEGORIES = ("domain_event", "process_event")
+# 為 null 或 []」）。category 值域讀 tracking_schema.EVT_CATEGORIES
+# （建立端定義），本檔不自持；訊息中依字母序列出以保持輸出穩定。
+EVENT_VALID_CATEGORIES = tuple(sorted(EVT_CATEGORIES))
+
+# 此 category 的 EVT 允許無 consumer（步驟進行中標記），其餘 category 必有 consumer
+EVENT_CATEGORY_WITHOUT_CONSUMER = "process_event"
 
 
 def _extract_headers(text: str) -> list[str]:
@@ -156,9 +161,10 @@ def _validate_event(frontmatter: dict) -> list[str]:
     `find_missing_completeness_fields` 只判斷欄位是否存在，id/name/
     canonical_name/category 這四個識別/顯示欄位額外要求值非空——這是
     EVT 型別的附加規則，不屬圖譜 schema 的通用完整性語意（該語意允許
-    FlowStep 等型別的欄位為 null/[]）。producers/consumers 同屬附加規則，
-    是本型別的核心價值：缺任一端代表事件的發送方或接收方未被記錄，交叉
-    驗證正是為了在文件層攔截這類缺口。
+    FlowStep 等型別的欄位為 null/[]）。producers 對所有 category 必填；
+    consumers 依 category 分流（依 tracking_schema.EVT_CATEGORIES 定義）：
+    domain_event 必填，process_event 允許為空或缺鍵。缺必填端代表事件的
+    發送方或接收方未被記錄，交叉驗證正是為了在文件層攔截這類缺口。
     """
     missing: list[str] = []
 
@@ -180,7 +186,7 @@ def _validate_event(frontmatter: dict) -> list[str]:
 
     if not frontmatter.get("producers"):
         missing.append("缺少 producer：EVT 必須至少一個 producer")
-    if not frontmatter.get("consumers"):
+    if category != EVENT_CATEGORY_WITHOUT_CONSUMER and not frontmatter.get("consumers"):
         missing.append("缺少 consumer：EVT 必須至少一個 consumer")
 
     return missing

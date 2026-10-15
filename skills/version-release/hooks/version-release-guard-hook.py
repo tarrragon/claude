@@ -41,7 +41,7 @@ from lib.hook_io import (
     create_simple_output,
 )
 from lib.git_utils import get_project_root
-from lib import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely, emit_hook_output
 
 
 def is_version_release_commit(tool_input: dict, logger: logging.Logger) -> tuple:
@@ -147,6 +147,7 @@ def main() -> int:
         return 0
 
     logger.info(f"Detected version release commit: {version_tag}")
+    warnings = []
 
     # 檢查 1: 是否透過 version_release.py 執行
     if not is_via_version_release_script(logger):
@@ -168,15 +169,25 @@ def main() -> int:
 繼續執行中...
 """
         logger.warning("Not executing via version_release.py")
-        print(warning_msg, file=sys.stderr)
+        warnings.append(warning_msg)
 
     # 檢查 2: pubspec.yaml 版本一致性
     version_ok, version_info = check_pubspec_version(logger)
     if not version_ok:
-        print(f"[Version Release Guard] 警告: {version_info}", file=sys.stderr)
+        warnings.append(f"[Version Release Guard] 警告: {version_info}")
 
     # 通過檢查（改為警告模式而非阻止）
     logger.info("Version release guard passed")
+    if warnings:
+        # 提醒走 additionalContext，並保留原核准決策（原輸出 decision=approve，
+        # 等同 allow）；單一 JSON，受眾過濾仍經 emit_hook_output 單點
+        emit_hook_output(
+            "PreToolUse",
+            additional_context="\n".join(warnings),
+            permission_decision="allow",
+            input_data=hook_input,
+        )
+        return 0
     output = create_simple_output("approve")
     write_hook_output(output)
     return 0

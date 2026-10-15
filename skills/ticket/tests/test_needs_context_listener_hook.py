@@ -187,12 +187,13 @@ class TestSuccessCheckViaRealExecutionResult:
 
     def test_zero_exit_code_without_success_echo_no_message(self):
         """exit_code 為 0 但 stdout 未含 CLI 成功回音時不宣告已更新（防禦性檢查）。"""
+        # 286.3：未遮蔽命令走第 1 層即成功；此防禦性檢查只對被遮蔽的命令生效
         rc, out = _run_main_logic(
             {
                 "tool_input": {
                     "command": (
                         'ticket track append-log 0.19.0-W3-097 --section '
-                        '"NeedsContext" "..."'
+                        '"NeedsContext" "..." 2>&1 | tail -5'
                     )
                 },
                 "tool_response": {
@@ -236,3 +237,40 @@ class TestSuccessCheckViaRealExecutionResult:
         )
         assert rc == 0
         assert out.strip(), f"stdout 缺席不應阻擋既有成功路徑，實際：{out!r}"
+
+    def test_unmasked_redirected_output_still_triggers_message(self):
+        """286.3 第 1 層：輸出被重導向吸走（stdout 空）的未遮蔽命令判為成功。"""
+        rc, out = _run_main_logic(
+            {
+                "tool_input": {
+                    "command": (
+                        'ticket track append-log 0.19.0-W3-097 --section '
+                        '"NeedsContext" "..." > /dev/null 2>&1'
+                    )
+                },
+                "tool_response": {"stdout": "", "stderr": "", "interrupted": False},
+            }
+        )
+        assert rc == 0
+        assert out.strip(), f"未遮蔽且輸出被吸走應觸發訊息，實際：{out!r}"
+
+    def test_masked_with_echo_in_stdout_triggers_message(self):
+        """被遮蔽的命令退回標記：stdout 含成功回音即觸發。"""
+        ticket_id = "0.19.0-W3-097"
+        rc, out = _run_main_logic(
+            {
+                "tool_input": {
+                    "command": (
+                        f'ticket track append-log {ticket_id} --section '
+                        '"NeedsContext" "..." 2>&1 | tail -5'
+                    )
+                },
+                "tool_response": {
+                    "stdout": f"[OK] {ticket_id} 已追加日誌到 'NeedsContext'",
+                    "stderr": "",
+                    "interrupted": False,
+                },
+            }
+        )
+        assert rc == 0
+        assert out.strip()

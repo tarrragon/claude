@@ -24,8 +24,10 @@ NeedsContext Listener Hook - PostToolUse (Bash)
     影響/建議補料/重派成本
 
 修復記錄（觸發條件過寬 + 成功檢查過弱）:
-  - 觸發條件改為 shell token 解析（parse_command_statements）比對命令位置
-    token，取代先前對命令字串原文做全文 regex search 的作法——後者會把引號
+  - 觸發條件改為 shell token 解析（parse_command_statements）後，在每個語句
+    的 token 清單內做任意位置的視窗掃描（連續六個 token 精確比對，無前綴
+    白名單，不限於命令位置），取代先前對命令字串原文做全文 regex search 的
+    作法——後者會把引號
     內的參數值（如文件撰寫、issue body、探針腳本提及該命令形態的字面文字）
     誤判為實際要執行的命令，且未驗證擷取的 ticket_id 是否為合法格式（可能
     命中字面佔位符如 `<ticket-id>`）。
@@ -34,6 +36,15 @@ NeedsContext Listener Hook - PostToolUse (Bash)
     "success") is False`，但 Bash 工具的 tool_response 通常不帶 `success`
     欄位（CLI 以非零 exit code 表示失敗時該欄位仍可能缺席），故寫入被拒
     （如票狀態非 in_progress）仍會主動宣告已更新。
+
+已知誤判（可接受）:
+  - 因為是語句內任意位置的視窗掃描，echo、grep、man、ssh 等命令之後接完整
+    命令字面（未加引號而被切成獨立 token）時也會命中。
+  - 可接受理由：本 hook 為提示型（PostToolUse 只提醒、不阻擋），誤判只多一則
+    提醒；且命中需同時滿足三個條件——含合法格式的 ticket ID（FULL_ANCHORED_RE）、
+    `--section NeedsContext`、PostToolUse 回音含「已追加日誌到」（成功回音）。
+  - 未覆蓋（漏判）：以變數帶入 ticket ID 或 section 名稱，命令文字中看不到
+    實際值，經用戶裁定改靠自律。
 """
 
 import json
@@ -51,13 +62,15 @@ from lib import (
     run_hook_safely,
     is_subagent_environment,
 )
+from lib.bash_tool_response import is_bash_success
 from lib.git_command_parse import parse_command_statements
 from lib.ticket_id_pattern import FULL_ANCHORED_RE
 
 HOOK_NAME = "needs-context-listener-hook"
 EXIT_SUCCESS = 0
 
-# 命令位置 token 子序列：ticket track append-log <id> --section NeedsContext
+# 視窗掃描比對的 token 子序列（語句內任意位置）：
+# ticket track append-log <id> --section NeedsContext
 _APPEND_LOG_PATTERN_LEN = 6
 _SECTION_FLAG_TOKEN = "--section"
 _NEEDS_CONTEXT_SECTION_TOKEN = "NeedsContext"
@@ -68,15 +81,18 @@ _LOG_APPENDED_SUCCESS_MARKER = "已追加日誌到"
 
 
 # ticket CLI 寫入命令「動作已完成、僅 auto-commit 失敗」的專用退出碼（sysexits EX_TEMPFAIL）
-EXIT_AUTO_COMMIT_FAILED = 75
 
 def _match_append_log_needscontext(tokens: List[str]) -> Optional[str]:
     """在單一語句 token 清單中尋找 `ticket track append-log <id> --section
     NeedsContext` 子序列，回傳格式合法的 ticket_id；否則回傳 None。
 
-    以命令位置 token 精確比對（非字串 search），引號內的參數值（如 ticket
-    描述文字提及該命令形態的字面文字）在 tokenize 階段已收斂成單一 token，
-    不會與這六個分開的 token 精確匹配，故不會誤判為實際要執行的命令。
+    以 token 視窗精確比對（非字串 search）：在語句內任意位置滑動六個 token
+    的視窗，不限命令位置、無前綴白名單。引號內的參數值（如 ticket 描述文字
+    提及該命令形態的字面文字）在 tokenize 階段已收斂成單一 token，不會與
+    這六個分開的 token 精確匹配，故不會誤判。
+    已知誤判：echo、grep、man、ssh 之後接完整命令字面時也會命中；提示型
+    hook 誤判只多一則提醒，且仍須合法 ticket ID 與 `--section NeedsContext`，
+    成功回音檢查在 main_logic。
     """
     for i in range(len(tokens) - _APPEND_LOG_PATTERN_LEN + 1):
         window = tokens[i : i + _APPEND_LOG_PATTERN_LEN]
@@ -97,7 +113,8 @@ def _match_append_log_needscontext(tokens: List[str]) -> Optional[str]:
 def extract_ticket_id(command: str) -> Optional[str]:
     """若命令為 ticket track append-log <id> --section NeedsContext，回傳 ticket_id。
 
-    以 shell token 解析（parse_command_statements）比對命令位置 token，取代
+    以 shell token 解析（parse_command_statements）後逐語句做任意位置視窗
+    掃描（非僅命令位置，見 _match_append_log_needscontext），取代
     先前對命令字串原文做全文 regex search 的作法——後者會把引號內的參數值
     （如 ticket --why 描述文字提及該命令形態）誤判為實際要執行的命令。找到
     候選 ticket_id 後另以 FULL_ANCHORED_RE 驗證格式，排除字面佔位符（如
@@ -146,14 +163,14 @@ def main_logic() -> int:
     if tool_response.get("success") is False:
         return EXIT_SUCCESS
 
-    exit_code = tool_response.get("exit_code")
-    if exit_code is not None and exit_code not in (0, EXIT_AUTO_COMMIT_FAILED):
-        return EXIT_SUCCESS
-
-    # stdout 非空時，要求含 CLI 成功回音才視為真正寫入成功；stdout 缺席
-    # （測試樁或部分 Bash 回應未帶此欄位）時不因此判定失敗，交由上兩項把關
-    stdout = tool_response.get("stdout", "")
-    if stdout and _LOG_APPENDED_SUCCESS_MARKER not in stdout:
+    # 成功判定改接共用 helper（interrupted 檢查加成功回音）。PostToolUse 只在 shell 層
+    # 結束碼為 0 時觸發，結束碼 75 屬非零、不會在此出現，原 75 分支已移除。
+    # stdout 欄位缺席（測試樁或部分 Bash 回應）時不因此判定失敗，交由上方 success 欄位把關
+    # 分層判定只接第 1 層：append-log 每次呼叫都實際追加，沒有「重複呼叫但無轉換」的情形，
+    # 在乎的是命令成功，不需票面驗證器；被遮蔽時退回成功回音標記。
+    if "stdout" in tool_response and not is_bash_success(
+        tool_response, (_LOG_APPENDED_SUCCESS_MARKER,), command=command
+    ):
         return EXIT_SUCCESS
 
     # W3-097 中性化（方案 V）：不預設 caller 為代理人，對 PM 自填與代理人回報情境皆適用

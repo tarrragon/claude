@@ -232,7 +232,7 @@ def test_dispatch_count_guard_counts_background_dispatch(monkeypatch, tmp_path):
 
     # 隔離狀態檔到 tmp_path
     state_file = tmp_path / "batch-state.json"
-    monkeypatch.setattr(hook, "get_batch_state_file", lambda: state_file)
+    monkeypatch.setattr(hook, "get_batch_state_file", lambda *a, **kw: state_file)
 
     # W17-197: dispatch-count-guard-hook 內部讀取 `hook_event_name`（snake_case），
     # 原測試誤用 camelCase `hookEventName` 導致進入 unknown event 分支，

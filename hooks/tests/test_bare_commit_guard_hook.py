@@ -54,6 +54,8 @@ import sys
 import importlib.util
 from pathlib import Path
 
+import subprocess
+
 import pytest
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
@@ -88,6 +90,7 @@ def _run_hook(
     unstaged_files=None,
     tool_name: str = "Bash",
     project_root: Path = Path("/fake/project"),
+    merge_head: bool = False,
 ) -> int:
     """以 monkeypatch 模擬 stdin + 依賴（活躍派發清單 / staged 檔案 /
     unstaged tracked 檔案），執行 main()。"""
@@ -95,6 +98,8 @@ def _run_hook(
     stdin_buffer = io.StringIO(json.dumps(payload))
     monkeypatch.setattr(sys, "stdin", stdin_buffer)
     monkeypatch.setattr(hook_module, "get_project_root", lambda: project_root)
+    monkeypatch.setattr(hook_module, "_merge_in_progress", lambda *a, **k: merge_head)
+    monkeypatch.setattr(hook_module, "_other_operation_state", lambda *a, **k: None)
     monkeypatch.setattr(
         hook_module, "_get_active_dispatches_safe", lambda root: dispatches or []
     )
@@ -998,3 +1003,417 @@ class TestLiveScopeFallbackToSnapshot:
         original = _dispatch(_LIVE_TICKET_ID, ["snap.py"])
         hook_module._with_live_declared_files([original], tmp_path, _RecordingLogger())
         assert original["files"] == ["snap.py"]
+
+
+# ============================================================================
+# MERGE_HEAD 存在時拒絕裸 commit（E2 正向對照：存在 vs 不存在）
+# ============================================================================
+
+
+class TestMergeHeadPresent:
+    def test_denied_with_merge_head_no_dispatch(self, monkeypatch, capsys):
+        rc = _run_hook(monkeypatch, 'git commit -m "x"', merge_head=True)
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "git merge --continue" in err
+        assert "GIT_EDITOR=true git merge --continue" in err
+        assert "MERGE_MSG" in err
+        assert "--abort" not in err
+
+    def test_denied_with_merge_head_in_parallel_period(self, monkeypatch, capsys):
+        rc = _run_hook(
+            monkeypatch,
+            'git commit -m "x"',
+            dispatches=[_dispatch("T-1", ["a.py"])],
+            staged_files=["a.py"],
+            merge_head=True,
+        )
+        assert rc == 2
+
+    def test_not_denied_without_merge_head(self, monkeypatch, capsys):
+        rc = _run_hook(monkeypatch, 'git commit -m "x"', merge_head=False)
+        assert rc == 0
+        assert "git merge --continue" not in capsys.readouterr().err
+
+    def test_amend_still_allowed_with_merge_head(self, monkeypatch, capsys):
+        rc = _run_hook(monkeypatch, "git commit --amend --no-edit", merge_head=True)
+        assert rc == 0
+
+    def test_all_flag_commit_denied_with_merge_head(self, monkeypatch):
+        assert _run_hook(monkeypatch, 'git commit -am "x"', merge_head=True) == 2
+
+    def test_pathspec_commit_denied_with_merge_head(self, monkeypatch):
+        assert _run_hook(monkeypatch, 'git commit -m x -- f.py', merge_head=True) == 2
+
+
+def _real_git(repo: Path, *args: str) -> None:
+    import subprocess
+
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+class TestMergeInProgressRealRepo:
+    """不 mock 偵測函式：真實 repo 中 merge --no-commit 前後各斷言一次。"""
+
+    def test_false_before_and_true_after_merge_no_commit(self, tmp_path):
+        _real_git(tmp_path, "init", "-q", "-b", "main")
+        (tmp_path / "a.txt").write_text("a\n")
+        _real_git(tmp_path, "add", "a.txt")
+        _real_git(tmp_path, "commit", "-q", "-m", "base")
+        _real_git(tmp_path, "checkout", "-q", "-b", "side")
+        (tmp_path / "b.txt").write_text("b\n")
+        _real_git(tmp_path, "add", "b.txt")
+        _real_git(tmp_path, "commit", "-q", "-m", "side")
+        _real_git(tmp_path, "checkout", "-q", "main")
+        assert hook_module._merge_in_progress(tmp_path) is False
+        _real_git(tmp_path, "merge", "--no-ff", "--no-commit", "side")
+        assert hook_module._merge_in_progress(tmp_path) is True
+
+
+# ============================================================================
+# 0.5.0-W1-120.4：偵測目錄（-C > payload cwd > root）與失敗語意
+# ============================================================================
+
+
+def _git_out(repo: Path, *args: str) -> None:
+    _real_git(repo, *args)
+
+
+@pytest.fixture
+def main_and_wt(tmp_path):
+    main_repo = tmp_path / "main"
+    main_repo.mkdir()
+    _real_git(main_repo, "init", "-q", "-b", "main")
+    (main_repo / "a.txt").write_text("a\n")
+    _real_git(main_repo, "add", "a.txt")
+    _real_git(main_repo, "commit", "-q", "-m", "base")
+    for br in ("side1", "side2"):
+        _real_git(main_repo, "checkout", "-q", "-b", br)
+        (main_repo / f"{br}.txt").write_text(br)
+        _real_git(main_repo, "add", f"{br}.txt")
+        _real_git(main_repo, "commit", "-q", "-m", br)
+        _real_git(main_repo, "checkout", "-q", "main")
+    wt = tmp_path / "wt"
+    _real_git(main_repo, "worktree", "add", "-q", "-b", "wtbr", str(wt), "main")
+    return main_repo, wt
+
+
+def _run_real(monkeypatch, command, root, cwd=None, logger_sink=None):
+    """不 mock 偵測函式；只固定 root、派發為空。"""
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+    if cwd is not None:
+        payload["cwd"] = str(cwd)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: root)
+    monkeypatch.setattr(hook_module, "_get_active_dispatches_safe", lambda r: [])
+    return main()
+
+
+class TestMergeDetectDirFourCells:
+    """合併位置 x 提交位置。root 固定為主工作樹。"""
+
+    def test_main_merging(self, monkeypatch, main_and_wt):
+        main_repo, wt = main_and_wt
+        _real_git(main_repo, "merge", "--no-ff", "--no-commit", "side1")
+        # 主工作樹提交：擋
+        assert _run_real(monkeypatch, 'git commit -m x', main_repo, cwd=main_repo) == 2
+        # cwd 在 worktree：不擋（原誤擋）
+        assert _run_real(monkeypatch, 'git commit -m x', main_repo, cwd=wt) == 0
+        # -C worktree：不擋（原誤擋）
+        assert _run_real(monkeypatch, f'git -C {wt} commit -m x', main_repo, cwd=main_repo) == 0
+        # -C 主工作樹、cwd 在 worktree：擋（-C 優先於 cwd）
+        assert _run_real(monkeypatch, f'git -C {main_repo} commit -m x', main_repo, cwd=wt) == 2
+
+    def test_worktree_merging(self, monkeypatch, main_and_wt):
+        main_repo, wt = main_and_wt
+        _real_git(wt, "merge", "--no-ff", "--no-commit", "side2")
+        # 主工作樹提交：不擋
+        assert _run_real(monkeypatch, 'git commit -m x', main_repo, cwd=main_repo) == 0
+        # cwd 在 worktree：擋
+        assert _run_real(monkeypatch, 'git commit -m x', main_repo, cwd=wt) == 2
+        # -C worktree：擋（原漏擋）
+        assert _run_real(monkeypatch, f'git -C {wt} commit -m x', main_repo, cwd=main_repo) == 2
+        # 無 payload cwd 時退回 root（主工作樹）：不擋
+        assert _run_real(monkeypatch, 'git commit -m x', main_repo) == 0
+
+    def test_relative_dash_c_uses_payload_cwd(self, monkeypatch, main_and_wt):
+        main_repo, wt = main_and_wt
+        _real_git(wt, "merge", "--no-ff", "--no-commit", "side2")
+        assert _run_real(monkeypatch, 'git -C ../wt commit -m x', main_repo, cwd=main_repo) == 2
+
+
+class _Sink:
+    def __init__(self):
+        self.warnings = []
+
+    def warning(self, msg, *args):
+        self.warnings.append(msg % args if args else msg)
+
+
+class TestMergeDetectFailureSemantics:
+    def test_failure_fail_open_with_warning(self, monkeypatch, tmp_path):
+        sink = _Sink()
+
+        def boom(*a, **k):
+            return subprocess.CompletedProcess(a, 128, "", "fatal: not a git repository")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", boom)
+        assert hook_module._merge_in_progress(tmp_path, sink) is False
+        assert len(sink.warnings) == 1
+        assert "rc=128" in sink.warnings[0] and str(tmp_path) in sink.warnings[0]
+
+    def test_timeout_fail_open_with_warning(self, monkeypatch, tmp_path):
+        sink = _Sink()
+
+        def slow(*a, **k):
+            raise subprocess.TimeoutExpired("git", 10)
+
+        monkeypatch.setattr(hook_module.subprocess, "run", slow)
+        assert hook_module._merge_in_progress(tmp_path, sink) is False
+        assert len(sink.warnings) == 1 and "TimeoutExpired" in sink.warnings[0]
+
+    def test_no_merge_writes_no_warning(self, main_and_wt):
+        main_repo, _ = main_and_wt
+        sink = _Sink()
+        assert hook_module._merge_in_progress(main_repo, sink) is False
+        assert sink.warnings == []
+
+    def test_real_nonexistent_dir_warns(self, tmp_path):
+        sink = _Sink()
+        assert hook_module._merge_in_progress(tmp_path / "nope", sink) is False
+        assert len(sink.warnings) == 1
+
+
+class TestMergeDetectFailureStderr:
+    _MARK = "MERGE_HEAD 偵測失敗，本次未檢查合併狀態"
+
+    def test_rc_failure_writes_stderr(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(
+            hook_module.subprocess, "run",
+            lambda *a, **k: subprocess.CompletedProcess(a, 128, "", "fatal"),
+        )
+        assert hook_module._merge_in_progress(tmp_path, _Sink()) is False
+        err = capsys.readouterr().err
+        assert self._MARK in err and str(tmp_path) in err and "rc=128" in err
+
+    def test_exception_writes_stderr(self, monkeypatch, tmp_path, capsys):
+        def slow(*a, **k):
+            raise subprocess.TimeoutExpired("git", 10)
+
+        monkeypatch.setattr(hook_module.subprocess, "run", slow)
+        assert hook_module._merge_in_progress(tmp_path, _Sink()) is False
+        assert self._MARK in capsys.readouterr().err
+
+    def test_no_merge_no_stderr(self, main_and_wt, capsys):
+        main_repo, _ = main_and_wt
+        assert hook_module._merge_in_progress(main_repo, _Sink()) is False
+        assert self._MARK not in capsys.readouterr().err
+
+
+# ============================================================================
+# 0.5.0-W1-120.5.1：CHERRY_PICK_HEAD／REVERT_HEAD／rebase 進行中（真實 git，不 mock 偵測）
+# ============================================================================
+
+import os
+
+
+def _g(repo: Path, *args: str, env_extra=None, check=True):
+    env = dict(os.environ, GIT_EDITOR="true", **(env_extra or {}))
+    return subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        check=check, capture_output=True, text=True, env=env,
+    )
+
+
+def _conflict_repo(tmp_path: Path) -> Path:
+    """main 與 side 對 a.txt 衝突；feat 兩個 commit，第一個與 main 衝突。"""
+    r = tmp_path / "r"
+    r.mkdir()
+    _g(r, "init", "-q", "-b", "main")
+    (r / "a.txt").write_text("base\n")
+    _g(r, "add", "a.txt")
+    _g(r, "commit", "-q", "-m", "base")
+    for br, txt in (("side", "side\n"), ("feat", "feat\n")):
+        _g(r, "checkout", "-q", "-b", br, "main")
+        (r / "a.txt").write_text(txt)
+        _g(r, "commit", "-q", "-am", br)
+        if br == "feat":
+            (r / "f2.txt").write_text("f2\n")
+            _g(r, "add", "f2.txt")
+            _g(r, "commit", "-q", "-m", "feat2")
+    _g(r, "checkout", "-q", "main")
+    (r / "a.txt").write_text("main\n")
+    _g(r, "commit", "-q", "-am", "main2")
+    return r
+
+
+def _resolve(r: Path):
+    (r / "a.txt").write_text("resolved\n")
+    _g(r, "add", "a.txt")
+
+
+class TestPendingOperationRealGit:
+    def test_clean_is_none(self, tmp_path):
+        r = _conflict_repo(tmp_path)
+        assert hook_module._other_operation_state(r) is None
+        assert _run_real(pytest.MonkeyPatch(), 'git commit -m x', r, cwd=r) == 0
+
+    def test_cherry_pick_denied(self, monkeypatch, tmp_path, capsys):
+        r = _conflict_repo(tmp_path)
+        _g(r, "cherry-pick", "side", check=False)
+        _resolve(r)
+        assert hook_module._other_operation_state(r) == "cherry-pick"
+        assert _run_real(monkeypatch, 'git commit -m x', r, cwd=r) == 2
+        err = capsys.readouterr().err
+        assert "git cherry-pick --continue" in err and "GIT_EDITOR=true" in err
+        assert "--abort" not in err
+        assert _run_real(monkeypatch, 'git commit --amend --no-edit', r, cwd=r) == 0
+
+    def test_revert_denied(self, monkeypatch, tmp_path, capsys):
+        r = _conflict_repo(tmp_path)
+        _g(r, "revert", "--no-commit", "HEAD")
+        assert hook_module._other_operation_state(r) == "revert"
+        assert _run_real(monkeypatch, 'git commit -m x', r, cwd=r) == 2
+        assert "git revert --continue" in capsys.readouterr().err
+
+    def test_rebase_conflict_denied(self, monkeypatch, tmp_path, capsys):
+        r = _conflict_repo(tmp_path)
+        _g(r, "checkout", "-q", "feat")
+        _g(r, "rebase", "main", check=False)
+        _resolve(r)
+        assert hook_module._other_operation_state(r) == "rebase"
+        assert _run_real(monkeypatch, 'git commit -m x', r, cwd=r) == 2
+        assert "git rebase --continue" in capsys.readouterr().err
+
+    def test_rebase_edit_warns_and_allows(self, monkeypatch, tmp_path, capsys):
+        r = _conflict_repo(tmp_path)
+        _g(r, "checkout", "-q", "side")
+        _g(r, "rebase", "-i", "main~1", check=False,
+           env_extra={"GIT_SEQUENCE_EDITOR": "sed -i.bak 's/^pick/edit/'"})
+        assert (r / ".git" / "rebase-merge" / "amend").exists()
+        assert hook_module._other_operation_state(r) == "rebase-edit"
+        assert _run_real(monkeypatch, 'git commit -m x', r, cwd=r) == 0
+        assert "rebase 在 edit 停下" in capsys.readouterr().err
+        assert _run_real(monkeypatch, 'git commit --amend --no-edit', r, cwd=r) == 0
+
+    def test_unparsable_denied_when_not_parallel(self, monkeypatch, tmp_path, capsys):
+        r = _conflict_repo(tmp_path)
+        _g(r, "cherry-pick", "side", check=False)
+        assert _run_real(monkeypatch, 'git commit -m "unterminated', r, cwd=r) == 2
+        assert "cherry-pick" in capsys.readouterr().err
+
+    def test_unparsable_warns_when_clean(self, monkeypatch, tmp_path):
+        r = _conflict_repo(tmp_path)
+        assert _run_real(monkeypatch, 'git commit -m "unterminated', r, cwd=r) == 0
+
+    def test_dash_c_and_cwd_order(self, monkeypatch, main_and_wt, tmp_path):
+        main_repo, wt = main_and_wt
+        _g(wt, "cherry-pick", "side2", check=False)  # 乾淨 pick 會直接提交
+        _g(wt, "cherry-pick", "--abort", check=False)
+        # worktree 內製造 revert 進行中；主工作樹不受影響
+        _g(wt, "revert", "--no-commit", "HEAD", check=False)
+        assert _run_real(monkeypatch, 'git commit -m x', main_repo, cwd=main_repo) == 0
+        assert _run_real(monkeypatch, 'git commit -m x', main_repo, cwd=wt) == 2
+        assert _run_real(monkeypatch, f'git -C {wt} commit -m x', main_repo, cwd=main_repo) == 2
+
+    def test_detect_failure_fail_open_dual_channel(self, tmp_path, capsys):
+        sink = _Sink()
+        assert hook_module._other_operation_state(tmp_path / "nope", sink) is None
+        assert len(sink.warnings) == 1
+        assert "偵測失敗" in capsys.readouterr().err
+
+
+class TestPendingOperationMutation:
+    """變異確認：偵測函式失效（恆回 None）時正向對照必須翻紅。"""
+
+    def test_blind_detector_lets_cherry_pick_through(self, monkeypatch, tmp_path):
+        r = _conflict_repo(tmp_path)
+        _g(r, "cherry-pick", "side", check=False)
+        monkeypatch.setattr(hook_module, "_other_operation_state", lambda *a, **k: None)
+        assert _run_real(monkeypatch, 'git commit -m x', r, cwd=r) == 0
+
+
+# ============================================================================
+# scan 模式：僅掃描命中的呼叫比照無法解析（0.5.0-W1-120.7.9.2）
+# ============================================================================
+
+_SCAN_ONLY_COMMANDS = [
+    "find . -exec git commit -m x \\;",
+    "taskset 0x1 git commit -m x",
+    "strace git commit -m x",
+]
+
+
+class TestScanOnlyTreatedAsUnparsable:
+    @pytest.mark.parametrize("command", _SCAN_ONLY_COMMANDS)
+    def test_parallel_blocks(self, monkeypatch, capsys, command):
+        exit_code = _run_hook(
+            monkeypatch, command, dispatches=[_dispatch("T-1", ["a.py"])]
+        )
+        assert exit_code == 2
+        assert "無法安全解析" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("command", _SCAN_ONLY_COMMANDS)
+    def test_non_parallel_warns(self, monkeypatch, capsys, command):
+        exit_code = _run_hook(monkeypatch, command, dispatches=[])
+        assert exit_code == 0
+        assert "無法安全解析" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "command", ["grep git commit notes.txt", "grep 'git commit' notes.txt", "man git-commit"]
+    )
+    def test_text_lookup_not_blocked_when_non_parallel(self, monkeypatch, capsys, command):
+        assert _run_hook(monkeypatch, command, dispatches=[]) == 0
+
+    def test_position_hit_parallel_unchanged(self, monkeypatch, capsys):
+        exit_code = _run_hook(
+            monkeypatch, 'git commit -m "x"',
+            dispatches=[_dispatch("T-1", ["a.py"]), _dispatch("T-2", ["b.py"])],
+            staged_files=["a.py", "b.py"],
+        )
+        assert exit_code == 2
+        assert "無法安全解析" not in capsys.readouterr().err
+
+    def test_position_hit_non_parallel_unchanged(self, monkeypatch, capsys):
+        assert _run_hook(monkeypatch, 'git commit -m "x"', dispatches=[]) == 0
+        assert "無法安全解析" not in capsys.readouterr().err
+
+    def test_mutation_without_scan_parallel_scan_only_slips_through(self, monkeypatch):
+        """變異確認：移除 scan=True 後，僅掃描命中輸入在並行期放行（證明測試有鑑別力）。"""
+        orig = hook_module.find_git_invocations
+        monkeypatch.setattr(
+            hook_module, "find_git_invocations",
+            lambda c, s, *a, **k: orig(c, s),
+        )
+        exit_code = _run_hook(
+            monkeypatch, "find . -exec git commit -m x \\;",
+            dispatches=[_dispatch("T-1", ["a.py"])],
+        )
+        assert exit_code == 0
+
+
+# ============================================================================
+# 無法解析成因區分：tokenize 失敗 vs 僅掃描命中（0.5.0-W1-120.7.10）
+# ============================================================================
+
+
+class TestParseCauseMessages:
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_tokenize_failure_message(self, monkeypatch, capsys, parallel):
+        dispatches = [_dispatch("T-1", ["a.py"])] if parallel else []
+        _run_hook(monkeypatch, 'git commit -m "unterminated', dispatches=dispatches)
+        err = capsys.readouterr().err
+        assert "未閉合引號" in err
+        assert "非命令位置" not in err
+
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_scan_only_message(self, monkeypatch, capsys, parallel):
+        dispatches = [_dispatch("T-1", ["a.py"])] if parallel else []
+        _run_hook(monkeypatch, "find . -exec git commit -m x \\;", dispatches=dispatches)
+        err = capsys.readouterr().err
+        assert "非命令位置" in err
+        assert "未閉合引號" not in err

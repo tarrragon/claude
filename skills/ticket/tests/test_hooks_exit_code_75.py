@@ -66,17 +66,46 @@ def test_needs_context_listener_hook(exit_code, expected, capsys):
     assert ("NeedsContext" in capsys.readouterr().out) is expected
 
 
-@pytest.mark.parametrize("exit_code, expected_feedback", [(0, False), (75, False), (1, True)])
-def test_cli_error_feedback_hook(exit_code, expected_feedback):
-    hook = _load(_CLAUDE / "skills" / "ticket" / "hooks" / "cli-error-feedback-hook.py", "cef_hook")
-    payload = _payload(
-        "ticket track append-log 0.1.0-W1-001 --section Solution x",
-        exit_code,
-        "",
-        "error: unrecognized arguments: --bogus",
-    )
-    result = hook.check_skill_cli_error(payload, _LOGGER)
-    assert (result is not None) is expected_feedback
+_CEF_CMD = "ticket track append-log 0.1.0-W1-001 --section Solution x"
+_CEF_ERR = "error: unrecognized arguments: --bogus"
+
+
+def _cef():
+    return _load(_CLAUDE / "skills" / "ticket" / "hooks" / "cli-error-feedback-hook.py", "cef_hook")
+
+
+def test_cli_error_feedback_hook_real_shape_success_no_feedback():
+    """真實形狀（無 exit_code）的成功命令：stdout 有 [OK] 回音，即使引述錯誤字樣也不回饋。"""
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": _CEF_CMD},
+        "tool_response": {
+            "stdout": "[OK] 0.1.0-W1-001 已追加日誌到 'Solution'\n" + _CEF_ERR,
+            "stderr": "",
+            "interrupted": False,
+            "isImage": False,
+            "noOutputExpected": False,
+        },
+    }
+    assert _cef().check_skill_cli_error(payload, _LOGGER) is None
+
+
+def test_cli_error_feedback_hook_exit_code_1_gives_feedback():
+    result = _cef().check_skill_cli_error(_payload(_CEF_CMD, 1, "", _CEF_ERR), _LOGGER)
+    assert result is not None
+
+
+def test_cli_error_feedback_hook_exit_code_75_compat_payload():
+    """結束碼 75 屬非零，真實流程走 PostToolUseFailure（由 0.5.0-W1-281 處理），
+    PostToolUse 上不會發生。此處僅驗證帶 exit_code 75 的相容 payload 依 helper 判定：
+    有 [OK] 回音視為成功不回饋；無成功回音則不視為成功，錯誤字樣照常回饋。
+    """
+    hook = _cef()
+    ok = _payload(_CEF_CMD, 75, "[OK] 0.1.0-W1-001 已追加日誌到 'Solution'")
+    assert hook.check_skill_cli_error(ok, _LOGGER) is None
+    # 286.3：未遮蔽命令走第 1 層即成功；無成功回音才回饋的情形限於被遮蔽的命令
+    bad = _payload(_CEF_CMD + " 2>&1 | tail -5", 75, "", _CEF_ERR)
+    assert hook.check_skill_cli_error(bad, _LOGGER) is not None
 
 
 @pytest.mark.parametrize(

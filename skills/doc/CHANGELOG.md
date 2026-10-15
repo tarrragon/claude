@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.24.12 — 三份 SPEC 模板（`spec-template.md`、`component-library-spec-template.md`、`design-system-spec-template.md`）frontmatter 新增 `has_functional_requirements: true` 與行內註解，說明預設 true、只認小寫 true/false、false 時 FR 覆蓋檢查略過且輸出為未執行比對、宣告 false 但內容有以 FR 開頭的標題行報錯（行為以 `.claude/skills/spec/scripts/check_domain_coverage.py` 為準）。兩份專用模板預設同為 true。僅改模板，無程式碼變更。
+
+**Version**: 1.24.11 — `doc validate` 對 EVT 的 consumers 非空檢查依 category 分流（依 `tracking_schema.EVT_CATEGORIES` 定義）：`domain_event` 仍必須非空，`process_event` 允許為空或缺鍵；producers 對所有 category 仍必填。`validate.py` 的 category 值域改引用 `EVT_CATEGORIES`，不再自持。同步 SKILL.md、event-template.md、validate docstring、測試檔頭敘述。測試：E1 對照（同一 fixture 只換 category，結果相反）、producers 空仍紅。`doc schema export` 輸出與型別表 JSON 不變。
+
 **Version**: 1.24.10 — `doc validate DOMAIN-MAP-*` 與 `doc validate-paths` 新增 domain 唯一性檢查：兩份以上 DomainBundle 宣告相同 `domain` 值時 exit 1，訊息列出 domain 值與每份 bundle 的載體路徑（`DOMAIN-MAP-*` 只在自身 domain 重複時失敗；`validate-paths` 報出全部重複群組）。`_declared_domains` 語意不變（UC／SPEC 的 domain 引用仍以「至少有一份宣告」為準），重複由上述兩個入口擋下。測試：E2（重複 domain 兩入口皆紅且訊息含兩份路徑、多群組全報）、E1 對照（改為不同 domain 後兩入口皆綠、他處重複不連累無關 bundle）。`doc schema export` 輸出不變。
 
 **Version**: 1.24.9 — `doc validate` 對非 data-contract 文件通過時的輸出改為先列「已執行且通過的檢查」，再依文件型別說明不適用項：UC 列出 domain 引用、`branch_from` 結構、主線 `next` 順序三項並說明 data-contract 章節 schema 不適用，輸出不再出現 `/spec validate`；SPEC（非 data-contract）列出 domain 引用檢查，保留改用 `/spec validate` 的路由提示。列為「通過」的只含實際檢查過內容的項目：語料沒有 DomainBundle 時 domain 引用檢查、UC 沒有結構化 flow 區塊時 flow 兩項檢查改列「略過」並寫明原因；PROP 等其他型別不印 `/spec validate` 與 UC flow 字樣，只說明沒有適用的檢查。僅改輸出文字，檢查邏輯與 exit code 不變，`doc schema export` 輸出不變。測試：E1（同一 UC 改前只印路由、改後列檢查項且無 `/spec`）、E2（flow 順序錯誤的 UC 仍 exit 1）、SPEC 路由保留對照。

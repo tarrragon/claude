@@ -15,6 +15,7 @@ Error Patterns Index Consistency Check Hook 測試
 """
 
 import importlib.util
+import json
 import sys
 from collections import Counter
 from datetime import date
@@ -833,8 +834,12 @@ class TestMainEndToEnd:
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
-        assert "TEST-001" in captured.err
-        assert "[WARNING]" in captured.err
+        assert captured.err == ""
+        output = json.loads(captured.out)
+        assert output["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+        context = output["hookSpecificOutput"]["additionalContext"]
+        assert "TEST-001" in context
+        assert "[WARNING]" in context
 
     def test_main_silent_when_fully_synced(self, tmp_path, monkeypatch, capsys):
         root = self._build_fixture_repo(
@@ -851,6 +856,7 @@ class TestMainEndToEnd:
         captured = capsys.readouterr()
         assert exit_code == 0
         assert captured.err == ""
+        assert captured.out == ""
 
     def test_main_never_exits_nonzero_even_on_missing_readme(self, tmp_path, monkeypatch):
         root = tmp_path / "project"
@@ -859,7 +865,8 @@ class TestMainEndToEnd:
         exit_code = _hook.main()
         assert exit_code == 0
 
-    def test_main_warns_on_one_way_related(self, tmp_path, monkeypatch, capsys):
+    def test_main_one_way_related_not_injected_to_model(self, tmp_path, monkeypatch, capsys):
+        """同批次單向引用屬建議且存量大，不注入模型 context（僅進日誌）。"""
         root = tmp_path / "project"
         error_patterns = root / ".claude" / "error-patterns"
         error_patterns.mkdir(parents=True)
@@ -882,9 +889,11 @@ class TestMainEndToEnd:
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
-        assert "PC-001" in captured.err
-        assert "PC-002" in captured.err
-        assert "[WARNING]" in captured.err
+        assert captured.err == ""
+        assert captured.out == ""
+        # 偵測本身仍成立（模型管道之外）
+        related_map = _hook.collect_related_map(error_patterns)
+        assert _hook.check_related_bidirectional(related_map)
 
     def test_main_silent_when_one_way_outside_same_batch_window(self, tmp_path, monkeypatch, capsys):
         """created 相差超過 7 天視為引註，非姊妹關係，主流程靜默。"""
@@ -911,6 +920,7 @@ class TestMainEndToEnd:
         captured = capsys.readouterr()
         assert exit_code == 0
         assert captured.err == ""
+        assert captured.out == ""
 
     def test_main_silent_when_related_fully_bidirectional(self, tmp_path, monkeypatch, capsys):
         root = tmp_path / "project"
@@ -935,6 +945,7 @@ class TestMainEndToEnd:
         captured = capsys.readouterr()
         assert exit_code == 0
         assert captured.err == ""
+        assert captured.out == ""
 
     def test_main_reports_real_duplicate_but_not_frozen_collision(
         self, tmp_path, monkeypatch, capsys
@@ -979,12 +990,14 @@ class TestMainEndToEnd:
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
-        assert "重複列" in captured.err
-        assert "\n  TEST-001\n" in captured.err
-        # PC-010 的碰撞歸屬 registered_collisions（INFO，輸出格式帶冒號「PC-010:」），
-        # 不可落入 duplicate_in_readme 的 WARNING 重複列段落（輸出格式無冒號「  PC-010」）
-        assert "\n  PC-010\n" not in captured.err
-        assert "\n  PC-010:\n" in captured.err
+        assert captured.err == ""
+        context = json.loads(captured.out)["hookSpecificOutput"]["additionalContext"]
+        assert "重複列" in context
+        assert "\n  TEST-001\n" in context
+        # PC-010 的碰撞歸屬 registered_collisions（政策允許的既知狀態），
+        # 既不可落入 WARNING 重複列段落，也不注入模型 context
+        assert "\n  PC-010\n" not in context
+        assert "PC-010" not in context
 
     def test_main_silent_for_no_slug_placeholder_listed_in_readme(
         self, tmp_path, monkeypatch, capsys
@@ -1006,6 +1019,7 @@ class TestMainEndToEnd:
         captured = capsys.readouterr()
         assert exit_code == 0
         assert captured.err == ""
+        assert captured.out == ""
 
 
 # ---------------------------------------------------------------------------

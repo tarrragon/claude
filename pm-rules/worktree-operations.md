@@ -265,7 +265,7 @@ git branch -d {branch}
 
 | 步驟 | 動作 | 原因 |
 |------|------|------|
-| 1 | 完成 Ticket 狀態更新（5W1H、claim、accept-creation） | 確保 Ticket 資訊完整 |
+| 1 | 完成 Ticket 狀態更新（5W1H、claim） | 確保 Ticket 資訊完整 |
 | 2 | `git add` + `git commit` main 上的變更 | **建議**，降低 worktree 操作（stash/checkout 等）造成變更遺失的風險；PC-019 的實際防護已改由 `workspace-wipe-guard-hook` 在危險動作端（stash/checkout/reset 等）無條件 DENY 承擔，非本步驟 |
 | 3 | 確認 `git status` 為 clean | PM 自行確認的良好實務（無 hook 於派發前強制阻擋），有助及早發現遺漏未提交的變更 |
 | 4 | 決定 `--worktree` / `-w` session 或 `Agent(isolation: "worktree")` | 依人工 session 或背景 subagent 選入口 |

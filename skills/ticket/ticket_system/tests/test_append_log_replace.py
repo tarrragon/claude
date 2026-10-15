@@ -204,3 +204,64 @@ class TestAppendLogReplaceFlag:
 
         captured = capsys.readouterr()
         assert "即將被取代的舊內容標記" in captured.out
+
+
+class TestReplacePreservesManagedH3:
+    """150.1：--replace 保留 CLI 管理的 H3 子節，摘要列出被取代的人寫 H3。"""
+
+    def _body(self, with_human_h3: bool = True) -> str:
+        human = "### 人寫子節甲\n\n舊人寫內容\n\n" if with_human_h3 else "舊平文內容\n\n"
+        return (
+            "## Problem Analysis\n"
+            + human
+            + "### 派發日誌\n\n派發條目一\n\n---\n\n"
+            + "### Commit 規範\n\n規範文字\n\n---\n\n"
+            + "## Solution\n既有方案\n"
+        )
+
+    def test_managed_subsections_survive_replace(
+        self, tmp_ticket_dir, patch_paths
+    ):
+        tid = "0.0.0-W0-REPL5"
+        path = tmp_ticket_dir / f"{tid}.md"
+        _write_ticket_with_body(path, tid, self._body())
+
+        assert _call_append_log(tid, "Problem Analysis", "新分析", replace=True) == 0
+
+        new_body = path.read_text(encoding="utf-8")
+        assert "舊人寫內容" not in new_body
+        assert "### 人寫子節甲" not in new_body
+        assert "派發條目一" in new_body and "規範文字" in new_body
+        order = [
+            new_body.index(m)
+            for m in ("新分析", "### 派發日誌", "### Commit 規範", "## Solution")
+        ]
+        assert order == sorted(order)
+
+    def test_summary_lists_human_h3_titles(
+        self, tmp_ticket_dir, patch_paths, capsys
+    ):
+        tid = "0.0.0-W0-REPL6"
+        path = tmp_ticket_dir / f"{tid}.md"
+        _write_ticket_with_body(path, tid, self._body())
+
+        _call_append_log(tid, "Problem Analysis", "新分析", replace=True)
+
+        out = capsys.readouterr().out
+        assert "### 人寫子節甲" in out
+        assert "### 派發日誌" not in out
+
+    def test_no_managed_subsection_result_unchanged(
+        self, tmp_ticket_dir, patch_paths
+    ):
+        """E1：無管理子節時結果與修正前逐字相同（header + 新內容 + 換行）。"""
+        tid = "0.0.0-W0-REPL7"
+        path = tmp_ticket_dir / f"{tid}.md"
+        body = "## Problem Analysis\n舊平文\n\n---\n\n## Solution\n既有方案\n"
+        _write_ticket_with_body(path, tid, body)
+
+        _call_append_log(tid, "Problem Analysis", "新分析", replace=True)
+
+        assert "## Problem Analysis\n新分析\n\n## Solution\n既有方案\n" in path.read_text(
+            encoding="utf-8"
+        )

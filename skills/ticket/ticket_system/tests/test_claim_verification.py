@@ -615,5 +615,41 @@ class TestApplyParseStrategy:
         )
 
 
+class TestKillProcessGroupZombie:
+    """殭屍群組（領頭程序已結束未回收）：macOS killpg 拋 PermissionError。"""
+
+    @staticmethod
+    def _make_zombie_leader() -> subprocess.Popen:
+        import time
+
+        proc = subprocess.Popen(["sleep", "0"], start_new_session=True)
+        time.sleep(0.5)  # 讓其結束但不 wait()，留下殭屍
+        return proc
+
+    def test_raw_killpg_on_zombie_group_raises(self):
+        """對照：直接 killpg 殭屍群組會拋例外，證明輸入有效。"""
+        import signal
+
+        proc = self._make_zombie_leader()
+        try:
+            with pytest.raises((PermissionError, ProcessLookupError)):
+                os.killpg(proc.pid, signal.SIGTERM)
+        finally:
+            proc.wait()
+
+    def test_kill_process_group_ignores_zombie_group(self):
+        """群組終止函式對殭屍群組不得拋例外。"""
+        from ticket_system.commands import claim_verification as cv
+
+        proc = self._make_zombie_leader()
+        try:
+            with patch.object(cv.os, "getpgid", return_value=proc.pid), patch.object(
+                cv, "_SIGTERM_SIGKILL_DELAY_SEC", 0
+            ):
+                cv._kill_process_group(proc.pid)
+        finally:
+            proc.wait()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

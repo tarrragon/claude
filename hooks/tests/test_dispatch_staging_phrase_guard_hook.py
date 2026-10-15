@@ -3,7 +3,7 @@ Dispatch Staging Phrase Guard Hook 測試
 
 對應 Ticket 0.2.1-W3-677 acceptance：
 - hook 於 Agent/Task prompt 涉及 commit 但缺精準 staging 制式句片語時，
-  輸出軟提示（stderr），不阻擋派發（exit 0）
+  輸出軟提示（additionalContext，模型可見），不阻擋派發（exit 0）
 - 唯讀派發（Dispatch-Mode: readonly 或 READONLY_AGENT_TYPES）不觸發提示
 - worktree 隔離派發（isolation == "worktree"）不觸發提示
 - 不涉及 commit 的 prompt 不觸發提示
@@ -74,28 +74,39 @@ DRIFT_CASE_PROMPT = (
 )
 
 
-def _run_hook(monkeypatch, tool_input: dict, tool_name: str = "Agent") -> tuple:
-    """執行 main()，回傳 (exit_code, stderr_text)。"""
-    payload = {"tool_name": tool_name, "tool_input": tool_input}
-    stdin_buffer = io.StringIO(json.dumps(payload))
-    monkeypatch.setattr(sys, "stdin", stdin_buffer)
+def _execute(monkeypatch, payload: dict) -> tuple:
+    """執行 main()，回傳 (exit_code, additionalContext 文字, stderr 文字)。
+
+    提醒走 additionalContext（stdout JSON）；無輸出時 additionalContext 為 ""。
+    """
     import contextlib
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
-    with contextlib.redirect_stderr(stderr_buffer):
+    with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
         exit_code = main()
-    return exit_code, stderr_buffer.getvalue()
+    out = stdout_buffer.getvalue().strip()
+    context = ""
+    if out:
+        hso = json.loads(out)["hookSpecificOutput"]
+        assert hso["hookEventName"] == "PreToolUse"
+        context = hso["additionalContext"]
+    assert stderr_buffer.getvalue() == ""  # 提醒不再走 stderr
+    return exit_code, context, stderr_buffer.getvalue()
+
+
+def _run_hook(monkeypatch, tool_input: dict, tool_name: str = "Agent") -> tuple:
+    """執行 main()，回傳 (exit_code, additionalContext 文字)。"""
+    payload = {"tool_name": tool_name, "tool_input": tool_input}
+    exit_code, context, _ = _execute(monkeypatch, payload)
+    return exit_code, context
 
 
 def _run_hook_with_string_tool_input(monkeypatch, tool_input: dict, tool_name: str = "Agent") -> tuple:
     """執行 main()，tool_input 以 JSON 字串（而非 dict）傳入——CC runtime 常見形態。"""
     payload = {"tool_name": tool_name, "tool_input": json.dumps(tool_input)}
-    stdin_buffer = io.StringIO(json.dumps(payload))
-    monkeypatch.setattr(sys, "stdin", stdin_buffer)
-    import contextlib
-    stderr_buffer = io.StringIO()
-    with contextlib.redirect_stderr(stderr_buffer):
-        exit_code = main()
-    return exit_code, stderr_buffer.getvalue()
+    exit_code, context, _ = _execute(monkeypatch, payload)
+    return exit_code, context
 
 
 # ----------------------------------------------------------------------------

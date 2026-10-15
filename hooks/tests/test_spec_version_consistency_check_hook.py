@@ -311,3 +311,41 @@ def test_format_drift_warning_includes_body_version(tmp_path):
 )
 def test_version_key_numeric_comparison(left, right, expected):
     assert (_hook._version_key(right) > _hook._version_key(left)) == expected
+
+
+# ---------------------------------------------------------------------------
+# main() 輸出管道（模型可見）
+# ---------------------------------------------------------------------------
+
+
+def _write_spec(root, name, content):
+    spec_dir = root / "docs" / "spec" / "x"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / name).write_text(content, encoding="utf-8")
+
+
+def test_main_drift_emits_model_visible_json_only(tmp_path, monkeypatch, capsys):
+    import json
+
+    _write_spec(tmp_path, "drifted.md", DRIFTED_SPEC)
+    monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+
+    assert _hook.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    output = json.loads(captured.out)
+    assert output["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+    assert "[Spec Version Drift]" in output["hookSpecificOutput"]["additionalContext"]
+
+
+def test_main_consistent_emits_nothing(tmp_path, monkeypatch, capsys):
+    """E2：非觸發分支無任何輸出。"""
+    _write_spec(tmp_path, "ok.md", CONSISTENT_SPEC)
+    monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+
+    assert _hook.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""

@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Dict, Optional, Sequence
+from typing import Callable, Dict, Optional, Sequence, Tuple
 
 from .git_ops import (
     _is_cas_rejection,
@@ -207,29 +207,27 @@ def _log_commit_event(
         sys.stderr.write(f"[WARNING] 提交重試日誌寫入失敗：{exc}\n")
 
 
-def auto_commit_ticket_md_with_retry(*args, **kwargs) -> Dict[str, object]:
-    """呼叫 ``_auto_commit_ticket_md``，git_failed 且屬暫時性競爭時退避重試。
+def retry_commit_attempt(
+    attempt: Callable[[], Tuple[str, str]], log_path: str, ticket_id: str
+) -> Dict[str, object]:
+    """執行 ``attempt``（回傳 ``(status, error)``），git_failed 且屬暫時性競爭時退避重試。
 
     重試預算語意：前 ``_COMMIT_MIN_RETRIES`` 次重試必做，不受牆鐘與等待預算限制；
     其後的額外重試須同時滿足「累計 sleep 不超過 ``_COMMIT_RETRY_BUDGET_SECONDS``」
     （只計等待，不含 git 嘗試耗時）與「自首次嘗試起的牆鐘不超過
     ``_COMMIT_RETRY_WALL_CAP_SECONDS``」。
-    絕不移除任何鎖檔。每次重試與最終失敗各寫一筆檔案日誌。回傳
-    ``{"status", "error", "attempts"}``；``error`` 僅在最終 status 為
-    git_failed 時有值，供呼叫端輸出失敗原因。
+    絕不移除任何鎖檔。每次重試與最終失敗各寫一筆檔案日誌（``log_path`` 用於解析
+    repo root）。回傳 ``{"status", "error", "attempts"}``；``error`` 僅在最終
+    status 為 git_failed 時有值，供呼叫端輸出失敗原因。
     """
     start = _clock()
     attempts = 0
     waited = 0.0
-    ticket_id = str(args[1]) if len(args) > 1 else str(kwargs.get("ticket_id", ""))
-    log_cwd = str(args[0] if args else kwargs["path"])
     while True:
-        detail: Dict[str, Optional[str]] = {}
-        status = _auto_commit_ticket_md(*args, result_out=detail, **kwargs)
+        status, error = attempt()
         attempts += 1
         if status != "git_failed":
             return {"status": status, "error": None, "attempts": attempts}
-        error = detail.get("error") or ""
         delay = _COMMIT_RETRY_BACKOFF_SECONDS[
             min(attempts - 1, len(_COMMIT_RETRY_BACKOFF_SECONDS) - 1)
         ]
@@ -239,11 +237,62 @@ def auto_commit_ticket_md_with_retry(*args, **kwargs) -> Dict[str, object]:
         )
         may_retry = attempts <= _COMMIT_MIN_RETRIES or within_extra_budget
         if not _is_retryable_commit_failure(error) or not may_retry:
-            _log_commit_event(log_cwd, "final_failure", ticket_id, attempts, waited, error)
+            _log_commit_event(log_path, "final_failure", ticket_id, attempts, waited, error)
             return {"status": status, "error": error, "attempts": attempts}
-        _log_commit_event(log_cwd, "retry", ticket_id, attempts, delay, error)
+        _log_commit_event(log_path, "retry", ticket_id, attempts, delay, error)
         _sleep(delay)
         waited += delay
+
+
+def auto_commit_ticket_md_with_retry(*args, **kwargs) -> Dict[str, object]:
+    """呼叫 ``_auto_commit_ticket_md``，git_failed 且屬暫時性競爭時退避重試。
+
+    預算語意見 ``retry_commit_attempt``。回傳 ``{"status", "error", "attempts"}``。
+    """
+    ticket_id = str(args[1]) if len(args) > 1 else str(kwargs.get("ticket_id", ""))
+    log_path = str(args[0] if args else kwargs["path"])
+
+    def attempt() -> Tuple[str, str]:
+        detail: Dict[str, Optional[str]] = {}
+        status = _auto_commit_ticket_md(*args, result_out=detail, **kwargs)
+        return status, detail.get("error") or ""
+
+    return retry_commit_attempt(attempt, log_path, ticket_id)
+
+
+def commit_files_isolated_with_retry(
+    commit_fn: Callable[..., Dict[str, object]],
+    paths: Sequence[str],
+    message: str,
+    ticket_id: str,
+    cwd: str,
+    **kwargs,
+) -> Dict[str, object]:
+    """以 ``commit_fn``（``commit_files_isolated`` 形）提交，鎖競爭與 CAS 拒絕時退避重試。
+
+    供 complete 收尾使用；回傳 ``commit_fn`` 最後一次的完整結果並附 ``attempts``。
+    ``commit_fn`` 由呼叫端傳入，使呼叫端模組的測試替身仍有效。
+    """
+    last: Dict[str, object] = {}
+
+    def attempt() -> Tuple[str, str]:
+        last.clear()
+        last.update(commit_fn(list(paths), message, cwd=cwd, **kwargs))
+        return _STATUS_MAP[str(last.get("status"))], str(last.get("error") or "")
+
+    outcome = retry_commit_attempt(attempt, str(paths[0]), ticket_id)
+    return {**last, "attempts": outcome["attempts"]}
+
+
+def classify_commit_failure(error: str) -> str:
+    """失敗原文分類：lock / cas / hook / other，供補救文案分支。"""
+    if _is_cas_rejection(error):
+        return "cas"
+    if _lock_paths_from_error(error):
+        return "lock"
+    if "hook" in error.lower() or "DENY" in error:
+        return "hook"
+    return "other"
 
 
 def format_write_command_commit_failure(
@@ -272,11 +321,20 @@ def format_write_command_commit_failure(
             "（例如 `pgrep -lf git`），再依鎖檔內容與時間判斷是否為殘骸，"
             "確認後才可手動移除。"
         )
-    lines.append(
-        f"補救指令（鎖排除後）：git add {' '.join([ticket_path, *extra_paths])} && "
-        f"git commit -m \"chore({ticket_id}): {operation} {section}\""
-        "（或 `ticket track commit` 以隔離索引提交）"
-    )
+    all_paths = " ".join([ticket_path, *extra_paths])
+    message = f"chore({ticket_id}): {operation} {section}"
+    if classify_commit_failure(error) in ("cas", "hook"):
+        # 無鎖可排除；並行派發期間裸 git commit 會被 bare-commit-guard 攔下
+        lines.append(
+            f"補救指令：ticket track commit {ticket_id} -m \"{message}\" -- {all_paths}"
+            "（隔離索引提交；不要用裸 git commit）"
+        )
+    else:
+        lines.append(
+            f"補救指令（鎖排除後）：git add {all_paths} && "
+            f"git commit -m \"{message}\""
+            "（或 `ticket track commit` 以隔離索引提交）"
+        )
     return "\n".join(lines) + "\n"
 
 

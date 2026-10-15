@@ -143,6 +143,13 @@ def main() -> int:
     # 模組 docstring「agent_handle 欄位」段的完整根因與依據）。
     agent_handle = tool_input.get("name", "") or ""
 
+    # 工作位置：隔離派發取 runtime 回報的 worktree 路徑（缺則留空，並行期判定
+    # 保守計入）；非隔離派發即派發者所在 checkout。
+    if isolation == "worktree":
+        work_checkout = str(tool_response.get("worktreePath") or "")
+    else:
+        work_checkout = str(project_root)
+
     files = []
     if ticket_id:
         try:
@@ -162,6 +169,7 @@ def main() -> int:
             session_id=session_id,
             name=name,
             agent_handle=agent_handle,
+            work_checkout=work_checkout,
         )
         logger.info(
             "recorded dispatch: %s (isolation=%s, ticket_id=%s, files=%d, "

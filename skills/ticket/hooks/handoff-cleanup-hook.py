@@ -40,6 +40,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root, is_subagent_environment
+from lib.ticket_command_parse import has_complete_command
+from lib.bash_tool_response import is_bash_success, is_failure_event, auto_commit_failure_as_success
+from lib.ticket_completed_verifier import make_completed_verifier
 
 import re
 from datetime import datetime
@@ -89,24 +92,35 @@ def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
 
-    if "ticket track complete" not in command:
-        logger.debug(f"命令非 ticket track complete: {command}")
+    # 共用解析器：涵蓋 complete／finish／batch-complete；無法解析（None）視為非完成命令
+    if has_complete_command(command) is not True:
+        logger.debug(f"命令非完成類命令: {command}")
         return False
 
     # 檢查執行結果 (exit code 0 或輸出包含成功標記)
     tool_response = input_data.get("tool_response") or {}
-    stdout = tool_response.get("stdout", "")
-    stderr = tool_response.get("stderr", "")
-    exit_code = tool_response.get("exit_code", -1)
+    if not tool_response:
+        # 缺漏或空的 tool_response 是畸形 payload，不得套用「未遮蔽即成功」
+        logger.debug("tool_response 缺漏或為空，fail-open 不清理")
+        return False
 
-    # 成功判斷：exit code = 0 且輸出包含成功標記
-    is_success = (exit_code in (0, EXIT_AUTO_COMMIT_FAILED)) and ("[OK]" in stdout or "已完成" in stdout or "completed" in stdout.lower())
+    # 成功判斷：真實 payload 無 exit_code，由共用 helper 以 interrupted 與成功標記判定
+    # 分層判定：交接檔清理是冪等的（重複 complete 已完成的票，清理為無害空操作），在乎的是
+    # 「命令成功」而非「發生完成轉換」，故只接第 1 層（未遮蔽即成功），不套 286.2 的
+    # 轉換驗證器；被遮蔽時（out=$(...); rc=$? 等）以 completed 驗證器判定，讀票失敗再退回標記
+    is_success = is_bash_success(
+        tool_response,
+        ("[OK]", "已完成", "completed"),
+        ignore_case=True,
+        command=command,
+        state_verifier=make_completed_verifier(command, logger),
+    )
 
     if is_success:
         logger.info(f"檢測到成功的 complete 命令")
         return True
 
-    logger.debug(f"命令未成功: exit_code={exit_code}, stdout={stdout}")
+    logger.debug(f"命令未成功: tool_response={tool_response}")
     return False
 
 def extract_ticket_ids(input_data: Dict[str, Any], logger) -> List[str]:
@@ -296,6 +310,13 @@ def main() -> int:
 
         # 步驟 2: 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
+
+        # PostToolUseFailure：僅結束碼 75（動作完成、auto-commit 失敗）沿用完成後處理
+        if is_failure_event(input_data):
+            input_data = auto_commit_failure_as_success(input_data)
+            if input_data is None:
+                logger.debug("失敗事件非結束碼 75，不處理")
+                return EXIT_SUCCESS
 
         # 步驟 2.5: subagent 環境跳過（代理人不執行 complete）
         if is_subagent_environment(input_data):

@@ -47,6 +47,7 @@ sys.path.insert(0, str(_PROJECT_INIT_DIR))
 
 from lib import setup_hook_logging, run_hook_safely
 from lib.hook_command_resolver import resolve_hook_script_path
+from lib.hook_registry import merge_dispatch_registry
 from project_init.lib.hook_checker import (
     extract_registered_hooks,
     extract_registered_skill_hooks,
@@ -461,6 +462,7 @@ def main():
         print(log_output)
         logger.info(log_output)
         return 0
+    merge_dispatch_registry(settings, project_root, logger)
 
     exclude_list = load_json_file(exclude_list_path, logger)
     exact_excludes, patterns = get_exclude_patterns(exclude_list)

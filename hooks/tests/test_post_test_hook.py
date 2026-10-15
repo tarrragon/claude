@@ -140,6 +140,11 @@ REAL_TEST_COMMAND_SAMPLES = [
     pytest.param("(cd /path && npm test)", id="parenthesised-subshell"),
     pytest.param("NODE_ENV=test npm test", id="env-prefix"),
     pytest.param("npm test 2>&1 | tail -20", id="npm-test-piped"),
+    pytest.param("python3 .claude/scripts/run-with-timeout.py 60 -- flutter test", id="timeout-wrapper-flutter"),
+    pytest.param(
+        "uv --directory .claude/hooks run --with pytest python -m pytest tests -q",
+        id="uv-run-python-m-pytest",
+    ),
 ]
 
 
@@ -159,6 +164,10 @@ ECHO_FALSE_POSITIVE_SAMPLES = [
     pytest.param("git status", id="git-status"),
     pytest.param("", id="empty-command"),
     pytest.param("echo dart test result", id="echo-dart-test-result-tokens"),
+    pytest.param(
+        'grep -n "TEST_COMMAND_PATTERN\\|flutter test\\|dart test" hook.py',
+        id="grep-quoted-pipe-keywords",
+    ),
 ]
 
 
@@ -304,3 +313,416 @@ def test_obsolete_ticket_track_create_removed(hook_module):
     assert "ticket create" in keywords
     assert "ticket batch-create" in keywords
     assert "ticket show" in keywords
+
+
+# ---------------------------------------------------------------------------
+# 時長達上限：不得終止任何程序，改輸出含清理指引的警告
+# ---------------------------------------------------------------------------
+
+import ast
+import json
+import shlex
+import time
+
+_BANNED_MODULES = {"subprocess", "signal", "pty", "multiprocessing"}
+_BANNED_OS_EXACT = {"kill", "killpg", "system", "popen", "fork", "forkpty", "posix_spawn", "posix_spawnp"}
+_BANNED_OS_PREFIX = ("spawn", "exec")
+
+
+def _is_banned_os_attr(name):
+    return name in _BANNED_OS_EXACT or name.startswith(_BANNED_OS_PREFIX)
+
+
+def find_termination_routes(source):
+    """對原始碼做語法樹檢查，回傳所有啟動程序／送訊號途徑的描述清單。"""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            found += [f"import {a.name}" for a in node.names if a.name.split(".")[0] in _BANNED_MODULES]
+        elif isinstance(node, ast.ImportFrom):
+            mod = (node.module or "").split(".")[0]
+            if mod in _BANNED_MODULES:
+                found.append(f"from {node.module} import ...")
+            elif mod == "os":
+                found += [f"from os import {a.name}" for a in node.names if _is_banned_os_attr(a.name)]
+            elif mod == "asyncio":
+                found += [f"from asyncio import {a.name}" for a in node.names if a.name.startswith("create_subprocess")]
+        elif isinstance(node, ast.Attribute):
+            base = node.value
+            if isinstance(base, ast.Name) and base.id == "os" and _is_banned_os_attr(node.attr):
+                found.append(f"os.{node.attr}")
+            if node.attr.startswith("create_subprocess"):
+                found.append(f"{node.attr}")
+    return found
+
+
+_INJECTED_ROUTES = [
+    pytest.param("import subprocess", id="import-subprocess"),
+    pytest.param("import signal", id="import-signal"),
+    pytest.param("from subprocess import run", id="from-subprocess"),
+    pytest.param("from signal import SIGTERM", id="from-signal"),
+    pytest.param("import os\nos.kill(1, 15)", id="os.kill"),
+    pytest.param("import os\nos.killpg(1, 15)", id="os.killpg"),
+    pytest.param("import os\nos.system('x')", id="os.system"),
+    pytest.param("import os\nos.popen('x')", id="os.popen"),
+    pytest.param("import os\nos.spawnv(0, 'x', [])", id="os.spawnv"),
+    pytest.param("import os\nos.execv('x', [])", id="os.execv"),
+    pytest.param("import os\nos.posix_spawn('x', [], {})", id="os.posix_spawn"),
+    pytest.param("import os\nos.fork()", id="os.fork"),
+    pytest.param("from os import kill", id="from-os-kill"),
+    pytest.param("from os import killpg as k", id="from-os-killpg-alias"),
+    pytest.param("from os import system", id="from-os-system"),
+    pytest.param("from os import execvp", id="from-os-execvp"),
+    pytest.param("import asyncio\nasyncio.create_subprocess_exec('x')", id="asyncio-exec"),
+    pytest.param("import asyncio\nasyncio.create_subprocess_shell('x')", id="asyncio-shell"),
+    pytest.param("from asyncio import create_subprocess_exec", id="from-asyncio"),
+    pytest.param("import subprocess\nsubprocess.getoutput('x')", id="subprocess.getoutput"),
+]
+
+
+@pytest.mark.parametrize("source", _INJECTED_ROUTES)
+def test_route_check_fails_on_injected_source(source):
+    """正向對照：注入各途徑的原始碼，檢查必須回報（含 from 匯入形式）。"""
+    assert find_termination_routes(source) != []
+
+
+def test_route_check_passes_on_clean_source():
+    assert find_termination_routes("import os\nx = os.path.join('a', 'b')\nos.environ.get('A')") == []
+
+
+def test_hook_source_has_no_termination_route():
+    """零終止保證：hook 原始碼不含任何啟動程序或送訊號的途徑。"""
+    assert find_termination_routes(HOOK_PATH.read_text()) == []
+
+
+def _arm_monitor(root, seconds_ago):
+    log_dir = root / ".claude" / "hook-logs"
+    log_dir.mkdir(parents=True)
+    f = log_dir / "test-monitor.json"
+    f.write_text(json.dumps({"start_timestamp": time.time() - seconds_ago,
+                              "status": "running"}))
+    return f
+
+
+def _run_at(module, monkeypatch, tmp_path, logger, seconds_ago):
+    monitor = _arm_monitor(tmp_path, seconds_ago)
+    monkeypatch.setattr(module, "get_project_root", lambda: tmp_path)
+    msg = module.check_test_timeout({}, {}, logger)
+    return msg, monitor
+
+
+def test_limit_reached_warns_on_stderr_once_with_single_label(hook_module, monkeypatch, tmp_path, logger, capsys, caplog):
+    caplog.set_level(logging.WARNING, logger=logger.name)
+    msg, monitor = _run_at(hook_module, monkeypatch, tmp_path, logger, hook_module.LIMIT_THRESHOLD + 5)
+    err = capsys.readouterr().err
+    assert "orphan-test-procs.py" in msg and "--kill" in msg
+    assert "orphan-test-procs.py" in err
+    assert err.startswith("[已達上限]")
+    assert err.count("[") == 1 and "[WARNING]" not in err
+    assert any("orphan-test-procs.py" in r.getMessage() for r in caplog.records)
+    assert json.loads(monitor.read_text())["action"] == "limit_warning"
+
+
+def test_limit_warning_content(hook_module, monkeypatch, tmp_path, logger):
+    msg, _ = _run_at(hook_module, monkeypatch, tmp_path, logger, hook_module.LIMIT_THRESHOLD + 5)
+    assert f"{hook_module.LIMIT_THRESHOLD // 60} 分鐘" in msg
+    assert "不自動終止" in msg and "其他專案" in msg
+    script = tmp_path / ".claude" / "scripts" / "orphan-test-procs.py"
+    list_cmd = f"python3 {shlex.quote(str(script))}"
+    lines = msg.splitlines()
+    assert list_cmd in lines
+    assert f"{list_cmd} --kill" in lines
+    assert "確屬本專案" in msg and "不再需要" in msg
+
+
+def test_critical_message_points_to_list_command_only(hook_module, monkeypatch, tmp_path, logger):
+    msg, _ = _run_at(hook_module, monkeypatch, tmp_path, logger, hook_module.CRITICAL_THRESHOLD + 5)
+    script = tmp_path / ".claude" / "scripts" / "orphan-test-procs.py"
+    assert f"python3 {shlex.quote(str(script))}" in msg.splitlines()
+    for banned in ("--kill", "pkill", "killall", "手動終止", "建議終止"):
+        assert banned not in msg
+    assert msg.split("，")[0] != hook_module._limit_message(30.0, tmp_path).split("，")[0]
+
+
+def test_limit_message_logged_once(hook_module, monkeypatch, tmp_path, logger, caplog):
+    caplog.set_level(logging.DEBUG, logger=logger.name)
+    _run_at(hook_module, monkeypatch, tmp_path, logger, hook_module.LIMIT_THRESHOLD + 5)
+    hits = [r for r in caplog.records if "orphan-test-procs.py" in r.getMessage()]
+    assert len(hits) == 1
+
+
+# (門檻屬性名, 門檻前一秒的 action, 門檻當秒的 action, 當秒訊息開頭)
+_BOUNDARY_CASES = [
+    pytest.param("WARNING_THRESHOLD", "normal", "warning", "警告：", id="warning-boundary"),
+    pytest.param("CRITICAL_THRESHOLD", "warning", "critical_warning", "嚴重警告：", id="critical-boundary"),
+    pytest.param("LIMIT_THRESHOLD", "critical_warning", "limit_warning", "[已達上限]", id="limit-boundary"),
+]
+
+
+@pytest.mark.parametrize("attr,before_action,at_action,at_prefix", _BOUNDARY_CASES)
+def test_threshold_boundaries(hook_module, tmp_path, attr, before_action, at_action, at_prefix):
+    t = getattr(hook_module, attr)
+    before_act, before_msg = hook_module._classify_duration(t - 1, tmp_path)
+    at_act, at_msg = hook_module._classify_duration(t, tmp_path)
+    assert before_act == before_action
+    assert at_act == at_action
+    assert at_msg.startswith(at_prefix)
+    assert not before_msg.startswith(at_prefix)
+
+
+def test_below_warning_is_normal(hook_module, tmp_path):
+    act, msg = hook_module._classify_duration(0, tmp_path)
+    assert act == "normal" and msg.startswith("測試完成：")
+
+
+def test_no_obsolete_constant_name(hook_module):
+    assert not hasattr(hook_module, "AUTO_KILL_THRESHOLD")
+
+
+# --- 評估紀錄取證欄位 ---
+
+def _run_logged_evaluation(hook_module, monkeypatch, tmp_path, logger, tool_response):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    input_data = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "pytest -q"},
+        "tool_response": tool_response,
+    }
+    hook_module.evaluate_test_failure(input_data, input_data["tool_input"], logger)
+    reports = list((tmp_path / ".claude" / "hook-logs").glob("pre-fix-evaluation-*.json"))
+    assert len(reports) == 1
+    return json.loads(reports[0].read_text(encoding="utf-8"))
+
+
+def test_evaluation_record_dict_tool_response(hook_module, monkeypatch, tmp_path, logger):
+    response = {"stdout": "collected 3 FAILED tests/test_x.py::t - boom", "stderr": ""}
+    report = _run_logged_evaluation(hook_module, monkeypatch, tmp_path, logger, response)
+    assert report["tool_response_type"] == "dict"
+    assert report["tool_response_keys"] == ["stdout", "stderr"]
+    assert report["tool_response_value_lengths"] == {
+        "stdout": len(response["stdout"]), "stderr": 0}
+    assert any("FAILED" in e["matched_excerpt"] for e in report["errors"])
+
+
+def test_evaluation_record_str_tool_response(hook_module, monkeypatch, tmp_path, logger):
+    response = "collected 3\nFAILED tests/test_x.py::t - boom\n"
+    report = _run_logged_evaluation(hook_module, monkeypatch, tmp_path, logger, response)
+    assert report["tool_response_type"] == "str"
+    assert "tool_response_keys" not in report
+    assert any("FAILED" in e["matched_excerpt"] for e in report["errors"])
+
+
+# --- Bash dict 形態只評估 stdout/stderr；pytest -q 綠燈摘要 ---
+
+_EDIT_DIFF = (
+    "diff --git a/t.py b/t.py\n+    assert x\n+# Expected: 1 Actual: 2\n"
+    "+FAILED tests/test_other.py::t\n"
+)
+
+
+def _eval_response(hook_module, logger, tool_name, tool_response):
+    input_data = {
+        "tool_name": tool_name,
+        "tool_input": {"command": "pytest -q"},
+        "tool_response": tool_response,
+    }
+    return hook_module.evaluate_test_failure(input_data, input_data["tool_input"], logger)
+
+
+def test_bash_dict_edit_diff_not_evaluated(hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    response = {"stdout": "..........\n82 passed in 0.25s\n", "stderr": "",
+                "bashEditDiff": _EDIT_DIFF}
+    assert _eval_response(hook_module, logger, "Bash", response) is None
+
+
+def test_bash_dict_real_failure_still_reported(hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    response = {"stdout": "x\nFAILED tests/a.py::t - boom\n1 failed, 5 passed in 0.5s\n",
+                "stderr": "", "bashEditDiff": ""}
+    result = _eval_response(hook_module, logger, "Bash", response)
+    assert result is not None and "TEST FAILURE" in result
+
+
+def test_bash_dict_stderr_failure_reported(hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    response = {"stdout": "", "stderr": "AssertionError: expected 1 to equal 2"}
+    assert _eval_response(hook_module, logger, "Bash", response) is not None
+
+
+def test_bash_dict_missing_stdout_stderr_fail_open(hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    assert _eval_response(hook_module, logger, "Bash", {"bashEditDiff": _EDIT_DIFF}) is None
+
+
+def test_non_bash_dict_keeps_original_behavior(hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    response = {"output": "x FAILED tests/a.py::t"}
+    result = _eval_response(hook_module, logger, "mcp__dart__run_tests", response)
+    assert result is not None and "TEST FAILURE" in result
+
+
+@pytest.mark.parametrize("output", [
+    "..........\n82 passed in 0.25s\n",
+    "82 passed, 2 skipped in 1.20s",
+])
+def test_pytest_q_green_summary_recognized(hook_module, output):
+    assert hook_module._is_green_summary(output)
+
+
+@pytest.mark.parametrize("output", [
+    "1 failed, 81 passed in 0.25s",
+    "81 passed, 1 failed in 0.25s",
+    "81 passed, 1 error in 0.25s",
+])
+def test_pytest_q_failure_summary_not_green(hook_module, output):
+    assert not hook_module._is_green_summary(output)
+
+
+# --- 綠燈捷徑：任何一行摘要含 N failed / N error 即不放行 ---
+
+@pytest.mark.parametrize("output", [
+    "=== 5 passed, 1 failed in 1s ===",
+    "5 passed in 1s\n1 failed in 2s",
+    "===== 5 passed in 1.00s =====\n===== 2 passed, 1 error in 0.50s =====",
+])
+def test_green_shortcut_not_taken_when_any_summary_has_failure(hook_module, output):
+    assert not hook_module._is_green_summary(output)
+
+
+def test_multi_run_pytest_output_reports_test_failure(hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    response = {"stdout": "5 passed in 1s\nFAILED tests/a.py::t - boom\n1 failed in 2s\n",
+                "stderr": ""}
+    result = _eval_response(hook_module, logger, "Bash", response)
+    assert result is not None and "TEST FAILURE" in result
+
+
+@pytest.mark.parametrize("output", [
+    "===== 5 passed in 1.00s =====",
+    "5 passed in 1s",
+    "===== 5 passed, 1 xfailed in 1.00s =====",
+    "5 passed, 1 xfailed in 1s",
+    "Tests: 10 passed, 0 failed",
+])
+def test_single_green_summary_still_green(hook_module, output):
+    assert hook_module._is_green_summary(output)
+
+
+# --- 裸 FAILED 樣式區分大小寫 ---
+
+_COMMIT_TITLE_MIXED = (
+    "[OK] 已提交 1fc768e\n  fix(x): post-test-hook 任一行摘要含 failed/error 即不走綠燈捷徑\n"
+    "rc=0 101 passed in 0.21s"
+)
+
+
+def test_lowercase_failed_in_commit_title_not_test_failure(hook_module, logger):
+    error_type, errors = hook_module._classify_errors(_COMMIT_TITLE_MIXED, logger)
+    assert errors == []
+
+
+def test_lowercase_failed_in_commit_title_end_to_end(hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    response = {"stdout": _COMMIT_TITLE_MIXED, "stderr": ""}
+    assert _eval_response(hook_module, logger, "Bash", response) is None
+
+
+FRAMEWORK_FAILURE_OUTPUTS = [
+    pytest.param("FAILED tests/test_a.py::test_x - assert 1 == 2", id="pytest-FAILED-line"),
+    pytest.param("=== 1 failed, 5 passed in 0.5s ===", id="pytest-N-failed-summary"),
+    pytest.param("00:02 +3 -1: test/a_test.dart: x [E]\n00:02 +3 -1: Some tests failed.",
+                 id="flutter-test"),
+    pytest.param("00:01 +0 -1: test/a_test.dart: x [E]\n00:01 +0 -1: Some tests failed.",
+                 id="dart-test"),
+    pytest.param("FAIL src/a.test.js\n  ● x\nTests:       1 failed, 3 passed, 4 total",
+                 id="jest"),
+]
+
+
+@pytest.mark.parametrize("output", FRAMEWORK_FAILURE_OUTPUTS)
+def test_framework_real_failure_output_reports_test_failure(hook_module, logger, output):
+    _, errors = hook_module._classify_errors(output, logger)
+    assert any(e["type"] == "test_failure" for e in errors), output
+
+
+# --- -q 綠燈摘要不要求行首 ---
+
+def test_green_summary_with_prefix_short_circuits_despite_uppercase_title(
+        hook_module, monkeypatch, tmp_path, logger):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    stdout = ("fix(x): post-test-hook 裸 FAILED 改區分大小寫並補小寫摘要樣式\n"
+              "rc=0 108 passed in 2.27s")
+    response = {"stdout": stdout, "stderr": ""}
+    assert _eval_response(hook_module, logger, "Bash", response) is None
+
+
+@pytest.mark.parametrize("stdout", [
+    "rc=0 1 failed, 108 passed in 2.27s",
+    "FAILED tests/x.py::t - assert\n1 failed, 3 passed in 1s",
+])
+def test_prefixed_failure_summary_still_reported(
+        hook_module, monkeypatch, tmp_path, logger, stdout):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    result = _eval_response(hook_module, logger, "Bash", {"stdout": stdout, "stderr": ""})
+    assert result is not None and "TEST FAILURE" in result
+
+
+# --- 失敗摘要單一來源：綠燈前置排除與錯誤分類共用 ---
+
+@pytest.mark.parametrize("output", [
+    "3 passed in 0.1s\n00:02 +3 -1: Some tests failed.",
+    "rc=0 3 passed in 0.1s\n00:02 +3 -1: Some tests failed.",
+])
+def test_green_shortcut_not_covering_flutter_failure(hook_module, monkeypatch, tmp_path, logger, output):
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    assert not hook_module._is_green_summary(output)
+    result = _eval_response(hook_module, logger, "Bash", {"stdout": output, "stderr": ""})
+    assert result is not None and "TEST FAILURE" in result
+
+
+def test_green_exclusion_reuses_classifier_summary_patterns(hook_module, logger):
+    for sample in ["Some tests failed", "2 failed", "1 error"]:
+        assert any(p.search(sample) for p, _ in hook_module.FAILURE_SUMMARY_PATTERNS)
+        _, errors = hook_module._classify_errors(sample, logger)
+        assert errors and not hook_module._is_green_summary(sample + "\n5 passed in 1s")
+
+
+# --- run_in_background：跳過計時與失敗評估（前景同命令照常，E1 對照） ---
+
+_FAILING_RESPONSE = {"stdout": "FAILED tests/a.py::t - boom\n1 failed in 1s", "stderr": ""}
+
+
+def _run_main(hook_module, monkeypatch, tmp_path, tool_input):
+    monitor = _arm_monitor(tmp_path, 2000)
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    data = {"tool_name": "Bash", "tool_input": tool_input,
+            "tool_response": _FAILING_RESPONSE}
+    monkeypatch.setattr(hook_module, "read_json_from_stdin", lambda _logger: data)
+    return monitor
+
+
+def test_foreground_command_is_timed_and_evaluated(hook_module, monkeypatch, tmp_path, capsys):
+    monitor = _run_main(hook_module, monkeypatch, tmp_path, {"command": "pytest -q"})
+    assert hook_module.main() == 0
+    out = capsys.readouterr().out
+    assert "TEST FAILURE" in out
+    assert json.loads(monitor.read_text())["status"] == "completed"
+
+
+def test_background_command_skips_timing_and_evaluation(
+        hook_module, monkeypatch, tmp_path, capsys):
+    monitor = _run_main(hook_module, monkeypatch, tmp_path,
+                        {"command": "pytest -q", "run_in_background": True})
+    before = monitor.read_text()
+    assert hook_module.main() == 0
+    assert capsys.readouterr().out == ""
+    assert monitor.read_text() == before
+    assert not list((tmp_path / ".claude" / "hook-logs").glob("pre-fix-evaluation-*.json"))
+
+
+def test_background_false_treated_as_foreground(hook_module, monkeypatch, tmp_path, capsys):
+    _run_main(hook_module, monkeypatch, tmp_path,
+              {"command": "pytest -q", "run_in_background": False})
+    assert hook_module.main() == 0
+    assert "TEST FAILURE" in capsys.readouterr().out

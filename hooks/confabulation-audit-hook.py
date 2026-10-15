@@ -16,6 +16,7 @@ Session 結束時檢查 confabulation 常見副作用指標：
 Source: 1.5.0-W5-014.1 / PC-166 防護 B 延伸
 """
 
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -32,19 +33,28 @@ from lib import (
 HOOK_NAME = "confabulation-audit"
 
 
+def _log_command_failure(func_name: str, cmd: list[str], reason: str) -> None:
+    """逾時與其他失敗回傳值相同，靠日誌區分（含函式名與子命令）。"""
+    logging.getLogger(HOOK_NAME).warning(f"{func_name} 失敗: {' '.join(cmd[:4])} ({reason})")
+
+
 def run_command(cmd: list[str], cwd: str | None = None, timeout: int = 10) -> tuple[int, str]:
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd
         )
         return result.returncode, result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except subprocess.TimeoutExpired:
+        _log_command_failure("run_command", cmd, f"timeout after {timeout}s")
+        return 1, ""
+    except (FileNotFoundError, OSError) as e:
+        _log_command_failure("run_command", cmd, f"{type(e).__name__}: {e}")
         return 1, ""
 
 
 def check_dirty_worktree(project_root: str) -> list[str]:
     """Check for uncommitted changes (potential confabulated commit)."""
-    rc, output = run_command(["git", "status", "--porcelain"], cwd=project_root)
+    rc, output = run_command(["git", "--no-optional-locks", "status", "--porcelain"], cwd=project_root)
     if rc != 0 or not output:
         return []
 

@@ -229,3 +229,9 @@ class TestSelfCheckHeadingPrefixMatch:
         content = _ticket_with_self_check_heading("### 自檢結果 (W10-118)")
         result = check_self_check_visibility(content, "IMP", _logger())
         assert result is None
+
+    def test_heading_with_yu_connector_matches(self):
+        """### 自檢結果與 Phase 4 評估 → 匹配（舊實作判缺）"""
+        content = _ticket_with_self_check_heading("### 自檢結果與 Phase 4 評估")
+        result = check_self_check_visibility(content, "IMP", _logger())
+        assert result is None

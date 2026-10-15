@@ -33,8 +33,24 @@ from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.handoff_utils import (
     is_handoff_stale,
     is_ticket_completed,
+    is_ticket_missing,
+    resolve_target,
     scan_pending_handoffs,
 )
+
+
+def _orphan_reason(record_data: dict, ticket_id: str, root: Path) -> str:
+    """來源票與 target（若有）皆查無時回傳 stale 原因，否則回空字串。
+
+    migrate 改名或票被刪後，pending 檔指向不存在的票，
+    is_ticket_completed 對查無票回 False 使其永遠不被清理。查詢以主倉庫為準。
+    """
+    if not is_ticket_missing(ticket_id, root):
+        return ""
+    target_id = resolve_target(record_data)
+    if target_id and not is_ticket_missing(target_id, root):
+        return ""
+    return f"來源 ticket {ticket_id} 查無（無對應 ticket 檔案）"
 
 
 def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
@@ -57,6 +73,7 @@ def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
     """
     records = scan_pending_handoffs()
     stale = []
+    state_root = get_ticket_state_root()
 
     for record in records:
         # 跳過解析/格式錯誤的檔案（不算 stale，保留作除錯用）
@@ -77,11 +94,19 @@ def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
                         f"(--force 模式跳過 task-chain 保護)"
                     )
                     stale.append((record.file_path, ticket_id, reason))
+                else:
+                    orphan = _orphan_reason(record.data, ticket_id, state_root)
+                    if orphan:
+                        stale.append((record.file_path, ticket_id, orphan))
             else:
                 # W17-163 L1-A: delegate 至 is_handoff_stale（單一 stale 判定來源）
                 is_stale, reason = is_handoff_stale(record.data)
                 if is_stale:
                     stale.append((record.file_path, ticket_id, reason))
+                else:
+                    orphan = _orphan_reason(record.data, ticket_id, state_root)
+                    if orphan:
+                        stale.append((record.file_path, ticket_id, orphan))
 
         elif record.format == "markdown":
             # Markdown 格式無 direction 資訊，沿用原行為：

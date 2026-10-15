@@ -252,11 +252,15 @@ uv run .claude/skills/dart-test-async-guardian/scripts/async_resource_scanner.py
 
 2. **識別卡住的測試**
    ```bash
-   # 使用 timeout 限制測試時間（macOS 需要安裝 coreutils）
-   timeout 30 flutter test test/unit/path/to/test.dart
-   # 或使用背景程序方式
-   flutter test test/unit/path/to/test.dart & sleep 30 && pkill -f flutter_tester
+   # 以程序群組逾時包裝限制測試時間（逾時結束碼 124，整個程序群組一併終止）
+   python3 .claude/scripts/run-with-timeout.py 30 -- flutter test test/unit/path/to/test.dart
+   # 事後確認本專案沒有留下孤兒測試程序（只列出；確認後才加 --kill）
+   python3 .claude/scripts/orphan-test-procs.py
    ```
+
+   不用 `timeout`：macOS 預設環境沒有此指令。不用 `alarm` 加 `exec` 或背景 `sleep` 後 `kill` 單一 PID：
+   訊號只送達最上層程序，flutter 工具與 `flutter_tester` 會被 launchd 收養後繼續執行。
+   不用以名稱比對的 `pkill`／`killall`：它比對全機程序，會終止其他 worktree 與其他專案的測試。
 
 3. **掃描異步資源問題**
    ```bash

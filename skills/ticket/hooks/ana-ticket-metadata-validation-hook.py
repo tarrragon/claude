@@ -25,7 +25,7 @@ ticket-file-access-guard-hook 已阻擋直接 Write/Edit ticket frontmatter，
   3. tdd_phase 與 ticket type 合理（小改動/DOC/ANA 不應強走完整 phase1-4）
 
 行為：
-  - 偵測到問題輸出 WARNING 到 stderr（不阻擋寫入）
+  - 偵測到問題以 additionalContext 輸出 WARNING（模型可見，不阻擋寫入）
   - 始終 exit 0
   - 僅檢查由 ANA 類代理人建立的 ticket（who.current 為 ANA 類，或 source_ticket 非空）
 
@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
-    get_effort_level, get_project_root,
+    get_effort_level, get_project_root, emit_model_reminder,
 )
 
 try:
@@ -360,12 +360,17 @@ def main() -> int:
             f"[ANA Ticket Metadata Warning] {ticket_id}（PC-058 防護）"
         )
         logger.warning(f"{ticket_id}: {len(warnings)} 項警告")
-        # 寫入 stderr 確保 PM 可見（規則 4）
-        print(header, file=sys.stderr)
+        # 以 additionalContext 讓模型（PM）可見；exit 0 stderr 模型不可見。
+        # 訊息明示對象為 PM，subagent 觸發時由 pm_only 受眾過濾丟棄。
+        lines = [header]
         for w in warnings:
-            print(f"  - {w}", file=sys.stderr)
+            lines.append(f"  - {w}")
             logger.warning(f"  - {w}")
-        print("  PM 派發前請複檢並修正 metadata。", file=sys.stderr)
+        lines.append("  PM 派發前請複檢並修正 metadata。")
+        emit_model_reminder(
+            "PostToolUse", "\n".join(lines),
+            audience="pm_only", input_data=input_data,
+        )
     else:
         logger.info(f"ANA ticket {frontmatter.get('id')} metadata 檢查通過")
 

@@ -25,11 +25,13 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from lib import get_project_root
+from lib.constants import HANDOFF_SESSION_STATE_TEMPLATE
+from lib.session_state_key import session_state_path
 
 # session 管理相關常數
 STOP_FLAG_FILE = ".claude/handoff/.stop-blocked"
 STOP_FLAG_EXPIRY_SECONDS = 7200  # 2 小時過期（一個 session 的合理長度）
-STATE_FILE_TEMPLATE = "/tmp/claude-handoff-state-{ppid}.json"
+STATE_FILE_TEMPLATE = HANDOFF_SESSION_STATE_TEMPLATE
 
 
 def get_session_stop_flag() -> Path:
@@ -45,15 +47,16 @@ def get_session_stop_flag() -> Path:
     return project_root / STOP_FLAG_FILE
 
 
-def get_session_state_file() -> Path:
+def get_session_state_file(
+    input_data: Optional[Dict[str, Any]] = None, logger=None
+) -> Optional[Path]:
     """
-    取得 session 狀態檔案路徑
+    取得 session 狀態檔案路徑（以 hook 輸入的 session_id 識別）
 
     Returns:
-        Path - 狀態檔案路徑
+        Path - 狀態檔案路徑；取不到 session_id 時為 None（fail-open）
     """
-    ppid = os.getppid()
-    return Path(STATE_FILE_TEMPLATE.format(ppid=ppid))
+    return session_state_path(STATE_FILE_TEMPLATE, input_data, logger)
 
 
 def has_been_triggered_this_session(logger) -> bool:
@@ -121,14 +124,18 @@ def mark_triggered_this_session(logger) -> None:
         logger.warning(f"建立 session stop flag 失敗: {e}")
 
 
-def read_session_state(logger) -> Optional[Dict[str, Any]]:
+def read_session_state(
+    logger, input_data: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
     """
     讀取 session 狀態檔案
 
     Returns:
-        dict - session 狀態，若檔案不存在則回傳 None
+        dict - session 狀態，若檔案不存在或取不到 session_id 則回傳 None
     """
-    state_file = get_session_state_file()
+    state_file = get_session_state_file(input_data, logger)
+    if state_file is None:
+        return None
 
     if not state_file.exists():
         logger.debug(f"session 狀態檔案不存在: {state_file}")

@@ -53,6 +53,9 @@ Hook Type: SessionStart（全量盤點，warning-only）+ PostToolUse（Edit /
 Write / MultiEdit，目標為 `.claude/settings.json` 或 `.claude/hooks/**/*.py`
 或 `.claude/skills/*/hooks/*.py` 時即時觸發同一檢查，防止未來新增違規）
 
+輸出管道：警告以 hookSpecificOutput.additionalContext 輸出（SessionStart 與
+PostToolUse 各用對應事件名），exit 0 stderr 對模型不可見故不用。
+
 阻擋策略：僅警告，不阻擋（exit 0 恆定）。理由：本檢查的「隱性依賴」與
 「宣告不完整」判定依賴 AST 靜態掃描這一啟發式手段，無法涵蓋動態 import
 （`importlib.import_module(name)`）等邊界情境，假陽性風險高於
@@ -78,7 +81,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
+    from lib import (
+        setup_hook_logging, run_hook_safely, read_json_from_stdin,
+        get_project_root, emit_model_reminder,
+    )
+    from lib.hook_registry import registry_commands
 except ImportError as e:
     # hook 自身失敗雙通道（quality-baseline 規則 4）：import 失敗時尚無
     # logger 可用，僅能靠 stderr 讓用戶可見；fail-open（exit 0）避免因
@@ -159,6 +166,14 @@ def _get_stdlib_module_names() -> "Set[str]":
     return set(_STDLIB_FALLBACK)
 
 
+def _dispatch_registry_commands(settings_path: Path) -> "List[str]":
+    """分派 registry 內的 hook 等價 command 字串（經 lib.hook_registry，讀不到回 []）"""
+    try:
+        return registry_commands(settings_path.parent.parent)
+    except (OSError, ValueError):
+        return []
+
+
 def extract_registered_hook_paths(settings_path: Path) -> "List[str]":
     """從 settings.json 抽取所有登記的 hook 檔案相對路徑（去重排序）。"""
     try:
@@ -166,6 +181,8 @@ def extract_registered_hook_paths(settings_path: Path) -> "List[str]":
     except OSError:
         return []
     hits = set(_REGISTERED_HOOK_PATH_RE.findall(raw))
+    for command in _dispatch_registry_commands(settings_path):
+        hits.update(_REGISTERED_HOOK_PATH_RE.findall(command))
     return sorted(hits)
 
 
@@ -182,7 +199,7 @@ def extract_hook_command_prefixes(settings_path: Path) -> "Dict[str, Set[str]]":
     except OSError:
         return {}
     prefixes: Dict[str, Set[str]] = {}
-    for command in _COMMAND_VALUE_RE.findall(raw):
+    for command in _COMMAND_VALUE_RE.findall(raw) + _dispatch_registry_commands(settings_path):
         match = _REGISTERED_HOOK_PATH_RE.search(command)
         if not match:
             continue
@@ -659,7 +676,7 @@ def main() -> int:
             logger.info(f"{HOOK_NAME} SessionStart 全量盤點：0 筆問題")
             return 0
         report = build_report(issues)
-        sys.stderr.write(report)
+        emit_model_reminder("SessionStart", report)
         logger.warning(f"{HOOK_NAME} SessionStart 全量盤點發現 {len(issues)} 筆問題")
         return 0
 
@@ -680,7 +697,7 @@ def main() -> int:
         return 0
 
     report = build_report(issues)
-    sys.stderr.write(report)
+    emit_model_reminder("PostToolUse", report, input_data=input_data)
     logger.warning(
         f"{HOOK_NAME} PostToolUse 觸發（{file_path}）發現 {len(issues)} 筆問題"
     )

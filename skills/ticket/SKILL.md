@@ -39,12 +39,12 @@ PM 依 pm-role 流程先 `claim`（無 `--as` 或 `--as rosemary-project-manager
 再派發時，`who.current` 停在 PM。派發的代理人執行 `complete --as <self>` 曾
 兩條路徑皆被擋：帶 `--as` 被 identity-guard 以身份不符拒絕，不帶 `--as`
 則被要求必須提供——且 who 是權責歸屬欄位，不該由執行者自行 `set-who` 繞過。
-三個代理人各自獨立撞上同一狀態後，補上兩道防線：
+三個代理人各自獨立撞上同一狀態後，補上讓出機制（本次起，派發 hook 不再預綁 PM 持有的票，讓出收斂為單一入口）：
 
 | 防線 | 機制 | 生效時機 |
 |------|------|---------|
-| 派發時自動重新綁定 | `dispatch-identity-bind-hook.py` 的 `UNBOUND_WHO_VALUES` 併入 PM 身份字面值，派發 Agent 工具呼叫成功後（PostToolUse）自動將 `who.current` 由 PM 改綁為實際派發的 subagent_type | 每次派發（常態路徑，事前預防） |
-| complete 前置自動讓出 | `complete`/`finish` 執行 identity 對照前，若 `who.current` 仍是 PM 且 `--as` 申報為具名非 PM 執行者，自動重新指派 `who.current` 為該執行者後再走既有比對 | 每次 complete/finish（worktree 隔離派發等前者未觸發的場景之保底） |
+| 派發 hook 只綁無主態 | `dispatch-identity-bind-hook.py` 的 `UNBOUND_WHO_VALUES` 不含 PM 身份；僅 `pending`／`待派發`／`?`／空時以 `set-who --current` 綁定。PM 持有的票不變，避免唯讀審查者覆寫 who | 每次派發 |
+| `--as` 寫入命令前置自動讓出 | `identity_guard.check_identity` 比對前，若 `who.current` 仍是 PM 且 `--as` 為具名非 PM 執行者，自動重新指派（`reassign_who_from_pm_if_takeover`，保留 history）；涵蓋 `check-acceptance`／`set-acceptance`／`complete`／`finish` 等所有走守衛的命令 | 實作代理人首次帶 `--as` 的寫入命令 |
 
 兩道防線皆不需執行者自行 `set-who`，也不需 PM 代跑 `complete`。若仍出現
 `who.current` 與具名執行者不符的 deny，訊息本身已含具體指令（`ticket track

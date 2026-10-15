@@ -175,16 +175,11 @@ class TrackAcceptanceMessages:
     CONTENT_PREFIX = "   內容:"
 
     # execute_check_acceptance 中的批量勾選摘要格式
-    BATCH_CHECK_SUMMARY_FORMAT = "[OK] {ticket_id} 已勾選 {checked_count}/{total_count} 項"
+    BATCH_CHECK_SUMMARY_FORMAT = "[OK] {ticket_id} 全部已勾選：本次變更 {changed_count} 項，目前 {checked_total}/{total_count}"
 
     # execute_check_acceptance 中的批量取消勾選摘要格式
-    BATCH_UNCHECK_SUMMARY_FORMAT = "[OK] {ticket_id} 已取消勾選 {unchecked_count}/{total_count} 項"
+    BATCH_UNCHECK_SUMMARY_FORMAT = "[OK] {ticket_id} 全部已取消勾選：本次變更 {changed_count} 項，目前已勾選 {checked_total}/{total_count}"
 
-    # execute_accept_creation 中的成功訊息格式
-    ACCEPT_CREATION_SUCCESS_FORMAT = "[OK] {ticket_id} 建立後驗收已通過"
-
-    # execute_accept_creation 中的已通過訊息格式
-    ACCEPT_CREATION_ALREADY_ACCEPTED_FORMAT = "[Info] {ticket_id} 已通過建立後驗收"
 
 
 # ============================================================================
@@ -397,7 +392,6 @@ class TrackMessages:
     HELP_PHASE = "更新 Ticket 的 TDD Phase"
     HELP_CHECK_ACCEPTANCE = "勾選或取消勾選驗收條件"
     HELP_APPEND_LOG = "追加執行日誌到 Ticket"
-    HELP_ACCEPT_CREATION = "標記 Ticket 建立後驗收已通過"
     HELP_ADD_CHILD = "建立 Ticket 父子關係"
     HELP_SET_PARENT = "修正 Ticket 的 parent_id（改寫或清除），並同步上游 children"
     HELP_AUDIT = "執行驗收檢查"

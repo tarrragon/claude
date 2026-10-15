@@ -19,8 +19,11 @@ Git 操作共用工具
 
 import fnmatch
 import os
+import signal
 import sys
 import subprocess
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -70,6 +73,11 @@ BARE_INDEX_RISK_OPS = {"read-tree", "reset"}
 CHECKOUT_OP = "checkout"
 GIT_INDEX_FILE_ENV = "GIT_INDEX_FILE"
 INDEX_TRIPWIRE_LOG_NAME = "index-tripwire"
+
+# 逾時後先送 SIGTERM，寬限此秒數仍未結束才 SIGKILL。取值依據：SIGKILL 終止持鎖 git
+# 必殘留 0 位元組 index.lock，SIGTERM 則 git 自行清鎖；清鎖為毫秒級，5 秒足夠且
+# 不致讓呼叫端無限等待。與 worktree-auto-commit-hook / ticket git_ops 兩份私有複本一致。
+TERMINATE_GRACE_SECONDS = 5
 
 # 跨專案豁免清單（W17-149 建立於 branch-verify-hook.py，0.2.1-W3-151 移至此處作 SSOT）：
 # 當目標檔案/檔案不在本專案 repo 時，使用通用清單，不套用 .claude/、docs/ 等本專案約定。
@@ -240,6 +248,87 @@ def run_git_command(
         error_msg = str(e)
         print(f"[Error] git command failed: {error_msg}", file=sys.stderr)
         return False, error_msg
+
+
+def _signal_process_group(proc, sig) -> None:
+    """對 proc 的行程群組送訊號；行程已結束或群組不存在時寫 stderr 後返回。"""
+    try:
+        os.killpg(proc.pid, sig)
+    except ProcessLookupError:
+        print(f"[Warning] process group {proc.pid} already gone ({sig.name})", file=sys.stderr)
+    except OSError as e:
+        print(f"[Warning] killpg {proc.pid} {sig.name} failed: {e}", file=sys.stderr)
+
+
+@contextmanager
+def _forward_sigterm_to_group(proc):
+    """子程序執行期間，hook 自身收到 SIGTERM 時先轉送給子群組。
+
+    子程序以 start_new_session 自成群組，harness 對 hook 後代送 TERM 時可能漏掉它
+    （hook 快速退出的輪次實測 1/5）。轉送後交還原 handler：SIG_DFL 則還原後對自身
+    重送 TERM 使 hook 照常結束，SIG_IGN 維持忽略，可呼叫物件則呼叫之。
+    非主執行緒無法安裝 signal handler，略過並寫 stderr。
+    原 handler 非由 Python 安裝（getsignal 回傳 None）時 signal.signal 無法還原，
+    故不安裝轉送，略過並寫 stderr。
+    """
+    if threading.current_thread() is not threading.main_thread():
+        print("[Warning] SIGTERM forwarding skipped: not in main thread", file=sys.stderr)
+        yield
+        return
+    previous = signal.getsignal(signal.SIGTERM)
+    if previous is None:
+        print("[Warning] SIGTERM forwarding skipped: previous handler not installed by Python", file=sys.stderr)
+        yield
+        return
+
+    def _forward(signum, frame):
+        _signal_process_group(proc, signal.SIGTERM)
+        signal.signal(signal.SIGTERM, previous)
+        if callable(previous):
+            previous(signum, frame)
+        elif previous == signal.SIG_DFL:
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    signal.signal(signal.SIGTERM, _forward)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def run_with_graceful_timeout(args, timeout, grace=None, **popen_kwargs):
+    """執行子程序並在逾時時先 SIGTERM、寬限後才 SIGKILL。
+
+    與 run_git_command 的分工：run_git_command 供唯讀查詢，固定帶
+    --no-optional-locks 且逾時由 subprocess 直接 SIGKILL；本函式供會取鎖
+    （寫入類 git、fetch）或需溫和終止的呼叫，args 須自帶完整命令（含 "git"）。
+
+    支援參數：args、timeout（None 為不設）、grace（預設 TERMINATE_GRACE_SECONDS）、
+    input（字串；有值才開 stdin）、其餘 popen_kwargs（cwd、env、text、encoding、errors）。
+    stdout / stderr 一律擷取。回傳 CompletedProcess；逾時拋 subprocess.TimeoutExpired。
+    一律以 start_new_session=True 啟動（自成行程群組）；逾時對整個群組先 SIGTERM、
+    寬限後 SIGKILL，孫程序（如 git 的 filter 子行程）一併終止。逾時後只等行程本身
+    結束，不等輸出管線 EOF（孫程序可能仍握著管線）。
+    """
+    if grace is None:
+        grace = TERMINATE_GRACE_SECONDS
+    input_text = popen_kwargs.pop("input", None)
+    stdin = subprocess.PIPE if input_text is not None else None
+    popen_kwargs["start_new_session"] = True
+    with subprocess.Popen(
+        args, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **popen_kwargs
+    ) as proc, _forward_sigterm_to_group(proc):
+        try:
+            out, err = proc.communicate(input_text, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _signal_process_group(proc, signal.SIGTERM)
+            try:
+                proc.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                _signal_process_group(proc, signal.SIGKILL)
+                proc.wait()
+            raise
+        return subprocess.CompletedProcess(args, proc.returncode, out, err)
 
 
 def parse_name_status_z(output: str) -> list[tuple[str, Optional[str], str]]:

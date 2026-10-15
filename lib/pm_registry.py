@@ -512,6 +512,43 @@ def is_fresh(heartbeat_ts: Optional[str], now: Optional[datetime] = None) -> boo
     return elapsed <= STALE_THRESHOLD_MINUTES * 60
 
 
+def classify_ownership(
+    entry_session_id: str,
+    self_session_id: str,
+    registry_sessions: Dict,
+    registry_available: bool = True,
+) -> str:
+    """三分產出形態 + 孤兒兩級 + registry 不可用降級：
+
+    - "self"：entry 屬本 session
+    - "cross_session_alive"：他 session 所屬且該 session heartbeat 仍新鮮
+    - "orphan_confirmed"：session_id 不在 pm-registry.json 的 sessions 中
+      （已 SessionEnd graceful release），無 session 可回收
+    - "orphan_suspected"：session_id 存在於 registry 但 heartbeat 已逾
+      STALE 門檻，可能異常終止未 graceful release
+    - "unknown_owner"：entry 無 session_id（早期派發記錄缺此欄位），無法
+      判定歸屬
+    - "registry_unavailable"：registry 讀取失敗/損毀（`read_registry`
+      降級分支），無法排除該 session 其實仍在 registry 中只是讀不到——
+      registry 不可用時一律回傳本分類，不得誤判為 orphan_confirmed（見
+      `registry_available=False` 時的判斷順序：先於 self 之後、其他分類
+      之前短路，因為 registry 不可用本身無法否定「他 session 存活」的
+      可能性）
+    """
+    if not entry_session_id:
+        return "unknown_owner"
+    if entry_session_id == self_session_id:
+        return "self"
+    if not registry_available:
+        return "registry_unavailable"
+    session_entry = registry_sessions.get(entry_session_id)
+    if session_entry is None:
+        return "orphan_confirmed"
+    if not is_fresh(session_entry.get("heartbeat_ts")):
+        return "orphan_suspected"
+    return "cross_session_alive"
+
+
 def recompute_lease(
     registry_file: Path,
     lock_file: Path,

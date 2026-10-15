@@ -51,6 +51,7 @@ from lib.hook_logging import (
     LIVENESS_SUBDIR,
 )
 from lib.hook_io import read_json_from_stdin, emit_hook_output
+from lib.hook_registry import merge_dispatch_registry
 
 HOOK_NAME = "hook-liveness-summary"
 
@@ -638,6 +639,7 @@ def main() -> int:
         logger.info("讀取 settings.json 失敗，跳過本次彙整: {}".format(e))
         return 0
 
+    merge_dispatch_registry(settings, root, logger)
     registered = _registered_hook_names(settings)
     covered = _covered_by_run_hook_safely(root, registered)
     uncovered = registered - covered

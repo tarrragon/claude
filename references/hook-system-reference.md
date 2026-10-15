@@ -478,6 +478,36 @@ uv run --quiet --script .claude/hooks/lsp-environment-check.py
 
 ---
 
+## Hook 狀態類別與根解析對照
+
+**原則**：hook 讀寫的每一類狀態，先判定它屬「全 repo 共用」（shared）或「跟著 worktree 走」（per-worktree），再依類別選根解析函式；根解析函式不由 import 習慣或搜尋結果順序決定。
+
+**Why**：同一個「專案根」有兩份優先序相反的實作。`lib.hook_base.get_project_root` 在 linked worktree 內忽略 `CLAUDE_PROJECT_DIR`、回 worktree 根（為避免 worktree 內 hook 動作洩漏到主倉庫而刻意如此）；`lib.git_utils.get_project_root` 以 `CLAUDE_PROJECT_DIR` 優先、依賴 hook 環境帶有該變數。兩者回傳型別相同，選錯沒有靜態或執行期訊號，只在 linked worktree 內才分歧。機制見 `.claude/error-patterns/architecture/ARCH-BAL-020-same-named-resolver-with-opposite-precedence.md`。
+
+**Consequence**：shared 狀態用了 worktree 根，hook 讀到的是 worktree 內的舊副本或不存在的檔案，且輸出與「真的沒有資料」同形——收尾閘門讀到未勾選的舊票面而錯擋，並行期守衛讀不到登記檔而判為無派發。
+
+| 狀態類別 | 屬性 | 應呼叫的函式 | 解析失敗時退回 |
+|---------|------|-------------|---------------|
+| ticket md（讀取） | shared | `lib.hook_base.get_shared_state_root(default_root)` | 非 repo 或 git 不可用：靜默退回 `default_root`；已偵測為 linked worktree 但查詢失敗或逾時：退回 `default_root`，寫 stderr 並記 warning |
+| `dispatch-active.json` | shared | `lib.hook_base.get_shared_state_root(default_root)`；僅需判斷是否處於並行期時直接呼叫 `lib.hook_base.has_parallel_dispatch(default_root)` | 同上；`has_parallel_dispatch` 對任何例外 fail-open，視為非並行 |
+| session registry | shared | 經 `git rev-parse --git-common-dir` 取主 `.git`（`lib/pm_registry` 已內建），不另選根 | 由 `lib/pm_registry` 處理 |
+| hook-logs（日誌根） | per-worktree | `lib.hook_base.get_project_root`（`setup_hook_logging` 內建，呼叫端不自行指定） | worktree 根 |
+| worktree 內程式碼與寫檔（hook 的寫入動作、liveness 紀錄） | per-worktree | `lib.hook_base.get_project_root` | worktree 根 |
+| 非 hook 情境、確知 hook 環境帶 `CLAUDE_PROJECT_DIR` 的既有讀取 | 視狀態屬性而定 | `lib.git_utils.get_project_root` | 無 env 時退回 cwd 所在 worktree，不保證指向主倉庫 |
+
+**判斷步驟**：
+
+1. 問「這份狀態在另一個 worktree 內的 hook 也必須看到同一份嗎？」是 → shared，用 `get_shared_state_root`。
+2. 否（例如日誌、hook 自己的寫入痕跡）→ per-worktree，用 `get_project_root`。
+3. 呼叫端已持有解析好的根時，以 `default_root` 傳入，保留既有測試替身的有效性。
+4. 新 hook 讀 shared 狀態前，在測試中建 linked worktree、使主倉庫與 worktree 的檔案內容不同，斷言讀到主倉庫那份；只用單一工作區的測試分辨不出選錯。
+
+**日誌根不改的原因**：日誌與狀態的根可以分裂（日誌落 worktree、狀態在主倉庫）。為避免查日誌時誤把兩者視為同處，判定類日誌行須寫出所用的狀態根（例：`agent-commit-verification` 的 `dispatch lookup` 日誌行帶 `state_root`），而不是把日誌根改成主倉庫。
+
+**已知未完成項**：`lib.dispatch_tracker.get_active_dispatches(project_root)` 由呼叫端傳入根，部分呼叫端仍以 `get_project_root` 系函式取根，於 linked worktree 內可能讀到舊登記檔。修法方向為在該函式內部以 `get_shared_state_root` 決定根，使呼叫端不再各自選根；承接中，完成前新增呼叫端須自行傳入 `get_shared_state_root` 的結果。
+
+---
+
 ## 🎯 最佳實踐
 
 ### 開發者指引

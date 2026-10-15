@@ -10,10 +10,12 @@ Hook 基礎設施層模組
 - get_project_root() -> Path
 """
 
+import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 # ============================================================================
 # 常數定義
@@ -34,6 +36,13 @@ GIT_TOPLEVEL_TIMEOUT = 5
 # 僅供測試 fixture 使用，見 .claude/hooks/tests/conftest.py 的
 # hook_project_env fixture。
 ENV_HOOK_TEST_ISOLATION = "HOOK_TEST_ISOLATION"
+
+# 專案根解析的行程內快取：(cwd, CLAUDE_PROJECT_DIR, HOOK_TEST_ISOLATION) -> 根目錄
+_PROJECT_ROOT_CACHE: dict[tuple[str, str | None, str | None], Path] = {}
+
+# 共用狀態根（linked worktree 時的主倉庫根）解析快取：cwd -> 主倉庫根或 None。
+# 與 _PROJECT_ROOT_CACHE 獨立，不影響 get_project_root 的快取行為。
+_MAIN_REPO_ROOT_CACHE: dict = {}
 
 
 # ============================================================================
@@ -101,8 +110,38 @@ def _linked_worktree_root() -> Path | None:
     return Path(toplevel_result.stdout.strip())
 
 
+def clear_project_root_cache() -> None:
+    """清除專案根解析快取（測試用：同鍵下替換暫存 repo 或替身後須重算）。"""
+    _PROJECT_ROOT_CACHE.clear()
+    _MAIN_REPO_ROOT_CACHE.clear()
+
+
 def _find_project_root() -> Path:
-    """查詢專案根目錄
+    """行程內快取版專案根解析。
+
+    Why：單一 hook 行程內 setup_hook_logging 與 mark_hook_entry 多次解析專案根，
+    每次都起 git 子程序（實測每行程 3 次 rev-parse）；同行程內 cwd 與環境變數
+    不變時結果恆定。鍵含 cwd、CLAUDE_PROJECT_DIR、HOOK_TEST_ISOLATION，任一改變即重算。
+    """
+    try:
+        cwd = os.getcwd()
+    except OSError:
+        # cwd 已被刪除：無法組鍵，不快取，維持原解析行為
+        return _resolve_project_root()
+    key = (
+        cwd,
+        os.environ.get(ENV_PROJECT_DIR),
+        os.environ.get(ENV_HOOK_TEST_ISOLATION),
+    )
+    cached = _PROJECT_ROOT_CACHE.get(key)
+    if cached is None:
+        cached = _resolve_project_root()
+        _PROJECT_ROOT_CACHE[key] = cached
+    return cached
+
+
+def _resolve_project_root() -> Path:
+    """查詢專案根目錄（未快取）
 
     優先順序：
     0. 測試隔離逃生艙（HOOK_TEST_ISOLATION=1 時）：直接採用
@@ -227,3 +266,89 @@ def get_project_root() -> Path:
         worktree 環境下 git rev-parse 策略確保路徑正確。
     """
     return _find_project_root()
+
+
+def _main_repo_root_of_linked_worktree() -> Optional[Path]:
+    """cwd 在 linked worktree 時回傳主倉庫根（git-common-dir 的父目錄），否則 None。
+
+    非 linked worktree（含非 repo、git 不可用）回 None，屬正常情境。
+    已偵測為 linked worktree 但 git-common-dir 查詢失敗時回 None 並寫 stderr
+    加 log（quality-baseline 規則 4），呼叫端退回 get_project_root 語意。
+    結果依 cwd 快取（每行程至多一次額外 git 子程序）。
+    """
+    try:
+        cwd = os.getcwd()
+    except OSError:
+        return None
+    if cwd in _MAIN_REPO_ROOT_CACHE:
+        return _MAIN_REPO_ROOT_CACHE[cwd]
+    result_root: Optional[Path] = None
+    if _linked_worktree_root() is not None:
+        try:
+            proc = subprocess.run(
+                ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=GIT_TOPLEVEL_TIMEOUT,
+            )
+            out = proc.stdout.strip()
+            if proc.returncode == 0 and out:
+                result_root = Path(out).parent
+            else:
+                _report_shared_root_failure("git-common-dir 查詢失敗 rc={}".format(proc.returncode))
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            _report_shared_root_failure("git-common-dir 查詢異常: {}".format(exc))
+    _MAIN_REPO_ROOT_CACHE[cwd] = result_root
+    return result_root
+
+
+def _report_shared_root_failure(reason: str) -> None:
+    """共用狀態根解析降級：stderr 加 log 雙通道（quality-baseline 規則 4）。"""
+    msg = "get_shared_state_root 降級為 get_project_root: {}".format(reason)
+    logging.getLogger("hook_base").warning(msg)
+    sys.stderr.write(msg + "\n")
+
+
+def get_shared_state_root(default_root: Optional[Path] = None) -> Path:
+    """取得讀取共用狀態（ticket md、dispatch-active.json）應使用的根目錄。
+
+    語意對齊 ticket CLI 的 get_ticket_state_root：
+    - HOOK_TEST_ISOLATION=1：直接回 get_project_root()（測試隔離，同 get_project_root）。
+    - cwd 在 linked worktree：回主倉庫根（git-common-dir 的父目錄）。
+    - 其餘（主倉庫、非 repo、git 不可用）：回 default_root，None 時回 get_project_root()。
+    - linked worktree 但 git-common-dir 查詢失敗：同上退回，並寫 stderr 加 log。
+
+    default_root 供呼叫端傳入自己已解析（或被測試替身取代）的專案根。
+    get_project_root 的行為與日誌根不受本函式影響。
+    """
+    fallback = default_root if default_root is not None else get_project_root()
+    if os.environ.get(ENV_HOOK_TEST_ISOLATION) == "1":
+        return fallback
+    main_root = _main_repo_root_of_linked_worktree()
+    return main_root if main_root is not None else fallback
+
+
+def has_parallel_dispatch(
+    default_root: Optional[Path] = None, checkout: Optional[Path] = None
+) -> bool:
+    """是否有活躍並行派發（讀共用狀態根的 dispatch-active.json）。
+
+    讀取根一律經 get_shared_state_root，linked worktree 內讀主倉庫登記檔。
+    讀取失敗（含匯入、JSON 損毀）保守視為非並行（fail-open，與既有兩份實作一致）。
+    default_root 語意同 get_shared_state_root。
+    checkout：命令實際作用的 checkout 根。給定時只計入工作位置與其相同的條目
+    （無工作位置欄位的舊條目保守計入）；None（預設）表示作用目標未知，
+    不過濾、全數計入。不以 cwd 推定，因 -C／cd 可讓命令作用到別的 checkout。
+    """
+    try:
+        from .dispatch_tracker import (
+            filter_dispatches_for_checkout,
+            get_active_dispatches,
+        )
+
+        dispatches = get_active_dispatches(get_shared_state_root(default_root))
+        return len(filter_dispatches_for_checkout(dispatches, checkout)) > 0
+    except Exception:
+        return False

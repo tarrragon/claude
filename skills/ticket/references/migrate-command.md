@@ -187,6 +187,8 @@ migrate 不改 todolist、不改 worklog 主檔、不移除舊目錄；這三件
 
 topic-assignments 以追加一行「新 ID、原主題」承接，不改寫舊行。遷移以單一隔離提交寫入新檔、舊檔、各引用者與 topic 追加行；提交失敗時 exit 75，`[WARNING]` 列出全部路徑。
 
+handoff pending（`.claude/handoff/pending/*.json`，版控忽略，不入提交）內的舊 ID 同步改寫：`ticket_id`／`from_ticket`／`target_ticket_id` 與 `direction` 後綴，檔名等於舊 ID 者依新 ID 改名；無 pending 目錄時不做任何事。
+
 ## Collision Detection
 
 > 來源：W14-048

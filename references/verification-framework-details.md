@@ -50,7 +50,7 @@ Ticket 標記完成
 | 開發命令識別 | 判斷是否為開發/修改命令 | 不是開發命令則跳過檢查 |
 | Ticket 內容品質 | Task Summary 完整（所有 Ticket 適用） | 建議補充內容 |
 | Solution 並行化 | Solution 已評估並行化可能性（所有 Ticket 適用） | 建議評估並行化 |
-| 建立後品質審核 | acceptance-auditor + system-analyst 並行審核通過（creation_accepted: true） | 派發審核代理人 |
+| 建立後品質審核 | acceptance-auditor + system-analyst 並行審核（PM 視需要派發，無機械閘門） | 派發審核代理人 |
 
 **責任**：Hook 系統負責檢查和提示；用戶負責建立或認領 Ticket；PM 負責監督 Ticket 生命週期
 

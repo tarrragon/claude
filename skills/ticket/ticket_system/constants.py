@@ -221,6 +221,9 @@ WHEN_TICKET_REF_RE = re.compile(WHEN_TICKET_REF_PATTERN)
 # 深度 = 沿 parent_id 鏈回溯到根的邊數 + 1（根 = depth 1）。
 # 保守設計：平台 5 層 - 1 層 PM - 1 層安全邊距 = 3 層 agent 可用。
 # 此常數為 can_descend() 的唯一深度判準來源（DRY，linux F2 修正）。
+# 兩個量不同：「票樹深度」（parent_id 鏈，本常數的比較對象）vs「巢狀層數」（派發者
+# 所處的平台代理人層級）。本常數依巢狀層數訂定，故只能拿來比較「派發者持有票」的樹深度；
+# 主線程位於最頂層，派發不受被派發票樹深度限制（派發守衛見 agent-ticket-validation-hook）。
 MAX_TICKET_DEPTH: int = 3
 
 # ============================================================

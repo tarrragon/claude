@@ -69,7 +69,7 @@ ticket track append-log <id> --section "Test Results" "測試結果"
 | 實作完成 | Solution | 「新增方法 A、修改檔案 B」 |
 | 測試完成 | Test Results | 「40/40 通過，無回歸」 |
 | 遇到阻塞 | Problem Analysis | 「發現 X 問題，需 PM 決策」 |
-| **任務完成（收尾）** | check-acceptance + complete | `ticket track check-acceptance --all <id> --as <自身 agent 名稱>` 後 `ticket track complete <id> --as <自身 agent 名稱>` |
+| **任務完成（收尾）** | check-acceptance + complete（worktree 隔離派發止於 worktree commit，見 2.4） | 非隔離：`ticket track check-acceptance --all <id> --as <自身 agent 名稱>` 後 `ticket track complete <id> --as <自身 agent 名稱>`；隔離：勾選 acceptance、填 Solution / Test Results、`ticket track commit ... --worktree`，不執行 complete |
 
 #### 2.4 收尾責任：自律 complete（W17-033）
 
@@ -99,6 +99,8 @@ ticket track complete <ticket-id> --as <自身 agent 名稱>
 > **邊界**：本段處理 **hook 強制層的 deny**（identity-guard 對照不符即擋）；前提一是 **agent 自律層**的 who.current 事前對照（不符即零寫入）。兩層互補、觸發路徑不同——自律層在寫入前自查，強制層在寫入時攔截。
 
 > **回覆勾選不算數，frontmatter 才是 SOT（W2-003）**：final message 裡描述「acceptance 已完成」屬記錄平面，`ticket track set-acceptance` / `check-acceptance` 寫入的 frontmatter 才是世界平面 SOT（見 `tool-output-trust-rules` 規則 5）。兩者不同步時 acceptance-gate-hook 只認 frontmatter，complete 會被擋下。收尾前務必實際執行上方 CLI 指令，不可只在回覆文字宣告完成。
+
+**隔離派發的收尾界線（worktree，用戶裁決，2026-10-14）**：以 `Agent(isolation: "worktree")` 派發時，上方 check-acceptance + complete 兩步中，**complete 不由代理人執行**。**Why**：代理人在合併前收尾，會讓票面在程式碼尚未進 main 時即為完成；平台對隔離代理人的 complete 另有阻擋，別名 `finish` 雖能通過且同樣經 acceptance-gate 驗收，但收尾時點仍在合併之前。**Consequence**：隔離代理人 complete 或 finish，票面狀態領先程式碼狀態，PM 無從在合併與測試之後才宣告完成。**Action**：隔離代理人收尾止於以下五步，完成後回報 PM，由 PM 於合併並驗證後在主 checkout 執行 complete：(1) `ticket track set-acceptance <id> --check <編號> --as <自身 agent 名稱>` 逐項勾選；(2) 以 `ticket track append-log` 填 Solution（含 `### 自檢結果與 Phase 4 評估`）與 Test Results；(3) `ticket track commit <id> -m "<描述>" --worktree <worktree 絕對路徑> -- <檔案>` 提交產品檔；(4) 不執行 `ticket track complete`，也不執行其別名 `ticket track finish`；(5) 回報 PM。自檢仍由代理人在執行期撰寫，PM 收尾只執行 complete，不代填自檢。非隔離派發（主 checkout cwd）維持上方 complete 流程。
 
 **例外情境**：
 
@@ -198,7 +200,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 |----------------|---------|
 | `echo "..." > /Users/.../project/file.md`（主 repo 絕對路徑） | `echo "..." > ./file.md`（worktree 相對路徑）<!-- broken-link-exempt: 表格範例路徑，非真實引用 --> |
 | `python3 -c "open('/Users/.../project/file.md','w').write(...)"` | `python3 -c "open('./file.md','w').write(...)"`<!-- broken-link-exempt: 表格範例路徑，非真實引用 --> |
-| `ticket track append-log`（CLI 解析 `CLAUDE_PROJECT_DIR` 指向主 repo） | 用 Edit 修改 worktree 內的 ticket md，或用 `(cd $PWD && ticket ...)` 確認 cwd |
+| 以 Edit 修改 worktree 內的 ticket md 副本（副本是舊版本，寫入不進主 repo 票面） | 直接執行 `ticket track append-log`（CLI 解析 `CLAUDE_PROJECT_DIR`，寫入主 repo 票面，此為票面的唯一正確寫入位置） |
 
 > **識別方式**：路徑含 `CLAUDE_PROJECT_DIR` 值、專案根目錄絕對路徑、或 `..` 回溯至 worktree 外 → 違規。僅限相對路徑或 `$PWD` 下的路徑 → 合規。
 > **來源**：W2-009（worktree agent 以 Python 直寫繞過隔離修改主 repo ticket 檔）。
@@ -341,7 +343,9 @@ MAX_TICKET_DEPTH = 3
 can_descend(ticket) = depth(ticket) < MAX_TICKET_DEPTH
 ```
 
-`can_descend` 供持有該票的呼叫者判斷能否再往下派發，不用於判斷該票能否被派發（被派發票僅在 depth > MAX_TICKET_DEPTH 時被派發守衛擋下）。
+`can_descend` 供持有該票的呼叫者判斷能否再往下派發，不用於判斷該票能否被派發。
+
+**兩個量的區別（樹深度 vs 巢狀層數）**：票樹深度是 parent_id 鏈長度；巢狀層數是派發者所處的平台代理人層級。派發守衛依巢狀層數判定：主線程派發（hook 輸入無 `agent_id`）位於最頂層，不受被派發票樹深度限制；子代理人派發以其持有票的 `can_descend` 判定，持有票映射缺失時退回「被派發票 depth > MAX_TICKET_DEPTH 才擋」。深度模組不可用或計算例外時 fail-open（stderr 與日誌雙通道）。
 
 ##### 五步自檢流程（claim 後執行）
 
@@ -453,7 +457,7 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 - [ ] MCP 工具被拒時已嘗試 Edit 降級，未 self-imposed early stop（規則 7 Fallback）
 - [ ] （程式碼類 subagent）讀 >200 行原始碼前優先用 `mcp__serena__get_symbols_overview`（規則 7 程式碼大檔讀取）
 - [ ] （spec/ANA 規劃含既有資源名稱）已 grep/ls 驗證名稱存在性並標註來源（規則 8）
-- [ ] **任務完成後執行 `ticket track check-acceptance --all <id> --as <自身名稱>` + `ticket track complete <id> --as <自身名稱>`（規則 2.4，--as 全覆蓋）**
+- [ ] **任務完成後執行 `ticket track check-acceptance --all <id> --as <自身名稱>` + `ticket track complete <id> --as <自身名稱>`（規則 2.4，--as 全覆蓋）；worktree 隔離派發止於 worktree commit，complete 由 PM 於合併後執行，不執行 complete / finish（規則 2.4 隔離派發的收尾界線）**
 - [ ] **--as 被 deny 時未拿掉 --as 繞過，已回報 PM 由其裁決（規則 2.4 --as 全覆蓋）**
 - [ ] **ticket 寫入前已 query 對照 who.current 與自身身份（規則 2.4 前提一，主判準）；不符時零寫入並回報 PM（PC-V1-002）**
 - [ ] **收尾前已確認 prompt 含執行指令（引用 ≠ 指派，規則 2.4 前提二，輔助判準）；僅含追溯 Ticket ID 時零 ticket 寫入**
@@ -482,6 +486,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
+**Last Updated**: 2026-10-14
+**Version**: 1.24.0 - 規則 2.4 新增「隔離派發的收尾界線」：worktree 隔離代理人收尾止於 worktree commit，complete 由 PM 於合併後在主 checkout 執行；2.3 表格與檢查清單同步；規則 6 的 append-log 替代做法改為直接執行 append-log（寫主 repo 票面），刪除以 Edit 改 worktree 票面副本的指示（用戶裁決，2026-10-14）
 **Last Updated**: 2026-09-08
 **Version**: 1.23.0 - 「worktree 隔離派發時必須 commit 產品碼進 worktree 分支」Action 改寫：預設 `ticket track commit --worktree <path>`（隔離索引），裸 `git add && git commit` 降為該命令失敗或不可用時的 fallback；與 `bash-tool-usage-rules.md` 規則七、ticket skill〈track commit 子命令〉措辭同步
 **Last Updated**: 2026-08-27

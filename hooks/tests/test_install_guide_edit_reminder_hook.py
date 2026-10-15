@@ -112,14 +112,24 @@ def test_prune_expired_removes_old_entries():
 # === emit_reminder ===
 
 
-def test_emit_reminder_writes_to_stderr(capsys):
+def _ctx(out: str) -> str:
+    """解析 stdout 單一 JSON，回傳 PostToolUse additionalContext。"""
+    data = json.loads(out)
+    hso = data["hookSpecificOutput"]
+    assert hso["hookEventName"] == "PostToolUse"
+    return hso["additionalContext"]
+
+
+def test_emit_reminder_writes_additional_context(capsys):
     hook = load_hook_module()
     hook.emit_reminder("docs/development-setup.md", MagicMock())
     captured = capsys.readouterr()
-    assert "install-guide-reminder" in captured.err
-    assert "fresh shell" in captured.err
-    assert "development-setup.md" in captured.err
-    assert "PC-159" in captured.err
+    ctx = _ctx(captured.out)
+    assert "install-guide-reminder" in ctx
+    assert "fresh shell" in ctx
+    assert "development-setup.md" in ctx
+    assert "PC-159" in ctx
+    assert "install-guide-reminder" not in captured.err
 
 
 # === main flow ===
@@ -131,7 +141,8 @@ def test_main_skips_non_edit_write_tool(monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", _StringIO(payload))
     rc = hook.main()
     assert rc == 0
-    assert "install-guide-reminder" not in capsys.readouterr().err
+    cap = capsys.readouterr()
+    assert cap.out == "" and "install-guide-reminder" not in cap.err
 
 
 def test_main_skips_non_install_guide_file(monkeypatch, capsys):
@@ -142,7 +153,8 @@ def test_main_skips_non_install_guide_file(monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", _StringIO(payload))
     rc = hook.main()
     assert rc == 0
-    assert "install-guide-reminder" not in capsys.readouterr().err
+    cap = capsys.readouterr()
+    assert cap.out == "" and "install-guide-reminder" not in cap.err
 
 
 def test_main_emits_reminder_for_install_guide(monkeypatch, tmp_path, capsys):
@@ -159,9 +171,9 @@ def test_main_emits_reminder_for_install_guide(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("sys.stdin", _StringIO(payload))
     rc = hook.main()
     assert rc == 0
-    err = capsys.readouterr().err
-    assert "install-guide-reminder" in err
-    assert "development-setup.md" in err
+    ctx = _ctx(capsys.readouterr().out)
+    assert "install-guide-reminder" in ctx
+    assert "development-setup.md" in ctx
 
 
 def test_main_throttles_second_call(monkeypatch, tmp_path, capsys):
@@ -181,7 +193,8 @@ def test_main_throttles_second_call(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("sys.stdin", _StringIO(payload))
     rc = hook.main()
     assert rc == 0
-    assert "install-guide-reminder" not in capsys.readouterr().err
+    cap = capsys.readouterr()
+    assert cap.out == "" and "install-guide-reminder" not in cap.err
 
 
 class _StringIO:

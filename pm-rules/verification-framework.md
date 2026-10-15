@@ -90,7 +90,7 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 | Phase 1 | SA 審查通過 | API 定義完整 |
 | Phase 2 | Phase 1 完成 | 測試案例設計完成 |
 | Phase 3a | Phase 2 完成 | 策略文件完整 |
-| Phase 3b | Phase 3a 完成 | 測試 100% 通過 |
+| Phase 3b | Phase 3a 完成 | 本票相關測試檔 100% 通過（全套件交合併閘門，見下方〈合併前全綠與實機驗證票〉） |
 | Phase 4 | Phase 3b 完成 | 評估報告完成 |
 
 ---
@@ -106,6 +106,46 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 **規則**：ticket 的 `where.files` 觸及 runtime surface（`lib/presentation/`、`lib/main.dart`、平台整合層）時，acceptance 必須含一項實機驗證——可自動化者指 on-device 測試（如 `integration_test/` 於釘住裝置執行全綠），不可自動化者（探索性、硬體相依、觀感）指 PM 手動 verify（`.claude/references/pm-role-details.md`「實機驗證屬 PM 職責」條款）。
 
 **Why**：host 測試以替身隔離接縫，全綠仍可能實機起不來、點不到、沒回應；acceptance 缺實機項時此類失效直到發版冒煙才暴露（quality-baseline 規則 1 邊界）。**Action**：PM 建票時對照 `where.files`；漏帶時於驗收前補 AC。判準句與紅燈層級順序節的豁免判準為同一句（「場景有無可駕駛的執行面」，權威見 `.claude/skills/tdd/references/phase2/rules.md`「紅燈層級順序」節）。Hook 強制層暫不建立（決策：現階段由 PM 建票時對照攔截即足）；若發生 runtime-surface ticket 漏帶實機 AC 且未被 PM 攔截，依 quality-baseline 規則 5 當下建 ANA 評估 hook 化。
+
+---
+
+## 合併前全綠與實機驗證票
+
+**原則**：測試驗證分兩個時點——本機提交前驗「本票相關測試檔」，合併 main 前驗「全套件」；全套件只在合併閘門內跑一次，不由各開發票各自重跑。
+
+**Why**：全套件在每張開發票各跑一次，N 張並行即 N 份重複負載，且彼此排擠名額。**Consequence**：若 Phase 3b 驗收仍要求全套件，代理人會繞過合併閘門自行跑全套件，重複負載回來，閘門的序列化失去意義。**Action**：依下表分工驗收。
+
+### 時點分工
+
+| 時點 | 驗證範圍 | 執行者 | 判定依據 |
+|------|---------|-------|---------|
+| 本機提交前（含 Phase 3b） | 本票相關測試檔 | 實作代理人 | 該次測試命令的結束碼 |
+| 合併 main 前 | 全套件 | worktree 合併流程，於名額閘門內 | 合併閘門讀取的結束碼；紅燈不合併 |
+| Level 4 驗收 | 讀合併結果，不重跑全套件 | acceptance-auditor | `.claude/logs/worktree-merge.log` 的 `[合併前測試]` 套件結果行與 `[合併閘門]` 結束行 |
+
+Level 4 找不到閘門結果的處置與 `--skip-gate` 例外，以 `.claude/agents/acceptance-auditor.md`〈Step 5 測試驗證：依審查時點分兩種做法〉為準。套件選擇、快照、重試與日誌格式見 `.claude/skills/worktree/SKILL.md`〈合併前全套件〉。測試入口與回報規格見 `.claude/references/agent-dispatch-template.md`〈測試入口〉。
+
+**Hook 回報的定位**：post-test-hook 等回報只是輔助訊號，不是「合併前全綠」的保證；保證來自合併閘門讀取的結束碼。條文與驗收不得依賴 hook 回報判定全綠。
+
+### 實機驗證票
+
+**原則**：runtime surface 的實機驗證集中成批，由 PM 開獨立的實機驗證票承接，不由每張開發票各自執行。
+
+**Why**：實機驗證需編譯 app，屬重量級工作；每張開發票各編譯一次，並行時同機疊加多份編譯。**Consequence**：不集中則編譯負載與全套件同型重複；不開票則 runtime 失效（host 測試以替身隔離接縫，全綠仍可能起不來）要到發版冒煙才暴露。
+
+**開票條件**（任一成立，由 PM 開一張）：
+
+| 條件 | 說明 |
+|------|------|
+| 一批合併中有票觸及 runtime surface | 任一票的 `where.files` 觸及 `lib/presentation/`、`lib/main.dart`、平台整合層（判準同〈Runtime-surface ticket 的實機驗證 AC 要求〉）；該批合併後開一張，取代各票各自的實機驗收；批次邊界由 PM 判斷，例如同一 wave 內相關 UI 票全數合併後 |
+| 版本發布前 | 固定一張，承接發版的 on-device 套件要求 |
+| 自動化 integration_test 紅燈且歸因於 runner 環境 | 歸因程式或測試本身的紅燈不屬此條，走一般除錯票 |
+
+**執行方式**：PM 以 `/verify`、`/run` 驅動 app 觀察 runtime 行為（實機驗證屬 PM 職責，見 `.claude/references/pm-role-details.md`「實機驗證屬 PM 職責」）。
+
+**排入名額閘門**：需要編譯或執行 integration_test 時，命令經 `run-with-timeout.py` 執行；該類命令判為 heavy，自動排入全機 1 名額的閘門，同一時間全機只有一份編譯，排隊時間不計逾時。不經包裝的 heavy 命令不得執行。
+
+**與 CI 的分工**：integration_test 與 macOS 編譯預定由 CI 承接，該外移尚在規劃中，現行條文不得當作已落地；CI 落地前，這兩類驗證由實機驗證票經名額閘門執行。CI 落地後，實機驗證票仍承擔 CI 無法覆蓋的部分：人眼觀察、平台權限與檔案系統互動、需用戶環境的流程。
 
 ---
 
@@ -271,7 +311,8 @@ PM 遇 AC 爭議裁決時：
 
 ---
 
-**Last Updated**: 2026-08-10
+**Last Updated**: 2026-10-15
+**Version**: 1.11.0 - 新增「合併前全綠與實機驗證票」章節（時點分工、開票條件、名額閘門排入、與 CI 分工）；Phase 3b 驗收改為本票相關測試檔
 **Version**: 1.10.0 - 新增「驗收條件爭議裁決框架」（Level 4 延伸）：核心區分軸（實質要求 vs 驗證方法）+ 判準一（條件未觸發不等於條件未滿足，附 blockedBy 表達法）+ 判準二（實質要求不等於驗證代理指標，附 PC-BAL-010 理論依據）+ 與 acceptance 漂移反模式的邊界 + PM 操作流程
 **Status**: Active
 **Responsible**: rosemary-project-manager, acceptance-auditor, Hook 系統

@@ -140,3 +140,91 @@ def test_only_info_and_debug_returns_false():
         "[2026-04-19 02:22:46] INFO - 結束\n"
     )
     assert _has_hook_error(content) is False
+
+
+# ----------------------------------------------------------------------------
+# git 逾時分支 warning 日誌（0.5.0-W1-164.6.18，補 164.6.16 的日誌回歸保護）
+# ----------------------------------------------------------------------------
+
+import logging
+import subprocess
+from types import SimpleNamespace
+
+import pytest
+
+_FEATURE_BRANCH = "feat/x"
+
+
+def _timeout(*args, **kwargs):
+    raise subprocess.TimeoutExpired(cmd="git", timeout=1)
+
+
+def _ok(stdout):
+    return lambda *a, **k: SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+
+def _warning_messages(caplog):
+    return [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+
+
+@pytest.fixture
+def hook_logger():
+    return logging.getLogger("test_git_timeout_logging")
+
+
+def test_unmerged_worktrees_git_log_timeout_logs_warning(monkeypatch, caplog, hook_logger):
+    monkeypatch.setattr(_hook.subprocess, "run", _timeout)
+    with caplog.at_level(logging.WARNING, logger=hook_logger.name):
+        result = _hook.get_unmerged_worktrees("/proj", hook_logger, worktrees=[("/wt", "feat/a")])
+    assert result == []
+    msgs = _warning_messages(caplog)
+    assert len(msgs) == 1
+    assert "git log main..feat/a" in msgs[0] and "TimeoutExpired" in msgs[0]
+
+
+def test_unmerged_worktrees_normal_does_not_log_warning(monkeypatch, caplog, hook_logger):
+    monkeypatch.setattr(_hook.subprocess, "run", _ok(""))
+    with caplog.at_level(logging.WARNING, logger=hook_logger.name):
+        result = _hook.get_unmerged_worktrees("/proj", hook_logger, worktrees=[("/wt", "feat/a")])
+    assert result == []
+    assert _warning_messages(caplog) == []
+
+
+def test_unmerged_feature_branches_git_branch_timeout_logs_warning(monkeypatch, caplog, hook_logger):
+    monkeypatch.setattr(_hook.subprocess, "run", _timeout)
+    with caplog.at_level(logging.WARNING, logger=hook_logger.name):
+        result = _hook.get_unmerged_feature_branches("/proj", hook_logger)
+    assert result == []
+    msgs = _warning_messages(caplog)
+    assert len(msgs) == 1
+    assert "git branch" in msgs[0] and "TimeoutExpired" in msgs[0]
+
+
+def test_unmerged_feature_branches_git_log_timeout_logs_warning(monkeypatch, caplog, hook_logger):
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[:2] == ["git", "branch"]:
+            return SimpleNamespace(returncode=0, stdout=f"main\n{_FEATURE_BRANCH}\n", stderr="")
+        raise subprocess.TimeoutExpired(cmd="git", timeout=1)
+
+    monkeypatch.setattr(_hook.subprocess, "run", fake_run)
+    monkeypatch.setattr(_hook, "FEATURE_BRANCH_PREFIXES", ("feat/",))
+    with caplog.at_level(logging.WARNING, logger=hook_logger.name):
+        result = _hook.get_unmerged_feature_branches("/proj", hook_logger)
+    assert result == []
+    msgs = _warning_messages(caplog)
+    assert len(msgs) == 1
+    assert f"git log main..{_FEATURE_BRANCH}" in msgs[0]
+
+
+def test_unmerged_feature_branches_normal_does_not_log_warning(monkeypatch, caplog, hook_logger):
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[:2] == ["git", "branch"]:
+            return SimpleNamespace(returncode=0, stdout=f"main\n{_FEATURE_BRANCH}\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="abc1234 msg\n", stderr="")
+
+    monkeypatch.setattr(_hook.subprocess, "run", fake_run)
+    monkeypatch.setattr(_hook, "FEATURE_BRANCH_PREFIXES", ("feat/",))
+    with caplog.at_level(logging.WARNING, logger=hook_logger.name):
+        result = _hook.get_unmerged_feature_branches("/proj", hook_logger)
+    assert result == [(_FEATURE_BRANCH, ["abc1234 msg"])]
+    assert _warning_messages(caplog) == []

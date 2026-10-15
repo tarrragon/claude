@@ -31,6 +31,9 @@ MAIN_WORKLOG_FILENAME_TEMPLATE = "v{version}-main.md"
 # 日期標題的正則（### YYYY-MM-DD 開頭）
 DATE_HEADING_PATTERN = re.compile(r"^### \d{4}-\d{2}-\d{2}")
 
+# 開發日誌章節標題（無日期標題時，當日標題建立於此章節末尾）
+DEV_LOG_HEADING = "## 開發日誌"
+
 # 區段結束標記（下一個 ### 或 --- 或 ## ）
 SECTION_END_PATTERN = re.compile(r"^(### |---|## )")
 
@@ -98,6 +101,26 @@ def _find_last_date_section_end(lines: list[str]) -> int | None:
     return insert_at
 
 
+def _find_dev_log_section_end(lines: list[str]) -> int | None:
+    """找「## 開發日誌」章節末尾插入點；無該章節回傳 None。"""
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == DEV_LOG_HEADING), None)
+    if start is None:
+        return None
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("---") or lines[i].startswith("## "):
+            end = i
+            break
+    while end > start + 1 and lines[end - 1].strip() == "":
+        end -= 1
+    return end
+
+
+def _build_new_date_block(today: str, progress_line: str) -> str:
+    """當日標題 + 進度行區塊（前置空行與前段分隔）。"""
+    return f"\n### {today}\n\n{progress_line}"
+
+
 def append_worklog_progress(version: str, ticket_id: str, title: str) -> Optional[str]:
     """
     在 main worklog 的最後一個日期區段末尾追加進度行
@@ -140,14 +163,21 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> Optiona
             if any(completion_marker in line for line in search_lines):
                 return None
 
-            insert_at = _find_last_date_section_end(search_lines)
-            if insert_at is None:
-                print("[WARNING] worklog 中找不到日期標題區段，跳過進度追加")
-                return None
-
             lines = content.splitlines(keepends=True)
             today = date.today().isoformat()
             progress_line = f"- {today}: {ticket_id} 完成 -- {title}\n"
+
+            insert_at = _find_last_date_section_end(search_lines)
+            if insert_at is None:
+                # 無任何日期標題：於「## 開發日誌」末尾建立當日標題再追加
+                insert_at = _find_dev_log_section_end(search_lines)
+                if insert_at is None:
+                    print(
+                        f"[WARNING] worklog 缺少「{DEV_LOG_HEADING}」章節與"
+                        f"「### YYYY-MM-DD」日期標題，跳過進度追加：{worklog_path}"
+                    )
+                    return None
+                progress_line = _build_new_date_block(today, progress_line)
             lines.insert(insert_at, progress_line)
 
             worklog_path.write_text("".join(lines), encoding="utf-8")
@@ -172,10 +202,14 @@ def _replay_progress_lines(base: str, text: str) -> str:
     """在 HEAD 版本全文 ``base`` 的最後日期區段末尾插入 ``text`` 各行。
 
     工作區不是「HEAD + 本次行」的超集（他人改了既有行）時由 git_ops 呼叫。
-    找不到日期標題區段時接在檔尾（與 AppendSpec 無 replay 的退回一致）。
+    無日期標題時插在「## 開發日誌」章節末尾；仍無則接在檔尾
+    （與 AppendSpec 無 replay 的退回一致）。
     """
     lines = base.splitlines(keepends=True)
-    insert_at = _find_last_date_section_end([ln.rstrip("\n") for ln in lines])
+    stripped = [ln.rstrip("\n") for ln in lines]
+    insert_at = _find_last_date_section_end(stripped)
+    if insert_at is None:
+        insert_at = _find_dev_log_section_end(stripped)
     if insert_at is None:
         return base + text
     return "".join(lines[:insert_at]) + text + "".join(lines[insert_at:])

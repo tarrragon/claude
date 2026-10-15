@@ -19,3 +19,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "wallclock: 以牆鐘時序為判準的真實子程序測試，負載敏感；與 hooks/pyproject.toml 同名同義，手動執行 -m wallclock",
+]

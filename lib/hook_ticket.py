@@ -26,7 +26,7 @@ from typing import List, Optional, Tuple, Union
 
 import yaml
 
-from .hook_base import get_project_root
+from .hook_base import get_project_root, get_shared_state_root
 
 # ============================================================================
 # 快取變數（模組級，用於效能改善）
@@ -565,7 +565,8 @@ def find_ticket_file(
         Path: Ticket 檔案路徑，或 None 如未找到
     """
     if project_root is None:
-        project_root = get_project_root()
+        # 票面屬共用狀態：linked worktree 內讀主倉庫
+        project_root = get_shared_state_root()
 
     # 嘗試解析 ticket_id 中的版本號（格式：{version}-W{wave}-{seq}）
     # 範例：0.1.0-W31-003 → version="0.1.0"
@@ -690,7 +691,7 @@ def extract_where_files(
     """
     if project_root is None:
         try:
-            project_root = get_project_root()
+            project_root = get_shared_state_root()
         except Exception as e:
             if logger:
                 logger.warning("無法取得 project_root: {}".format(e))

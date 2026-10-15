@@ -22,15 +22,53 @@ if __name__ == "__main__":
 import argparse
 import json
 import os
+import re
 import subprocess
-from typing import List, Optional, Set
+from collections import Counter
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
+from ticket_system.lib.commit_attribution import apply_attribution
 from ticket_system.lib.file_conflict import files_intersect, parse_file_intent, write_files
-from ticket_system.lib.git_ops import commit_files_isolated
+from ticket_system.lib.git_ops import (
+    FAILURE_CAS,
+    FAILURE_GIT_STEP,
+    AppendSpec,
+    commit_files_isolated,
+)
 from ticket_system.lib.messages import ErrorMessages, format_error
 from ticket_system.lib.paths import get_ticket_path, get_ticket_state_root
 from ticket_system.lib.project_root import resolve_project_cwd
+from ticket_system.lib.topic_assignments import TOPIC_ASSIGNMENTS_RELATIVE_PATH
+from ticket_system.lib.worklog_appender import _build_worklog_path
 from ticket_system.lib.ticket_loader import load_ticket
+
+
+FAILURE_CRITERIA = "criteria"
+FAILURE_ENVIRONMENT = "environment"
+
+# 判準性拒絕：命令正在執行範圍保護，走 fallback 等於繞過該保護。
+CRITERIA_REJECTION_GUIDANCE = (
+    "[NEXT] 此為範圍判準拒絕，不得改走 fallback（裸 git commit）；"
+    "請停手回報 PM，以 set-where 補宣告，或從輸入移除該檔案後重跑本命令。"
+)
+# 環境性失敗：隔離索引機制本身故障，範圍判準已通過。
+ENVIRONMENT_FAILURE_GUIDANCE = (
+    "[NEXT] 此為環境性失敗；請先重跑本命令（index.lock／HEAD 競爭通常重跑即成功），"
+    "持續失敗才走規則七 fallback。"
+)
+
+_ENVIRONMENT_KINDS = frozenset({FAILURE_CAS, FAILURE_GIT_STEP})
+
+
+def classify_failure(failure_kind: Optional[str]) -> str:
+    """依 ``failure_kind`` 將失敗分為判準性或環境性。
+
+    只讀結構化欄位。僅明確的環境類型判為環境性；None 或無法辨識者
+    fail-closed 歸判準性（不引導走 fallback，停手回報）。
+    """
+    if failure_kind in _ENVIRONMENT_KINDS:
+        return FAILURE_ENVIRONMENT
+    return FAILURE_CRITERIA
 
 
 def _resolve_repo_root(worktree: Optional[str]) -> Optional[str]:
@@ -83,6 +121,23 @@ def _own_ticket_md(version: str, ticket_id: str, repo_root: str) -> str:
     if rel.startswith(".."):
         rel = _to_repo_relative(abs_path, str(get_ticket_state_root()), repo_root)
     return rel
+
+
+def _cli_managed_paths(version: str, ticket_id: str, repo_root: str) -> set:
+    """CLI 自己寫入的檔案（隱含可寫，不需列入 where.files），repo-relative posix。
+
+    票自身 md、票所屬版本的工作日誌、topic-assignments.txt。complete／create
+    收尾 CAS 失敗的補救指令會同時帶這幾個檔；不放行則照抄補救指令仍被拒。
+    清單固定三項，不放寬到任意 docs/ 路徑（他票票檔與一般 docs 檔仍須在 where.files）。
+    """
+    worklog = _to_repo_relative(
+        str(_build_worklog_path(version)), str(get_ticket_state_root()), repo_root
+    )
+    return {
+        _own_ticket_md(version, ticket_id, repo_root),
+        worklog,
+        TOPIC_ASSIGNMENTS_RELATIVE_PATH,
+    }
 
 
 def _out_of_scope_files(
@@ -218,6 +273,72 @@ def _expand_directories(
     return expanded
 
 
+def _head_lines(rel: str, repo_root: str) -> List[str]:
+    """HEAD 版本的檔案各行；HEAD 無此檔（新檔）回傳空清單。"""
+    result = subprocess.run(
+        ["git", "show", f"HEAD:{rel}"],
+        cwd=repo_root, capture_output=True, text=True, check=False,
+    )
+    return result.stdout.splitlines() if result.returncode == 0 else []
+
+
+def _own_new_lines(
+    rel: str, repo_root: str, is_own_line: Callable[[str], bool]
+) -> List[str]:
+    """工作區相對 HEAD 新增、且 is_own_line 判定屬本票的行（保留工作區行序）。"""
+    try:
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            work = fh.read().splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"[WARNING] 無法讀取共用檔 {rel}：{exc}，視為無本票的行")
+        return []
+    budget = Counter(_head_lines(rel, repo_root))
+    own: List[str] = []
+    for line in work:
+        if budget[line] > 0:
+            budget[line] -= 1  # HEAD 已有的行
+        elif is_own_line(line):
+            own.append(line)
+    return own
+
+
+def _ticket_id_pattern(ticket_id: str) -> "re.Pattern[str]":
+    """票 ID 字面比對（排除較長 ID 的前綴命中與 `.N` 子票）。"""
+    return re.compile(rf"(?<![\w.-]){re.escape(ticket_id)}(?![\w-]|\.\d)")
+
+
+def _split_shared_append_files(
+    files: List[str], ticket_id: str, version: str, repo_root: str
+) -> Tuple[List[str], Dict[str, AppendSpec]]:
+    """把 append-only 共用檔（topic-assignments、版本工作日誌）從整檔提交
+    路徑移出，改成只追加本票的行（他票未提交的行留在工作區）。
+
+    topic 行以票 ID 為首欄；工作日誌行含票 ID。共用檔無本票的行時不提交
+    該檔並輸出提示。
+    """
+    worklog = _to_repo_relative(
+        str(_build_worklog_path(version)), str(get_ticket_state_root()), repo_root
+    )
+    pattern = _ticket_id_pattern(ticket_id)
+    rules: Dict[str, Callable[[str], bool]] = {
+        TOPIC_ASSIGNMENTS_RELATIVE_PATH: lambda ln: (ln.split() or [""])[0] == ticket_id,
+        worklog: lambda ln: bool(pattern.search(ln)),
+    }
+    paths: List[str] = []
+    appends: Dict[str, AppendSpec] = {}
+    for rel in files:
+        rule = rules.get(rel)
+        if rule is None:
+            paths.append(rel)
+            continue
+        own = _own_new_lines(rel, repo_root, rule)
+        if own:
+            appends[rel] = AppendSpec("".join(f"{ln}\n" for ln in own))
+        else:
+            print(f"[INFO] 共用檔 {rel} 無本票（{ticket_id}）新增的行，不提交該檔")
+    return paths, appends
+
+
 def execute_commit(args: argparse.Namespace, version: str) -> int:
     """`ticket track commit <ticket-id> -m <msg> -- <files>`：驗證 files
     為 where.files 寫入子集後，透過 commit_files_isolated 隔離提交。
@@ -253,17 +374,23 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
     }
 
     own_md = _own_ticket_md(version, args.ticket_id, repo_root)
+    implicit_writable = _cli_managed_paths(version, args.ticket_id, repo_root)
     non_own_inputs = [
-        f for f in args.files if _to_repo_relative(f, repo_root, base_dir) != own_md
+        f for f in args.files
+        if _to_repo_relative(f, repo_root, base_dir) not in implicit_writable
+    ]
+    own_md_inputs = [
+        f for f in args.files if _to_repo_relative(f, repo_root, base_dir) == own_md
     ]
 
     # 票面依 root 分離設計由主 repo CLI 寫入並自動提交；linked worktree 內的
     # 票面只可能是舊副本，提交它會使合回 main 的票面狀態倒退。
-    if worktree and len(non_own_inputs) != len(args.files):
+    if worktree and own_md_inputs:
         print(
             f"[ERROR] Ticket {args.ticket_id} 的票面不可在 worktree 提交：票面由主 repo "
             "CLI 寫入並自動提交，worktree 內的副本是舊版本，提交會使合回 main 的"
-            "票面狀態倒退。請從輸入移除票面，只提交產品檔。"
+            "票面狀態倒退。請從輸入移除票面，只提交產品檔。\n"
+            + CRITERIA_REJECTION_GUIDANCE
         )
         return 1
 
@@ -283,11 +410,11 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
                 "非寫入意圖）；若確有寫入需求，請於該路徑後加 ::write 標記，"
                 "例如：path/to/file.py::write"
             )
-        print(message)
+        print(message + "\n" + CRITERIA_REJECTION_GUIDANCE)
         return 1
 
     out_of_scope = _out_of_scope_files(
-        args.files, normalized_declared | {own_md}, repo_root, base_dir
+        args.files, normalized_declared | implicit_writable, repo_root, base_dir
     )
     if out_of_scope:
         print(
@@ -295,6 +422,8 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
             + "\n".join(f"  - {f}" for f in out_of_scope)
             + "\n宣告範圍：\n"
             + "\n".join(f"  - {f}" for f in sorted(normalized_declared))
+            + "\n"
+            + CRITERIA_REJECTION_GUIDANCE
         )
         return 1
 
@@ -311,11 +440,37 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         )
         return 1
 
-    result = commit_files_isolated(normalized_input, args.message, cwd=repo_root)
+    normalized_input, append_lines = _split_shared_append_files(
+        normalized_input, args.ticket_id, version, repo_root
+    )
+    if not normalized_input and not append_lines:
+        print("[INFO] 無可提交內容（共用檔沒有本票的行），未提交")
+        return 0
+    if not normalized_input:
+        # commit_files_isolated 在 paths 為空時直接回 empty、不處理 append_lines；
+        # 以票自身 md 作主路徑（內容未變時淨變更為零，屬合法）。
+        # worktree 內票面是舊副本（見上方票面拒絕），不可借作主路徑。
+        if worktree:
+            print(
+                "[ERROR] worktree 模式下只提交共用檔的本票行需要主路徑，但票面副本不可"
+                "在 worktree 提交；請連同產品檔一起提交，或在主 repo 執行"
+            )
+            return 1
+        if not os.path.isfile(os.path.join(repo_root, own_md)):
+            print(f"[ERROR] 只提交共用檔的本票行需要主路徑，但票面 {own_md} 不存在於 {repo_root}")
+            return 1
+        normalized_input = [own_md]
+
+    message, attribution_warning = apply_attribution(args.message, repo_root)
+    if attribution_warning:
+        print(attribution_warning)
+    result = commit_files_isolated(
+        normalized_input, message, cwd=repo_root, append_lines=append_lines or None
+    )
     status = result["status"]
     if status == "committed":
         print(f"[OK] 已提交 {result['commit_sha']}")
-        for p in normalized_input:
+        for p in list(normalized_input) + list(append_lines):
             print(f"  - {p}")
         return 0
     if status == "empty":
@@ -332,6 +487,10 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         return 0
 
     print(f"[ERROR] 提交失敗：{result['error']}")
+    if classify_failure(result.get("failure_kind")) == FAILURE_CRITERIA:
+        print(CRITERIA_REJECTION_GUIDANCE)
+    else:
+        print(ENVIRONMENT_FAILURE_GUIDANCE)
     return 1
 
 

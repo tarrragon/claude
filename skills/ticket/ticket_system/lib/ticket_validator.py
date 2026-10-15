@@ -744,7 +744,7 @@ def _detect_self_check_subsection(body: str) -> bool:
             return False
         return bool(
             re.search(
-                r"^### 自檢結果(?:[\s（(].*)?$",
+                r"^### 自檢結果(?:[\s（(與].*)?$",
                 solution_match.group(1),
                 flags=re.MULTILINE,
             )

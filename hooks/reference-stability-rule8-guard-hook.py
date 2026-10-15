@@ -98,6 +98,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import sys
@@ -233,7 +234,11 @@ def _get_repo_root(start_path: str) -> Optional[str]:
             return None
         root = result.stdout.strip()
         return root or None
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as e:
+        logging.getLogger("reference-stability-rule8-guard").warning(
+            "git rev-parse --show-toplevel 失敗（fail-open 回傳 None）: cwd=%s, %s: %s",
+            start_path, type(e).__name__, e,
+        )
         return None
 
 

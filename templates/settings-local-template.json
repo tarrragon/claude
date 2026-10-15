@@ -65,8 +65,9 @@
 
       "_COMMENT_FLUTTER_START: === [FLUTTER] 以下為 Flutter/Dart 特定權限，非 Flutter 專案請移除 ===",
       "Bash(flutter test:*)",
-      "Bash(timeout 60 flutter test:*)",
-      "Bash(timeout 120 flutter test:*)",
+      "Bash(python3 .claude/scripts/run-with-timeout.py 60 -- flutter test:*)",
+      "Bash(python3 .claude/scripts/run-with-timeout.py 120 -- flutter test:*)",
+      "Bash(python3 .claude/scripts/orphan-test-procs.py)",
       "Bash(flutter analyze:*)",
       "Bash(flutter pub get:*)",
       "Bash(flutter clean:*)",

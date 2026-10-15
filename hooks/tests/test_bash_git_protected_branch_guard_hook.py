@@ -1078,3 +1078,76 @@ class TestHasShellExpansionSyntaxUnit:
 
     def test_empty_false(self):
         assert hook_module._has_shell_expansion_syntax("") is False
+
+
+# ============================================================================
+# scan=True（0.5.0-W1-120.7.9.3）：僅掃描命中的 git write 與位置命中同等處置
+# ============================================================================
+
+
+class TestScanModeE2:
+    def _setup(self, monkeypatch, tmp_path, staged: bool):
+        host = tmp_path / "host"
+        host.mkdir()
+        _init_git_repo(host)
+        external = tmp_path / "external"
+        external.mkdir()
+        _init_git_repo(external, branch="main")
+        if staged:
+            _stage_file(external, ".claude/skills/x/y.md")
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: host)
+        return external
+
+    def _deny(self, out: str) -> bool:
+        if not out.strip():
+            return False
+        hso = json.loads(out)["hookSpecificOutput"]
+        return hso["permissionDecision"] == "deny"
+
+    def test_setsid_commit_denied_on_protected_branch(self, monkeypatch, capsys, tmp_path):
+        external = self._setup(monkeypatch, tmp_path, staged=True)
+        cmd = f'setsid git -C {external} commit -m "msg"'
+        exit_code, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": cmd}}
+        )
+        assert exit_code == 0
+        assert self._deny(out)
+
+    def test_find_exec_commit_denied_on_protected_branch(self, monkeypatch, capsys, tmp_path):
+        external = self._setup(monkeypatch, tmp_path, staged=True)
+        cmd = f"find . -maxdepth 0 -exec git -C {external} commit -m msg \\;"
+        _, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": cmd}}
+        )
+        assert self._deny(out)
+
+    def test_setsid_commit_allowed_without_staged(self, monkeypatch, capsys, tmp_path):
+        external = self._setup(monkeypatch, tmp_path, staged=False)
+        cmd = f'setsid git -C {external} commit -m "msg"'
+        _, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": cmd}}
+        )
+        assert not self._deny(out)
+
+    def test_grep_quoted_text_allowed(self, monkeypatch, capsys, tmp_path):
+        external = self._setup(monkeypatch, tmp_path, staged=True)
+        cmd = f"grep 'git -C {external} commit' notes.txt"
+        exit_code, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": cmd}}
+        )
+        assert exit_code == 0
+        assert not self._deny(out)
+
+    def test_mutation_without_scan_flips_to_allow(self, monkeypatch, capsys, tmp_path):
+        external = self._setup(monkeypatch, tmp_path, staged=True)
+        orig = hook_module.find_git_invocations
+        monkeypatch.setattr(
+            hook_module,
+            "find_git_invocations",
+            lambda command, subs, *a, **k: orig(command, subs),
+        )
+        cmd = f'setsid git -C {external} commit -m "msg"'
+        _, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": cmd}}
+        )
+        assert not self._deny(out)

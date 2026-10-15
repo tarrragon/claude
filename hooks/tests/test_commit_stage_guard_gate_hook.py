@@ -25,6 +25,7 @@ Source: ticket 0.2.1-W3-893（來源 ANA 0.2.1-W3-825）
 """
 
 import importlib.util
+import io
 import json
 import subprocess
 import sys
@@ -446,3 +447,56 @@ class TestWorktreeBranchResolution:
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+class TestScanModeE2:
+    """scan=True（0.5.0-W1-120.7.9.3）：僅掃描命中的 git commit 與位置命中同等處置。"""
+
+    def _stage_violation(self, repo):
+        target = repo / ".claude" / "references" / "x.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("baseline\n", encoding="utf-8")
+        _run_git(["add", "."], cwd=repo)
+        _run_git(["commit", "-q", "-m", "baseline2"], cwd=repo)
+        target.write_text("baseline\n引用 W9-002 的分析結論。\n", encoding="utf-8")
+        _run_git(["add", ".claude/references/x.md"], cwd=repo)
+
+    def _run(self, repo, command):
+        return TestMainIntegration()._run_hook(
+            {"tool_name": "Bash", "tool_input": {"command": command}}, repo
+        )
+
+    def test_scan_only_commit_denied_with_violation(self, scratch_repo):
+        self._stage_violation(scratch_repo)
+        result = self._run(scratch_repo, "setsid git commit -m x")
+        assert result.returncode == 2
+        assert "reference-stability-rule8-guard" in result.stderr
+
+    def test_find_exec_commit_denied_with_violation(self, scratch_repo):
+        self._stage_violation(scratch_repo)
+        result = self._run(
+            scratch_repo, "find . -maxdepth 0 -exec git commit -m x \\;"
+        )
+        assert result.returncode == 2
+
+    def test_scan_only_commit_allowed_without_staged(self, scratch_repo):
+        assert self._run(scratch_repo, "setsid git commit -m x").returncode == 0
+
+    def test_grep_quoted_commit_allowed_with_violation(self, scratch_repo):
+        self._stage_violation(scratch_repo)
+        assert self._run(scratch_repo, "grep 'git commit' notes.txt").returncode == 0
+
+    def test_mutation_without_scan_flips_to_allow(self, scratch_repo, monkeypatch, capsys):
+        self._stage_violation(scratch_repo)
+        orig = hook_module.find_git_invocations
+        monkeypatch.setattr(
+            hook_module,
+            "find_git_invocations",
+            lambda command, subs, *a, **k: orig(command, subs),
+        )
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "setsid git commit -m x"}}
+        )))
+        monkeypatch.chdir(scratch_repo)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(scratch_repo))
+        assert hook_module.main() == 0

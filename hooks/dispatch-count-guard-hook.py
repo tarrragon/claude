@@ -14,7 +14,8 @@
   1. PostToolUse（Agent tool call）：偵測關鍵字，初始化/更新派發計數
   2. UserPromptSubmit（用戶下一次輸入）：驗證派發計數，輸出警告
 
-計數器存放: /tmp/claude-dispatch-batch-{ppid}.json
+計數器存放: /tmp/claude-dispatch-batch-{session_id}.json（session_id 取自 hook 輸入）
+失敗語意: fail-open——取不到 session_id 時略過計數與驗證，不阻擋
 格式:
   {
     "expected": 3,
@@ -53,6 +54,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
+from lib.session_state_key import session_state_path
 from lib.constants import (
     DISPATCH_MULTI_KEYWORDS,
     DISPATCH_BATCH_STATE_TEMPLATE,
@@ -91,10 +93,9 @@ DEFAULT_OUTPUT = {
 # 狀態檔管理
 # ============================================================================
 
-def get_batch_state_file() -> Path:
-    """取得派發批次狀態檔路徑"""
-    ppid = os.getppid()
-    return Path(DISPATCH_BATCH_STATE_TEMPLATE.format(ppid=ppid))
+def get_batch_state_file(input_data: Dict[str, Any], logger=None) -> Optional[Path]:
+    """取得派發批次狀態檔路徑（以 hook 輸入的 session_id 識別；取不到回傳 None）"""
+    return session_state_path(DISPATCH_BATCH_STATE_TEMPLATE, input_data, logger)
 
 
 def is_state_file_expired(file_path: Path) -> bool:
@@ -215,7 +216,11 @@ def handle_post_tool_use(input_data: Dict[str, Any], logger) -> int:
     keywords, expected_count = detection
 
     # 初始化或更新狀態檔
-    state_file = get_batch_state_file()
+    state_file = get_batch_state_file(input_data, logger)
+    if state_file is None:
+        # fail-open：取不到 session_id 就略過計數（警告型 hook，不阻擋）
+        print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
     state = read_batch_state(state_file, logger) or {
         "expected": expected_count,
         "keywords": keywords,
@@ -269,7 +274,10 @@ def handle_user_prompt_submit(input_data: Dict[str, Any], logger) -> int:
     """
     UserPromptSubmit Hook：驗證派發計數，若不一致輸出警告
     """
-    state_file = get_batch_state_file()
+    state_file = get_batch_state_file(input_data, logger)
+    if state_file is None:
+        # fail-open：取不到 session_id 就略過驗證
+        return EXIT_SUCCESS
     state = read_batch_state(state_file, logger)
 
     if not state:

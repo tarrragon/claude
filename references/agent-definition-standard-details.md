@@ -187,6 +187,25 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 | 2 | `ticket track complete <id>` | acceptance 全數通過 |
 | 例外 | 在 NeedsContext 記錄缺口、**不 complete** | acceptance 有未通過 |
 
+### 隔離派發的收尾界線（worktree，用戶裁決，2026-10-14）
+
+上方兩步收尾適用於**非隔離派發**（代理人 cwd 為主 checkout）。以 `Agent(isolation: "worktree")` 派發時，代理人只做到 worktree commit，**complete 由 PM 於合併並驗證後在主 checkout 執行**。
+
+**Why**：隔離代理人在合併前 complete，會讓票面在程式碼尚未進 main 時即為完成。平台對隔離代理人的 `complete` 另有阻擋；別名 `finish` 雖能通過且同樣經 acceptance-gate 驗收（gate 辨識 finish 並讀主倉庫票面），收尾時點仍在合併之前。把 complete 移到合併與測試之後，票面完成狀態才與 main 一致，自檢仍由執行期的代理人撰寫。
+
+**Consequence**：隔離代理人 complete 或 finish，票面狀態領先程式碼狀態，合併衝突或合併後測試失敗時票面已是完成；PM 代填自檢則破壞「執行期的代理人才是自檢正確供給側」的設計。
+
+**Action**：
+
+| 角色 | 動作 |
+|------|------|
+| 隔離代理人 | `set-acceptance` 勾選 → `append-log` 填 Solution（含 `### 自檢結果與 Phase 4 評估`）與 Test Results → `ticket track commit <id> -m "..." --worktree <路徑> -- <檔案>` → 回報 PM；**不執行 complete 與 finish** |
+| PM | 合併 worktree 分支並驗證測試後，於主 checkout 執行 complete；只執行 complete，不代填自檢 |
+
+**PM 收尾身份（用戶裁決，2026-10-14，採三候選之二）**：PM 先執行 `ticket track set-who <id> --current rosemary-project-manager`，再 `complete`。who.history 保留實作者與交接時間，Executing Agent 欄保留實作者，who.current 記錄收尾者，票面同時可查「誰實作」與「誰收尾」，成本只多一條命令。不採 `complete --as rosemary-project-manager` 而不改 who（票面無收尾紀錄，只留在遙測與 git），也不採改派非隔離代理人代為 complete（多一次派發，且收尾者實際未做事）。依據：實測三候選的身份紀錄、成本與 gate 相容性比較。
+
+**例外**：acceptance 有未通過項時，代理人於 NeedsContext 記錄缺口並回報 PM，PM 不 complete。
+
 ### 安全網設計
 
 acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM 執行皆會觸發。故 agent 自律 complete 無安全風險，hook 失敗時依訊息修補後重試即可。
@@ -203,10 +222,11 @@ acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM
 
 | 違規類型 | 偵測時機 | 行為 |
 |---------|---------|------|
-| 實作類 agent commit 後未 complete 也未回報缺口 | PM handoff 時發現 ticket 仍 in_progress | 視為 PC-105 模式（subagent-no-complete-after-commit），PM 補做但記錄為待防護 |
+| 實作類 agent commit 後未 complete 也未回報缺口（worktree 隔離派發不適用：其 complete 由 PM 於合併後執行） | PM handoff 時發現 ticket 仍 in_progress | 視為 PC-105 模式（subagent-no-complete-after-commit），PM 補做但記錄為待防護 |
 
 ---
 
+**Last Updated**: 2026-10-14 | **Version**: 1.8.0 — 「執行責任：Ticket 完成」新增「隔離派發的收尾界線」小節：worktree 隔離代理人止於 worktree commit，complete 由 PM 於合併後在主 checkout 執行，PM 收尾身份採 set-who 後 complete；違規偵測表補隔離派發排除（用戶裁決，2026-10-14）。
 **Last Updated**: 2026-08-23 | **Version**: 1.7.0 — 跨 ticket 物件操作禁令新增「邊界：建立自身衍生票不在禁止範圍」小節（含三明示）：禁令對象限他人既有 ticket，`create --source-ticket` / `--parent` 不受限，撰寫禁令時須明寫此邊界。因「包括 close / set-status / 編輯他人 ticket md 等」以「等」結尾未劃邊界，`create` 與同列動詞字面相近而被讀成禁止建票，已發生代理人停手上報的實際誤讀。
 **Version**: 1.6.0 — 「執行責任：Ticket 完成」章節 Action 句改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，AGENT_PRELOAD.md 規則 2.4 非有效送達路徑，改要求直接寫入實作類 agent 自身定義檔主文（mint-format-specialist.md 為落地範例）
 **Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/agent-definition-standard.md` 外移至本檔（W7-004.2 auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.1–1.4 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033 + SA 跨 ticket close 事件（並行 claim race condition 暴露）。

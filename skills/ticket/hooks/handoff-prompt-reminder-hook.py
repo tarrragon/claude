@@ -35,8 +35,9 @@ Handoff 提醒 Hook — WARN 模式
     UserPromptSubmit Hook 提供的 JSON (stdin)
 
 防重複觸發:
-    使用父進程 PID 作為 session 識別符
-    flag 檔案: /tmp/claude-handoff-reminded-{ppid}
+    使用 hook 輸入的 session_id 作為 session 識別符
+    flag 檔案: /tmp/claude-handoff-reminded-{session_id}
+    失敗語意: fail-open——取不到 session_id 時略過 flag 讀寫（提醒照常輸出）
 """
 
 import sys
@@ -52,6 +53,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter, get_project_root, find_ticket_file
 from lib.hook_messages import WorkflowMessages, CoreMessages, format_message
+from lib.constants import HANDOFF_REMINDED_FLAG_TEMPLATE
+from lib.session_state_key import session_state_path
 
 # W17-181.2: delegate is_ticket_completed 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。
 # 加入 ticket_system 父路徑以解析 handoff_utils 內部 `from ticket_system.lib.*` import。
@@ -83,42 +86,48 @@ except Exception as _import_err:  # pragma: no cover
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 
-def get_session_flag_file(logger) -> Path:
+def get_session_flag_file(input_data: Optional[Dict[str, Any]], logger) -> Optional[Path]:
     """
     取得 session flag 檔案路徑
 
-    使用父進程 PID 作為 session 識別符
+    使用 hook 輸入的 session_id 作為 session 識別符；取不到回傳 None（fail-open）
 
     Args:
+        input_data: hook 輸入
         logger: Logger 實例
 
     Returns:
-        Path - flag 檔案路徑
+        Path - flag 檔案路徑，或 None
     """
-    ppid = os.getppid()
-    return Path(f"/tmp/claude-handoff-reminded-{ppid}")
+    return session_state_path(HANDOFF_REMINDED_FLAG_TEMPLATE, input_data, logger)
 
-def has_reminded_this_session(logger) -> bool:
+def has_reminded_this_session(input_data: Optional[Dict[str, Any]], logger) -> bool:
     """
     檢查此 session 是否已提醒過
 
+    取不到 session_id 時視為未提醒（fail-open：提醒不因狀態缺失而遺失）
+
     Args:
+        input_data: hook 輸入
         logger: Logger 實例
 
     Returns:
         bool - 是否已提醒
     """
-    flag_file = get_session_flag_file(logger)
-    return flag_file.exists()
+    flag_file = get_session_flag_file(input_data, logger)
+    return flag_file is not None and flag_file.exists()
 
-def mark_reminded_this_session(logger) -> None:
+def mark_reminded_this_session(input_data: Optional[Dict[str, Any]], logger) -> None:
     """
-    標記此 session 已提醒過
+    標記此 session 已提醒過（取不到 session_id 時略過）
 
     Args:
+        input_data: hook 輸入
         logger: Logger 實例
     """
-    flag_file = get_session_flag_file(logger)
+    flag_file = get_session_flag_file(input_data, logger)
+    if flag_file is None:
+        return
     try:
         flag_file.touch()
         logger.debug(f"建立 session flag: {flag_file}")
@@ -372,13 +381,13 @@ def generate_hook_output(
             return {"suppressOutput": True}
 
     # 檢查此 session 是否已提醒過
-    if has_reminded_this_session(logger):
+    if has_reminded_this_session(input_data, logger):
         logger.info("此 session 已提醒過，跳過")
         return {"suppressOutput": True}
 
     # 生成提醒訊息（含 Ticket 內容注入）並標記已提醒
     reminder_message = generate_reminder_message(pending_tasks, project_root, logger)
-    mark_reminded_this_session(logger)
+    mark_reminded_this_session(input_data, logger)
 
     return {
         "hookSpecificOutput": {

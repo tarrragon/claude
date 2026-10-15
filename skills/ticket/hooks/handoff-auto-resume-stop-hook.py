@@ -723,7 +723,7 @@ def generate_hook_output(
         logger.debug(f"專案根目錄: {project_root}")
 
         # Step 2: 讀取 session 狀態
-        session_state = read_session_state(logger)
+        session_state = read_session_state(logger, input_data)
         pending_tasks = None
         recent_tasks = []
 

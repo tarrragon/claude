@@ -37,8 +37,9 @@ def logger():
     return MagicMock()
 
 
-def _make(id_, type_="IMP", parent="P", blocked_by=None):
+def _make(id_, type_="IMP", parent="P", blocked_by=None, status="pending"):
     return {
+        "status": status,
         "id": id_,
         "type": type_,
         "parent_id": parent,
@@ -71,6 +72,26 @@ def test_a2_violation_multi_sibling_dep(hook_module):
     assert v is not None
     assert v["condition"] == 1
     assert v["severity"] == "BLOCK"
+
+
+def test_e1_multi_sibling_terminal_vs_nonterminal_differs(hook_module):
+    """E1: 同一張多前驅票，前驅全終態放行、任一非終態 BLOCK，結果不同"""
+    b = _make("B", blocked_by=["A", "C"])
+    done = {"A": _make("A", status="completed"), "B": b,
+            "C": _make("C", status="closed")}
+    mixed = {"A": _make("A", status="completed"), "B": b,
+             "C": _make("C", status="in_progress")}
+    assert hook_module.check_condition_1_unidirectional(b, done) is None
+    v = hook_module.check_condition_1_unidirectional(b, mixed)
+    assert v is not None and v["severity"] == "BLOCK"
+
+
+def test_e2_bidirectional_blocks_even_when_predecessors_terminal(hook_module):
+    """E2: 雙向依賴即使前驅終態仍 BLOCK"""
+    a = _make("A", blocked_by=["B"], status="completed")
+    b = _make("B", blocked_by=["A"], status="completed")
+    v = hook_module.check_condition_1_unidirectional(a, {"A": a, "B": b})
+    assert v is not None and v["severity"] == "BLOCK"
 
 
 def test_a3_legal_single_predecessor(hook_module):

@@ -18,21 +18,12 @@ Worktree 和分支檢查 Hook - PreToolUse Hook
   2. 對每個 worktree（排除主倉庫）執行 git status --short 檢查未提交變更
   3. 執行 git branch --no-merged main 檢查未合併分支
   4. (merge/cherry-pick) 檢查主倉庫 HEAD 是否指向 main/master，不符時輸出 WARNING
-  5. 有發現時：輸出 WARNING 到 stderr，列出所有未提交/未合併的詳情
+  5. 有發現時：以 additionalContext 輸出 WARNING，列出所有未提交/未合併的詳情
   6. 無發現時：靜默通過
   7. 永遠 exit 0（不阻止操作，僅警告）
-
-HOOK_METADATA (JSON):
-{
-  "event_type": "PreToolUse",
-  "matcher": "Bash",
-  "timeout": 10000,
-  "description": "git push/merge/cherry-pick 前檢查 worktree、分支和目標分支",
-  "dependencies": [],
-  "version": "1.2.0"
-}
 """
 
+import logging
 import sys
 import subprocess
 from pathlib import Path
@@ -44,7 +35,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 try:
-    from lib import setup_hook_logging, run_hook_safely
+    from lib import (
+        setup_hook_logging,
+        run_hook_safely,
+        read_hook_input,
+        emit_model_reminder,
+    )
 except ImportError as e:
     print(f"[Hook Import Warning] {Path(__file__).name}: {e}", file=sys.stderr)
     # Fallback: 最小化日誌設定，run_hook_safely 退化為直接呼叫（無 liveness 記錄）
@@ -53,6 +49,14 @@ except ImportError as e:
         return logging.getLogger(name)
     def run_hook_safely(main_func, hook_name, fail_closed=False):
         return main_func()
+    def emit_model_reminder(event, text, *, audience="all", input_data=None):
+        return None
+    def read_hook_input():
+        import json
+        try:
+            return json.load(sys.stdin)
+        except Exception:
+            return {}
 
 
 # ============================================================================
@@ -131,8 +135,14 @@ def run_git_command(args: List[str], cwd: Optional[str] = None) -> Tuple[bool, s
         )
         return (result.returncode == 0, result.stdout.strip())
     except subprocess.TimeoutExpired:
+        logging.getLogger("worktree-branch-check").warning(
+            f"run_git_command 逾時: git {' '.join(args[:3])} (timeout {GIT_COMMAND_TIMEOUT}s)"
+        )
         return False, "timeout"
     except Exception as e:
+        logging.getLogger("worktree-branch-check").warning(
+            f"run_git_command 失敗: git {' '.join(args[:3])} ({type(e).__name__}: {e})"
+        )
         return False, str(e)
 
 
@@ -226,7 +236,7 @@ def get_uncommitted_count(worktree_path: str) -> int:
     Returns:
         未提交變更的檔案數量
     """
-    success, output = run_git_command(["status", "--short"], cwd=worktree_path)
+    success, output = run_git_command(["--no-optional-locks", "status", "--short"], cwd=worktree_path)
     if not success or not output:
         return 0
 
@@ -401,40 +411,50 @@ def main() -> int:
     """Hook 主邏輯"""
     logger = setup_hook_logging("worktree-branch-check")
 
-    # 從環境或標準輸入讀取 Bash 命令
-    # 若無法取得命令，靜默通過
-    bash_command = sys.stdin.read().strip() if not sys.stdin.isatty() else ""
+    # 解析 PreToolUse payload，比對對象僅限 tool_input.command
+    # 解析失敗或無命令時 fail-open 靜默通過
+    payload = read_hook_input() if not sys.stdin.isatty() else {}
+    tool_input = payload.get("tool_input") if isinstance(payload, dict) else None
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    bash_command = command.strip() if isinstance(command, str) else ""
 
     if not bash_command:
-        # 無法取得命令，靜默通過
-        logger.debug("無法取得 Bash 命令，靜默通過")
+        logger.warning("無法從 payload 取得 tool_input.command，靜默通過")
         return EXIT_SUCCESS
 
     # 判斷是否應執行檢查
     if not should_check_git_operation(bash_command):
-        logger.debug(f"命令 '{bash_command}' 不需要 worktree 檢查，靜默通過")
+        logger.debug(f"命令（長度 {len(bash_command)}）不需要 worktree 檢查，靜默通過")
         return EXIT_SUCCESS
 
     logger.info("偵測到 push/merge/cherry-pick 命令，執行 worktree 和分支檢查")
+
+    # 兩類警告合併為單一 additionalContext 輸出（hook 只能輸出一份 JSON）
+    warnings: List[str] = []
 
     # 目標分支比對（僅 merge/cherry-pick，push 不需要）
     if is_merge_or_cherry_pick(bash_command):
         target_warning = check_target_branch()
         if target_warning:
-            print(target_warning, file=sys.stderr)
+            warnings.append(target_warning)
             logger.warning("主倉庫 HEAD 未指向預期的合併目標分支")
 
     # 執行 worktree 和未合併分支檢查
     result = check_git_state()
 
-    # 如果有發現，輸出警告
+    # 如果有發現，收集警告
     if result.has_uncommitted_worktrees or result.has_unmerged_branches:
-        warning_msg = format_warning_output(result)
-        print(warning_msg, file=sys.stderr)
+        warnings.append(format_warning_output(result))
         logger.warning(f"偵測到未合併進度：{len(result.uncommitted_worktrees)} 個 worktree，{len(result.unmerged_branches)} 個分支")
     else:
         # 無發現，靜默通過
         logger.debug("無未提交或未合併進度，靜默通過")
+
+    if warnings:
+        # 提醒對象是模型，走 additionalContext（exit 0 stderr 對模型不可見）
+        emit_model_reminder(
+            "PreToolUse", "\n\n".join(warnings), input_data=payload
+        )
 
     # 永遠 exit 0，不阻止操作
     return EXIT_SUCCESS

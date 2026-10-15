@@ -1,0 +1,199 @@
+{
+  "_comment": "Bash 事件 hook 分派清單：新增 Bash 的 PreToolUse/PostToolUse hook 時在對應 group 的 hooks 加一項（path 自專案根；timeout 秒，缺省 60）。重型 hook 排最後。mcp__dart__run_tests 與不帶 matcher 的註冊不經分派器，維持在 settings.json。",
+  "groups": {
+    "PreToolUse:Bash": {
+      "budget": 380,
+      "hooks": [
+        {
+          "path": ".claude/hooks/isolated-subagent-main-write-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/git-index-lock-cleanup-hook.py"
+        },
+        {
+          "path": ".claude/hooks/test-timeout-pre.py"
+        },
+        {
+          "path": ".claude/skills/version-release/hooks/version-release-guard-hook.py"
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/acceptance-gate-hook.py"
+        },
+        {
+          "path": ".claude/hooks/bash-edit-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/bash-write-boundary-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/bash-git-protected-branch-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/global-pkill-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/pre-test-hook.py"
+        },
+        {
+          "path": ".claude/skills/dart-test-async-guardian/hooks/pre-test-scan.py"
+        },
+        {
+          "path": ".claude/skills/worktree/hooks/worktree-branch-check-hook.py"
+        },
+        {
+          "path": ".claude/hooks/phase4-decision-enforcement-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/homoglyph-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/uv-tool-ownership-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/uncommitted-ticket-md-reminder-hook.py"
+        },
+        {
+          "path": ".claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/sibling-blockedby-validator-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/domain-import-lint-hook.py"
+        },
+        {
+          "path": ".claude/hooks/bare-commit-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/commit-stage-guard-gate-hook.py"
+        },
+        {
+          "path": ".claude/hooks/bash-git-add-broad-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/merge-staged-index-guard-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/workspace-wipe-guard-hook.py"
+        },
+        {
+          "path": ".claude/hooks/skill-sync-push-residue-gate-hook.py"
+        },
+        {
+          "path": ".claude/hooks/hooks-test-gate-hook.py",
+          "timeout": 120
+        },
+        {
+          "path": ".claude/hooks/tracking-schema-json-staleness-guard-hook.py",
+          "timeout": 595
+        }
+      ]
+    },
+    "PostToolUse:Bash": {
+      "budget": 120,
+      "hooks": [
+        {
+          "path": ".claude/hooks/post-test-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/handoff-cleanup-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/post-git-commit-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/commit-msg-layer2-marker-check-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/commit-attribution-trailer-check-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/worktree/hooks/worktree-merge-reminder-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/cli-error-feedback-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/post-ticket-lifecycle-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/phase4-decision-enforcement-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/needs-context-listener-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/skill-cli-sync-check-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/variable-count-literal-guard-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/parallel-claim-audit-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/parallel-dispatch-verification-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/session-context-guard-hook.py",
+          "timeout": 30
+        }
+      ]
+    },
+    "PostToolUseFailure:Bash": {
+      "budget": 60,
+      "hooks": [
+        {
+          "path": ".claude/hooks/post-tool-failure-liveness-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/post-test-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/cli-error-feedback-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/handoff-cleanup-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/ticket/hooks/post-ticket-lifecycle-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/session-context-guard-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/parallel-dispatch-verification-hook.py",
+          "timeout": 30
+        },
+        {
+          "path": ".claude/skills/worktree/hooks/worktree-merge-reminder-hook.py",
+          "timeout": 30
+        }
+      ]
+    }
+  }
+}

@@ -257,7 +257,7 @@ def main() -> int:
     if not raw_command:
         return 0
 
-    invocations = find_git_invocations(raw_command, {"add"})
+    invocations = find_git_invocations(raw_command, {"add"}, scan=True)
     if invocations is None:
         # 無法安全 tokenize（未閉合引號等）：既有設計選擇 fail-open——
         # 無法靜態確認時傾向不誤擋非本 hook 意圖攔截的命令，簽名收斂後

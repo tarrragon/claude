@@ -142,9 +142,11 @@ def test_exhausted_stderr_lists_path_and_remedy(repo, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert failed is True
     assert str(repo / f"{_TID}.md") in err
-    assert f"git add {repo / (_TID + '.md')}" in err
-    assert "git commit" in err
-    assert "ticket track commit" in err
+    # W1-075.2：CAS 分支首選 ticket track commit（隔離索引），不再指示 git add
+    assert f"ticket track commit {_TID}" in err
+    assert f"-- {repo / (_TID + '.md')}" in err
+    assert "不要用裸 git commit" in err
+    assert "git add" not in err
     assert "final_failure" in _read_log(repo)
 
 

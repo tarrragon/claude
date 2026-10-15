@@ -392,12 +392,59 @@ class TestC_S1:
         result = strategy.detect(event, state, sd_s1, "T-1", logging.getLogger("t"))
         assert result.hit is True
 
-    def test_c8_failure_detection_fallback_keyword(self, hook_mod, strategy, sd_s1):
+    def test_c8_report_keywords_not_failure(self, hook_mod, strategy, sd_s1):
+        """E2：前景代理人報告含 error / failed 字樣的 PostToolUse 不計為失敗。"""
         import logging
         state = hook_mod._initial_state()
-        event = make_post_tool_use_task({"output": "...Exception thrown while running..."})
+        state["signals"]["consecutive_failures"] = {"count": 1}
+        event = make_post_tool_use_task(
+            {"output": "...Exception thrown; error handled; 2 tests failed then fixed..."})
+        event["tool_name"] = "Agent"
         result = strategy.detect(event, state, sd_s1, "T-1", logging.getLogger("t"))
-        assert result.hit is True
+        assert result.hit is False
+        assert result.reset is True
+
+    def test_c11_agent_failure_event_counts(self, hook_mod, strategy, sd_s1):
+        import logging
+        state = hook_mod._initial_state()
+        event = {"hook_event_name": "PostToolUseFailure", "tool_name": "Agent",
+                 "error": "Agent type not found", "cwd": "/tmp"}
+        r1 = strategy.detect(event, state, sd_s1, "T-1", logging.getLogger("t"))
+        assert r1.hit is True and r1.count == 1 and r1.should_warn is False
+        state = strategy.apply(state, r1, "T-1")
+        r2 = strategy.detect(event, state, sd_s1, "T-1", logging.getLogger("t"))
+        assert r2.count == 2 and r2.should_warn is True
+
+    def test_c12_agent_success_resets_after_failure(self, hook_mod, strategy, sd_s1):
+        import logging
+        state = hook_mod._initial_state()
+        fail = {"hook_event_name": "PostToolUseFailure", "tool_name": "Agent", "cwd": "/tmp"}
+        ok = {"hook_event_name": "PostToolUse", "tool_name": "Agent",
+              "tool_response": {"status": "completed"}, "cwd": "/tmp"}
+        lg = logging.getLogger("t")
+        state = strategy.apply(state, strategy.detect(fail, state, sd_s1, "T-1", lg), "T-1")
+        state = strategy.apply(state, strategy.detect(ok, state, sd_s1, "T-1", lg), "T-1")
+        assert state["signals"]["consecutive_failures"]["count"] == 0
+        r = strategy.detect(fail, state, sd_s1, "T-1", lg)
+        assert r.count == 1 and r.should_warn is False
+
+    def test_c13_production_yaml_agent_and_failure_source(self, hook_mod):
+        import logging
+        cfg = hook_mod.load_config(
+            Path(__file__).resolve().parents[2] / "config" / "wrap-triggers.yaml",
+            logging.getLogger("t"))
+        sd = next(s for s in cfg.signals if s.id == "consecutive_failures")
+        assert sd.tool_matcher == "Agent"
+        assert "PostToolUseFailure" in sd.event_sources
+        assert "keywords" not in (sd.raw.get("failure_detection") or {})
+
+    def test_c14_settings_registers_failure_event_for_agent(self):
+        settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+        hits = [e for e in settings["hooks"]["PostToolUseFailure"]
+                if e.get("matcher") == "Agent" and any(
+                    "wrap-decision-tripwire-hook.py" in h.get("command", "")
+                    for h in e.get("hooks", []))]
+        assert len(hits) == 1
 
     def test_c9_non_task_tool_ignored(self, hook_mod, strategy, sd_s1):
         import logging
@@ -496,6 +543,82 @@ class TestD_S2:
 # ============================================================================
 # D2. S2 context-aware filter（黑名單版）— W10-058.1.1.2
 # ============================================================================
+
+class TestD3_FrameworkMessageSkip:
+    """非使用者撰寫回合（agent-message／cross-session-message）不套用 restrictive_keywords。"""
+
+    REPORT = "交回報告：此路徑目前無法判定歸因，已列為已知限制，請 PM 後續處理"
+    PREFIXES = ["<agent-message", "<cross-session-message", "<teammate-message",
+                "[Subagent hand-back]"]
+
+    @staticmethod
+    def _sd(hook_mod, tmp_yaml, prefixes):
+        overrides = {"restrictive_keywords": {"skip_prompt_prefixes": prefixes}}
+        tmp_yaml.write_text(yaml_fixture(signal_overrides=overrides), encoding="utf-8")
+        cfg = _load_config(hook_mod, tmp_yaml)
+        return next(s for s in cfg.signals if s.id == "restrictive_keywords")
+
+    def _detect(self, hook_mod, sd, prompt):
+        import logging
+        return hook_mod.RestrictiveKeywordsStrategy().detect(
+            make_user_prompt(prompt), hook_mod._initial_state(), sd, None,
+            logging.getLogger("t"))
+
+    def test_e1_user_authored_restrictive_still_triggers(self, hook_mod, tmp_yaml):
+        sd = self._sd(hook_mod, tmp_yaml, self.PREFIXES)
+        result = self._detect(hook_mod, sd, self.REPORT)
+        assert result.hit is True
+        assert result.should_warn is True
+        assert result.matched_keyword == "無法"
+
+    @pytest.mark.parametrize("marker", [
+        # 真實誤報當時 prompt 的逐字開頭（第一行為固定引導句）
+        "Another Claude session sent a message:\n"
+        "<agent-message from=\"imp-306-5\">\n[Subagent hand-back] ",
+        "Another Claude session sent a message:\n"
+        "<teammate-message teammate_id=\"incident-314\" color=\"blue\">\n",
+        "  <cross-session-message>\n",
+        "[Subagent hand-back]\n",
+    ])
+    def test_e2_framework_marked_turn_does_not_trigger(self, hook_mod, tmp_yaml, marker):
+        sd = self._sd(hook_mod, tmp_yaml, self.PREFIXES)
+        result = self._detect(hook_mod, sd, marker + self.REPORT)
+        assert result.hit is False
+        assert result.should_warn is False
+        assert result.log_reason == "framework_message"
+
+    def test_marker_beyond_scan_range_is_known_miss(self, hook_mod, tmp_yaml):
+        """已知漏判：標記在開頭 3 行之外時視為使用者回合，照常觸發。"""
+        sd = self._sd(hook_mod, tmp_yaml, self.PREFIXES)
+        result = self._detect(hook_mod, sd, "a\nb\nc\n<agent-message>\n" + self.REPORT)
+        assert result.hit is True
+
+    def test_user_sentence_mentioning_agent_message_still_triggers(self, hook_mod, tmp_yaml):
+        """對照：使用者句中提到 agent-message 字樣，不跳過。"""
+        sd = self._sd(hook_mod, tmp_yaml, self.PREFIXES)
+        prompt = "我看到 <agent-message> 這個標籤，但這個功能目前無法處理，請評估"
+        result = self._detect(hook_mod, sd, prompt)
+        assert result.hit is True
+        assert result.matched_keyword == "無法"
+
+    def test_failure_is_fail_open(self, hook_mod, tmp_yaml, capsys):
+        sd = self._sd(hook_mod, tmp_yaml, self.PREFIXES)
+        sd.skip_prompt_prefixes = [None]  # startswith(None) 會拋 TypeError
+        result = self._detect(hook_mod, sd, self.REPORT)
+        assert result.hit is True
+        assert "fail-open" in capsys.readouterr().err
+
+    def test_production_yaml_declares_markers(self, hook_mod):
+        import logging
+        cfg = hook_mod.load_config(CONFIG_PATH, logging.getLogger("t"))
+        sd = next(s for s in cfg.signals if s.id == "restrictive_keywords")
+        for marker in ("<agent-message", "<cross-session-message", "<teammate-message"):
+            assert marker in sd.skip_prompt_prefixes
+        real = ("Another Claude session sent a message:\n"
+                "<teammate-message teammate_id=\"x\">\n")
+        assert self._detect(hook_mod, sd, real + self.REPORT).hit is False
+        assert self._detect(hook_mod, sd, self.REPORT).hit is True
+
 
 class TestD2_ContextBlacklist:
     """W10-058.1.1.2：context-aware filter 黑名單版測試。
@@ -761,6 +884,40 @@ class TestF_Resets:
         import logging
         t = hook_mod.derive_ticket({}, tmp_path, logging.getLogger("t"))
         assert t is None
+
+    def test_f10_dispatch_active_real_shape_not_used(self, hook_mod, monkeypatch, tmp_path):
+        """實檔形狀 {dispatches: [...]} 並行多筆時不得取任何一張票（全域狀態不可歸屬）。"""
+        import json as _json
+        import logging
+        monkeypatch.delenv("TICKET_ID", raising=False)
+        d = tmp_path / ".claude"
+        d.mkdir()
+        payload = {"dispatches": [
+            {"ticket_id": "9.9.9-W1-001", "dispatched_at": "2026-01-01T00:00:00"},
+            {"ticket_id": "9.9.9-W1-002", "dispatched_at": "2026-01-01T00:05:00"},
+        ]}
+        (d / "dispatch-active.json").write_text(_json.dumps(payload), encoding="utf-8")
+
+        def fake_run(*args, **kwargs):
+            raise subprocess.SubprocessError("no git")
+        monkeypatch.setattr(hook_mod.subprocess, "run", fake_run)
+        assert hook_mod.derive_ticket({}, tmp_path, logging.getLogger("t")) is None
+
+    def test_f11_agent_prompt_wins_over_dispatch_active(self, hook_mod, monkeypatch, tmp_path):
+        """對照：同一份多筆 dispatch-active 下，Agent 事件仍取 prompt 首行票號。"""
+        import json as _json
+        import logging
+        monkeypatch.delenv("TICKET_ID", raising=False)
+        d = tmp_path / ".claude"
+        d.mkdir()
+        payload = {"dispatches": [
+            {"ticket_id": "9.9.9-W1-001", "dispatched_at": "2026-01-01T00:00:00"},
+            {"ticket_id": "9.9.9-W1-002", "dispatched_at": "2026-01-01T00:05:00"},
+        ]}
+        (d / "dispatch-active.json").write_text(_json.dumps(payload), encoding="utf-8")
+        event = {"tool_name": "Agent",
+                 "tool_input": {"prompt": "Ticket: 9.9.9-W1-001\n任務"}}
+        assert hook_mod.derive_ticket(event, tmp_path, logging.getLogger("t")) == "9.9.9-W1-001"
 
 
 # ============================================================================
@@ -1038,6 +1195,7 @@ class TestL_Advisory:
                             lambda ev, cwd, logger: "TEST-TICKET-0.18-W10-009")
         code = hook_mod.main()
         captured = capsys.readouterr()
+        self.last_out = captured.out
         return code, captured.err
 
     def test_l1_signal_paths_exit_zero(self, hook_mod, monkeypatch, tmp_yaml, tmp_state_path, tmp_path, capsys):
@@ -1056,6 +1214,52 @@ class TestL_Advisory:
         event = make_user_prompt("這是正常的開發需求並不包含任何關鍵字")
         code, _ = self._run_hook(hook_mod, monkeypatch, event, tmp_yaml, tmp_state_path, tmp_path, capsys)
         assert code == 0
+
+    def _run_stdout(self, hook_mod, monkeypatch, events, tmp_yaml, tmp_path, capsys):
+        """逐一餵事件給 main()（略過 pytest 環境豁免），回傳最後一次 stdout。"""
+        monkeypatch.setattr(hook_mod, "is_pytest_environment", lambda: False)
+        out = ""
+        for ev in events:
+            self._run_hook(hook_mod, monkeypatch, ev, tmp_yaml, None, tmp_path, capsys)
+            out = self.last_out
+        return out
+
+    def test_l4_prompt_warning_emits_additional_context(
+            self, hook_mod, monkeypatch, tmp_yaml, tmp_path, capsys):
+        monkeypatch.setattr(hook_mod, "is_pytest_environment", lambda: False)
+        event = make_user_prompt("這個功能做不到啦不可能實現的我想我們應該放棄")
+        self._run_hook(hook_mod, monkeypatch, event, tmp_yaml, None, tmp_path, capsys)
+        out = self.last_out
+        data = json.loads(out.strip().splitlines()[-1])
+        hso = data["hookSpecificOutput"]
+        assert hso["hookEventName"] == "UserPromptSubmit"
+        assert "[WRAP" in hso["additionalContext"]
+
+    def test_l5_failure_event_name_follows_payload(
+            self, hook_mod, monkeypatch, tmp_yaml, tmp_path, capsys):
+        fail = {"hook_event_name": "PostToolUseFailure", "tool_name": "Agent",
+                "error": "boom", "cwd": "/tmp"}
+        tmp_yaml.write_text(yaml_fixture(signal_overrides={"consecutive_failures": {
+            "event_sources": ["PostToolUse", "PostToolUseFailure"]}}), encoding="utf-8")
+        out = self._run_stdout(hook_mod, monkeypatch, [fail, fail], tmp_yaml, tmp_path, capsys)
+        data = json.loads(out.strip().splitlines()[-1])
+        assert data["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+        assert "additionalContext" in data["hookSpecificOutput"]
+
+    def test_l6_no_warning_no_stdout(
+            self, hook_mod, monkeypatch, tmp_yaml, tmp_path, capsys):
+        out = self._run_stdout(
+            hook_mod, monkeypatch, [make_user_prompt("正常需求")], tmp_yaml, tmp_path, capsys)
+        assert out.strip() == ""
+
+    def test_l7_path_mention_is_not_manual_invocation(self, hook_mod):
+        """E2：訊息含 skill 路徑不判為手動執行；開頭命令形式仍判為手動。"""
+        path_msg = "見 .claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py 的說明"
+        assert hook_mod.is_manual_wrap_invocation(make_user_prompt(path_msg)) is False
+        assert hook_mod.is_manual_wrap_invocation(
+            make_post_tool_use_bash("cat .claude/skills/wrap-decision/SKILL.md")) is False
+        assert hook_mod.is_manual_wrap_invocation(make_user_prompt("  /wrap-decision")) is True
+        assert hook_mod.is_manual_wrap_invocation(make_user_prompt("/wrap-decisions")) is False
 
 
 # ============================================================================
@@ -1408,3 +1612,189 @@ class TestO_PytestEnvironmentExemption:
             "pytest 環境下 derive_ticket 不應被呼叫（main 應早期 return）")
         assert called["get_project_root"] is False, (
             "pytest 環境下 get_project_root 不應被呼叫")
+
+
+# ============================================================================
+# 票號推導（Agent payload 層）E1/E2 對照
+# ============================================================================
+
+def make_agent_failure(prompt, cwd):
+    """真實 payload 形狀：PostToolUseFailure 帶 tool_name/tool_input（含 prompt）。"""
+    return {
+        "hook_event_name": "PostToolUseFailure",
+        "tool_name": "Agent",
+        "tool_input": {"description": "x", "prompt": prompt},
+        "cwd": str(cwd),
+    }
+
+
+class TestDeriveTicketFromAgentPayload:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("TICKET_ID", raising=False)
+
+    def _run_s1_twice(self, hook_mod, event, tmp_path):
+        import logging
+        logger = logging.getLogger("test")
+        cfg = _load_config(hook_mod, CONFIG_PATH)
+        cfg.warn_cooldown_seconds = 0
+        state = hook_mod._initial_state()
+        ticket = hook_mod.derive_ticket(event, tmp_path, logger)
+        state = hook_mod.apply_ticket_switch_reset(state, ticket)
+        hook_mod._process_signals(event, "PostToolUseFailure", state, cfg, ticket, logger)
+        warnings = hook_mod._process_signals(
+            event, "PostToolUseFailure", state, cfg, ticket, logger)
+        return ticket, state, warnings
+
+    def test_e1_ticket_derived_and_warning_carries_it(self, hook_mod, tmp_path):
+        event = make_agent_failure("Ticket: 0.9.0-W1-001\n任務：x", tmp_path)
+        ticket, state, warnings = self._run_s1_twice(hook_mod, event, tmp_path)
+        assert ticket == "0.9.0-W1-001"
+        assert state["current_ticket"] == "0.9.0-W1-001"
+        assert len(warnings) == 1
+        assert "Ticket: 0.9.0-W1-001" in warnings[0]
+
+    def test_e1_switch_reset_with_derived_ticket(self, hook_mod, tmp_path):
+        import logging
+        logger = logging.getLogger("test")
+        state = hook_mod._initial_state()
+        state["current_ticket"] = "0.9.0-W1-001"
+        state["signals"]["consecutive_failures"] = {"count": 1}
+        event = make_agent_failure("Ticket: 0.9.0-W1-002", tmp_path)
+        ticket = hook_mod.derive_ticket(event, tmp_path, logger)
+        state = hook_mod.apply_ticket_switch_reset(state, ticket)
+        assert ticket == "0.9.0-W1-002"
+        assert state["signals"] == {}
+
+    def test_e2_no_ticket_no_empty_field(self, hook_mod, tmp_path):
+        event = make_agent_failure("沒有票號的 prompt", tmp_path)
+        ticket, state, warnings = self._run_s1_twice(hook_mod, event, tmp_path)
+        assert ticket is None
+        assert state["current_ticket"] is None
+        assert len(warnings) == 1
+        assert "Ticket:" not in warnings[0]
+        assert "連續 2 次代理人失敗" in warnings[0]
+
+    def test_e2_user_prompt_event_has_no_payload_ticket(self, hook_mod, tmp_path):
+        event = make_user_prompt("Ticket: 0.9.0-W1-001 但這是使用者輸入", cwd=tmp_path)
+        assert hook_mod._ticket_from_agent_payload(event) is None
+
+
+# ============================================================================
+# 狀態檔依 session_id 分檔（E1 對照：他 session 換票不影響；E2 對照：缺值退回共用檔）
+# ============================================================================
+
+class TestSessionScopedState:
+    """跑完整 main()，以磁碟上的狀態檔 JSON 為結構化斷言對象。"""
+
+    SHARED = ".claude/hook-state/wrap-tripwire-state.json"
+    STATE_A = ".claude/hook-state/wrap-tripwire-state-sessA.json"
+    STATE_B = ".claude/hook-state/wrap-tripwire-state-sessB.json"
+
+    @pytest.fixture(autouse=True)
+    def _env(self, hook_mod, monkeypatch, tmp_path):
+        monkeypatch.delenv("TICKET_ID", raising=False)
+        monkeypatch.setattr(hook_mod, "is_pytest_environment", lambda: False)
+        monkeypatch.setattr(hook_mod, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            hook_mod, "derive_ticket",
+            lambda ev, cwd, logger: hook_mod._ticket_from_agent_payload(ev))
+        target = tmp_path / ".claude" / "config" / "wrap-triggers.yaml"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    def _fire(self, hook_mod, monkeypatch, event):
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        assert hook_mod.main() == 0
+
+    def _failure(self, tmp_path, ticket, session_id=None):
+        ev = make_agent_failure("Ticket: %s\n任務：x" % ticket, tmp_path)
+        if session_id is not None:
+            ev["session_id"] = session_id
+        return ev
+
+    def _state(self, tmp_path, rel):
+        return json.loads((tmp_path / rel).read_text(encoding="utf-8"))
+
+    def test_e1_other_session_ticket_switch_keeps_s1_count(self, hook_mod, monkeypatch, tmp_path):
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901", "sessA"))
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-902", "sessB"))
+        sa = self._state(tmp_path, self.STATE_A)
+        sb = self._state(tmp_path, self.STATE_B)
+        assert sa["current_ticket"] == "0.9.0-W1-901"
+        assert sa["signals"]["consecutive_failures"]["count"] == 1
+        assert sb["current_ticket"] == "0.9.0-W1-902"
+        assert sb["signals"]["consecutive_failures"]["count"] == 1
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901", "sessA"))
+        sa = self._state(tmp_path, self.STATE_A)
+        assert sa["signals"]["consecutive_failures"]["count"] == 2
+        assert not (tmp_path / self.SHARED).exists()
+
+    def test_e2_missing_session_id_uses_shared_file_and_old_behavior(self, hook_mod, monkeypatch, tmp_path):
+        # 缺 session_id 與空字串：皆退回共用檔，他票換票仍清空計數（改前行為）
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901"))
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901", ""))
+        shared = self._state(tmp_path, self.SHARED)
+        assert shared["signals"]["consecutive_failures"]["count"] == 2
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-902"))
+        shared = self._state(tmp_path, self.SHARED)
+        assert shared["current_ticket"] == "0.9.0-W1-902"
+        assert shared["signals"]["consecutive_failures"]["count"] == 1
+        files = sorted((tmp_path / ".claude" / "hook-state").glob("*.json"))
+        assert files == [tmp_path / self.SHARED]
+
+    def test_manual_wrap_reset_only_clears_own_session(self, hook_mod, monkeypatch, tmp_path):
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901", "sessA"))
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-902", "sessB"))
+        manual = make_user_prompt("/wrap-decision", cwd=tmp_path)
+        manual["session_id"] = "sessA"
+        self._fire(hook_mod, monkeypatch, manual)
+        sa = self._state(tmp_path, self.STATE_A)
+        sb = self._state(tmp_path, self.STATE_B)
+        assert "consecutive_failures" not in sa["signals"]
+        assert sb["signals"]["consecutive_failures"]["count"] == 1
+
+    def _seed(self, tmp_path, name, age_days):
+        d = tmp_path / ".claude" / "hook-state"
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / name
+        p.write_text("{}", encoding="utf-8")
+        t = datetime.now().timestamp() - age_days * 86400
+        os.utime(p, (t, t))
+        return p
+
+    def test_prune_removes_stale_other_session_keeps_rest(self, hook_mod, monkeypatch, tmp_path):
+        stale = self._seed(tmp_path, "wrap-tripwire-state-old.json", 30)
+        fresh = self._seed(tmp_path, "wrap-tripwire-state-new.json", 1)
+        shared = self._seed(tmp_path, "wrap-tripwire-state.json", 30)
+        cur = self._seed(tmp_path, "wrap-tripwire-state-sessA.json", 30)
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901", "sessA"))
+        assert not stale.exists()
+        assert fresh.exists()
+        assert shared.exists()
+        assert cur.exists()
+
+    def test_prune_without_session_id_keeps_shared_file(self, hook_mod, monkeypatch, tmp_path):
+        stale = self._seed(tmp_path, "wrap-tripwire-state-old.json", 30)
+        shared = self._seed(tmp_path, "wrap-tripwire-state.json", 30)
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901"))
+        assert not stale.exists()
+        assert shared.exists()
+
+    def test_prune_failure_does_not_break_main(self, hook_mod, monkeypatch, tmp_path):
+        stale = self._seed(tmp_path, "wrap-tripwire-state-old.json", 30)
+
+        def boom(self_path, *a, **k):
+            raise PermissionError("denied")
+        monkeypatch.setattr(Path, "unlink", boom)
+        self._fire(hook_mod, monkeypatch, self._failure(tmp_path, "0.9.0-W1-901", "sessA"))
+        assert stale.exists()
+        state = self._state(tmp_path, self.STATE_A)
+        assert state["signals"]["consecutive_failures"]["count"] == 1
+
+    def test_session_id_sanitized_for_filename(self, hook_mod, tmp_path):
+        import logging
+        base = tmp_path / "s.json"
+        p = hook_mod.resolve_state_path(base, {"session_id": "../x/y"}, logging.getLogger("t"))
+        assert p.parent == tmp_path
+        assert p.name == "s-___x_y.json"

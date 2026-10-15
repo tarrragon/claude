@@ -343,7 +343,7 @@ Phase 4a 多視角分析報告完成後，進入 Phase 4b 前，PM 必須執行 
 | Phase 2 | Phase 3a | 測試案例設計完成 | 填寫 Context Bundle（→ Phase 3a） |
 | Phase 3a | 3b 拆分評估 | 策略文件完成 | 填寫 Context Bundle（→ Phase 3b） |
 | 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） | 各子任務填寫 Context Bundle |
-| Phase 3b | Phase 4a 或 4b | 測試全部通過 | 填寫 Context Bundle（→ Phase 4a） |
+| Phase 3b | Phase 4a 或 4b | 本票相關測試檔全部通過（全套件由合併閘門在合併 main 前執行，見 `.claude/skills/worktree/SKILL.md`〈合併前全套件〉） | 填寫 Context Bundle（→ Phase 4a） |
 | Phase 4a | Phase 4b | 多視角分析報告完成 | - |
 | Phase 4b | Phase 4c | 重構執行完成 | - |
 | Phase 4c | 完成 | 多視角再審核報告完成 | - |
@@ -483,7 +483,8 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 
 ---
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-10-15
+**Version**: 2.20.0 — Phase 3b 轉換條件改為本票相關測試檔全綠，全套件由合併閘門在合併 main 前執行
 **Version**: 2.19.0 — 相關文件補一行路由指向 `worktree-operations.md`「多階段串接派發」節（跨 agent phase 接力的 feat 分支累積器機制，屬 git 分支操作非 TDD phase 語意，不搬機制內容）
 **Version**: 2.18.0 — 新增「ANA 全量 grep/regex 範圍驗證完整性規範」獨立章節：三層強制要求（驗證方法涵蓋完整性聲明、覆蓋完整性聲明格式、AC 設計連動），觸發案例 W1-005 ANA AC-4 二度誤判（0.19.1-W1-039）
 **Version**: 2.17.0 — Phase 4 派發前新增「TD 清單校準（td-status）」預檢步驟（W10-083 / PC-094 落地，防止多視角浪費 token 在已完成 TD 項）

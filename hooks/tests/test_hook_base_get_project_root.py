@@ -245,3 +245,58 @@ class TestGetProjectRootHookBase:
         with patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": "/test"}):
             result = get_project_root()
             assert isinstance(result, Path)
+
+
+class TestProjectRootCache:
+    """_find_project_root 行程內快取"""
+
+    def test_same_key_spawns_git_once(self, monkeypatch, tmp_path):
+        """同鍵連續呼叫只起一次 git 子程序"""
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        monkeypatch.chdir(tmp_path)
+        with patch("lib.hook_base.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+            get_project_root()
+            get_project_root()
+            get_project_root()
+            assert mock_run.call_count == 2  # 首次解析 2 次（worktree 偵測 + toplevel），其後 0 次
+
+    def test_changed_cwd_recomputes(self, monkeypatch, tmp_path):
+        """cwd 改變時重算"""
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        other = tmp_path / "other"
+        other.mkdir()
+        with patch("lib.hook_base._resolve_project_root", return_value=tmp_path) as mock_res:
+            monkeypatch.chdir(tmp_path)
+            get_project_root()
+            monkeypatch.chdir(other)
+            get_project_root()
+            assert mock_res.call_count == 2
+
+    def test_changed_env_recomputes(self, monkeypatch, tmp_path):
+        """CLAUDE_PROJECT_DIR 改變時重算並回傳新值"""
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        monkeypatch.chdir(tmp_path)
+        with patch("lib.hook_base._linked_worktree_root", return_value=None) as mock_wt:
+            monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/a")
+            assert get_project_root() == Path("/a")
+            monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/b")
+            assert get_project_root() == Path("/b")
+            assert mock_wt.call_count == 2
+
+    def test_clear_cache_recomputes(self, monkeypatch, tmp_path):
+        """清除快取後重算"""
+        from lib.hook_base import clear_project_root_cache
+
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        monkeypatch.chdir(tmp_path)
+        with patch("lib.hook_base._resolve_project_root", return_value=tmp_path) as mock_res:
+            get_project_root()
+            get_project_root()
+            assert mock_res.call_count == 1
+            clear_project_root_cache()
+            get_project_root()
+            assert mock_res.call_count == 2

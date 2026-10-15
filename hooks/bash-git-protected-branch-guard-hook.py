@@ -247,7 +247,7 @@ def _find_write_invocations(command: str) -> Optional[List[Dict[str, object]]]:
     """
     invocations: List[Dict[str, object]] = []
 
-    top_level = find_git_invocations(command, WRITE_SUBCOMMANDS)
+    top_level = find_git_invocations(command, WRITE_SUBCOMMANDS, scan=True)
     if top_level is None:
         return None
     for inv in top_level:
@@ -267,7 +267,7 @@ def _find_write_invocations(command: str) -> Optional[List[Dict[str, object]]]:
         cd_match = _SUBSHELL_CD_RE.match(content.strip())
         if not cd_match:
             continue
-        sub_invocations = find_git_invocations(content, WRITE_SUBCOMMANDS)
+        sub_invocations = find_git_invocations(content, WRITE_SUBCOMMANDS, scan=True)
         if sub_invocations is None:
             return None
         for inv in sub_invocations:
@@ -428,12 +428,12 @@ def _find_add_invocations_in_scope(
     子 shell 形式（scope_content 非 None）：只在該子 shell 內容內搜尋。
     """
     if scope_content is not None:
-        sub_invocations = find_git_invocations(scope_content, {"add"})
+        sub_invocations = find_git_invocations(scope_content, {"add"}, scan=True)
         if sub_invocations is None:
             return None
         return [inv.args for inv in sub_invocations]
 
-    top_level = find_git_invocations(command, {"add"})
+    top_level = find_git_invocations(command, {"add"}, scan=True)
     if top_level is None:
         return None
     return [inv.args for inv in top_level if inv.dash_c_path == repo_hint]

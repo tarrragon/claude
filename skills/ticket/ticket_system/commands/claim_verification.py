@@ -266,6 +266,8 @@ def _kill_process_group(pid: int) -> None:
     """送 SIGTERM → 等 1 秒 → 送 SIGKILL 清除 process group。
 
     ``ProcessLookupError`` 表示 group 已退出（1 秒內自行結束），靜默忽略。
+    ``PermissionError`` 見於 macOS 對只剩未回收殭屍的 group 送訊號，
+    同屬 group 已無可終止成員，靜默忽略。
     """
     try:
         pgid = os.getpgid(pid)
@@ -273,13 +275,13 @@ def _kill_process_group(pid: int) -> None:
         return
     try:
         os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         return
     time.sleep(_SIGTERM_SIGKILL_DELAY_SEC)
     try:
         os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    except (ProcessLookupError, PermissionError):
+        pass  # group 已退出或僅剩殭屍，無可終止成員
 
 
 def execute_verification(

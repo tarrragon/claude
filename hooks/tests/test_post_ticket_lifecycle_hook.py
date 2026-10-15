@@ -34,15 +34,8 @@ spec.loader.exec_module(post_ticket_lifecycle_hook)
 class TestPostTicketLifecycleHook:
     """post-ticket-lifecycle-hook 單元測試類"""
 
-    def _reset_counter(self):
-        """清除 session counter 檔案"""
-        counter_file = post_ticket_lifecycle_hook.get_counter_file()
-        if counter_file.exists():
-            counter_file.unlink()
-
     def test_single_complete_success(self):
         """ticket track complete 成功 → 輸出含 additionalContext"""
-        self._reset_counter()
         input_data = {
             "tool_name": "Bash",
             "tool_input": {"command": "ticket track complete 0.1.0-W30-002"},
@@ -56,7 +49,6 @@ class TestPostTicketLifecycleHook:
 
     def test_batch_complete_success(self):
         """batch-complete 成功 → 輸出含 additionalContext"""
-        self._reset_counter()
         input_data = {
             "tool_name": "Bash",
             "tool_input": {"command": "ticket track batch-complete --ids 001,002"},
@@ -85,10 +77,10 @@ class TestPostTicketLifecycleHook:
         assert "additionalContext" not in output.get("hookSpecificOutput", {})
 
     def test_complete_without_success_marker(self):
-        """命令匹配但 stdout 不含成功標記 → 不觸發"""
+        """命令被遮蔽（驗證器無票號可讀、退回標記）且 stdout 不含成功標記 → 不觸發"""
         input_data = {
             "tool_name": "Bash",
-            "tool_input": {"command": "ticket track complete 0.1.0-W30-002"},
+            "tool_input": {"command": "ticket track complete X-NONE; echo rc=$?"},
             "tool_response": {"stdout": "操作失敗，Ticket 不存在"}
         }
 
@@ -101,10 +93,10 @@ class TestPostTicketLifecycleHook:
         assert "additionalContext" not in output.get("hookSpecificOutput", {})
 
     def test_empty_stdout(self):
-        """stdout 為空 → 不觸發"""
+        """被遮蔽且 stdout 為空 → 不觸發"""
         input_data = {
             "tool_name": "Bash",
-            "tool_input": {"command": "ticket track complete 0.1.0-W30-002"},
+            "tool_input": {"command": "ticket track complete X-NONE; echo rc=$?"},
             "tool_response": {"stdout": ""}
         }
 
@@ -159,18 +151,47 @@ class TestPostTicketLifecycleHook:
 
     def test_is_complete_successful_true(self):
         assert post_ticket_lifecycle_hook.is_complete_successful(
-            "Ticket 0.1.0-W30-002 已完成"
+            {"stdout": "Ticket 0.1.0-W30-002 已完成"}, "ticket track complete X-NONE; echo"
         ) is True
 
     def test_is_complete_successful_false(self):
-        assert post_ticket_lifecycle_hook.is_complete_successful("操作失敗") is False
+        assert post_ticket_lifecycle_hook.is_complete_successful(
+            {"stdout": "操作失敗"}, "ticket track complete X-NONE; echo") is False
 
     def test_is_complete_successful_empty(self):
-        assert post_ticket_lifecycle_hook.is_complete_successful("") is False
+        assert post_ticket_lifecycle_hook.is_complete_successful(
+            {"stdout": ""}, "ticket track complete X-NONE; echo") is False
+
+    def test_unmasked_success_ignores_stdout(self):
+        """未遮蔽的命令收到 PostToolUse 即成功，不看 stdout"""
+        assert post_ticket_lifecycle_hook.is_complete_successful(
+            {"stdout": ""}, "ticket track complete X-NONE") is True
+
+    def test_unmasked_recomplete_outside_window_not_success(self, monkeypatch):
+        """E1：未遮蔽且 stdout 為「已完成於 ...」，窗外為 False、窗內為 True"""
+        out = {"stdout": "0.5.0-W1-286.1 已完成於 2026-10-15T11:52:55"}
+        cmd = "ticket track complete 0.5.0-W1-286.1"
+        for verdict in (False, True):
+            monkeypatch.setattr(
+                post_ticket_lifecycle_hook, "make_completed_verifier",
+                lambda c, v=verdict: (lambda: v))
+            assert post_ticket_lifecycle_hook.is_complete_successful(out, cmd) is verdict
+
+    def test_masked_form_uses_ticket_state(self, monkeypatch):
+        """E1/E2：stdout 無標記的兩種遮蔽形態，驗證器為真則成功、為假則否"""
+        for command in (
+            "ticket track finish T > log 2>&1; echo rc=$?",
+            "out=$(ticket track complete T 2>&1); rc=$?",
+        ):
+            for verdict in (True, False):
+                monkeypatch.setattr(
+                    post_ticket_lifecycle_hook, "make_completed_verifier",
+                    lambda cmd, v=verdict: (lambda: v))
+                assert post_ticket_lifecycle_hook.is_complete_successful(
+                    {"stdout": "rc=0"}, command) is verdict
 
     def test_output_contains_checkpoint_reminder(self):
         """成功偵測時，輸出含 POST_TICKET_COMPLETE_CHECKPOINT_REMINDER"""
-        self._reset_counter()
         input_data = {
             "tool_name": "Bash",
             "tool_input": {"command": "ticket track complete 0.1.0-W30-002"},
@@ -189,33 +210,22 @@ class TestPostTicketLifecycleHook:
         expected = {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
         assert post_ticket_lifecycle_hook.DEFAULT_OUTPUT == expected
 
-    def test_session_counter_increments(self):
-        """驗證 session counter 遞增"""
-        self._reset_counter()
-        assert post_ticket_lifecycle_hook.read_counter() == 0
-        post_ticket_lifecycle_hook.increment_counter()
-        assert post_ticket_lifecycle_hook.read_counter() == 1
-        post_ticket_lifecycle_hook.increment_counter()
-        assert post_ticket_lifecycle_hook.read_counter() == 2
-        self._reset_counter()
-
-    def test_session_counter_warning_at_threshold(self):
-        """第 2 個 Ticket 完成時出現輕度提醒"""
-        self._reset_counter()
-        # 先完成 1 個
-        post_ticket_lifecycle_hook.increment_counter()
-
+    def test_complete_does_not_count_session(self):
+        """session 完成計數只由 session-context-guard-hook 負責；本 hook 不計數也不輸出計數警告"""
+        assert not hasattr(post_ticket_lifecycle_hook, "increment_counter")
         input_data = {
             "tool_name": "Bash",
+            "session_id": "lifecycle-no-count",
             "tool_input": {"command": "ticket track complete 0.1.0-W30-002"},
             "tool_response": {"stdout": "已完成"}
         }
+        counter = Path("/tmp/claude-session-completed-tickets-lifecycle-no-count")
+        counter.unlink(missing_ok=True)
 
         with patch('sys.stdin', StringIO(json.dumps(input_data))):
             with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
                 post_ticket_lifecycle_hook.main()
 
-        output = json.loads(mock_stdout.getvalue())
-        context = output.get("hookSpecificOutput", {}).get("additionalContext", "")
-        assert "Session Context Guard" in context
-        self._reset_counter()
+        context = json.loads(mock_stdout.getvalue()).get("hookSpecificOutput", {}).get("additionalContext", "")
+        assert "Session Context Guard" not in context
+        assert not counter.exists()

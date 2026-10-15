@@ -1112,3 +1112,23 @@ class TestUnitFunctions:
         )
         assert pre == "原始內容\n"
         assert post == "改寫內容\n"
+
+
+class TestGetRepoRootTimeoutLogging:
+    """0.5.0-W1-164.6.16：git 逾時分支 fail-open 回傳 None 並寫 warning 日誌。"""
+
+    def test_timeout_logs_warning_and_returns_none(self, hook_mod, monkeypatch, tmp_path, caplog):
+        def _raise(*a, **kw):
+            raise subprocess.TimeoutExpired(cmd="git", timeout=5)
+
+        monkeypatch.setattr(hook_mod.subprocess, "run", _raise)
+        with caplog.at_level("WARNING"):
+            assert hook_mod._get_repo_root(str(tmp_path)) is None
+        assert "rev-parse --show-toplevel" in caplog.text
+        assert str(tmp_path) in caplog.text
+
+    def test_normal_completion_writes_no_warning(self, hook_mod, tmp_path, caplog):
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        with caplog.at_level("WARNING"):
+            assert hook_mod._get_repo_root(str(tmp_path)) is not None
+        assert "rev-parse" not in caplog.text

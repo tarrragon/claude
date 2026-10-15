@@ -153,7 +153,6 @@ SKILLS_DIR = HOOKS_DIR.parent / "skills"
 
 GAP_HOOK_PATHS = {
     "active-dispatch-tracker-hook.py": HOOKS_DIR / "active-dispatch-tracker-hook.py",
-    "cli-failure-help-reminder-hook.py": HOOKS_DIR / "cli-failure-help-reminder-hook.py",
     "comment-qa-hook.py": SKILLS_DIR / "dart-comment-traceability" / "hooks" / "comment-qa-hook.py",
     "dispatch-count-guard-hook.py": HOOKS_DIR / "dispatch-count-guard-hook.py",
     "file-ownership-guard-hook.py": HOOKS_DIR / "file-ownership-guard-hook.py",
@@ -183,25 +182,31 @@ def test_gap_hook_migrated_to_unified_exit(hook_file):
 # ---------------------------------------------------------------------------
 
 CLI_FAILURE_PAYLOAD = {
+    "hook_event_name": "PostToolUseFailure",
     "tool_name": "Bash",
     "tool_input": {"command": "./scripts/deploy.sh --target prod"},
-    "tool_response": {"stdout": "", "stderr": "deploy failed: missing config"},
+    "error": "Exit code 1\ndeploy failed: missing config",
 }
 
 
 class TestCliFailureHelpReminderHook:
-    """cli-failure-help-reminder：PostToolUse 訊息路徑。"""
+    """cli-error-feedback（check_general_cli_failure）：PostToolUse 訊息路徑。
+
+    舊 cli-failure-help-reminder 已併入此 hook；該 hook 不經 emit_hook_output，
+    而是在 subagent 環境整體早退（無輸出），故 subagent 案例斷言無 additionalContext。
+    """
 
     @pytest.fixture(scope="class")
     def hook(self):
-        return _load_module("cli_failure", HOOKS_DIR / "cli-failure-help-reminder-hook.py")
+        return _load_module(
+            "cli_failure",
+            SKILLS_DIR / "ticket" / "hooks" / "cli-error-feedback-hook.py")
 
     def test_subagent_env_message_suppressed(self, hook, capsys):
         payload = dict(CLI_FAILURE_PAYLOAD, **SUBAGENT_INPUT)
         rc, out = _run_main(hook, payload, capsys)
         assert rc == 0
-        output = json.loads(out)
-        assert "additionalContext" not in output["hookSpecificOutput"], \
+        assert "additionalContext" not in out, \
             "subagent 觸發時 PC-005 提醒不應注入"
 
     def test_pm_env_message_emitted(self, hook, capsys):
@@ -249,7 +254,8 @@ class TestPreTestHook:
 
     PAYLOAD = {
         "tool_name": "Bash",
-        "tool_input": {"command": "flutter test"},
+        # 指定具體測試檔（light）：不觸發未包裝 heavy 封堵，專測環境警告路徑
+        "tool_input": {"command": "flutter test test/a_test.dart"},
     }
 
     @pytest.fixture(scope="class")

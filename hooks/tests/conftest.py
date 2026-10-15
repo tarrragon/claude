@@ -194,7 +194,7 @@ def sample_session_state():
 def hook_project_env(tmp_path):
     """cwd 無關 + 自動清理的假專案根，供以 subprocess 執行 hook 的測試使用（0.2.1-W3-027）。
 
-    Why：部分 hook（creation-acceptance-gate-hook 等）透過 get_project_root()
+    Why：部分 hook（如 acceptance-gate-hook）透過 get_project_root()
     （優先序：worktree 偵測 > CLAUDE_PROJECT_DIR > git rev-parse > cwd 向上搜尋）
     解析專案根，再以「project_root 相對路徑」尋找 ticket 檔（見
     lib.hook_ticket.find_ticket_file）。過去測試直接在真實 repo 下
@@ -233,3 +233,13 @@ def hook_project_env(tmp_path):
     project_root.mkdir(parents=True, exist_ok=True)
     env = {"CLAUDE_PROJECT_DIR": str(project_root), "HOOK_TEST_ISOLATION": "1"}
     return project_root, env
+
+
+@pytest.fixture(autouse=True)
+def clear_project_root_cache():
+    """每個測試前後清除 hook_base 專案根快取，避免同鍵不同結果的跨測試汙染。"""
+    from lib import hook_base
+
+    hook_base.clear_project_root_cache()
+    yield
+    hook_base.clear_project_root_cache()

@@ -14,7 +14,8 @@ Active Dispatch Tracker 共用模組
   派發的精準路徑，先於 mark_turn_ended_by_id 呼叫）
 - mark_turn_ended_by_id: 標記 agent_id 對應 entry 的回合結束時刻（不刪除，
   未命名派發的既有路徑）
-- mark_oldest_active_null_agent_id_entry_turn_ended: 上者的 FIFO fallback
+- mark_oldest_active_null_agent_id_entry_turn_ended: 已停用（SubagentStop 不再
+  呼叫 FIFO 後援，見該函式 docstring）
 - get_active_dispatches: 取得所有活躍派發
 - is_file_under_dispatch: 檢查檔案是否在派發中
 - cleanup_expired: 清理超時記錄
@@ -63,8 +64,8 @@ agent_handle 欄位（identifier namespace 修復）：
   自己回報、CC runtime 保證存在的 `agent_id`（named 派發格式為
   `a<handle>-<hex>`，如 `afix-abc123-73070ca5c1d3f849`）對不上。named
   派發（帶 `name` 參數）在平行情境下（同批次派發多個代理人）必然產生
-  多筆 `agent_id is None` 的候選，FIFO fallback 依設計於候選 > 1 時
-  停用，故 `turn_ended_at` 在此主要情境下永遠不會被設定。
+  多筆 `agent_id is None` 的候選，FIFO fallback（現已移除）於候選 > 1 時
+  本就停用，故 `turn_ended_at` 在此主要情境下永遠不會被設定。
 
   `agent_handle` 欄位改在 dispatch 當下（`PostToolUse` 觸發時）同步
   擷取派發用的 `name` 參數（可定址短 handle，非 persona），不依賴任何
@@ -74,7 +75,9 @@ agent_handle 欄位（identifier namespace 修復）：
   不受影響，繼續走 `mark_turn_ended_by_id` 舊路徑。
 """
 
+import copy
 import json
+import logging
 import os
 import re
 import subprocess
@@ -145,25 +148,75 @@ else:
         fcntl.flock(fd, fcntl.LOCK_UN)
 
 # 記憶體快取：避免同一 Hook 執行中重複讀取 JSON 檔案
-# 使用檔案 mtime 判斷是否需要重新讀取
-_state_cache: Dict = {"data": None, "mtime": 0.0}
+# 鍵為解析後的狀態檔路徑，值為 (st_mtime_ns, data)；以奈秒整數比較 mtime，
+# 命中時回傳 deepcopy，呼叫端就地修改不會污染快取
+_state_cache: Dict[Path, Tuple[int, Dict]] = {}
 
 
 def reset_cache() -> None:
     """重設記憶體快取（供測試使用）。"""
-    _state_cache["data"] = None
-    _state_cache["mtime"] = 0.0
+    _state_cache.clear()
+    _SHARED_ROOT_CACHE.clear()
+
+
+_SHARED_ROOT_CACHE: Dict[str, Path] = {}
+_GIT_COMMON_DIR_TIMEOUT = 5
+
+
+def _report_shared_root_failure(reason: str) -> None:
+    """主倉庫根解析降級：stderr 加 log 雙通道（quality-baseline 規則 4）。"""
+    msg = "dispatch_tracker 主倉庫根解析降級為傳入的 project_root: {}".format(reason)
+    logging.getLogger("dispatch_tracker").warning(msg)
+    sys.stderr.write(msg + "\n")
+
+
+def resolve_shared_root(project_root: Path) -> Path:
+    """以傳入的 project_root 推回主倉庫根，讓 linked worktree 與主倉庫共用同一份登記檔。
+
+    不依賴 cwd、不匯入 hook_base（hook_base 反向匯入本模組，會形成循環）。
+    僅當 project_root/.git 是檔案（linked worktree 或 submodule 的 gitdir 指標）
+    時才查 `git -C <root> rev-parse --path-format=absolute --git-common-dir`；
+    主倉庫（.git 為目錄）與非 repo 直接回傳原值，不起子程序。
+    查詢失敗（逾時、git 不可用、rc 非 0）時回傳原值並寫 stderr 加 log。
+    """
+    key = str(project_root)
+    cached = _SHARED_ROOT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    result = project_root
+    if (project_root / ".git").is_file():
+        try:
+            proc = subprocess.run(
+                ["git", "-C", key, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_GIT_COMMON_DIR_TIMEOUT,
+            )
+            out = proc.stdout.strip()
+            if proc.returncode == 0 and out:
+                common = Path(out)
+                # submodule 的 common dir 為 .git/modules/x，父目錄不是工作樹根，不採用
+                if common.name == ".git":
+                    result = common.parent
+            else:
+                _report_shared_root_failure("git-common-dir 查詢失敗 rc={}".format(proc.returncode))
+        except (OSError, subprocess.SubprocessError) as exc:
+            _report_shared_root_failure("git-common-dir 查詢異常: {}".format(exc))
+    _SHARED_ROOT_CACHE[key] = result
+    return result
 
 
 def get_state_file_path(project_root: Path) -> Path:
-    """取得狀態檔路徑"""
-    return project_root / STATE_FILE_RELATIVE
+    """取得狀態檔路徑（linked worktree 內指向主倉庫那份）"""
+    return resolve_shared_root(project_root) / STATE_FILE_RELATIVE
 
 
 @contextmanager
 def _state_lock(project_root: Path):
     """排他鎖保護 read-modify-write 週期，防止並行寫入資料遺失。"""
-    lock_file = project_root / LOCK_FILE_RELATIVE
+    lock_file = resolve_shared_root(project_root) / LOCK_FILE_RELATIVE
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     fd = lock_file.open("w")
     try:
@@ -184,17 +237,17 @@ def _read_state(project_root: Path) -> Dict:
     if not state_file.exists():
         return {"dispatches": []}
     try:
-        current_mtime = state_file.stat().st_mtime
-        if _state_cache["data"] is not None and _state_cache["mtime"] == current_mtime:
-            return _state_cache["data"]
+        current_mtime_ns = state_file.stat().st_mtime_ns
+        cached = _state_cache.get(state_file)
+        if cached is not None and cached[0] == current_mtime_ns:
+            return copy.deepcopy(cached[1])
 
         content = state_file.read_text(encoding="utf-8")
         data = json.loads(content)
         if not isinstance(data, dict) or "dispatches" not in data:
             return {"dispatches": []}
 
-        _state_cache["data"] = data
-        _state_cache["mtime"] = current_mtime
+        _state_cache[state_file] = (current_mtime_ns, copy.deepcopy(data))
         return data
     except (json.JSONDecodeError, OSError) as e:
         print(f"[dispatch_tracker] _read_state: 狀態檔讀取失敗 ({state_file}): {e}", file=sys.stderr)
@@ -241,9 +294,8 @@ def _write_state(project_root: Path, state: Dict) -> None:
                 pass
         raise
 
-    # 寫入後使快取失效，下次 _read_state 會重新讀取
-    _state_cache["data"] = None
-    _state_cache["mtime"] = 0.0
+    # 寫入後使該路徑的快取失效，下次 _read_state 會重新讀取
+    _state_cache.pop(state_file, None)
 
 
 def _prune_tombstones(state: Dict, now: datetime) -> None:
@@ -310,8 +362,14 @@ def record_dispatch(
     session_id: str = "",
     name: str = "",
     agent_handle: str = "",
+    work_checkout: str = "",
 ) -> None:
     """記錄一個新的派發。寫入 dispatch-active.json。
+
+    work_checkout：代理人工作所在 checkout 的根路徑。非隔離派發為派發者
+        所在 checkout；隔離派發為其 linked worktree 根（runtime 未回報路徑
+        時留空）。空值代表「位置不明」，並行期判定一律計入（保守）。
+        見 `filter_dispatches_for_checkout`。
 
     Args:
         project_root: 專案根目錄
@@ -376,6 +434,7 @@ def record_dispatch(
             "session_id": session_id,
             "name": name,
             "agent_handle": agent_handle,
+            "work_checkout": work_checkout,
             "turn_ended_at": _consume_tombstone(state, agent_id, agent_handle),
         }
         state["dispatches"].append(entry)
@@ -651,7 +710,12 @@ def clear_oldest_null_agent_id_entry(project_root: Path) -> bool:
 
 
 def mark_oldest_active_null_agent_id_entry_turn_ended(project_root: Path) -> bool:
-    """標記 agent_id 為 null 且尚未標記過回合結束的最早一筆（FIFO fallback）。
+    """【已停用】標記 agent_id 為 null 且未結束回合的最早一筆（FIFO fallback）。
+
+    SubagentStop 已不呼叫本函式：同步派發的 Stop 先於自身記錄寫入，唯一
+    null 候選必屬他人運行中記錄，FIFO 會誤標；且 7 日派發日誌 321 筆中
+    agent_id 為 None 為 0 筆，已無合法候選。精準匹配未命中一律走墓碑。
+    保留函式僅為既有測試與外部相容，不應新增呼叫端。
 
     SubagentStop 觸發時 agent_id 精準匹配失敗後使用。因 SubagentStop
     input 無 description 欄位，改用 FIFO 語義。
@@ -686,6 +750,35 @@ def get_active_dispatches(project_root: Path) -> List[Dict]:
     """
     state = _read_state(project_root)
     return state["dispatches"]
+
+
+def _same_path(a: str, b: str) -> bool:
+    """以 inode 比對同一目錄（涵蓋 /tmp 與 /private/tmp、symlink、大小寫別名）；
+    任一路徑不存在或無法解析視為相同（保守，計入並行期）。"""
+    try:
+        return os.path.samefile(a, b)
+    except (OSError, ValueError):
+        return True
+
+
+def filter_dispatches_for_checkout(
+    dispatches: List[Dict], checkout: Optional[Path]
+) -> List[Dict]:
+    """並行期判定用：只保留工作位置與 checkout 相同的條目。
+
+    保守方向（多擋不放行）：條目無 work_checkout 欄位或為空（舊條目、位置
+    不明）、checkout 為 None、路徑解析失敗，一律保留。
+    僅供「並行期判定」使用；隔離代理人的身分判定須讀全部條目，不得經此過濾。
+    """
+    if checkout is None:
+        return list(dispatches)
+    target = str(checkout)
+    kept = []
+    for d in dispatches:
+        loc = d.get("work_checkout") or ""
+        if not loc or _same_path(loc, target):
+            kept.append(d)
+    return kept
 
 
 def is_file_under_dispatch(project_root: Path, filepath: str) -> Optional[Dict]:

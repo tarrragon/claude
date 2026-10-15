@@ -539,7 +539,7 @@ class TestDictFieldFlattenRegression:
             {"id": "x", "who": {"current": "old-agent", "history": {"t0": "old-agent"}}},
         )
         assert saved["who"]["current"] == "new-agent"
-        assert saved["who"]["history"] == {"t0": "old-agent"}
+        assert saved["who"]["history"].get("t0") == "old-agent"  # 既有項保留；改派另追加一筆（見 test_complete_metadata_sync）
 
     def test_set_who_recovers_dict_when_flattened_string(self):
         """Given who 已壓扁為 string（legacy 資料），when set-who, then 重建為 dict。"""

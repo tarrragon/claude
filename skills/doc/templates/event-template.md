@@ -6,7 +6,7 @@
 id: EVT-DOMAIN-NNN
 name: "{事件名稱}"
 canonical_name: "MODULE.ACTION.STATE"  # 規範化事件名：模組.動作.狀態，如 BackupTracker.Snapshot.Incremented
-category: domain_event           # domain_event（業務狀態變更）/ process_event（流程/系統事件）
+category: domain_event           # domain_event（狀態變更事實，必有 consumer）/ process_event（步驟進行中標記，允許無 consumer）
 status: draft                    # draft / review / approved / deprecated
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
@@ -14,8 +14,8 @@ updated: "YYYY-MM-DD"
 # 負載結構（選填；內部 schema 待首個真實 EVT 實例定案後補齊）
 payload: null
 
-# 交叉驗證核心欄位（選填於建立時，但 `doc validate` 對已存在文件強制檢查
-# 兩者皆非空——缺一端代表事件的發送方或接收方未被記錄，見 SKILL why）
+# 交叉驗證核心欄位（選填於建立時，但 `doc validate` 對已存在文件強制檢查：
+# producers 一律非空；consumers 在 domain_event 必須非空，process_event 允許為空）
 producers: []                    # 發送此事件的 domain/service，如 [BackupTracker]
 consumers: []                    # 接收此事件的 domain/service，如 [SnapshotCounter]
 

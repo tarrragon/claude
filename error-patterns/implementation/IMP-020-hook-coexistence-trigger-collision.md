@@ -11,7 +11,7 @@
 | 來源版本 | v0.1.0 |
 | 發現日期 | 2026-03-06 |
 | 風險等級 | 中 |
-| 來源 | cli-failure-help-reminder-hook 與 pre-fix-evaluation-hook 共存於 PostToolUse/Bash 觸發點 |
+| 來源 | cli-failure-help-reminder-hook（歷史名稱；已併入 cli-error-feedback-hook）與 pre-fix-evaluation-hook 共存於 PostToolUse/Bash 觸發點 |
 
 ### 症狀
 
@@ -58,9 +58,9 @@
 
 | 措施 | 說明 | 位置 |
 |------|------|------|
-| HANDLED_BY_OTHER_HOOKS 排除清單 | cli-failure-help-reminder-hook 排除 pre-fix-evaluation 已處理的命令 | .claude/hooks/cli-failure-help-reminder-hook.py |
-| EXPECTED_STDERR_COMMANDS 清單 | 排除 grep/find 等預期有 stderr 的命令 | .claude/hooks/cli-failure-help-reminder-hook.py |
-| GIT_INFO_STDERR_PATTERNS 清單 | 排除 git 資訊性 stderr | .claude/hooks/cli-failure-help-reminder-hook.py |
+| HANDLED_BY_OTHER_HOOKS 排除清單 | cli-error-feedback-hook 的 check_general_cli_failure（原 cli-failure-help-reminder-hook 邏輯）排除 pre-fix-evaluation 已處理的命令 | .claude/skills/ticket/hooks/cli-error-feedback-hook.py |
+| EXPECTED_STDERR_COMMANDS 清單 | 排除 grep/find 等預期有 stderr 的命令 | .claude/skills/ticket/hooks/cli-error-feedback-hook.py |
+| GIT_INFO_STDERR_PATTERNS 清單 | 排除 git 資訊性 stderr | .claude/skills/ticket/hooks/cli-error-feedback-hook.py |
 
 ---
 
@@ -83,6 +83,6 @@
 
 ## 相關文件
 
-- .claude/hooks/cli-failure-help-reminder-hook.py - 實作範例
+- .claude/skills/ticket/hooks/cli-error-feedback-hook.py - 實作範例（原 cli-failure-help-reminder-hook 已併入）
 - .claude/hooks/post-test-hook.py - 同 matcher 的既有 Hook（原 pre-fix-evaluation-hook.py 邏輯已合併於此，見 PC-162）
 - .claude/settings.json - Hook 註冊配置

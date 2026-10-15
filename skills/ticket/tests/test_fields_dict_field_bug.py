@@ -112,7 +112,7 @@ def test_scenario_1_dict_to_subkey_update(tmp_path, monkeypatch):
     fm = _load_frontmatter(ticket_path)
     assert isinstance(fm["who"], dict), "who 必須保持 dict 結構"
     assert fm["who"]["current"] == "agent-b", "current 子欄位已更新"
-    assert fm["who"]["history"] == {"phase1": "lavender"}, "history 子欄位保留"
+    assert fm["who"]["history"].get("phase1") == "lavender"  # 既有項保留；改派另追加一筆（見 test_complete_metadata_sync）
 
 
 def test_scenario_2_squashed_string_recovery(tmp_path, monkeypatch):

@@ -164,7 +164,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.dispatch_tracker import get_active_dispatches
 from lib.git_command_parse import (
+    classify_parse_cause,
     contains_git_word,
+    explain_parse_cause,
     find_git_invocations,
     parse_command_statements,
 )
@@ -193,10 +195,13 @@ def _invocations_or_conservative_default(command: str, subcommand: str):
     不含目標操作」是兩種不同狀態，不可混為一談：本守衛防的是不可逆資料
     遺失，寧可對無法判定的命令保守阻擋，也不放行未知風險。
     """
-    invocations = find_git_invocations(command, {subcommand})
+    invocations = find_git_invocations(command, {subcommand}, scan=True)
     if invocations is None:
         return [], True
-    return invocations, False
+    if invocations and all(inv.via_scan for inv in invocations):
+        # 僅任意位置掃描命中（無位置命中）：辨識不確定，比照無法解析
+        return [], True
+    return [inv for inv in invocations if not inv.via_scan], False
 
 
 def _has_whole_tree_arg_target(args: List[str]) -> bool:
@@ -336,7 +341,11 @@ def _run_rev_parse(target_dir: str, *flags: str) -> Optional[List[str]]:
             text=True,
             timeout=5,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as e:
+        logging.getLogger("workspace-wipe-guard").warning(
+            "git rev-parse %s 失敗（fail-open 回傳 None）: cwd=%s, %s: %s",
+            " ".join(flags), target_dir, type(e).__name__, e,
+        )
         return None
     if result.returncode != 0:
         return None
@@ -481,6 +490,7 @@ def _build_deny_message(
     safe_hint: Optional[str],
     dispatch_count: Optional[int],
     main_repo_dirty: Optional[bool],
+    parse_cause: Optional[str] = None,
 ) -> str:
     """組出 DENY 訊息：操作名稱 + 觸發理由（可多條）+ 安全替代。
 
@@ -508,6 +518,10 @@ def _build_deny_message(
     elif main_repo_dirty:
         reasons.append(
             "主 repo 有未提交變更：主 repo 存在未提交的 tracked 檔案變更"
+        )
+    if parse_cause is not None:
+        reasons.append(
+            "命令無法確認為安全：保守視為命中本操作。" + explain_parse_cause(parse_cause)
         )
     reason_block = "\n".join(f"  - {r}" for r in reasons)
 
@@ -588,8 +602,13 @@ def main() -> int:
             "未知(讀取失敗，保守阻擋)" if dispatch_count is None else dispatch_count,
             "未知(讀取失敗，保守阻擋)" if main_repo_dirty is None else main_repo_dirty,
         )
+        parse_cause = classify_parse_cause(
+            find_git_invocations(command, _WIPE_SUBCOMMANDS, scan=True)
+        )
         print(
-            _build_deny_message(op_name, safe_hint, dispatch_count, main_repo_dirty),
+            _build_deny_message(
+                op_name, safe_hint, dispatch_count, main_repo_dirty, parse_cause
+            ),
             file=sys.stderr,
         )
         return 2

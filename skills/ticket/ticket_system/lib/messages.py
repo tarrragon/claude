@@ -141,7 +141,7 @@ class WarningMessages:
     SEQ_IGNORED_WITH_PARENT = "[提示] --seq {seq} 在子任務模式下被忽略，自動使用序號 {child_seq}"
     DEPTH_LIMIT_REACHED = (
         "[Warning] 新子任務 {ticket_id} 深度為 {depth}，超過嵌套上限 MAX_TICKET_DEPTH={max_depth}\n"
-        "   深度超過上限的 ticket 不可被派發執行（W1-056.5 協議 v2 D3，裁決 E；深度 == 上限為合法最深層）\n"
+        "   主線程派發此 ticket 不受影響；子代理人持有此 ticket 時不可再往下派發（深度 == 上限為合法最深層）\n"
         "   查詢深度：ticket track depth {ticket_id}"
     )
     CHILDREN_COUNT_HIGH = (

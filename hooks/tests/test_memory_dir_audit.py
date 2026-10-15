@@ -58,18 +58,27 @@ def _load_hook_module():
 
 
 def _run_main_with_input(hook_module, input_data):
-    """以 stdin 注入 JSON 並呼叫 hook.main()，回傳 (exit_code, stderr_text)。"""
+    """以 stdin 注入 JSON 並呼叫 hook.main()，回傳 (exit_code, stdout_text)。
+
+    稽核提醒走 stdout JSON additionalContext（模型可見）；stderr 必須為空，
+    否則代表提醒回退到模型不可見的管道，直接在此斷言失敗。
+    回傳值第二項雖在各測試中沿用 stderr_text 變數名，語意已是 stdout。
+    """
     stdin_buf = io.StringIO(json.dumps(input_data))
     old_stdin = sys.stdin
+    old_stdout = sys.stdout
     old_stderr = sys.stderr
     sys.stdin = stdin_buf
+    sys.stdout = io.StringIO()
     sys.stderr = io.StringIO()
     try:
         exit_code = hook_module.main()
-        stderr_text = sys.stderr.getvalue()
-        return exit_code, stderr_text
+        stdout_text = sys.stdout.getvalue()
+        assert sys.stderr.getvalue() == "", "提醒不得走 stderr"
+        return exit_code, stdout_text
     finally:
         sys.stdin = old_stdin
+        sys.stdout = old_stdout
         sys.stderr = old_stderr
 
 
@@ -171,6 +180,12 @@ class TestAuditBaseline(_MemoryDirAuditMainTestCase):
         self.assertIn("[MemoryDirAudit]", stderr_text)
         self.assertIn("換個地方記錄", stderr_text)
 
+        # 輸出為單一 JSON（SessionStart additionalContext，模型可見）
+        payload = json.loads(stderr_text)
+        hook_output = payload["hookSpecificOutput"]
+        self.assertEqual(hook_output["hookEventName"], "SessionStart")
+        self.assertIn("[MemoryDirAudit]", hook_output["additionalContext"])
+
         marker_state = json.loads(self._marker_file.read_text(encoding="utf-8"))
         self.assertEqual(
             marker_state,
@@ -243,6 +258,9 @@ class TestEventDrivenThrottle(_MemoryDirAuditMainTestCase):
         stop_exit, stop_stderr = _run_main_with_input(hook, self._stop_input())
         self.assertEqual(stop_exit, 0)
         self.assertIn("[MemoryDirAudit]", stop_stderr)
+        self.assertEqual(
+            json.loads(stop_stderr)["hookSpecificOutput"]["hookEventName"], "Stop"
+        )
 
     def test_second_stop_after_warning_does_not_repeat(self):
         """Stop 告警後 marker 已更新為當前快照，若內容此後不再變化，

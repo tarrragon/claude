@@ -990,7 +990,7 @@ def test_force_bypass_fail_closed_when_parser_raises(project_dir, capture_logger
     def _boom(_command):
         raise RuntimeError("parser exploded")
 
-    monkeypatch.setattr(module, "parse_command_statements", _boom)
+    monkeypatch.setattr(module, "find_complete_invocations", _boom)
     result = module.check_acceptance_status(
         parent_id, project_dir, capture_logger,
         f"ticket track complete {parent_id} --force",
@@ -1092,3 +1092,146 @@ def test_children_incomplete_message_documents_force_bypass():
     msg = GateMessages.CHILDREN_INCOMPLETE_ERROR
     assert "--force" in msg
     assert _MSG_AUDIT in msg
+
+
+# ---------------------------------------------------------------------------
+# 0.5.0-W1-120.7.9.5.2：完成類辨識改用共用任意位置掃描
+# ---------------------------------------------------------------------------
+
+_SCAN_TID = "0.5.0-W1-001"
+
+
+@pytest.mark.parametrize("command", [
+    f"ticket track complete {_SCAN_TID}",
+    f"timeout 30 ticket track complete {_SCAN_TID}",
+    f"git status && ticket track finish {_SCAN_TID}",
+    f"bash -c 'ticket track complete {_SCAN_TID}'",
+    f"/usr/local/bin/ticket track complete {_SCAN_TID}",
+])
+def test_is_complete_command_scan_positive(command):
+    module = _load_gate_module("acceptance_gate_hook_scan_pos")
+    assert module.is_complete_command(command) is True
+
+
+@pytest.mark.parametrize("command", [
+    f"echo ticket track complete {_SCAN_TID}",
+    f"printf %s ticket track complete {_SCAN_TID}",
+    "command -v ticket track complete",
+    f"ticket track claim {_SCAN_TID}",
+    f"ticket track create --why 'ticket track complete {_SCAN_TID}'",
+])
+def test_is_complete_command_scan_negative(command):
+    module = _load_gate_module("acceptance_gate_hook_scan_neg")
+    assert module.is_complete_command(command) is False
+
+
+def test_is_complete_command_unparseable_falls_back_to_legacy_literal():
+    """未閉合引號：解析失敗，退回字面比對（fail-closed）維持不變。"""
+    module = _load_gate_module("acceptance_gate_hook_scan_legacy")
+    assert module.is_complete_command("ticket track complete 'abc") is True
+    assert module.is_complete_command("ticket track claim 'abc") is False
+
+
+def test_is_complete_command_stdin_shell_falls_back_to_legacy_literal():
+    """管線或 here-string 餵 stdin shell：掃描回 None，退回字面比對（fail-closed）。"""
+    module = _load_gate_module("acceptance_gate_hook_scan_stdin_shell")
+    # 後備為字面比對且先剝引號，故用未加引號的形式證明走了後備（掃描本身會回 []）
+    assert module.is_complete_command(f"echo ticket track complete {_SCAN_TID} | bash") is True
+    assert module.is_complete_command(f"bash <<< ticket track complete {_SCAN_TID}") is True
+    assert module.is_complete_command("cat f | bash") is False
+    # 引號內字面：原文後備辨識（fail-closed）
+    assert module.is_complete_command(f'echo "ticket track complete {_SCAN_TID}" | bash') is True
+    assert module.is_complete_command(f'bash <<< "ticket track complete {_SCAN_TID}"') is True
+
+
+_E2E_TID = "0.5.0-W1-120.7.9.5"
+
+
+@pytest.mark.parametrize("command", [
+    f"ticket track complete {_E2E_TID}",
+    f"nice ticket track complete {_E2E_TID}",
+    f"echo ticket track complete {_E2E_TID} | bash",
+    f'bash -c "ticket track complete {_E2E_TID}"',
+    f'echo "ticket track complete {_E2E_TID}" | bash',
+    f'bash <<< "ticket track complete {_E2E_TID}"',
+])
+def test_extract_ticket_id_covers_quoted_and_stdin_shell_forms(command, capture_logger):
+    """引號內腳本與 stdin shell 寫法也要抽到 ID，否則閘門放行（_extract_ticket_or_skip）。"""
+    module = _load_gate_module("acceptance_gate_hook_extract_id")
+    assert module.extract_ticket_id_from_command(command, capture_logger) == _E2E_TID
+
+
+def test_extract_ticket_id_not_complete_with_quoted_verb_in_why(capture_logger):
+    module = _load_gate_module("acceptance_gate_hook_extract_neg")
+    cmd = f'ticket track claim {_E2E_TID} --why "ticket track complete 0.5.0-W1-999"'
+    assert module.extract_ticket_id_from_command(cmd, capture_logger) is None
+
+
+def test_extract_ticket_id_takes_verb_arg_not_why_text(capture_logger):
+    module = _load_gate_module("acceptance_gate_hook_extract_first")
+    cmd = f'ticket track complete {_E2E_TID} --why "見 0.5.0-W1-999"'
+    assert module.extract_ticket_id_from_command(cmd, capture_logger) == _E2E_TID
+
+
+def test_has_force_flag_on_complete_scan_forms():
+    module = _load_gate_module("acceptance_gate_hook_scan_force")
+    assert module.has_force_flag_on_complete(
+        f"timeout 30 ticket track complete {_SCAN_TID} --force", _SCAN_TID) is True
+    assert module.has_force_flag_on_complete(
+        f"git status && nice ticket track finish {_SCAN_TID} --force", _SCAN_TID) is True
+    # bash -c 內的 --force 隨引號剝除而不旁路（維持 deny，安全側）
+    assert module.has_force_flag_on_complete(
+        f"bash -c 'ticket track complete {_SCAN_TID} --force'", _SCAN_TID) is False
+    # 對照：不帶 --force、他鏈的 --force、引號內的 --force 皆不算
+    assert module.has_force_flag_on_complete(
+        f"ticket track complete {_SCAN_TID}", _SCAN_TID) is False
+    assert module.has_force_flag_on_complete(
+        f"ticket track complete {_SCAN_TID} && git push --force", _SCAN_TID) is False
+    assert module.has_force_flag_on_complete(
+        f"ticket track complete {_SCAN_TID} --why 'x --force'", _SCAN_TID) is False
+    # 解析失敗維持 False（呼叫端 fail-closed）
+    assert module.has_force_flag_on_complete(
+        f"ticket track complete {_SCAN_TID} --force 'abc", _SCAN_TID) is False
+
+
+_MULTI_A = "0.5.0-W1-291"
+_MULTI_B = "0.5.0-W1-120.7.9.5"
+
+
+@pytest.mark.parametrize("command", [
+    f"ticket track complete {_MULTI_A}; ticket track complete {_MULTI_B}",
+    f"ticket track complete {_MULTI_A} && bash -c 'ticket track complete {_MULTI_B}'",
+    f"ticket track batch-complete {_MULTI_A},{_MULTI_B}",
+    f"ticket track batch-complete {_MULTI_A} {_MULTI_B}",
+])
+def test_extract_ticket_ids_collects_all_ids_in_multi_forms(command, capture_logger):
+    """一個命令內的多個完成類呼叫：後面的 ID 也要進入檢查清單。"""
+    module = _load_gate_module("acceptance_gate_hook_multi_ids")
+    assert module.extract_ticket_ids_from_command(command, capture_logger) == [_MULTI_A, _MULTI_B]
+
+
+def test_extract_ticket_ids_single_id_unchanged(capture_logger):
+    module = _load_gate_module("acceptance_gate_hook_multi_single")
+    cmd = f"ticket track complete {_MULTI_A}"
+    assert module.extract_ticket_ids_from_command(cmd, capture_logger) == [_MULTI_A]
+    assert module.extract_ticket_id_from_command(cmd, capture_logger) == _MULTI_A
+
+
+def test_extract_ticket_ids_raw_fallback_collects_all_ids(capture_logger):
+    """解析失敗（管線餵 stdin shell）時，原文後備也收集全部 ID。"""
+    module = _load_gate_module("acceptance_gate_hook_multi_raw")
+    cmd = f"echo ticket track complete {_MULTI_A}; ticket track complete {_MULTI_B} | bash"
+    assert module.find_complete_invocations(cmd) is None
+    assert module.extract_ticket_ids_from_command(cmd, capture_logger) == [_MULTI_A, _MULTI_B]
+
+
+def test_second_id_with_incomplete_children_is_checked_and_blocks(project_dir, logger):
+    """逐一檢查：第一張已完成、第二張有未完成 children 時，第二張的結果為應擋。"""
+    module = _load_gate_module("acceptance_gate_hook_multi_check")
+    _write_ticket(project_dir, _MULTI_A, status="completed")
+    _write_ticket(project_dir, _MULTI_B, status="in_progress", children=[_MULTI_B + ".1"])
+    _write_ticket(project_dir, _MULTI_B + ".1", status="pending")
+    cmd = f"ticket track complete {_MULTI_A}; ticket track complete {_MULTI_B}"
+    ids = module.extract_ticket_ids_from_command(cmd, logger)
+    results = [module.check_acceptance_status(t, project_dir, logger, cmd) for t in ids]
+    assert [r.should_block for r in results] == [False, True]

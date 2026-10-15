@@ -9,7 +9,7 @@ Dispatch Staging Phrase Guard Hook - PreToolUse Hook（Layer 2，軟提示）
 功能：
   Agent/Task 派發涉及 git commit 工作、但 prompt 缺「精準 staging 制式句」
   （權威版見 .claude/references/agent-dispatch-template.md「精準 staging
-  制式句（權威版）」節）關鍵片語時，輸出軟提示到 stderr，仍放行（exit 0）。
+  制式句（權威版）」節）關鍵片語時，以 additionalContext 輸出軟提示，仍放行（exit 0）。
 
   制式句對齊 agent-dispatch-template.md 權威版（v1.29.0 起）涵蓋三類獨立
   根因，本 hook 以三類 OR 片語各自獨立判定（缺一不足，任一類別缺失皆
@@ -61,7 +61,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib import ...`
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
+from lib import (  # noqa: E402
+    setup_hook_logging,
+    run_hook_safely,
+    read_json_from_stdin,
+    emit_model_reminder,
+)
 
 # ----------------------------------------------------------------------------
 # 比對方式選擇理由
@@ -442,7 +447,8 @@ def main() -> int:
     missing = _missing_categories(prompt_lower)
     if missing:
         hint = _build_soft_hint(missing)
-        print(hint, file=sys.stderr)
+        # 提醒對象是模型（PM），走 additionalContext；stderr 不可見（exit 0）
+        emit_model_reminder("PreToolUse", hint, input_data=input_data)
         logger.info(
             "軟提示：prompt 涉及 commit 但缺制式句片語 missing=%s subagent_type=%s",
             missing, subagent_type,

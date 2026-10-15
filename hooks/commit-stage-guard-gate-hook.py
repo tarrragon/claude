@@ -192,7 +192,7 @@ def _git_show(rev_spec: str, project_root: Path) -> str:
 def _merge_in_progress(project_root: Path) -> bool:
     """判斷是否正在完成一次合併（`MERGE_HEAD` 可解析），語意與
     git-ref-transaction-content-guard.py 的同名函式一致：手動解衝突後執行
-    `git commit` 落地合併結果時，`MERGE_HEAD` 尚未被 git 清除，可據此判斷
+    `git merge --continue` 落地合併結果時，`MERGE_HEAD` 尚未被 git 清除，可據此判斷
     即將建立的是合併 commit，供 branch-verify 豁免（見
     lib.commit_content_guards._check_branch_verify 的 is_merge_commit）。
     """
@@ -277,7 +277,7 @@ def main() -> int:
     if not contains_git_word(command):
         return EXIT_ALLOW
 
-    invocations = find_git_invocations(command, {"commit"})
+    invocations = find_git_invocations(command, {"commit"}, scan=True)
     if not invocations:
         logger.debug("命令不含 git commit 呼叫，或無法安全解析，放行")
         return EXIT_ALLOW

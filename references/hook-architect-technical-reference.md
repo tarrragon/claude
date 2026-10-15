@@ -581,6 +581,46 @@ Hook JSON output 新增 `terminalSequence` 欄位，讓 hook 在無 controlling 
 
 **識別訊號**：hook 原始碼有 `additionalContext` / `systemMessage` 輸出但 grep 不到 `is_subagent_environment`，即為待評估對象。完整症狀與案例見 `.claude/error-patterns/process-compliance/PC-V1-004-hook-injection-audience-mismatch.md`。
 
+### 事件類型與輸出管道的可見性對照表
+
+**Why**：品質基線規則 4 只要求失敗對用戶可見（stderr）。提醒類輸出若受眾是模型，exit 0 的 stderr 不進模型 context，提醒靜默失效（IMP-GPD-004）。
+
+**Consequence**：作者照字面寫 stderr 加 exit 0，hook 日誌顯示正常執行，模型行為卻不受提醒影響，且無任何錯誤訊號。
+
+**Action**：先宣告受眾，再依下表選管道。
+
+實測（2026-10，`claude -p` 探針 hook）：各事件註冊多支探針，每支以不同管道輸出唯一標記，再請模型列出 context 中的標記；探針另寫日誌確認分支實際執行。「是」為標記出現在模型 context；「否」為探針已執行但模型回報未見；「未測」未實測。
+
+| 事件 | exit 0 stderr | exit 0 純文字 stdout | additionalContext | systemMessage | exit 2 stderr | decision block reason |
+|------|---------------|----------------------|-------------------|---------------|---------------|-----------------------|
+| UserPromptSubmit | 否 | 是 | 是 | 否 | 否（提示被擋下，訊息顯示於用戶端，模型不執行） | 否（同左） |
+| SessionStart | 否 | 是 | 是 | 否 | 否 | 未測 |
+| PreToolUse | 否 | 否 | 是 | 否 | 是（自然觀測） | 未測 |
+| PostToolUse | 否 | 否 | 是 | 否 | 是 | 是 |
+| PostToolUseFailure | 否 | 否 | 是 | 未測 | 是 | 未測 |
+| Stop | 否 | 否 | 是（模型續跑） | 否 | 是（模型續跑） | 是（模型續跑） |
+| SubagentStop | 未測 | 未測 | 未測 | 未測 | 未測 | 未測 |
+
+用戶欄位：`-p` 模式無 UI，未實測。專案紀錄（IMP-048）稱非零結束碼的 stderr 顯示為 hook error。
+
+附帶事實：
+
+- 非標準欄位（`message`、無 decision 的 `reason`、`suppressOutput`）對模型不可見。
+- Bash PostToolUse 的 `tool_response.stderr` 恆為空字串，stderr 併入 stdout；失敗命令走 PostToolUseFailure，payload 改帶 `error` 欄位（內容為結束碼加交錯的 stdout 與 stderr）。
+- Pre／Post 類事件的純文字 stdout 不僅模型不可見，另有 JSON validation 風險（IMP-055）。
+- Stop 上可見管道會使模型續跑，選用前確認是否要讓模型繼續。
+
+**選管道速查**：
+
+| 受眾 | 管道 |
+|------|------|
+| 模型，提醒即可 | `emit_hook_output` 輸出 `additionalContext`（`.claude/lib/hook_io.py`，PM-only 訊息用 `audience="pm_only"`） |
+| 模型，須使其停手 | exit 2 加 stderr，或 decision block |
+| 用戶 | 非零結束碼加 stderr；SessionStart 可用純文字 stdout |
+| 營運日誌 | `setup_hook_logging` 日誌，不輸出 |
+
+案例與 IMP-055 的對照見 IMP-GPD-004（`.claude/error-patterns/implementation/` 下）。
+
 ---
 
 ## 可觀察性模式

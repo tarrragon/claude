@@ -236,6 +236,9 @@ ticket_id」映射表（未落在任何宣告範圍者標「未宣告範圍」�
    說明須逐條分開送出執行、不可用 `&&` 或分號串接。
 
 ============================================================
+九修正：擁有者 session 已結束（orphan_confirmed）的派發條目不計入佔用（見
+_exclude_orphan_confirmed；僅排除確定孤兒，registry 讀取失敗 fail-closed）
+
 八修正：宣告範圍改讀票面現行 where.files，不再以派發快照為準
 ============================================================
 派發記錄的 `files` 是派發當下由 dispatch_tracker 記錄的 where.files 快照。
@@ -253,21 +256,46 @@ ticket_id 讀票面現行 where.files 並取代該筆的 `files`，下游判定�
 快照並寫 warning，行為與修前相同（不新增 fail-open／fail-closed 路徑）。
 不處理：記錄提前被清除（記錄生命週期問題，見「五修正」）；路徑字串解析
 （CJK／quotepath）。
+
+============================================================
+辨識範疇：commit 呼叫的辨識模型與已知未涵蓋（路由說明）
+============================================================
+本 hook 以任意位置掃描（scan=True）辨識 commit 呼叫：位置判定之外，另掃
+每個語句中的每個 git token。只有掃描命中、沒有位置命中時，辨識不確定，
+比照「命令無法解析」處理（見 main() 對 via_scan 的處置）。
+
+掃描仍漏判的封閉類別、各類的偵測承擔者或不承擔的理由、掃描的誤判情境
+與改寫方式，統一記於 `.claude/references/bash-tool-usage-details.md`
+〈守衛如何辨識 commit：位置判定、任意位置掃描與殘留範圍〉，本 docstring
+不重複全文，以免兩處漂移。守衛沒有反應不等於命令符合規則七。
 """
 
 import json
+import subprocess
 import sys
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
-from lib.dispatch_tracker import get_active_dispatches
-from lib.git_command_parse import GitInvocation, contains_git_word, find_git_invocations
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, resolve_session_id
+from lib.dispatch_tracker import filter_dispatches_for_checkout, get_active_dispatches
+from lib.git_command_parse import (
+    GitInvocation,
+    classify_parse_cause,
+    contains_git_word,
+    explain_parse_cause,
+    find_git_invocations,
+)
 from lib.git_utils import get_project_root, run_git_command
+from lib.pm_registry import (
+    DEGRADED_READ_KEY,
+    classify_ownership,
+    get_registry_paths,
+    read_registry,
+)
 
 _UNASSIGNED_LABEL = "未宣告範圍"
 
@@ -371,6 +399,364 @@ def _with_live_declared_files(
             continue
         resolved.append({**dispatch, "files": live_files})
     return resolved
+
+
+def _read_registry_sessions(project_root: Path, logger) -> "tuple[Dict, bool]":
+    """回傳 (sessions, available)。任何讀取失敗一律 available=False
+    （fail-closed：不得把讀不到當成 session 已結束）。"""
+    try:
+        paths = get_registry_paths(cwd=str(project_root), logger=logger)
+        if paths is None:
+            return {}, False
+        data = read_registry(paths[0], logger=logger)
+    except Exception as exc:
+        logger.warning("讀取 pm-registry 失敗，派發條目全數維持佔用：%s", exc)
+        return {}, False
+    if data.get(DEGRADED_READ_KEY, False):
+        return {}, False
+    return data.get("sessions", {}) or {}, True
+
+
+def _exclude_orphan_confirmed(
+    dispatches: List[Dict], project_root: Path, self_session_id: str, logger
+) -> List[Dict]:
+    """九修正：排除擁有者 session 已結束（orphan_confirmed）的派發條目。
+
+    背景代理人隨擁有者 session 程序結束，該 session 已 graceful release
+    後其條目不可能再有人寫檔。僅排除 orphan_confirmed；orphan_suspected、
+    unknown_owner、registry_unavailable、self、cross_session_alive 維持
+    佔用。registry 讀取失敗為 fail-closed（全數維持佔用）。
+    不改登記檔，只改本守衛的佔用判定。
+    """
+    if not any(d.get("session_id") for d in dispatches):
+        return dispatches
+    sessions, available = _read_registry_sessions(project_root, logger)
+    kept: List[Dict] = []
+    for dispatch in dispatches:
+        ownership = classify_ownership(
+            dispatch.get("session_id") or "", self_session_id, sessions, available
+        )
+        if ownership == "orphan_confirmed":
+            logger.warning(
+                "排除擁有者 session 已結束的派發條目：ticket_id=%s session_id=%s",
+                dispatch.get("ticket_id"), dispatch.get("session_id"),
+            )
+            continue
+        kept.append(dispatch)
+    return kept
+
+
+def _base_dir(payload_cwd: Optional[str], project_root: Path) -> str:
+    """命令開始執行的目錄：payload `cwd`，缺則 project root。"""
+    return payload_cwd or str(project_root)
+
+
+def _resolve_detect_dirs(
+    payload_cwd: Optional[str],
+    invocation: Optional[GitInvocation],
+    project_root: Path,
+) -> List[str]:
+    """進行中狀態的偵測目錄清單（有序去重）。
+
+    狀態檔（MERGE_HEAD 等）是各 worktree 獨立的，`git commit` 實際作用在
+    lib 解析的 effective_dir（已含 `cd`、全部 `-C`、`~`、`..`）。目錄可知時
+    只查該處；`dir_unknown` 為真（變數、命令替換、`cd -` 等）或無 invocation
+    時目標不可信，payload cwd 與 project root 兩處都查，任一處有進行中
+    狀態就擋。
+    """
+    if invocation is not None and not invocation.dir_unknown and invocation.effective_dir:
+        return [invocation.effective_dir]
+    return list(dict.fromkeys([_base_dir(payload_cwd, project_root), str(project_root)]))
+
+
+_GIT_DIR_ENV_NAMES = ("GIT_DIR=", "GIT_WORK_TREE=")
+_GIT_DIR_OPTIONS = ("--git-dir", "--work-tree")
+
+
+def _overrides_git_dir(inv: GitInvocation) -> bool:
+    """commit 呼叫是否以 GIT_DIR／GIT_WORK_TREE（環境變數前綴或 env 包裝）
+    或 --git-dir／--work-tree 選項改寫目標；子命令之前的 token 即涵蓋三者。
+    """
+    for tok in inv.statement[:inv.subcommand_index]:
+        if tok.startswith(_GIT_DIR_ENV_NAMES):
+            return True
+        if tok.split("=", 1)[0] in _GIT_DIR_OPTIONS:
+            return True
+    return False
+
+
+def _commit_target_checkouts(
+    invocations: Optional[List[GitInvocation]], logger
+) -> Optional[List[Path]]:
+    """全部 commit 呼叫的目標 checkout 聯集；任一呼叫無法判定或帶 git-dir
+    類覆寫則回 None（呼叫端不過濾，全數計入，保守方向）。
+    """
+    if not invocations:
+        return None
+    targets: List[Path] = []
+    for inv in invocations:
+        if _overrides_git_dir(inv):
+            logger.info("commit 帶 GIT_DIR／--git-dir 類覆寫，不依工作位置過濾")
+            return None
+        target = _commit_target_checkout([inv], logger)
+        if target is None:
+            return None
+        targets.append(target)
+    return targets
+
+
+def _filter_dispatches_for_targets(
+    dispatches: List[Dict], targets: Optional[List[Path]]
+) -> List[Dict]:
+    """條目工作位置等於任一目標即保留（依原順序、不重複）。"""
+    if targets is None:
+        return dispatches
+    kept_ids = set()
+    for target in targets:
+        for d in filter_dispatches_for_checkout(dispatches, target):
+            kept_ids.add(id(d))
+    return [d for d in dispatches if id(d) in kept_ids]
+
+
+def _commit_target_checkout(
+    invocations: Optional[List[GitInvocation]], logger
+) -> Optional[Path]:
+    """commit 實際作用的 checkout 根；無法判定回 None（呼叫端不過濾，保守計入）。
+
+    沿用 `_resolve_detect_dirs` 的目錄語意：目錄可知時取 effective_dir
+    （含 -C、cd）；無解析結果或 dir_unknown 時不猜，回 None。
+    rev-parse 失敗時 fail-open 並雙通道回報。
+    """
+    if not invocations:
+        return None
+    inv = invocations[0]
+    if inv.dir_unknown or not inv.effective_dir:
+        return None
+    if not Path(inv.effective_dir).is_dir():
+        # 目錄不存在：git 本身也會失敗，屬預期情境，僅記 log、不過濾
+        logger.info("commit 目標目錄不存在，不依工作位置過濾：%s", inv.effective_dir)
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "-C", inv.effective_dir, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        top = proc.stdout.strip()
+        if proc.returncode == 0 and top:
+            return Path(top)
+        if proc.returncode == 128:
+            # 非 git repo：commit 本身也無從作用，預期情境，僅記 log、不過濾
+            logger.info("commit 目標目錄非 git repo，不依工作位置過濾：%s", inv.effective_dir)
+            return None
+        reason = "rev-parse rc={}".format(proc.returncode)
+    except (OSError, subprocess.SubprocessError) as exc:
+        reason = str(exc)
+    _report_detect_failure(inv.effective_dir, reason, logger, target="checkout 根")
+    return None
+
+
+def _report_detect_failure(
+    detect_dir, reason: str, logger, target: str = "MERGE_HEAD"
+) -> None:
+    """偵測失敗雙通道可見（品質基線規則 4）：stderr 讓用戶看到守衛本次未生效，
+    log 保留細節。fail-open 放行不變。`target` 標示偵測對象，
+    讓 MERGE_HEAD 與其他進行中狀態的失敗可分辨。"""
+    scope = "合併狀態" if target == _TARGET_MERGE else "該狀態"
+    sys.stderr.write(
+        f"[bare-commit-guard] {target} 偵測失敗，本次未檢查{scope}："
+        f"dir={detect_dir}, 原因={reason}\n"
+    )
+    if logger is not None:
+        logger.warning(
+            "%s 偵測失敗（%s），fail-open 放行：dir=%s", target, reason, detect_dir
+        )
+
+
+_TARGET_MERGE = "MERGE_HEAD"
+_TARGET_OTHER = "cherry-pick／revert／rebase 狀態"
+
+
+def _note_detect_failure(detect_dir, reason: str, logger, target: str, failures) -> None:
+    """`failures` 為 list 時只收集原因（由呼叫端合併回報一次），否則立即回報。"""
+    if failures is not None:
+        failures.append(reason)
+        return
+    _report_detect_failure(detect_dir, reason, logger, target)
+
+
+def _merge_in_progress(detect_dir, logger=None, failures=None) -> bool:
+    """`MERGE_HEAD` 可解析即有未收尾的合併；此時裸 commit 會把合併收尾成
+    merge commit（可能是他方的合併）。
+
+    rev-parse -q --verify：rc 0 = 有合併；rc 1 = 無此 ref（正常，不寫 log）；
+    其他 rc、逾時、git 不存在 = 偵測失敗，fail-open 放行但寫 warning
+    （與「無合併」區分，否則偵測失效不可見）。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "--no-optional-locks", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+            cwd=str(detect_dir),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        _note_detect_failure(
+            detect_dir, f"{type(exc).__name__}: {exc}", logger, _TARGET_MERGE, failures
+        )
+        return False
+    if result.returncode == 0:
+        return True
+    if result.returncode != 1:
+        _note_detect_failure(
+            detect_dir,
+            f"rc={result.returncode}, stderr={(result.stderr or '').strip()}",
+            logger, _TARGET_MERGE, failures,
+        )
+    return False
+
+
+def _build_merge_in_progress_deny_message() -> str:
+    """組出 MERGE_HEAD 存在時的 DENY 訊息。"""
+    return (
+        "[合併進行中，裸 commit 被阻擋]\n\n"
+        "理由：偵測到 MERGE_HEAD（有未收尾的合併），裸 `git commit` 會把"
+        "該合併收尾成 merge commit，若該合併非本人發起，會連同他方內容"
+        "一併提交。\n\n"
+        "若合併是你發起的，請改用（git merge --continue 不接受任何引數，"
+        "-m／--no-edit 皆會 fatal；無 tty 環境須以 GIT_EDITOR=true 略過編輯器）：\n"
+        "  GIT_EDITOR=true git merge --continue\n"
+        "自訂合併訊息：先寫入 `git rev-parse --git-path MERGE_MSG` 所指的檔案，"
+        "再執行上一行。\n\n"
+        "若合併非你發起：請停手並回報 PM，不要自行收尾或放棄該合併。\n"
+    )
+
+
+# 進行中操作的狀態種類（_other_operation_state 回傳值）
+_OP_CHERRY_PICK = "cherry-pick"
+_OP_REVERT = "revert"
+_OP_REBASE = "rebase"
+_OP_REBASE_EDIT = "rebase-edit"
+_OP_MERGE = "merge"
+# 一律擋裸 commit 的種類（rebase-edit 只警告）
+_BLOCKING_OPS = (_OP_MERGE, _OP_CHERRY_PICK, _OP_REVERT, _OP_REBASE)
+
+_GIT_PATH_NAMES = (
+    "CHERRY_PICK_HEAD",
+    "REVERT_HEAD",
+    "rebase-merge",
+    "rebase-apply",
+    "rebase-merge/amend",
+)
+
+
+def _other_operation_state(detect_dir, logger=None, failures=None) -> Optional[str]:
+    """判別 cherry-pick／revert／rebase 進行中狀態（MERGE_HEAD 另由
+    `_merge_in_progress` 處理）。
+
+    狀態檔路徑以 `git rev-parse --git-path` 取得（worktree 的 git dir 不同，
+    不可手拼 `.git/`），相對路徑以 detect_dir 為基準。判別：
+    CHERRY_PICK_HEAD 存在 -> cherry-pick；REVERT_HEAD 存在 -> revert；
+    rebase-merge 或 rebase-apply 目錄存在 -> rebase，其中 rebase-merge/amend
+    也存在 -> rebase-edit（edit 停下，已提交完畢等待修改）。
+    偵測失敗（git 不存在、rc 非 0、逾時）fail-open 回 None，並雙通道回報。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "--no-optional-locks", "rev-parse"]
+            + [a for n in _GIT_PATH_NAMES for a in ("--git-path", n)],
+            cwd=str(detect_dir),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        _note_detect_failure(
+            detect_dir, f"{type(exc).__name__}: {exc}", logger, _TARGET_OTHER, failures
+        )
+        return None
+    lines = (result.stdout or "").splitlines()
+    if result.returncode != 0 or len(lines) != len(_GIT_PATH_NAMES):
+        _note_detect_failure(
+            detect_dir,
+            f"rc={result.returncode}, stderr={(result.stderr or '').strip()}",
+            logger, _TARGET_OTHER, failures,
+        )
+        return None
+    paths = {
+        name: (Path(detect_dir) / line)  # 絕對路徑會覆蓋 detect_dir
+        for name, line in zip(_GIT_PATH_NAMES, lines)
+    }
+    if paths["CHERRY_PICK_HEAD"].is_file():
+        return _OP_CHERRY_PICK
+    if paths["REVERT_HEAD"].is_file():
+        return _OP_REVERT
+    if paths["rebase-merge"].is_dir() or paths["rebase-apply"].is_dir():
+        if paths["rebase-merge/amend"].is_file():
+            return _OP_REBASE_EDIT
+        return _OP_REBASE
+    return None
+
+
+def _pending_operation(detect_dir, logger=None) -> Optional[str]:
+    """合併優先，其次 cherry-pick／revert／rebase；皆無回 None。
+
+    MERGE_HEAD 偵測失敗代表 git 整體不可用，第二次偵測必同樣失敗：
+    此時合併回報一次（標示兩個偵測對象）並略過第二次呼叫，fail-open。
+    """
+    failures: list = []
+    if _merge_in_progress(detect_dir, logger, failures):
+        return _OP_MERGE
+    if failures:
+        _report_detect_failure(
+            detect_dir, failures[0], logger, f"{_TARGET_MERGE} 與{_TARGET_OTHER}"
+        )
+        return None
+    return _other_operation_state(detect_dir, logger)
+
+
+def _pending_operation_in_dirs(detect_dirs, logger=None) -> Optional[str]:
+    """多個偵測目錄：任一處有阻擋型進行中狀態就回該狀態，其次 rebase-edit。"""
+    found = [op for op in (_pending_operation(d, logger) for d in detect_dirs) if op]
+    for op in found:
+        if op in _BLOCKING_OPS:
+            return op
+    return found[0] if found else None
+
+
+_CONTINUE_HINTS = {
+    _OP_CHERRY_PICK: ("CHERRY_PICK_HEAD", "cherry-pick", "git cherry-pick --continue", "`git rev-parse --git-path MERGE_MSG` 所指的檔案"),
+    _OP_REVERT: ("REVERT_HEAD", "revert", "git revert --continue", "`git rev-parse --git-path MERGE_MSG` 所指的檔案"),
+    _OP_REBASE: ("rebase-merge／rebase-apply 目錄（rebase 在衝突或中斷處停下）", "rebase", "git rebase --continue", "`git rev-parse --git-path rebase-merge/message` 所指的檔案"),
+}
+
+
+def _build_pending_operation_deny_message(op: str) -> str:
+    """cherry-pick／revert／rebase 進行中時的 DENY 訊息；合併走原訊息。"""
+    if op == _OP_MERGE:
+        return _build_merge_in_progress_deny_message()
+    marker, noun, cont, msg_what = _CONTINUE_HINTS[op]
+    return (
+        f"[{noun} 進行中，裸 commit 被阻擋]\n\n"
+        f"理由：偵測到 {marker}（有未收尾的 {noun}），裸 `git commit` 會把"
+        f"目前 index 內容（可能含他方已 stage 的內容）併成單一 commit、"
+        f"以本次 -m 取代原訊息，且{noun} 的狀態可能被清除或歷史被改寫。\n\n"
+        f"若 {noun} 是你發起的，請改用（無 tty 環境須以 GIT_EDITOR=true "
+        f"略過編輯器）：\n"
+        f"  GIT_EDITOR=true {cont}\n"
+        f"自訂訊息：先把訊息寫入 {msg_what}，再執行上一行。\n\n"
+        f"若 {noun} 非你發起：請停手並回報 PM，不要自行收尾或放棄。\n"
+    )
+
+
+def _build_rebase_edit_warn_message() -> str:
+    """rebase edit 停下時的 WARN 訊息（放行）。"""
+    return (
+        "[提醒] 偵測到 rebase 在 edit 停下（rebase-merge/amend 存在）。"
+        "此狀態下新增 commit 是分拆 commit 的正常用法，本次放行；但該 commit "
+        "會成為 rebase 歷史的一部分，若非你發起的 rebase，請確認這是你要的"
+        "位置。\n"
+    )
 
 
 def _get_staged_files(project_root: Path) -> List[str]:
@@ -672,7 +1058,7 @@ def _build_index_discarding_deny_message(dispatch_count: int) -> str:
     )
 
 
-def _build_parse_failure_deny_message(dispatch_count: int) -> str:
+def _build_parse_failure_deny_message(dispatch_count: int, cause: Optional[str] = None) -> str:
     """組出「命令含 git 字樣但無法安全解析」的 DENY 訊息（並行期）。
 
     無法安全解析時（`find_git_invocations` 回傳 None，見共用模組「失敗
@@ -683,18 +1069,19 @@ def _build_parse_failure_deny_message(dispatch_count: int) -> str:
         "[並行派發期間裸 commit 被阻擋（命令無法安全解析）]\n\n"
         f"理由：目前有 {dispatch_count} 個實作代理人正在派發中"
         "（.claude/dispatch-active.json 有活躍記錄），且本次命令含 git"
-        "字樣，但因未閉合引號等原因無法安全解析其結構，無法確認是否為"
+        "字樣，但無法安全解析其結構，無法確認是否為"
         "裸 commit 或其安全性，故保守阻擋。\n\n"
-        "請檢查命令引號是否配對，修正後重試。\n"
+        f"{explain_parse_cause(cause)}修正後重試。\n"
     )
 
 
-def _build_parse_failure_warn_message() -> str:
+def _build_parse_failure_warn_message(cause: Optional[str] = None) -> str:
     """組出「命令含 git 字樣但無法安全解析」的 WARN 訊息（非並行期）。"""
     return (
-        "[提醒] 本次命令含 git 字樣，但因未閉合引號等原因無法安全解析其"
-        "結構。目前無並行派發活躍記錄，本次放行；請檢查命令引號是否配對，"
-        "以防未來並行期無法確認安全性而被阻擋。\n"
+        "[提醒] 本次命令含 git 字樣，但無法安全解析其結構。"
+        "目前無並行派發活躍記錄，本次放行。"
+        f"{explain_parse_cause(cause)}"
+        "並行期同類命令會被阻擋。\n"
     )
 
 
@@ -736,24 +1123,49 @@ def main() -> int:
         logger.debug("命令不含 git 字樣，放行")
         return 0
 
-    invocations = find_git_invocations(command, {"commit"})
-
     project_root = get_project_root()
-    dispatches = _with_live_declared_files(
-        _get_active_dispatches_safe(project_root), project_root, logger
+    base_dir = _base_dir(input_data.get("cwd"), project_root)
+    invocations = find_git_invocations(command, {"commit"}, base_dir, scan=True)
+    parse_cause = classify_parse_cause(invocations)
+    if invocations and all(inv.via_scan for inv in invocations):
+        # 僅任意位置掃描命中（無位置命中）：辨識不確定，比照無法解析處置
+        logger.info("commit 呼叫僅掃描命中，比照無法解析")
+        invocations = None
+    elif invocations:
+        invocations = [inv for inv in invocations if not inv.via_scan]
+
+    # 並行期只計入工作位置與本 checkout 相同的條目；舊條目（無 work_checkout）保守計入。
+    # 過濾基準是 commit 實際作用的 checkout（-C／cd 後的 effective_dir），非 hook cwd。
+    dispatches = _exclude_orphan_confirmed(
+        _filter_dispatches_for_targets(
+            _get_active_dispatches_safe(project_root),
+            _commit_target_checkouts(invocations, logger),
+        ),
+        project_root,
+        resolve_session_id(input_data),
+        logger,
     )
+    dispatches = _with_live_declared_files(dispatches, project_root, logger)
     dispatch_count = len(dispatches)
 
     if invocations is None:
         # 無法安全 tokenize（未閉合引號等）：命令含 git 字樣但結構不明，
         # 並行期保守阻擋、非並行期僅提醒（見兩則 _build_parse_failure_*
-        # 訊息函式 docstring）。
+        # 訊息函式 docstring）。例外：有他方可能待收尾的進行中操作時，
+        # 不論並行期與否一律擋（無 -C 資訊，偵測目錄為 payload cwd > root）。
+        pending = _pending_operation_in_dirs(
+            _resolve_detect_dirs(input_data.get("cwd"), None, project_root), logger
+        )
+        if pending in _BLOCKING_OPS:
+            logger.warning("命令無法安全解析且 %s 進行中，一律阻擋", pending)
+            print(_build_pending_operation_deny_message(pending), file=sys.stderr)
+            return 2
         if dispatch_count > 0:
             logger.warning("命令含 git 字樣但無法安全解析，並行期保守阻擋")
-            print(_build_parse_failure_deny_message(dispatch_count), file=sys.stderr)
+            print(_build_parse_failure_deny_message(dispatch_count, parse_cause), file=sys.stderr)
             return 2
         logger.info("命令含 git 字樣但無法安全解析，非並行期 WARN 放行")
-        print(_build_parse_failure_warn_message(), file=sys.stderr)
+        print(_build_parse_failure_warn_message(parse_cause), file=sys.stderr)
         return 0
 
     if not invocations:
@@ -768,6 +1180,17 @@ def main() -> int:
     if _has_amend_exemption(invocation.args):
         logger.debug("命令含 --amend，放行")
         return 0
+
+    pending = _pending_operation_in_dirs(
+        _resolve_detect_dirs(input_data.get("cwd"), invocation, project_root), logger
+    )
+    if pending in _BLOCKING_OPS:
+        logger.warning("%s 進行中，裸 commit 會收尾他方操作，阻擋", pending)
+        print(_build_pending_operation_deny_message(pending), file=sys.stderr)
+        return 2
+    if pending == _OP_REBASE_EDIT:
+        logger.info("rebase edit 停下，WARN 後續行正常判定")
+        print(_build_rebase_edit_warn_message(), file=sys.stderr)
 
     if _has_all_exemption(invocation.args):
         if dispatch_count == 0:

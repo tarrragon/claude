@@ -41,6 +41,7 @@ from lib import (
     get_project_root,
     find_active_in_progress_ticket,
 )
+from lib.hook_base import get_shared_state_root  # noqa: E402
 from lib.hook_messages import (
     AskUserQuestionMessages,
     ProcessSkipMessages,
@@ -307,7 +308,7 @@ def has_active_dispatch() -> bool:
         True 若有 active dispatch；False 若檔案缺失/損毀/dispatches 空
     """
     try:
-        root = get_project_root()
+        root = get_shared_state_root()
         path = root / ".claude" / "dispatch-active.json"
         if not path.exists():
             return False

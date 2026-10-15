@@ -347,7 +347,8 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
     }
     action = action_map[mode]
     if mode.startswith("all_"):
-        scope = f"全部 ({changed}/{total})"
+        checked_total = sum(1 for item in acceptance_list if item.startswith("[x]"))
+        scope = f"全部（目前已勾選 {checked_total}/{total}）"
     elif mode == "add":
         scope = f"{changed} 項"
     else:

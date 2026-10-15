@@ -94,3 +94,32 @@ def test_liveness_entry_written_via_run_hook_safely(hook_mod, monkeypatch, tmp_p
     assert len(lines) == 1
     entry = json.loads(lines[0])
     assert entry["hook"] == hook_mod.HOOK_NAME
+
+
+def _lookup_log_lines(hook_mod, monkeypatch, agent_id, dispatches, root):
+    import logging
+
+    records = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    lg = logging.getLogger("lookup-log-test")
+    lg.setLevel(logging.DEBUG)
+    lg.handlers = [_Capture()]
+    monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda _root: dispatches)
+    hook_mod._lookup_agent_info(root, agent_id, lg)
+    return [m for m in records if m.startswith("dispatch lookup:")]
+
+
+def test_lookup_log_registered_worktree_agent(hook_mod, monkeypatch):
+    dispatches = [{"agent_id": "a-reg", "agent_description": "d", "branch_name": "wt-b"}]
+    lines = _lookup_log_lines(hook_mod, monkeypatch, "a-reg", dispatches, Path("/state/root"))
+    assert lines == ["dispatch lookup: agent_id=a-reg hit=True state_root=/state/root"]
+
+
+def test_lookup_log_unregistered_agent(hook_mod, monkeypatch):
+    dispatches = [{"agent_id": "a-reg", "agent_description": "d", "branch_name": "wt-b"}]
+    lines = _lookup_log_lines(hook_mod, monkeypatch, "a-unreg", dispatches, Path("/state/root"))
+    assert lines == ["dispatch lookup: agent_id=a-unreg hit=False state_root=/state/root"]

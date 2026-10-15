@@ -182,16 +182,13 @@ amendment_reason: '修正原因簡述'
     v
 是「繼續任務鏈」類請求? ─是→ [強制] 並行可行性分析 → 主動建議並行
     |
-    └─否→ pending? → creation_accepted?
-          |           ─否→ [強制] 並行審核（acceptance-auditor + system-analyst）
-          |                → 通過後設定 creation_accepted: true
-          |           ─是→ claim → 階段判斷
+    └─否→ pending? → claim → 階段判斷
           in_progress? → 繼續執行
           completed? → [AskUserQuestion] 後續步驟選擇
           blocked? → 升級 PM
 ```
 
-**建立後審核檢查（強制）**：pending Ticket 認領前必須 `creation_accepted: true`，否則強制並行派發 acceptance-auditor + system-analyst 審核。豁免：已審核父 Ticket 的子任務。
+**建立後審核**：`creation_accepted` 由建票在硬閘門通過後寫 true，認領不檢查該欄位；並行審核（acceptance-auditor + system-analyst）由 PM 視需要派發，見 ticket-lifecycle.md〈建立後審核流程〉。
 
 **Wave 邊界檢查（強制）**：當用戶指定「繼續 Wx」時，**必須**只處理該 Wave 的任務，禁止跨 Wave 執行。
 

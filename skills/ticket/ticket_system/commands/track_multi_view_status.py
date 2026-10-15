@@ -7,19 +7,19 @@ CLI 無編輯指令、該區段不在 ticket-file-access-guard-hook 白名單內
 complete。本命令提供唯一合法出路。
 
 定位設計：鎖定該 ticket 的 `multi_view_status:` 這一行本身（欄位名固定，
-非任意子字串比對）。命中 0 行或多行一律拒絕寫入。
+非任意子字串比對）。命中多行拒絕寫入；0 行則新增。
 
-寫入設計（原地覆寫，僅該行）：新值取代命中行的整行內容
-（`multi_view_status: <value>`），前後其他行完全不變——與
-add-exempt-marker 的「僅追加」語意相反，本命令是「僅覆寫單行」，因為
-語意是修正既有錯誤值而非補充新內容。
+寫入設計：新值取代命中行的整行內容（`multi_view_status: <value>`）；
+值為 skipped / n_a 時於其下寫入平鋪 `reason:` 行（取代緊接的既有 reason
+行），因 acceptance-gate 要求這兩值附 reason 子欄位。章節缺欄位行時，於
+章節末新增平鋪 multi_view_status 與 reason 行。其餘行完全不變。
 
 防濫用結論：
 1. 本命令只能覆寫 `multi_view_status:` 這一行的值，不能觸碰章節其他內容。
 2. 新值必須屬 .claude/config/ana-solution-schema.yaml 定義的合法值域，
-   reason 為必填（呼叫端須提供修正依據，供 commit 訊息與稽核追蹤），但
-   reason 本身不寫入 ticket body——只覆寫欄位行，不擴大寫入面。
-3. 命中 0 行或多行一律拒絕，避免誤改非目標行。
+   reason 為必填；skipped / n_a 時 reason 落地為平鋪 reason 行，使產出
+   通過 gate（寫入面僅限欄位行與其 reason 行）。
+3. 命中多行一律拒絕，避免誤改非目標行；命中 0 行改為新增（補寫用途）。
 4. 沿用 append-log 系列既有的 status precondition（in_progress /
    completed 可寫，pending/blocked/closed 需 --force）與
    auto-commit（每次呼叫都有可追蹤的 git commit）。
@@ -36,6 +36,8 @@ from pathlib import Path
 
 from ticket_system.lib.multi_view_status import (
     FIELD_LINE_PATTERN,
+    append_field_and_reason,
+    apply_field_and_reason,
     build_field_line,
     validate_new_value,
     validate_reason,
@@ -110,11 +112,13 @@ def _execute_fix_multi_view_status_locked(args: argparse.Namespace, version: str
 
     hits = list(FIELD_LINE_PATTERN.finditer(match.content))
 
+    # 缺欄位行：於章節末新增平鋪 multi_view_status（與 reason）行。
     if not hits:
-        print(
-            f"[Error] {args.ticket_id} 的 '{section}' 章節找不到 multi_view_status 行，未寫入"
+        new_content = append_field_and_reason(match.content, new_value, reason)
+        new_line = build_field_line("", new_value)
+        return _write_and_report(
+            ticket, args, version, section, body, match, new_content, new_line, reason
         )
-        return 1
 
     # 多重命中時（如既有非法值行 + 事後 append-log 補正的合法值行並存），
     # 允許用 --match 子字串收窄至單一行，語意同 add-exempt-marker 的 --match。
@@ -140,10 +144,16 @@ def _execute_fix_multi_view_status_locked(args: argparse.Namespace, version: str
         return 1
 
     hit = hits[0]
-    indent = hit.group(1) or ""
-    new_line = build_field_line(indent, new_value)
-    # 僅取代命中行本身的整段範圍；命中行前後的原文字逐字元不變（未被讀寫觸碰）。
-    new_content = match.content[: hit.start()] + new_line + match.content[hit.end():]
+    new_line = build_field_line(hit.group(1) or "", new_value)
+    # 取代命中行（skipped/n_a 並連同緊接的 reason 行）；其餘原文字逐字元不變。
+    new_content = apply_field_and_reason(match.content, hit, new_value, reason)
+    return _write_and_report(
+        ticket, args, version, section, body, match, new_content, new_line, reason
+    )
+
+
+def _write_and_report(ticket, args, version, section, body, match, new_content, new_line, reason) -> int:
+    """組回 body、存檔、commit 並輸出結果。"""
     new_body = body[: match.content_start] + new_content + body[match.end:]
 
     try:
@@ -165,7 +175,7 @@ def _execute_fix_multi_view_status_locked(args: argparse.Namespace, version: str
         InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="multi_view_status"
     ))
     print(f"   已覆寫為: {new_line.strip()}")
-    print(f"   理由（未寫入 body，僅供稽核）: {reason}")
+    print(f"   理由: {reason}")
 
     try:
         with open(ticket_path, "r", encoding="utf-8") as _vf:

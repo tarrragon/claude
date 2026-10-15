@@ -31,7 +31,6 @@ Pattern: PC-093
 """
 
 import re
-import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,9 +49,9 @@ from lib import (  # noqa: E402
     find_ticket_file,
     emit_hook_output,
 )
-from lib.git_command_parse import (  # noqa: E402
-    strip_heredoc_bodies,
-    normalize_newlines_to_separators,
+from lib.ticket_command_parse import (  # noqa: E402
+    COMPLETE_VERBS,
+    find_ticket_track_invocations,
 )
 from lib.ticket_id_pattern import BARE_START_BOUNDED_RE  # noqa: E402
 
@@ -82,7 +81,6 @@ RULE_PATH_PATTERN = re.compile(r"\.claude/(?:rules|pm-rules)/")
 # 觸發命令偵測：語句內 token 需依序相鄰命中，見 extract_ticket_id_from_command
 # （原為對整條命令字串的 regex.search，heredoc/引號 payload 內文含觸發字樣
 # 會被誤判為真實呼叫，已改為 token 化後的相鄰比對，見「payload 誤判修正」段）
-_STATEMENT_SEPARATORS = frozenset({"&&", "||", ";", "|", "(", ")"})
 
 # 豁免 marker 解析（大小寫敏感，EX-N7）
 EXEMPT_MARKER = re.compile(
@@ -844,35 +842,6 @@ def detect_hook_self_reference(content: str) -> bool:
 # 「重複實作 payload 剝離」問題（真正容易重複、風險最高的 heredoc 剝離
 # 已重用，未重寫）。
 
-def _tokenize_statements(command: str) -> Optional[List[List[str]]]:
-    """把命令字串剝除 heredoc 本體、換行正規化後，以 shlex 保留引號語意
-    tokenize，並依 shell 運算子切分為獨立語句清單。
-
-    回傳 None 表示無法安全 tokenize（未閉合引號等）。
-    """
-    stripped = strip_heredoc_bodies(command)
-    normalized = normalize_newlines_to_separators(stripped)
-    try:
-        lexer = shlex.shlex(normalized, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except ValueError:
-        return None
-
-    statements: List[List[str]] = []
-    current: List[str] = []
-    for tok in tokens:
-        if tok in _STATEMENT_SEPARATORS:
-            if current:
-                statements.append(current)
-            current = []
-        else:
-            current.append(tok)
-    if current:
-        statements.append(current)
-    return statements
-
-
 def extract_ticket_id_from_command(command: str) -> Tuple[Optional[str], Optional[str]]:
     """從 bash 命令萃取 (ticket_id, mode)。
 
@@ -883,30 +852,40 @@ def extract_ticket_id_from_command(command: str) -> Tuple[Optional[str], Optiona
     情境下的行為一致（原本 regex 對這些輸入同樣找不到匹配而回傳 None），
     本次修正未改變此方向（見 acceptance 6）。
     """
-    if not command:
-        return (None, None)
-
-    statements = _tokenize_statements(command)
-    if statements is None:
-        return (None, None)
-
-    for statement in statements:
-        if (
-            len(statement) >= 5
-            and statement[0] == "ticket"
-            and statement[1] == "track"
-            and statement[2] == "phase"
-            and statement[4] == "phase4"
-        ):
-            return (statement[3], "main_gate")
-        if (
-            len(statement) >= 4
-            and statement[0] == "ticket"
-            and statement[1] == "track"
-            and statement[2] == "complete"
-        ):
-            return (statement[3], "residual_gate")
+    targets = extract_ticket_targets_from_command(command)
+    if targets:
+        return targets[0]
     return (None, None)
+
+
+def extract_ticket_targets_from_command(
+    command: str,
+) -> List[Tuple[str, str]]:
+    """從 bash 命令收集全部 (ticket_id, mode)，依出現順序。
+
+    以 lib 共用的任意位置掃描辨識 `ticket track phase <ID> phase4`（main_gate）
+    與完成類命令（residual_gate；batch-complete 的每個 ID 皆收集）。
+    解析失敗（None）回傳空清單，維持 fail-open。
+    """
+    if not command:
+        return []
+    found = find_ticket_track_invocations(command, ("phase",) + COMPLETE_VERBS)
+    if not found:
+        return []
+    targets: List[Tuple[str, str]] = []
+    for verb, args in found:
+        # ID 以 TICKET_ID_PATTERN 比對取得（比照 acceptance-gate），帶值選項
+        # （--as X、--version X）的值不是 ID，不得以位置推定；選項值本身若
+        # 恰符合 ID 格式則一併收集，真正的目標仍會被判定。
+        ids = [a for a in args if not a.startswith("-") and TICKET_ID_PATTERN.search(a)]
+        if verb == "phase":
+            if "phase4" not in args:
+                continue
+            mode = "main_gate"
+        else:
+            mode = "residual_gate"
+        targets.extend((tid, mode) for tid in ids)
+    return targets
 
 
 # ============================================================================
@@ -1065,11 +1044,21 @@ def main() -> int:
         logger.debug("no command in tool_input, skip")
         return 0
 
-    ticket_id, mode = extract_ticket_id_from_command(command)
-    if mode is None:
+    targets = extract_ticket_targets_from_command(command)
+    if not targets:
         logger.debug("command not matching main/residual gate: {}".format(command[:80]))
         return 0
 
+    # 多 ID 寫法逐一判定；任一阻擋即 exit 2（其餘仍照常輸出）
+    exit_code = 0
+    for ticket_id, mode in targets:
+        if _check_ticket(ticket_id, mode, event_name, effort, logger) == 2:
+            exit_code = 2
+    return exit_code
+
+
+def _check_ticket(ticket_id, mode, event_name, effort, logger) -> int:
+    """對單一 (ticket_id, mode) 執行掃描與輸出，回傳 0 或 2。"""
     # Event 與 mode 對應檢查（INT-6/INT-10）
     if mode == "main_gate" and event_name not in ("PostToolUse", ""):
         logger.debug("main_gate 但 event 非 PostToolUse: {}".format(event_name))

@@ -675,13 +675,158 @@ git -C "$D" show HEAD:a.txt              # v2 —— 內容被回滾，git log �
 
 | 情境 | 處置 |
 |------|------|
-| 衝突解決完畢，準備收尾提交 | 精確 `git add <衝突檔>` → `git diff --cached --name-only` 核對 index 僅含衝突檔與本次合併應有的變更 → 裸 `git commit`（`git merge --continue` 亦讀 index，同樣受此核對保護） |
+| 衝突解決完畢，準備收尾提交 | 精確 `git add <衝突檔>` → `git diff --cached --name-only` 核對 index 僅含衝突檔與本次合併應有的變更 → `GIT_EDITOR=true git merge --continue`。存在 MERGE_HEAD 時 `bare-commit-guard-hook.py` 拒絕裸 `git commit`；完成合併只有 `merge --continue` 一條路徑，放棄走 `git merge --abort` |
+| 需自訂合併訊息 | 先把訊息寫入 `$(git rev-parse --git-path MERGE_MSG)` 所指的檔，再執行上列收尾指令。`git merge --continue` 不接受任何引數（`-m`、`--no-edit` 皆報錯） |
+| 共用 checkout 需合併 | 合併一步完成；禁以 `git merge --no-commit` 開頭、把未收尾的合併留給另一個 session。合併報 `Unable to write index` 的檢查與處置見〈兩段式合併禁令（MERGE_HEAD 空窗）〉 |
 | 合併前工作區已有未暫存的無關編輯 | 合併前先處置（提交或 `git stash`），不留在工作區等合併結束——`-A` 之外，衝突期間的多次 `git add` 也容易誤觸 |
 | 已發生捲入 | 依規則七既有條文：**不得** `revert` / `reset --soft` / `commit --amend` / 反向套用。被捲入的內容與他方同窗口的合法寫入在 diff 上不可區分，任一還原動作都會連帶撤銷後者。記錄 commit SHA 與檔案清單於 ticket，上報 PM |
 
-**與既有防護層的關係**：派發骨架（`agent-dispatch-template.md` / `dispatch_skeleton.py` 的 `SKELETON_TEMPLATE_NORMAL`）的 Forbidden 行已同時禁 `git add . / git add -A` 與 `git commit -a`，涵蓋本節兩種載體；缺口原本只在規則七主文——規則七列的是四種 pathspec 形式，未把廣域 staging 納入自身射程，本節補此涵蓋。`bare-commit-guard-hook.py` 與 `dispatch-staging-phrase-guard-hook.py` 皆不涵蓋 merge 收尾（前者攔 pathspec commit，後者檢查派發 prompt 的片語完整性），強制層是否加碼屬另一議題，不在本節範圍。
+**與既有防護層的關係**：派發骨架（`agent-dispatch-template.md` / `dispatch_skeleton.py` 的 `SKELETON_TEMPLATE_NORMAL`）的 Forbidden 行已同時禁 `git add . / git add -A` 與 `git commit -a`，涵蓋本節兩種載體；缺口原本只在規則七主文——規則七列的是四種 pathspec 形式，未把廣域 staging 納入自身射程，本節補此涵蓋。`bare-commit-guard-hook.py` 於 MERGE_HEAD 存在時拒絕裸 commit，涵蓋「以裸 commit 收尾」這條路徑；廣域 staging（`git add -A` 後走 `merge --continue`）仍無強制層。`dispatch-staging-phrase-guard-hook.py` 檢查派發 prompt 的片語完整性，不涵蓋 merge 收尾。強制層是否加碼屬另一議題，不在本節範圍。
 
 **與 PC-BAL-008 的歸屬判定**：本機制**應併入 `PC-BAL-008` 作為新變體**，不另立 error-pattern。判定依據三項——(1) 該 PC 的根因抽象層是「commit 範圍大於意圖且無訊號」，本節是同一抽象下的另一載體，該 PC 已用「變體：檔案級共用」章節容納過一次相同性質的擴充；(2) 讀者遇到「commit 含非預期檔案」時只需查一份文件，另立新 PC 會迫使讀者在兩份相似文件間先判定載體差異，而該判定正是事發當下最難做的；(3) 該 PC 的預防措施（隔離索引、commit 後驗證錨定 SHA 而非 `HEAD`）對本節同樣適用，另立會整段重複。**併入的代價**：該 PC 標題含 `parallel-agent`，而本機制在單 session 自行合併時亦會發生，併入時需於變體章節明示此差異。
+
+### 兩段式合併禁令（MERGE_HEAD 空窗）
+
+**Why**：`git merge --no-commit` 開頭、另一個 Bash 呼叫才收尾時，兩次呼叫之間 MERGE_HEAD 與半合併的 index 留在共用 working tree，長度不受控，他方的 `git add`／`git commit` 作用在這個狀態上。
+
+**Consequence**：他方的裸 commit 實際完成該合併（多 parent，內容含半合併 index），provenance 污染且零訊號；`bare-commit-guard-hook.py` 於 MERGE_HEAD 存在時拒絕裸 commit，空窗期間並行 session 的提交表現為無來由的失敗。
+
+**Action**：共用 checkout 內的合併在單一 Bash 呼叫內完成。同一 session 解完衝突並以 `GIT_EDITOR=true git merge --continue` 收尾屬合法，不得把未收尾的合併留給另一個 session。合併報 `Unable to write index` 視為狀態不一致的警報（`PC-169`、`IMP-V1-005`），不直接 commit 完成，也不直接再執行一次合併，先查：
+
+| 檢查 | 判讀與處置 |
+|------|-----------|
+| `git log --oneline -1` 對照 HEAD 是否已前移 | HEAD 已前移而 index 過時（fast-forward 的非原子性）：依 `IMP-V1-005`，先 `git reset` 重建 index 對齊 HEAD，再繼續任何 commit |
+| MERGE_HEAD 是否殘留（`git rev-parse -q --verify MERGE_HEAD`） | 殘留：先 `git merge --abort`，再重新合併（`PC-169`） |
+
+#### 變體：合併途中 HEAD 被他方推進（update_ref 失敗）
+
+**Why**：`git merge` 先寫 index 與工作區，最後才更新 HEAD 參照（git 內部的 update_ref 步驟，會比對 HEAD 舊值），兩步之間不是原子操作。共用 checkout 中有其他 session 以隔離索引 CAS 高頻推進 HEAD 時，這段空窗內只要 HEAD 前進，舊值比對就會失敗。
+
+**Consequence**：git 先印出 `fatal: update_ref failed for ref 'HEAD': … is at <X> but expected <Y>`，接著仍印出 `Merge made by the 'ort' strategy.`。輸出看似成功，實際上 HEAD 沒有前進，MERGE_HEAD 卻留了下來，合併結果的檔案也已 staged、工作區已改寫。這就是上文的 MERGE_HEAD 空窗，只是並非刻意分兩段造成：他方的裸 commit 會被守衛擋下，若繞過守衛，則會把這批 staged 檔夾帶進去。
+
+**Action**：
+
+| 步驟 | 動作 |
+|------|------|
+| 辨識 | 三個訊號同時成立：輸出含 `update_ref failed`、`git rev-parse -q --verify MERGE_HEAD` 有值、`git rev-parse HEAD` 不是新合併提交 |
+| 禁止 | 不以裸 `git commit` 收尾（守衛拒絕，且會把當下的 index 原樣提交）；不直接重跑 `git merge` |
+| 處置一（保留合併結果） | 以隔離索引 CAS 補提交，步驟見下方清單 |
+| 處置二（放棄重來） | `git merge --abort` 還原後，改走下一列的預設路徑 |
+| 預設路徑 | 共用 checkout 合併 worktree 分支時，直接使用 worktree skill 的 `merge` 子命令（隔離索引 CAS 合併，內建空合併守衛、三方合併、衝突中止與 index 同步重試），不手動 `git merge` |
+
+**處置的選擇**：合併結果包含已手動解完的衝突、重來的成本高時，選處置一；其餘情況選處置二，再走預設路徑。處置二不需要手寫 git 底層指令，出錯的面較小。
+
+**處置一的步驟**：
+
+1. 以臨時 `GIT_INDEX_FILE` 從當前 HEAD `git read-tree`，記下這個 HEAD 作為舊值。
+2. 逐檔把合併結果的 blob 以 `git update-index --cacheinfo` 套入臨時 index。
+3. `git write-tree` 取得 tree。若 tree 等於第一親代的 tree，代表沒有套入任何變更：停手，改走處置二，不要建提交。
+4. `git commit-tree` 以「舊值、分支」為雙親代建立提交，再以 `git update-ref HEAD <新提交> <舊值>` 推進。舊值比對失敗代表 HEAD 又被推進，回到步驟 1 重做。
+5. 推進成功後執行 `git merge --quit` 清除合併狀態，再逐檔比對 HEAD、index、工作區三平面是否一致。
+
+**手寫 CAS 腳本的陷阱**：在 zsh 中把多行檔案清單放進未加引號的變數再 `for f in $FILES` 迴圈，zsh 不會做字詞切分，整串會被當成單一路徑；`update-index` 因此沒有套入任何變更，產生 tree 與第一親代相同的空合併（`PC-169` 同形）。檔案清單一律以 `git diff -z` 輸出、交給陣列或程式語言處理；或直接使用預設路徑的子命令。
+
+### 進行中操作的裸 commit 收尾（cherry-pick、revert、rebase）
+
+**Why**：MERGE_HEAD 空窗的機制同樣存在於其他會在中途停下的操作。cherry-pick 或 revert 停下時留下 CHERRY_PICK_HEAD 或 REVERT_HEAD，rebase 停下時留下 rebase-merge（或 rebase-apply）目錄；git 對裸 `git commit` 的處理不檢查是誰發起了這個操作。
+
+**Consequence**：以暫存 repo 實測，由旁觀者對無關檔案 add 後裸 commit：
+
+| 發起者的狀態 | 旁觀者裸 commit 的結果 |
+|------|------|
+| cherry-pick 或 rebase 遇衝突，尚未解決 | git 自身以 unmerged 路徑拒絕，不成立 |
+| cherry-pick 遇衝突，發起者已解決並 stage | 旁觀者的 commit 帶走發起者的內容，訊息被取代，CHERRY_PICK_HEAD 被清除，發起者的 `cherry-pick --continue` 失敗 |
+| `revert --no-commit`，或 revert 衝突已解決並 stage | 同上，REVERT_HEAD 被清除，發起者的 `revert --continue` 失敗 |
+| rebase 遇衝突，發起者已解決並 stage | 旁觀者的 commit 落在 detached HEAD，吸收發起者正在重放的那個 commit 並蓋掉其訊息；發起者的 `rebase --continue` 仍回 rc=0，最終歷史少了那個 commit |
+| `rebase -i` 在 edit 停下 | 不夾帶內容，但旁觀者的 commit 進入發起者的 rebase 歷史，旁觀者以為提交在原分支 |
+| `cherry-pick --no-commit` 無衝突 | 沒有進行中狀態，屬一般的 staged 內容夾帶，由並行期 staged 範圍判定處理 |
+
+這些結果都只有一個 parent，沒有合併收尾那種兩個 parent 的外觀證據，事後更難察覺。
+
+**Action**：
+
+| 情境 | 處置 |
+|------|------|
+| 自己發起的 cherry-pick 或 revert，衝突已解決 | 精確 `git add <衝突檔>` → 核對 index → `GIT_EDITOR=true git cherry-pick --continue`（或 `revert --continue`）。自訂訊息先寫入 `$(git rev-parse --git-path MERGE_MSG)` 所指的檔 |
+| 自己發起的 rebase，衝突已解決 | 同上，收尾用 `GIT_EDITOR=true git rebase --continue`。自訂訊息先寫入 `$(git rev-parse --git-path rebase-merge/message)` 所指的檔 |
+| 自己發起的 `rebase -i`，在 edit 停下要分拆 commit | 裸 `git commit` 照常可用，守衛只提醒；`--amend` 不受影響 |
+| 裸 commit 被拒，而操作不是自己發起的 | 停手回報，不代為收尾，也不 `--abort`——放棄會毀掉他方進行中的操作 |
+
+**強制層**：`bare-commit-guard-hook.py` 在 CHERRY_PICK_HEAD 或 REVERT_HEAD 存在，或 rebase-merge、rebase-apply 存在且沒有 `rebase-merge/amend`（衝突停下）時，拒絕裸 commit；有 `amend`（edit 停下）時只提醒。偵測目錄依序取命令的 `-C`、payload 的 cwd、專案根，狀態檔路徑以 `git rev-parse --git-path` 取得，所以 worktree 內的操作也能正確判讀。命令無法解析、但存在上述任一狀態時，不論是否有其他 session 正在派發都拒絕。偵測本身失敗（逾時、目錄不存在）時放行，並同時寫 stderr 與日誌。未實測：rebase-apply（am 型）路徑，以及 edit 步驟本身發生衝突時是否仍留有 `amend` 檔。
+
+### 守衛如何辨識 commit：位置判定、任意位置掃描與殘留範圍
+
+**Why**：守衛只看得到 Bash 工具收到的命令字串，看不到執行時展開的內容。「這個字串裡有沒有一次 git commit」只能靠解析推定，推定必有不準之處。辨識模型決定守衛的失效方向，所以須明寫它漏判什麼、誤判什麼，讀者才不會把「守衛沒擋」當成「命令安全」。
+
+**Consequence**：把守衛當作完備防線的讀者，會在殘留類別上放心使用規則七禁止的寫法；把誤判當作守衛故障的讀者，會繞過守衛而非改寫命令。兩種誤讀都使守衛的保護失效。
+
+**Action**：先讀下面三張表，再決定命令寫法。
+
+#### 兩種辨識模型
+
+| 模型 | 判定方式 | 使用者 |
+|------|---------|--------|
+| 位置判定（預設） | 只在命令位置找 git，並逐一剝除白名單內的前綴命令（env、time、xargs 等）與遞迴解析 shell -c、eval | 提示型 hook：漏判的後果只是少一則提醒 |
+| 任意位置掃描（scan） | 位置判定之外，另掃每個語句中的每個 git token，echo、printf 之後的參數與 `command -v` 除外 | 阻擋型守衛：漏判的方向是放行，所以寧可多找 |
+
+位置判定的漏判集合沒有上界，因為凡接受命令作為參數的程式（setsid、ionice、strace 等）都須逐一收錄。掃描模式不依賴白名單，漏判集合縮為下一節的封閉類別。解析結果帶 `via_scan` 標記：位置判定命中為假，只有掃描命中才為真。
+
+守衛端的處置：只有掃描命中、沒有任何位置命中時，辨識不確定，比照「命令無法解析」處理。分級守衛在並行派發期阻擋、非並行期只提醒；以狀態為判決條件的守衛，仍須遇上風險狀態才阻擋。有位置命中時，丟棄掃描命中，處置不變。
+
+#### scan 模式仍漏判的封閉類別
+
+| 類別 | 為何漏判 | 偵測承擔者或不承擔的理由 |
+|------|---------|-------------------------|
+| shell 別名與函式 | 命令字串只含別名名稱，展開內容在 shell 內，不在字串中 | 文字層無法承擔。別名展開後仍是 git，故由 git 層的 ref 事件承擔；目前沒有已實作的 ref 事件後盾，等同不承擔 |
+| 變數或命令替換組出的命令 | 命令名稱要執行時才決定，靜態不可判定 | 不承擔：任何文字解析模型都無法處理。同上，ref 事件層若實作可承擔 |
+| 字串形式的腳本載體（su -c、script -c、sg -c） | 腳本內容是單一字串，掃描不展開這幾個載體 | 不承擔：載體是有限集合，且合作中的 session 極少使用；收錄成本高於漏判後果 |
+| echo 引號內的命令替換 | echo 之後的參數是掃描的刻意例外，否則 echo 內文字會大量誤判 | 不承擔：例外是誤判與漏判的取捨，取誤判較小的一側 |
+| 遠端或容器內執行（ssh、docker exec、kubectl exec） | 掃描會命中，但命令作用在另一個 repo，不是守衛保護的 repo | 有意的保守誤判，見下節；判定目標與實際作用目標不一致，不另行承擔 |
+
+提示型 hook 仍用位置判定，白名單未收錄的前綴命令對它們依舊漏判，後果只是少一則提醒，不另行處理。
+
+**判讀**：守衛沒有反應，不等於命令通過了規則七。上表五類不論守衛如何設定都不會被文字層攔下，須由執行者自律。
+
+#### 並行期工作位置的放行殘留
+
+**判定基準**：commit 目標取同一條命令內全部 commit 呼叫的聯集（例如以 `&&` 串接的多個 commit），條目的工作位置等於聯集內任一目標即計入並行期，不以第一個 commit 為準。任一 commit 帶 `GIT_DIR=`、`GIT_WORK_TREE=` 前綴（含 `env` 包裝），或帶 `--git-dir`、`--work-tree` 選項時，覆寫使目標無法從 cwd 與 `-C` 推定，此時不套用工作位置過濾，全數條目計入（多擋方向）。
+
+**Why**：並行期判定只計入「工作位置等於 commit 目標 checkout」的派發登記條目，目的是避免在 checkout A 的派發擋下 checkout B 的 commit。工作位置在派發登記當下寫入，commit 目標在命令解析時取得；兩者之間的差距，就是下表三條殘留的來源。
+
+**Consequence**：這三條殘留的失敗方向是放行：條目被過濾掉，並行期判定為否，裸 commit 與 pathspec commit 通過守衛，可能吸入他方已 staged 的檔案。守衛沒有反應，不代表目標 checkout 內沒有並行的代理人。
+
+| 殘留 | 觸發條件 | 條目為何被濾掉 |
+|------|---------|---------------|
+| 非隔離代理人跨 checkout stage | 非隔離代理人登記時的工作位置是派發者的 checkout；代理人之後以 `cd` 或 `git -C` 在另一個 checkout 進行 stage | 對該另一個 checkout 的 commit，條目的工作位置不等於 commit 目標，不計入 |
+| 登記後切換 cwd | 非隔離派發登記後，PM 把 cwd 切換到另一個 checkout 工作 | 條目仍指原 checkout；對原 checkout 的判定正確，對新 checkout 不計入 |
+| 事先 export 的 `GIT_DIR`、`GIT_WORK_TREE` | 在先前的命令或 shell 中已 `export GIT_DIR=...` 或 `export GIT_WORK_TREE=...`，之後的 commit 命令本身不帶這些變數 | 命令文字沒有覆寫的痕跡，目標被推定為 cwd 所在的 checkout；實際作用的是環境變數指向的 checkout，推定與實際不符時，條目不計入 |
+
+**判定端無解的理由**：工作位置只能取自登記端的資訊。登記發生在派發當下，無從預知代理人日後 `cd` 到哪、PM 日後切換到哪；判定端只看得到 commit 目標，看不到代理人其他的寫入位置。改以 commit 目標為基準已是判定端的上限，把基準換回 cwd 會讓 `git -C` 指向他處的 commit 被誤濾。事先 export 的變數則因為值不在命令文字中，判定端只解析命令字串，無從得知環境變數的內容；這與前述「變數或命令替換組出的命令」同屬文字層無解。
+
+**承擔者**：由執行者自律承擔（用戶裁定接受）。Action：非隔離代理人需在另一個 checkout stage 時，改以隔離派發；PM 切換 cwd 前，先確認原 checkout 已無未收尾的非隔離派發；需要指定 git 目錄時，把 `GIT_DIR`、`GIT_WORK_TREE` 寫在 commit 命令本身（前綴或 `--git-dir`、`--work-tree`），不事先 export，commit 前以 `env | grep '^GIT_'` 確認環境內沒有殘留值。
+
+**與多擋方向的對照**：工作位置無法判定時，條目一律計入並行期（多擋、不放行）：舊格式條目沒有位置欄位、欄位為空、路徑解析失敗、commit 目標目錄未知或不存在、目標不是 git repo。隔離派發若 runtime 未提供 worktree 路徑，位置欄位留空，該條目對所有 checkout 全數計入，屬多擋方向，只是失去過濾收益。
+
+#### scan 的誤判情境與改寫方式
+
+**誤判的形狀**：git 字樣原樣出現在其他命令的參數位置，且不是 echo、printf 或 `command -v`。掃描無法判斷那個命令會不會把參數當命令執行，所以保守視為呼叫。已知的封閉集合：
+
+| 情境 | 例 |
+|------|---|
+| 查詢或顯示文字的命令 | grep、rg、man、tldr、apropos、cat、head、diff、sed、wc、ls、less |
+| 把字串交給其他程式的命令 | open、say、pip、npm、`python3 tool.py` |
+| 腳本的參數 | `bash script.sh` 後接 git 字樣 |
+| 遠端或容器內執行 | ssh、docker run、kubectl exec |
+
+**Consequence**：並行派發期，這類命令被視為無法解析而阻擋；非並行期只多一則提醒。在真實命令語料中此類誤判很少見，主要出現在刻意構造的壓力輸入，所以不以擴充例外清單處理——把 grep、rg、man 類加入例外只減少一小部分誤判，例外清單會變成另一份開放的白名單。
+
+**Action**：改寫命令，不繞過守衛。
+
+| 改寫方式 | 效果 |
+|---------|------|
+| 把 git 字樣加上引號，例如 `grep 'git commit' file` | 引號內文字交由既有的引號處理，不被當作 token |
+| 把 git 放在命令位置 | 屬真實呼叫，照一般 git 命令的規則處理 |
+| 遠端或容器內的 git 呼叫 | 無法改寫成不命中；並行期請先確認為必要，再依守衛訊息處置 |
 
 ---
 
@@ -754,6 +899,17 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 
 ---
 
+**Last Updated**: 2026-10-15
+**Version**: 1.21.0 — 〈並行期工作位置的放行殘留〉同步修正後的判定：新增「判定基準」（commit 目標取命令內全部 commit 的聯集；帶 `GIT_DIR`、`GIT_WORK_TREE`、`--git-dir`、`--work-tree` 時不過濾、全數計入），殘留由兩條增為三條（新增事先 export 的 `GIT_DIR`、`GIT_WORK_TREE`：觸發條件、放行方向、判定端無解理由、自律承擔），承擔者 Action 補不事先 export 與 commit 前檢查環境。
+**Version**: 1.20.0 — 〈守衛如何辨識 commit〉新增子節「並行期工作位置的放行殘留」：依工作位置過濾後的兩條放行殘留（非隔離代理人跨 checkout stage、登記後切換 cwd）的觸發條件、失敗方向、判定端無解的理由、自律承擔，以及位置不明與 runtime 未提供 worktree 路徑時的多擋方向；僅新增小節。
+**Last Updated**: 2026-10-14
+**Version**: 1.19.0 — 規則七詳細新增〈守衛如何辨識 commit：位置判定、任意位置掃描與殘留範圍〉：兩種辨識模型與 via_scan 處置、scan 仍漏判的封閉類別及各自承擔者、scan 的誤判情境與改寫方式；僅新增小節，不改既有條文。
+**Last Updated**: 2026-10-14
+**Version**: 1.18.0 — 新增〈進行中操作的裸 commit 收尾（cherry-pick、revert、rebase）〉：以暫存 repo 實測各停下狀態下旁觀者裸 commit 的後果（內容夾帶、訊息取代、狀態清除、rebase 歷史遺失一個 commit 且 `--continue` 仍回 rc=0），收尾處置表（各操作的 `--continue` 與自訂訊息檔），以及 `bare-commit-guard-hook.py` 的對應強制層與未實測項。
+
+**Last Updated**: 2026-10-12
+**Version**: 1.17.0 — 〈兩段式合併禁令（MERGE_HEAD 空窗）〉新增變體「合併途中 HEAD 被他方推進（update_ref 失敗）」：辨識訊號三項、禁止事項、兩種處置（隔離索引 CAS 補提交後 `git merge --quit`／`git merge --abort` 重來），預設路徑改指 worktree skill 的 `merge` 子命令；補手寫 CAS 腳本在 zsh 未切字詞產生空合併的陷阱。
+**Version**: 1.16.0 — 規則七詳細「衝突合併收尾」處置表改為 `GIT_EDITOR=true git merge --continue`（對齊 MERGE_HEAD 存在時守衛拒絕裸 commit），補自訂合併訊息做法（寫入 MERGE_MSG；`merge --continue` 不接受引數）；新增「兩段式合併禁令（MERGE_HEAD 空窗）」Why／Consequence／Action 三級小節（置於 PC-BAL-008 歸屬判定之後）；`Unable to write index` 處置對齊 `PC-169`／`IMP-V1-005`（視為警報，先查 HEAD 與 MERGE_HEAD，不重試），守衛具名並更正「與既有防護層的關係」（MERGE_HEAD 存在時拒絕裸 commit）。
 **Last Updated**: 2026-10-07
 **Version**: 1.15.0 — 規則一詳細 uv 方法由不存在的 `-d` 短旗標改為 `--directory`，附 uv 0.8.13 實測錯誤訊息。
 **Last Updated**: 2026-09-08

@@ -150,7 +150,7 @@ class TestHasActiveDispatchHelper:
             json.dumps({"dispatches": [{"agent_id": "x", "dispatched_at": "2026-01-01T00:00:00Z"}]}),
             encoding="utf-8",
         )
-        monkeypatch.setattr(process_skip_guard_hook, "get_project_root", lambda: repo)
+        monkeypatch.setattr(process_skip_guard_hook, "get_shared_state_root", lambda: repo)
         assert has_active_dispatch() is True
 
     def test_returns_false_when_dispatches_empty(self, tmp_path, monkeypatch):
@@ -162,7 +162,7 @@ class TestHasActiveDispatchHelper:
         (claude_dir / "dispatch-active.json").write_text(
             json.dumps({"dispatches": []}), encoding="utf-8"
         )
-        monkeypatch.setattr(process_skip_guard_hook, "get_project_root", lambda: repo)
+        monkeypatch.setattr(process_skip_guard_hook, "get_shared_state_root", lambda: repo)
         assert has_active_dispatch() is False
 
     def test_returns_false_when_file_missing(self, tmp_path, monkeypatch):
@@ -170,7 +170,7 @@ class TestHasActiveDispatchHelper:
         repo = tmp_path
         (repo / "docs" / "work-logs").mkdir(parents=True)
         (repo / ".claude").mkdir()
-        monkeypatch.setattr(process_skip_guard_hook, "get_project_root", lambda: repo)
+        monkeypatch.setattr(process_skip_guard_hook, "get_shared_state_root", lambda: repo)
         assert has_active_dispatch() is False
 
     def test_returns_false_when_json_corrupted(self, tmp_path, monkeypatch):
@@ -180,14 +180,14 @@ class TestHasActiveDispatchHelper:
         claude_dir = repo / ".claude"
         claude_dir.mkdir()
         (claude_dir / "dispatch-active.json").write_text("{not valid json", encoding="utf-8")
-        monkeypatch.setattr(process_skip_guard_hook, "get_project_root", lambda: repo)
+        monkeypatch.setattr(process_skip_guard_hook, "get_shared_state_root", lambda: repo)
         assert has_active_dispatch() is False
 
-    def test_returns_false_when_get_project_root_raises(self, monkeypatch):
-        """get_project_root 拋例外 → False（W11-021：改用 get_project_root 統一入口）"""
+    def test_returns_false_when_get_shared_state_root_raises(self, monkeypatch):
+        """get_shared_state_root 拋例外 → False"""
         def _raise():
             raise RuntimeError("simulated failure")
-        monkeypatch.setattr(process_skip_guard_hook, "get_project_root", _raise)
+        monkeypatch.setattr(process_skip_guard_hook, "get_shared_state_root", _raise)
         assert has_active_dispatch() is False
 
     def test_legacy_bare_list_format_supported(self, tmp_path, monkeypatch):
@@ -199,5 +199,5 @@ class TestHasActiveDispatchHelper:
         (claude_dir / "dispatch-active.json").write_text(
             json.dumps([{"agent_id": "x"}]), encoding="utf-8"
         )
-        monkeypatch.setattr(process_skip_guard_hook, "get_project_root", lambda: repo)
+        monkeypatch.setattr(process_skip_guard_hook, "get_shared_state_root", lambda: repo)
         assert has_active_dispatch() is True

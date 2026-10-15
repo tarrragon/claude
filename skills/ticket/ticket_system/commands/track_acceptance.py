@@ -485,81 +485,26 @@ def _execute_batch_check_acceptance(
 
     # 輸出結果
     total_count = len(acceptance_list)
-    if uncheck:
-        print(format_info(
-            InfoMessages.ACCEPTANCE_CRITERIA_UPDATED,
-            ticket_id=args.ticket_id,
-            index=f"全部 ({count}/{total_count})",
-            status_text=TrackAcceptanceMessages.STATUS_TEXT_UNCHECKED
-        ))
-        print(format_msg(
-            TrackAcceptanceMessages.BATCH_UNCHECK_SUMMARY_FORMAT,
-            ticket_id=args.ticket_id,
-            unchecked_count=count,
-            total_count=total_count
-        ))
-    else:
-        print(format_info(
-            InfoMessages.ACCEPTANCE_CRITERIA_UPDATED,
-            ticket_id=args.ticket_id,
-            index=f"全部 ({count}/{total_count})",
-            status_text=TrackAcceptanceMessages.STATUS_TEXT_CHECKED
-        ))
-        print(format_msg(
-            TrackAcceptanceMessages.BATCH_CHECK_SUMMARY_FORMAT,
-            ticket_id=args.ticket_id,
-            checked_count=count,
-            total_count=total_count
-        ))
+    checked_total = sum(1 for item in acceptance_list if item.startswith("[x]"))
+    # 本次變更數與目前已勾選數分開呈現，避免 (n/m) 被讀成目前進度
+    print(format_info(
+        InfoMessages.ACCEPTANCE_CRITERIA_UPDATED,
+        ticket_id=args.ticket_id,
+        index=f"全部（本次變更 {count} 項）",
+        status_text=(TrackAcceptanceMessages.STATUS_TEXT_UNCHECKED if uncheck
+                     else TrackAcceptanceMessages.STATUS_TEXT_CHECKED),
+    ))
+    summary_format = (TrackAcceptanceMessages.BATCH_UNCHECK_SUMMARY_FORMAT if uncheck
+                      else TrackAcceptanceMessages.BATCH_CHECK_SUMMARY_FORMAT)
+    print(format_msg(
+        summary_format,
+        ticket_id=args.ticket_id,
+        changed_count=count,
+        checked_total=checked_total,
+        total_count=total_count,
+    ))
 
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
-
-
-def execute_accept_creation(args: argparse.Namespace, version: str) -> int:
-    """
-    標記 Ticket 建立後驗收已通過
-
-    支援命令格式：
-    - ticket track accept-creation <id>
-
-    將 frontmatter 中的 creation_accepted 欄位設為 true。
-    既有 Ticket 缺少此欄位時視為 false。
-    """
-    # W14-045: file_lock 包圍 load → modify → save
-    lock_target = Path(get_ticket_path(version, args.ticket_id))
-    with file_lock(lock_target):
-        ticket = load_ticket(version, args.ticket_id)
-        if not ticket:
-            print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
-            return 1
-
-        # 取得當前 creation_accepted 狀態（預設為 false）
-        creation_accepted = ticket.get("creation_accepted", False)
-
-        if creation_accepted:
-            # 已經通過驗收
-            msg = format_msg(
-                TrackAcceptanceMessages.ACCEPT_CREATION_ALREADY_ACCEPTED_FORMAT,
-                ticket_id=args.ticket_id
-            )
-            print(msg)
-            return 0
-
-        # 標記建立後驗收已通過
-        ticket["creation_accepted"] = True
-
-        # 保存
-        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-        save_ticket(ticket, ticket_path)
-
-    # 輸出結果
-    msg = format_msg(
-        TrackAcceptanceMessages.ACCEPT_CREATION_SUCCESS_FORMAT,
-        ticket_id=args.ticket_id
-    )
-    print(msg)
-
-    return 0
 
 
 def _replace_or_append_section_content(
@@ -774,15 +719,25 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         # 已寫入的實質內容，一律用本次內容整段覆寫，維持 header 不變、章節
         # 在 body 中的原位置不動。
         if getattr(args, "replace", False):
+            from ticket_system.commands.track_dispatch import split_managed_h3
+
             header_end = section_text.find("\n")
             header_line = section_text[: header_end + 1] if header_end != -1 else section_text
             updated_section = header_line + new_entry.lstrip("\n") + "\n"
 
+            # CLI 管理的 H3 子節（派發日誌 / Commit 規範）接在新內容之後保留
+            managed_texts, human_titles = split_managed_h3(section_content)
+            if managed_texts:
+                updated_section += "\n" + "\n\n".join(managed_texts) + "\n"
+
             # 覆寫為不可逆操作（ticket md 受 hook 保護無法手工還原），寫回前
-            # 印出將被取代的內容摘要供呼叫端核對，作為防呆。
-            old_summary = section_content.strip()
-            if len(old_summary) > 200:
-                old_summary = old_summary[:200] + "...(truncated)"
+            # 印出將被取代的內容摘要供呼叫端核對，作為防呆。有人寫 H3 時列標題。
+            if human_titles:
+                old_summary = "將被取代的子節：\n" + "\n".join(human_titles)
+            else:
+                old_summary = section_content.strip()
+                if len(old_summary) > 200:
+                    old_summary = old_summary[:200] + "...(truncated)"
             print(
                 f"[append-log] --replace 將取代 section '{section}' 既有內容："
                 f"\n{old_summary}\n"

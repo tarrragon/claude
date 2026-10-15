@@ -99,6 +99,89 @@ class TestPC019DowngradedToWarn:
             assert hook.main() == 0
 
 
+class TestReadOnlyGitNoOptionalLocks:
+    """0.5.0-W1-164.3：工作樹側唯讀 diff 須帶 --no-optional-locks 且位於子命令前。"""
+
+    def test_worktree_side_diffs_carry_flag_before_subcommand(self):
+        data = {"tool_input": {"isolation": "worktree"}}
+        with patch.object(hook, "read_json_from_stdin", return_value=data), patch.object(
+            hook, "_check_origin_behind", return_value=0
+        ), patch.object(
+            hook.subprocess,
+            "run",
+            side_effect=[_diff_result(""), _diff_result("")],
+        ) as run:
+            hook.main()
+        argvs = [c.args[0] for c in run.call_args_list]
+        assert len(argvs) == 2
+        for argv in argvs:
+            assert "--no-optional-locks" in argv
+            assert argv.index("--no-optional-locks") < argv.index("diff")
+
+
+class TestUnstagedDiffDoesNotRewriteIndex:
+    """0.5.0-W1-164.3：--no-optional-locks 不阻止 index 回寫，須 diff.autoRefreshIndex=false。
+
+    效果層：對 hook 實際組出的 unstaged diff argv，在真實 stat-dirty repo 執行，
+    比對 .git/index 位元組。
+    """
+
+    @staticmethod
+    def _make_stat_dirty_repo(repo):
+        import os
+        import subprocess as sp
+
+        def git(*a):
+            sp.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+
+        git("init", "-q")
+        git("config", "user.email", "t@example.com")
+        git("config", "user.name", "T")
+        target = repo / "f.txt"
+        target.write_text("content\n", encoding="utf-8")
+        git("add", "f.txt")
+        git("commit", "-q", "-m", "init")
+        # 內容不變、只改 mtime：stat-dirty，git diff 預設會 refresh 並回寫 index
+        st = target.stat()
+        os.utime(target, (st.st_atime, st.st_mtime + 100))
+
+    @staticmethod
+    def _capture_unstaged_argv():
+        data = {"tool_input": {"isolation": "worktree"}}
+        with patch.object(hook, "read_json_from_stdin", return_value=data), patch.object(
+            hook, "_check_origin_behind", return_value=0
+        ), patch.object(
+            hook.subprocess,
+            "run",
+            side_effect=[_diff_result(""), _diff_result("")],
+        ) as run:
+            hook.main()
+        return list(run.call_args_list[0].args[0])
+
+    @staticmethod
+    def _run_and_read_index(argv, repo):
+        import subprocess as sp
+
+        index = repo / ".git" / "index"
+        before = index.read_bytes()
+        sp.run(argv, cwd=repo, check=True, capture_output=True)
+        return before, index.read_bytes()
+
+    def test_hook_unstaged_diff_leaves_index_untouched(self, tmp_path):
+        self._make_stat_dirty_repo(tmp_path)
+        argv = self._capture_unstaged_argv()
+        before, after = self._run_and_read_index(argv, tmp_path)
+        assert before == after
+
+    def test_control_without_flag_rewrites_index(self, tmp_path):
+        self._make_stat_dirty_repo(tmp_path)
+        argv = self._capture_unstaged_argv()
+        stripped = [a for a in argv if a not in ("-c", "diff.autoRefreshIndex=false")]
+        assert stripped != argv, "hook argv 未含 -c diff.autoRefreshIndex=false"
+        before, after = self._run_and_read_index(stripped, tmp_path)
+        assert before != after, "對照不成立：fixture 無鑑別力"
+
+
 class TestOriginBehindDenyUnchanged:
     """W4-008：origin/main 落後超門檻仍 exit 2，本票不動。"""
 

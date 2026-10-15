@@ -49,6 +49,7 @@ from typing import List, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from lib.git_command_parse import match_git_commit
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -63,14 +64,6 @@ from lib import (
 # ============================================================================
 
 EXIT_SUCCESS = 0
-
-EXCLUDED_COMMAND_PATTERNS = [
-    "git log",
-    "git show",
-    "git diff",
-    "git status",
-    "git commit --amend",
-]
 
 COMMIT_SUCCESS_MARKERS = [
     "files changed",
@@ -129,12 +122,7 @@ DEFAULT_OUTPUT = {
 
 def is_git_commit_command(command: str) -> bool:
     """判斷是否為 git commit 命令（排除 read-only / amend 變體）"""
-    if "git commit" not in command:
-        return False
-    for excluded in EXCLUDED_COMMAND_PATTERNS:
-        if excluded in command:
-            return False
-    return True
+    return match_git_commit(command) is True
 
 
 def is_commit_successful(stdout: str) -> bool:

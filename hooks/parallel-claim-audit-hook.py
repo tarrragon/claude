@@ -19,19 +19,12 @@ Parallel Claim Audit Hook (PostToolUse:Bash) — 非阻擋 observability
   - 失敗雙通道可觀測（quality-baseline 規則 4）：例外寫 logger.info + stderr
 
 觸發時機: PostToolUse (Bash: ticket track claim)
+覆蓋限制: 只見被管線或分號遮蔽的失敗（整體結束碼為 0）；未遮蔽的非零結束碼走
+  PostToolUseFailure，本 hook 不在該群組，不會收到（含結束碼 75）。
 
 輸出:
   audit log（JSONL）：{ ticket_id, wave, timestamp, same_wave_in_progress: [...] }
   異常時：stderr + logger（不阻擋，exit 0）
-
-HOOK_METADATA (JSON):
-{
-  "event_type": "PostToolUse",
-  "matcher": "Bash",
-  "description": "並行 claim 事後歸因 - ticket track claim 後記錄同 wave in_progress 快照（非阻擋）",
-  "dependencies": [],
-  "version": "1.0.0"
-}
 """
 
 import json
@@ -42,6 +35,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from typing import Optional
+from lib.bash_tool_response import is_bash_success
+from lib.ticket_claim_verifier import make_claim_verifier
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -73,23 +69,51 @@ def parse_claim_command(command: str):
     return candidate
 
 
-EXIT_AUTO_COMMIT_FAILED = 75  # ticket CLI：動作已完成、僅 auto-commit 失敗
-# format_write_command_commit_failure 的固定片語；exit_code 欄位缺席時的後備判讀
+# claim 成功回音（messages.py TICKET_CLAIMED）
+CLAIM_SUCCESS_MARKERS = ("[OK] 已接手",)
+# format_write_command_commit_failure 的固定片語；其 stderr 原因文字可能含 "failed"
 AUTO_COMMIT_WARNING_MARK = "已寫入 working tree 但 auto-commit 失敗"
 
 
-def is_claim_successful(tool_result) -> bool:
+def _claim_transition_verdict(tool_result, command: str, logger) -> Optional[bool]:
+    """以票面確認「這次發生了認領轉換」，不論命令是否被遮蔽。
+
+    未遮蔽且收到 PostToolUse 只代表命令成功：對已認領的票再次 claim，CLI 仍輸出
+    「已被接手」警告且結束碼為 0，started_at 保持舊值（落在時間窗外）。
+    回傳 True／False 為驗證器的明確判定；None 表示票面讀不到，呼叫端退回標記判定。
+    """
+    try:
+        verdict = bool(make_claim_verifier(command, logger)())
+    except Exception:  # 讀票失敗不等於命令失敗：退回標記判定
+        return None
+    if not verdict:
+        return False
+    # 驗證器為真時仍交由 is_bash_success 做 exit_code 前置檢查（驗證器恆真，不重複判定）
+    return is_bash_success(
+        tool_result, CLAIM_SUCCESS_MARKERS, command=command, state_verifier=lambda: True
+    )
+
+
+def is_claim_successful(tool_result, command: Optional[str] = None, logger=None) -> bool:
     """判斷 claim 是否成功。
 
+    給定 command 時先以票面驗證器確認認領轉換（見 _claim_transition_verdict）；
+    驗證器不可用時退回下列標記判定。
     失敗訊號（任一出現於 stdout/stderr 即視為失敗）：
     - 'already claimed' / 'not found' / 'Error' / 'failed' / 'blocked'
     其餘視為成功（observability 寧可多記，不影響 claim）。
     """
     if not isinstance(tool_result, dict):
         return True
-    # 75（EXIT_AUTO_COMMIT_FAILED）：claim 已寫入、僅 auto-commit 失敗。其 stderr 的
-    # 原因文字可能含 "failed"，不可被下列子字串比對誤判為 claim 失敗。
-    if tool_result.get("exit_code") == EXIT_AUTO_COMMIT_FAILED:
+    # 結束碼 75（claim 已寫入、僅 auto-commit 失敗）屬非零，PostToolUse 只在結束碼為 0 時
+    # 觸發，故此處不會收到 75，原 75 分支已移除；以下 WARNING 片語後備保留。
+    if tool_result.get("interrupted") is True:
+        return False
+    if command:
+        verdict = _claim_transition_verdict(tool_result, command, logger)
+        if verdict is not None:
+            return verdict
+    if is_bash_success(tool_result, CLAIM_SUCCESS_MARKERS):
         return True
     if AUTO_COMMIT_WARNING_MARK in str(tool_result.get("stderr", "")):
         return True
@@ -159,7 +183,10 @@ def main() -> int:
 
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}
-    tool_result = input_data.get("tool_result", {})
+    # 平台欄位為 tool_response；tool_result 僅為舊測試樁相容後備
+    tool_result = input_data.get("tool_response")
+    if tool_result is None:
+        tool_result = input_data.get("tool_result", {})
 
     if tool_name != "Bash":
         return 0
@@ -169,7 +196,7 @@ def main() -> int:
     if ticket_id is None:
         return 0  # 非 claim 命令，正常跳過
 
-    if not is_claim_successful(tool_result):
+    if not is_claim_successful(tool_result, command, logger):
         logger.info("claim 命令未成功（{}），不記錄快照".format(ticket_id))
         return 0
 

@@ -72,7 +72,7 @@
 | 5 | 分批 | 依拓撲（`blockedBy` 與敘述中的隱性依賴）、`where.files` 交集、驗收容量三因子分批；同檔票合併或序列；決策與文件票排第一批 | PM 前台 | `ticket track conflicts --version <版本>`；批次表 | 同批任兩票 `where.files` 無交集；每批張數不超過 PM 一輪可逐份核對數 |
 | 6 | 決策批次 | 派發決策與文件票（唯讀分析、規格修訂）；完成後依結論校正實作票的策略欄 | 系統分析／文件代理人，主 repo 隔離索引提交 | 決策票 Solution、規格版本 +1 | 逐張核對：commit 存在、驗收條件全勾、規格 diff 與票面一致 |
 | 7 | 凍結兩步 | 決策批次完成後才凍結——決策票可能再生必要票。標版本條目 `scope: frozen`；對「必要」票逐張標阻擋理由 | PM 前台 | `docs/todolist.yaml`；`ticket track set-scope-blocker <id> --reason <契約項>` | `version-release check --version <版本>` 列出的阻擋數等於必要票數，溢出票出現在「發版時前移」清單 |
-| 8 | 實作批次 | 派發實作票（各自 worktree）；派發前跑派發骨架確認 readiness；票 md 已在遠端 | 語言實作代理人 | `ticket track dispatch <id> --as <agent>`；prompt 內含 `finish` 收尾 | 每張依 `.claude/pm-rules/parallel-dispatch.md`〈PM 側 worktree 合入與驗收三軸（強制）〉逐項核對後併入 |
+| 8 | 實作批次 | 派發實作票（各自 worktree）；派發前跑派發骨架確認 readiness；票 md 已在遠端 | 語言實作代理人 | `ticket track dispatch <id> --as <agent>`；prompt 收尾止於 `ticket track commit`（不含 complete 與 finish） | 每張依 `.claude/pm-rules/parallel-dispatch.md`〈PM 側 worktree 合入與驗收三軸（強制）〉逐項核對後併入；合併並驗證後由 PM 於主 checkout `set-who` 再 `complete` |
 | 9 | 實機驗證 | 契約中需真實輸入的部分由 PM 驅動產品實機、用戶操作、以世界平面證據（存檔、log、畫面）逐條對驗收 | PM + 用戶 | 證據表寫入票面 Solution | 每條驗收有一項可重讀的證據，不以口頭「看起來對」放行 |
 | 10 | 發版 | 契約阻擋清空即發版，不等池清空；先確認溢出目標版本已登記（patch 與 minor 皆依〈版本登記規則〉對應列的門檻），再 dry-run、再正式 finish | PM 前台 | `version-release check`、`finish --dry-run`、`finish` | finish 後工作區乾淨、tag 已推、下一版本已啟用；若 finish 的收尾差集守衛回報殘留，逐檔判定來源後精確提交 |
 
@@ -210,5 +210,7 @@ Patch 的收件窗口 = 自登記起，到 patch 自身凍結為止。上層 min
 
 ---
 
+**Last Updated**: 2026-10-14
+**Version**: 1.1.1 — 步驟 8 實作批次的 prompt 收尾由 `finish` 改為止於 `ticket track commit`，驗收欄補 PM 合併並驗證後 `set-who` 再 `complete`（收尾時點在合併之前，票面領先程式碼；來源：用戶裁決，2026-10-14）
 **Last Updated**: 2026-10-01
 **Version**: 1.1.0 — 新增〈版本契約五欄模板〉與〈分診與前移路由〉（minor 完成後分診定 topic patch、執行期新發現依 topic 契合、例外閥限縮、前移目標由分診指定、後續版本票池於規劃波逐張裁決、框架票當期建票但 finish 前移）；Patch 生命週期與入口 B 的前移目標改為分診指定優先；反模式與檢查清單同步。來源 canonical #114 方案 1～5。

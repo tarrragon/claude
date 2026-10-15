@@ -16,7 +16,7 @@ marker 記錄的是「候選目錄現在有哪些檔案」，這是目錄的屬�
 1. 以 `resolve_candidate_memory_dirs()` 篩出對應本專案的候選目錄
 2. 對每個候選取當前「檔名集合」快照
 3. 與 marker 記錄的上一次快照比較，任一候選目錄「非空且與上次快照不同」
-   即輸出改道指引（stderr）
+   即輸出改道指引（stdout JSON additionalContext，模型可見）
 4. 不論是否告警，marker 都無條件更新為當前快照
 
 代價：marker 不分 session，若 session B 期間發生的變化已被 session A 的
@@ -39,7 +39,7 @@ Stop 記錄過，B 不會再被告知同一次變化。這個代價是刻意接�
 5. 比對鍵必須取自 `get_project_root()`；`CLAUDE_PROJECT_DIR` 恆指主 repo，
    不隨 worktree 的實際 cwd 改變
 6. SessionStart 與 Stop 皆不使用 deny/block 語意，`main()` 恆回傳
-   `EXIT_OK`，稽核結果一律透過 stderr 訊息呈現，不透過 exit code 表達
+   `EXIT_OK`，稽核結果一律透過 additionalContext 呈現，不透過 exit code 表達
 7. marker 只比對檔名集合，不讀取檔案內容、不比對 mtime；marker 檔案本身
    不得落在被稽核的 memory 目錄內（否則目錄非空即為 marker 自身造成，
    稽核會命中自己寫的 marker，自我實現）；實際存放路徑見下方「marker
@@ -95,6 +95,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))  # .claude/       (lib.*)
 
 try:
     from lib import (
+        emit_model_reminder,
         get_project_root,
         read_json_from_stdin,
         run_hook_safely,
@@ -115,7 +116,7 @@ except ImportError as e:
 
 # === Exit Code ===
 # SessionStart 與 Stop 皆無 deny/block 語意，本 hook 恆定 exit 0，
-# 稽核結果透過 stderr 訊息呈現，不透過 exit code 表達。
+# 稽核結果透過 additionalContext 呈現，不透過 exit code 表達。
 EXIT_OK = 0
 
 _HOME = os.path.expanduser("~")
@@ -295,7 +296,7 @@ def _warn_if_comparison_key_may_be_stale(logger) -> None:
         )
 
 
-def _run_audit(logger, marker_file: Path) -> int:
+def _run_audit(logger, marker_file: Path, input_data: dict) -> int:
     """核心稽核邏輯，SessionStart 與 Stop 共用同一份判準（見檔案頂端行為
     契約）：取當前候選目錄快照，與 marker 記錄的上一次快照比較，任一候選
     目錄「非空且與上次不同」即告警，並無條件更新 marker 為當前快照。
@@ -317,7 +318,12 @@ def _run_audit(logger, marker_file: Path) -> int:
 
     if changed_nonempty_dirs:
         logger.info(f"稽核偵測到 memory 目錄內容變化：{changed_nonempty_dirs}")
-        print(AUDIT_MESSAGE, file=sys.stderr)
+        # 受眾為模型：訊息要求模型搬遷內容，exit 0 stderr 對模型不可見，
+        # 改走 additionalContext（Stop 事件會讓模型續跑接手搬遷，符合意圖；
+        # marker 已更新，同一變化不會重複觸發）
+        emit_model_reminder(
+            input_data["hook_event_name"], AUDIT_MESSAGE, input_data=input_data
+        )
     else:
         logger.debug(f"稽核：內容相對上次快照無變化（共 {len(candidates)} 個候選）")
     return EXIT_OK
@@ -338,7 +344,7 @@ def main() -> int:
         logger.debug(f"非 SessionStart/Stop 事件（{hook_event_name}），跳過")
         return EXIT_OK
 
-    return _run_audit(logger, _marker_file())
+    return _run_audit(logger, _marker_file(), input_data)
 
 
 if __name__ == "__main__":

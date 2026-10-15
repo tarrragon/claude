@@ -51,15 +51,6 @@ Hook 類型: UserPromptSubmit
 版本過濾（v3.4.0 更新）：
 - 優先掃描當前活躍版本的 Ticket（來自 docs/todolist.yaml 的 current_version 欄位）
 - 若 current_version 讀取失敗或目錄不存在，fallback 到掃描所有版本目錄
-
-HOOK_METADATA (JSON):
-{
-  "event_type": "UserPromptSubmit",
-  "timeout": 5000,
-  "description": "命令入口閘門 - 驗證開發命令的 Ticket 前置條件（v3.6.0 引導式：無 Ticket 放行 + 注入 AskUserQuestion 引導）",
-  "dependencies": [],
-  "version": "3.6.0"
-}
 """
 
 import sys

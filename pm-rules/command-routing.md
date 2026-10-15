@@ -42,7 +42,7 @@
 
 | 判斷條件 | 路由 |
 |---------|------|
-| 開發命令（實作/建立/新增/重構） | Hook 驗證 Ticket → **pending 需 creation_accepted**（見 execution-discovery-rules.md）→ 行為分類 → 分工路由（見下） |
+| 開發命令（實作/建立/新增/重構） | Hook 驗證 Ticket → 行為分類 → 分工路由（見下） |
 | 安全相關（auth/token/permission） | → 強制派發 security-reviewer |
 | 除錯命令（test failed/crash/bug） | → [強制] WRAP 快速模式（根因多選項擴增）→ 派發 incident-responder（見 incident-routing.md） |
 

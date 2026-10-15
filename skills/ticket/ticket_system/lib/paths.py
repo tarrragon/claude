@@ -275,6 +275,40 @@ def get_tickets_dir(version: str) -> Path:
     return get_tickets_dir_under_root(get_ticket_state_root(), version)
 
 
+def _resolve_git_common_dir_from_fs(start: Path) -> Optional[Path]:
+    """以檔案系統解析 git common dir（不啟動子程序）；無法判定回傳 None。
+
+    從 start 往上找第一個含 `.git` 的目錄：`.git` 為目錄即 common dir；
+    為檔案（linked worktree）則讀 `gitdir:` 指向的目錄，再讀其下 `commondir`
+    檔（可為相對路徑，相對於該 gitdir）。
+    """
+    start = start.resolve()
+    for base in (start, *start.parents):
+        dot_git = base / ".git"
+        try:
+            if dot_git.is_dir():
+                return dot_git.resolve()
+            if not dot_git.is_file():
+                continue
+            text = dot_git.read_text(encoding="utf-8").strip()
+            if not text.startswith("gitdir:"):
+                return None
+            gitdir = Path(text[len("gitdir:"):].strip())
+            if not gitdir.is_absolute():
+                gitdir = base / gitdir
+            commondir_file = gitdir / "commondir"
+            if not commondir_file.is_file():
+                return gitdir.resolve()
+            common = Path(commondir_file.read_text(encoding="utf-8").strip())
+            if not common.is_absolute():
+                common = gitdir / common
+            return common.resolve()
+        except OSError:
+            # 讀取失敗交由 caller 退回 git 子程序解析
+            return None
+    return None
+
+
 def get_git_common_dir(cwd: Optional[Path] = None) -> Optional[Path]:
     """
     取得 git 的 common dir：所有 linked worktree 共用的 `.git` 目錄，
@@ -292,6 +326,11 @@ def get_git_common_dir(cwd: Optional[Path] = None) -> Optional[Path]:
         Path | None: git common dir 的絕對路徑；非 git 環境 / git 不存在 /
             逾時 / 指令失敗時回傳 None（caller 應降級處理）。
     """
+    fs_result = _resolve_git_common_dir_from_fs(
+        cwd if cwd is not None else Path.cwd()
+    )
+    if fs_result is not None:
+        return fs_result
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],

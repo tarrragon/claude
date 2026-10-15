@@ -382,3 +382,59 @@ def test_dispatch_skeleton_normal_agent_commit_with_hook_scope_within_prompt_lim
         f"dispatch 骨架（hooks 目錄變體）實際餵給 hook 仍被阻擋"
         f"（exit_code={exit_code}）：{capsys.readouterr().err}"
     )
+
+
+def test_staging_phrases_distinguish_criteria_rejection_from_environmental_failure():
+    """0.5.0-W1-297.2：全文與骨架短版皆須含兩類 fallback 條件——判準性拒絕
+    不得 fallback（回報 PM）；環境性失敗先重跑，持續失敗才 fallback。"""
+    module = _load_dispatch_skeleton_module()
+    assert "environmental" in module.STAGING_PHRASE_AGENT
+    assert "re-running" in module.STAGING_PHRASE_AGENT
+    assert "must NOT use fallback" in module.STAGING_PHRASE_AGENT
+    assert "no fallback" in module.STAGING_PHRASE_AGENT_PROMPT
+    assert "Environmental failure" in module.STAGING_PHRASE_AGENT_PROMPT
+    assert "re-run" in module.STAGING_PHRASE_AGENT_PROMPT
+
+
+def test_hook_ticket_reminder_asks_for_evidence_not_acceptance_sentences():
+    """0.5.0-W1-276.2：提醒須列出證據形式與位置（Test Results／Solution、
+    hook-logs/ 日誌行引文、fail 宣告加觸發條件），不再要求 acceptance 含句子。"""
+    reminder = _load_dispatch_skeleton_module().HOOK_TICKET_REMINDER
+    for form in ("Test Results", "Solution", "hook-logs/", "觸發條件", "fail-open"):
+        assert form in reminder, form
+    assert "acceptance 含四項必含" not in reminder
+
+
+# ----------------------------------------------------------------------------
+# worktree 隔離變體收尾句（裁決 B）：止於 ticket track commit 並回報 PM，
+# complete 由 PM 合併後於主 checkout 執行。E1 對照：none 變體仍含 complete。
+# ----------------------------------------------------------------------------
+
+def _build_skeleton_by_isolation(isolation: str) -> str:
+    module = _load_dispatch_skeleton_module()
+    return module.build_skeleton(
+        kind="normal",
+        ticket_id="0.2.1-W3-XXXX",
+        task_summary="一句話動作描述測試填空",
+        agent_name="thyme-python-developer",
+        commit_policy="agent",
+        isolation=isolation,
+    )
+
+
+def test_worktree_closing_stops_at_commit_and_reports_to_pm():
+    skeleton = _build_skeleton_by_isolation("worktree")
+    assert "finish" not in skeleton
+    assert "complete" not in skeleton
+    assert "ticket track commit" in skeleton
+    assert "回報 PM" in skeleton
+
+
+def test_none_closing_still_contains_complete():
+    skeleton = _build_skeleton_by_isolation("none")
+    assert "ticket track complete" in skeleton
+
+
+def test_worktree_skeleton_within_prompt_limit():
+    skeleton = _build_skeleton_by_isolation("worktree")
+    assert _skeleton_line_count(skeleton) <= PROMPT_LINE_LIMIT

@@ -28,7 +28,7 @@
 
 ### 規則 1：測試通過率 100%
 
-**測試通過率必須維持 100%**：提交前所有測試通過、PR 合併 CI 全綠、版本發布完整套件通過。違規處理：測試失敗禁止直接修復，必須派發 incident-responder 分析，遵循 Skip-gate 防護機制。
+**測試通過率必須維持 100%**：本機提交前該票相關測試檔全綠；合併 main 前全套件全綠，由 worktree 合併流程在閘門內執行並讀結束碼，紅燈不合併，代理人不自行跑全套件（執行點與套件選擇見 `.claude/skills/worktree/SKILL.md`〈合併前全套件〉）；CI 落地後，PR 合併須 CI 全綠（見 `.claude/pm-rules/verification-framework.md`〈與 CI 的分工〉）；版本發布完整套件通過。違規處理：測試失敗禁止直接修復，必須派發 incident-responder 分析，遵循 Skip-gate 防護機制。
 
 - **邊界：測試綠燈不等於 Runtime 正確**：100% 通過是必要非充分條件。修復「訊息系統 / 日誌系統 / 跨模組整合」類 bug 時 unit test 綠燈可能遮蔽 runtime 失效（mock 替代真實依賴 + 斷言不檢查訊息文字 + 動態語言靜默忽略多餘參數三層共振）；此類修復 acceptance 必含 runtime 層級驗證。詳見 `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md`。
 - **邊界：少量綠燈不等於 always 綠燈**：race / 異步 / 環境敏感類問題 baseline 取樣 N < 5 時連續 GREEN 可能是 flaky 環境的幸運連勝，基於假 baseline 的決策鏈會連鎖崩塌；此類任務派發前 prompt 必須強制 N >= 5 取樣 + 紀錄 GREEN/RED 分佈。詳見 `.claude/error-patterns/process-compliance/PC-168-flaky-baseline-lucky-streak.md`。
@@ -46,6 +46,8 @@
 ### 規則 4：Hook 失敗必須可見
 
 **Hook 失敗不可靜默吞掉，必須對用戶可見**（來源：IMP-003）：Hook 異常必須寫入 stderr（用戶端可見）+ 同時寫檔案日誌（保留完整 traceback）；禁止只記錄日誌檔而不通知用戶。
+
+**提醒類輸出須宣告受眾**（來源：IMP-GPD-004）——hook 輸出提醒前先宣告給誰看：用戶、模型、或營運日誌。受眾含模型時，提醒必須走模型看得到的管道：經 `emit_hook_output`（`.claude/lib/hook_io.py`）輸出 `additionalContext`，或以 exit 2／decision block 使其停手；**exit 0 加 stderr 對模型不可見**，不得作為提醒模型的唯一管道。事件與管道的可見性對照表見 `.claude/references/hook-architect-technical-reference.md`「事件類型與輸出管道的可見性對照表」。
 
 **擴充：一般程式碼異常可觀測性**（來源：IMP-013）——雙通道要求亦適用所有程式碼異常處理。每個 `except` 區塊必須滿足以下至少一項，否則需在註解說明原因：寫入 stderr（`sys.stderr.write` / `logger.error`）、寫入日誌檔（`logger.info/warning/error`）、只做 `return`/`pass` 時在註解說明。Hook 異常 stderr+日誌皆必須；業務邏輯拒絕日誌必須、stderr 建議。Go/Dart 具體要求見 `.claude/references/observability-rules.md`。
 
@@ -109,6 +111,8 @@
 - `.claude/skills/framework-issue/SKILL.md` - 規則 5 框架問題升級流程（介入判斷、兩條路徑、issue 關閉協議、回報前查重 SOP）
 
 ---
+**Last Updated**: 2026-10-15 | **Version**: 3.10.0 — 規則 1 禁令句拆為兩時點：本機提交前該票相關測試檔全綠、合併 main 前全套件全綠（合併閘門執行並讀結束碼），路由 worktree SKILL〈合併前全套件〉；不展開論證，細節在 verification-framework〈合併前全綠與實機驗證票〉。
+**Last Updated**: 2026-10-15 | **Version**: 3.9.0 — 規則 4 補「提醒類輸出須宣告受眾」一段：受眾含模型時走 additionalContext 或 exit 2，exit 0 加 stderr 對模型不可見（實測 2026-10）；可見性對照表放 hook-architect-technical-reference，案例見 IMP-GPD-004。
 **Last Updated**: 2026-09-30 | **Version**: 3.8.0 — 規則 5 ANA spawn 情境表第一列對齊 PC-091：ANA 結論要求的落地改 `--parent`（children），`--source-ticket` 限分析中發現、結論未要求的獨立工作；後果與 `--force` 條件路由 ticket-lifecycle。
 **Version**: 3.7.0 — 規則 5 補一行射程註記（不展開三明示，僅路由）：「建立 Ticket」以發現的收件方裝有本框架 ticket 系統為前提，協作或接手他人專案時合法載體改為通過閘門的盤點工作項表，三種終態對應與強制層零改動接法見 `.claude/references/decision-trigger-binding-details.md` 規則 2.6。
 **Version**: 3.6.0 — 規則 5 補一行接縫註記（不展開三明示，僅路由）：優先級對應表「高→當前版本（IMP Ticket）」應讀作「高＝本版處理」，票型由證據狀態決定而非優先級，判準主文見 `.claude/skills/framework-issue/references/escalation-flow.md`〈修法時點分離：發現票何時能寫定修法〉（發現時點與修法定案時點分離，來源用戶裁示）。

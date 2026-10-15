@@ -11,13 +11,14 @@
 1. test-timeout-post.py — 測試超時監控
 2. pre-fix-evaluation-hook.py — 測試失敗評估
 
-觸發時機: PostToolUse (Bash: flutter test / dart test / npm test, 或 mcp__dart__run_tests)
+觸發時機: PostToolUse (Bash: flutter test / dart test / npm test / pytest，含 timeout、
+          fvm、uv run、run-with-timeout.py 前綴，或 mcp__dart__run_tests)
 """
 
 import json
 import os
 import re
-import subprocess
+import shlex
 import sys
 from datetime import datetime
 from enum import Enum
@@ -27,6 +28,9 @@ from typing import Dict, List, Tuple, Optional
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from lib.test_command_parse import find_test_invocations
+from lib.test_monitor_path import monitor_key, keyed_monitor_file, legacy_monitor_file
+from lib.bash_tool_response import is_failure_event, parse_failure_error
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -48,20 +52,6 @@ except ImportError as _import_err:
 # ============================================================================
 
 EXIT_SUCCESS = 0
-
-# 測試命令偵測 regex（W3-066 修正）
-#
-# 舊版 TEST_COMMAND_KEYWORDS substring `in` 比對 ["npm test", ...] 會誤觸發
-# echo "npm test" 等回顯關鍵字的非測試命令。改用 statement 邊界 + word
-# boundary regex：要求 test 命令位於命令序列起頭（^/&&/||/;/|/(/換行）後，
-# 可選環境變數前綴，最後接 flutter test / dart test / npm test / npm run test。
-#
-# 同時補強 npm run test:hooks 等 substring 比對漏觸發的情境。
-TEST_COMMAND_PATTERN = re.compile(
-    r"(?:^|[;|&(\n]|&&|\|\|)\s*"                # statement 邊界
-    r"(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*"       # 可選環境變數前綴
-    r"(?:flutter\s+test|dart\s+test|npm\s+(?:test|run\s+test))\b"
-)
 
 # Ticket body 寫入操作關鍵字（W3-041 豁免；W3-066 補齊）
 # 這些 CLI 命令會把含「FAILED / N tests failed」字面的 ticket body 內容
@@ -93,9 +83,14 @@ TICKET_MD_PATH_PATTERNS = [
 # --- timeout 子邏輯常數 ---
 WARNING_THRESHOLD = 300     # 5 分鐘
 CRITICAL_THRESHOLD = 900    # 15 分鐘
-AUTO_KILL_THRESHOLD = 1800  # 30 分鐘
+LIMIT_THRESHOLD = 1800      # 30 分鐘（達此值僅警告，不終止任何程序）
 
 # --- pre-fix-evaluation 子邏輯常數 ---
+
+
+def _p(pattern: str, flags: int = re.IGNORECASE | re.MULTILINE) -> "re.Pattern[str]":
+    """編譯錯誤樣式；旗標由各樣式自帶（預設不分大小寫、多行）。"""
+    return re.compile(pattern, flags)
 
 
 class ErrorType(Enum):
@@ -108,48 +103,58 @@ class ErrorType(Enum):
 
 
 SYNTAX_PATTERNS = [
-    (r"Expected.*?['\"]([;})\]])['\"]", "缺少括號或分號: {0}"),
-    (r"Unexpected\s+(?:end of|token)\b", "意外 token"),
-    (r"unterminated string literal", "字串未結束"),
-    (r"unexpected end of(?:\s+\w+)*\s*file", "檔案不完整"),
-    (r"missing comma", "缺少逗號"),
-    (r"invalid number format", "無效數字格式"),
+    (_p(r"Expected.*?['\"]([;})\]])['\"]"), "缺少括號或分號: {0}"),
+    (_p(r"Unexpected\s+(?:end of|token)\b"), "意外 token"),
+    (_p(r"unterminated string literal"), "字串未結束"),
+    (_p(r"unexpected end of(?:\s+\w+)*\s*file"), "檔案不完整"),
+    (_p(r"missing comma"), "缺少逗號"),
+    (_p(r"invalid number format"), "無效數字格式"),
 ]
 
 COMPILATION_PATTERNS = [
-    (r"(?:type|variable).*?can't be assigned", "類型不匹配"),
-    (r"is not a subtype of", "類型不匹配"),
-    (r"Undefined\s+(?:name|class|function)\s+['\"]?(\w+)['\"]?", "未定義名稱: {0}"),
-    (r"Target of URI\s+.*?\s+doesn't exist", "導入檔案不存在"),
-    (r"(?:Class|Function|Method)\s+['\"]?(\w+)['\"]?\s+not found", "引用不存在: {0}"),
-    (r"cannot find symbol", "符號未定義"),
-    (r"incompatible types", "類型不相容"),
+    (_p(r"(?:type|variable).*?can't be assigned"), "類型不匹配"),
+    (_p(r"is not a subtype of"), "類型不匹配"),
+    (_p(r"Undefined\s+(?:name|class|function)\s+['\"]?(\w+)['\"]?"), "未定義名稱: {0}"),
+    (_p(r"Target of URI\s+.*?\s+doesn't exist"), "導入檔案不存在"),
+    (_p(r"(?:Class|Function|Method)\s+['\"]?(\w+)['\"]?\s+not found"), "引用不存在: {0}"),
+    (_p(r"cannot find symbol"), "符號未定義"),
+    (_p(r"incompatible types"), "類型不相容"),
+]
+
+# 失敗摘要樣式（單一來源）：錯誤分類與綠燈前置排除共用，兩處不再各自維護
+# flutter / dart「Some tests failed」、jest「Tests: N failed」、pytest「N failed / N error(s)」（N 須非 0）
+FAILURE_SUMMARY_PATTERNS = [
+    (_p(r"Some tests failed"), "部分測試失敗"),
+    (_p(r"(?<![\w-])([1-9]\d*)\s+failed\b"), "{0} 個測試失敗（摘要）"),
+    (_p(r"(?<![\w-])([1-9]\d*)\s+errors?\b"), "{0} 個測試錯誤（摘要）"),
 ]
 
 TEST_FAILURE_PATTERNS = [
-    (r"Expected:\s*(.+?)\s*Actual:", "斷言失敗: Expected {0}"),
+    (_p(r"Expected:\s*(.+?)\s*Actual:"), "斷言失敗: Expected {0}"),
     # W1-055: 排除「0 tests failed」/「0 failed」綠燈 summary
     # 用 negative lookbehind 確保前面數字不是 0
-    (r"(?<![\d])([1-9]\d*)\s+tests?\s+failed\b", "{0} 個測試失敗"),
+    (_p(r"(?<![\d])([1-9]\d*)\s+tests?\s+failed\b"), "{0} 個測試失敗"),
     # W1-055: 縮窄 FAILED pattern
     # 舊版 r"FAILED" 會誤命中：
     #   - 「0 failed」「零 failed」綠燈 summary
     #   - 「not failed」「FAILED-CASES」等識別符
     #   - 「Tests: 0 failed」等 jest/vitest 綠燈摘要
     # 縮窄為：行首或非識別符前綴 + FAILED + word boundary，且前後不能是
-    # 「0 」「not 」或 hyphen/底線連字符
-    (r"(?<![\w-])FAILED(?![\w-])(?!\s*[:=]\s*0\b)", "測試失敗"),
-    (r"AssertionError", "斷言錯誤"),
+    # 「0 」「not 」或 hyphen/底線連字符。FAILED 區分大小寫：小寫 failed 常見於
+    # commit 標題等一般文字，小寫摘要由 FAILURE_SUMMARY_PATTERNS 承擔
+    (_p(r"(?<![\w-])FAILED(?![\w-])(?!\s*[:=]\s*0\b)", re.MULTILINE), "測試失敗"),
+    *FAILURE_SUMMARY_PATTERNS,
+    (_p(r"AssertionError"), "斷言錯誤"),
 ]
 
 ANALYZER_WARNING_PATTERNS = [
-    (r"info\s*-.*?unused", "未使用的警告"),
+    (_p(r"info\s*-.*?unused"), "未使用的警告"),
     # eslint stylish formatter 格式：縮排 + row:col + warning + 訊息 + rule-name
     # 例：「  12:34  warning  Unused variable  no-unused-vars」
     # 縮窄理由：W1-059 / W1-048.8 實證舊 regex r"warning\s*-" 誤報 jest console.warn
     # 與含 "warning - ..." 的訊息字串。要求 row:col 起頭 + 結尾 rule name 才屬 lint warning。
-    (r"^\s*\d+:\d+\s+warning\s+.+?\s+@?[a-z][a-z0-9-]*(?:/[a-z0-9-]+)*\s*$", "lint 警告"),
-    (r"deprecated\s+(?:function|class|method)", "已棄用 API"),
+    (_p(r"^\s*\d+:\d+\s+warning\s+.+?\s+@?[a-z][a-z0-9-]*(?:/[a-z0-9-]+)*\s*$"), "lint 警告"),
+    (_p(r"deprecated\s+(?:function|class|method)"), "已棄用 API"),
 ]
 
 TRUNCATED_OUTPUT_PATTERN = re.compile(
@@ -164,14 +169,16 @@ TRUNCATED_OUTPUT_PATTERN = re.compile(
 def _is_test_command(input_data: dict) -> bool:
     """判斷是否為測試命令。
 
-    W3-066: 改用 statement 邊界 + word boundary regex，避免 echo "npm test"
-    等回顯關鍵字的非測試命令誤觸發。
+    判定委派 lib/test_command_parse.py（2026-10-14）：只認敘述開頭的測試指令，
+    引號內字樣（echo、grep pattern、ticket 參數）不算；涵蓋 pytest 與
+    run-with-timeout.py 包裝。
     """
     tool_name = input_data.get("tool_name", "")
 
     if tool_name == "Bash":
         command = (input_data.get("tool_input") or {}).get("command", "")
-        return bool(TEST_COMMAND_PATTERN.search(command))
+        # 解析失敗（None）視為非測試：監控型 hook，漏判只少一次評估
+        return bool(find_test_invocations(command))
     elif tool_name == "mcp__dart__run_tests":
         return True
 
@@ -182,10 +189,57 @@ def _is_test_command(input_data: dict) -> bool:
 # 子邏輯 1: 測試超時監控（來自 test-timeout-post.py）
 # ============================================================================
 
+def _orphan_script(project_dir: Path) -> str:
+    """列出／終止殘留測試程序的腳本絕對路徑（已 shell quote）。"""
+    return shlex.quote(str(project_dir / ".claude" / "scripts" / "orphan-test-procs.py"))
+
+
+def _critical_message(duration_minutes: float, project_dir: Path) -> str:
+    """15 分鐘一級：只指向列出指令，不給未指明範圍的終止建議。"""
+    return (
+        f"嚴重警告：測試執行 {duration_minutes:.1f} 分鐘，可能有卡住問題。\n"
+        "如需檢查殘留測試程序，請先只列出（不會動任何程序）：\n"
+        f"python3 {_orphan_script(project_dir)}"
+    )
+
+
+def _limit_message(duration_minutes: float, project_dir: Path) -> str:
+    """上限警告全文。不終止程序：此時自身測試已返回，終止指令作用於全機，
+    會波及其他 session 與其他專案。兩條指令各佔一行、使用絕對路徑。"""
+    script = _orphan_script(project_dir)
+    limit_minutes = LIMIT_THRESHOLD // 60
+    return (
+        f"[已達上限] 測試執行 {duration_minutes:.1f} 分鐘，超過 {limit_minutes} 分鐘上限。\n"
+        "本 hook 不自動終止程序：終止指令作用於全機，會波及其他 session 與其他專案。\n"
+        "可能殘留孤兒測試程序，請依序執行（第一條只列出，第二條才終止）：\n"
+        f"python3 {script}\n"
+        f"python3 {script} --kill\n"
+        "僅當第一條列出的程序確屬本專案且已不再需要時，才執行第二條。"
+    )
+
+
+def _classify_duration(duration: float, project_dir: Path) -> Tuple[str, str]:
+    """依門檻由高到低回傳 (action, message)；分鐘數由 duration 自算。"""
+    minutes = duration / 60
+    if duration >= LIMIT_THRESHOLD:
+        return "limit_warning", _limit_message(minutes, project_dir)
+    if duration >= CRITICAL_THRESHOLD:
+        return "critical_warning", _critical_message(minutes, project_dir)
+    if duration >= WARNING_THRESHOLD:
+        return "warning", f"警告：測試執行 {minutes:.1f} 分鐘，可能有卡住問題"
+    return "normal", f"測試完成：{minutes:.1f} 分鐘"
+
+
 def check_test_timeout(input_data: dict, tool_input: dict, logger):
     """子邏輯 1: 測試超時監控。回傳訊息或 None。"""
     project_dir = get_project_root()
-    monitor_file = project_dir / ".claude" / "hook-logs" / "test-monitor.json"
+    key = monitor_key(input_data)
+    keyed_file = keyed_monitor_file(project_dir, key) if key else None
+    # 有鍵：pre 必寫鍵檔，鍵檔不存在即無計時可收，不退回舊單檔（其內容可能是過期的）
+    if keyed_file and not keyed_file.exists():
+        logger.debug("timeout: 有鍵但鍵檔不存在，跳過（不退回舊單檔）")
+        return None
+    monitor_file = keyed_file if keyed_file else legacy_monitor_file(project_dir)
 
     if not monitor_file.exists():
         logger.debug("timeout: 監控檔案不存在，跳過")
@@ -198,37 +252,33 @@ def check_test_timeout(input_data: dict, tool_input: dict, logger):
         logger.debug("timeout: 監控檔案無法讀取，跳過")
         return None
 
+    # 無鍵走舊單檔時只採用 running（completed 為上一輪已收尾的內容）
+    if not keyed_file and monitor_data.get("status") != "running":
+        logger.debug("timeout: 舊單檔非 running，跳過")
+        return None
+
     start_timestamp = monitor_data.get("start_timestamp", 0)
     if start_timestamp == 0:
         return None
 
     duration = datetime.now().timestamp() - start_timestamp
-    duration_minutes = duration / 60
-
     monitor_data["end_time"] = datetime.now().isoformat()
     monitor_data["duration_seconds"] = duration
     monitor_data["status"] = "completed"
 
-    message = ""
-    if duration >= AUTO_KILL_THRESHOLD:
-        subprocess.run(["pkill", "-f", "flutter_tester"], capture_output=True,
-        encoding="utf-8",
-        errors="replace")
-        message = f"測試執行 {duration_minutes:.1f} 分鐘，已自動終止 flutter_tester"
-        monitor_data["action"] = "auto_killed"
-    elif duration >= CRITICAL_THRESHOLD:
-        message = f"嚴重警告：測試執行 {duration_minutes:.1f} 分鐘，建議手動終止"
-        monitor_data["action"] = "critical_warning"
-    elif duration >= WARNING_THRESHOLD:
-        message = f"警告：測試執行 {duration_minutes:.1f} 分鐘，可能有卡住問題"
-        monitor_data["action"] = "warning"
-    else:
-        message = f"測試完成：{duration_minutes:.1f} 分鐘"
-        monitor_data["action"] = "normal"
+    action, message = _classify_duration(duration, project_dir)
+    monitor_data["action"] = action
+    is_limit = action == "limit_warning"
+    if is_limit:
+        print(message, file=sys.stderr)
 
     try:
-        with open(monitor_file, "w") as f:
-            json.dump(monitor_data, f, indent=2, ensure_ascii=False)
+        # 鍵檔收尾即刪（歷史由 jsonl 保存）；舊單檔照舊寫回
+        if monitor_file == keyed_file:
+            monitor_file.unlink()
+        else:
+            with open(monitor_file, "w") as f:
+                json.dump(monitor_data, f, indent=2, ensure_ascii=False)
         history_file = project_dir / ".claude" / "hook-logs" / "test-duration-history.jsonl"
         with open(history_file, "a") as f:
             f.write(json.dumps(monitor_data, ensure_ascii=False) + "\n")
@@ -236,7 +286,8 @@ def check_test_timeout(input_data: dict, tool_input: dict, logger):
         print(f"[WARNING] 無法寫入測試監控記錄: {e}", file=sys.stderr)
         logger.warning(f"timeout: 寫入監控檔案失敗: {e}")
 
-    logger.info(f"timeout: {message}")
+    log = logger.warning if is_limit else logger.info
+    log(f"timeout: {message}")
     return message
 
 
@@ -256,13 +307,14 @@ def _classify_errors(output: str, logger) -> Tuple[ErrorType, List[Dict[str, str
     for error_type, patterns in all_pattern_groups:
         errors: List[Dict[str, str]] = []
         for pattern, description in patterns:
-            matches = re.finditer(pattern, output, re.IGNORECASE | re.MULTILINE)
+            matches = pattern.finditer(output)
             for match in matches:
                 desc = description.format(*match.groups()) if "{" in description else description
                 errors.append({
                     "type": error_type.value,
                     "description": desc,
-                    "pattern": pattern,
+                    "pattern": pattern.pattern,
+                    "matched_excerpt": output[max(0, match.start() - 80):match.end() + 80],
                 })
         if errors:
             return error_type, errors
@@ -288,7 +340,20 @@ def _resolve_truncated_output(output_str: str, logger) -> str:
         return output_str
 
 
-def _log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger) -> None:
+def _describe_tool_response(tool_response) -> Dict[str, object]:
+    """描述 tool_response 形態（只記型別與長度，不轉存內容）。"""
+    info: Dict[str, object] = {"tool_response_type": type(tool_response).__name__}
+    if isinstance(tool_response, dict):
+        info["tool_response_keys"] = list(tool_response.keys())
+        info["tool_response_value_lengths"] = {
+            str(k): len(v) if hasattr(v, "__len__") else len(str(v))
+            for k, v in tool_response.items()
+        }
+    return info
+
+
+def _log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger,
+                    tool_response=None, event_name: str = "PostToolUse") -> None:
     """記錄評估結果到日誌。"""
     project_root = get_project_root()
     log_dir = project_root / ".claude" / "hook-logs"
@@ -297,10 +362,12 @@ def _log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger)
     report_file = log_dir / f"pre-fix-evaluation-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
     report = {
         "timestamp": datetime.now().isoformat(),
+        "hook_event_name": event_name,
         "error_type": error_type.value,
         "error_count": len(errors),
         "errors": errors,
         "requires_ticket": "pm_decision",
+        **_describe_tool_response(tool_response),
     }
 
     try:
@@ -350,6 +417,8 @@ GREEN_SUMMARY_PATTERNS = [
     re.compile(r"Tests?:\s+\d+\s+passed,\s+\d+\s+total", re.IGNORECASE),
     # pytest: "===== N passed in X.XXs =====" 或 "N passed, 0 failed"
     re.compile(r"=+\s*\d+\s+passed(?:,\s+\d+\s+\w+)*\s+in\s+[\d.]+s", re.IGNORECASE),
+    # pytest -q: "N passed in X.XXs"（無 = 框線；排除夾帶 failed/error 的摘要）
+    re.compile(r"(?<!\S)\d+\s+passed(?:,\s+\d+\s+(?!failed|error)\w+)*\s+in\s+[\d.]+s", re.IGNORECASE),
     # Mocha: "N passing" without "N failing"
     re.compile(r"^\s*\d+\s+passing\b", re.MULTILINE | re.IGNORECASE),
     # 通用「0 failed」字面（與 passed 同段出現）
@@ -370,6 +439,9 @@ def _is_green_summary(output: str) -> bool:
     - 含 Jest/Vitest/pytest/Mocha 標準綠燈 summary
     - 含「all tests passed」「no issues found」（既有判定，保留相容）
     """
+    if any(pattern.search(output) for pattern, _ in FAILURE_SUMMARY_PATTERNS):
+        return False
+
     lower = output.lower()
     if "all tests passed" in lower or "no issues found" in lower:
         return True
@@ -388,12 +460,34 @@ def evaluate_test_failure(input_data: dict, tool_input: dict, logger):
         logger.debug("evaluation: ticket body 寫入操作，跳過失敗評估（W3-041）")
         return None
 
+    failure_event = is_failure_event(input_data)
     tool_response = input_data.get("tool_response", "")
-    if not tool_response:
+    if failure_event:
+        # PostToolUseFailure 無 tool_response，改讀 error；只信首行 Exit code N
+        parsed = parse_failure_error(input_data.get("error"))
+        if parsed is None:
+            logger.debug("evaluation: PostToolUseFailure 的 error 格式無法解析，fail-open 跳過")
+            return None
+        tool_response = parsed[1]
+        if not tool_response.strip():
+            logger.debug("evaluation: 失敗事件無輸出內容，跳過")
+            return None
+        output_str = tool_response
+    elif not tool_response:
         logger.debug("evaluation: 無 tool_response，跳過")
         return None
 
-    output_str = str(tool_response) if not isinstance(tool_response, str) else tool_response
+    if failure_event:
+        pass
+    elif input_data.get("tool_name") == "Bash" and isinstance(tool_response, dict):
+        # 只評估真實命令輸出；bashEditDiff 等欄位含他人改動檔案的 diff，不可入比對
+        stdout, stderr = tool_response.get("stdout"), tool_response.get("stderr")
+        if stdout is None and stderr is None:
+            logger.debug("evaluation: Bash 回應缺 stdout/stderr，fail-open 跳過")
+            return None
+        output_str = "\n".join(str(v) for v in (stdout, stderr) if v)
+    else:
+        output_str = str(tool_response) if not isinstance(tool_response, str) else tool_response
     output_str = _resolve_truncated_output(output_str, logger)
 
     # W1-055: 強化綠燈識別（Jest/Vitest/pytest/Mocha summary + 0 failed 字面）
@@ -408,7 +502,8 @@ def evaluate_test_failure(input_data: dict, tool_input: dict, logger):
         return None
 
     logger.info(f"evaluation: 偵測到 {len(errors)} 個 {error_type.value} 錯誤")
-    _log_evaluation(error_type, errors, logger)
+    _log_evaluation(error_type, errors, logger, tool_response,
+                    "PostToolUseFailure" if failure_event else "PostToolUse")
 
     if error_type == ErrorType.SYNTAX_ERROR:
         message = f"\n語法錯誤 - 簡化修復流程\n\n錯誤數量: {len(errors)}\n推薦代理人: mint-format-specialist\n\n識別的語法錯誤：\n"
@@ -460,6 +555,12 @@ def main() -> int:
         logger.debug("ticket body 寫入操作，跳過所有後續子邏輯（W3-066 補強）")
         return EXIT_SUCCESS
 
+    # 背景命令：PostToolUse 在啟動回傳時觸發，此刻既無測試時長也無測試結果；
+    # 跳過計時與失敗評估。欄位缺失視為前景。
+    if tool_input.get("run_in_background") is True:
+        logger.debug("run_in_background 為真，跳過計時與失敗評估")
+        return EXIT_SUCCESS
+
     logger.info("偵測到測試命令，開始執行子邏輯")
 
     messages = []
@@ -484,7 +585,8 @@ def main() -> int:
     if messages:
         output = {
             "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
+                "hookEventName": ("PostToolUseFailure" if is_failure_event(input_data)
+                                  else "PostToolUse"),
                 "additionalContext": "\n\n".join(messages)
             }
         }

@@ -148,7 +148,9 @@ class TestMainIntegrationDowngraded:
 
         assert exit_code == 0  # PostToolUse 不 deny
         assert not os.access(target, os.X_OK)  # 降級版不再 chmod
-        assert capsys.readouterr().err == ""  # 降級版不再印 stderr
+        captured = capsys.readouterr()
+        assert captured.err == ""  # 降級版不再印 stderr
+        assert captured.out == ""  # 無提醒可遷移：不輸出 additionalContext
 
     def test_write_new_hook_with_exec_bit_no_action(self, tmp_path, monkeypatch, capsys):
         target = _make_file(tmp_path / ".claude" / "hooks" / "new-hook.py", executable=True)

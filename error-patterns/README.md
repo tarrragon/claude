@@ -166,6 +166,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | TEST-GPD-001 | 同 bundle id 的多份 .app 使系統依 bundle id 啟動錯的那一份，實機觀測被第二實例污染 | 高 | 0.3.1 |
 | TEST-GPD-002 | 契約守衛斷言常數等於其值，而非驗證使用該常數的行為 | 中 | 0.4.0 |
 | TEST-GPD-003 | 以 monkeypatch 替換全域 time.sleep 作假時鐘，被 subprocess 的等待輪詢呼叫而使推進量不固定 | 中 | 0.4.1 |
+| TEST-GPD-004 | 守衛測試以自由文字子字串斷言決策，被輸出中的無關文字滿足而在決策未發生時仍綠 | 中 | 0.5.0 |
 
 ### 文件 (DOC)
 
@@ -387,6 +388,9 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-BAL-020 | 未錨定行首的 code fence 正則讓行內三反引號字面翻轉守衛判定 | 中 | 0.2.1 |
 | IMP-BAL-021 | 查詢型命令暗含歸檔副作用且無持久日誌，加上檔名鍵與查找鍵不一致，讓正常歸檔被誤判為資料遺失 | 中 | 0.2.1 |
 | IMP-GPD-001 | 隔離索引 CAS 的鎖重試字串比對不涵蓋 update-ref 的 ref lock 錯誤 | 高 | 0.1.0 |
+| IMP-GPD-002 | Hook 將 Bash 的 tool_response 整包字串化比對，誤把 bashEditDiff 中他人正在寫的程式碼當成命令輸出 | 高 | 0.5.0 |
+| IMP-GPD-003 | 可重入鎖以環境標記交給子程序辨識，子程序載入另一棵樹的舊版協定碼，等待自己祖先持有的鎖 | 高 | 0.5.0 |
+| IMP-GPD-004 | 提醒類 hook 以 stderr 加 exit 0 輸出，提醒對模型不可見 | 中 | 0.5.0 |
 
 ### 流程 (PROC)
 
@@ -716,6 +720,9 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-GPD-028 | context 壓縮後以工作區空目錄推斷在飛代理人已停擺，接手並污染其共用器材 | 高 | 0.1.0 |
 | PC-GPD-029 | 代理人終止背景測試後憑記憶回報已終止，實際由它啟動的子程序仍在執行 | 中 | 0.4.1 |
 | PC-GPD-030 | 把 linked worktree 當成票務 CLI 的實驗沙盒，寫入命令實際改到主 checkout 的真票 | 高 | 0.4.1 |
+| PC-GPD-031 | 代理人依 harness 的 Bash 改檔許可直接用 Bash 寫檔，自動載入的工具選擇規則未能勝出 | 中 | 0.5.0 |
+| PC-GPD-032 | hook 實地觸發的命令落在提早返回分支，驗證看似通過卻沒有執行到目標邏輯 | 中 | 0.5.0 |
+| PC-GPD-033 | 為減少誤擋而放寬守衛判定，只驗證誤擋已解除，未驗證應擋者仍被擋 | 高 | 0.5.0 |
 
 ---
 

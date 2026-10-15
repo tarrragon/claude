@@ -12,7 +12,7 @@ PostToolUse Hook: ticket-creation-validation-hook.py
 
 觸發條件：
   - Hook 類型: PostToolUse (Write 工具執行後)
-  - 檔案路徑: 符合 docs/work-logs/*/tickets/*.md 模式
+  - 檔案路徑: 符合 docs/work-logs/**/tickets/*.md 模式（版本目錄可為任意層數）
 
 驗證邏輯：
   1. 檢查檔案路徑是否為 Ticket 檔案
@@ -25,7 +25,7 @@ PostToolUse Hook: ticket-creation-validation-hook.py
   - type = "DOC"：文件類型
 
 行為：
-  - 缺少 decision_tree_path 時輸出 WARNING 到 stderr
+  - 缺少 decision_tree_path 時以 additionalContext 輸出 WARNING（模型可見）
   - 始終返回 exit code 0（不阻止操作）
 """
 
@@ -45,28 +45,33 @@ except ImportError:
 _hooks_dir = Path(__file__).resolve().parents[3] / "hooks"
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
+# lib 套件位於 .claude/lib，其父目錄 .claude 須在搜尋路徑
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
 try:
-    from lib import get_effort_level
+    from lib import get_effort_level, emit_model_reminder, setup_hook_logging
 except ImportError:
+    setup_hook_logging = None
+
     def get_effort_level(payload, default="medium"):
         return default
+
+    def emit_model_reminder(event, text, *, audience="all", input_data=None):
+        # lib 不可用時退回 stderr，至少保留用戶可見
+        print(text, file=sys.stderr)
 
 
 # 日誌配置
 def setup_logging() -> logging.Logger:
-    """設置日誌。"""
-    log_dir = Path.home() / ".claude" / "hook-logs" / "ticket-creation-validation"
-    log_dir.mkdir(parents=True, exist_ok=True)
+    """設置日誌，寫入專案 .claude/hook-logs/（lib 統一日誌）。"""
+    if setup_hook_logging is not None:
+        return setup_hook_logging("ticket-creation-validation")
 
+    # lib 不可用的退路：不寫檔，避免回到使用者家目錄
     logger = logging.getLogger("ticket-creation-validation")
-    logger.setLevel(logging.DEBUG)
-
-    handler = logging.FileHandler(log_dir / "hook.log")
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
+    logger.addHandler(logging.NullHandler())
     return logger
 
 
@@ -76,7 +81,8 @@ logger = setup_logging()
 def is_ticket_file(file_path: Path) -> bool:
     """判斷檔案是否為 Ticket 檔案。
 
-    Ticket 檔案路徑模式：docs/work-logs/*/tickets/*.md
+    Ticket 檔案路徑模式：docs/work-logs/<一層或多層版本目錄>/tickets/*.md
+    （單層 v0.5.0 與階層 v0/v0.5/v0.5.0 皆接受；tickets 之後不得再有子目錄）
 
     Args:
         file_path: 檔案路徑
@@ -86,7 +92,7 @@ def is_ticket_file(file_path: Path) -> bool:
     """
     # 轉換為 posix 路徑便於檢查
     path_str = file_path.as_posix()
-    pattern = r"docs/work-logs/[^/]+/tickets/[^/]+\.md$"
+    pattern = r"docs/work-logs/(?:[^/]+/)+tickets/[^/]+\.md$"
     return bool(re.search(pattern, path_str))
 
 
@@ -276,8 +282,11 @@ def main() -> int:
         warning_msg = check_ticket_decision_tree_path(file_path, content)
 
         if warning_msg:
-            # 輸出警告到 stderr
-            print(warning_msg, file=sys.stderr)
+            # 以 additionalContext 讓模型（PM）可見；stderr 模型不可見
+            emit_model_reminder(
+                "PostToolUse", warning_msg,
+                audience="pm_only", input_data=hook_input,
+            )
             logger.info(f"Warning output for: {file_path}")
 
         # 始終返回 0（不阻止操作）

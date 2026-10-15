@@ -7,7 +7,7 @@
 UC Fingerprint Drift Check Hook - PostToolUse Hook
 
 docs/app-use-cases.md 被 Write/Edit 修改後，自動執行 fingerprint check，
-偵測 UC 內容漂移並以 stderr WARNING 提示 PM。
+偵測 UC 內容漂移並以 additionalContext 提示模型。
 
 Hook 類型：PostToolUse
 匹配工具：Edit, Write
@@ -30,6 +30,7 @@ from lib import (  # noqa: E402
     read_json_from_stdin,
     extract_tool_input,
     get_project_root,
+    emit_model_reminder,
 )
 
 
@@ -84,8 +85,8 @@ def main() -> int:
     parts.append("  執行 `doc uc fingerprint update` 更新指紋。")
 
     message = "\n".join(parts)
-    sys.stderr.write(message + "\n")
     logger.info(message)
+    emit_model_reminder("PostToolUse", message, input_data=input_data)
     return 0
 
 

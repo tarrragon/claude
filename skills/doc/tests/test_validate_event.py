@@ -1,7 +1,8 @@
 """validate 子命令對 EVT 型別的測試（0.2.1-W3-1060）。
 
 EVT 是 B 層 proposed 型別：producers/consumers 建立模板時為選填，但
-`doc validate` 對已存在的 EVT 文件強制檢查兩者皆非空——缺一端代表事件的
+`doc validate` 對已存在的 EVT 文件檢查：producers 一律非空，consumers 依
+category 分流（domain_event 必須非空，process_event 允許為空）——缺必填端代表事件的
 發送方或接收方未被記錄，這是本型別的核心價值（見票 why：BackupTracker
 incrementSnapshotCount 有 consumer 無 producer 導致次數門檻永久失效）。
 """
@@ -258,3 +259,41 @@ class TestValidateEventFileResolution:
 
         output = capsys.readouterr().out
         assert "通過" in output
+
+
+class TestValidateEventConsumersByCategory:
+    """consumers 檢查依 category 分流（E1 對照：同一 fixture 只換 category）。"""
+
+    _BASE = 'name: "步驟標記"\ncanonical_name: "Library.Step.Marked"\n'
+
+    def _run(self, tmp_path, capsys, doc_id, category, extra):
+        events_dir = tmp_path / "docs" / "events" / "library"
+        _write_event(events_dir, doc_id, f"{self._BASE}category: {category}\n{extra}")
+        code = None
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            try:
+                execute(argparse.Namespace(doc_id=doc_id))
+            except SystemExit as e:
+                code = e.code
+        return code, capsys.readouterr().out
+
+    def test_empty_consumers_differs_by_category(self, tmp_path, capsys):
+        extra = "producers: [CheckoutService]\nconsumers: []"
+        d_code, d_out = self._run(tmp_path, capsys, "EVT-LIBRARY-020", "domain_event", extra)
+        p_code, p_out = self._run(tmp_path, capsys, "EVT-LIBRARY-021", "process_event", extra)
+        assert d_code == 1 and "consumer" in d_out
+        assert p_code == 0 and "通過" in p_out
+
+    def test_missing_consumers_key_differs_by_category(self, tmp_path, capsys):
+        extra = "producers: [CheckoutService]"
+        d_code, _ = self._run(tmp_path, capsys, "EVT-LIBRARY-022", "domain_event", extra)
+        p_code, _ = self._run(tmp_path, capsys, "EVT-LIBRARY-023", "process_event", extra)
+        assert d_code == 1
+        assert p_code == 0
+
+    def test_process_event_empty_producers_still_fails(self, tmp_path, capsys):
+        code, out = self._run(
+            tmp_path, capsys, "EVT-LIBRARY-024", "process_event", "producers: []\nconsumers: []"
+        )
+        assert code == 1
+        assert "producer" in out.lower()

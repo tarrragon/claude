@@ -17,12 +17,12 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 | 四：CLI backtick 不用雙引號 | 雙引號內 backtick 被當 command substitution。改用 heredoc `cmd "$(cat <<'EOF'...EOF)"`、單引號包整參數、或 Edit 直改 ticket md。看到來源不明 `command not found` / `ModuleNotFoundError` 優先查 backtick | PC-079 |
 | 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 |
 | 六：長背景任務即時可觀察 | 需即時觀察用 `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`（告知 `tail -f`）；只需最終結果保留規則二 `\| tail`。雙層緩衝（fully-buffered + `\| tail` 等 EOF）使輸出檔全程 0 行 | 背景任務緩衝 spike 實驗 |
-| 七：禁 pathspec / `--only` / `-o` 提交丟棄 index，禁廣域 staging 收尾合併 | `git commit -- <path>` 與 `--only`（`-o`）語意相同：皆以 HEAD 建臨時 index、填入指定路徑的 **working tree 內容**、據此 commit，等同丟棄既有 index，會吸入該路徑上他人未 stage 的編輯；`--include`（`-i`）不丟棄 index，但把指定路徑併入現有 index 一併提交，會連同 index 中他人已 staged 的檔案一起送出。並行環境（共用 working tree）三者皆禁用。正確替代：`git add <exact-path>` 精確 stage → `git diff --cached --name-only` 確認 index 只含目標檔 → 裸 `git commit`（不帶 pathspec、不帶 `--only`/`-o`/`-a`）。**衝突合併的收尾提交同受本規則管轄**：`git merge` 產生衝突後以 `git add -A` / `git add .` / `git commit -a` 完成該合併，會把工作區內與本次合併無關的未暫存編輯一併寫進 merge commit；正確替代同上——精確 `git add <衝突檔>` → 核對 index → 裸 `git commit` | 並行 session 誤吸實測案例（以 `git apply --cached` 正確暫存後改用 pathspec 提交，誤吸另一並行 session 尚未 stage 的編輯，事後以回滾 commit 精準還原） |
+| 七：禁 pathspec / `--only` / `-o` 提交丟棄 index，禁廣域 staging 收尾合併 | `git commit -- <path>` 與 `--only`（`-o`）語意相同：皆以 HEAD 建臨時 index、填入指定路徑的 **working tree 內容**、據此 commit，等同丟棄既有 index，會吸入該路徑上他人未 stage 的編輯；`--include`（`-i`）不丟棄 index，但把指定路徑併入現有 index 一併提交，會連同 index 中他人已 staged 的檔案一起送出。並行環境（共用 working tree）三者皆禁用。正確替代：`git add <exact-path>` 精確 stage → `git diff --cached --name-only` 確認 index 只含目標檔 → 裸 `git commit`（不帶 pathspec、不帶 `--only`/`-o`/`-a`）。**衝突合併的收尾提交同受本規則管轄**：`git merge` 產生衝突後以 `git add -A` / `git add .` / `git commit -a` 完成該合併，會把工作區內與本次合併無關的未暫存編輯一併寫進 merge commit；正確收尾：精確 `git add <衝突檔>` → `git diff --cached --name-only` 核對 index → `GIT_EDITOR=true git merge --continue`（存在 MERGE_HEAD 時 `bare-commit-guard-hook.py` 拒絕裸 `git commit`；`merge --continue` 不接受 `-m`／`--no-edit`，自訂訊息先寫入 `$(git rev-parse --git-path MERGE_MSG)`）。**cherry-pick、revert、rebase 進行中同理**：存在 CHERRY_PICK_HEAD、REVERT_HEAD，或 rebase 在衝突處停下時，守衛同樣拒絕裸 `git commit`，收尾分別用 `GIT_EDITOR=true git cherry-pick --continue`、`revert --continue`、`rebase --continue`；`rebase -i` 在 edit 停下時新增 commit 屬正常用法，守衛只提醒。非自己發起的進行中操作，停手回報，不代為收尾或放棄（機制見 details.md「進行中操作的裸 commit 收尾」）。**禁兩段式合併**：共用 checkout 的合併一步完成，不以 `git merge --no-commit` 開頭後把未收尾的合併留給另一個 session；合併報 `Unable to write index` 視為狀態不一致警報，不直接 commit 完成、不直接重跑合併，處置見 `PC-169`、`IMP-V1-005`。機制與檢查步驟見 details.md「兩段式合併禁令（MERGE_HEAD 空窗）」 | 並行 session 誤吸實測案例（以 `git apply --cached` 正確暫存後改用 pathspec 提交，誤吸另一並行 session 尚未 stage 的編輯，事後以回滾 commit 精準還原） |
 | 八：CJK 聚合統計加 LC_ALL=C | `sort`/`uniq`（含 `comm`/`join`）依目前 locale collation 比較，非位元組序；系統預設 locale（僅 `LANG` 未設 `LC_ALL`/`LC_COLLATE`）下會把位元組相異的中文字串判為相等並合併計數，且無警告、總數仍守恆，唯獨分組錯誤、標籤取自被合併一方。管線各命令前加 `LC_ALL=C`，或改用 `grep -cF` 逐一 byte-exact 計數；關鍵統計結果寫入交接文件前應交叉驗證 | IMP-BAL-013（最小重現與案例見 references 詳細版） |
 
 > **chpwd 與即時協議**：裸 cd 觸發 zsh chpwd hook 的 ls 淹沒工具結果。輸出可疑/被淹沒當下依四步即時協議——停手 → 重發乾淨原子命令（`git -C`／子 shell）→ 只信 raw stdout → 固定值（hash／二元 grep／整數計數）驗證。論證見 details.md 規則一詳細 + `tool-output-trust-rules` 規則 1-4。
 
-> **規則七與代理人票務提交的預設關係**：手動／無票務 CLI 之高衝突路徑仍用規則七三步或隔離索引 CAS（並列加強選項，`GIT_INDEX_FILE` 全程不觸碰共用 index，已驗證實作見 `ticket-md-auto-commit-hook.py`）；**代理人票務提交改以 `ticket track commit`（隔離索引）為預設**，規則七三步降為其 fallback（僅該命令失敗或不可用時用）。配方、適用條件與分工見 details.md「規則七詳細」。
+> **規則七與代理人票務提交的預設關係**：手動／無票務 CLI 之高衝突路徑仍用規則七三步或隔離索引 CAS（並列加強選項，`GIT_INDEX_FILE` 全程不觸碰共用 index，已驗證實作見 `ticket-md-auto-commit-hook.py`）；**代理人票務提交改以 `ticket track commit`（隔離索引）為預設**，規則七三步降為其 fallback（僅該命令環境性失敗且重跑仍失敗，或不可用時用；範圍判準拒絕不得走 fallback，見 `ticket` skill 的 track-command.md〈Fallback 條件〉）。配方、適用條件與分工見 details.md「規則七詳細」。
 
 > **規則七核對步驟的粒度邊界（檔案內夾帶）**：`git diff --cached --name-only` 只列檔名，核對粒度為檔案層級——`git add` 的最小單位即整個檔案，目標檔本身已含他人未 stage 的編輯時，該編輯隨精確 add 一併進入 index，核對必然通過，對此無鑑別力（機制與 PC-BAL-008「變體：檔案級共用」同源）。**不改變規則七既有禁止事項**，pathspec / `--only` / `-o` / `-i` 仍全數禁用。append-only 共用檔（如 `docs/work-logs/topic-assignments.txt`，每次 `ticket create` 皆追加一行，屬結構性熱點）建議：`git add --patch` 逐 hunk 挑選，或約定由單一方負責提交該檔。完整機制見 details.md「規則七詳細」。
 
@@ -50,7 +50,9 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] 輸出可疑/被淹沒？→ 停手重發乾淨原子命令，只信 raw stdout（規則一即時協議）
 - [ ] 準備 `git commit -- <path>` / `--only` / `-o` / `-i`？→ 改精確 `git add <exact-path>` + `git diff --cached --name-only` 核對 index 範圍 + 裸 `git commit`（規則七）
 - [ ] 目標檔是 append-only 共用檔（如 `topic-assignments.txt`）且他人可能有未 stage 的行？→ 核對只驗檔名無法鑑別檔內夾帶，改用 `git add --patch` 挑 hunk 或約定單一方提交（規則七邊界）
-- [ ] `git merge` 產生衝突，準備以 `git add -A` / `git add .` / `git commit -a` 收尾？→ 廣域 staging 會把工作區內與本次合併無關的未暫存編輯寫進 merge commit，改精確 `git add <衝突檔>` + 核對 index + 裸 `git commit`（規則七）
+- [ ] `git merge` 產生衝突，準備以 `git add -A` / `git add .` / `git commit -a` 收尾？→ 廣域 staging 會把工作區內與本次合併無關的未暫存編輯寫進 merge commit，改精確 `git add <衝突檔>` + 核對 index + `GIT_EDITOR=true git merge --continue`（規則七）
+- [ ] 裸 `git commit` 被拒，訊息指出 cherry-pick、revert 或 rebase 進行中？→ 自己發起的改用對應的 `GIT_EDITOR=true git <操作> --continue`；非自己發起的停手回報，不收尾也不 `--abort`（規則七）
+- [ ] 準備 `git merge --no-commit`，或把未收尾的合併留給另一個 session？→ 合併一步完成；同一 session 解完衝突並以 `git merge --continue` 收尾屬合法，不用裸 `git commit`；合併報 `Unable to write index` 不直接 commit 或重跑，依 `PC-169`、`IMP-V1-005` 處置（規則七）
 - [ ] `git add` 與裸 commit 之間 HEAD 可能已被他方前進（並行環境常態）？→ 核對只驗檔名無法鑑別 index entry 過期，commit 前比對 `git show :<path>` 與 `git show HEAD:<path>`，判定過期則 `git restore --staged <path>` 後重新 add（規則七邊界）
 - [ ] 準備以 `sort` / `uniq` / `comm` / `join` 聚合中文（CJK）字串做統計？→ 管線各命令前加 `LC_ALL=C`，或改用 `grep -cF` byte-exact 計數；結果將寫入交接文件前交叉驗證（規則八）
 
@@ -59,7 +61,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 ## 相關文件
 
 - `.claude/references/bash-tool-usage-details.md` — 各規則速查表、根因圖解、Why/Consequence、即時協議論證、規則六調和、規則七過期快照最小重現、規則八最小重現
-- `.claude/hooks/bare-commit-guard-hook.py` — 規則七的 hook 強制層（防護標的為範圍過寬；過期快照屬範圍正確而內容過舊，不在其涵蓋內）
+- `.claude/hooks/bare-commit-guard-hook.py` — 規則七的 hook 強制層（防護標的為範圍過寬；MERGE_HEAD、CHERRY_PICK_HEAD、REVERT_HEAD 存在或 rebase 在衝突處停下時拒絕裸 commit；過期快照屬範圍正確而內容過舊，不在其涵蓋內）
 - `.claude/rules/core/tool-output-trust-rules.md` — confabulation 防護（規則一即時協議）
 - `.claude/references/quality-python.md` — Python 執行規則
 - `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`、`IMP-046-git-index-lock-race-condition.md`、`IMP-BAL-013-locale-sort-uniq-merges-distinct-cjk-strings.md`
@@ -68,6 +70,8 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
+**Last Updated**: 2026-10-14 | **Version**: 3.14.0 — 規則七把「進行中操作的裸 commit」擴及 cherry-pick、revert、rebase：存在 CHERRY_PICK_HEAD、REVERT_HEAD 或 rebase 衝突停下時守衛拒絕裸 commit，收尾改用對應的 `--continue`；`rebase -i` 的 edit 停下只提醒。統一檢查清單新增一列，相關文件的守衛描述同步。機制與實測見 details.md「進行中操作的裸 commit 收尾」。
+**Last Updated**: 2026-10-12 | **Version**: 3.13.0 — 規則七衝突合併收尾改為 `GIT_EDITOR=true git merge --continue`（對齊守衛：MERGE_HEAD 存在時拒絕裸 commit），新增兩段式合併禁令（共用 checkout 合併一步完成、不留跨呼叫 MERGE_HEAD）；統一檢查清單同步改列並新增一列；`Unable to write index` 處置路由 `PC-169`／`IMP-V1-005`，守衛具名 `bare-commit-guard-hook.py`。機制見 details.md。
 **Last Updated**: 2026-10-07 | **Version**: 3.12.1 — 規則一速查表與統一檢查清單的 uv 旗標由不存在的 `-d` 短旗標改為 `--directory`（uv 0.8.13 實測 `unexpected argument '-d' found`，詳 details.md 規則一）。
 **Last Updated**: 2026-09-09 | **Version**: 3.12.0 — 統一檢查清單的過濾方向條目**拆為唯讀與寫入兩列**（淨增一列）：既有條目射程收窄為「唯讀查驗」，另立一列給寫入類 CLI——判成敗讀 exit code（`out=$(...); rc=$?`），不讀輸出外觀。拆分而非併排的理由：既有條目開的藥是輸出形狀（改截法），要求讀者在當下判斷「這次輸出是什麼結構」，判斷留在迴路內就會偶爾失敗；同一命令同一機制已四次發生，其中一次在該條目已位於執行者自動載入 context 的情況下仍失敗，第四條「記得換個方式看輸出」擋不住第五次。`rc` 是整數固定值，把讀者的判斷整個移出迴路。完整論證、實測重現與 `tool-output-trust` 規則 3 寫入側缺口見 details.md「事實修正」與「Action 第 0 項」兩節。速查表未動。
 **Last Updated**: 2026-09-08 | **Version**: 3.11.0 — 規則七「版本邊界（過期 index 快照）」邊界段補一句交叉引用：隔離索引 CAS 路徑不僅有同型風險、且會主動製造它（CAS 推進 HEAD 後，共用 index 中重疊的既有 entry 全部過期）；防線分別是配方步驟內的基準釘選（`$OLD_HEAD` 變數，禁用 `HEAD` 符號）與配方收尾的過期 entry 清理，完整條文見 details.md「隔離索引 CAS 的時間維度要件」。

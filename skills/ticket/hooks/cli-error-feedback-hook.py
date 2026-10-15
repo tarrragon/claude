@@ -23,16 +23,6 @@ Envelope 偵測模式 (W17-008.5.5；補移植於 0.0.1-W1-005):
 - 升級至 v2 時兩處須同改
 
 行為: 不阻擋（exit 0），僅在 additionalContext 輸出提醒訊息
-
-HOOK_METADATA (JSON):
-{
-  "event_type": "PostToolUse",
-  "matcher": "Bash",
-  "timeout": 5000,
-  "description": "CLI 錯誤偵測與回饋（合併 cli-failure-help-reminder + skill-cli-error-feedback）",
-  "dependencies": [],
-  "version": "1.0.0"
-}
 """
 
 import sys
@@ -47,6 +37,13 @@ sys.path.insert(0, _FRAMEWORK_HOOKS)
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, is_subagent_environment
 from lib.hook_messages import WorkflowMessages
+from lib.bash_tool_response import is_bash_success, is_failure_event, parse_failure_error
+from lib.ticket_command_parse import is_invocation_masked
+from lib.git_command_parse import parse_command_statements
+from lib.test_command_parse import find_test_invocations, _strip_launch_prefixes
+
+# ticket CLI 錯誤輸出的固定 stdout 行首前綴
+STDOUT_ERROR_PREFIX = "[Error]"
 
 # ============================================================================
 # 常數定義
@@ -135,17 +132,14 @@ SKILL_CLI_ERROR_FEEDBACK_TEMPLATE = """
 # --- General CLI Failure 常數（來自 cli-failure-help-reminder-hook） ---
 
 # 已由其他 Hook 處理的命令模式（避免重複提醒）
+# 測試類（flutter test／dart test／pytest／uv run pytest 等）由共用測試命令判定處理；
+# 以下為共用判定不涵蓋的項目，剝除啟動前綴後依敘述開頭 token 序列比對
 HANDLED_BY_OTHER_HOOKS = [
-    "flutter test",
-    "dart test",
-    "dart analyze",
-    "go test",
-    "go vet",
-    "pytest",
-    "uv run pytest",
-    "ticket ",
-    "skill ",
-    "uv run ticket",
+    ("dart", "analyze"),
+    ("go", "test"),
+    ("go", "vet"),
+    ("ticket",),
+    ("skill",),
 ]
 
 # 預期可能有 stderr 輸出但非真正失敗的命令
@@ -175,7 +169,8 @@ GIT_INFO_STDERR_PATTERNS = [
 # ============================================================================
 
 # ticket CLI 寫入命令「動作已完成、僅 auto-commit 失敗」的專用退出碼（sysexits EX_TEMPFAIL）
-EXIT_AUTO_COMMIT_FAILED = 75
+# ticket CLI 寫入命令的成功回音（messages.py 以 [OK] 起頭）
+_CLI_SUCCESS_MARKERS = ("[OK]",)
 
 def _find_skill_cli_token(command: str) -> Optional[str]:
     """在複合命令（含 && / ; / | 等鏈式運算子）中尋找觸發 ticket/skill CLI 的片段，
@@ -232,7 +227,51 @@ def detect_skill_error_type(stderr: str, stdout: str) -> Optional[str]:
     return None
 
 
-def extract_command_summary(command: str) -> Tuple[str, str]:
+AMBIGUOUS_STATEMENT_SUMMARY = "（多陳述命令，無法判定出錯的陳述）"
+
+
+def _skill_cli_segments(command: str) -> list:
+    """複合命令中屬 ticket/skill CLI 的片段（已去 `(` 前綴與空白）。"""
+    found = []
+    for segment in re.split(r'[|&;]+', command):
+        segment = segment.strip().lstrip('(').strip()
+        tokens = segment.split()
+        if not tokens:
+            continue
+        first = tokens[0][1:] if tokens[0].startswith("/") else tokens[0]
+        if first in SKILL_CLI_COMMANDS:
+            found.append(segment)
+    return found
+
+
+def _segment_verb(segment: str) -> Optional[str]:
+    """片段的子命令動詞（`ticket track <verb>` 取 verb，否則取第二個 token）。"""
+    tokens = segment.split()
+    if len(tokens) >= 3 and tokens[1] == "track":
+        return tokens[2]
+    return tokens[1] if len(tokens) >= 2 else None
+
+
+def locate_failing_statement(command: str, output: str) -> Optional[str]:
+    """多陳述命令中，從錯誤輸出歸因實際出錯的 ticket/skill CLI 陳述。
+
+    原缺陷：摘要一律取命令開頭，`ticket track set-who ... > /dev/null 2>&1;
+    ticket track check-acceptance <id> 2 3` 出錯的是第二個陳述，卻標成 set-who。
+    argparse 錯誤輸出帶出錯陳述的子命令名稱（usage / error 行），故以輸出中是否
+    出現該動詞（完整字詞）歸因；恰好一個陳述命中才指名，其餘回傳 None（不指名）。
+    """
+    segments = _skill_cli_segments(command)
+    if len(segments) == 1:
+        return segments[0]
+    hits = []
+    for segment in segments:
+        verb = _segment_verb(segment)
+        if verb and re.search(r'(?<![\w-])' + re.escape(verb) + r'(?![\w-])', output):
+            hits.append(segment)
+    return hits[0] if len(hits) == 1 else None
+
+
+def extract_command_summary(command: str, output: str = "") -> Tuple[str, str]:
     """提取命令摘要和基本命令
 
     `command_base` 優先取複合命令（含 `&&` / `;` / `|` 等鏈式運算子）中實際
@@ -243,8 +282,19 @@ def extract_command_summary(command: str) -> Tuple[str, str]:
     2>/dev/null; ticket track set-where ...` 這類複合命令會誤取 `cd`，使
     後續 `{command_base} --help` 建議變成無意義的 `cd --help`（`cd` 是
     shell builtin，無 `--help`）。
+
+    多個 ticket/skill CLI 陳述時（286.3）：摘要與 command_base 指向 output 歸因
+    出的出錯陳述；無法歸因時摘要標示無法判定，不指名任何陳述。
     """
     command_summary = command[:80] if len(command) > 80 else command
+
+    if len(_skill_cli_segments(command)) > 1:
+        failing = locate_failing_statement(command, output)
+        if failing is None:
+            command_summary = AMBIGUOUS_STATEMENT_SUMMARY
+        else:
+            command_summary = failing[:80]
+            command = failing
 
     command_base = _find_skill_cli_token(command)
     if command_base is None:
@@ -254,6 +304,15 @@ def extract_command_summary(command: str) -> Tuple[str, str]:
             command_base = command_base[1:]
 
     return command_summary, command_base
+
+
+def _failure_event_output(input_data: Dict[str, Any]) -> Optional[str]:
+    """PostToolUseFailure 事件的失敗輸出（error 首行 Exit code N 之後的交錯 stdout/stderr）。
+
+    error 格式無法解析時回傳 None，呼叫端 fail-open 跳過。
+    """
+    parsed = parse_failure_error(input_data.get("error"))
+    return None if parsed is None else parsed[1]
 
 
 def check_skill_cli_error(input_data: Dict[str, Any], logger) -> Optional[str]:
@@ -270,20 +329,37 @@ def check_skill_cli_error(input_data: Dict[str, Any], logger) -> Optional[str]:
         logger.debug("skill-cli: 跳過，非 ticket/skill CLI 命令")
         return None
 
+    failure_event = is_failure_event(input_data)
     tool_response = input_data.get("tool_response") or {}
-    if isinstance(tool_response, str):
+    if failure_event:
+        failure_output = _failure_event_output(input_data)
+        if failure_output is None:
+            logger.debug("skill-cli: PostToolUseFailure 的 error 格式無法解析，fail-open 跳過")
+            return None
+        stderr, stdout = "", failure_output
+    elif isinstance(tool_response, str):
         stderr = ""
         stdout = tool_response
-    else:
+    elif isinstance(tool_response, dict):
         stderr = tool_response.get("stderr", "")
         stdout = tool_response.get("stdout", "")
+    else:
+        logger.debug("skill-cli: tool_response 形狀異常，跳過")
+        return None
 
-    # exit_code=0 表示命令成功
-    if isinstance(tool_response, dict):
-        exit_code = tool_response.get("exit_code")
-        if exit_code in (0, EXIT_AUTO_COMMIT_FAILED):
-            logger.debug("skill-cli: 命令成功（exit_code=0），跳過")
-            return None
+    # 失敗事件已確定為失敗，不做成功回音判定
+    # 成功判定改接共用 helper：真實 payload 無 exit_code，且 PostToolUse 只在 shell 層
+    # 結束碼為 0 時觸發（失敗走 PostToolUseFailure，本專案未註冊）。結束碼 75 屬非零，
+    # 在 PostToolUse 上不會出現，原 75 分支已移除。命令成功回音存在即跳過，避免成功命令
+    # 的 stdout 引述錯誤字樣（如讀取內含 usage 錯誤文字的 ticket）被誤報。
+    # 分層判定（286.3）：本 hook 是反向判定（非成功才給回饋），只接第 1 層——未遮蔽的命令
+    # 收到 PostToolUse 即蘊含成功（argparse 錯誤結束碼非 0，走 PostToolUseFailure），
+    # 不論 stdout 是否有 [OK]；被遮蔽時退回成功回音標記，維持原行為。
+    if not failure_event and is_bash_success(
+        tool_response, _CLI_SUCCESS_MARKERS, command=command
+    ):
+        logger.debug("skill-cli: 命令成功（含成功回音），跳過")
+        return None
 
     if not stderr and not stdout:
         logger.debug("skill-cli: 無錯誤資訊，跳過")
@@ -306,7 +382,7 @@ def check_skill_cli_error(input_data: Dict[str, Any], logger) -> Optional[str]:
     logger.info("skill-cli: 偵測到 SKILL 引導缺陷錯誤: %s", error_type)
     logger.info("skill-cli: 失敗命令: %s", command[:120])
 
-    command_summary, command_base = extract_command_summary(command)
+    command_summary, command_base = extract_command_summary(command, stderr + "\n" + stdout)
     return SKILL_CLI_ERROR_FEEDBACK_TEMPLATE.format(
         error_type=error_type,
         command_summary=command_summary,
@@ -318,12 +394,35 @@ def check_skill_cli_error(input_data: Dict[str, Any], logger) -> Optional[str]:
 # General CLI Failure 子邏輯（來自 cli-failure-help-reminder-hook）
 # ============================================================================
 
-def is_handled_by_other_hooks(command: str) -> bool:
-    """判斷命令是否已由其他 Hook 處理"""
-    for pattern in HANDLED_BY_OTHER_HOOKS:
-        if pattern in command:
+def _statement_starts_with(tokens, prefix) -> bool:
+    if len(tokens) < len(prefix):
+        return False
+    return [Path(tokens[0]).name] + list(tokens[1:len(prefix)]) == list(prefix)
+
+
+def _is_non_test_handled(command: str) -> bool:
+    statements = parse_command_statements(command)
+    for statement in statements or []:
+        stripped = _strip_launch_prefixes(statement)
+        if any(_statement_starts_with(stripped, p) for p in HANDLED_BY_OTHER_HOOKS):
             return True
     return False
+
+
+def is_handled_by_other_hooks(command: str, logger=None) -> bool:
+    """判斷命令是否已由其他 Hook 處理。
+
+    測試類走共用測試命令判定；其餘依敘述開頭比對（前綴處理與共用判定同一函式）。
+    無法解析或判定拋例外一律回 False（寧可多提醒、不漏提醒）。
+    """
+    try:
+        if find_test_invocations(command):
+            return True
+        return _is_non_test_handled(command)
+    except Exception as e:
+        if logger is not None:
+            logger.error("general-cli: 已處理判定例外，不抑制提醒: %s", e, exc_info=True)
+        return False
 
 
 def is_expected_stderr(command: str, stderr: str) -> bool:
@@ -338,6 +437,45 @@ def is_expected_stderr(command: str, stderr: str) -> bool:
     return False
 
 
+def _masked_stdout_error(command: str, tool_response: Any, logger) -> Optional[str]:
+    """遮蔽路徑上 stdout 的 [Error] 失敗訊息；非遮蔽、無法判斷或未命中回傳 None。
+
+    比對規則：stdout 任一行 lstrip 後以 STDOUT_ERROR_PREFIX（`[Error]`）開頭才算。
+    ticket CLI 的錯誤固定寫在 stdout 且以該前綴起頭；成功命令輸出中途夾帶
+    `[Error]` 字樣（非行首）不命中。
+    僅在 is_invocation_masked(command) 為 True 時檢查：未遮蔽而收到 PostToolUse
+    的命令結束碼為 0，不以 stdout 判失敗；None（無法解析）fail-open 視為不命中。
+    """
+    if not isinstance(tool_response, dict):
+        return None
+    stdout = tool_response.get("stdout", "")
+    if not isinstance(stdout, str) or STDOUT_ERROR_PREFIX not in stdout:
+        return None
+    try:
+        masked = is_invocation_masked(command)
+    except Exception as e:
+        logger.error("general-cli: 遮蔽判斷例外，fail-open: %s", e, exc_info=True)
+        return None
+    if masked is not True:
+        return None
+    for line in stdout.splitlines():
+        if line.lstrip().startswith(STDOUT_ERROR_PREFIX):
+            logger.info("general-cli: 遮蔽路徑 stdout 偵測到 %s 前綴", STDOUT_ERROR_PREFIX)
+            return line.strip()
+    return None
+
+
+def _stdout_error_reminder(command: str, stdout_error: str, logger) -> Optional[str]:
+    """遮蔽路徑 stdout [Error] 的提醒；ticket/skill 前綴不套用「已由其他 Hook 處理」排除
+    （skill 分支只認參數類錯誤，業務錯誤無人處理），其餘 handled 命令仍排除。"""
+    if is_handled_by_other_hooks(command, logger) and not is_skill_cli_command(command):
+        logger.debug("general-cli: 已由其他 Hook 處理: %s", command[:80])
+        return None
+    logger.info("general-cli: 遮蔽失敗（stdout %s），輸出 PC-005 調查步驟提醒", STDOUT_ERROR_PREFIX)
+    logger.info("general-cli: 失敗命令: %s", command[:120])
+    return WorkflowMessages.CLI_FAILURE_HELP_REMINDER
+
+
 def check_general_cli_failure(input_data: Dict[str, Any], logger) -> Optional[str]:
     """
     檢查一般 CLI 失敗（來自 cli-failure-help-reminder-hook）
@@ -348,17 +486,28 @@ def check_general_cli_failure(input_data: Dict[str, Any], logger) -> Optional[st
     tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
 
-    tool_response = input_data.get("tool_response") or {}
-    if isinstance(tool_response, str):
-        stderr = ""
+    if is_failure_event(input_data):
+        # 失敗事件的 error 為交錯輸出，整段視為 stderr 並接既有分流
+        failure_output = _failure_event_output(input_data)
+        if failure_output is None:
+            logger.debug("general-cli: PostToolUseFailure 的 error 格式無法解析，fail-open 跳過")
+            return None
+        stderr = failure_output
     else:
-        stderr = tool_response.get("stderr", "")
+        # PostToolUse 的 tool_response.stderr 實測恆為空（stderr 併入 stdout），
+        # 不以其判斷；此事件僅剩遮蔽路徑的 stdout 行首 [Error] 一條偵測。
+        tool_response = input_data.get("tool_response") or {}
+        stdout_error = _masked_stdout_error(command, tool_response, logger)
+        if stdout_error:
+            return _stdout_error_reminder(command, stdout_error, logger)
+        logger.debug("general-cli: PostToolUse 無遮蔽失敗訊號，命令成功，跳過")
+        return None
 
     if not stderr or not stderr.strip():
         logger.debug("general-cli: 無 stderr，命令成功，跳過")
         return None
 
-    if is_handled_by_other_hooks(command):
+    if is_handled_by_other_hooks(command, logger):
         logger.debug("general-cli: 已由其他 Hook 處理: %s", command[:80])
         return None
 
@@ -430,7 +579,8 @@ def main() -> int:
     if additional_context:
         output = {
             "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
+                "hookEventName": ("PostToolUseFailure" if is_failure_event(input_data)
+                                  else "PostToolUse"),
                 "additionalContext": additional_context
             }
         }

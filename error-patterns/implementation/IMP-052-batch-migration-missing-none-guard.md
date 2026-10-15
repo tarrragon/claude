@@ -20,7 +20,7 @@ first_seen: 2026-04-07
 
 4 個受影響的 Hook：
 - `worktree-merge-reminder-hook.py`
-- `cli-failure-help-reminder-hook.py`
+- `cli-failure-help-reminder-hook.py`（歷史名稱；已併入 `.claude/skills/ticket/hooks/cli-error-feedback-hook.py`，原檔移除）
 - `skill-cli-error-feedback-hook.py`
 - `session-context-guard-hook.py`
 

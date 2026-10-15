@@ -578,3 +578,21 @@ class TestCompleteWorklogLineLevelCommit:
         progress = [i for i, ln in enumerate(head) if f"{_PARENT} 完成" in ln]
         assert len(progress) == 1
         assert head.index("- x") < progress[0] < head.index("---"), head
+
+
+@pytest.mark.parametrize(
+    "heading,expected",
+    [
+        ("### 自檢結果與 Phase 4 評估", True),
+        ("### 自檢結果 (補充)", True),
+        ("### 自檢結果", True),
+        ("### 自檢結果摘要", False),
+    ],
+)
+def test_self_check_gate_heading_variants(heading, expected):
+    """gate 判定回傳值：「與」後綴合格，「摘要」仍判缺。"""
+    from ticket_system.lib.ticket_validator import validate_self_check_subsection
+
+    body = f"## Solution\n\nsol\n\n{heading}\n\n- [x] ok\n\n## Test Results\n"
+    passed, _label = validate_self_check_subsection("IMP", body)
+    assert passed is expected

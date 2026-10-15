@@ -403,7 +403,8 @@ def get_unmerged_worktrees(
                 commits = [l for l in log_result.stdout.strip().splitlines() if l]
                 if commits:
                     unmerged.append(WorktreeItems(wt_path, branch, commits))
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.warning("git log main..%s 失敗，略過該分支: cwd=%s, %s: %s", branch, project_root, type(e).__name__, e)
             continue
 
     return unmerged
@@ -449,7 +450,8 @@ def get_unmerged_feature_branches(
         )
         if result.returncode != 0:
             return []
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning("git branch 失敗，回傳空清單: cwd=%s, %s: %s", project_root, type(e).__name__, e)
         return []
 
     unmerged = []
@@ -474,7 +476,8 @@ def get_unmerged_feature_branches(
                 commits = [line for line in log_result.stdout.strip().splitlines() if line]
                 if commits:
                     unmerged.append((branch, commits))
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.warning("git log main..%s 失敗，略過該分支: cwd=%s, %s: %s", branch, project_root, type(e).__name__, e)
             continue
 
     return unmerged
@@ -742,11 +745,23 @@ def _lookup_agent_info(project_root, agent_id, logger):
             if d.get("agent_id") == agent_id:
                 desc = d.get("agent_description", "unknown")
                 uses_wt = bool(d.get("branch_name"))
+                _log_lookup_result(logger, agent_id, True, project_root)
                 return desc, uses_wt
     except Exception as e:
         logger.debug("dispatch-active.json lookup failed: %s", e)
 
+    _log_lookup_result(logger, agent_id, False, project_root)
     return "unknown", False
+
+
+def _log_lookup_result(logger, agent_id, hit, project_root) -> None:
+    """判定日誌行：agent_id、dispatch 查詢是否命中、本次讀取的狀態根路徑。"""
+    logger.debug(
+        "dispatch lookup: agent_id=%s hit=%s state_root=%s",
+        agent_id,
+        hit,
+        project_root,
+    )
 
 
 def main() -> None:

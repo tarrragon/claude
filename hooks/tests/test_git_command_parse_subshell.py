@@ -300,3 +300,27 @@ class TestBareCommitGuardEndToEnd:
 
     def test_amend_after_subshell_still_exempt(self, monkeypatch):
         assert _run_bare_commit(monkeypatch, "(true); git commit --amend -m x") == 0
+
+
+class TestBareCommitGuardWrappedForms:
+    """0.5.0-W1-120.7.1：原漏判的包裝寫法現在被攔下；echo／引號內文字不受影響。"""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "/usr/bin/git commit -m x",
+            "command git commit -m x",
+            "exec git commit -m x",
+            "bash -c 'git commit -m x'",
+            "eval 'git commit -m x'",
+        ],
+    )
+    def test_wrapped_bare_commit_denied(self, monkeypatch, command):
+        assert _run_bare_commit(monkeypatch, command) == 2
+
+    @pytest.mark.parametrize(
+        "command",
+        ["echo git commit -m x", "echo '/usr/bin/git commit -m x'", "bash -c 'echo git commit'"],
+    )
+    def test_text_only_not_denied(self, monkeypatch, command):
+        assert _run_bare_commit(monkeypatch, command) == 0

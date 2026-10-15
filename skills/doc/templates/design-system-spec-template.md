@@ -11,6 +11,9 @@ created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 version: "1.0"
 owner: ""
+has_functional_requirements: true  # 預設 true（未填視同 true）；僅本規格確實不含任何 FR 時改為 false，只認小寫 true/false，其他值報錯。
+                                 #   false 時 /spec validate 的 FR 覆蓋檢查略過，輸出為「未執行覆蓋比對」而非通過；
+                                 #   宣告 false 但內容有以 FR 開頭的標題行，報錯（宣告與內容矛盾）
 domain: ui
 subdomain: design-system
 related_usecases: []

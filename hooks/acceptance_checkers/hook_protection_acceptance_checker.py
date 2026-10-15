@@ -57,6 +57,8 @@ acceptance 不再要求第四項的數字宣告（迴歸案例：僅含前三項
 不觸發：type 非 IMP（ANA/DOC/ADJ 等）、where.files 不含 hooks 目錄路徑。
 """
 
+import os
+import posixpath
 import re
 import sys
 from pathlib import Path, PurePosixPath
@@ -122,7 +124,9 @@ _SOLUTION_SECTION_RE = re.compile(r"^## Solution\s*\n(.*?)(?=^## |\Z)", re.MULTI
 class PathInventoryResult(NamedTuple):
     """產生路徑盤點表解析結果。
 
-    status 三態：
+    status 四態：
+      - "no_separator"：找到含「產生路徑」的表頭列，但其下一行不是分隔列
+        （表頭與分隔列之間夾空行等）→ 與 absent 同樣阻擋，僅訊息不同
       - "absent"：找不到含「產生路徑」表頭的表格 → 呼叫端應阻擋 complete
       - "failed"：表格存在但欄位/內容不符預期（缺覆蓋欄、儲存格非「是/否」
         等）→ 呼叫端應 fail-open（不阻擋、不拋例外，僅記錄 warning 並略過
@@ -177,18 +181,20 @@ def parse_path_inventory_table(text: str) -> PathInventoryResult:
 
     lines = text.split("\n")
     header_idx = None
+    header_without_separator = False
     for i in range(len(lines) - 1):
         stripped = lines[i].strip()
-        if (
-            stripped.startswith("|")
-            and _INVENTORY_HEADER_MARKER in stripped
-            and _TABLE_SEPARATOR_ROW_RE.match(lines[i + 1].strip())
-        ):
+        if not (stripped.startswith("|") and _INVENTORY_HEADER_MARKER in stripped):
+            continue
+        if _TABLE_SEPARATOR_ROW_RE.match(lines[i + 1].strip()):
             header_idx = i
             break
+        header_without_separator = True
 
     if header_idx is None:
-        return PathInventoryResult(status="absent")
+        return PathInventoryResult(
+            status="no_separator" if header_without_separator else "absent"
+        )
 
     header_cells = _split_table_row(lines[header_idx])
     coverage_idx = next(
@@ -242,7 +248,34 @@ def _normalize_path(raw: str) -> PurePosixPath:
     """以 PurePosixPath 標準化路徑，避免 string startswith 誤判（規則層要求，
     沿用 ticket_system.commands.track_parallel_check 既有慣例）。
     """
-    return PurePosixPath(raw.strip().strip("/"))
+    return PurePosixPath(posixpath.normpath(raw.strip().strip("/")))
+
+
+_PROJECT_ROOT = _claude_dir.parent
+
+
+def _escapes_root(path: PurePosixPath) -> bool:
+    """normpath 後仍以 `..` 開頭，即跳出專案根。"""
+    return bool(path.parts) and path.parts[0] == ".."
+
+
+def _resolve_real_relative(
+    normalized: PurePosixPath, project_root: Path
+) -> Optional[PurePosixPath]:
+    """檔案存在時以 realpath 取實際路徑，回傳相對專案根的路徑。
+
+    不存在則回傳 None（無 symlink 可解）；實際路徑落在專案根外則回傳以 `..`
+    開頭的路徑，由呼叫端 fail-closed。
+    """
+    candidate = project_root / normalized.as_posix()
+    if not candidate.exists():
+        return None
+    real = Path(os.path.realpath(candidate))
+    real_root = Path(os.path.realpath(project_root))
+    try:
+        return PurePosixPath(real.relative_to(real_root).as_posix())
+    except ValueError:
+        return PurePosixPath("..")
 
 
 def _is_under(path: PurePosixPath, prefix: PurePosixPath) -> bool:
@@ -267,18 +300,86 @@ def _is_skill_hooks_path(path: PurePosixPath) -> bool:
     return len(parts) >= 4 and parts[3] == "hooks"
 
 
-def touches_hook_protection_scope(file_path: str) -> bool:
-    """單一路徑是否落在防護類 hook 觸發範圍（頂層 hooks/ 或 skill hooks/）。"""
+def _is_hooks_tests_path(path: PurePosixPath) -> bool:
+    """path 是否位於 `.claude/hooks/tests/` 或 `.claude/skills/<skill>/hooks/tests/` 下。
+
+    測試檔不是會被 runtime 載入的 hook，只改它的票不需要實地觸發等四項。
+    """
+    if _is_under(path, _TOP_LEVEL_HOOKS_PREFIX / "tests"):
+        return True
+    parts = path.parts
+    return _is_skill_hooks_path(path) and len(parts) >= 5 and parts[4] == "tests"
+
+
+def _in_hook_scope(path: PurePosixPath) -> bool:
+    """已正規化路徑是否命中 hook 範圍（tests 排除在外）。"""
+    if _is_hooks_tests_path(path):
+        return False
+    return _is_under(path, _TOP_LEVEL_HOOKS_PREFIX) or _is_skill_hooks_path(path)
+
+
+def touches_hook_protection_scope(
+    file_path: str, project_root: Optional[Path] = None
+) -> bool:
+    """單一路徑是否落在防護類 hook 觸發範圍（頂層 hooks/ 或 skill hooks/）。
+
+    hooks/tests/ 下的路徑不命中；寫入集混合 tests 與 hook 本體時，
+    hook 本體路徑仍會使整票命中（由 `_any_path_touches_hook_scope` 的 any 達成）。
+
+    判定前先 normpath 解析 `.`、`..`；跳出專案根一律視為 hook 票（fail-closed）。
+    檔案存在時另以 realpath 的實際路徑再判定一次（tests 下 symlink 指向 hook 本體）。
+    """
     if not file_path:
         return False
     normalized = _normalize_path(file_path)
-    return _is_under(normalized, _TOP_LEVEL_HOOKS_PREFIX) or _is_skill_hooks_path(
-        normalized
-    )
+    if _escapes_root(normalized):
+        return True
+    if _in_hook_scope(normalized):
+        return True
+    if not _is_hooks_tests_path(normalized):
+        return False
+    real = _resolve_real_relative(normalized, project_root or _PROJECT_ROOT)
+    if real is None:
+        return False
+    return _escapes_root(real) or _in_hook_scope(real)
 
 
-def _any_path_touches_hook_scope(where_files: List[str]) -> bool:
-    return any(touches_hook_protection_scope(f) for f in where_files)
+def _any_path_touches_hook_scope(where_files: List[str], logger=None) -> bool:
+    """寫入集任一路徑命中即 True。判定例外時 fail-closed：視為 hook 票。"""
+    try:
+        return any(touches_hook_protection_scope(f) for f in where_files)
+    except Exception as exc:  # fail-closed：寧可多要求四項也不放行
+        if logger is not None:
+            logger.warning(f"hook 票範圍判定例外，fail-closed 視為 hook 票：{exc}")
+        return True
+
+
+_PLACEHOLDER = "<待填>"
+
+
+# 276.1 的模板（create.py 的 _HOOK_ACCEPTANCE_TEMPLATES）一律以「：<待填>」
+# 結尾；只有此形式視為未填寫，條目中段敘述性提及 <待填> 不阻擋。
+_TEMPLATE_SUFFIX = "：" + _PLACEHOLDER
+
+
+def _is_template_placeholder(line: str) -> bool:
+    """條目是否為以「：<待填>」結尾的未填寫模板。"""
+    return line.rstrip().endswith(_TEMPLATE_SUFFIX)
+
+
+def _placeholder_acceptance_items(frontmatter: dict) -> List[str]:
+    """回傳 acceptance 中仍為模板形式（以「：<待填>」結尾）的條目文字。
+
+    判定例外時 fail-closed：視為該條目未填寫。
+    """
+    items = []
+    for line in _join_acceptance_text(frontmatter).split("\n"):
+        try:
+            if _is_template_placeholder(line):
+                items.append(line)
+        except Exception:  # fail-closed：判定失敗仍阻擋
+            items.append(line)
+    return items
 
 
 def _join_acceptance_text(frontmatter: dict) -> str:
@@ -304,6 +405,51 @@ def _missing_categories(acceptance_text: str) -> List[str]:
     for label, keywords in _CATEGORY_KEYWORDS.items():
         if not any(keyword.lower() in lowered for keyword in keywords):
             missing.append(label)
+    return missing
+
+
+# 前三項改為檢查 Test Results／Solution 的證據（格式固定字串），
+# acceptance 字面僅在過渡期作為「放行但 WARN」的依據。
+_LABEL_TRIGGER = "本 session 實地觸發確認"
+_LABEL_LIVENESS = "liveness 驗證方式"
+_LABEL_FAILURE = "失敗語意（fail-open/fail-closed）"
+
+# 日誌行引文（hook-logs/ 路徑後接檔名）或 `ticket track hook-liveness` 輸出標頭
+# （「解析名稱: <name>」）。單純提及 hook-liveness 指令名稱或「記入 Solution」不算。
+_LOG_EVIDENCE_RE = re.compile(r"hook-logs/[^\s`'\"]+|解析名稱\s*[:：]\s*\S")
+_FAIL_DECLARATION_RE = re.compile(r"fail[- ]?(open|closed)", re.IGNORECASE)
+_TRIGGER_CONDITION_RE = re.compile(r"觸發條件\s*[:：]\s*\S")
+_EVIDENCE_SECTION_NAMES = ("Solution", "Test Results")
+# 過渡期 WARN 的固定前綴，供統計誤擋率的下游工具比對
+_TRANSITION_LOG_PREFIX = "[evidence-transition]"
+
+
+def _extract_section(content: str, name: str) -> str:
+    """擷取 `## <name>` 章節文字（至下一個 `## ` 或結尾）；缺席回傳空字串。"""
+    if not content:
+        return ""
+    pattern = re.compile(
+        r"^## " + re.escape(name) + r"\s*\n(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL
+    )
+    match = pattern.search(content)
+    return match.group(1) if match else ""
+
+
+def missing_evidence_categories(content: str) -> List[str]:
+    """回傳在 Test Results／Solution 找不到證據的類別標籤（空清單表示齊備）。
+
+    - 實地觸發、liveness：需有 hook-logs/ 日誌行引文或 hook-liveness 輸出標頭
+    - 失敗語意：需有 fail-open／fail-closed 宣告，且同處有「觸發條件：<內容>」
+    """
+    evidence_text = "\n".join(_extract_section(content, n) for n in _EVIDENCE_SECTION_NAMES)
+    missing = []
+    if not _LOG_EVIDENCE_RE.search(evidence_text):
+        missing.extend([_LABEL_TRIGGER, _LABEL_LIVENESS])
+    if not (
+        _FAIL_DECLARATION_RE.search(evidence_text)
+        and _TRIGGER_CONDITION_RE.search(evidence_text)
+    ):
+        missing.append(_LABEL_FAILURE)
     return missing
 
 
@@ -344,19 +490,46 @@ def check_hook_protection_acceptance(
     # stdout 比對邏輯），不代表本 ticket 會寫入 hook 檔案，不應觸發防護類
     # 要求；未標記與 ::write 標記維持既有觸發行為（預設視為寫入）。
     where_files = extract_where_files_write_only(frontmatter, logger)
-    if not _any_path_touches_hook_scope(where_files):
-        logger.debug("write-set where.files 未觸及 hooks 目錄，跳過防護類 hook acceptance 檢查")
+    if not _any_path_touches_hook_scope(where_files, logger):
+        logger.info(
+            "write-set where.files 未觸及 hook 本體（無 hooks 路徑，或全落在 hooks/tests/），"
+            "排除判定：跳過防護類 hook acceptance 檢查"
+        )
         return False, None
 
     ticket_id = frontmatter.get("id", "未知")
+    placeholders = _placeholder_acceptance_items(frontmatter)
+    if placeholders:
+        listed = "\n".join(f"  - {item}" for item in placeholders)
+        logger.error(f"Ticket {ticket_id} acceptance 殘留 {_PLACEHOLDER} - 阻擋 complete")
+        return True, (
+            f"[ERROR] Acceptance Gate: 防護類 hook ticket 的 acceptance 殘留 "
+            f"{_PLACEHOLDER}\n\nTicket: {ticket_id}\n"
+            f"以下條目尚未填寫，請改寫為實際內容：\n{listed}\n"
+        )
     acceptance_text = _join_acceptance_text(frontmatter)
-    missing = _missing_categories(acceptance_text)
+    literal_missing = _missing_categories(acceptance_text)
+    evidence_missing = missing_evidence_categories(content)
+    # 過渡期：證據缺失但 acceptance 字面命中 → WARN 放行並記 log；
+    # 證據缺失且字面也缺 → 阻擋（維持原有強度）
+    missing = [label for label in evidence_missing if label in literal_missing]
+    for label in evidence_missing:
+        if label not in literal_missing:
+            logger.warning(
+                f"{_TRANSITION_LOG_PREFIX} ticket={ticket_id} category={label} "
+                "acceptance 字面命中但 Test Results／Solution 無證據，過渡期放行",
+                extra={
+                    "ticket_id": ticket_id,
+                    "category": label,
+                    "missing_evidence": _EVIDENCE_FORMS[label],
+                },
+            )
 
     how_strategy = _extract_how_strategy(frontmatter)
     inventory_source = how_strategy if how_strategy.strip() else _extract_solution_section(content)
     inventory_result = parse_path_inventory_table(inventory_source)
 
-    if inventory_result.status == "absent":
+    if inventory_result.status in ("absent", "no_separator"):
         missing.append(_PATH_INVENTORY_LABEL)
     elif inventory_result.status == "failed":
         logger.warning(
@@ -376,7 +549,9 @@ def check_hook_protection_acceptance(
         )
         return False, None
 
-    msg = _format_block_message(ticket_id, missing)
+    msg = _format_block_message(
+        ticket_id, missing, header_without_separator=inventory_result.status == "no_separator"
+    )
     logger.error(
         f"Ticket {ticket_id} where.files 觸及 hooks 目錄但缺必含項目 "
         f"{len(missing)} 項（{'、'.join(missing)}） - 阻擋 complete"
@@ -384,17 +559,37 @@ def check_hook_protection_acceptance(
     return True, msg
 
 
-def _format_accepted_literals(missing: List[str]) -> str:
-    """列出缺項各自可命中的字面（僅前三項；第四項為表格判定，不適用）。"""
+_EVIDENCE_FORMS = {
+    _LABEL_TRIGGER: "Test Results 或 Solution 引用 .claude/hook-logs/ 下的日誌行"
+    "（路徑加該行內容），證明本 session 實地觸發並落檔",
+    _LABEL_LIVENESS: "Test Results 或 Solution 貼 `ticket track hook-liveness` 輸出"
+    "（含「解析名稱: ...」標頭），或 hook-logs/ 路徑下的日誌行引文",
+    _LABEL_FAILURE: "Solution 寫 fail-open 或 fail-closed 二擇一，並附"
+    "「觸發條件：<何種情況觸發>」",
+}
+
+
+def _format_required_evidence(missing: List[str]) -> str:
+    """列出缺項各自所需的證據形式與位置（僅前三項；第四項為表格判定，不適用）。"""
     lines = []
     for label in missing:
-        keywords = _CATEGORY_KEYWORDS.get(label)
-        if keywords:
-            lines.append(f"  - {label}：{'、'.join(keywords)}\n")
+        form = _EVIDENCE_FORMS.get(label)
+        if form:
+            lines.append(f"  - {label}：{form}\n")
     return "".join(lines)
 
 
-def _format_block_message(ticket_id: str, missing: List[str]) -> str:
+_NO_SEPARATOR_NOTICE = (
+    "格式限制（為何被擋）：已找到含「產生路徑」的表頭列，但它的下一行不是分隔列，"
+    "故被判為沒有表。表頭與分隔列之間、各資料列之間不可夾空行；"
+    "下方範例即合格寫法（逐列緊接）。\n"
+    "\n"
+)
+
+
+def _format_block_message(
+    ticket_id: str, missing: List[str], header_without_separator: bool = False
+) -> str:
     missing_list = "\n".join(f"  - {label}" for label in missing)
     msg = (
         f"[ERROR] Acceptance Gate: 防護類 hook ticket 缺必含項目\n"
@@ -404,18 +599,18 @@ def _format_block_message(ticket_id: str, missing: List[str]) -> str:
         f"依規範必須補齊以下項目，缺少：\n"
         f"{missing_list}\n"
         f"\n"
-        f"判定方式：以字面（不分大小寫的子字串）比對 acceptance 全文，非語意判斷；"
-        f"語意相同但未含下列任一字面仍會被視為缺項。各項可命中的字面：\n"
-        f"{_format_accepted_literals(missing)}"
+        f"判定方式：檢查 ticket 的 Test Results 與 Solution 是否有證據，不比對 "
+        f"acceptance 字句；只寫「記入 Solution」之類指向句不算證據。各項所需證據：\n"
+        f"{_format_required_evidence(missing)}"
         f"\n"
-        f"合格填法範例（前三項寫在 acceptance）：\n"
-        f"  - 本 session 實地觸發確認：明示已於本 session 實地觸發該 hook 並"
-        f"確認落檔（含缺可執行位已排除），或「本 wave 該防護不生效，改以人工"
-        f"紀律承擔」（部署期政策亦屬合格填法）\n"
-        f"  - liveness 驗證方式：說明如何確認 hook 確實被 runtime 載入執行\n"
-        f"  - 失敗語意：說明異常時 fail-open 或 fail-closed\n"
+        f"合格填法範例（寫在 Test Results 或 Solution）：\n"
+        f"  - 實地觸發與 liveness：.claude/hook-logs/<hook 名>/<日期>.log "
+        f"出現 `[INFO] ...` 該行（引文）\n"
+        f"  - 失敗語意：fail-closed；觸發條件：判定函式拋例外時\n"
     )
     if _PATH_INVENTORY_LABEL in missing:
+        if header_without_separator:
+            msg += "\n" + _NO_SEPARATOR_NOTICE
         msg += (
             f"\n"
             f"產生路徑盤點結果——讀取優先序（為何會被擋）：checker 只判斷 "

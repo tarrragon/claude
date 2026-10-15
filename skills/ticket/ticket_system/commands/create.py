@@ -440,6 +440,75 @@ def _report_dry_run_preview(ticket_id: str, config: TicketConfig) -> None:
             print(f"     - {item}")
 
 
+# 防護類 hook 票的四條 acceptance 模板（label 對應 hook_protection_acceptance_checker
+# 的 _CATEGORY_KEYWORDS，第四條對應 how.strategy 的盤點表）。文字刻意避開 gate
+# 關鍵詞，使未填的模板本身不會讓 gate 通過；<待填> 為佔位。
+_HOOK_ACCEPTANCE_TEMPLATES = (
+    ("本 session 實地觸發確認", "[ ] 當次執行環境下的觸發驗證結果：<待填>"),
+    ("liveness 驗證方式", "[ ] 載入與執行的確認方式（如何確認 hook 被載入並執行）：<待填>"),
+    ("失敗語意（fail-open/fail-closed）", "[ ] 異常時的放行或阻擋行為：<待填>"),
+    ("產生路徑盤點結果", "[ ] 產生路徑盤點表已寫入 how.strategy：<待填>"),
+)
+_PATH_INVENTORY_LABEL = "產生路徑盤點結果"
+
+
+def _load_hook_protection_checker() -> Any:
+    """匯入 hook 防護 checker 模組；失敗時雙通道記錄並回傳 None（不帶模板）。"""
+    try:
+        import importlib
+        hooks_dir = Path(__file__).resolve().parents[4] / "hooks"
+        if str(hooks_dir) not in sys.path:
+            sys.path.insert(0, str(hooks_dir))
+        return importlib.import_module(
+            "acceptance_checkers.hook_protection_acceptance_checker"
+        )
+    except Exception as exc:  # noqa: BLE001 — 降級：不帶模板，但必須可見
+        sys.stderr.write(
+            f"[WARNING] _load_hook_protection_checker: 無法匯入 hook 防護 checker，"
+            f"略過 acceptance 模板帶入：{exc}\n"
+        )
+        return None
+
+
+def apply_hook_acceptance_template(
+    where_files: List[str],
+    acceptance: Optional[List[str]],
+    how_strategy: str = "",
+) -> tuple:
+    """where 觸及 hook 本體時，於 acceptance 追加缺少類別的模板。
+
+    第四條（產生路徑盤點）的已具備判定與 gate 一致：how_strategy 內有盤點表
+    （parse_path_inventory_table 非 absent/no_separator）即視為已具備。
+
+    Returns:
+        (新 acceptance 清單, 是否觸及 hook 範圍)。未觸及或 checker 不可用時
+        原樣回傳 acceptance 與 False。已含對應類別的條目不重複追加。
+    """
+    checker = _load_hook_protection_checker()
+    if checker is None:
+        return acceptance, False
+    if not any(checker.touches_hook_protection_scope(f) for f in (where_files or [])):
+        return acceptance, False
+
+    current = list(acceptance or [])
+    text = "\n".join(str(item) for item in current)
+    missing = set(checker._missing_categories(text))
+    inventory = checker.parse_path_inventory_table(how_strategy or "")
+    if inventory.status in ("absent", "no_separator") and "產生路徑盤點" not in text:
+        missing.add(_PATH_INVENTORY_LABEL)
+    for label, template in _HOOK_ACCEPTANCE_TEMPLATES:
+        if label in missing:
+            current.append(template)
+    return current, True
+
+
+def print_hook_ticket_reminder() -> None:
+    """印出 dispatch 同款的 hook 票必含項提醒。"""
+    from ticket_system.lib.dispatch_skeleton import HOOK_TICKET_REMINDER
+
+    print(HOOK_TICKET_REMINDER)
+
+
 def _build_and_save_ticket(
     version: str,
     ticket_id: str,
@@ -643,6 +712,20 @@ def _persist_and_report(
     if bool(getattr(args, "dry_run", False)):
         _report_dry_run_preview(ticket_id, config)
         return 0
+
+    # 步驟 1.8：where 觸及 hook 本體時帶入 acceptance 模板並印提醒。
+    # config 的 acceptance 為 None 表示使用型別預設；觸及時需先展開預設再追加。
+    base_acceptance = config.get("acceptance")
+    if base_acceptance is None:
+        from ticket_system.lib.ticket_builder import get_default_acceptance_criteria
+        base_acceptance = get_default_acceptance_criteria(config["ticket_type"])
+    new_acceptance, touches_hook = apply_hook_acceptance_template(
+        config.get("where_files") or [], base_acceptance,
+        str(config.get("how_strategy") or ""),
+    )
+    if touches_hook:
+        config["acceptance"] = new_acceptance
+        print_hook_ticket_reminder()
 
     # 步驟 2：持久化
     ticket = _build_and_save_ticket(version, ticket_id, config)

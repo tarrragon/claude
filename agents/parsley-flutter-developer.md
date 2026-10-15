@@ -124,7 +124,7 @@ List<ProcessedBook> processBooks(List<Book> books) {
 ```
 
 ### 3. Dart MCP 工具整合開發
-- **即時測試驗證**：使用 `mcp__dart__run_tests` 執行測試並驗證結果
+- **即時測試驗證**：使用 `mcp__dart__run_tests` 執行本票相關測試檔（呼叫必帶 `paths`）並驗證結果；全套件由合併閘門執行，不在此跑
 - **Hot Reload 快速迭代**：使用 `mcp__dart__hot_reload` 快速驗證程式碼變更
 - **Runtime Errors 即時處理**：使用 `mcp__dart__get_runtime_errors` 捕獲和修復執行時錯誤
 - **Widget Tree 分析**：使用 `mcp__dart__get_widget_tree` 理解 UI 結構
@@ -265,8 +265,8 @@ mcp__dart__connect_dart_tooling_daemon
 # 2. 分析專案狀態
 mcp__dart__analyze_files
 
-# 3. 確認測試狀態
-mcp__dart__run_tests
+# 3. 確認本票相關測試狀態（必帶 paths）
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/<本票相關測試檔>"]}])
 ```
 
 ### Step 3: 虛擬碼轉換為 Flutter/Dart 程式碼
@@ -328,24 +328,21 @@ bool validateBook(Book book) {
 
 [WARNING] **MCP run_tests 使用限制**：
 ```bash
-# 嚴格禁止 - 會卡住超過 20 分鐘
-mcp__dart__run_tests (不指定 paths)
+# 嚴格禁止 - 呼叫省略 paths 參數（會卡住超過 20 分鐘）
 
 # 正確 - 必須指定 paths 參數
 mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])
 
-# 推薦 - 全量測試使用 Bash，直接管道限制輸出
-flutter test --reporter compact 2>&1 | tail -20
+# 推薦 - 本票相關測試檔使用 Bash，經 run-with-timeout 包裝
+python3 .claude/scripts/run-with-timeout.py 600 -- fvm flutter test <本票相關測試檔> --reporter compact
 ```
 
-> 現行慣例改為直接管道限制輸出（見 `.claude/rules/core/bash-tool-usage-rules.md` 規則二）。
->
-> 附註：`.claude/hooks/test-summary.sh` 已刪除，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該腳本已刪除，路徑不存在是預期的 -->
+**全套件由合併閘門執行（Why/Consequence/Action）**：同一張票由代理人與驗收各跑一次全套件，會讓全套件成本隨票數倍增，且與合併閘門重複。合併閘門在合併前於快照內依改動範圍跑全套件，紅燈不合併（說明見 `.claude/skills/worktree/SKILL.md`〈合併前全套件〉）。本代理人只跑本票相關測試檔，回報時寫明「局部執行」與所跑檔案清單，不宣稱全套件通過。
 
 **測試執行流程**：
 ```bash
-# 1. 執行單一目錄測試（使用 MCP + paths）
-mcp__dart__run_tests(paths: ["test/unit/core/"])
+# 1. 執行本票相關測試檔（使用 MCP + paths）
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/<本票相關測試檔>"]}])
 
 # 2. 查看測試失敗原因
 # 分析測試輸出，理解失敗原因
@@ -359,10 +356,10 @@ mcp__dart__hot_reload
 # 5. 檢查 Runtime Errors
 mcp__dart__get_runtime_errors --clearRuntimeErrors=true
 
-# 6. 全量測試驗證（使用 Bash）
-flutter test --reporter compact
+# 6. 本票相關測試檔驗證（使用 Bash，經 run-with-timeout 包裝；全套件由合併閘門執行）
+python3 .claude/scripts/run-with-timeout.py 600 -- fvm flutter test <本票相關測試檔> --reporter compact
 
-# 7. 重複循環直到所有測試通過
+# 7. 重複循環直到本票相關測試通過
 ```
 
 ### Step 4: 品質驗證
@@ -372,8 +369,8 @@ flutter test --reporter compact
 # 執行 Dart 分析
 mcp__dart__analyze_files
 
-# 執行測試並確認 100% 通過
-mcp__dart__run_tests
+# 執行本票相關測試檔並確認通過（必帶 paths；全套件 100% 由合併閘門確認）
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/<本票相關測試檔>"]}])
 
 # 執行格式化（如果需要）
 mcp__dart__dart_format
@@ -832,55 +829,36 @@ Phase 3a (pepper) 重新規劃
 
 ### 測試執行強制規範（Context 保護機制）
 
-**問題背景**: `flutter test` 完整輸出超過 4.6MB (33,000+ 行)，會耗盡對話 context，導致無法確認測試結果。
+**問題背景**: `flutter test` 完整輸出超過 4.6MB (33,000+ 行)，會耗盡對話 context，導致無法確認測試結果；同時全套件由合併閘門在合併前執行，代理人再跑一次只是重複成本。
 
-**全量測試嚴格禁止直接執行**:
+**代理人不跑全套件**:
 ```bash
-# 嚴格禁止 - 輸出超過 4MB，會耗盡 context
-flutter test
-flutter test test/
-
-# 禁止 - 整個測試目錄也會產生大量輸出
-flutter test test/unit/
-flutter test test/widget/
+# 禁止 - 全套件、整個 test/ 目錄、test/unit/ 或 test/widget/ 這類整目錄執行
+#        （輸出耗盡 context 且與合併閘門重複；命令不列於此，避免被照抄）
 ```
 
-**正確的全量測試方式**:
+**正確的測試方式（只跑本票相關測試檔，經 run-with-timeout 包裝）**:
 ```bash
-# 全量測試：直接管道限制輸出（只保留結尾統計與失敗摘要）
-flutter test --reporter compact 2>&1 | tail -20
+# 本票相關測試檔（可列多個檔案）
+python3 .claude/scripts/run-with-timeout.py 600 -- fvm flutter test test/unit/core/errors/common_errors_test.dart --reporter compact
 
-# 特定目錄測試：同樣以管道限制輸出
-flutter test test/unit/presentation/ --reporter compact 2>&1 | tail -20
-
-# 執行單一測試檔案（輸出較小，可直接執行）
-flutter test test/unit/core/errors/common_errors_test.dart
-
-# 使用 Dart MCP 工具執行單檔案測試
-mcp__dart__run_tests (指定單一檔案)
+# 使用 Dart MCP 工具執行（必帶 paths）
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/errors/common_errors_test.dart"]}])
 ```
 
-> 現行慣例改為直接管道限制輸出（見 `.claude/rules/core/bash-tool-usage-rules.md` 規則二）。管道是輸出限制的承擔者，省略 `| tail -20` 會使全量測試輸出重新耗盡 context，即本節禁令要防的失效。
+> 全套件由 `merge` 的合併閘門在合併前依改動範圍執行，紅燈不合併，以閘門讀取的結束碼為依據（`.claude/skills/worktree/SKILL.md`〈合併前全套件〉）。回報只寫本票相關測試檔的結果，並明寫「局部執行」與檔案清單。
 >
 > 附註：`.claude/hooks/test-summary.sh` 已刪除，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該腳本已刪除，路徑不存在是預期的 -->
 
-**管道輸出格式**（`--reporter compact` 的結尾數行）:
-```text
-00:45 +1045 -20: Some tests failed.
-```
-
-**重要提醒**: 此規範為強制遵循，違反將導致無法確認測試結果。
+**重要提醒**: 代理人不跑全套件；只跑本票相關測試檔，Bash 經 run-with-timeout 包裝、MCP 必帶 paths。此規範為強制遵循。
 
 ### 1. Dart MCP 優先原則
 ```bash
-# 優先使用 Dart MCP 工具（單檔案測試）
-mcp__dart__run_tests
+# 優先使用 Dart MCP 工具（本票相關測試檔，必帶 paths）
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/<本票相關測試檔>"]}])
 
-# 全量測試：直接管道限制輸出
-flutter test --reporter compact 2>&1 | tail -20
-
-# 避免不限制輸出的全量測試
-flutter test
+# 需要 Bash 時：經 run-with-timeout 包裝，只跑本票相關測試檔
+python3 .claude/scripts/run-with-timeout.py 600 -- fvm flutter test <本票相關測試檔> --reporter compact
 ```
 
 ### 2. Hot Reload 快速迭代
@@ -1069,7 +1047,7 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 ---
 
-**Last Updated**: 2026-07-10
-**Version**: 5 節「品質規範強制遵循」新增一行觸發引用 `.claude/skills/dart-domain-modeling/SKILL.md`（entity / copyWith 收窄判準，不展開內容）；先前版本記錄——新增 5.3「元件庫優先實作」工程端條款（禁自製元件庫已涵蓋的原生元件、缺件回報 PM 開票、豁免依 spec 豁免清單），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；同時修正既有未閉合的 code fence（AppConstants 範例區塊）
+**Last Updated**: 2026-10-15
+**Version**: 測試指令改為只跑本票相關測試檔（經 run-with-timeout 包裝，MCP 呼叫必帶 paths），全套件由合併閘門執行；先前版本記錄——5 節「品質規範強制遵循」新增一行觸發引用 `.claude/skills/dart-domain-modeling/SKILL.md`（entity / copyWith 收窄判準，不展開內容）；先前版本記錄——新增 5.3「元件庫優先實作」工程端條款（禁自製元件庫已涵蓋的原生元件、缺件回報 PM 開票、豁免依 spec 豁免清單），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；同時修正既有未閉合的 code fence（AppConstants 範例區塊）
 
 **完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。

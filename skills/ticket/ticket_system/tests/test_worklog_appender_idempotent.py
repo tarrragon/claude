@@ -110,11 +110,11 @@ def test_return_value_is_inserted_line_only_when_written(tmp_path):
     assert second is None
 
 
-def test_no_date_heading_returns_none_and_file_unchanged(tmp_path):
-    """工作日誌無日期標題區段：回傳 None 且檔案內容不變。"""
+def test_no_date_heading_and_no_dev_section_returns_none_and_file_unchanged(tmp_path):
+    """無日期標題且無「## 開發日誌」章節（0.5.0-W1-222 後僅此情形跳過）：回傳 None 且檔案不變。"""
     worklog = tmp_path / WORKLOG_REL
     worklog.parent.mkdir(parents=True, exist_ok=True)
-    original = "# v0.31.1 版本工作日誌\n\n## 前情提要\n\n## 開發日誌\n"
+    original = "# v0.31.1 版本工作日誌\n\n## 前情提要\n"
     worklog.write_text(original, encoding="utf-8")
 
     with patch.object(wa, "get_ticket_state_root", return_value=tmp_path):

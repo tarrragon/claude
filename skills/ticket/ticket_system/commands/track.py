@@ -107,7 +107,6 @@ from .track_batch import (
 from .track_acceptance import (
     execute_check_acceptance,
     execute_append_log,
-    execute_accept_creation,
     execute_add_spawn_request,
     execute_resolve_spawn_request,
 )
@@ -540,7 +539,6 @@ def _create_command_handlers() -> dict:
         "register-artifact": execute_register_artifact,
         "resolve-artifact": execute_resolve_artifact,
         "list-artifacts": execute_list_artifacts,
-        "accept-creation": execute_accept_creation,
         "add-child": execute_add_child,
         "set-parent": execute_set_parent,
         "set-blocked-by": execute_set_blocked_by,
@@ -1236,7 +1234,7 @@ def _register_relation_commands(
 def _register_acceptance_commands(
     subparsers: argparse._SubParsersAction,
 ) -> None:
-    """註冊驗收條件和執行日誌子命令：check-acceptance, append-log, accept-creation, audit"""
+    """註冊驗收條件和執行日誌子命令：check-acceptance, append-log, audit"""
     # check-acceptance 操作
     p_check_acceptance = subparsers.add_parser(
         "check-acceptance",
@@ -1610,14 +1608,6 @@ def _register_acceptance_commands(
         "--force", action="store_true", default=False,
         help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
     )
-
-    # accept-creation 操作
-    p_accept_creation = subparsers.add_parser(
-        "accept-creation",
-        help=TrackMessages.HELP_ACCEPT_CREATION
-    )
-    p_accept_creation.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
-    p_accept_creation.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # audit 操作
     p_audit = subparsers.add_parser(

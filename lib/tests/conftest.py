@@ -46,3 +46,13 @@ def pytest_unconfigure(config):
     if _STATE["root"] is not None:
         shutil.rmtree(_STATE["root"], ignore_errors=True)
     _STATE["root"] = _STATE["patch"] = None
+
+
+@pytest.fixture(autouse=True)
+def clear_project_root_cache():
+    """每個測試前後清除 hook_base 專案根快取，避免同鍵不同結果的跨測試汙染。"""
+    from lib import hook_base
+
+    hook_base.clear_project_root_cache()
+    yield
+    hook_base.clear_project_root_cache()

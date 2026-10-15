@@ -36,32 +36,51 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
+from lib.hook_base import has_parallel_dispatch  # noqa: E402
+from lib.git_command_parse import (  # noqa: E402
+    classify_parse_cause,
+    contains_git_word,
+    explain_parse_cause,
+    find_git_invocations,
+)
 
 
 SCHEMA_PY_REL_PATH = ".claude/skills/doc/doc_system/core/tracking_schema.py"
 SCHEMA_JSON_REL_PATH = ".claude/skills/doc/doc_system/core/tracking_schema.json"
 DOC_SKILL_PROJECT_DIR = ".claude/skills/doc"
 
-def is_commit_command(command: str) -> bool:
-    """判斷是否為 git commit 命令（排除唯讀/amend 變體）。"""
-    if "git commit" not in command:
-        return False
-    for excluded in ("git commit --amend", "git log", "git show", "git diff"):
-        if excluded in command:
-            return False
-    return True
+def is_commit_command(command: str) -> Optional[bool]:
+    """判斷是否為新建 git commit 命令（排除 --amend）。
+
+    以 find_git_invocations 解析（涵蓋 git -C x commit、command/exec 前綴、
+    bash -c 等；echo 與引號內文字不誤判）。
+    回傳 None 表示命令含 git 字樣但無法解析，由 main() 決定保守處置。
+    """
+    return classify_commit_command(command)[0]
+
+
+def classify_commit_command(command: str) -> Tuple[Optional[bool], Optional[str]]:
+    """同 is_commit_command，另回傳無法確認的成因（tokenize 失敗或僅掃描命中）。"""
+    if not contains_git_word(command):
+        return False, None
+    invocations = find_git_invocations(command, {"commit"}, scan=True)
+    cause = classify_parse_cause(invocations)
+    if cause is not None:
+        return None, cause  # tokenize 失敗，或僅掃描命中（辨識不確定）：比照無法解析
+    invocations = [inv for inv in invocations if not inv.via_scan]
+    return any("--amend" not in inv.args for inv in invocations), None
 
 
 def get_staged_files(project_root: Path, logger) -> list:
     """取得目前已 staged 的檔案清單（`git diff --cached --name-only`）。"""
     try:
         result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
+            ["git", "--no-optional-locks", "diff", "--cached", "--name-only"],
             cwd=str(project_root),
             capture_output=True,
             text=True,
@@ -134,7 +153,27 @@ def main() -> int:
 
     tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
-    if not is_commit_command(command):
+    is_commit, parse_cause = classify_commit_command(command)
+    if is_commit is None:
+        # 無法解析：比照 bare-commit-guard，並行期保守擋下、非並行期僅提醒。
+        # 提醒走 stderr 直接 print（logger.warning 會觸發 hook error 顯示）。
+        if has_parallel_dispatch(get_project_root()):
+            logger.warning("命令含 git 字樣但無法安全解析，並行期保守阻擋")
+            print(
+                "[tracking-schema-json-staleness-guard] 命令無法安全解析，"
+                "並行派發期間保守阻擋。"
+                f"{explain_parse_cause(parse_cause)}請改寫後重送。",
+                file=sys.stderr,
+            )
+            return 2
+        logger.info("命令含 git 字樣但無法安全解析，非並行期提醒放行")
+        print(
+            "[tracking-schema-json-staleness-guard] 提醒：命令無法安全解析，"
+            f"未檢查 tracking_schema.json 是否過期。{explain_parse_cause(parse_cause)}",
+            file=sys.stderr,
+        )
+        return 0
+    if not is_commit:
         logger.debug("跳過: 非 git commit 命令")
         return 0
 

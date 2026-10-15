@@ -9,7 +9,7 @@ UC Reference Validation Hook - PreToolUse Hook
 功能：
   Write/Edit/MultiEdit 目標為程式碼檔（.dart/.js/.ts/.py）時，掃描新增內容中的
   UC-XX token，比對 docs/app-use-cases.md 動態解析的白名單（SSOT），
-  命中未定義編號時輸出 stderr WARNING（含合法清單提示）。
+  命中未定義編號時以 additionalContext 輸出 WARNING（含合法清單提示）。
 
   首版為 WARNING-only（業界調研 + WRAP 決策修訂定案）：一律 exit 0 放行，
   不 deny。是否升級為 deny 由後續觀察期票評估。
@@ -51,6 +51,7 @@ from lib import (  # noqa: E402
     read_json_from_stdin,
     extract_tool_input,
     get_project_root,
+    emit_model_reminder,
 )
 
 WARNING_TEMPLATE = """[uc-reference-validation] 偵測到未定義的 UC 編號：{tokens}
@@ -156,7 +157,8 @@ def main() -> int:
         file_path=file_path,
         valid_list=_format_valid_list(valid),
     )
-    sys.stderr.write(message)
+    # 提醒對象是模型，走 additionalContext（exit 0 stderr 對模型不可見）
+    emit_model_reminder("PreToolUse", message, input_data=input_data)
     logger.warning("WARNING：%s 含未定義 UC token：%s", file_path, violations)
     return 0
 

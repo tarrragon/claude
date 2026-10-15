@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from worktree_manager import (
+    MergeOutcome,
     cmd_merge,
     _merge_validate_ticket_status,
     _check_working_tree_clean,
@@ -54,14 +55,20 @@ class TestMergeSuccess:
         monkeypatch.setattr("worktree_manager.run_git_command", mock_run_git)
         monkeypatch.setattr("worktree_manager.get_worktree_list", mock_get_worktree_list)
 
+        monkeypatch.setattr(
+            "worktree_manager.merge_branch_cas",
+            lambda *a, **k: MergeOutcome(ok=True, commit_sha="abc123", attempts=1),
+        )
+        monkeypatch.setattr("worktree_manager._verify_three_planes", lambda *a, **k: [])
+
         # 執行
         exit_code = cmd_merge("0.1.1-W9-002")
 
         # 驗證
         assert exit_code == 0
         captured = capsys.readouterr()
-        assert "git checkout main" in captured.out
-        assert "git merge --no-ff" in captured.out
+        assert "合併提交：abc123" in captured.out
+        assert "合併成功" in captured.out
 
 
 class TestMergeBlocked:
@@ -152,12 +159,18 @@ class TestMergeWarning:
         monkeypatch.setattr("worktree_manager.run_git_command", mock_run_git)
         monkeypatch.setattr("worktree_manager.get_worktree_list", mock_get_worktree_list)
 
+        monkeypatch.setattr(
+            "worktree_manager.merge_branch_cas",
+            lambda *a, **k: MergeOutcome(ok=True, commit_sha="abc123", attempts=1),
+        )
+        monkeypatch.setattr("worktree_manager._verify_three_planes", lambda *a, **k: [])
+
         exit_code = cmd_merge("0.1.1-W9-002")
 
         assert exit_code == 0
         captured = capsys.readouterr()
         assert "警告" in captured.out
-        assert "git merge" in captured.out
+        assert "合併成功" in captured.out
 
     def test_merge_hint_branch_behind_main(self, monkeypatch, capsys):
         """場景 5: merge — 分支落後 main（提示但不阻擋）
@@ -184,12 +197,18 @@ class TestMergeWarning:
         monkeypatch.setattr("worktree_manager.run_git_command", mock_run_git)
         monkeypatch.setattr("worktree_manager.get_worktree_list", mock_get_worktree_list)
 
+        monkeypatch.setattr(
+            "worktree_manager.merge_branch_cas",
+            lambda *a, **k: MergeOutcome(ok=True, commit_sha="abc123", attempts=1),
+        )
+        monkeypatch.setattr("worktree_manager._verify_three_planes", lambda *a, **k: [])
+
         exit_code = cmd_merge("0.1.1-W9-002")
 
-        assert exit_code == 1
+        assert exit_code == 0
         captured = capsys.readouterr()
-        assert "阻擋" in captured.out
-        assert "rebase" in captured.out
+        assert "落後" in captured.out
+        assert "合併成功" in captured.out
 
     def test_merge_hint_no_new_commits(self, monkeypatch, capsys):
         """場景 6: merge — 分支無新 commit（警告）
@@ -213,12 +232,18 @@ class TestMergeWarning:
         monkeypatch.setattr("worktree_manager.run_git_command", mock_run_git)
         monkeypatch.setattr("worktree_manager.get_worktree_list", mock_get_worktree_list)
 
+        monkeypatch.setattr(
+            "worktree_manager.merge_branch_cas",
+            lambda *a, **k: MergeOutcome(ok=True, commit_sha="abc123", attempts=1),
+        )
+        monkeypatch.setattr("worktree_manager._verify_three_planes", lambda *a, **k: [])
+
         exit_code = cmd_merge("0.1.1-W9-002")
 
         assert exit_code == 0
         captured = capsys.readouterr()
         assert "提示" in captured.out or "新 commit" in captured.out
-        assert "git merge" in captured.out
+        assert "合併成功" in captured.out
 
 
 class TestMergeError:

@@ -199,3 +199,28 @@ def test_integration_with_identity_guard_pass(
         "0.0.0", tid, "thyme-python-developer", command="complete"
     )
     assert result is None  # None = 放行（情境 3：--as == who.current）
+
+
+def test_check_identity_hands_over_pm_held_ticket_for_non_complete_command(
+    tmp_ticket_dir: Path, patch_ticket_paths, monkeypatch
+):
+    """0.5.0-W1-192.1（B）：PM 持有的票，實作代理人以 check-acceptance --as 首次
+    寫入即由 check_identity 讓出（不再依賴派發 hook 預綁，也不限 complete）。"""
+    from ticket_system.lib import identity_guard
+
+    tid = "0.0.0-W0-TAKEOVER7"
+    path = tmp_ticket_dir / f"{tid}.md"
+    _write_ticket(path, tid, _WHO_DICT_PM)
+
+    def _fake_load_ticket(version: str, ticket_id: str):
+        p = tmp_ticket_dir / f"{ticket_id}.md"
+        fm, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
+        return fm or None
+
+    monkeypatch.setattr(identity_guard, "load_ticket", _fake_load_ticket)
+
+    result = identity_guard.check_identity(
+        "0.0.0", tid, "thyme-python-developer", command="check-acceptance"
+    )
+    assert result is None
+    assert _read_who(path)["current"] == "thyme-python-developer"

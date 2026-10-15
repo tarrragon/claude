@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.44.48（本地變更）— 身份綁定與守衛：`dispatch-identity-bind-hook` 的 `UNBOUND_WHO_VALUES` 移除 PM 身份，PM 持有的票派發唯讀審查者不再被覆寫 who，綁定改用 `set-who --current`（保留 who.history）；PM 持有票的讓出（`reassign_who_from_pm_if_takeover`）由 complete／finish 前置延伸到 `identity_guard.check_identity`，涵蓋所有帶 `--as` 的守衛命令；守衛 deny 訊息移除 `--as <who.current>` 可複製範例，改為回報 PM `set-who` 改派。
+
 **Version**: 2.44.47（本地變更）— `references/architecture.md` 在 named agent 三態表後補一行路由：經 SendMessage 進入 running 前，先確認 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉。純文件路由，CLI 行為不變。此變更原本隨派發範本的恢復判準一起修改時漏升版號，導致本地與發佈庫出現版號相同但內容不同，本版補升。
 
 **Version**: 2.44.46（本地變更）— `ticket track depth` 輸出補一行 `[用途]` 說明：`can_descend` 供持有該票的呼叫者判斷能否再往下派發，不用於判斷該票能否被派發（被派發票僅在 depth > MAX_TICKET_DEPTH 時被擋）。can_descend 判準與守衛邏輯不變，僅輸出文案與文件。文件同步：`references/track-command.md` depth 段、`.claude/agents/AGENT_PRELOAD.md` D3 單一判準段。測試 `tests/test_depth_command_and_warning.py::TestTrackDepthPurposeNote`：E1 改前 can_descend true／false 兩案輸出皆不含用途說明（2 紅），改後含（綠）。

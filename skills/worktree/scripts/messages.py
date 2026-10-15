@@ -27,7 +27,6 @@ class MergeMessages:
 
     NO_NEW_COMMITS = "[提示] 此分支沒有超前 {base} 的新 commit（ahead = 0）。\n可能此分支已合併，或尚未進行任何開發。"
 
-    BRANCH_BEHIND_BASE = "[阻擋] 此分支落後 {base} {count} 個 commit。\n合併會覆蓋 main 上的新變更。\n\nmain 上的新 commit：\n{commit_list}\n\n請先在 worktree 中 rebase：\n  cd {worktree_path} && git rebase {base}"
 
     # ===== 驗證進度訊息 =====
     VERIFICATION_IN_PROGRESS = "正在驗證 Ticket 的合併前置條件..."
@@ -46,6 +45,22 @@ class MergeMessages:
     MERGE_SUCCESS = "合併成功。\n建議執行 /worktree cleanup {ticket_id} 清理 worktree。"
 
     MERGE_FAILED = "[錯誤] 合併失敗：{error}"
+
+    # ===== 隔離索引 CAS 合併 =====
+    CAS_CONFLICT = "合併有文字衝突，已中止，未寫入任何 ref：{detail}"
+    CAS_MERGE_TREE_FAILED = "merge-tree 失敗"
+    CAS_CHECK_RAISED = "合併前檢查執行失敗：{error}"
+    CAS_CHECK_FAILED = "合併前檢查未通過"
+    CAS_REF_UNRESOLVED = "無法解析 {base} 或 {branch}"
+    CAS_ALREADY_MERGED = "分支 {branch} 已被 {base} 包含，無可合併內容"
+    CAS_EMPTY_MERGE = "拒絕空合併：合併結果的 tree 等於第一親代，分支變更全未進入結果"
+    CAS_COMMIT_TREE_FAILED = "commit-tree 失敗：{error}"
+    CAS_RETRY_LIMIT = "CAS 重試超過上限 {limit} 次，已中止，未寫入任何 ref；最後一次失敗原因：{error}"
+    SKIP_GATE_NEEDS_REASON = "[錯誤] --skip-gate 必須附理由"
+    CAS_SYNC_FAILED = "(同步共用 index 失敗：{error})"
+    CAS_RESULT = "合併提交：{commit}（嘗試 {attempts} 次）\n同步共用 index/工作區：{synced} 檔；三平面核對不一致：{bad} 檔"
+    CAS_SKIPPED_FILE = "  [未同步，index 或工作區已被改動] {path}"
+    CAS_PLANE_MISMATCH = "  [三平面不一致] {path}"
 
 
 class CreateMessages:

@@ -58,7 +58,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root
+from lib import setup_hook_logging, run_hook_safely, get_project_root, emit_model_reminder
 
 # error-patterns 底下的分類目錄（排除 README.md 本身）
 CATEGORY_DIRS = [
@@ -396,7 +396,7 @@ def compare(
 
 
 def format_report(result: dict, frozen_error: str = None) -> str:
-    """組裝 stderr 文字，僅在有發現或凍結表解析失敗時輸出對應段落。"""
+    """組裝報告文字，僅在有發現或凍結表解析失敗時輸出對應段落。"""
     lines = []
     missing = result["missing_in_readme"]
     stale = result["stale_in_readme"]
@@ -475,6 +475,21 @@ def format_report(result: dict, frozen_error: str = None) -> str:
     return "\n".join(lines)
 
 
+def select_model_actionable(result: dict) -> dict:
+    """篩出值得注入模型 context 的發現（SessionStart 每次都占用 token）。
+
+    保留：未入索引、過時條目、未登記碰撞、README 重複列（模型可直接修）。
+    排除：已登記碰撞（政策允許的既知狀態）、檔名無法抽 ID、related 單向引用
+    （存量大且屬建議；完整報告仍寫入日誌）。
+    """
+    return dict(
+        result,
+        registered_collisions={},
+        unrecognized=[],
+        one_way_related=[],
+    )
+
+
 def main() -> int:
     logger = setup_hook_logging("error-patterns-index-consistency-check")
     root = get_project_root()
@@ -508,7 +523,12 @@ def main() -> int:
         report = format_report(result, frozen_error)
 
         if report:
-            sys.stderr.write(report + "\n")
+            logger.info("完整報告:\n%s", report)
+        model_report = format_report(select_model_actionable(result), frozen_error)
+        if model_report:
+            # 受眾為模型：索引缺漏由模型直接修；exit 0 stderr 模型不可見，
+            # 改走 additionalContext（單一 JSON）
+            emit_model_reminder("SessionStart", model_report)
         if (
             result["missing_in_readme"]
             or result["stale_in_readme"]

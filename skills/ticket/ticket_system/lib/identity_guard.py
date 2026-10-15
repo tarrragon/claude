@@ -232,20 +232,19 @@ def check_identity(
             # 的值因票而異，連派發者都無法預先猜對，訊息本身須自足，不需
             # 執行者另外查 `ticket track who` 才知道該填什麼——同一批同型
             # 死結的延伸修復：派發時寫死 --as 的猜測可能與實際值不符）。
+            # 不印 `--as <who.current>` 可複製範例——執行者照抄
+            # 即以他人名義申報。who.current 只作資訊顯示，出口為「以自己的
+            # 身份帶 --as」或「不是該執行者則回報 PM set-who 改派」。
             who_current = _resolve_who_current(version, ticket_id)
-            if who_current:
-                sys.stderr.write(
-                    f"[identity-guard] deny：{command} 須提供 --as 申報執行身份。"
-                    f"目前 who.current = {who_current}；若你是該執行者，"
-                    f"請帶 --as 重試（例：ticket track {command} {ticket_id} "
-                    f"--as {who_current}）\n"
-                )
-            else:
-                sys.stderr.write(
-                    f"[identity-guard] deny：{command} 須提供 --as <agent-name> 申報執行身份，"
-                    f"請帶 --as 重試（例：ticket track {command} {ticket_id} "
-                    f"--as <agent-name>）\n"
-                )
+            current_hint = (
+                f"目前 who.current = {who_current}；" if who_current else ""
+            )
+            sys.stderr.write(
+                f"[identity-guard] deny：{command} 須提供 --as <agent-name>（填你自己的身份）"
+                f"申報執行身份，請帶 --as 重試。{current_hint}若你不是 who.current 所指執行者，"
+                f"請回報 PM 執行 `ticket track set-who {ticket_id} --current "
+                f"<你的身份>` 改派，不得借用他人名義申報\n"
+            )
             _write_telemetry(
                 command=command,
                 ticket_id=ticket_id,
@@ -282,6 +281,17 @@ def check_identity(
 
     who_current = _resolve_who_current(version, ticket_id)
 
+    # （B）：who.current 為 PM 暫代管且申報者為具名非 PM 執行者時，
+    # 於比對前讓出（派發 hook 不再預綁，所有 --as 寫入命令共用此單一入口）。
+    # lazy import：commands.lifecycle 為上層模組，避免載入期循環依賴。
+    if who_current == PM_AGENT_NAME:
+        from ticket_system.commands.lifecycle import (
+            reassign_who_from_pm_if_takeover,
+        )
+
+        if reassign_who_from_pm_if_takeover(version, ticket_id, as_value):
+            who_current = _resolve_who_current(version, ticket_id)
+
     # 情境 3：相符放行
     if who_current is not None and as_value == who_current:
         _write_telemetry(
@@ -302,22 +312,11 @@ def check_identity(
     #     該用的 --as 值，可自行修正（who.current 的值因票而異、連派發者
     #     都無法預知，訊息須直接給出可複製的值，不能只留占位符）。
     who_display = who_current if who_current is not None else "(未指派)"
-    if who_current:
-        # who.current 有具體值：出口 (a) 可給出可直接複製執行的指令。
-        exit_a = (
-            f"(a) 若你就是 {who_display}，改用 "
-            f"`ticket track {command} {ticket_id} --as {who_display}` 重試；"
-        )
-    else:
-        # who.current 空值（真無主）：出口 (a) 不成立，避免印出
-        # 「--as (未指派)」這種無法執行的指令。
-        exit_a = ""
     sys.stderr.write(
         f"[identity-guard] deny：身份 {as_value} 與指派執行者 {who_display} 不符。"
-        f"合法出口：{exit_a}"
-        f"(b) 若指派本身錯誤或尚無指派，回報 PM 執行 "
+        f"若你不是 {who_display}，請回報 PM 執行 "
         f"`ticket track set-who {ticket_id} --current {as_value}` 重新指派後再 "
-        f"{command}（PC-V1-002 前提一）\n"
+        f"{command}；不得改用他人名義申報（PC-V1-002 前提一）\n"
     )
     _write_telemetry(
         command=command,

@@ -31,13 +31,13 @@ signals:
   - id: consecutive_failures
     category: wrap_standard
     enabled: true
-    event_sources: ["PostToolUse"]
-    tool_matcher: "Task"        # 僅在代理人派發工具觸發
+    event_sources: ["PostToolUse", "PostToolUseFailure"]
+    tool_matcher: "Agent"       # 僅在代理人派發工具觸發（Hook 同時相容舊名 Task）
     threshold: 2                # 連續失敗次數門檻
-    # B-1 + C3-1 (W10-056.3): 失敗判定條件 source-of-truth（W10-052）
-    # Hook 讀取 keywords 與 structured_statuses；不再硬編碼於 Python。
+    # 失敗來源：PostToolUseFailure 事件計一次失敗；PostToolUse 為成功派發，重置計數，
+    # 唯 tool_response 的結構化 status 命中 structured_statuses 時仍計失敗。
+    # 不比對報告全文關鍵字（前景代理人報告常含 error、failed）。
     failure_detection:
-      keywords: ["error", "exception", "failed", "timeout"]
       structured_statuses: ["failed", "error"]
     reset_conditions:
       - agent_success
@@ -67,6 +67,17 @@ signals:
     match_mode: "substring"
     case_sensitive: false
     min_prompt_length: 20
+    # 非使用者撰寫的回合（代理人交回報告、跨 session 訊息）：開頭 skip_prompt_scan_lines 行內
+    # 有任一行以下列前綴開頭即整個跳過本訊號。實際形態：第一行固定引導句
+    # 「Another Claude session sent a message:」，第二行為標記標籤。
+    # 報告內的「無法」是代理人描述行為的引述，不是 PM 的限制性結論。
+    # 已知漏判：標記在開頭範圍之外的回合仍會比對；使用者自己在開頭幾行行首寫標記標籤會被跳過。
+    skip_prompt_scan_lines: 3
+    skip_prompt_prefixes:
+      - "<agent-message"
+      - "<cross-session-message"
+      - "<teammate-message"
+      - "[Subagent hand-back]"
     # W10-058.1.1.2：context-aware filter（黑名單版）
     # 觸發詞前後 window 字內含 words 任一者 → 視為技術語境陳述，suppress signal。
     # 用途：降低 hit 4 型誤報（技術陳述如「Stop 事件不可能每 turn fire」中「不可能」非 PM 限制性主張）。

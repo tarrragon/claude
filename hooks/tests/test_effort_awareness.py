@@ -243,48 +243,6 @@ class TestPhase4EffortAlwaysBlocks:
 # W14-037：類別 A 剩餘 6 hook effort 感知
 # ============================================================================
 
-class TestCreationAcceptanceGateEffort:
-    HOOK = ticket_skill_hooks_path / "creation-acceptance-gate-hook.py"
-
-    def test_low_effort_does_not_short_circuit(self, hook_project_env):
-        # 建立 pending + creation_accepted: false 的 fixture ticket（非 in_progress，
-        # 不落入 re-claim no-op 豁免），移除短路後 low effort 應與 medium/high
-        # 一樣執行完整檢查並阻擋 claim。
-        # cwd 無關化 + 防殘留（0.2.1-W3-027）：改用 conftest 共用的 hook_project_env
-        # fixture——以 tmp_path 假專案根 + CLAUDE_PROJECT_DIR 導向 find_ticket_file()
-        # 解析，取代真實 repo 路徑，pytest 自動清理不留殘留目錄。
-        project_root, env = hook_project_env
-        fixture_dir = project_root / "docs" / "work-logs" / "v0" / "v0.2" / "v0.2.1" / "tickets"
-        fixture_dir.mkdir(parents=True, exist_ok=True)
-        fixture = fixture_dir / "0.2.1-W3-999.md"
-        fixture.write_text(
-            "---\nid: 0.2.1-W3-999\nstatus: pending\ncreation_accepted: false\n---\n# fixture\n",
-            encoding="utf-8",
-        )
-        payload = {
-            "prompt": "/ticket track claim 0.2.1-W3-999",
-            "effort": {"level": "low"},
-        }
-        rc, _, _ = _run_hook(self.HOOK, payload, env=env)
-        assert rc == 2  # EXIT_BLOCK：creation_accepted 未通過，low effort 不再豁免
-
-    def test_medium_effort_processes(self):
-        payload = {
-            "prompt": "echo hi",  # 非 claim 命令，醫療通過
-            "effort": {"level": "medium"},
-        }
-        rc, _, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
-
-    def test_high_effort_processes(self):
-        payload = {
-            "prompt": "echo hi",
-            "effort": {"level": "high"},
-        }
-        rc, _, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
-
-
 class TestAnaTicketMetadataValidationEffort:
     HOOK = ticket_skill_hooks_path / "ana-ticket-metadata-validation-hook.py"
 
@@ -308,9 +266,25 @@ class TestAnaTicketMetadataValidationEffort:
             },
             "effort": {"level": "low"},
         }
-        rc, _, stderr = _run_hook(self.HOOK, payload)
+        rc, stdout, _ = _run_hook(self.HOOK, payload)
         assert rc == 0  # 此 hook 恆為 exit 0（WARNING-only，不阻擋）
-        assert "PC-058" in stderr  # 但必須確實輸出警告，證明未短路跳過檢查
+        # 但必須確實輸出警告（additionalContext），證明未短路跳過檢查
+        ctx = json.loads(stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "PC-058" in ctx
+
+    def test_non_ana_ticket_no_output(self):
+        # E2 對照：非 ANA 來源 ticket 不觸發，無輸出
+        payload = {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "docs/work-logs/v0.18.0/tickets/test.md",
+                "content": "---\nid: test\nacceptance:\n  - 'a; b'\n---\n# x",
+            },
+        }
+        rc, stdout, stderr = _run_hook(self.HOOK, payload)
+        assert rc == 0
+        assert stdout.strip() == ""
+        assert "PC-058" not in stderr
 
     def test_medium_effort_processes(self):
         payload = {
@@ -345,9 +319,29 @@ class TestTicketCreationValidationEffort:
             },
             "effort": {"level": "low"},
         }
-        rc, _, stderr = _run_hook(self.HOOK, payload)
+        rc, stdout, _ = _run_hook(self.HOOK, payload)
         assert rc == 0  # 此 hook 恆為 exit 0（WARNING-only，不阻擋）
-        assert "decision_tree_path" in stderr  # 但必須確實輸出警告，證明未短路跳過檢查
+        # 但必須確實輸出警告（additionalContext），證明未短路跳過檢查
+        ctx = json.loads(stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "decision_tree_path" in ctx
+
+    def test_complete_decision_tree_path_no_output(self):
+        # E2 對照：欄位完整的 ticket 不應有任何輸出
+        content = (
+            "---\nid: test\ntype: IMP\ndecision_tree_path:\n"
+            "  entry_point: a\n  final_decision: b\n  rationale: c\n---\n# x"
+        )
+        payload = {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "docs/work-logs/v0.18.0/tickets/test.md",
+                "content": content,
+            },
+        }
+        rc, stdout, stderr = _run_hook(self.HOOK, payload)
+        assert rc == 0
+        assert stdout.strip() == ""
+        assert "decision_tree_path" not in stderr
 
     def test_medium_effort_processes(self):
         payload = {

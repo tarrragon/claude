@@ -2,7 +2,7 @@
 name: doc
 description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、建立、導航和管理。Use for: (1) 查詢提案、規格、用例文件, (2) 建立新提案/規格/用例（從模板）, (3) 跨文件導航（從 UC 找 spec/ticket）, (4) Domain 地圖查詢, (5) 追蹤索引管理, (6) UC 測試對應驗證, (7) 提案評估與審查, (8) 測試追溯矩陣查詢（UC↔測試覆蓋狀態）, (9) UC 編號治理（uc list 列合法 UC / uc verify 白名單驗證可掛 CI / uc trace 引用追溯 / uc context 派發 UC 定位）。Use when: user mentions PROP-, UC-, SPEC-, 功能, 需求, feature, issue, 提案, 用例, 規格, 需求文件, 需求追蹤, 測試覆蓋, 追溯, traceability, test-map, UC 編號, 編號驗證, uc verify, 偽 UC, 合法 UC 清單"
 metadata:
-  version: 1.24.10
+  version: 1.24.12
 ---
 
 # Doc SKILL
@@ -22,7 +22,7 @@ metadata:
 | DomainMap | `docs/spec/{domain}/domain-map.md`（單 domain 退化 `docs/domain-map.md`） | domain bundle 邊界、依賴方向、層測試策略？（DDD 水平視角，正交 UC）| `templates/domain-map-template.md` |
 | DataContract | `docs/spec/{domain}/`（沿用 SPEC-NNN 編號體系，`subdomain: data-contract`） | 資料層邏輯契約（DB-agnostic）與實作綁定（DB-specific）是什麼？（schema 語意、不變式、保證層歸屬） | `templates/data-contract-template.md` |
 | UseCase | `docs/usecases/` | 使用場景和驗收標準？ | Read `references/usecases.md` |
-| Event | `docs/events/{domain}/`（ID 為 `EVT-{DOMAIN}-{NNN}`，domain-scoped 配號） | 領域事件是什麼？誰發送（producer）、誰接收（consumer）？B 層 proposed 型別，`producers`/`consumers` 建立時選填，`doc validate` 對已存在文件強制檢查兩者皆非空 | `templates/event-template.md` |
+| Event | `docs/events/{domain}/`（ID 為 `EVT-{DOMAIN}-{NNN}`，domain-scoped 配號） | 領域事件是什麼？誰發送（producer）、誰接收（consumer）？B 層 proposed 型別，`producers`/`consumers` 建立時選填，`doc validate` 對已存在文件強制檢查 `producers` 非空；`consumers` 依 category 分流（`domain_event` 必須非空，`process_event` 允許為空） | `templates/event-template.md` |
 | Tracking | `docs/proposals-tracking.yaml` | 提案進度如何？ | Read `references/tracking.md` |
 
 ---

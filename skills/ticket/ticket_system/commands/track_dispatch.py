@@ -77,6 +77,10 @@ PARENT_SCHEMA_SECTION = "Problem Analysis"
 # 全文導致骨架超出 agent-prompt-length-guard 的 30 行硬上限（PC-040）。
 COMMIT_SECTION_HEADING = "Commit 規範"
 
+# CLI 管理的 H3 子節標題（單一清單）。`append-log --replace` 取代 Problem Analysis
+# 時須保留這些子節（由 CLI 寫入的暫態內容，人寫的 H3 不在此列）。
+CLI_MANAGED_H3_HEADINGS = (DISPATCH_LOG_SECTION, COMMIT_SECTION_HEADING)
+
 # 骨架常數與純組裝邏輯已抽離至 ticket_system.lib.dispatch_skeleton（不
 # import filelock，供 CLI 與 hooks 測試套件共用同一份組裝路徑）。本模組
 # import 上方常數僅為向後相容既有引用（如逐字同步文件的比對），CLI 呼叫
@@ -130,6 +134,27 @@ def _find_h3_subsection(section_content: str, heading: str) -> Optional[tuple]:
     boundary_match = re.search(r"\n#{2,3} ", section_content[content_start:])
     end = content_start + boundary_match.start() if boundary_match else len(section_content)
     return start, content_start, end, section_content[start:end]
+
+
+def split_managed_h3(section_content: str) -> tuple:
+    """切出 CLI 管理的 H3 子節與人寫的 H3 標題。
+
+    回傳 `(managed_texts, human_titles)`：managed_texts 為管理子節全文，依在
+    原內容中的出現順序；human_titles 為不屬 CLI_MANAGED_H3_HEADINGS 的 H3 標題。
+    """
+    found = []
+    for heading in CLI_MANAGED_H3_HEADINGS:
+        sub = _find_h3_subsection(section_content, heading)
+        if sub:
+            found.append((sub[0], sub[3].rstrip()))
+    found.sort()
+    managed_titles = {f"### {h}" for h in CLI_MANAGED_H3_HEADINGS}
+    human_titles = [
+        m.group(0).strip()
+        for m in re.finditer(r"^###\s+.*$", section_content, re.MULTILINE)
+        if m.group(0).strip() not in managed_titles
+    ]
+    return [text for _, text in found], human_titles
 
 
 def _append_dispatch_note(body: str, note: str) -> str:
@@ -480,7 +505,7 @@ def register_dispatch_command(subparsers: "argparse._SubParsersAction") -> None:
         choices=["worktree", "none"],
         default=None,
         help=(
-            "派發位置：worktree（收尾句改 finish 並註明 PM 代跑）/ none（主工作樹，"
+            "派發位置：worktree（收尾止於 ticket track commit 並回報 PM，complete 由 PM 於合併後執行）/ none（主工作樹，"
             "收尾 complete；未帶且 where.files 含非豁免路徑時 stderr 警告）"
         ),
     )

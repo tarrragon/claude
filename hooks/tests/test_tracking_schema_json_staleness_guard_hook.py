@@ -66,6 +66,16 @@ def test_get_staged_files_parses_output():
     assert files == ["a.py", "b.json"]
 
 
+def test_get_staged_files_uses_no_optional_locks_before_subcommand():
+    logger = MagicMock()
+    fake_result = MagicMock(returncode=0, stdout="", stderr="")
+    with patch.object(_hook.subprocess, "run", return_value=fake_result) as run:
+        _hook.get_staged_files(Path("/tmp"), logger)
+    argv = run.call_args.args[0]
+    assert "--no-optional-locks" in argv
+    assert argv.index("--no-optional-locks") < argv.index("diff")
+
+
 def test_get_staged_files_returns_empty_on_failure():
     logger = MagicMock()
     fake_result = MagicMock(returncode=1, stdout="", stderr="boom")
@@ -253,6 +263,26 @@ def _run_hook_as_subprocess(command: str, repo: Path) -> subprocess.CompletedPro
     )
 
 
+def _hook_log_text(repo: Path) -> str:
+    """收集隔離 tmp repo 內 hook 日誌全文；fail-open（逾時放行）只寫在這裡。"""
+    log_root = repo / ".claude" / "hook-logs"
+    if not log_root.is_dir():
+        return f"(無日誌目錄: {log_root})"
+    parts = [
+        f"--- {p.relative_to(repo)} ---\n{p.read_text(encoding='utf-8', errors='replace')}"
+        for p in sorted(log_root.rglob("*")) if p.is_file()
+    ]
+    return "\n".join(parts) or "(日誌目錄為空)"
+
+
+def _diag(result: subprocess.CompletedProcess, repo: Path) -> str:
+    """斷言失敗訊息：returncode 與 hook 放行原因（fail-open 日誌行）同時可見。"""
+    return (
+        f"rc={result.returncode}\nstdout={result.stdout}\nstderr={result.stderr}\n"
+        f"hook 日誌:\n{_hook_log_text(repo)}"
+    )
+
+
 def _git(repo: Path, *args) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(repo), *args],
@@ -315,6 +345,7 @@ def tmp_repo(tmp_path):
     assert _main_status() == baseline, "main repo git status changed during test"
 
 
+@pytest.mark.wallclock
 @pytest.mark.integration
 def test_production_launch_comment_only_change_does_not_block(tmp_repo):
     """方式 B 選擇的理由的實測證成：純註解改動（不影響 schema 值）→ 不觸發。
@@ -331,9 +362,10 @@ def test_production_launch_comment_only_change_does_not_block(tmp_repo):
 
     result = _run_hook_as_subprocess('git commit -m "test: comment only"', tmp_repo)
 
-    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert result.returncode == 0, _diag(result, tmp_repo)
 
 
+@pytest.mark.wallclock
 @pytest.mark.integration
 def test_production_launch_semantic_change_without_regen_blocks(tmp_repo):
     """語意改動（新增 GRAPH_NODE_TYPES 條目）但未重產 JSON → 生產路徑下阻擋（exit 2）。
@@ -360,10 +392,11 @@ def test_production_launch_semantic_change_without_regen_blocks(tmp_repo):
 
     result = _run_hook_as_subprocess('git commit -m "test: semantic change no regen"', tmp_repo)
 
-    assert result.returncode == 2, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert result.returncode == 2, _diag(result, tmp_repo)
     assert "tracking_schema.json 過期" in result.stderr
 
 
+@pytest.mark.wallclock
 @pytest.mark.integration
 def test_production_launch_unrelated_commit_not_affected(tmp_repo):
     """未改動 tracking_schema.py 的 commit 不受影響（生產啟動方式驗證）。"""
@@ -372,7 +405,7 @@ def test_production_launch_unrelated_commit_not_affected(tmp_repo):
 
     result = _run_hook_as_subprocess('git commit -m "test: unrelated"', tmp_repo)
 
-    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert result.returncode == 0, _diag(result, tmp_repo)
 
 
 def test_scenario_hand_edited_compat_version_key_blocks(monkeypatch, capsys):
@@ -387,3 +420,105 @@ def test_scenario_hand_edited_compat_version_key_blocks(monkeypatch, capsys):
     )
     assert exit_code == 2
     assert "tracking_schema.json 過期" in capsys.readouterr().err
+
+
+# ============================================================================
+# 解析器判定（E2 正反向對照）與 None 處置
+# ============================================================================
+
+
+def test_is_commit_command_dash_c_hits_e2():
+    assert _hook.is_commit_command("git -C x commit -m y") is True
+
+
+def test_is_commit_command_echo_not_hit_e2():
+    assert _hook.is_commit_command("echo git commit") is False
+
+
+def test_is_commit_command_unparseable_returns_none():
+    assert _hook.is_commit_command("git commit -m 'unclosed") is None
+
+
+def _run_main_with_command(command, parallel):
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+    with patch.object(_hook, "read_json_from_stdin", return_value=payload), \
+         patch.object(_hook, "has_parallel_dispatch", return_value=parallel):
+        return _hook.main()
+
+
+def test_main_unparseable_parallel_blocks():
+    assert _run_main_with_command("git commit -m 'unclosed", True) == 2
+
+
+def test_main_unparseable_non_parallel_warns_passes():
+    assert _run_main_with_command("git commit -m 'unclosed", False) == 0
+
+
+# ============================================================================
+# scan 模式：僅掃描命中的呼叫比照無法解析（0.5.0-W1-120.7.9.2）
+# ============================================================================
+
+_SCAN_ONLY = "find . -exec git commit -m x \\;"
+
+
+def _run_scan(monkeypatch, command, parallel):
+    monkeypatch.setattr(_hook, "has_parallel_dispatch", lambda root: parallel)
+    return _run_main_with(
+        monkeypatch, command, [_hook.SCHEMA_PY_REL_PATH],
+        {"node_types": {"a": 1}}, {"node_types": {}},
+    )
+
+
+def test_scan_only_parallel_blocks(monkeypatch, capsys):
+    assert _run_scan(monkeypatch, _SCAN_ONLY, True) == 2
+    assert "無法安全解析" in capsys.readouterr().err
+
+
+def test_scan_only_non_parallel_warns(monkeypatch, capsys):
+    assert _run_scan(monkeypatch, _SCAN_ONLY, False) == 0
+    assert "提醒" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "command", ["grep git commit notes.txt", "grep 'git commit' notes.txt", "man git-commit"]
+)
+def test_text_lookup_not_blocked_when_non_parallel(monkeypatch, command):
+    assert _run_scan(monkeypatch, command, False) == 0
+
+
+def test_position_hit_stale_still_blocks_regardless_of_parallel(monkeypatch, capsys):
+    assert _run_scan(monkeypatch, 'git commit -m "x"', False) == 2
+    assert "tracking_schema.json 過期" in capsys.readouterr().err
+
+
+def test_is_commit_command_scan_only_returns_none():
+    assert _hook.is_commit_command(_SCAN_ONLY) is None
+    assert _hook.is_commit_command('git commit -m "x"') is True
+
+
+def test_mutation_without_scan_scan_only_slips_through(monkeypatch):
+    """變異確認：移除 scan=True 後，僅掃描命中輸入並行期放行。"""
+    orig = _hook.find_git_invocations
+    monkeypatch.setattr(_hook, "find_git_invocations", lambda c, s, *a, **k: orig(c, s))
+    assert _run_scan(monkeypatch, _SCAN_ONLY, True) == 0
+
+
+# ============================================================================
+# 無法解析成因區分（0.5.0-W1-120.7.10）
+# ============================================================================
+
+
+@pytest.mark.parametrize("parallel", [True, False])
+def test_tokenize_failure_message(monkeypatch, capsys, parallel):
+    _run_scan(monkeypatch, "git commit -m 'unclosed", parallel)
+    err = capsys.readouterr().err
+    assert "未閉合引號" in err
+    assert "非命令位置" not in err
+
+
+@pytest.mark.parametrize("parallel", [True, False])
+def test_scan_only_message(monkeypatch, capsys, parallel):
+    _run_scan(monkeypatch, _SCAN_ONLY, parallel)
+    err = capsys.readouterr().err
+    assert "非命令位置" in err
+    assert "未閉合引號" not in err

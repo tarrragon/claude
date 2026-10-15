@@ -44,6 +44,10 @@ try:
 except ImportError:
     yaml = None
 
+# 終態常數取自 ticket 系統權威定義，不在 hook 內另寫字面清單
+sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "ticket"))
+from ticket_system.constants import TERMINAL_STATUSES
+
 
 # ============================================================================
 # 常數
@@ -72,7 +76,11 @@ def check_condition_1_unidirectional(target: Dict, siblings_map: Dict[str, Dict]
         if target.get("id") in dep_blocked:
             return _violation(1, SEVERITY_BLOCK, "雙向依賴", "移除其中一向依賴")
 
-    if len(sibling_deps) >= 2:
+    # 前驅皆終態：結構已不影響排程，阻擋只讓既成票無法收尾，放行
+    all_terminal = all(
+        siblings_map[d].get("status") in TERMINAL_STATUSES for d in sibling_deps
+    )
+    if len(sibling_deps) >= 2 and not all_terminal:
         return _violation(1, SEVERITY_BLOCK,
                           f"多兄弟依賴（{len(sibling_deps)} 個前驅兄弟）",
                           "限制單一前驅，或拆為父子深度")

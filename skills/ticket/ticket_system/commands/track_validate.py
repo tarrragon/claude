@@ -67,7 +67,7 @@ _FIX_SUGGESTIONS: dict[str, str] = {
         "    ticket track remove-acceptance <id> <index>\n"
         "    ticket track set-acceptance <id> --check <index>"
     ),
-    "who": "ticket track claim <id>（自動設定 current/history）",
+    "who": "ticket track claim <id> --as <agent>（設定 current；改派時 history 追加原 current）",
 }
 
 

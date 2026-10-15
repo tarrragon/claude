@@ -244,3 +244,193 @@ def test_main_end_to_end_compound_command_suggests_actual_cli_help_not_shell_bui
     additional = payload["hookSpecificOutput"].get("additionalContext", "")
     assert "ticket --help" in additional
     assert "cd --help" not in additional
+
+
+# ----------------------------------------------------------------------------
+# 286.3：分層成功判定（反向）與多陳述命令的失敗歸因
+# ----------------------------------------------------------------------------
+
+_MULTI = (
+    "ticket track set-who 0.5.0-W1-286.3 basil > /dev/null 2>&1; "
+    "ticket track check-acceptance 0.5.0-W1-286.3 2 3"
+)
+_MULTI_ERR = "usage: ticket track check-acceptance [-h]\nerror: unrecognized arguments: 3"
+
+
+def test_unmasked_success_with_swallowed_output_gives_no_feedback(capsys):
+    """成功但輸出被吸走（stdout 空、無 [OK]）的未遮蔽命令不給錯誤回饋。"""
+    stdin = _make_input(
+        "ticket track set-who 0.5.0-W1-286.3 basil > /dev/null 2>&1", exit_code=0
+    )
+    rc, out = _run_main(stdin, capsys)
+    assert rc == 0
+    assert "additionalContext" not in json.loads(out)["hookSpecificOutput"]
+
+
+def test_unmasked_success_quoting_error_text_gives_no_feedback(capsys):
+    """E1 對照之一：未遮蔽成功命令的 stdout 引述 usage 錯誤字樣，不誤報。"""
+    stdin = _make_input(
+        "ticket track full 0.5.0-W1-286.3", stdout="error: unrecognized arguments: 3",
+        exit_code=0,
+    )
+    rc, out = _run_main(stdin, capsys)
+    assert "additionalContext" not in json.loads(out)["hookSpecificOutput"]
+
+
+def test_masked_command_with_error_output_still_gives_feedback(capsys):
+    """E1 對照之二：被遮蔽（管線）且輸出含錯誤時仍給回饋。"""
+    stdin = _make_input(
+        "ticket track check-acceptance 0.5.0-W1-286.3 2 3 2>&1 | tail -5",
+        stdout=_MULTI_ERR, exit_code=0,
+    )
+    rc, out = _run_main(stdin, capsys)
+    assert "[CLI 錯誤偵測]" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+
+
+def test_failure_event_attributes_to_failing_statement(capsys):
+    """多陳述命令：失敗歸因指向 check-acceptance，不是開頭的 set-who。"""
+    stdin = json.dumps({
+        "hook_event_name": "PostToolUseFailure",
+        "tool_name": "Bash",
+        "tool_input": {"command": _MULTI},
+        "error": "Exit code 2\n" + _MULTI_ERR,
+    })
+    rc, out = _run_main(stdin, capsys)
+    additional = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert "失敗命令：ticket track check-acceptance" in additional
+    assert "set-who" not in additional
+
+
+def test_ambiguous_multi_statement_does_not_name_a_statement():
+    """輸出同時帶出兩個陳述的動詞：無法歸因，不指名任何陳述。"""
+    summary, base = hook.extract_command_summary(
+        _MULTI, "usage: set-who and check-acceptance error"
+    )
+    assert summary == hook.AMBIGUOUS_STATEMENT_SUMMARY
+    assert base == "ticket"
+
+
+def test_single_cli_statement_among_other_commands_keeps_whole_summary():
+    summary, _ = hook.extract_command_summary(
+        "cd /x 2>/dev/null; ticket track set-where 0.19.0-W3-071 --layer Domain",
+        "unrecognized arguments",
+    )
+    assert summary.startswith("cd /x")
+
+
+# ----------------------------------------------------------------------------
+# 0.5.0-W1-295：遮蔽路徑 stdout 行首 [Error] 偵測（check_general_cli_failure）
+# ----------------------------------------------------------------------------
+
+import logging
+
+
+def _general(command: str, stdout: str = "", stderr: str = ""):
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "tool_response": {"stdout": stdout, "stderr": stderr},
+    }
+    return hook.check_general_cli_failure(payload, logging.getLogger("t295"))
+
+
+def test_masked_stdout_error_prefix_is_failure():
+    """正向對照：舊實作只看 stderr，此情境回傳 None。"""
+    out = _general("ticket track claim X; echo done", "[Error] not found\ndone\n")
+    assert out == hook.WorkflowMessages.CLI_FAILURE_HELP_REMINDER
+
+
+def test_posttooluse_stderr_is_not_a_failure_signal():
+    """stderr 在 PostToolUse 恆空，分支不再依賴它；即使塞值也不觸發（E1 對照）。"""
+    assert _general("somecli run; echo done", "done\n", stderr="boom") is None
+
+
+def test_success_stdout_with_error_words_gives_no_feedback():
+    """成功命令 stdout 含錯誤字樣（非行首 [Error]）不回饋。"""
+    assert _general("somecli run", "Traceback: error: failed to open\n") is None
+
+
+def _general_failure(command: str, error: str):
+    payload = {
+        "hook_event_name": "PostToolUseFailure",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "error": error,
+    }
+    return hook.check_general_cli_failure(payload, logging.getLogger("t306"))
+
+
+def test_failure_event_nonzero_exit_gives_feedback():
+    """E2 正向對照：PostToolUseFailure 結束碼非 0 且有輸出 → 回饋。"""
+    out = _general_failure("somecli run", "Exit code 1\nboom: cannot open\n")
+    assert out == hook.WorkflowMessages.CLI_FAILURE_HELP_REMINDER
+
+
+def test_failure_event_unparseable_error_fails_open():
+    assert _general_failure("somecli run", "garbage") is None
+
+
+def test_masked_stdout_error_not_at_line_start_is_not_failure():
+    assert _general("ticket track query X; echo ok", "title: see [Error] in text\n") is None
+
+
+def test_unmasked_stdout_error_prefix_is_not_failure():
+    assert _general("ticket track query X", "[Error] quoted in ticket body\n") is None
+
+
+def test_unparseable_command_fails_open():
+    assert _general("ticket track claim 'X; echo", "[Error] x\n") is None
+
+
+# ----------------------------------------------------------------------------
+# 「已由其他 hook 處理」依命令開頭比對（子字串誤判 E2 對照）
+# ----------------------------------------------------------------------------
+
+REMINDER = hook.WorkflowMessages.CLI_FAILURE_HELP_REMINDER
+_FAIL_OUT = "Exit code 1\nboom: cannot open\n"
+
+
+def test_pip_install_pytest_failure_is_not_suppressed():
+    assert _general_failure("pip install pytest", _FAIL_OUT) == REMINDER
+
+
+def test_quoted_flutter_test_in_argument_is_not_suppressed():
+    assert _general_failure("cat x | somecli 'flutter test'", _FAIL_OUT) == REMINDER
+
+
+def test_quoted_dart_analyze_in_argument_is_not_suppressed():
+    assert _general_failure("somecli 'dart analyze' y", _FAIL_OUT) == REMINDER
+
+
+def test_real_pytest_failure_is_suppressed():
+    assert _general_failure("pytest tests/test_a.py", _FAIL_OUT) is None
+
+
+def test_real_flutter_test_failure_is_suppressed():
+    assert _general_failure("flutter test test/a_test.dart", _FAIL_OUT) is None
+
+
+def test_real_ticket_cli_failure_is_suppressed():
+    assert _general_failure("ticket track claim X", _FAIL_OUT) is None
+
+
+def test_prefixed_commands_are_still_suppressed():
+    for cmd in (
+        "FOO=1 pytest tests/a.py",
+        "cd x && flutter test",
+        "uv --directory x run pytest tests",
+        "uv run ticket track query X",
+        "cd x && dart analyze lib",
+        "go vet ./...",
+        "go test ./...",
+    ):
+        assert _general_failure(cmd, _FAIL_OUT) is None, cmd
+
+
+def test_shared_judge_exception_does_not_suppress():
+    with patch.object(hook, "find_test_invocations", side_effect=RuntimeError("boom")):
+        assert _general_failure("pytest tests/a.py", _FAIL_OUT) == REMINDER
+
+
+def test_unparseable_command_is_not_suppressed():
+    assert hook.is_handled_by_other_hooks("pytest 'unclosed") is False

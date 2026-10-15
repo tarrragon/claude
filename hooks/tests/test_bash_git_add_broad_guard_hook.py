@@ -422,3 +422,55 @@ class TestUnaffectedCommands:
     def test_empty_command_allowed(self, monkeypatch):
         exit_code = _run_hook(monkeypatch, "", uncommitted=[_fs("M ", "a.py")])
         assert exit_code == 0
+
+
+# ============================================================================
+# scan=True（0.5.0-W1-120.7.9.3）：僅掃描命中的 git add 與位置命中同等處置
+# ============================================================================
+
+_SCAN_ONLY_ADD = "setsid git add -A"
+
+
+class TestScanModeE2:
+    def test_scan_only_add_denied_with_uncommitted(self, monkeypatch):
+        exit_code = _run_hook(
+            monkeypatch, _SCAN_ONLY_ADD, uncommitted=[_fs("M ", "a.py")]
+        )
+        assert exit_code == 2
+
+    def test_find_exec_add_denied_with_uncommitted(self, monkeypatch):
+        exit_code = _run_hook(
+            monkeypatch,
+            "find . -maxdepth 0 -exec git add -A \\;",
+            uncommitted=[_fs("M ", "a.py")],
+        )
+        assert exit_code == 2
+
+    def test_scan_only_add_allowed_without_uncommitted(self, monkeypatch):
+        assert _run_hook(monkeypatch, _SCAN_ONLY_ADD, uncommitted=[]) == 0
+
+    def test_grep_quoted_text_allowed(self, monkeypatch):
+        exit_code = _run_hook(
+            monkeypatch,
+            "grep 'git add -A' notes.txt",
+            uncommitted=[_fs("M ", "a.py")],
+        )
+        assert exit_code == 0
+
+    def test_unparseable_still_allowed(self, monkeypatch):
+        exit_code = _run_hook(
+            monkeypatch, 'git add -A "unclosed', uncommitted=[_fs("M ", "a.py")]
+        )
+        assert exit_code == 0
+
+    def test_mutation_without_scan_flips_to_allow(self, monkeypatch):
+        orig = hook_module.find_git_invocations
+        monkeypatch.setattr(
+            hook_module,
+            "find_git_invocations",
+            lambda command, subs, *a, **k: orig(command, subs),
+        )
+        exit_code = _run_hook(
+            monkeypatch, _SCAN_ONLY_ADD, uncommitted=[_fs("M ", "a.py")]
+        )
+        assert exit_code == 0

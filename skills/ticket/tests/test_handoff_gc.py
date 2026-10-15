@@ -64,6 +64,15 @@ def _write_handoff_markdown(pending_dir: Path, ticket_id: str, content: str = "T
     return path
 
 
+def _make_ticket(project_root: Path, ticket_id: str, status: str = "pending", version: str = "0.1.0") -> Path:
+    """建立測試用 ticket md（使來源/目標票「存在」，避免被判為查無）"""
+    d = project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{ticket_id}.md"
+    path.write_text(f"---\nid: {ticket_id}\nstatus: {status}\n---\n", encoding="utf-8")
+    return path
+
+
 class TestCollectStaleHandoffs:
     """測試 _collect_stale_handoffs 函式"""
 
@@ -72,6 +81,7 @@ class TestCollectStaleHandoffs:
         """來源 ticket 未完成時，無 stale handoff"""
         project_root, pending, archive = temp_gc_env
         mock_completed.return_value = False
+        _make_ticket(project_root, "0.1.0-W6-001")
         _write_handoff(pending, "0.1.0-W6-001", "context-refresh")
         result = _collect_stale_handoffs()
         assert len(result) == 0
@@ -119,6 +129,8 @@ class TestCollectStaleHandoffs:
         project_root, pending, archive = temp_gc_env
         mock_completed.return_value = True
         mock_target_started.return_value = False
+        _make_ticket(project_root, "0.1.0-W6-001", "completed")
+        _make_ticket(project_root, "0.1.0-W6-002")
         _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002")
         result = _collect_stale_handoffs()
         assert len(result) == 0
@@ -275,6 +287,8 @@ class TestExecuteGcExecute:
         project_root, pending, archive = temp_gc_env
         mock_completed.side_effect = lambda tid, project_root=None: tid == "0.1.0-W6-001"
 
+        _make_ticket(project_root, "0.1.0-W6-001", "completed")
+        _make_ticket(project_root, "0.1.0-W6-002")
         stale_file = _write_handoff(pending, "0.1.0-W6-001", "context-refresh", from_status="in_progress")
         valid_file = _write_handoff(pending, "0.1.0-W6-002", "context-refresh", from_status="in_progress")
 
@@ -352,6 +366,8 @@ class TestForceFlagW3_018_2:
         project_root, pending, archive = temp_gc_env
         mock_completed.return_value = True
         mock_target_started.return_value = False
+        _make_ticket(project_root, "0.1.0-W6-001", "completed")
+        _make_ticket(project_root, "0.1.0-W6-002")
         _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002", from_status="completed")
         result = _collect_stale_handoffs(force=False)
         assert len(result) == 0
@@ -361,6 +377,8 @@ class TestForceFlagW3_018_2:
         """force=True 但來源 ticket 仍 pending/in_progress 時不應標 stale"""
         project_root, pending, archive = temp_gc_env
         mock_completed.return_value = False
+        for tid in ("0.1.0-W6-001", "0.1.0-W6-003", "0.1.0-W6-004"):
+            _make_ticket(project_root, tid, "in_progress")
         _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002", from_status="in_progress")
         _write_handoff(pending, "0.1.0-W6-003", "to-parent", from_status="in_progress")
         _write_handoff(pending, "0.1.0-W6-004", "to-child:0.1.0-W6-005", from_status="in_progress")
@@ -379,3 +397,57 @@ class TestForceFlagW3_018_2:
         assert len(result) == 3
         ticket_ids = {r[1] for r in result}
         assert ticket_ids == {"0.1.0-W6-001", "0.1.0-W6-003", "0.1.0-W6-004"}
+
+
+class TestOrphanSourceTicket:
+    """0.5.0-W1-067.3：查無來源票的 pending 檔判為 stale（含正向對照 E2）"""
+
+    def test_missing_source_is_stale(self, temp_gc_env):
+        """正向對照：來源票不存在 -> 列為 stale 且 dry-run 不移動檔案"""
+        project_root, pending, archive = temp_gc_env
+        f = _write_handoff(pending, "0.1.0-W9-001", "context-refresh")
+        result = _collect_stale_handoffs()
+        assert [r[1] for r in result] == ["0.1.0-W9-001"]
+        assert "查無" in result[0][2]
+        execute_gc(dry_run=True)
+        assert f.exists()
+
+    def test_missing_source_is_stale_under_force(self, temp_gc_env):
+        """--force 路徑同樣清理查無票"""
+        project_root, pending, archive = temp_gc_env
+        _write_handoff(pending, "0.1.0-W9-001", "context-refresh")
+        assert len(_collect_stale_handoffs(force=True)) == 1
+
+    def test_existing_source_not_stale(self, temp_gc_env):
+        """對照：來源票存在且未完成 -> 不清"""
+        project_root, pending, archive = temp_gc_env
+        _make_ticket(project_root, "0.1.0-W9-001", "in_progress")
+        _write_handoff(pending, "0.1.0-W9-001", "context-refresh")
+        assert _collect_stale_handoffs() == []
+
+    def test_source_in_other_version_dir_not_stale(self, temp_gc_env):
+        """對照：來源票位於他版本目錄 -> 不誤判"""
+        project_root, pending, archive = temp_gc_env
+        _make_ticket(project_root, "0.1.0-W9-001", "in_progress", version="0.2.0")
+        _write_handoff(pending, "0.1.0-W9-001", "context-refresh")
+        assert _collect_stale_handoffs() == []
+
+    def test_missing_source_but_target_exists_not_stale(self, temp_gc_env):
+        """對照：來源查無但 target 存在 -> 不清（target 才是該做的工作）"""
+        project_root, pending, archive = temp_gc_env
+        _make_ticket(project_root, "0.1.0-W9-002", "pending")
+        _write_handoff(pending, "0.1.0-W9-001", "to-sibling:0.1.0-W9-002")
+        assert _collect_stale_handoffs() == []
+
+    def test_missing_source_and_target_is_stale(self, temp_gc_env):
+        """來源與 target 皆查無 -> stale"""
+        project_root, pending, archive = temp_gc_env
+        _write_handoff(pending, "0.1.0-W9-001", "to-sibling:0.1.0-W9-002")
+        assert len(_collect_stale_handoffs()) == 1
+
+    def test_lookup_exception_not_stale(self, temp_gc_env):
+        """對照：查詢拋例外 -> 保守不判 stale"""
+        project_root, pending, archive = temp_gc_env
+        _write_handoff(pending, "0.1.0-W9-001", "context-refresh")
+        with patch("ticket_system.lib.handoff_utils._find_ticket_file", side_effect=OSError("boom")):
+            assert _collect_stale_handoffs() == []

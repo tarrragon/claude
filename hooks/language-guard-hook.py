@@ -13,7 +13,7 @@ Language Guard Hook - 偵測前一輪 assistant 回應的語言/格式違規
   1. 非預期語言：韓文（U+AC00-D7AF）、日文假名（U+3040-30FF）
   2. Emoji codepoint：U+1F300-U+1FAFF / U+2600-U+27BF 等主要範圍
   3. 隱含表達 6 句型（document-writing-style v1.2.0 反模式表）
-- 觸發後寫入 stderr + 日誌（規則 4：失敗必須可見）
+- 觸發後以 additionalContext 輸出（模型可見）+ 日誌；內部錯誤仍寫 stderr（規則 4）
 
 設計原則（W17-068 / W17-066 ginger P1 + linux L-C1）：
 - L1 同步阻擋層由 askuserquestion-charset-guard-hook.py 處理（exit 2 阻擋）
@@ -36,7 +36,14 @@ from typing import Optional, List, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
+from lib import (
+    setup_hook_logging,
+    run_hook_safely,
+    read_json_from_stdin,
+    get_project_root,
+    emit_model_reminder,
+)
+from lib.transcript_tail_reader import read_last_assistant_text
 
 
 # ============================================================================
@@ -201,37 +208,26 @@ def extract_previous_assistant_message(hook_input: dict, logger) -> Optional[str
     """
     從 Hook 輸入中提取前一輪 assistant 回應。
 
-    Hook 輸入結構：
-    {
-        "transcript": [
-            {"role": "user", "content": "..."},
-            {"role": "assistant", "content": "..."},
-            ...
-        ]
-    }
+    實測的 UserPromptSubmit payload（鍵：session_id、transcript_path、cwd、
+    prompt_id、permission_mode、hook_event_name、prompt）不含 transcript 內容，
+    只提供 transcript_path（session JSONL 檔路徑）；由該檔取最後一則 assistant 文字。
 
     Returns:
-        前一輪 assistant 回應的 content，或 None（若無 transcript 或無 assistant 回應）
+        前一輪 assistant 回應文字，或 None（無 transcript_path、檔案不存在、
+        解析失敗皆 fail-open 並記日誌）
     """
     try:
-        transcript = hook_input.get("transcript")
-        if not isinstance(transcript, list) or not transcript:
-            logger.debug("無 transcript 或 transcript 為空")
+        transcript_path = hook_input.get("transcript_path")
+        if not transcript_path:
+            logger.info("payload 無 transcript_path，略過檢查")
             return None
-
-        # 從後往前掃描，找最後一個 assistant 訊息
-        for item in reversed(transcript):
-            if isinstance(item, dict) and item.get("role") == "assistant":
-                content = item.get("content")
-                if isinstance(content, str):
-                    logger.debug(f"找到前一輪 assistant 回應，長度 {len(content)}")
-                    return content
-
-        logger.debug("Transcript 中未找到 assistant 回應")
-        return None
+        text = read_last_assistant_text(transcript_path, logger)
+        if text is None:
+            logger.info("transcript 未取得 assistant 回應（fail-open）")
+        return text
 
     except Exception as e:
-        logger.info(f"提取 transcript 失敗（已預期的非標準輸入）: {e}")
+        logger.info(f"提取 transcript 失敗（fail-open）: {e}")
         return None
 
 
@@ -303,15 +299,19 @@ def main() -> int:
             logger.debug("無前一輪 assistant 回應，靜默通過")
             return 0
 
+        # 警告改以 additionalContext 輸出（UserPromptSubmit 的 stderr 模型不可見，
+        # 提醒對象是模型自身的前一輪輸出），三類偵測合成單一 JSON。
+        warnings: List[str] = []
+
         # 偵測 1：非預期語言（韓文 / 日文假名）
         if contains_non_expected_language(previous_message):
-            sys.stderr.write(build_language_warning())
+            warnings.append(build_language_warning())
             logger.warning("偵測到韓文或日文假名字元在 assistant 回應中")
 
         # 偵測 2：Emoji（W17-068 新增）
         emoji_hits = find_emoji_chars(previous_message)
         if emoji_hits:
-            sys.stderr.write(build_emoji_warning(emoji_hits))
+            warnings.append(build_emoji_warning(emoji_hits))
             logger.warning(
                 "偵測到 %d 處 emoji 字元（前 5 個：%s）",
                 len(emoji_hits),
@@ -321,11 +321,16 @@ def main() -> int:
         # 偵測 3：隱含表達 6 句型（W17-068 新增；警告非阻擋）
         implicit_hits = find_implicit_expressions(previous_message)
         if implicit_hits:
-            sys.stderr.write(build_implicit_expression_warning(implicit_hits))
+            warnings.append(build_implicit_expression_warning(implicit_hits))
             logger.warning(
                 "偵測到 %d 處隱含表達句型：%s",
                 len(implicit_hits),
                 [p for p, _ in implicit_hits],
+            )
+
+        if warnings:
+            emit_model_reminder(
+                "UserPromptSubmit", "".join(warnings), input_data=hook_input
             )
 
         return 0

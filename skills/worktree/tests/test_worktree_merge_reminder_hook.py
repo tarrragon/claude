@@ -87,7 +87,17 @@ def _install_main_mocks(
     worktrees=None,
     unmerged_commits_by_branch=None,
     dirty_files_by_path=None,
+    locked_paths=(),
+    zero_commit_branches=(),
 ):
+    # 0.5.0-W1-300：0.5.0-W1-290 新增 locked／零提交判準；預設前提為
+    # 「未 locked、分支有自己的提交」，使原清理提醒分支可達。
+    monkeypatch.setattr(hook, "get_locked_paths", lambda logger: set(locked_paths))
+    monkeypatch.setattr(
+        hook,
+        "has_no_own_commits",
+        lambda branch, logger: branch in zero_commit_branches,
+    )
     input_data = {
         "tool_input": {"command": "ticket track complete 0.0.0-W1-001"},
     }
@@ -116,6 +126,44 @@ def _run_main_and_get_message(capsys) -> str:
     captured = capsys.readouterr()
     output = json.loads(captured.out.strip())
     return output["hookSpecificOutput"]["additionalContext"]
+
+
+class TestInProgressClassification:
+    """E2 正向對照（0.5.0-W1-300）：locked／零提交 worktree 歸進行中，
+    不列入清理建議。斷言看結構化結果（classify_worktrees 回傳值）。"""
+
+    def _classify(self, monkeypatch, **kwargs):
+        _install_main_mocks(monkeypatch, **kwargs)
+        wts = [("/path/to/wt", "feat/0.0.0-W1-010")]
+        return hook.classify_worktrees(wts, logging.getLogger("test-wmr"))
+
+    def test_locked_worktree_is_in_progress(self, monkeypatch):
+        unmerged, merged, in_progress = self._classify(
+            monkeypatch, locked_paths=["/path/to/wt"]
+        )
+        assert unmerged == []
+        assert merged == []
+        assert in_progress == [
+            ("/path/to/wt", "feat/0.0.0-W1-010", "worktree 已 locked")
+        ]
+
+    def test_zero_commit_worktree_is_in_progress(self, monkeypatch):
+        unmerged, merged, in_progress = self._classify(
+            monkeypatch, zero_commit_branches=["feat/0.0.0-W1-010"]
+        )
+        assert unmerged == []
+        assert merged == []
+        assert in_progress == [
+            ("/path/to/wt", "feat/0.0.0-W1-010", "分支尚無自己的提交")
+        ]
+
+    def test_unlocked_with_commits_is_merged_control(self, monkeypatch):
+        """對照組：未 locked 且有自己的提交 → merged（確認上兩筆差異來自判準）。"""
+        unmerged, merged, in_progress = self._classify(monkeypatch)
+        assert in_progress == []
+        assert [(p, b) for p, b, _ in merged] == [
+            ("/path/to/wt", "feat/0.0.0-W1-010")
+        ]
 
 
 class TestMergedCleanupReminderMessage:

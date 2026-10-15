@@ -15,6 +15,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, read_json_from_stdin
+from lib.git_command_parse import match_git_commit
+
+
+def is_git_commit_command(command: str) -> bool:
+    """以 find_git_invocations 判定 commit；無法解析視為未命中。"""
+    # 原行為不排除 amend；None（無法解析）視為未命中
+    return match_git_commit(command, exclude_amend=False) is True
 
 
 def main() -> None:
@@ -31,7 +38,7 @@ def main() -> None:
     tool_input = data.get("tool_input", {})
     command = tool_input.get("command", "")
 
-    if "git commit" not in command:
+    if not is_git_commit_command(command):
         return
 
     stdout = data.get("stdout", "")

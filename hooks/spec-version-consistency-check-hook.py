@@ -39,7 +39,7 @@ from typing import List, NamedTuple, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root
+from lib import setup_hook_logging, run_hook_safely, get_project_root, emit_model_reminder
 
 HOOK_NAME = "spec-version-consistency-check-hook"
 
@@ -237,7 +237,9 @@ def main() -> int:
         return 0
 
     warning = format_drift_warning(drifts, project_root)
-    print(warning, file=sys.stderr)
+    # 受眾為模型：版號漂移可由模型直接對齊；exit 0 stderr 模型不可見，
+    # 改走 additionalContext（一致時不輸出，平時零 token 成本）
+    emit_model_reminder("SessionStart", warning)
     logger.warning(warning)
     return 0
 

@@ -54,6 +54,15 @@ def _has_phase4_evidence(solution_text: str) -> bool:
     return False
 
 
+def has_phase4_review_evidence(body: str) -> bool:
+    """公開判定：ticket body 的 Solution 章節是否含 Phase 4 審查證據。
+
+    gate 與 lifecycle（complete 的 Review Status）共用此判定。
+    """
+    solution_text = _extract_solution_section(body)
+    return bool(solution_text) and _has_phase4_evidence(solution_text)
+
+
 def check_phase4_review_evidence(
     content: str, ticket_type: str, logger
 ) -> Optional[str]:

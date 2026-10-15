@@ -14,6 +14,7 @@ import pytest
 
 from ticket_system.commands import track_dispatch as td_mod
 from ticket_system.commands import track_dispatch_validate as tdv_mod
+from ticket_system.lib.dispatch_skeleton import HOOK_TICKET_REMINDER
 
 
 def _write_ticket_md(path: Path, tid: str, where_files=None) -> None:
@@ -523,10 +524,10 @@ def test_dispatch_hook_ticket_appends_four_item_reminder(dispatch_ticket_hook_sc
     assert rc == 0
 
     out = capsys.readouterr().out
-    assert "本 session 實地觸發確認" in out
-    assert "liveness 驗證方式" in out
-    assert "fail-open" in out and "fail-closed" in out
-    assert "產生路徑盤點表" in out
+    # 比對提醒常數的每個條目行，而非硬寫整段字面
+    entries = [ln.strip() for ln in HOOK_TICKET_REMINDER.splitlines() if ln.strip()]
+    assert len(entries) >= 5
+    assert all(entry in out for entry in entries)
 
 
 def test_dispatch_non_hook_ticket_omits_four_item_reminder(dispatch_ticket, capsys):
@@ -535,7 +536,7 @@ def test_dispatch_non_hook_ticket_omits_four_item_reminder(dispatch_ticket, caps
     assert rc == 0
 
     out = capsys.readouterr().out
-    assert "liveness 驗證方式" not in out
+    assert HOOK_TICKET_REMINDER.splitlines()[0].strip() not in out
 
 
 # --- dispatch-validate 規則 4b 樣板偵測（0.1.0-W3-087） -----------------
@@ -677,9 +678,12 @@ def test_dispatch_isolation_worktree_vs_default_closing_differs(dispatch_ticket,
     assert out_default != out_wt
     assert "ticket track complete" in out_default
     assert "ticket track finish" not in out_default
-    assert "ticket track finish" in out_wt
+    # 通用 Commit 段落兩側都提到 --worktree，故以收尾句專有的完整片段區分
+    assert "--worktree <worktree 絕對路徑>" not in out_default
+    assert "--worktree <worktree 絕對路徑>" in out_wt
+    assert "ticket track finish" not in out_wt
     assert "ticket track complete" not in out_wt
-    assert "PM" in out_wt.splitlines()[-1] or "代跑" in out_wt
+    assert "回報 PM" in out_wt
 
 
 def test_dispatch_isolation_none_keeps_complete_closing(dispatch_ticket, capsys):

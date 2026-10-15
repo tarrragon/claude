@@ -6,6 +6,7 @@ Handoff 共用判斷函式模組
 """
 
 import json
+import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,8 @@ from ticket_system.lib.constants import (
     HANDOFF_PENDING_SUBDIR,
 )
 from ticket_system.lib.paths import get_project_root, get_ticket_state_root
+
+_logger = logging.getLogger(__name__)
 
 
 # W17-181.1: 真 SSOT delegate 至 hook_utils.hook_ticket
@@ -128,6 +131,36 @@ def is_ticket_completed(
         return status == STATUS_COMPLETED
     except Exception:
         return False  # 保守策略：無法判斷時顯示
+
+
+def is_ticket_missing(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+) -> bool:
+    """
+    確認 Ticket 檔案「確定不存在」。
+
+    與 is_ticket_completed 的保守策略相反：僅在查詢機制可用、查詢成功且無結果時
+    回 True；查詢機制不可用或查詢拋例外一律回 False（不確定不當作查無），
+    避免暫時性錯誤使 handoff 被誤清。find_ticket_file 在直接路徑落空後會全量
+    掃描所有版本目錄，故他版本目錄存在的票不會被判為查無。
+
+    Args:
+        ticket_id: Ticket ID
+        project_root: 專案根目錄；None 時 fallback 至 get_project_root()
+
+    Returns:
+        bool: True 表示確定查無該票，False 表示存在或無法判斷
+    """
+    if _find_ticket_file is None:
+        return False
+    try:
+        root = project_root if project_root is not None else get_project_root()
+        return _find_ticket_file(ticket_id, root) is None
+    except Exception as exc:
+        # 查詢失敗不等於查無此票：回 False 保守不清，但留下可觀測訊號
+        _logger.warning("is_ticket_missing 查詢失敗 ticket_id=%s: %s", ticket_id, exc)
+        return False
 
 
 def is_ticket_terminal(

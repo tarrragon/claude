@@ -346,11 +346,36 @@ class TestMainIntegration:
         lg.propagate = False
         return lg, records
 
+    @staticmethod
+    def _install_fake_clock(monkeypatch, return_gap=0.0):
+        """全注入時鐘：牆鐘與 monotonic 共用同一假時刻，測試不依賴真實時間。
+
+        return_gap：第二次牆鐘取樣（return_wall）前推進的秒數，模擬 total 與
+        return_wall 兩次取樣之間的排程空隙。
+        """
+        import types
+
+        clock = {"t": 1000.0, "wall_calls": 0}
+
+        def _wall():
+            clock["wall_calls"] += 1
+            if clock["wall_calls"] >= 2:
+                clock["t"] += return_gap
+            return clock["t"]
+
+        monkeypatch.setattr(hook_module, "_wall_clock", _wall)
+        monkeypatch.setattr(
+            hook_module, "time", types.SimpleNamespace(monotonic=lambda: clock["t"])
+        )
+        return clock
+
     def _fake_run(self, monkeypatch, returncode, stdout, delay=0.05):
         import subprocess as sp
 
+        clock = self._install_fake_clock(monkeypatch)
+
         def _run(cmd, **kw):
-            time.sleep(delay)
+            clock["t"] += delay
             return sp.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
 
         monkeypatch.setattr(hook_module.subprocess, "run", _run)
@@ -383,7 +408,7 @@ class TestMainIntegration:
         import re
 
         total = float(re.search(r"total=(\d+\.\d+)s", msg).group(1))
-        assert 0.04 <= total < 5  # fake run 睡 0.05s
+        assert total == pytest.approx(0.05)  # 假時鐘推進 0.05s
         assert "pytest_self_reported=0.01s" in msg
         assert recs[0].levelname == "INFO"
 
@@ -419,17 +444,19 @@ class TestMainIntegration:
     # ---- 0.4.1-W1-035.4：細化分段計時（四段 + 兩次 load1）----
 
     def _fake_run_with_timing(self, monkeypatch, marks, returncode=0,
-                              stdout="1 passed in 0.01s\n"):
+                              stdout="1 passed in 0.01s\n", return_gap=0.0):
         """假 subprocess.run：依 env 計時檔路徑寫入 marks（相對 spawn 的秒偏移）。"""
         import subprocess as sp
 
+        clock = self._install_fake_clock(monkeypatch, return_gap)
+
         def _run(cmd, **kw):
             path = kw["env"][hook_module.TIMING_ENV]
-            now = time.time()
+            now = clock["t"]
             payload = {k: (now + v if k in ("configure", "unconfigure", "atexit") else v)
                        for k, v in marks.items()}
             Path(path).write_text(json.dumps(payload), encoding="utf-8")
-            time.sleep(0.05)
+            clock["t"] += 0.05
             return sp.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
 
         monkeypatch.setattr(hook_module.subprocess, "run", _run)
@@ -448,13 +475,26 @@ class TestMainIntegration:
         def _f(name):
             return float(re.search(name + r"=(-?\d+\.\d+)s", msg).group(1))
 
-        parts = [_f(n) for n in ("spawn_to_configure", "configure_to_summary",
-                                 "summary_to_pyexit", "pyexit_to_uvexit")]
-        assert all(p >= 0 for p in parts)
-        assert abs(sum(parts) - _f("total")) < 0.05  # 牆鐘 vs monotonic 差
-        assert abs(_f("segment_sum") - sum(parts)) < 0.011  # 各段四捨五入
-        assert abs(_f("sum_residual")) < 0.05
+        expected = {"spawn_to_configure": 0.01, "configure_to_summary": 0.02,
+                    "summary_to_pyexit": 0.01, "pyexit_to_uvexit": 0.01}
+        for name, value in expected.items():
+            assert _f(name) == pytest.approx(value)
+        assert _f("segment_sum") == pytest.approx(0.05)
+        assert _f("total") == pytest.approx(0.05)
+        assert _f("sum_residual") == 0.0
         assert "load1_start=1.50" in msg and "load1_end=2.25" in msg
+
+    def test_sum_residual_detects_sampling_gap(self, monkeypatch, tmp_path):
+        """E 系列對照：total 與 return_wall 取樣間推進 0.2s，residual 必為 -0.200。"""
+        self._fake_run_with_timing(monkeypatch, self._FULL_MARKS, return_gap=0.2)
+        lg, records = self._capture_logger("t-seg4-gap")
+        status, _ = hook_module._run_pytest([tmp_path / "test_a.py"], tmp_path, lg)
+        assert status == "pass"
+        msg = self._timing_records(records)[0].getMessage()
+        import re
+
+        residual = float(re.search(r"sum_residual=(-?\d+\.\d+)s", msg).group(1))
+        assert residual == pytest.approx(-0.2)
 
     def test_timing_file_missing_warns_verdict_unchanged(self, monkeypatch, tmp_path):
         """E2：外掛沒寫時刻檔（外掛失敗）只記 warning，細分 n/a，判定不變。"""
@@ -837,6 +877,12 @@ class TestMainIntegration:
                 for h in entry.get("hooks", []):
                     if "hooks-test-gate-hook.py" in h.get("command", ""):
                         found.append(h.get("timeout"))
+        # Bash 事件的註冊改由分派程序的 registry 承載，單支逾時由分派器以 setitimer 強制
+        registry = json.loads((HOOKS_DIR / "hook-dispatch-registry.json").read_text())
+        for group in registry["groups"].values():
+            for e in group["hooks"]:
+                if e["path"].endswith("hooks-test-gate-hook.py"):
+                    found.append(e.get("timeout"))
         assert found and all(t is not None for t in found), "須明示 timeout"
         for t in found:
             assert t == hook_module.PLATFORM_TIMEOUT_SECONDS

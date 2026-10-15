@@ -124,7 +124,7 @@ class TestBindDispatchIdentity:
         assert result is True
         assert calls == [
             ["who", "1.5.0-W5-005.2"],
-            ["set-who", "1.5.0-W5-005.2", "thyme-python-developer"],
+            ["set-who", "1.5.0-W5-005.2", "--current", "thyme-python-developer"],
         ]
 
     def test_unbound_chinese_placeholder_binds(self):
@@ -132,17 +132,44 @@ class TestBindDispatchIdentity:
         assert result is True
         assert calls[-1][0] == "set-who"
 
-    def test_pm_held_who_rebinds_to_dispatched_agent(self):
-        """who.current 為 PM（先 claim 再派發常態）視為可覆蓋的暫代管態，
-        重新綁定給實際派發的 subagent_type（複現多起代理人卡住的死結修復）。"""
-        result, calls = self._bind(
-            f"Who: {dispatch_identity_bind_hook.PM_AGENT_NAME}\n"
-        )
-        assert result is True
-        assert calls == [
-            ["who", "1.5.0-W5-005.2"],
-            ["set-who", "1.5.0-W5-005.2", "thyme-python-developer"],
+    @pytest.mark.parametrize(
+        "agent",
+        ["linux", "basil-writing-critic", "acceptance-auditor", "thyme-python-developer"],
+    )
+    def test_pm_held_who_never_rebound_by_dispatch(self, agent):
+        """0.5.0-W1-192.1（E2）：PM 持有的票派發任何代理人（含唯讀審查者）後
+        who 不變；實作代理人的交接改由 identity_guard 於其首次 --as 寫入命令時
+        讓出（見 test_pm_takeover_reassignment）。"""
+        calls = []
+
+        def fake_cli(args, project_root, logger):
+            calls.append(args)
+            return f"Who: {dispatch_identity_bind_hook.PM_AGENT_NAME}\n"
+
+        with patch.object(
+            dispatch_identity_bind_hook, "_run_ticket_cli", side_effect=fake_cli
+        ):
+            result = bind_dispatch_identity("1.5.0-W5-005.2", agent, Path("."), MagicMock())
+        assert result is False
+        assert calls == [["who", "1.5.0-W5-005.2"]]
+
+    def test_unbound_bind_uses_current_flag_to_keep_history(self):
+        """綁定走 set-who --current（子欄位寫入，追加 who.history），非整體覆寫。"""
+        _, calls = self._bind("Who: pending\n")
+        assert calls[-1] == [
+            "set-who", "1.5.0-W5-005.2", "--current", "thyme-python-developer"
         ]
+
+    def test_pm_name_constant_matches_identity_guard(self):
+        """兩檔不可互相 import，以原始碼比對守住常數一致。"""
+        import re
+
+        guard = (
+            Path(__file__).resolve().parents[2]
+            / "skills/ticket/ticket_system/lib/identity_guard.py"
+        ).read_text(encoding="utf-8")
+        m = re.search(r'^PM_AGENT_NAME = "([^"]+)"', guard, re.M)
+        assert m and m.group(1) == dispatch_identity_bind_hook.PM_AGENT_NAME
 
     def test_bound_who_not_overwritten(self):
         """已綁定態不覆蓋——審查型派發不得 clobber 真執行者"""
@@ -338,6 +365,7 @@ class TestMixedBatchRegression:
         assert mock_cli.call_args_list[1][0][0] == [
             "set-who",
             "0.2.1-W3-900",
+            "--current",
             "thyme-python-developer",
         ]
 

@@ -46,10 +46,6 @@ hooks:
     timeout: 5000
   cli-dependency-check.py:
     event: SessionStart
-  cli-failure-help-reminder-hook.py:
-    event: PostToolUse
-    matcher: Bash
-    timeout: 5000
   command-entrance-gate-hook.py:
     event: UserPromptSubmit
     timeout: 10000
@@ -267,9 +263,6 @@ skill_hooks:
   ticket/cli-error-feedback-hook.py:
     event: PostToolUse
     matcher: Bash
-    timeout: 5000
-  ticket/creation-acceptance-gate-hook.py:
-    event: UserPromptSubmit
     timeout: 5000
   ticket/handoff-auto-resume-stop-hook.py:
     event: Stop

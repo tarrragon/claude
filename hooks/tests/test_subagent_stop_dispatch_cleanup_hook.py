@@ -99,10 +99,6 @@ class TestSubagentStopDispatchCleanupSchema:
 
         monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
         monkeypatch.setattr(hook_mod, "mark_turn_ended_by_id", lambda root, aid: cleared)
-        monkeypatch.setattr(
-            hook_mod, "mark_oldest_active_null_agent_id_entry_turn_ended",
-            lambda root: False,
-        )
         monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda root: remaining)
         # dedup state 寫到 tmp_path，避免測試污染真實 repo 的 hook-logs
         monkeypatch.setattr(
@@ -233,10 +229,6 @@ class TestHandleFirstPrecedence:
         monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
         monkeypatch.setattr(hook_mod, "mark_turn_ended_by_handle", _mock_handle)
         monkeypatch.setattr(hook_mod, "mark_turn_ended_by_id", _mock_id)
-        monkeypatch.setattr(
-            hook_mod, "mark_oldest_active_null_agent_id_entry_turn_ended",
-            lambda root: False,
-        )
         monkeypatch.setattr(
             hook_mod, "get_active_dispatches", lambda root: remaining or []
         )
@@ -453,10 +445,6 @@ class TestStopHookActiveCircuitBreaker:
         state_file.write_text("{}", encoding="utf-8")
         monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
         monkeypatch.setattr(hook_mod, "mark_turn_ended_by_id", lambda root, aid: True)
-        monkeypatch.setattr(
-            hook_mod, "mark_oldest_active_null_agent_id_entry_turn_ended",
-            lambda root: False,
-        )
         monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda root: [])
         monkeypatch.setattr(
             hook_mod, "_get_wait_dedup_state_file",
@@ -474,101 +462,43 @@ class TestStopHookActiveCircuitBreaker:
         assert "[OK]" in payload["systemMessage"]
 
 
-class TestFifoFallbackMultipleNullCandidates:
-    """FIFO 後援於 null 候選數 > 1 時停用，避免誤將仍在執行中的記錄標記為
-    已結束回合。
+class TestNoFifoFallback:
+    """無匹配 Stop 不得標記他人運行中的 null 記錄，改留墓碑（E2）。"""
 
-    背景：isolation=none 派發的 agent_id 全記為 null，FIFO 若在多筆並存時
-    仍標記「最早」的一筆，不保證是本次真正結束的那一筆。
-    """
-
-    def test_declines_mark_when_multiple_null_candidates(
-        self, hook_mod, monkeypatch, capsys, tmp_path
-    ):
-        """null 候選 2 筆：不呼叫 mark_oldest_active_null_agent_id_entry_turn_ended，
-        僅供 [WAIT] 訊息。"""
-        state_file = tmp_path / "dispatch-active.json"
-        state_file.write_text("{}", encoding="utf-8")
-
-        def _fail_if_called(root):
-            raise AssertionError(
-                "候選數 > 1 時不應呼叫 mark_oldest_active_null_agent_id_entry_turn_ended"
-            )
-
-        null_candidates = [
-            {
-                "agent_id": None,
-                "agent_description": "agent-A",
-                "ticket_id": "T-A",
-                "dispatched_at": "2026-01-01T00:00:00+00:00",
-            },
-            {
-                "agent_id": None,
-                "agent_description": "agent-B",
-                "ticket_id": "T-B",
-                "dispatched_at": "2026-01-01T00:01:00+00:00",
-            },
-        ]
-
-        monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
-        monkeypatch.setattr(hook_mod, "mark_turn_ended_by_id", lambda root, aid: False)
-        monkeypatch.setattr(
-            hook_mod, "mark_oldest_active_null_agent_id_entry_turn_ended",
-            _fail_if_called,
-        )
-        monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda root: null_candidates)
+    def _stop(self, hook_mod, monkeypatch, tmp_path, agent_id):
         monkeypatch.setattr(
             hook_mod, "_get_wait_dedup_state_file",
             lambda root: tmp_path / "wait-broadcast-dedup.json",
         )
-        monkeypatch.setattr(sys, "stdin", _stdin({"agent_id": "agent-no-match"}))
+        monkeypatch.setattr(sys, "stdin", _stdin({"agent_id": agent_id}))
+        assert hook_mod.main() == 0
 
-        rc = hook_mod.main()
-        assert rc == 0
-
-        payload = json.loads(capsys.readouterr().out)
-        msg = payload["systemMessage"]
-        assert "[WAIT]" in msg, "未標記任一記錄，候選仍在 still_running 中觸發 [WAIT]"
-        assert "仍有 2 個代理人" in msg
-        assert "已標記回合結束" not in msg, "候選數 > 1 時不應宣稱已標記"
-
-    def test_single_null_candidate_still_uses_fifo(
-        self, hook_mod, monkeypatch, capsys, tmp_path
+    def test_unmatched_stop_does_not_mark_others_null_record(
+        self, hook_mod, monkeypatch, tmp_path
     ):
-        """null 候選 = 1 筆：維持原 FIFO 行為（向後相容，非本次修改範圍）。"""
-        state_file = tmp_path / "dispatch-active.json"
-        state_file.write_text("{}", encoding="utf-8")
+        """正向對照：一筆他人運行中 null 記錄 + 無匹配 Stop -> 不被標、留墓碑。"""
+        import lib.dispatch_tracker as dt
 
-        calls = {"count": 0}
+        root = hook_mod._get_project_root()
+        dt.record_dispatch(root, "others-running", agent_id=None)
 
-        def _record_fifo(root):
-            calls["count"] += 1
-            return True
+        self._stop(hook_mod, monkeypatch, tmp_path, "unrelated-stop-id")
 
-        one_candidate = [
-            {
-                "agent_id": None,
-                "agent_description": "agent-A",
-                "ticket_id": "T-A",
-                "dispatched_at": "2026-01-01T00:00:00+00:00",
-            },
-        ]
+        entry = dt.get_active_dispatches(root)[0]
+        assert entry["turn_ended_at"] is None
+        state = json.loads(dt.get_state_file_path(root).read_text(encoding="utf-8"))
+        assert "unrelated-stop-id" in json.dumps(state.get("tombstones", [])), "應留下墓碑"
 
-        monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
-        monkeypatch.setattr(hook_mod, "mark_turn_ended_by_id", lambda root, aid: False)
-        monkeypatch.setattr(
-            hook_mod, "mark_oldest_active_null_agent_id_entry_turn_ended", _record_fifo
-        )
-        monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda root: one_candidate)
-        monkeypatch.setattr(
-            hook_mod, "_get_wait_dedup_state_file",
-            lambda root: tmp_path / "wait-broadcast-dedup.json",
-        )
-        monkeypatch.setattr(sys, "stdin", _stdin({"agent_id": "agent-no-match"}))
+    def test_exact_match_stop_still_marks(self, hook_mod, monkeypatch, tmp_path):
+        """反向對照：agent_handle 精準匹配的 Stop 照常標記。"""
+        import lib.dispatch_tracker as dt
 
-        rc = hook_mod.main()
-        assert rc == 0
-        assert calls["count"] == 1, "候選數 <= 1 時應照常呼叫 FIFO 清理"
+        root = hook_mod._get_project_root()
+        dt.record_dispatch(root, "named", agent_id=None, agent_handle="fix-x")
+
+        self._stop(hook_mod, monkeypatch, tmp_path, "afix-x-73070ca5c1d3f849")
+
+        assert dt.get_active_dispatches(root)[0]["turn_ended_at"] is not None
 
 
 class TestWaitBroadcastDedup:
@@ -587,10 +517,6 @@ class TestWaitBroadcastDedup:
         state_file.write_text("{}", encoding="utf-8")
         monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
         monkeypatch.setattr(hook_mod, "mark_turn_ended_by_id", lambda root, aid: cleared)
-        monkeypatch.setattr(
-            hook_mod, "mark_oldest_active_null_agent_id_entry_turn_ended",
-            lambda root: cleared,
-        )
         monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda root: remaining)
         monkeypatch.setattr(
             hook_mod, "_get_wait_dedup_state_file",

@@ -332,7 +332,7 @@ def _validation_setup(mod, monkeypatch, is_valid):
     monkeypatch.setattr(
         mod,
         "validate_task_dispatch",
-        lambda tool_input, logger: (is_valid, None if is_valid else "派發驗證失敗測試", "tid"),
+        lambda tool_input, logger, input_data=None: (is_valid, None if is_valid else "派發驗證失敗測試", "tid"),
     )
     monkeypatch.setattr(mod, "save_check_log", lambda *a, **k: None)
 

@@ -225,8 +225,6 @@ def test_hook_blocks_non_claude_prompt_without_worktree(monkeypatch, capsys):
         },
     )
     assert exit_code == 2
-    err = capsys.readouterr().err
-    assert "必須使用 isolation" in err, "應使用原 BLOCK_MESSAGE_TEMPLATE"
 
 
 def test_hook_allows_cross_path_with_worktree_when_claude_in_main_repo(monkeypatch, capsys):
@@ -257,8 +255,6 @@ def test_hook_blocks_cross_path_without_worktree(monkeypatch, capsys):
         },
     )
     assert exit_code == 2
-    err = capsys.readouterr().err
-    assert "必須使用 isolation" in err
 
 
 def test_hook_blocks_external_claude_path_absolute(monkeypatch, capsys):
@@ -303,8 +299,6 @@ def test_hook_blocks_empty_prompt_without_worktree(monkeypatch, capsys):
         },
     )
     assert exit_code == 2
-    err = capsys.readouterr().err
-    assert "必須使用 isolation" in err
 
 
 def test_hook_allows_no_subagent_type(monkeypatch, capsys):
@@ -661,6 +655,8 @@ class TestKeywordConflictIntegration:
             capsys,
             tool_input={
                 "subagent_type": "sage-test-architect",
+                # 名單外代理人寫 tests/ 路徑也須 worktree，本測試聚焦警告，故帶隔離
+                "isolation": "worktree",
                 "prompt": "請實作新測試並寫入 tests/unit/foo_test.py",
             },
         )
@@ -669,7 +665,7 @@ class TestKeywordConflictIntegration:
             "sage + 『實作』應觸發 W5-045 警告"
         )
         assert "實作" in err
-        # sage 非 IMPLEMENTATION_AGENTS，掃描後放行
+        # 低信心警告不阻擋，已隔離 → 放行
         assert exit_code == 0
 
     def test_implementation_agent_with_git_commit_prompt_emits_warning(
@@ -2139,7 +2135,6 @@ class TestReviewKeywordExemptionRemoved:
                         "prompt": "實作 src/widgets/book_card.dart 並寫對應 tests/unit/book_card_test.dart"},
         )
         assert exit_code == 2
-        assert "必須使用 isolation" in capsys.readouterr().err
 
     def test_external_claude_still_blocked(self, monkeypatch, capsys):
         exit_code = _run_hook(
@@ -2289,7 +2284,7 @@ class TestDispatchModeReadonlyExemption:
 # 0.1.0-W3-156: worktree 派發 prompt 誤用 `track complete` 提示（改用 finish）
 # ============================================================================
 
-_has_track_complete = _hook._has_track_complete
+_has_track_complete = _hook._has_track_closing
 
 
 class TestHasTrackComplete:
@@ -2300,13 +2295,13 @@ class TestHasTrackComplete:
         "/ticket track complete 0.1.0-W3-147",
         "收尾：ticket track  complete 0.1.0-W3-147",  # 多空白
         "TICKET TRACK COMPLETE 0.1.0-W3-147",  # 大小寫不敏感
+        "ticket track finish 0.1.0-W3-147 --as parsley-flutter-developer",
     ])
     def test_detects_track_complete(self, prompt):
         assert _has_track_complete(prompt) is True
 
     @pytest.mark.parametrize("prompt", [
         "",
-        "ticket track finish 0.1.0-W3-147 --as parsley-flutter-developer",
         "ticket track completed 0.1.0-W3-147",  # 非完整字，不誤觸
         "ticket track append-log 0.1.0-W3-147",
         "ticket track claim 0.1.0-W3-147",
@@ -2350,11 +2345,9 @@ class TestWorktreeCompleteWarning:
         assert exit_code == 0
         context = _parse_additional_context(capsys)
         assert context, "worktree + track complete 應輸出 additionalContext 提示"
-        assert "finish" in context
-        assert "agent-dispatch-template.md" in context
 
-    def test_track_finish_prompt_no_warning(self, monkeypatch, capsys):
-        """prompt 已用 track finish（正確用法）→ 不誤報。"""
+    def test_track_finish_prompt_emits_warning(self, monkeypatch, capsys):
+        """正向對照：worktree + track finish 同樣出提示，且 permissionDecision 為 allow（不阻擋）。"""
         exit_code = _run_hook(
             monkeypatch,
             capsys,
@@ -2369,8 +2362,30 @@ class TestWorktreeCompleteWarning:
             },
         )
         assert exit_code == 0
+        out = capsys.readouterr().out.strip()
+        assert out, "worktree + track finish 應輸出提示"
+        hso = json.loads(out)["hookSpecificOutput"]
+        assert hso["permissionDecision"] == "allow"
+        assert hso.get("additionalContext")
+
+    def test_track_commit_only_prompt_no_warning(self, monkeypatch, capsys):
+        """prompt 止於 track commit（正確用法）→ 不誤報。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "isolation": "worktree",
+                "prompt": (
+                    "Ticket: 0.1.0-W3-147\n\n"
+                    "1. 提取 lib/workspace/workspace_repository.dart 的 value types\n\n"
+                    "收尾：ticket track commit 0.1.0-W3-147 -m x，回報 PM"
+                ),
+            },
+        )
+        assert exit_code == 0
         context = _parse_additional_context(capsys)
-        assert context == "", "track finish 不應觸發提示"
+        assert context == "", "止於 track commit 不應觸發提示"
 
     def test_non_worktree_dispatch_no_warning_even_with_track_complete(
         self, monkeypatch, capsys
@@ -2394,3 +2409,154 @@ class TestWorktreeCompleteWarning:
         assert exit_code == 2, "非 worktree 派發應維持既有強制阻擋行為"
         context = _parse_additional_context(capsys)
         assert context == "", "非 worktree 派發不應觸發 track complete 提示"
+
+
+class TestClosingWarningQuotedOrNegated:
+    """收尾提示：引用或否定的形態不提示（E1），真正要求收尾的仍提示（E2）。"""
+
+    @staticmethod
+    def _dispatch(monkeypatch, capsys, prompt):
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "isolation": "worktree",
+                "prompt": prompt,
+            },
+        )
+        assert exit_code == 0
+        return _parse_additional_context(capsys)
+
+    @pytest.mark.parametrize("prompt", [
+        # 否定形態：PM 收尾段
+        "收尾：不要執行 ticket track complete、ticket track finish 或 check-acceptance",
+        "禁止 ticket track complete，回報 PM",
+        "Do not run ticket track complete",
+        # 引用形態：測試用命令字串、指稱 hook 類別
+        "測試以 `ticket track complete X` 作為測試用命令字串驗證解析",
+        "處理偵測 ticket track complete 與 ticket track finish 的 hook 類別",
+    ])
+    def test_quoted_or_negated_no_warning(self, monkeypatch, capsys, prompt):
+        """E1：引用或否定 → 無 additionalContext。"""
+        assert _has_track_complete(prompt) is False
+        context = self._dispatch(monkeypatch, capsys, "Ticket: X\n\n" + prompt)
+        assert context == ""
+
+    @pytest.mark.parametrize("prompt", [
+        "收尾：ticket track complete 0.1.0-W3-147 --as agent",
+        "完成後執行 ticket track finish 0.1.0-W3-147",
+        # 同 prompt 內先否定一句、另一句仍真正要求收尾
+        "不要改其他檔案。最後 ticket track complete 0.1.0-W3-147",
+        # 否定與收尾同句但以逗號分隔
+        "不要改其他檔案，最後執行 ticket track complete 0.1.0-W3-147",
+        # 「分別」含「別」字不是否定
+        "分別確認後執行 ticket track complete 0.1.0-W3-147",
+    ])
+    def test_real_closing_instruction_still_warns(self, monkeypatch, capsys, prompt):
+        """E2：真正要求代理人收尾 → 仍提示，permissionDecision 維持 allow。"""
+        assert _has_track_complete(prompt) is True
+        context = self._dispatch(monkeypatch, capsys, "Ticket: X\n\n" + prompt)
+        assert "track commit" in context
+
+    def test_judgement_exception_fails_open(self, monkeypatch, capsys):
+        """判定拋例外 → 不阻擋、不輸出提示、stderr 有記錄。"""
+        def boom(_prompt):
+            raise RuntimeError("boom")
+        monkeypatch.setattr(_hook, "_has_track_closing", boom)
+        context = self._dispatch(
+            monkeypatch, capsys, "收尾：ticket track complete X"
+        )
+        assert context == ""
+
+
+# ============================================================================
+# 名單外代理人依目標路徑判定 worktree 強制（斷言 exit code / 結構化欄位）
+# ============================================================================
+
+class TestNonListAgentPathBased:
+    def test_sage_with_test_path_without_worktree_blocked(self, monkeypatch, capsys):
+        """正向對照 1：名單外 + test/ 路徑 + 無 worktree → 阻擋（舊實作為 0）。"""
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "sage-test-architect",
+            "prompt": "整理 test/unit/foo_test.dart 的測試案例",
+        })
+        assert code == 2
+
+    def test_sage_with_test_path_with_worktree_allowed(self, monkeypatch, capsys):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "sage-test-architect",
+            "isolation": "worktree",
+            "prompt": "整理 test/unit/foo_test.dart 的測試案例",
+        })
+        assert code == 0
+
+    def test_non_list_agent_without_paths_allowed(self, monkeypatch, capsys):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "general-purpose",
+            "prompt": "比較兩種方案的取捨並回報",
+        })
+        assert code == 0
+
+    def test_non_list_agent_main_claude_only_allowed(self, monkeypatch, capsys):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "general-purpose",
+            "prompt": "閱讀 .claude/rules/README.md 並回報",
+        })
+        assert code == 0
+
+    def test_non_list_agent_external_claude_blocked(self, monkeypatch, capsys):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "general-purpose",
+            "prompt": "閱讀 /tmp/other-repo/.claude/hooks/foo.py",
+        })
+        assert code == 2
+
+    def test_non_list_agent_external_claude_blocked_with_worktree(
+        self, monkeypatch, capsys
+    ):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "general-purpose",
+            "isolation": "worktree",
+            "prompt": "閱讀 /tmp/other-repo/.claude/hooks/foo.py",
+        })
+        assert code == 2
+
+    def test_non_list_agent_readonly_declaration_exempts_other_path(
+        self, monkeypatch, capsys
+    ):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "general-purpose",
+            "prompt": "Dispatch-Mode: readonly\n審查 src/foo.py 並回報",
+        })
+        assert code == 0
+
+    def test_basil_worktree_track_finish_emits_closing_context(
+        self, monkeypatch, capsys
+    ):
+        """正向對照 2：名單外 + worktree + track finish → 有收尾提示（舊實作無）。"""
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "basil-hook-architect",
+            "isolation": "worktree",
+            "prompt": "修改 .claude/hooks/foo.py，收尾：ticket track finish X --as basil",
+        })
+        assert code == 0
+        assert _parse_additional_context(capsys) != ""
+
+    def test_basil_worktree_without_closing_command_no_context(
+        self, monkeypatch, capsys
+    ):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "basil-hook-architect",
+            "isolation": "worktree",
+            "prompt": "修改 .claude/hooks/foo.py，完成後回報 PM",
+        })
+        assert code == 0
+        assert _parse_additional_context(capsys) == ""
+
+    def test_list_agent_empty_prompt_still_blocked(self, monkeypatch, capsys):
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "thyme-python-developer",
+            "prompt": "",
+        })
+        assert code == 2

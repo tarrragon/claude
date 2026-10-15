@@ -9,6 +9,21 @@ from pathlib import Path
 import sys
 
 
+# ===== 套件層級 cwd 隔離 =====
+
+@pytest.fixture(autouse=True)
+def _isolate_git_cwd(tmp_path, monkeypatch):
+    """mock 縫失效時 git 也找不到任何 repo，避免對執行者 cwd 執行真實寫入。
+
+    GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE 會繞過 GIT_CEILING_DIRECTORIES，
+    須一併清除。
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(var, raising=False)
+
+
 # ===== 樣本資料 =====
 
 @pytest.fixture

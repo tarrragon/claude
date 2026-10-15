@@ -56,3 +56,44 @@ def validate_reason(reason: str) -> Tuple[bool, Optional[str]]:
 def build_field_line(indent: str, value: str) -> str:
     """組出覆寫後的 `multi_view_status: <value>` 行（不含結尾換行）。"""
     return f"{indent}multi_view_status: {value}"
+
+
+# 需附平鋪 reason 行的值（與 ana-solution-schema.yaml required_subfields 同步）。
+VALUES_REQUIRING_REASON = frozenset({"skipped", "n_a"})
+
+# 緊接欄位行之後的既有平鋪 reason 行。
+REASON_LINE_PATTERN = re.compile(r"[ \t]*reason[ \t]*:[^\n]*", re.IGNORECASE)
+
+
+def build_reason_line(indent: str, reason: str) -> str:
+    """組出平鋪 `reason: <text>` 行（單行，換行折為空白；不含結尾換行）。"""
+    return f"{indent}reason: {' '.join(reason.split())}"
+
+
+def apply_field_and_reason(content: str, hit, new_value: str, reason: str) -> str:
+    """覆寫命中的欄位行；skipped/n_a 時於其下寫入 reason，取代緊接的既有 reason 行。"""
+    indent = hit.group(1) or ""
+    new_text = build_field_line(indent, new_value)
+    tail_start = hit.end()
+    if new_value in VALUES_REQUIRING_REASON:
+        new_text += "\n" + build_reason_line(indent, reason)
+        if content[tail_start:tail_start + 1] == "\n":
+            existing = REASON_LINE_PATTERN.match(content, tail_start + 1)
+            if existing:
+                tail_start = existing.end()
+    return content[: hit.start()] + new_text + content[tail_start:]
+
+
+def append_field_and_reason(content: str, new_value: str, reason: str) -> str:
+    """章節缺欄位行時，於章節實質內容末（分隔線 `---` 之前）新增平鋪欄位行與 reason 行。"""
+    lines = [build_field_line("", new_value)]
+    if new_value in VALUES_REQUIRING_REASON:
+        lines.append(build_reason_line("", reason))
+    block = "\n".join(lines)
+    body = content.rstrip()
+    trailing = content[len(body):]
+    if body.endswith("---"):
+        body = body[:-3].rstrip()
+        trailing = "\n\n---" + trailing
+    sep = "\n" if body else ""
+    return f"{body}{sep}{block}{trailing or chr(10)}"

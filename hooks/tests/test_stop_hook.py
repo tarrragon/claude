@@ -14,7 +14,8 @@ from io import StringIO
 
 
 # 載入 Stop hook 模組
-STOP_HOOK_PATH = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "handoff-auto-resume-stop-hook.py"
+SID = "test-session-stop-hook"
+STOP_HOOK_PATH =Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "handoff-auto-resume-stop-hook.py"
 
 
 def load_stop_hook_module():
@@ -46,7 +47,7 @@ class TestStopHookSessionFlag:
 
         # 無任務情況
         with patch.object(hook_module, "scan_pending_handoff_tasks", return_value=([], [])):
-            output = hook_module.generate_hook_output(logger)
+            output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
 
         # 即使無任務也不應建立 flag（因為無阻塊決策）
         assert output.get("suppressOutput") is True
@@ -70,7 +71,7 @@ class TestStopHookSessionFlag:
             _json.dump({"created_at": _dt.now().isoformat(), "reason": "test"}, f)
 
         # 第二次呼叫應跳過
-        output = hook_module.generate_hook_output(logger)
+        output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
 
         assert output.get("suppressOutput") is True
 
@@ -79,11 +80,11 @@ class TestStopHookSessionFlag:
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        state_file = Path(f"/tmp/claude-handoff-state-{mock_ppid}.json")
+        state_file = Path(f"/tmp/claude-handoff-state-{SID}.json")
         with open(state_file, 'w') as f:
             json.dump(sample_session_state, f)
 
-        output = hook_module.generate_hook_output(logger)
+        output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
 
         # 應該阻塊並要求恢復 session state 中的任務
         assert output.get("decision") == "block"
@@ -96,7 +97,7 @@ class TestStopHookSessionFlag:
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        state_file = Path(f"/tmp/claude-handoff-state-{mock_ppid}.json")
+        state_file = Path(f"/tmp/claude-handoff-state-{SID}.json")
         state_file.unlink(missing_ok=True)
 
         # 建立待恢復任務
@@ -112,7 +113,7 @@ class TestStopHookSessionFlag:
         # Mock is_ticket_completed 和 is_ticket_recently_started
         with patch.object(hook_module, "is_ticket_completed", return_value=False), \
              patch.object(hook_module, "is_ticket_recently_started", return_value=False):
-            output = hook_module.generate_hook_output(logger)
+            output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
 
         # 應該從 pending 目錄找到任務並阻塊
         assert output.get("decision") == "block"
@@ -123,12 +124,12 @@ class TestStopHookSessionFlag:
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        state_file = Path(f"/tmp/claude-handoff-state-{mock_ppid}.json")
+        state_file = Path(f"/tmp/claude-handoff-state-{SID}.json")
         state_file.unlink(missing_ok=True)
 
         # 不建立任何待恢復任務
 
-        output = hook_module.generate_hook_output(logger)
+        output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
 
         # 應該允許對話終止
         assert output.get("suppressOutput") is True
@@ -143,7 +144,7 @@ class TestStopHookJsonOutput:
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        state_file = Path(f"/tmp/claude-handoff-state-{mock_ppid}.json")
+        state_file = Path(f"/tmp/claude-handoff-state-{SID}.json")
         state_file.unlink(missing_ok=True)
 
         # 建立 session 狀態
@@ -154,7 +155,7 @@ class TestStopHookJsonOutput:
         with open(state_file, 'w') as f:
             json.dump(state_data, f)
 
-        output = hook_module.generate_hook_output(logger)
+        output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
 
         # 驗證輸出結構
         assert isinstance(output, dict)
@@ -169,7 +170,7 @@ class TestStopHookJsonOutput:
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        output = hook_module.generate_hook_output(logger)
+        output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
 
         # 無任務時應使用 suppressOutput
         assert isinstance(output, dict)
@@ -184,7 +185,7 @@ class TestStopHookErrorHandling:
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        state_file = Path(f"/tmp/claude-handoff-state-{mock_ppid}.json")
+        state_file = Path(f"/tmp/claude-handoff-state-{SID}.json")
         state_file.unlink(missing_ok=True)
 
         # 寫入無效 JSON
@@ -193,7 +194,7 @@ class TestStopHookErrorHandling:
 
         # 應該優雅處理而不拋例外
         try:
-            output = hook_module.generate_hook_output(logger)
+            output = hook_module.generate_hook_output(logger, input_data={"session_id": SID})
             # 應該回傳有效的 Hook 輸出
             assert isinstance(output, dict)
             assert "suppressOutput" in output or "decision" in output

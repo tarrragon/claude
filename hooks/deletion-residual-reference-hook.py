@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely, emit_model_reminder
 
 # 偵測閾值：old_string 比 new_string 長至少這麼多字元才視為「刪除」
 DELETION_THRESHOLD_CHARS = 50
@@ -203,19 +203,19 @@ def main() -> int:
     if not unique_residuals:
         return 0
 
-    # 輸出 WARNING
-    print("=" * 60, file=sys.stderr)
-    print("[WARNING] IMP-042 殘留引用檢查", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print(f"檔案: {file_path}", file=sys.stderr)
-    print(f"偵測到刪除操作（移除 {deleted_chars} 字元）", file=sys.stderr)
-    print(f"以下關鍵詞在檔案中仍有引用：\n", file=sys.stderr)
-
+    # 輸出 WARNING：以 additionalContext 讓模型讀到（stderr + exit 0 模型不可見）
+    lines = [
+        "[WARNING] IMP-042 殘留引用檢查",
+        f"檔案: {file_path}",
+        f"偵測到刪除操作（移除 {deleted_chars} 字元）",
+        "以下關鍵詞在檔案中仍有引用：",
+    ]
     for r in unique_residuals[:10]:  # 最多顯示 10 個
-        print(f"  [{r['term']}] 第 {r['line_num']} 行: {r['line']}", file=sys.stderr)
+        lines.append(f"  [{r['term']}] 第 {r['line_num']} 行: {r['line']}")
+    lines.append("建議：檢查上述引用是否需要同步更新或移除。")
 
-    print(f"\n建議：檢查上述引用是否需要同步更新或移除。", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
+    logger.info("殘留引用提醒：%s（%d 個關鍵詞）", file_path, len(unique_residuals))
+    emit_model_reminder("PostToolUse", "\n".join(lines), input_data=input_data)
 
     return 0
 

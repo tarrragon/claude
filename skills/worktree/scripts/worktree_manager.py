@@ -16,6 +16,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 import subprocess
+import time
+from dataclasses import dataclass, field
+from typing import Callable, ContextManager
+import contextlib
 
 try:
     from .constants import (
@@ -31,6 +35,10 @@ try:
         MACOS_XCCONFIG_TEMPLATES,
     )
     from .messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
+    from .merge_gate import (
+        GATE_MAX_RETRIES, GATE_ABORTED, GATE_REFUSED, GATE_WRITTEN, MergeGate, SlotWaitRefused, SuiteRunner,
+        emit_gate_line, gate_line, gate_result_label,
+    )
 except ImportError:
     # Fallback when running with scripts/ on sys.path (test 與直接執行情境)
     from constants import (
@@ -46,6 +54,10 @@ except ImportError:
         MACOS_XCCONFIG_TEMPLATES,
     )
     from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
+    from merge_gate import (
+        GATE_MAX_RETRIES, GATE_ABORTED, GATE_REFUSED, GATE_WRITTEN, MergeGate, SlotWaitRefused, SuiteRunner,
+        emit_gate_line, gate_line, gate_result_label,
+    )
 
 # 動態定位專案根目錄（W1-118 修復：方案 D 雙策略 fallback）
 #
@@ -1079,7 +1091,7 @@ def _merge_build_output(
     warnings: list[str]
 ) -> None:
     """
-    輸出 git merge 指令和相關提示訊息
+    輸出驗證結果和相關提示訊息
 
     Args:
         ticket_id: Ticket ID
@@ -1101,14 +1113,6 @@ def _merge_build_output(
         print(warning)
         print()
 
-    # 輸出 merge 指令
-    print(MergeMessages.MERGE_COMMAND_HEADER)
-    print()
-    print(f"  git checkout {DEFAULT_BASE_BRANCH}")
-    print(f"  git merge --no-ff {branch_name}")
-    print()
-    print(MergeMessages.MERGE_COMMAND_HINT.format(ticket_id=ticket_id))
-
 
 def _print_existing_worktrees() -> None:
     """
@@ -1129,22 +1133,6 @@ def _print_existing_worktrees() -> None:
         print("目前存在的 worktree：")
         for item in existing:
             print(item)
-
-
-def _get_main_new_commits(branch_name: str) -> str:
-    """
-    取得 main 上比 branch 新的 commit 列表（一行一個）
-
-    Args:
-        branch_name: feature 分支名稱
-
-    Returns:
-        str: commit 列表文字，每行一個 commit
-    """
-    success, output = run_git_command(
-        ["log", "--oneline", f"{branch_name}..{DEFAULT_BASE_BRANCH}"]
-    )
-    return output.strip() if success and output.strip() else "(無法取得 commit 列表)"
 
 
 def _merge_build_warnings_list(ahead: int, behind: int, status_msg: str) -> list[str]:
@@ -1224,87 +1212,473 @@ def _merge_validate_preconditions(
     return True
 
 
-def _merge_validate_and_collect_metrics(
-    ticket_id: str,
-    worktree: dict
-) -> tuple[bool, int, int, list[str]]:
-    """
-    驗證 merge 前置條件並收集 metrics
-
-    W16 修復：認知負擔指數 = 8 (<= 10)
-
-    Args:
-        ticket_id: Ticket ID
-        worktree: worktree 資訊字典
-
-    Returns:
-        tuple[bool, int, int, list[str]]:
-            - bool: 驗證通過
-            - int: ahead 數
-            - int: behind 數
-            - list[str]: 警告訊息列表
-    """
-    # 驗證前置條件
-    if not _merge_validate_preconditions(ticket_id, worktree["path"]):
-        return False, 0, 0, []
-
-    # 計算 metrics 和警告
-    branch_name = worktree.get("branch", f"feat/{ticket_id}")
-    ahead, behind, warnings = _merge_collect_warnings_for_branch(branch_name, ticket_id)
-
-    return True, ahead, behind, warnings
+def _merge_find_by_branch(branch: str) -> Optional[dict]:
+    """以分支名查詢合併對象：有 worktree 回傳其 dict；無 worktree 但分支存在回傳 path=None；皆無回傳 None。"""
+    for wt in get_worktree_list():
+        if wt.get("branch") == branch:
+            return wt
+    ok, _ = run_git_command(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"])
+    return {"path": None, "branch": branch} if ok else None
 
 
-def cmd_merge(ticket_id: str) -> int:
-    """
-    merge 子命令 — 前置驗證並輸出 git merge 指令
+def _merge_log_pre_acceptance(label: str, reason: str, tag: str = "合併前驗收") -> None:
+    """旗標與理由輸出並追加到 .claude/logs/worktree-merge.log（合併前驗收、略過合併前測試共用）。"""
+    line = f"[{tag}] target={label} reason={reason}"
+    print(line)
+    try:
+        log_dir = Path(get_project_root()) / ".claude" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with open(log_dir / "worktree-merge.log", "a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {line}\n")
+    except OSError as exc:
+        sys.stderr.write(f"[WARNING] worktree-merge 日誌寫入失敗：{exc}\n")
 
-    驗證 Ticket 狀態為 completed、working tree 乾淨、ahead/behind 狀態後，
-    輸出 git merge --no-ff 指令供使用者執行（不自動執行 git merge）。
 
-    W16 修復：認知負擔指數 = 6 (<= 10)
-    拆分出：_merge_validate_and_collect_metrics(指數 8), _merge_validate_preconditions(指數 9),
-    _merge_collect_warnings_for_branch(指數 6), _merge_build_warnings_list(指數 7)
-    W17 修復：認知負擔指數進一步降至 4，提取共用的驗證和查詢邏輯到 _validate_and_find_worktree
+def _merge_resolve_target(
+    ticket_id: Optional[str], branch: Optional[str], pre_acceptance_reason: Optional[str]
+) -> Optional[tuple[dict, str, str]]:
+    """解析合併對象並做前置驗證。回傳 (worktree, branch_name, label)；驗證失敗回傳 None（訊息已輸出）。"""
+    if branch:
+        worktree = _merge_find_by_branch(branch)
+        if worktree is None:
+            print(f"[阻擋] 找不到分支 {branch}")
+            return None
+        if worktree.get("path"):
+            clean, count = _check_working_tree_clean(worktree["path"])
+            if not clean:
+                print(MergeMessages.DIRTY_WORKING_TREE.format(count=count))
+                return None
+        return worktree, branch, branch
 
-    Args:
-        ticket_id: Ticket ID（如 "0.1.1-W9-002"）
-
-    Returns:
-        int: exit code（0 成功輸出指令，1 驗證失敗被阻擋）
-    """
-    # Step 1-2: 驗證 Ticket ID 格式並查詢 worktree（共用函式）
     worktree = _validate_and_find_worktree(ticket_id)
     if worktree is None:
+        return None
+    if pre_acceptance_reason:
+        clean, count = _check_working_tree_clean(worktree["path"])
+        if not clean:
+            print(MergeMessages.DIRTY_WORKING_TREE.format(count=count))
+            return None
+    elif not _merge_validate_preconditions(ticket_id, worktree["path"]):
+        return None
+    return worktree, worktree.get("branch", f"feat/{ticket_id}"), ticket_id
+
+
+def cmd_merge(
+    ticket_id: Optional[str],
+    pre_merge_check: "Optional[PreMergeCheck]" = None,
+    *,
+    branch: Optional[str] = None,
+    pre_acceptance_reason: Optional[str] = None,
+    skip_gate_reason: Optional[str] = None,
+    gate_runner: "Optional[SuiteRunner]" = None,
+    message: Optional[str] = None,
+    ticket: Optional[str] = None,
+) -> int:
+    """
+    merge 子命令 — 前置驗證後以隔離索引 CAS 直接完成合併
+
+    合併 commit 訊息：message 非空時原文使用（含換行與 trailer）；否則在預設訊息
+    `Merge branch '<分支>'` 後附 `(<票號>)`，票號取 ticket 參數，缺省為 ticket_id；
+    兩者皆無時維持預設訊息。
+
+    對象由 ticket_id 或 branch 指定（branch 用於萃取不到 ticket ID 的 worktree-agent-<id>，
+    不查票狀態）。預設要求票 completed 且 working tree 乾淨；pre_acceptance_reason 非空時
+    允許票未 completed（合併前驗收），旗標與理由寫入日誌。落後 base 僅提示，不阻擋；
+    衝突由 merge_branch_cas 中止且 ref 不變。pre_merge_check 為可注入的合併前檢查掛點；
+    未注入時預設掛上合併前全套件閘門（merge_gate.MergeGate，gate_runner 可替換套件執行器），
+    skip_gate_reason 非空時略過閘門，旗標與理由寫入日誌。
+
+    Returns:
+        int: exit code（0 合併成功，1 驗證失敗或合併中止）
+    """
+    target = _merge_resolve_target(ticket_id, branch, pre_acceptance_reason)
+    if target is None:
         return 1
+    _worktree, branch_name, label = target
 
-    # Step 3: 驗證前置條件並收集 metrics
-    passed, ahead, behind, warnings = _merge_validate_and_collect_metrics(ticket_id, worktree)
-    if not passed:
-        return 1
-
-    branch_name = worktree.get("branch", f"feat/{ticket_id}")
-
-    # Step 4: behind > 0 時阻擋合併
+    ahead, behind = get_worktree_ahead_behind(branch_name, DEFAULT_BASE_BRANCH)
+    warnings = _merge_build_warnings_list(ahead, behind, "")
+    if pre_acceptance_reason:
+        _merge_log_pre_acceptance(label, pre_acceptance_reason)
+    elif ticket_id and not branch:
+        _, status_msg = _merge_validate_ticket_status(ticket_id)
+        warnings = _merge_build_warnings_list(ahead, behind, status_msg or "")
     if behind > 0:
-        commit_list = _get_main_new_commits(branch_name)
-        print(MergeMessages.BRANCH_BEHIND_BASE.format(
-            base=DEFAULT_BASE_BRANCH,
-            count=behind,
-            commit_list=commit_list,
-            worktree_path=worktree["path"],
-        ))
-        return 1
+        warnings.append(
+            f"[提示] 分支落後 {DEFAULT_BASE_BRANCH} {behind} 個 commit，"
+            "由三方合併處理；衝突時將中止且 ref 不變。"
+        )
 
-    # Step 5: 輸出驗證結果並執行合併
-    _merge_build_output(ticket_id, branch_name, ahead, behind, warnings)
+    _merge_build_output(label, branch_name, ahead, behind, warnings)
     print()
     print(MergeMessages.MERGE_EXECUTING.format(branch=branch_name, base=DEFAULT_BASE_BRANCH))
-    success, output = run_git_command(["merge", "--no-ff", branch_name])
-    if not success:
-        print(MergeMessages.MERGE_FAILED.format(error=output))
-        return 1
+    merge_message = _compose_merge_message(branch_name, message, ticket or ticket_id)
+    max_retries = None
+    if pre_merge_check is None:
+        if skip_gate_reason is not None:
+            if not skip_gate_reason.strip():
+                print(MergeMessages.SKIP_GATE_NEEDS_REASON)
+                return 1
+            _merge_log_pre_acceptance(label, skip_gate_reason, tag="略過合併前測試")
+        else:
+            pre_merge_check = MergeGate(get_project_root(), runner=gate_runner)
+            max_retries = GATE_MAX_RETRIES
+    if isinstance(pre_merge_check, MergeGate):
+        return _merge_through_gate(pre_merge_check, branch_name, label, max_retries, merge_message)
+    outcome = merge_branch_cas(branch_name, pre_merge_check=pre_merge_check, max_retries=max_retries,
+                               message=merge_message)
+    return _print_merge_outcome(outcome, label)
 
+
+def _compose_merge_message(branch_name: str, message: Optional[str], ticket: Optional[str]) -> Optional[str]:
+    """決定合併 commit 訊息：明示 message 優先；否則有票號時附在預設訊息後；皆無回傳 None。"""
+    if message and message.strip():
+        return message
+    if ticket:
+        return f"Merge branch '{branch_name}' ({ticket})"
+    return None
+
+
+def _merge_through_gate(
+    gate: MergeGate, branch_name: str, label: str, max_retries: Optional[int],
+    message: Optional[str] = None,
+) -> int:
+    """經合併閘門合併，並在閘門開始與結束各記一行（stdout 與 worktree-merge.log）。
+
+    名額未取得（預估拒絕、等待逾時、訊號）是預期內結果：說明行已由名額閘門輸出，這裡只回傳
+    其結束碼（拒絕／逾時為 125）；其餘例外記一行「中止」後原樣再拋，保留 traceback。
+    """
+    root = get_project_root()
+    ok, base_head = _git_out(["rev-parse", DEFAULT_BASE_BRANCH], root)
+    base_head = base_head if ok else "未知"
+
+    def record(phase: str, commit: str, result: Optional[str] = None) -> None:
+        emit_gate_line(root, gate_line(phase, DEFAULT_BASE_BRANCH, branch_name, commit, result))
+
+    record("開始", base_head)
+    try:
+        outcome = merge_branch_cas(branch_name, pre_merge_check=gate, max_retries=max_retries,
+                                   message=message, hold=gate.hold(branch_name, DEFAULT_BASE_BRANCH))
+    except SlotWaitRefused as refused:
+        record("結束", base_head, GATE_REFUSED if refused.exit_code == 125 else GATE_ABORTED)
+        return refused.exit_code
+    except BaseException:  # 非預期例外與中斷：留一行紀錄後原樣再拋
+        record("結束", base_head, GATE_ABORTED)
+        raise
+    if outcome.ok:
+        record("結束", outcome.commit_sha, GATE_WRITTEN)
+    else:
+        record("結束", base_head, gate_result_label(outcome.error))
+    return _print_merge_outcome(outcome, label)
+
+
+# ===== 隔離索引 CAS 合併 =====
+#
+# 為何不用 `git merge`：它先寫共用 index 與工作區、最後才 update_ref；HEAD 被並行推進時
+# update_ref 失敗，留下 MERGE_HEAD 與 staged 結果。此處全程只寫物件庫，ref 以 CAS 一步推進，
+# 成功之後才碰共用 index。合併結果由 `git merge-tree --write-tree` 計算（不使用任何 index），
+# 檔案清單一律走 NUL 分隔輸出，不經 shell 字詞切分。
+
+_NUL = b"\0"
+_ZERO_SHA_CHAR = "0"
+_SHA_HEX_LEN = 40
+_GIT_TIMEOUT_SECONDS = 60
+_CONFLICT_DETAIL_MAX_CHARS = 500
+# 重試預算複製自 .claude/skills/ticket/ticket_system/lib/git_utils.py 的
+# retry_commit_attempt（worktree 套件以檔案路徑載入，無法 import ticket_system）：
+# 前 _RETRY_MIN 次必做；其後額外重試須累計等待 <= _RETRY_BUDGET_SECONDS 且牆鐘 <= _RETRY_WALL_CAP_SECONDS。
+_RETRY_BACKOFF_SECONDS = (0.5, 1.0, 2.0)
+_RETRY_MIN = 3
+_RETRY_BUDGET_SECONDS = 5.0
+_RETRY_WALL_CAP_SECONDS = 20.0
+_RETRYABLE_MARKERS = ("index.lock", "cannot lock ref", "is at", "reference already exists")
+# 測試接縫：只替換這兩個名稱，不改寫全域 time
+_sleep = time.sleep
+_clock = time.monotonic
+_ISOLATED_ENV_DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """合併前檢查的回傳值。passed 為 False 時 reason 會被印出，合併中止且不寫任何 ref。"""
+
+    passed: bool
+    reason: str = ""
+
+
+# 簽名：(merge_commit_sha, target_ref, expected_old_sha, attempt) -> CheckResult
+# 時機：commit-tree 之後、update-ref 之前，每次 CAS 嘗試都呼叫（attempt 從 1 起算）。
+# commit 已在物件庫但無 ref 指向，檢查端可 `git worktree add --detach <path> <merge_commit_sha>`。
+PreMergeCheck = Callable[[str, str, str, int], CheckResult]
+
+
+@dataclass
+class MergeOutcome:
+    """merge_branch_cas 的結果。ok=False 時 HEAD 未動、未留任何 ref/MERGE_HEAD。"""
+
+    ok: bool
+    error: str = ""
+    commit_sha: str = ""
+    synced: list = field(default_factory=list)
+    skipped: list = field(default_factory=list)
+    attempts: int = 0
+
+
+def _git_raw(args: list, repo: str, input_bytes: Optional[bytes] = None):
+    """在 repo 執行 git，回傳 CompletedProcess（bytes）。"""
+    env = {k: v for k, v in os.environ.items() if k not in _ISOLATED_ENV_DROP}
+    return subprocess.run(
+        ["git", *args], cwd=repo, input=input_bytes, capture_output=True,
+        env=env, timeout=_GIT_TIMEOUT_SECONDS,
+    )
+
+
+def _git_out(args: list, repo: str) -> tuple[bool, str]:
+    """執行 git，回傳 (成功, stdout 去尾端空白 或 stderr)。"""
+    proc = _git_raw(args, repo)
+    if proc.returncode == 0:
+        return True, proc.stdout.decode("utf-8", "replace").strip()
+    return False, proc.stderr.decode("utf-8", "replace").strip()
+
+
+def _is_retryable(error: str) -> bool:
+    return any(marker in error for marker in _RETRYABLE_MARKERS)
+
+
+def _retry_delay_allowed(attempts: int, waited: float, delay: float, start: float) -> bool:
+    if attempts <= _RETRY_MIN:
+        return True
+    return waited + delay <= _RETRY_BUDGET_SECONDS and _clock() - start + delay <= _RETRY_WALL_CAP_SECONDS
+
+
+def _run_with_retry(attempt: Callable[[], tuple[str, str]]) -> tuple[str, str, int]:
+    """attempt 回傳 (status, error)；status 為 'retry' 且錯誤屬暫時性競爭時退避重試。
+
+    回傳 (最終 status, error, 嘗試次數)。絕不移除任何鎖檔。
+    """
+    start, waited, attempts = _clock(), 0.0, 0
+    while True:
+        status, error = attempt()
+        attempts += 1
+        if status != "retry":
+            return status, error, attempts
+        delay = _RETRY_BACKOFF_SECONDS[min(attempts - 1, len(_RETRY_BACKOFF_SECONDS) - 1)]
+        if not _is_retryable(error) or not _retry_delay_allowed(attempts, waited, delay, start):
+            return "abort", error, attempts
+        _sleep(delay)
+        waited += delay
+
+
+def _resolve_commit(ref: str, repo: str) -> tuple[bool, str]:
+    return _git_out(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], repo)
+
+
+def _compute_merge_tree(old_head: str, branch_sha: str, repo: str) -> tuple[bool, str]:
+    """三方合併得到 tree；文字衝突或其他失敗回傳 (False, 說明)。不碰任何 index。"""
+    proc = _git_raw(["merge-tree", "--write-tree", "-z", old_head, branch_sha], repo)
+    parts = proc.stdout.split(_NUL)
+    if proc.returncode == 0:
+        return True, parts[0].decode()
+    if proc.returncode == 1:
+        detail = " ".join(p.decode("utf-8", "replace") for p in parts[1:] if p)
+        return False, MergeMessages.CAS_CONFLICT.format(detail=detail[:_CONFLICT_DETAIL_MAX_CHARS])
+    return False, proc.stderr.decode("utf-8", "replace").strip() or MergeMessages.CAS_MERGE_TREE_FAILED
+
+
+def _run_pre_merge_check(
+    check: Optional[PreMergeCheck], commit: str, ref: str, expected_old: str, attempt: int
+) -> str:
+    """回傳空字串表示通過，否則為中止理由。檢查回傳失敗或拋例外皆視為不通過。"""
+    if check is None:
+        return ""
+    try:
+        result = check(commit, ref, expected_old, attempt)
+    except Exception as exc:  # 檢查端故障不可放行合併；理由經 MergeOutcome.error 輸出
+        return MergeMessages.CAS_CHECK_RAISED.format(error=exc)
+    return "" if result.passed else (result.reason or MergeMessages.CAS_CHECK_FAILED)
+
+
+def _prepare_candidate(branch: str, base: str, repo: str, message: str):
+    """計算待合併 commit（只寫物件）。回傳 (merge_commit, old_head, 中止說明)。"""
+    ok, old_head = _resolve_commit(f"refs/heads/{base}", repo)
+    ok2, branch_sha = _resolve_commit(f"refs/heads/{branch}", repo)
+    if not (ok and ok2):
+        return None, "", MergeMessages.CAS_REF_UNRESOLVED.format(base=base, branch=branch)
+    if _git_raw(["merge-base", "--is-ancestor", branch_sha, old_head], repo).returncode == 0:
+        return None, "", MergeMessages.CAS_ALREADY_MERGED.format(base=base, branch=branch)
+    ok, tree = _compute_merge_tree(old_head, branch_sha, repo)
+    if not ok:
+        return None, "", tree
+    _, old_tree = _git_out(["rev-parse", f"{old_head}^{{tree}}"], repo)
+    if tree == old_tree:
+        return None, "", MergeMessages.CAS_EMPTY_MERGE
+    ok, commit = _git_out(["commit-tree", tree, "-p", old_head, "-p", branch_sha, "-m", message], repo)
+    if not ok:
+        return None, "", MergeMessages.CAS_COMMIT_TREE_FAILED.format(error=commit)
+    return commit, old_head, ""
+
+
+def _cas_attempt(branch: str, base: str, repo: str, check: Optional[PreMergeCheck], message: str, box: dict):
+    """單次嘗試：算 commit → 合併前檢查 → update-ref CAS。回傳 (status, error)。"""
+    box["attempt"] = box.get("attempt", 0) + 1
+    limit = box.get("max_retries")
+    if limit is not None and box["attempt"] > limit + 1:
+        return "abort", MergeMessages.CAS_RETRY_LIMIT.format(limit=limit, error=box.get("last_retry_error", ""))
+    commit, old_head, why = _prepare_candidate(branch, base, repo, message)
+    if commit is None:
+        return "abort", why
+    ref = f"refs/heads/{base}"
+    reason = _run_pre_merge_check(check, commit, ref, old_head, box["attempt"])
+    if reason:
+        return "abort", reason
+    proc = _git_raw(["update-ref", ref, commit, old_head], repo)
+    if proc.returncode != 0:
+        box["last_retry_error"] = proc.stderr.decode("utf-8", "replace").strip()
+        return "retry", box["last_retry_error"]
+    box["commit"], box["old_head"] = commit, old_head
+    return "done", ""
+
+
+def _parse_raw_diff(raw: bytes) -> list:
+    """解析 `diff-tree -r -z --raw --no-renames` 為 [(舊 mode, 新 mode, 舊 sha, 新 sha, 狀態, 路徑)]。"""
+    tokens = raw.split(_NUL)
+    entries = []
+    for meta, path in zip(tokens[0::2], tokens[1::2]):
+        f = meta.decode().lstrip(":").split(" ")
+        entries.append((f[0], f[1], f[2], f[3], f[4][:1], path.decode("utf-8", "surrogateescape")))
+    return entries
+
+
+def _worktree_sha(repo: str, path: str) -> Optional[str]:
+    if not os.path.lexists(os.path.join(repo, path)):
+        return None
+    ok, sha = _git_out(["hash-object", "--", path], repo)
+    return sha if ok else "?"
+
+
+def _index_entries(repo: str) -> dict:
+    """共用 index：路徑 -> (mode, sha)（stage 0）；有衝突 stage 的路徑為 None。"""
+    proc = _git_raw(["ls-files", "-s", "-z"], repo)
+    table = {}
+    for rec in proc.stdout.split(_NUL):
+        if not rec:
+            continue
+        meta, _, path = rec.decode("utf-8", "surrogateescape").partition("\t")
+        mode, sha, stage = meta.split(" ")
+        table[path] = (mode, sha) if stage == "0" else None
+    return table
+
+
+def _unchanged_since(entry: tuple, index: dict, repo: str) -> bool:
+    """index 與工作區皆等於舊 HEAD 的該路徑才可同步。"""
+    old_mode, _, old_sha, _, _, path = entry
+    if set(old_sha) == {_ZERO_SHA_CHAR}:  # 新增檔：舊 HEAD 不存在，index 與工作區也須不存在
+        return path not in index and _worktree_sha(repo, path) is None
+    return index.get(path) == (old_mode, old_sha) and _worktree_sha(repo, path) == old_sha
+
+
+def _apply_sync(repo: str, to_sync: list) -> tuple[str, str]:
+    """把新 HEAD 的內容寫入共用 index 與工作區。回傳 (status, error)，供重試包裝。"""
+    lines = []
+    for _, new_mode, _, new_sha, status, path in to_sync:
+        if status == "D":
+            lines.append(f"0 {_ZERO_SHA_CHAR * _SHA_HEX_LEN}\t{path}")
+        else:
+            lines.append(f"{new_mode} {new_sha}\t{path}")
+    payload = _NUL.join(line.encode("utf-8", "surrogateescape") for line in lines) + _NUL
+    proc = _git_raw(["update-index", "-z", "--index-info"], repo, payload)
+    if proc.returncode != 0:
+        return "retry", proc.stderr.decode("utf-8", "replace").strip()
+    for path in (e[5] for e in to_sync if e[4] == "D"):
+        if os.path.lexists(os.path.join(repo, path)):
+            os.remove(os.path.join(repo, path))
+    present = [e[5] for e in to_sync if e[4] != "D"]
+    if present:
+        data = _NUL.join(p.encode("utf-8", "surrogateescape") for p in present) + _NUL
+        proc = _git_raw(["checkout-index", "-f", "-z", "--stdin"], repo, data)
+        if proc.returncode != 0:
+            return "retry", proc.stderr.decode("utf-8", "replace").strip()
+    return "done", ""
+
+
+def _sync_shared_checkout(repo: str, base: str, old_head: str, new_head: str) -> tuple[list, list]:
+    """只同步「index 與工作區皆等於舊 HEAD」的檔；其餘列為 skipped 不動。回傳 (synced, skipped)。"""
+    ok, current = _git_out(["symbolic-ref", "-q", "--short", "HEAD"], repo)
+    if not ok or current != base:
+        return [], []  # 共用 checkout 不在 base 分支：其 index 與本次 ref 推進無關
+    raw = _git_raw(["diff-tree", "-r", "-z", "--raw", "--no-renames", old_head, new_head], repo).stdout
+    entries = _parse_raw_diff(raw)
+    index = _index_entries(repo)
+    to_sync = [e for e in entries if _unchanged_since(e, index, repo)]
+    skipped = [e[5] for e in entries if e not in to_sync]
+    if to_sync:
+        status, error, _ = _run_with_retry(lambda: _apply_sync(repo, to_sync))
+        if status != "done":
+            return [], [e[5] for e in entries] + [MergeMessages.CAS_SYNC_FAILED.format(error=error)]
+    return [e[5] for e in to_sync], skipped
+
+
+def _verify_three_planes(repo: str, synced: list, new_head: str) -> list:
+    """三平面核對：同步過的檔 index 與 HEAD 是否一致；回傳不一致的路徑。"""
+    index = _index_entries(repo)
+    bad = []
+    for path in synced:
+        proc = _git_raw(["ls-tree", "-z", new_head, "--", path], repo)
+        head_meta = proc.stdout.decode("utf-8", "replace").split("\t")[0].split(" ")
+        head_sha = head_meta[2] if len(head_meta) == 3 else None
+        if (index.get(path) or (None, None))[1] != head_sha:
+            bad.append(path)
+    return bad
+
+
+def merge_branch_cas(
+    branch: str,
+    repo: Optional[str] = None,
+    base: str = DEFAULT_BASE_BRANCH,
+    pre_merge_check: Optional[PreMergeCheck] = None,
+    message: Optional[str] = None,
+    max_retries: Optional[int] = None,
+    hold: "Optional[ContextManager]" = None,
+) -> MergeOutcome:
+    """以 CAS 把 branch 合併進 base（--no-ff 等價：雙親代 commit）。合併主流程的唯一入口。
+
+    pre_merge_check：預設 None（直接 update-ref）。簽名
+    `(merge_commit_sha, target_ref, expected_old_sha, attempt) -> CheckResult`，
+    在 commit-tree 之後、update-ref 之前呼叫。回傳 passed=False 或拋例外時不執行
+    update-ref，ref 不變，理由放進 MergeOutcome.error 並印出。
+    CAS 重試時每次嘗試依新 HEAD 產生不同 commit，因此每次嘗試都重新呼叫檢查
+    （檢查成本隨重試次數倍增；是否快取或縮短由檢查端決定）。
+    max_retries：預設 None（沿用 _run_with_retry 的預算）；給定時 CAS 重試超過該次數即中止，
+    回報最後一次失敗原因，ref 不變、分支保留。
+    hold：預設 None。給定時為 context manager，在第一次產生合併 commit 之前進入、所有嘗試
+    （含 CAS 重試）結束後離開，涵蓋 update-ref 完成與各種中止路徑；合併閘門用它整段持有
+    heavy 名額，使檢查窗口不含排隊時間。
+    成功後共用 index/工作區只同步未被他人動過的檔。
+    """
+    repo = repo or get_project_root()
+    msg = message or f"Merge branch '{branch}'"
+    box: dict = {"max_retries": max_retries}
+    with (hold if hold is not None else contextlib.nullcontext()):
+        status, error, attempts = _run_with_retry(
+            lambda: _cas_attempt(branch, base, repo, pre_merge_check, msg, box)
+        )
+    if status != "done":
+        return MergeOutcome(ok=False, error=error, attempts=attempts)
+    synced, skipped = _sync_shared_checkout(repo, base, box["old_head"], box["commit"])
+    return MergeOutcome(True, "", box["commit"], synced, skipped, attempts)
+
+
+def _print_merge_outcome(outcome: MergeOutcome, ticket_id: str) -> int:
+    if not outcome.ok:
+        print(MergeMessages.MERGE_FAILED.format(error=outcome.error))
+        return 1
+    bad = _verify_three_planes(get_project_root(), outcome.synced, outcome.commit_sha)
+    print(MergeMessages.CAS_RESULT.format(
+        commit=outcome.commit_sha, attempts=outcome.attempts, synced=len(outcome.synced), bad=len(bad)))
+    for path in outcome.skipped:
+        print(MergeMessages.CAS_SKIPPED_FILE.format(path=path))
+    for path in bad:
+        print(MergeMessages.CAS_PLANE_MISMATCH.format(path=path))
     print(MergeMessages.MERGE_SUCCESS.format(ticket_id=ticket_id))
     return 0
 
@@ -1827,7 +2201,31 @@ def main():
     )
     merge_parser.add_argument(
         "ticket_id",
-        help="Ticket ID (例如：0.1.1-W9-002)"
+        nargs="?",
+        help="Ticket ID (例如：0.1.1-W9-002)；與 --branch 擇一"
+    )
+    merge_parser.add_argument(
+        "--branch",
+        help="以分支名指定合併對象（如 worktree-agent-<id>），不查票狀態"
+    )
+    merge_parser.add_argument(
+        "--skip-gate",
+        metavar="REASON",
+        help="略過合併前全套件閘門（須帶理由，理由寫入日誌）"
+    )
+    merge_parser.add_argument(
+        "--message", "-m",
+        help="合併 commit 訊息（原文使用，可含換行與 trailer）；省略則用預設訊息"
+    )
+    merge_parser.add_argument(
+        "--ticket",
+        metavar="TICKET_ID",
+        help="票號：預設訊息附上 (<票號>)；以 <ticket-id> 合併時自動帶入；--message 優先"
+    )
+    merge_parser.add_argument(
+        "--pre-acceptance",
+        metavar="REASON",
+        help="合併前驗收：票未 completed 也允許合併，理由寫入日誌"
     )
 
     # cleanup 子命令
@@ -1857,7 +2255,13 @@ def main():
     elif args.command == "status":
         return cmd_status(args.ticket_id)
     elif args.command == "merge":
-        return cmd_merge(args.ticket_id)
+        if bool(args.ticket_id) == bool(args.branch):
+            print("[錯誤] merge 需指定 <ticket-id> 或 --branch 其中之一")
+            return 1
+        return cmd_merge(
+            args.ticket_id, branch=args.branch, pre_acceptance_reason=args.pre_acceptance,
+            skip_gate_reason=args.skip_gate, message=args.message, ticket=args.ticket,
+        )
     elif args.command == "cleanup":
         return cmd_cleanup(args.ticket_id, force=args.force)
     else:

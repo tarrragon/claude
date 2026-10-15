@@ -8,7 +8,9 @@ name = "worktree-skill"
 version = "1.0.0"
 description = "Git Worktree Management SKILL for Claude Code"
 requires-python = ">=3.11"
-dependencies = []
+# 與 hooks/session-start-merged-worktree-audit-hook.py 的 PEP 723 宣告同步：
+# 該 hook 經 lib 惰性載入 hook_ticket，頂層 import yaml。
+dependencies = ["pyyaml"]
 
 [project.scripts]
 worktree = "scripts.worktree_manager:main"

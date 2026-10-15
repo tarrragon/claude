@@ -70,7 +70,6 @@ from lib import (
 from lib.dispatch_tracker import (
     mark_turn_ended_by_handle,
     mark_turn_ended_by_id,
-    mark_oldest_active_null_agent_id_entry_turn_ended,
     get_active_dispatches,
     get_state_file_path,
     leave_turn_ended_tombstone,
@@ -211,42 +210,8 @@ def main() -> int:
         marked = mark_turn_ended_by_id(project_root, agent_id)
 
     if not marked:
-        # Fallback：標記 agent_id=null 且尚未標記過回合結束的最早一筆（FIFO）
-        # SubagentStop input 無 description 欄位，無法做 description 匹配。
-        #
-        # 候選數 > 1 時停用 FIFO：isolation=none 派發的 agent_id 全記為
-        # null，此時「最早」不代表「本次真正結束的那一筆」，標記任一筆
-        # 都可能誤將仍在執行中的代理人記錄判為已結束回合。候選數 > 1 時
-        # 不標記任何記錄，只寫 WARNING，留待 cleanup_expired 依超時回收。
-        null_candidates = [
-            d for d in get_active_dispatches(project_root)
-            if d.get("agent_id") is None and d.get("turn_ended_at") is None
-        ]
-        if len(null_candidates) > 1:
-            logger.warning(
-                "SubagentStop agent_id=%s 無精準匹配，null 候選 %d 筆（>1）"
-                "已停用 FIFO 後援避免誤標，待 cleanup_expired 超時回收",
-                agent_id,
-                len(null_candidates),
-            )
-        else:
-            fallback_marked = mark_oldest_active_null_agent_id_entry_turn_ended(
-                project_root
-            )
-            if fallback_marked:
-                logger.info(
-                    "SubagentStop fallback 標記回合結束（agent_id=%s 無精準匹配，"
-                    "FIFO 標記最早 null entry）",
-                    agent_id,
-                )
-                marked = True
-            else:
-                logger.warning(
-                    "SubagentStop agent_id=%s 無法標記回合結束（精準和 FIFO 兩路徑皆失敗）",
-                    agent_id,
-                )
-
-    if not marked:
+        # 無 FIFO 後援：他人運行中的 null 記錄不可被無匹配 Stop 誤標
+        # （同步派發 Stop 先於自身記錄寫入，唯一候選必屬他人）。
         # 同步派發時序：SubagentStop 早於 PostToolUse(Agent) 寫入記錄，條目
         # 尚不存在；留墓碑供 record_dispatch 寫入時消費（TTL + 消費即刪）。
         try:

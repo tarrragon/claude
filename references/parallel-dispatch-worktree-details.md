@@ -30,7 +30,7 @@
 
 > **worktree 為 fresh checkout，gitignored 生成產物須先確認就緒**：worktree 是全新 checkout，任何 gitignored 的建置生成產物（i18n 產物、序列化程式碼、DI 註冊等）若未同步存在，會造成連鎖編譯失敗且極易被誤判為高並行編譯器資源耗盡（實證與歸因陷阱見 `IMP-APP-003`）。**Why**：gitignore 排除生成產物是常見慣例，但該慣例假設「產物可即時重新生成」，worktree 派發若未確保生成步驟已執行，假設不成立。**Consequence**：全套件測試結果不可信，數十至上百項編譯失敗會被誤歸因為環境噪音而非缺產物。**Action**：(1) 派發跑全套件的 worktree agent 前，PM 先確認該 worktree 內含當前所有必要生成產物；(2) 對每個 gitignored 生成產物，評估納入版控，或於派發 prompt 中要求 agent 先執行對應 generation 指令（如 `flutter gen-l10n` / `dart run build_runner build`）；(3) 判斷「大量編譯失敗」是否為此類根因時，先查該產物是否 gitignored 且未納版控，勿逕自歸因並行資源耗盡。
 
-> **worktree 派發收尾用 `ticket track finish` 別名，避開 `complete` 誤判**：CC runtime 的 worktree isolation guard 對 argv 逐元素做 basename 比對其可處理的 shell 命令清單，`complete` 命中 bash builtin `complete`，使 `ticket track complete` 在 worktree 派發下條件性被誤判為「不可驗證的合併類操作」而阻擋（同一操作同一隔離環境下結果不穩定重現，五次派發兩擋三過）。**Why**：guard 的比對粒度是 argv 每個 token 的 basename，不區分命令位置與參數位置，故子命令名稱恰好撞上 shell builtin 名稱時才會誤判，其餘子命令（如 `claim`、`append-log`）不受影響。**Consequence**：代理人執行 `ticket track complete` 被拒時無法自行收尾，需 PM 在主 repo 代執行並代填 Layer 1 自檢，但代填的自檢在證據來源上與代理人自檢本質不同（PM 看不到代理人的執行過程）。**Action**：worktree 隔離派發的收尾指引一律使用 `ticket track finish <id> --as <agent-name>`（`finish` 為 `complete` 的別名，兩者行為完全等價，含 `--as` / `--force` 全旗標）；主 repo cwd 場景維持原名 `complete` 不變。`complete` 本身不動、不加棄用警告——它不是要被取代，只是在 worktree 環境有代稱。
+> **worktree 派發收尾：代理人止於 worktree commit，`complete` 由 PM 於合併後執行**（用戶裁決，2026-10-14）：平台對隔離代理人的 `complete` 條件性阻擋（argv 逐元素 basename 比對撞上 bash builtin `complete`）；改走別名 `finish` 雖能通過且同樣經 acceptance-gate 驗收，收尾時點仍在合併之前。**Why**：complete 發生在 PM 合併與測試之後，票面完成狀態才與 main 上的程式碼一致；自檢仍由執行期的代理人經 `append-log` 撰寫，證據來源不變。**Consequence**：隔離代理人 complete 或 finish，complete 被平台擋下而阻塞，finish 則讓票面在程式碼未進 main 時即為完成；PM 代填自檢則破壞「執行期的代理人才是自檢正確供給側」的設計。**Action**：隔離代理人收尾止於 `set-acceptance` 勾選、`append-log` 填 Solution（含 `### 自檢結果與 Phase 4 評估`）與 Test Results、`ticket track commit ... --worktree`，不執行 complete 與 finish，回報 PM；PM 合併並驗證後於主 checkout 先 `ticket track set-who <id> --current rosemary-project-manager` 再 `complete`，只執行 complete、不代填自檢。主 repo cwd 場景維持代理人自行 `complete`。派發 prompt 寫法見 `.claude/references/agent-dispatch-template.md`〈worktree 派發收尾指引：complete 由 PM 於合併後執行〉。
 
 <!-- rule8-exempt: relocation:自 .claude/pm-rules/parallel-dispatch.md 逐字搬移 -->
 ### Redirect 派發反模式禁令（強制，W1-016）
@@ -206,6 +206,8 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 ---
 
+**Last Updated**: 2026-10-14
+**Version**: 1.2.0 — 「worktree 派發收尾用 finish 別名」條款改寫為「代理人止於 worktree commit，complete 由 PM 於合併後執行」，PM 收尾身份採 set-who 後 complete（用戶裁決，2026-10-14）。
 **Last Updated**: 2026-09-29
 **Version**: 1.1.0 — 〈風險分級表〉後加一行路由至 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉（派發位置單一入口，框架 issue 101）。
 **Version**: 1.0.0 — 從 `.claude/pm-rules/parallel-dispatch.md`「Worktree 隔離（風險分級）」章節整段外移（熱點檔案叢集拆分），內容未經改寫，僅位置搬移。

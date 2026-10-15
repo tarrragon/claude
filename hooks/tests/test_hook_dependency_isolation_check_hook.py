@@ -524,11 +524,33 @@ class TestTriggerRouting:
             sys, "stdin", _stdin_json({"hook_event_name": "SessionStart"})
         )
         rc = hook_mod.main()
-        err = capsys.readouterr().err
+        captured = capsys.readouterr()
+        out = json.loads(captured.out)["hookSpecificOutput"]
 
         assert rc == 0
-        assert "WARNING" in err
-        assert "foo-hook.py" in err
+        assert out["hookEventName"] == "SessionStart"
+        assert "WARNING" in out["additionalContext"]
+        assert "foo-hook.py" in out["additionalContext"]
+        assert captured.err == ""
+        assert "permissionDecision" not in out
+
+    def test_sessionstart_clean_no_output(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        # E2 對照：純 stdlib hook 無問題，不輸出
+        project_root = _make_project(
+            tmp_path, ".claude/hooks/foo-hook.py", "#!/usr/bin/env python3\nimport os\n"
+        )
+        monkeypatch.setattr(hook_mod, "get_project_root", lambda: project_root)
+        monkeypatch.setattr(
+            sys, "stdin", _stdin_json({"hook_event_name": "SessionStart"})
+        )
+        rc = hook_mod.main()
+        captured = capsys.readouterr()
+
+        assert rc == 0
+        assert captured.out == ""
+        assert captured.err == ""
 
     def test_posttooluse_settings_json_edit_triggers(
         self, hook_mod, monkeypatch, tmp_path, capsys
@@ -543,10 +565,13 @@ class TestTriggerRouting:
         }
         monkeypatch.setattr(sys, "stdin", _stdin_json(payload))
         rc = hook_mod.main()
-        err = capsys.readouterr().err
+        captured = capsys.readouterr()
+        out = json.loads(captured.out)["hookSpecificOutput"]
 
         assert rc == 0
-        assert "WARNING" in err
+        assert out["hookEventName"] == "PostToolUse"
+        assert "WARNING" in out["additionalContext"]
+        assert captured.err == ""
 
     def test_posttooluse_hook_py_edit_triggers(
         self, hook_mod, monkeypatch, tmp_path, capsys
@@ -563,10 +588,13 @@ class TestTriggerRouting:
         }
         monkeypatch.setattr(sys, "stdin", _stdin_json(payload))
         rc = hook_mod.main()
-        err = capsys.readouterr().err
+        captured = capsys.readouterr()
+        out = json.loads(captured.out)["hookSpecificOutput"]
 
         assert rc == 0
-        assert "WARNING" in err
+        assert out["hookEventName"] == "PostToolUse"
+        assert "WARNING" in out["additionalContext"]
+        assert captured.err == ""
 
     def test_posttooluse_unrelated_file_skipped(
         self, hook_mod, monkeypatch, tmp_path, capsys
@@ -581,10 +609,11 @@ class TestTriggerRouting:
         }
         monkeypatch.setattr(sys, "stdin", _stdin_json(payload))
         rc = hook_mod.main()
-        err = capsys.readouterr().err
+        captured = capsys.readouterr()
 
         assert rc == 0
-        assert err == ""
+        assert captured.err == ""
+        assert captured.out == ""
 
     def test_missing_stdin_input_allowed(self, hook_mod, monkeypatch):
         monkeypatch.setattr(sys, "stdin", io.StringIO(""))

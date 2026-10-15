@@ -80,7 +80,7 @@
 
 | 派發類型 | isolation 值 | 派發前置 | 收尾指令 | 禁止事項 |
 |---------|-------------|---------|---------|---------|
-| 實作派發，`where.files` 含非豁免路徑 | `isolation: "worktree"`（`.claude/references/parallel-dispatch-worktree-details.md`〈風險分級表〉高風險列） | `git push origin main`（同檔〈worktree 派發注意事項〉worktree base 條；`.claude/references/agent-dispatch-template.md`〈worktree 派發 base 同步指引〉） | 代理人 `ticket track finish <id> --as <agent>`；被隔離守衛拒絕時交還 PM 於主 repo 代跑（template〈worktree 派發收尾指引：用 `finish` 別名避開 `complete` 誤判〉；`.claude/references/agent-dispatch-decision.md`〈isolation:worktree 派發的 complete 收尾限制〉）；PM 合入依本檔〈PM 側 worktree 合入與驗收三軸（強制）〉 | 不帶 isolation 派到共用主工作樹；代理人或 PM 在共用主工作樹切換或建立分支（下節） |
+| 實作派發，`where.files` 含非豁免路徑 | `isolation: "worktree"`（`.claude/references/parallel-dispatch-worktree-details.md`〈風險分級表〉高風險列） | `git push origin main`（同檔〈worktree 派發注意事項〉worktree base 條；`.claude/references/agent-dispatch-template.md`〈worktree 派發 base 同步指引〉） | 代理人止於 `ticket track commit`（`--worktree`，只提交產品檔）並回報 PM，不執行 complete 與 finish；PM 合併並驗證後於主 checkout `set-who` 再 `complete`（template〈worktree 派發收尾指引：complete 由 PM 於合併後執行〉；`.claude/references/agent-dispatch-decision.md`〈isolation:worktree 派發的 complete 收尾限制〉）；PM 合入依本檔〈PM 側 worktree 合入與驗收三軸（強制）〉 | 不帶 isolation 派到共用主工作樹；代理人或 PM 在共用主工作樹切換或建立分支（下節） |
 | 實作派發，`where.files` 全為豁免路徑 | 不帶（主 repo cwd，`agent-dispatch-validation-hook.py` 放行純主 repo `.claude/` 目標）；同時修改 `.claude/` 的派發數上限見 worktree-details〈`.claude/` 修改類並行數限 ≤ 2〉 | 無 | 代理人 `ticket track complete <id> --as <agent>`（主 repo cwd 維持原名） | 在共用主工作樹切換或建立分支（下節） |
 | 唯讀審查／分析派發 | 不帶；prompt 首行宣告 `Dispatch-Mode: readonly`（template〈唯讀派發豁免 worktree 強制〉） | 無 | 無 commit；PM 讀取報告後自行落地 | 寫入任何檔案；以 prompt 內文的審查類字眼代替首行宣告 |
 
@@ -445,7 +445,7 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ### PM 側 worktree 合入與驗收三軸（強制）
 
-本節定義 PM 收到 worktree 代理人 `finish` 回報後的動作：合入四步、驗收三軸、失效處置。代理人側的「在 worktree 內 `git merge main`」見 `.claude/references/agent-dispatch-template.md`〈worktree 派發 base 同步指引〉，本節不重複。**Why**：worktree 派發的分支以派發瞬間的 main 為基底，同批其他票與 PM 自己的提交會讓 main 持續前進，直接 fast-forward 必被拒；而代理人回報的「已完成」是記錄平面，票狀態與程式碼是否真的進了歷史要看 git。**Consequence**：不重併就 ff 會反覆被拒或誤走成 merge commit；只信回報會把停在工作區的完成狀態當成已落地，下一個 session 看到的是 in_progress。**Action**：
+本節定義 PM 收到 worktree 代理人 commit 回報（代理人止於 `ticket track commit`，尚未 complete）後的動作：合入四步、驗收三軸、失效處置；三軸通過後 PM 於主 checkout 執行 `ticket track set-who <id> --current rosemary-project-manager` 與 `ticket track complete <id> --as rosemary-project-manager`（理由：收尾時點在合併之前，票面領先程式碼，故 complete 移到合併並驗證之後）。代理人側的「在 worktree 內 `git merge main`」見 `.claude/references/agent-dispatch-template.md`〈worktree 派發 base 同步指引〉，本節不重複。**Why**：worktree 派發的分支以派發瞬間的 main 為基底，同批其他票與 PM 自己的提交會讓 main 持續前進，直接 fast-forward 必被拒；而代理人回報的「已完成」是記錄平面，票狀態與程式碼是否真的進了歷史要看 git。**Consequence**：不重併就 ff 會反覆被拒或誤走成 merge commit；只信回報會把停在工作區的完成狀態當成已落地，下一個 session 看到的是 in_progress。**Action**：
 
 | 步驟 | 命令 | 說明 |
 |------|------|------|
@@ -564,6 +564,7 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 - .claude/pm-rules/references/commit-and-phase-responsibility.md - Commit 責任邊界（Phase 分工、代理人自治規則）
 - .claude/skills/bulk-evaluate/SKILL.md - 批量評估工具（1:1 派發）
 - .claude/skills/parallel-evaluation/SKILL.md - 並行評估工具（多視角掃描）
+- .claude/skills/multi-session-orchestration/SKILL.md - 主控 PM 統籌多條同儕 session 工作線的操作流程（分線、共用資源協調、審查標記查證、階段收尾）；本檔管強制條文，該 skill 管操作流程
 - .claude/pm-rules/task-splitting.md - 任務拆分指南
 - .claude/pm-rules/decision-tree.md - 主線程決策樹（第負一層）
 - .claude/skills/agent-team/SKILL.md - Agent Teams 操作指南
@@ -571,6 +572,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
+**Last Updated**: 2026-10-14
+**Version**: 4.37.0 - 〈派發位置判準〉worktree 列收尾欄與〈PM 側 worktree 合入與驗收三軸〉開頭改為代理人止於 `ticket track commit`、PM 合併並驗證後 `set-who` 再 `complete`，移除隔離代理人以 `finish` 收尾的條文（收尾時點在合併之前，票面領先程式碼；來源：用戶裁決，2026-10-14）
 **Last Updated**: 2026-10-08
 **Version**: 4.36.0 - 停滯偵測判準表「一級處置」列補路由：SendMessage 喚醒前先確認 worktree 仍在，指向 `agent-dispatch-template.md` 恢復前判準段落
 **Last Updated**: 2026-09-30

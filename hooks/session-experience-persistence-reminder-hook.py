@@ -31,6 +31,7 @@ import json
 import re
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 # 加入 hook_utils 路徑
 sys.path.insert(0, str(Path(__file__).parent))
@@ -40,6 +41,8 @@ from lib import (
     setup_hook_logging,
     run_hook_safely,
     get_project_root,
+    read_json_from_stdin,
+    emit_model_reminder,
     find_ticket_files,
     parse_ticket_frontmatter,
 )
@@ -196,35 +199,110 @@ def format_reminder_reason(tickets: list) -> str:
     )
 
 
-def generate_hook_output(logger) -> dict:
-    """
-    生成 Hook 輸出。
-
-    Returns:
-        dict - Hook 輸出 JSON
-    """
+def scan_tickets(logger) -> list:
+    """掃描 context 敏感票；掃描失敗回傳空清單（已記錄日誌）。"""
     try:
         project_root = get_project_root()
         logger.debug(f"專案根目錄: {project_root}")
-
-        sensitive_tickets = scan_context_sensitive_tickets(project_root, logger)
-
-        if not sensitive_tickets:
-            logger.info("無 context 敏感的待執行 Ticket，靜默通過")
-            return {"suppressOutput": True}
-
-        reason = format_reminder_reason(sensitive_tickets)
-        logger.info(f"輸出 context 保護提醒（{len(sensitive_tickets)} 個 Ticket）")
-
-        # 輸出到 stderr（系統可見）
-        print(f"\n{reason}", file=sys.stderr)
-
-        # 不阻止退出，只輸出提醒
-        return {"suppressOutput": True}
-
+        return scan_context_sensitive_tickets(project_root, logger)
     except Exception as e:
         logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
-        return {"suppressOutput": True}
+        return []
+
+
+# --- 節流狀態（以 session_id 分檔，記錄該 session 已提醒過的票 ID）---
+
+STATE_FILE_PREFIX = "persistence-reminder-"
+STATE_MAX_AGE_SECONDS = 7 * 24 * 3600
+
+
+def get_state_dir() -> Path:
+    """狀態檔目錄（測試以 monkeypatch 覆寫）。"""
+    return get_project_root() / ".claude" / "hook-state"
+
+
+def state_file_for(session_id: str) -> Path:
+    """session_id 消毒後組成檔名，避免路徑穿越。"""
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id)[:128]
+    return get_state_dir() / f"{STATE_FILE_PREFIX}{safe}.json"
+
+
+def load_notified_ids(state_file: Path, logger) -> set:
+    """讀取已提醒票 ID；檔案不存在或讀取失敗皆回傳空集合（fail-open，失敗記日誌）。"""
+    if not state_file.exists():
+        return set()
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        return set(str(x) for x in data.get("notified_ids", []))
+    except Exception as e:
+        logger.warning(f"讀取節流狀態失敗，視為尚未提醒: {e}")
+        return set()
+
+
+def save_notified_ids(state_file: Path, ids: set, logger) -> None:
+    """寫入已提醒票 ID；失敗只記日誌（fail-open）。"""
+    try:
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(
+            json.dumps({"notified_ids": sorted(ids)}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning(f"寫入節流狀態失敗（下次可能重複提醒）: {e}")
+
+
+def cleanup_old_state(logger) -> None:
+    """清除超過保留期的狀態檔；失敗只記日誌。"""
+    try:
+        import time
+        cutoff = time.time() - STATE_MAX_AGE_SECONDS
+        for f in get_state_dir().glob(f"{STATE_FILE_PREFIX}*.json"):
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+    except Exception as e:
+        logger.warning(f"清理過期節流狀態失敗: {e}")
+
+
+def select_new_tickets(tickets: list, session_id: str, logger) -> list:
+    """回傳本 session 尚未提醒過的票，並把本次要提醒的票記入狀態檔。
+
+    缺 session_id 時無法分檔，採保守行為：全數回傳、不寫狀態（照舊每次提醒）。
+    """
+    if not session_id:
+        logger.info("缺 session_id，不節流（保守：照舊提醒）")
+        return tickets
+    try:
+        state_file = state_file_for(session_id)
+        notified = load_notified_ids(state_file, logger)
+        new_tickets = [t for t in tickets if str(t["id"]) not in notified]
+        if new_tickets:
+            save_notified_ids(
+                state_file, notified | {str(t["id"]) for t in new_tickets}, logger
+            )
+            cleanup_old_state(logger)
+        return new_tickets
+    except Exception as e:
+        logger.warning(f"節流判定失敗，fail-open 照舊提醒: {e}")
+        return tickets
+
+
+def build_reminder(logger, session_id: str = "") -> Optional[str]:
+    """
+    掃描並產生增量提醒文字（只含本 session 尚未提醒過的票）。
+
+    Returns:
+        str - 提醒訊息；None 表示無需提醒
+    """
+    tickets = scan_tickets(logger)
+    if not tickets:
+        logger.info("無 context 敏感的待執行 Ticket，靜默通過")
+        return None
+    new_tickets = select_new_tickets(tickets, session_id, logger)
+    if not new_tickets:
+        logger.info("清單無新增票，本 session 已提醒過，不重複輸出")
+        return None
+    logger.info(f"提醒 context 保護（{len(new_tickets)} 個 Ticket）")
+    return format_reminder_reason(new_tickets)
 
 
 def main() -> int:
@@ -234,8 +312,20 @@ def main() -> int:
     try:
         logger.info("Session 經驗持久化提醒 Hook 啟動")
 
-        hook_output = generate_hook_output(logger)
-        print(json.dumps(hook_output, ensure_ascii=False, indent=2))
+        hook_input = read_json_from_stdin(logger) or {}
+
+        # Stop 事件的 additionalContext 會讓模型續跑一次（意圖內：讓模型評估
+        # context 持久化）；續跑後的下一次 Stop 不得再輸出，避免無限迴圈。
+        if hook_input.get("stop_hook_active"):
+            logger.info("stop_hook_active 為真，不再輸出提醒")
+            print(json.dumps({"suppressOutput": True}))
+            return 0
+
+        reminder = build_reminder(logger, str(hook_input.get("session_id") or ""))
+        if reminder:
+            emit_model_reminder("Stop", reminder, input_data=hook_input)
+        else:
+            print(json.dumps({"suppressOutput": True}))
 
         logger.info("Hook 執行完成")
         return 0

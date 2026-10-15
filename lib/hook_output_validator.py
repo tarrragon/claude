@@ -38,12 +38,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # .claude/lib/（同層 sibling import）
 
 from hook_command_resolver import hook_command_var_values, tokenize_hook_command
+from hook_registry import merge_dispatch_registry
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
 
 # Hook events whose stdout MUST be JSON with hookSpecificOutput schema
-JSON_SCHEMA_EVENTS = {"PreToolUse", "PostToolUse"}
+JSON_SCHEMA_EVENTS = {"PreToolUse", "PostToolUse", "PostToolUseFailure"}
 
 # Dummy stdin payload（PostToolUse/PreToolUse 皆可吃）
 DUMMY_STDIN = json.dumps({
@@ -86,6 +87,8 @@ def load_target_hooks() -> list[tuple[str, str, str]]:
     """Return list of (event_name, matcher, hook_command) for JSON-schema events."""
     with SETTINGS_PATH.open("r", encoding="utf-8") as f:
         settings = json.load(f)
+    # Bash 事件的 hook 已併入分派程序，settings.json 只剩分派器一筆；併回 registry 取完整清單
+    merge_dispatch_registry(settings, PROJECT_ROOT)
 
     hooks_config = settings.get("hooks", {})
     results: list[tuple[str, str, str]] = []

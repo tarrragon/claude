@@ -24,6 +24,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
+from lib import run_hook_safely  # noqa: E402
+
 
 def main() -> int:
     # 讀取 Hook 輸入
@@ -118,4 +124,4 @@ def _extract_test_path(command: str) -> str:
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "pre-test-scan"))

@@ -352,7 +352,9 @@ def _compute_segments(
     """由 gate 端 spawn／return 與 pytest 端 configure／unconfigure／atexit 時刻算四段。
 
     四段首尾相接，加總 = return_wall - spawn_wall（牆鐘）。與 total（monotonic）的
-    差 sum_residual 來自兩個時鐘源的差異（牆鐘可被校時調整、monotonic 不可），正常 <10ms。
+    差 sum_residual 有兩個來源：(1) 兩個時鐘源的差異（牆鐘可被校時調整、monotonic 不可）；
+    (2) 取樣點非原子——spawn_wall 與 started、total 與 return_wall 各為相鄰兩次取樣，
+    之間的排程空隙會直接進入 residual。輕載下通常 <10ms，高負載下不保證。
     任一時刻缺漏的段記 None（例如 pytest 被 timeout 殺掉時無 atexit）。
     """
     side = side or {}

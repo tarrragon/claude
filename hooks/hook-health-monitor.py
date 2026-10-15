@@ -50,6 +50,7 @@ try:
     from lib import setup_hook_logging, run_hook_safely
     from lib.common_functions import get_project_root, hook_output
     from lib import hook_health
+    from lib.hook_registry import merge_dispatch_registry
 except ImportError as e:
     print(json.dumps({"result": "continue"}))
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
@@ -402,9 +403,11 @@ def _load_settings(settings_path: Path) -> Dict:
         return {}
     try:
         with open(settings_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            settings = json.load(f)
     except (json.JSONDecodeError, IOError):
         return {}
+    # Bash 事件的 hook 已併入分派 registry，併回註冊清單才不會被分類為未註冊
+    return merge_dispatch_registry(settings, settings_path.parent.parent)
 
 
 def _today_str(now: Optional[datetime] = None) -> str:

@@ -54,7 +54,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root,
     find_ticket_files, find_ticket_file, validate_ticket_has_decision_tree, save_check_log,
-    prompt_references_handoff_ticket, emit_handoff_recovery_signal, validate_hook_input, validate_ticket_unified
+    prompt_references_handoff_ticket, emit_handoff_recovery_signal, validate_hook_input, validate_ticket_unified,
+    is_subagent_environment, dispatch_tracker
 )
 
 # ----------------------------------------------------------------------------
@@ -216,24 +217,61 @@ def is_exempt_agent_type(subagent_type: str, logger) -> bool:
         logger.info(f"代理人類型 '{subagent_type}' 豁免 Ticket 驗證（用於前置資訊蒐集）")
     return is_exempt
 
-def check_depth_descend(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
+def find_dispatcher_ticket(input_data: Optional[Dict[str, Any]], logger) -> Optional[str]:
     """
-    檢查被派發引用的 ticket 深度是否未超出上限（協議 v2 D3，裁決 E）。
+    取得子代理人（派發者）持有的 ticket ID。
 
-    判準：被派發票 depth > MAX_TICKET_DEPTH 才 deny。depth == MAX_TICKET_DEPTH 是
-        框架允許的最深層，可被派發執行（與 AGENT_PRELOAD D3 對齊：can_descend 判斷的是
-        呼叫者持有的票，不是被派發的票）。
+    來源：dispatch-active.json（dispatch_tracker）中 agent_id 精確比對（或 agent_handle
+    錨定正規式 ^a<handle>-<hex>$）命中的 entry.ticket_id，即該代理人被派發時綁定的票。
+    映射缺失、過期或讀檔失敗時回傳 None（呼叫端退回保守判準），並寫日誌。
+    """
+    agent_id = (input_data or {}).get("agent_id") or ""
+    if not agent_id:
+        return None
+    try:
+        for entry in dispatch_tracker.get_active_dispatches(Path(get_project_root())):
+            handle = entry.get("agent_handle") or ""
+            hit = entry.get("agent_id") == agent_id or (
+                handle and re.match("^a" + re.escape(handle) + "-[0-9a-f]+$", agent_id) is not None
+            )
+            if hit and entry.get("ticket_id"):
+                return entry["ticket_id"]
+    except Exception as e:
+        logger.warning(f"派發者映射讀取失敗: {type(e).__name__}: {e}")
+        sys.stderr.write(
+            f"[agent-ticket-validation-hook] 派發者映射讀取失敗，退回被派發票深度判準: "
+            f"{type(e).__name__}: {e}\n"
+        )
+        return None
+    logger.info(f"agent_id 無派發映射: {agent_id}")
+    return None
 
+
+def _depth_deny_message(ticket_id: str, depth: int, limit_desc: str) -> str:
+    return (
+        f"嵌套深度超限：{limit_desc}（Ticket {ticket_id} 深度 = {depth}，"
+        f"框架最大深度上限 MAX_TICKET_DEPTH = {MAX_TICKET_DEPTH}），不可再往下派發。\n"
+        f"建議處理方向：\n"
+        f"  1. ascend 回報：以 Exit Status (status: blocked, reason: 深度上限) 將需拆分的工作回報上層 PM\n"
+        f"  2. NeedsContext：在 ticket 的 NeedsContext 章節記錄需拆分的子任務，由 PM 在較淺層重新組織\n"
+        f"  3. 確認任務無法在本層完成時，由 PM 評估是否調整 ticket 階層結構"
+    )
+
+
+def check_depth_descend(
+    ticket_id: str, logger, input_data: Optional[Dict[str, Any]] = None
+) -> Tuple[bool, Optional[str]]:
+    """
+    以派發者的實際巢狀層數檢查深度（協議 v2 D3）。
+
+    兩個量不同：被派發票的樹深度（parent_id 鏈）不等於派發者所處的平台巢狀層數。
+    - 主線程派發（input_data 無 agent_id）：位於巢狀最頂層，不受被派發票樹深度限制，放行。
+    - 子代理人派發：以派發者持有票的 can_descend（depth < MAX_TICKET_DEPTH）判定；
+      持有票映射缺失時退回保守判準（被派發票 depth > MAX_TICKET_DEPTH 才 deny）。
     深度計算複用 ticket_system.lib.depth.compute_depth（禁止平行實作，ARCH-020）。
 
-    Args:
-        ticket_id: 被派發引用的 Ticket ID
-        logger: 日誌物件
-
     Returns:
-        tuple - (is_ok, error_message)
-            - is_ok: True 表示深度合規或檢查不適用（fail-open）
-            - error_message: 超限時的 deny 指引；合規時為 None
+        (is_ok, error_message)
 
     fail-open：DEPTH_AVAILABLE = False 或計算異常時回傳 (True, None)，
     同時寫 stderr 警告與日誌（品質基線規則 4），不靜默。
@@ -246,22 +284,31 @@ def check_depth_descend(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
         return True, None
 
     try:
-        depth = compute_depth(ticket_id)
-        if depth <= MAX_TICKET_DEPTH:
-            logger.info(f"Ticket {ticket_id} 深度 {depth} 未超過上限 {MAX_TICKET_DEPTH}，允許派發")
+        if not is_subagent_environment(input_data):
+            logger.info(f"深度判定分支=main_thread，派發 {ticket_id} 不受票樹深度限制，放行")
             return True, None
 
-        msg = (
-            f"嵌套深度超限：Ticket {ticket_id} 深度 = {depth}，"
-            f"超過框架最大深度上限（MAX_TICKET_DEPTH = {MAX_TICKET_DEPTH}），"
-            f"不可派發深度超過上限的 ticket。\n"
-            f"建議處理方向：\n"
-            f"  1. ascend 回報：以 Exit Status (status: blocked, reason: 深度上限) 將需拆分的工作回報上層 PM\n"
-            f"  2. NeedsContext：在 ticket 的 NeedsContext 章節記錄需拆分的子任務，由 PM 在較淺層重新組織\n"
-            f"  3. 確認任務無法在本層完成時，由 PM 評估是否調整 ticket 階層結構"
-        )
+        holder = find_dispatcher_ticket(input_data, logger)
+        if holder:
+            holder_depth = compute_depth(holder)
+            allowed = holder_depth < MAX_TICKET_DEPTH
+            logger.info(
+                f"深度判定分支=subagent_holder，派發者持有票 {holder} 深度 {holder_depth}，"
+                f"can_descend={allowed}"
+            )
+            if allowed:
+                return True, None
+            logger.warning(f"深度超限 deny: 派發者持有票 {holder} (depth={holder_depth})")
+            return False, _depth_deny_message(
+                holder, holder_depth, "派發者持有的票已達最深層，不可再往下派發"
+            )
+
+        depth = compute_depth(ticket_id)
+        logger.info(f"深度判定分支=subagent_fallback，被派發票 {ticket_id} 深度 {depth}")
+        if depth <= MAX_TICKET_DEPTH:
+            return True, None
         logger.warning(f"深度超限 deny: {ticket_id} (depth={depth} > {MAX_TICKET_DEPTH})")
-        return False, msg
+        return False, _depth_deny_message(ticket_id, depth, "被派發票深度超過上限")
     except Exception as e:
         # 深度計算過程異常（如 ticket 載入失敗）不應阻擋既有派發，fail-open；
         # stderr + 日誌雙通道可見（品質基線規則 4）。
@@ -273,7 +320,9 @@ def check_depth_descend(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
         return True, None
 
 
-def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, Optional[str], Optional[str]]:
+def validate_task_dispatch(
+    tool_input: Dict[str, Any], logger, input_data: Optional[Dict[str, Any]] = None
+) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     驗證 Task 派發是否有效
 
@@ -321,7 +370,7 @@ def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, Op
 
     # 步驟 4: 嵌套深度檢查（協議 v2 D3 強制層，W1-056.9）
     # ticket 有效後才檢查深度；豁免型 agent 已在步驟 1 提前 return，不會抵達此處。
-    depth_ok, depth_err = check_depth_descend(ticket_id, logger)
+    depth_ok, depth_err = check_depth_descend(ticket_id, logger, input_data)
     if not depth_ok:
         return False, depth_err, ticket_id
 
@@ -419,7 +468,7 @@ def main() -> int:
         tool_input = input_data.get("tool_input", {})
 
         # 步驟 4: 驗證 Task 派發有效性
-        is_valid, error_message, ticket_id = validate_task_dispatch(tool_input, logger)
+        is_valid, error_message, ticket_id = validate_task_dispatch(tool_input, logger, input_data)
 
         logger.info(f"Task 派發驗證: is_valid={is_valid}, ticket_id={ticket_id}")
 

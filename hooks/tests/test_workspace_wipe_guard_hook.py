@@ -909,3 +909,89 @@ class TestTargetRepoResolution:
             )
         assert code == 0
         assert any("目標 repo 解析" in r.getMessage() for r in caplog.records)
+
+
+class TestRunRevParseTimeoutLogging:
+    """0.5.0-W1-164.6.16：git 逾時分支 fail-open 回傳 None 並寫 warning 日誌。"""
+
+    def test_timeout_logs_warning_and_returns_none(self, monkeypatch, tmp_path, caplog):
+        import subprocess
+
+        def _raise(*a, **kw):
+            raise subprocess.TimeoutExpired(cmd="git", timeout=5)
+
+        monkeypatch.setattr(hook_module.subprocess, "run", _raise)
+        with caplog.at_level(logging.WARNING):
+            assert hook_module._run_rev_parse(str(tmp_path), "--git-dir") is None
+        assert "rev-parse --git-dir" in caplog.text
+        assert str(tmp_path) in caplog.text
+
+    def test_normal_completion_writes_no_warning(self, tmp_path, caplog):
+        import subprocess
+
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        with caplog.at_level(logging.WARNING):
+            assert hook_module._run_rev_parse(str(tmp_path), "--git-dir") is not None
+        assert "rev-parse" not in caplog.text
+
+
+# ============================================================================
+# scan 模式：僅掃描命中的呼叫比照無法解析（0.5.0-W1-120.7.9.2）
+# ============================================================================
+
+_SCAN_ONLY_WIPES = [
+    "find . -exec git reset --hard \\;",
+    "taskset 1 git stash",
+    "setsid git reset --hard",
+]
+
+
+class TestScanOnlyTreatedAsUnparsable:
+    @pytest.mark.parametrize("command", _SCAN_ONLY_WIPES)
+    def test_parallel_blocks(self, monkeypatch, capsys, command):
+        assert _run_hook(monkeypatch, command, dispatch_count=1) == 2
+
+    @pytest.mark.parametrize("command", _SCAN_ONLY_WIPES)
+    def test_non_parallel_clean_warns(self, monkeypatch, capsys, command):
+        assert _run_hook(monkeypatch, command, dispatch_count=0) == 0
+        assert "提醒" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "command", ["grep git stash notes.txt", "grep 'git stash' notes.txt", "man git-stash"]
+    )
+    def test_text_lookup_not_blocked_when_non_parallel_clean(self, monkeypatch, command):
+        assert _run_hook(monkeypatch, command, dispatch_count=0) == 0
+
+    def test_position_hit_unchanged(self, monkeypatch, capsys):
+        # 位置命中的安全形式（帶 pathspec）並行期仍放行；危險形式仍阻擋
+        assert _run_hook(monkeypatch, "git stash push -- a.py", dispatch_count=1) == 0
+        assert _run_hook(monkeypatch, "git reset --hard", dispatch_count=1) == 2
+        assert _run_hook(monkeypatch, "git reset --soft HEAD~1", dispatch_count=1) == 0
+
+    def test_mutation_without_scan_scan_only_slips_through(self, monkeypatch):
+        """變異確認：移除 scan=True 後，僅掃描命中輸入並行期放行。"""
+        orig = hook_module.find_git_invocations
+        monkeypatch.setattr(
+            hook_module, "find_git_invocations", lambda c, s, *a, **k: orig(c, s)
+        )
+        assert _run_hook(monkeypatch, "setsid git reset --hard", dispatch_count=1) == 0
+
+
+class TestParseCauseMessages:
+    def test_tokenize_failure_message(self, monkeypatch, capsys):
+        assert _run_hook(monkeypatch, "git reset --hard 'unclosed", dispatch_count=1) == 2
+        err = capsys.readouterr().err
+        assert "未閉合引號" in err
+        assert "非命令位置" not in err
+
+    def test_scan_only_message(self, monkeypatch, capsys):
+        assert _run_hook(monkeypatch, "setsid git reset --hard", dispatch_count=1) == 2
+        err = capsys.readouterr().err
+        assert "非命令位置" in err
+        assert "未閉合引號" not in err
+
+    def test_positional_hit_has_no_parse_reason(self, monkeypatch, capsys):
+        assert _run_hook(monkeypatch, "git reset --hard", dispatch_count=1) == 2
+        err = capsys.readouterr().err
+        assert "未閉合引號" not in err
+        assert "非命令位置" not in err

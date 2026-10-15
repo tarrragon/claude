@@ -186,10 +186,12 @@ def _resolve_shared_lock_path(tickets_dir: Path) -> Path:
     project_root = get_project_root()
     common_dir = get_git_common_dir(project_root)
     if common_dir is None:
+        _warn_create_lock_degraded("git common dir 無法解析，鎖檔退回票目錄（僅本地互斥）")
         return tickets_dir / CREATE_LOCK_FILENAME
     try:
         rel = tickets_dir.resolve().relative_to(project_root.resolve())
     except ValueError:
+        _warn_create_lock_degraded("tickets_dir 不在專案根下，鎖檔退回票目錄（僅本地互斥）")
         return tickets_dir / CREATE_LOCK_FILENAME
     lock_name = str(rel).replace("/", "__").replace("\\", "__")
     return common_dir / "ticket-create-locks" / f"{lock_name}{CREATE_LOCK_FILENAME}"
@@ -245,8 +247,8 @@ def create_id_allocation_lock(tickets_dir: Path) -> Iterator[None]:
       （stderr warn + 無鎖續行），理由見 _try_acquire_create_lock docstring。
 
     Lock file：優先為 ``{git-common-dir}/ticket-create-locks/{相對路徑}.ticket-create.lock``；
-    非 git 環境降級為 ``{tickets_dir}/.ticket-create.lock``（`*.lock` 已在
-    .gitignore；crash 後 OS 自動回收 fd 釋鎖，殘留檔不影響 reuse）。
+    非 git 環境降級為 ``{tickets_dir}/.ticket-create.lock``（`.gitignore` 的
+    `docs/**/.ticket-create.lock` 涵蓋；crash 後 OS 自動回收 fd 釋鎖，殘留檔不影響 reuse）。
 
     使用方式::
 

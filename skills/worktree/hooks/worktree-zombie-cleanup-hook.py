@@ -25,6 +25,7 @@ Source: 0.18.0-W17-119 / 0.18.0-W17-119.1 — 4 週累積 24 個殭屍 worktree�
 """
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -38,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import setup_hook_logging, run_hook_safely, get_project_root, get_worktree_list  # type: ignore
+from lib.git_utils import run_with_graceful_timeout, TERMINATE_GRACE_SECONDS  # type: ignore
 
 HOOK_NAME = "worktree-zombie-cleanup"
 
@@ -51,6 +53,59 @@ DISABLE_ENV_VAR = "WORKTREE_ZOMBIE_CLEANUP_DISABLE"
 
 # locked 檔案 PID 解析正則
 _PID_PATTERN = re.compile(r"\(pid\s+(\d+)\)")
+
+# 唯讀判斷的逾時秒數；branch -d 與 worktree unlock/remove 各自另設
+_READ_TIMEOUT_SECONDS = 10
+_WRITE_TIMEOUT_SECONDS = 15
+_BRANCH_DELETE_TIMEOUT_SECONDS = 10
+
+# 整體期限：外層為 settings.json 註冊的 SessionStart timeout（30 秒），扣除 uv 啟動餘裕。
+# 各 git 呼叫逾時 = min(原值, 剩餘 - 溫和終止寬限)，使內部終止先於外層到期。
+OUTER_TIMEOUT_SECONDS = 30
+_STARTUP_MARGIN_SECONDS = 5
+OVERALL_BUDGET_SECONDS = OUTER_TIMEOUT_SECONDS - _STARTUP_MARGIN_SECONDS
+
+# 單調時鐘絕對期限；None 表示未啟用（單元測試與直接呼叫維持原逾時）
+_deadline: Optional[float] = None
+
+
+def start_overall_deadline(budget: float = OVERALL_BUDGET_SECONDS) -> None:
+    global _deadline
+    _deadline = time.monotonic() + budget
+
+
+def budgeted_timeout(base: float) -> Optional[float]:
+    """回傳扣減後的逾時秒數；預算不足（剩餘 <= 寬限）回傳 None。"""
+    if _deadline is None:
+        return base
+    usable = _deadline - time.monotonic() - TERMINATE_GRACE_SECONDS
+    if usable <= 0:
+        return None
+    return min(base, usable)
+
+
+def budget_exhausted() -> bool:
+    return budgeted_timeout(_READ_TIMEOUT_SECONDS) is None
+
+
+def _log_budget_exhausted(func: str, subcommand: str, fallback: str) -> None:
+    logging.getLogger(HOOK_NAME).warning(
+        "%s: 整體期限不足，放棄 git %s，%s", func, subcommand, fallback
+    )
+
+
+# ---------- 靜默回傳路徑的日誌（逾時與其他失敗訊息可區分） ----------
+
+def _log_timeout(func: str, subcommand: str, seconds: int, fallback: str) -> None:
+    logging.getLogger(HOOK_NAME).warning(
+        "%s: git %s 逾時（%ds），%s", func, subcommand, seconds, fallback
+    )
+
+
+def _log_failure(func: str, subcommand: str, cause: Any, fallback: str) -> None:
+    logging.getLogger(HOOK_NAME).warning(
+        "%s: git %s 執行失敗（%s），%s", func, subcommand, cause, fallback
+    )
 
 
 # ---------- 純函式（易於 unit test） ----------
@@ -112,17 +167,26 @@ def check_pid_alive(pid: int) -> Tuple[bool, str]:
 
 def is_worktree_dirty(worktree_path: Path) -> bool:
     """檢查 worktree 是否有未提交變更。失敗時保守視為 dirty。"""
+    timeout = budgeted_timeout(_READ_TIMEOUT_SECONDS)
+    if timeout is None:
+        _log_budget_exhausted("is_worktree_dirty", "status", "保守視為 dirty")
+        return True
     try:
         result = subprocess.run(
-            ["git", "-C", str(worktree_path), "status", "--porcelain"],
+            ["git", "-C", str(worktree_path), "--no-optional-locks", "status", "--porcelain"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=timeout,
         )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+    except subprocess.TimeoutExpired:
+        _log_timeout("is_worktree_dirty", "status", timeout, "保守視為 dirty")
+        return True
+    except (subprocess.SubprocessError, FileNotFoundError, OSError) as exc:
+        _log_failure("is_worktree_dirty", "status", exc, "保守視為 dirty")
         return True
 
     if result.returncode != 0:
+        _log_failure("is_worktree_dirty", "status", f"returncode={result.returncode}", "保守視為 dirty")
         return True
     return bool((result.stdout or "").strip())
 
@@ -157,17 +221,26 @@ def is_branch_merged(project_root: Path, branch: str, base: str = "main") -> boo
 
     失敗時保守視為未併入（False），避免誤刪含未落地工作的分支。
     """
+    timeout = budgeted_timeout(_READ_TIMEOUT_SECONDS)
+    if timeout is None:
+        _log_budget_exhausted("is_branch_merged", "log", "保守視為未併入")
+        return False
     try:
         result = subprocess.run(
             ["git", "-C", str(project_root), "log", f"{base}..{branch}", "--oneline"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=timeout,
         )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+    except subprocess.TimeoutExpired:
+        _log_timeout("is_branch_merged", "log", timeout, "保守視為未併入")
+        return False
+    except (subprocess.SubprocessError, FileNotFoundError, OSError) as exc:
+        _log_failure("is_branch_merged", "log", exc, "保守視為未併入")
         return False
 
     if result.returncode != 0:
+        _log_failure("is_branch_merged", "log", f"returncode={result.returncode}", "保守視為未併入")
         return False
     return not bool((result.stdout or "").strip())
 
@@ -184,12 +257,15 @@ def delete_branch_if_merged(project_root: Path, branch: str, name: str, logger) 
     if not is_branch_merged(project_root, branch):
         logger.warning("[%s] 分支 %s ahead>0（含未併入 main 的提交），保留不刪", name, branch)
         return False
+    timeout = budgeted_timeout(_BRANCH_DELETE_TIMEOUT_SECONDS)
+    if timeout is None:
+        _log_budget_exhausted("delete_branch_if_merged", "branch -d", "保留分支")
+        return False
     try:
-        result = subprocess.run(
+        result = run_with_graceful_timeout(
             ["git", "-C", str(project_root), "branch", "-d", branch],
-            capture_output=True,
+            timeout,
             text=True,
-            timeout=10,
         )
     except (subprocess.SubprocessError, FileNotFoundError, OSError) as exc:
         logger.error("[%s] 刪除分支 %s 執行失敗: %s", name, branch, exc)
@@ -207,8 +283,12 @@ def remove_worktree(project_root: Path, worktree_path: Path, name: str, logger) 
         ["git", "-C", str(project_root), "worktree", "unlock", str(worktree_path)],
         ["git", "-C", str(project_root), "worktree", "remove", "--force", str(worktree_path)],
     ):
+        timeout = budgeted_timeout(_WRITE_TIMEOUT_SECONDS)
+        if timeout is None:
+            _log_budget_exhausted("remove_worktree", " ".join(cmd[3:5]), "放棄清理")
+            return False
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            result = run_with_graceful_timeout(cmd, timeout, text=True)
         except (subprocess.SubprocessError, FileNotFoundError, OSError) as exc:
             logger.error("[%s] %s 執行失敗: %s", name, " ".join(cmd[3:]), exc)
             return False
@@ -359,7 +439,13 @@ def main() -> int:
 
     logger.info("掃描 %d 個 agent worktree", len(worktrees))
     now = time.time()
-    results = [process_worktree(project_root, wt, now, logger) for wt in worktrees]
+    start_overall_deadline()
+    results = []
+    for wt in worktrees:
+        if budget_exhausted():
+            logger.warning("整體期限不足，略過剩餘 %d 個 worktree", len(worktrees) - len(results))
+            break
+        results.append(process_worktree(project_root, wt, now, logger))
 
     summary = summarize(results)
     if summary:

@@ -47,6 +47,8 @@ sys.path.insert(0, str(_CLAUDE_DIR))
 sys.path.insert(0, str(_CLAUDE_DIR / "hooks"))
 
 from lib import setup_hook_logging, run_hook_safely, get_uncommitted_files, FileStatus
+# 逾時溫和終止（行程群組 SIGTERM 後 SIGKILL）的單一實作在 lib；沿用原名使測試可 patch 本模組屬性
+from lib.git_utils import run_with_graceful_timeout as _run_with_graceful_timeout
 
 # dispatch_tracker / find_ticket_files 為訊息富化與防 race 用；缺失時降級而非崩潰
 try:
@@ -343,13 +345,12 @@ def _run_git_with_lock_retry(args, logger, action_label, max_retries=3, wait_sec
     last_rc = 1
     for attempt in range(1, max_retries + 1):
         try:
-            result = subprocess.run(
+            result = _run_with_graceful_timeout(
                 args,
-                capture_output=True,
+                GIT_TIMEOUT,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=GIT_TIMEOUT,
             )
         except subprocess.TimeoutExpired:
             logger.error("git %s 逾時", action_label)
