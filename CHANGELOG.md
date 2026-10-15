@@ -1,3 +1,14 @@
+## [2.82.1] - 2026-10-16
+
+### Summary
+chore: sync-push 回寫框架版本 某版本
+
+Changes: 1 chore
+
+- chore: sync-push 回寫框架版本 某版本
+
+---
+
 ## [2.82.0] - 2026-10-16
 
 ### Summary
