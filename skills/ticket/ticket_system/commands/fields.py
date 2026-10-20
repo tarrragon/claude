@@ -45,6 +45,7 @@ from ticket_system.lib.command_lifecycle_messages import (
 )
 from ticket_system.lib.ticket_loader import get_ticket_path
 from ticket_system.lib.who_history import record_who_change
+from ticket_system.lib.scope_sync_hint import print_scope_sync_hint, read_scope_value
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
@@ -224,6 +225,8 @@ def _execute_set_dict_subfields(
 
         subkey = DICT_FIELD_SUBKEY[field_name]
         existing = ticket.get(field_name)
+        prior_files = read_scope_value(ticket, "where.files")
+        prior_files = list(prior_files) if isinstance(prior_files, list) else prior_files
         working = dict(existing) if isinstance(existing, dict) else dict(_DICT_FIELD_DEFAULTS[field_name])
 
         if field_name == "who":
@@ -275,6 +278,7 @@ def _execute_set_dict_subfields(
             print(warning)
         for missing in missing_where_paths(get_project_root(), applied["files"]):
             print(format_warning(CreateMessages.WHERE_PATH_NOT_FOUND_WARNING, path=missing))
+        print_scope_sync_hint(ticket, "where.files", args.ticket_id, prior_files)
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
@@ -384,6 +388,12 @@ def execute_set_field(
         # 取得新值
         new_value = args.value
 
+        # 範圍欄位同步提示：寫入前記下原值（where 以 files 為準，需複製避免被就地改寫）
+        scope_key = "where.files" if actual_field_name == "where" else actual_field_name
+        prior_scope = read_scope_value(ticket, scope_key)
+        if isinstance(prior_scope, list):
+            prior_scope = list(prior_scope)
+
         # 更新欄位：dict 型欄位僅更新子欄位（W10-086 修復，防止壓扁 dict 為 string）
         synced_files: Optional[list] = None
         if actual_field_name in DICT_FIELD_SUBKEY:
@@ -464,6 +474,8 @@ def execute_set_field(
         # where.files 路徑存在性 WARNING：set-where 路徑型輸入同上，僅警告不阻擋。
         for missing in missing_where_paths(get_project_root(), synced_files):
             print(format_warning(CreateMessages.WHERE_PATH_NOT_FOUND_WARNING, path=missing))
+    if actual_field_name in ("title", "what") or synced_files is not None:
+        print_scope_sync_hint(ticket, scope_key, args.ticket_id, prior_scope)
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 

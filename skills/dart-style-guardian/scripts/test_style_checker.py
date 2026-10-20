@@ -44,13 +44,15 @@ CONFIG = {
 }
 
 
-def make_project(tmp_path: Path, config: dict | None = CONFIG) -> Path:
+def make_project(
+    tmp_path: Path, config: dict | None = CONFIG, subdir: str = "project-integration"
+) -> Path:
     """Build a minimal project tree, optionally carrying a calibration file."""
     root = tmp_path / "proj"
-    (root / ".claude" / "config").mkdir(parents=True)
+    (root / ".claude" / subdir).mkdir(parents=True)
     (root / "lib").mkdir()
     if config is not None:
-        (root / ".claude" / "config" / "dart-style-guardian.json").write_text(
+        (root / ".claude" / subdir / "dart-style-guardian.json").write_text(
             json.dumps(config), encoding="utf-8"
         )
     return root
@@ -78,12 +80,29 @@ class TestConfigLoading:
 
     def test_malformed_config_falls_back_with_notice(self, tmp_path, capsys):
         root = make_project(tmp_path, config=None)
-        (root / ".claude" / "config" / "dart-style-guardian.json").write_text(
+        (root / ".claude" / "project-integration" / "dart-style-guardian.json").write_text(
             "{ not json", encoding="utf-8"
         )
         cfg = load_config(root / "lib")
         assert cfg.tokens["color"] is None
         assert "失敗" in capsys.readouterr().err
+
+    def test_legacy_location_used_with_migration_notice(self, tmp_path, capsys):
+        root = make_project(tmp_path, subdir="config")
+        cfg = load_config(root / "lib")
+        err = capsys.readouterr().err
+        assert cfg.tokens["color"] == "AppPalette"
+        assert ".claude/config/dart-style-guardian.json" in err
+        assert ".claude/project-integration/dart-style-guardian.json" in err
+
+    def test_new_location_wins_over_legacy_without_notice(self, tmp_path, capsys):
+        root = make_project(tmp_path, subdir="config", config={"tokens": {"color": "Old"}})
+        new = root / ".claude" / "project-integration"
+        new.mkdir()
+        (new / "dart-style-guardian.json").write_text(json.dumps(CONFIG), encoding="utf-8")
+        cfg = load_config(root / "lib")
+        assert cfg.tokens["color"] == "AppPalette"
+        assert "遷移" not in capsys.readouterr().err
 
 
 class TestSuggestionVocabulary:

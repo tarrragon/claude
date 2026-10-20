@@ -15,6 +15,7 @@
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -47,13 +48,17 @@ def _write_transcript(tmp_path: Path, entries: list) -> Path:
     return p
 
 
-def _assistant_entry(cache_read: int) -> dict:
-    """構造一則含 usage.cache_read_input_tokens 的 assistant entry。"""
+def _assistant_entry(cache_read: int, input_tokens: int = 0, cache_creation: int = 0) -> dict:
+    """構造一則含 usage 三欄位的 assistant entry。"""
     return {
         "message": {
             "role": "assistant",
             "content": [{"type": "text", "text": "ok"}],
-            "usage": {"cache_read_input_tokens": cache_read},
+            "usage": {
+                "input_tokens": input_tokens,
+                "cache_creation_input_tokens": cache_creation,
+                "cache_read_input_tokens": cache_read,
+            },
         }
     }
 
@@ -69,7 +74,7 @@ def test_read_last_cache_read_basic(hook_mod, tmp_path):
         tmp_path,
         [_assistant_entry(10_000), _assistant_entry(200_000)],
     )
-    assert hook_mod.read_last_cache_read(str(p)) == 200_000
+    assert hook_mod.read_last_total_context(str(p)) == 200_000
 
 
 def test_read_last_cache_read_skips_non_assistant(hook_mod, tmp_path):
@@ -79,12 +84,12 @@ def test_read_last_cache_read_skips_non_assistant(hook_mod, tmp_path):
         {"message": {"role": "user", "content": "hi"}},
     ]
     p = _write_transcript(tmp_path, entries)
-    assert hook_mod.read_last_cache_read(str(p)) == 50_000
+    assert hook_mod.read_last_total_context(str(p)) == 50_000
 
 
 def test_read_last_cache_read_missing_file(hook_mod):
     """transcript 檔不存在 → None。"""
-    assert hook_mod.read_last_cache_read("/nonexistent/transcript.jsonl") is None
+    assert hook_mod.read_last_total_context("/nonexistent/transcript.jsonl") is None
 
 
 def test_read_last_cache_read_no_usage(hook_mod, tmp_path):
@@ -93,7 +98,7 @@ def test_read_last_cache_read_no_usage(hook_mod, tmp_path):
         tmp_path,
         [{"message": {"role": "assistant", "content": "ok"}}],
     )
-    assert hook_mod.read_last_cache_read(str(p)) is None
+    assert hook_mod.read_last_total_context(str(p)) is None
 
 
 # ---------------------------------------------------------------------------
@@ -159,15 +164,21 @@ def test_load_state_corrupt_returns_empty(hook_mod, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _run_hook(stdin_str: str):
+def _run_hook(stdin_str: str, env=None):
     """以 subprocess 跑 hook，回傳 (returncode, stderr)。"""
+    return _run_hook_full(stdin_str, env)[:2]
+
+
+def _run_hook_full(stdin_str: str, env=None):
+    """回傳 (returncode, stderr, stdout)。env 為額外環境變數。"""
     proc = subprocess.run(
         [sys.executable, str(HOOK_PATH)],
         input=stdin_str,
         capture_output=True,
         text=True,
+        env={**os.environ, **(env or {})},
     )
-    return proc.returncode, proc.stderr
+    return proc.returncode, proc.stderr, proc.stdout
 
 
 def test_main_empty_stdin_exits_0(hook_mod):
@@ -194,18 +205,83 @@ def test_main_below_threshold_no_warning(hook_mod, tmp_path):
     assert "context-depth-warning" not in stderr
 
 
-def test_main_above_threshold_warns(hook_mod, tmp_path, monkeypatch):
-    """超閾值首次 → stderr 提示且 exit 0。隔離 state file 避免污染。"""
-    p = _write_transcript(tmp_path, [_assistant_entry(hook_mod.THRESHOLD + 5_000)])
+def _payload(p, sid="sess-x"):
+    return json.dumps({"session_id": sid, "transcript_path": str(p)})
+
+
+def test_sum_of_three_usage_fields(hook_mod, tmp_path):
+    """口徑為 input + cache_creation + cache_read 合計。"""
+    p = _write_transcript(tmp_path, [_assistant_entry(300_000, 50_000, 60_000)])
+    assert hook_mod.read_last_total_context(str(p)) == 410_000
+
+
+def test_log_line_uses_total_field_name(hook_mod, tmp_path, monkeypatch):
+    """日誌欄位名稱表達合計口徑：total=，不得沿用 cache_read=。"""
+    import io
+
+    p = _write_transcript(tmp_path, [_assistant_entry(300_000, 50_000, 60_000)])
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(hook_mod, "LOG_DIR", log_dir)
+    monkeypatch.setattr(hook_mod, "LOG_FILE", log_dir / "x.log")
+    monkeypatch.setenv("CONTEXT_DEPTH_WARNING_STATE", str(tmp_path / "state.json"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(_payload(p)))
+    assert hook_mod.main() == 0
+    text = (log_dir / "x.log").read_text(encoding="utf-8")
+    assert "total=410000" in text
+    assert "cache_read=" not in text
+
+
+def test_above_threshold_emits_additional_context(hook_mod, tmp_path):
+    """400K 以上輸出 additionalContext JSON，含 K 數、/compact、claude -n。"""
+    p = _write_transcript(tmp_path, [_assistant_entry(410_000)])
     state_file = tmp_path / "state.json"
-    monkeypatch.setenv("CONTEXT_DEPTH_WARNING_STATE", str(state_file))
-    rc, stderr = _run_hook(
-        json.dumps({"session_id": "sess-warn", "transcript_path": str(p)})
+    rc, _, out = _run_hook_full(
+        _payload(p), {"CONTEXT_DEPTH_WARNING_STATE": str(state_file)}
     )
     assert rc == 0
-    assert "context-depth-warning" in stderr
-    # 去重已記錄
-    assert hook_mod.load_state(state_file).get("sess-warn") is not None
+    ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert "410K" in ctx and "/compact" in ctx and "claude -n" in ctx
+    assert hook_mod.load_state(state_file).get("sess-x") is not None
+
+
+def test_below_threshold_no_output(hook_mod, tmp_path):
+    p = _write_transcript(tmp_path, [_assistant_entry(399_000)])
+    rc, _, out = _run_hook_full(
+        _payload(p), {"CONTEXT_DEPTH_WARNING_STATE": str(tmp_path / "s.json")}
+    )
+    assert rc == 0
+    assert out.strip() == ""
+
+
+def test_same_tier_not_repeated(hook_mod, tmp_path):
+    p = _write_transcript(tmp_path, [_assistant_entry(410_000)])
+    env = {"CONTEXT_DEPTH_WARNING_STATE": str(tmp_path / "s.json")}
+    _, _, first = _run_hook_full(_payload(p), env)
+    _, _, second = _run_hook_full(_payload(p), env)
+    assert first.strip() != ""
+    assert second.strip() == ""
+
+
+def test_drop_below_threshold_resets_dedup(hook_mod, tmp_path):
+    env = {"CONTEXT_DEPTH_WARNING_STATE": str(tmp_path / "s.json")}
+    high = _write_transcript(tmp_path, [_assistant_entry(410_000)])
+    _run_hook_full(_payload(high), env)
+    low = _write_transcript(tmp_path, [_assistant_entry(50_000)])
+    _run_hook_full(_payload(low), env)
+    assert hook_mod.load_state(tmp_path / "s.json").get("sess-x") is None
+    high = _write_transcript(tmp_path, [_assistant_entry(410_000)])
+    _, _, again = _run_hook_full(_payload(high), env)
+    assert again.strip() != ""
+
+
+def test_env_override_threshold(hook_mod, tmp_path):
+    p = _write_transcript(tmp_path, [_assistant_entry(120_000)])
+    env = {
+        "CONTEXT_DEPTH_WARNING_STATE": str(tmp_path / "s.json"),
+        "CONTEXT_DEPTH_WARNING_THRESHOLD": "100000",
+    }
+    _, _, out = _run_hook_full(_payload(p), env)
+    assert "120K" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
 
 
 # ---------------------------------------------------------------------------

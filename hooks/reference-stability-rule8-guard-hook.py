@@ -61,7 +61,10 @@
 
 觸發時機: PreToolUse Edit / Write / MultiEdit
 掃描範圍: 目標檔案路徑位於 `.claude/` 下，且不在 `.claude/handoff/archive/`
-          （該目錄為歷史紀錄，規則 8 明文豁免）
+          （該目錄為歷史紀錄，規則 8 明文豁免）；gitignore 命中且未受版控的
+          本機檔（如 settings.local.json）不掃描——sync-push 只取 tracked 樹，
+          這類檔案不會到達其他 consumer。gitignore 判斷失敗時照常掃描
+          （見 is_gitignored_local_file）
 偵測樣式（ticket ID 軌，exit 2 可阻擋）:
   - 版本化 ticket ID：`\\d+\\.\\d+\\.\\d+-W\\d+-\\d+`（如 9.9.9-W9-999）
   - 裸格式 ticket ID：`W\\d+-\\d+`（如 W9-999）
@@ -286,6 +289,53 @@ def is_scanned_path(file_path: str) -> bool:
     if rel.startswith(EXEMPT_DIR_PREFIX):
         return False
     return True
+
+
+def is_gitignored_local_file(file_path: str) -> bool:
+    """判斷檔案是否為 gitignore 命中且未受版控的本機檔（不隨 sync 擴散）。
+
+    規則 8 的前提是框架檔會經 sync-push 擴散到其他 consumer；sync-push 以
+    git archive 只取 tracked 樹，untracked 且 gitignore 命中的檔案（如
+    settings.local.json）不會離開本專案，前提不成立。`git check-ignore`
+    預設對 tracked 檔一律回報「未忽略」，與 sync 的取檔範圍一致：被強制
+    加入版控的 gitignore 命中檔仍照常掃描。
+
+    只有 git 明確回報「忽略」（returncode 0）才回傳 True。判斷本身失敗
+    （git 不可用、逾時、例外、returncode 128）一律回傳 False，照常掃描：
+    本判斷是放寬，失效方向是放行，判斷失敗不得落在放行側。相對路徑輸入
+    沒有可靠的 repo 起點，同樣回傳 False。
+    """
+    if not file_path:
+        return False
+    path = Path(file_path.replace("\\", "/"))
+    if not path.is_absolute():
+        return False
+
+    log = logging.getLogger("reference-stability-rule8-guard")
+    try:
+        resolved = path.resolve()
+        existing_dir = _nearest_existing_ancestor(resolved.parent)
+        if existing_dir is None:
+            return False
+        result = subprocess.run(
+            ["git", "-C", str(existing_dir), "check-ignore", "-q", str(resolved)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        log.warning(
+            "git check-ignore 失敗（照常掃描）: path=%s, %s: %s",
+            file_path, type(e).__name__, e,
+        )
+        return False
+
+    if result.returncode not in (0, 1):
+        log.warning(
+            "git check-ignore 非預期結束碼（照常掃描）: path=%s, rc=%s, stderr=%s",
+            file_path, result.returncode, result.stderr.strip(),
+        )
+    return result.returncode == 0
 
 
 def is_class4_whitelisted(file_path: str) -> bool:
@@ -762,6 +812,10 @@ def main() -> int:
 
     if not is_scanned_path(file_path):
         logger.debug(f"路徑 {file_path} 不在規則 8 掃描範圍，跳過")
+        return EXIT_ALLOW
+
+    if is_gitignored_local_file(file_path):
+        logger.info(f"路徑 {file_path} 為 gitignore 命中且未受版控的本機檔，不隨 sync 擴散，跳過")
         return EXIT_ALLOW
 
     if is_class4_whitelisted(file_path):

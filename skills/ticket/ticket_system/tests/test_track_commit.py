@@ -417,15 +417,19 @@ class TestResolveRepoRoot:
         assert result == "/repo"
 
     def test_worktree_given_uses_its_own_toplevel(self):
-        completed = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="/worktrees/wt1\n", stderr=""
-        )
-        with patch.object(track_commit.subprocess, "run", return_value=completed) as mock_run:
+        def fake_run(cmd, **kwargs):
+            out = (
+                "worktree /repo\n\nworktree /worktrees/wt1\n"
+                if "worktree" in cmd else "/worktrees/wt1\n"
+            )
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=out, stderr="")
+
+        with patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch.object(track_commit.subprocess, "run", side_effect=fake_run) as mock_run:
             result = track_commit._resolve_repo_root("/worktrees/wt1")
 
         assert result == "/worktrees/wt1"
-        called_kwargs = mock_run.call_args.kwargs
-        assert called_kwargs["cwd"] == "/worktrees/wt1"
+        assert mock_run.call_args_list[0].kwargs["cwd"] == "/worktrees/wt1"
 
     def test_worktree_not_a_git_dir_returns_none(self):
         completed = subprocess.CompletedProcess(
@@ -475,6 +479,96 @@ class TestExecuteCommitWorktreeOption:
         assert "/not/a/repo" in out
 
 
+class TestWriteScopeHardening:
+    """0.5.0-W1-390：symlink 與他 repo --worktree 皆拒絕提交（E2）。"""
+
+    @staticmethod
+    def _commit(repo, files, declared, worktree=None):
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "resolve_project_cwd", return_value=str(repo)), \
+             patch.object(track_commit, "commit_files_isolated",
+                          return_value={"status": "committed", "commit_sha": "x1",
+                                        "error": None}) as mock_commit:
+            rc = track_commit.execute_commit(_args(files, worktree=worktree), _VERSION)
+        return rc, mock_commit
+
+    def test_symlink_file_rejected(self, tmp_path):
+        (tmp_path / "real.py").write_text("x")
+        (tmp_path / "link.py").symlink_to(tmp_path / "real.py")
+        rc, mock_commit = self._commit(tmp_path, ["link.py"], ["link.py"])
+        assert rc == 1
+        mock_commit.assert_not_called()
+
+    def test_symlink_dir_outside_repo_rejected(self, tmp_path):
+        repo, outside = tmp_path / "repo", tmp_path / "outside"
+        repo.mkdir()
+        outside.mkdir()
+        (outside / "f.py").write_text("x")
+        (repo / "sub").symlink_to(outside, target_is_directory=True)
+        rc, mock_commit = self._commit(repo, ["sub/f.py"], ["sub"])
+        assert rc == 1
+        mock_commit.assert_not_called()
+
+    def test_regular_file_still_commits(self, tmp_path):
+        (tmp_path / "ok.py").write_text("x")
+        rc, mock_commit = self._commit(tmp_path, ["ok.py"], ["ok.py"])
+        assert rc == 0
+        mock_commit.assert_called_once()
+
+    def _commit_dir(self, repo, status_output):
+        with patch.object(track_commit, "_git_status_porcelain",
+                          return_value=status_output), \
+             patch.object(track_commit, "get_ticket_state_root",
+                          return_value=repo):
+            return self._commit(repo, ["d"], ["d"])
+
+    def test_symlink_under_directory_declaration_rejected(self, tmp_path):
+        """0.5.0-W1-398.1（E2）：目錄展開出的 symlink 檔不得進入提交。"""
+        (tmp_path / "d").mkdir()
+        (tmp_path / "d" / "real.py").write_text("x")
+        (tmp_path / "d" / "link.py").symlink_to(tmp_path / "d" / "real.py")
+        rc, mock_commit = self._commit_dir(
+            tmp_path, "?? d/real.py\0?? d/link.py\0"
+        )
+        assert rc == 1
+        mock_commit.assert_not_called()
+
+    def test_regular_files_under_directory_declaration_commit(self, tmp_path):
+        """E1：目錄宣告下一般檔案照常提交。"""
+        (tmp_path / "d").mkdir()
+        (tmp_path / "d" / "real.py").write_text("x")
+        rc, mock_commit = self._commit_dir(tmp_path, "?? d/real.py\0")
+        assert rc == 0
+        mock_commit.assert_called_once()
+
+    def test_foreign_repo_worktree_rejected(self, tmp_path):
+        main, foreign = tmp_path / "main", tmp_path / "foreign"
+        for d in (main, foreign):
+            d.mkdir()
+            subprocess.run(["git", "init", "-q", str(d)], check=True)
+        rc, mock_commit = self._commit(
+            main, ["ok.py"], ["ok.py"], worktree=str(foreign)
+        )
+        assert rc == 1
+        mock_commit.assert_not_called()
+
+    def test_worktree_list_failure_rejected(self, tmp_path):
+        """保守一側：git worktree list 失敗時拒絕。"""
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        failed = subprocess.CompletedProcess([], 128, "", "boom")
+        real_run = subprocess.run
+
+        def fake_run(cmd, *a, **kw):
+            return failed if "worktree" in cmd else real_run(cmd, *a, **kw)
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            rc, mock_commit = self._commit(
+                tmp_path, ["ok.py"], ["ok.py"], worktree=str(tmp_path)
+            )
+        assert rc == 1
+        mock_commit.assert_not_called()
+
+
 class TestLinkedWorktreeEndToEnd:
     """真實 tmp repo + git worktree add 場景：新檔可 add、已修改檔不再
     誤判空 tree，commit 落在 worktree 分支，主 repo 共用 index 未被觸碰
@@ -509,7 +603,7 @@ class TestLinkedWorktreeEndToEnd:
         declared = ["tracked.py", "new_file.py"]
         with patch.object(
             track_commit, "load_ticket", return_value=self._ticket_declaring(declared)
-        ):
+        ), patch.object(track_commit, "resolve_project_cwd", return_value=str(main_repo)):
             args = _args(
                 ["new_file.py"], message="add new file", worktree=str(worktree_dir)
             )
@@ -532,7 +626,7 @@ class TestLinkedWorktreeEndToEnd:
         declared = ["tracked.py"]
         with patch.object(
             track_commit, "load_ticket", return_value=self._ticket_declaring(declared)
-        ):
+        ), patch.object(track_commit, "resolve_project_cwd", return_value=str(main_repo)):
             args = _args(
                 ["tracked.py"], message="modify tracked file", worktree=str(worktree_dir)
             )
@@ -579,7 +673,9 @@ class TestWorktreeRejectsOwnTicketMd:
         own = str(worktree_dir / "docs" / f"{_TICKET_ID}.md")
         with patch.object(
             track_commit, "load_ticket", return_value=_ticket(["prod.py"])
-        ), patch.object(track_commit, "get_ticket_path", return_value=own):
+        ), patch.object(track_commit, "get_ticket_path", return_value=own), \
+             patch.object(track_commit, "resolve_project_cwd",
+                          return_value=str(worktree_dir.parent / "main")):
             return track_commit.execute_commit(
                 _args(files, worktree=str(worktree_dir)), _VERSION
             )

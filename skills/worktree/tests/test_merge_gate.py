@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / ".claude"))
 
 import merge_gate as mg  # noqa: E402
 import worktree_manager as wm  # noqa: E402
+import merge_cas as mc  # noqa: E402
 from lib.test_command_parse import WEIGHT_HEAVY, classify_argv_weight  # noqa: E402
 
 TICKET_FILE = "docs/work-logs/v0/v0.5/v0.5.0/tickets/9.9.9-W1-001.md"
@@ -41,7 +42,7 @@ def commit_file(repo, name, text, msg):
 
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
-    monkeypatch.setattr(wm, "_sleep", lambda _s: None)
+    monkeypatch.setattr(mc, "_sleep", lambda _s: None)
     r = tmp_path / "repo"
     r.mkdir()
     git(r, "init", "-b", "main")
@@ -194,6 +195,16 @@ def skel(tmp_path):
 class TestScope:
     def test_flutter_scope(self, skel):
         assert mg.select_suites(["lib/main.dart"], skel) == [mg.SUITE_FLUTTER]
+
+    def test_assets_only_runs_flutter(self, skel):
+        """E2 正向對照：只改 assets 下檔案（內嵌副本）必跑 flutter。"""
+        paths = ["assets/schema/tracking_schema.json"]
+        assert mg.needs_gate(paths)
+        assert mg.select_suites(paths, skel) == [mg.SUITE_FLUTTER]
+
+    def test_ticket_only_still_exempt(self, skel):
+        assert not mg.needs_gate([TICKET_FILE])
+        assert mg.select_suites([TICKET_FILE], skel) == []
 
     def test_hooks_and_other_claude_paths_run_hooks(self, skel):
         for p in (".claude/hooks/x.py", ".claude/rules/core/a.md", ".claude/settings.json",
@@ -348,6 +359,32 @@ class TestArtifacts:
 def advance_main(repo, name, text):
     """模擬並行 session 推進 main。"""
     commit_file(repo, name, text, f"advance {name}")
+
+
+class TestUnmappedWarning:
+    def _run(self, repo, monkeypatch, capsys, paths):
+        monkeypatch.setattr(mg, "changed_paths_between", lambda *_a: paths)
+        head = git(repo, "rev-parse", "HEAD")
+        res = mg.MergeGate(str(repo), art(lambda argv, cwd: (0, "")))(head, "main", head, 1)
+        assert res.passed
+        return capsys.readouterr().out
+
+    def test_all_exempt_lists_unmapped_paths(self, repo, monkeypatch, capsys):
+        out = self._run(repo, monkeypatch, capsys, ["tools/sub/a.py", "README.md"])
+        assert "WARNING" in out and "tools/sub/a.py" in out and "README.md" in out and "免跑" in out
+
+    def test_partial_lists_unmapped_paths(self, repo, monkeypatch, capsys):
+        out = self._run(repo, monkeypatch, capsys, ["lib/a.dart", "tools/sub/a.py"])
+        assert "WARNING" in out and "tools/sub/a.py" in out and "lib/a.dart" not in out
+
+    def test_exempt_only_has_no_warning(self, repo, monkeypatch, capsys):
+        out = self._run(repo, monkeypatch, capsys, [TICKET_FILE, "docs/work-logs/topic-assignments.txt"])
+        assert "WARNING" not in out and "免跑" in out
+
+    def test_truncates_with_total(self, repo, monkeypatch, capsys):
+        paths = [f"tools/f{i}.py" for i in range(mg.UNMAPPED_SHOW_MAX + 3)]
+        out = self._run(repo, monkeypatch, capsys, paths)
+        assert f"{len(paths)} 個" in out and "其餘 3 個略" in out and paths[-1] not in out
 
 
 class TestRetryReuse:
@@ -611,7 +648,7 @@ class Events:
 
 def instrument(monkeypatch, ev):
     """記錄 commit-tree（_prepare_candidate 成功返回）與 update-ref 完成；事件名不分執行緒。"""
-    real_prepare, real_raw = wm._prepare_candidate, wm._git_raw
+    real_prepare, real_raw = mc._prepare_candidate, mc._git_raw
 
     def prepare(branch, base, repo, message):
         out = real_prepare(branch, base, repo, message)
@@ -625,8 +662,8 @@ def instrument(monkeypatch, ev):
             ev.add("update-ref")
         return proc
 
-    monkeypatch.setattr(wm, "_prepare_candidate", prepare)
-    monkeypatch.setattr(wm, "_git_raw", raw)
+    monkeypatch.setattr(mc, "_prepare_candidate", prepare)
+    monkeypatch.setattr(mc, "_git_raw", raw)
 
 
 def gated_merge(repo, branch, runner, ev, tag="", **kw):
@@ -933,7 +970,7 @@ class TestGateLog:
         base = git(repo, "rev-parse", "main")
         assert wm.cmd_merge(None, branch="feat", gate_runner=art(green_runner([]))) == 0
         merged = git(repo, "rev-parse", "main")
-        start, end = self.gate_lines(repo)
+        start, _pre, end = self.gate_lines(repo)
         print(start)
         print(end)
         assert "開始" in start and "target main" in start and base[:12] in start and "分支 feat" in start
@@ -944,7 +981,7 @@ class TestGateLog:
     def test_red_result(self, repo):
         base = git(repo, "rev-parse", "main")
         assert wm.cmd_merge(None, branch="feat", gate_runner=art(lambda a, c: (1, "FAILED t::x\n"))) == 1
-        start, end = self.gate_lines(repo)
+        start, _pre, end = self.gate_lines(repo)
         assert "結果 紅燈" in end and base[:12] in end
 
     def test_refused_result(self, repo):
@@ -954,7 +991,7 @@ class TestGateLog:
             assert wm.cmd_merge(None, branch="feat", gate_runner=art(green_runner([]))) == 125
         finally:
             hold.release()
-        start, end = self.gate_lines(repo)
+        start, _pre, end = self.gate_lines(repo)
         assert "結果 拒絕" in end and base[:12] in end
 
     def test_timeout_and_abort_are_distinguished(self):
@@ -1033,3 +1070,222 @@ class TestFailureDetailRetention:
         assert "E2-ASSERT-MARK" in reason
         text = (tmp_path / ".claude/logs/merge-gate-failures/e2commit0000-hooks.log").read_text(encoding="utf-8")
         assert "E2-STDERR-MARK" in text and "E2-ASSERT-MARK" in text
+
+
+class TestPrecheckConflict:
+    """進場排隊前以 merge-tree 預檢文字衝突（0.5.0-W1-328）。"""
+
+    @staticmethod
+    def gate_lines(repo):
+        log = (repo / ".claude/logs/worktree-merge.log").read_text(encoding="utf-8")
+        return [ln for ln in log.splitlines() if mg.GATE_LINE_PREFIX in ln]
+
+    def test_conflict_reported_before_queueing(self, repo):
+        advance_main(repo, "lib/other.txt", "o-main\n")  # 與 feat 對同檔同處不同改動
+        base = git(repo, "rev-parse", "main")
+        calls = []
+        hold = TestGateRefusalExpected.occupy(10.0)  # 若進入排隊，會因名額被占而回 125
+        try:
+            rc = wm.cmd_merge(None, branch="feat", gate_runner=art(green_runner(calls)))
+        finally:
+            hold.release()
+        assert rc == 1
+        assert git(repo, "rev-parse", "main") == base and not calls
+        _, end = self.gate_lines(repo)
+        assert f"結果 {mg.GATE_PRECHECK_CONFLICT}" in end
+
+    def test_conflict_appearing_while_queued_still_aborts_after_slot(self, repo, monkeypatch):
+        """對照：預檢通過，排隊期間 main 前進產生衝突，取得名額後仍中止且 ref 不變。"""
+        real_hold = mg.MergeGate.hold
+        state = {}
+
+        def hold_then_advance(self, branch, base):
+            with real_hold(self, branch, base):
+                advance_main(repo, "lib/other.txt", "o-main\n")
+                state["advanced"] = git(repo, "rev-parse", "main")
+                yield
+
+        import contextlib
+        monkeypatch.setattr(mg.MergeGate, "hold", contextlib.contextmanager(hold_then_advance))
+        rc = wm.cmd_merge(None, branch="feat", gate_runner=art(green_runner([])))
+        assert rc == 1
+        assert git(repo, "rev-parse", "main") == state["advanced"]
+        *_, end = self.gate_lines(repo)
+        assert f"結果 {mg.GATE_ABORTED}" in end
+
+    def test_clean_precheck_logs_one_line_between_start_and_end(self, repo):
+        """預檢無衝突時，gate 日誌依序為開始、預檢無衝突、結束（0.5.0-W1-328.1）。"""
+        rc = wm.cmd_merge(None, branch="feat", gate_runner=art(green_runner([])))
+        assert rc == 0
+        start, pre, end = self.gate_lines(repo)
+        assert "開始" in start and "結束" in end
+        assert pre.split(mg.GATE_LINE_PREFIX, 1)[1].strip().startswith("預檢") and f"結果 {mg.GATE_PRECHECK_CLEAR}" in pre
+        assert pre.split("｜")[1:3] == start.split("｜")[1:3]  # target、分支欄位與開始行一致
+
+    def test_already_merged_passes_precheck(self, repo):
+        git(repo, "merge", "--no-edit", "feat")
+        assert mc.precheck_merge_conflict("feat", "main", str(repo)) == ""
+
+
+class TestPrecheckException:
+    def test_precheck_exception_logs_abort_and_reraises(self, repo, monkeypatch):
+        def boom(*a, **k):
+            raise subprocess.TimeoutExpired("git", 60)
+
+        monkeypatch.setattr(wm, "precheck_merge_conflict", boom)
+        with pytest.raises(subprocess.TimeoutExpired):
+            wm.cmd_merge(None, branch="feat", gate_runner=art(green_runner([])))
+        log = (repo / ".claude/logs/worktree-merge.log").read_text(encoding="utf-8")
+        lines = [ln for ln in log.splitlines() if mg.GATE_LINE_PREFIX in ln]
+        assert len(lines) == 2 and f"結果 {mg.GATE_ABORTED}" in lines[1]
+
+
+# ---- 專案宣告的套件對應（410.3.1）----
+
+DECL_REL = ".claude/project-integration/merge-gate.yaml"
+WEB_DECL = """\
+suites:
+  web:
+    prefixes: [web/]
+    files: [package.json]
+    command: [npm, test]
+    artifacts:
+      - path: node_modules/.ready
+        generate: [npm, ci]
+"""
+# 與內建 Flutter 對應等價的宣告：改寫後選套件結果須與內建一致
+FLUTTER_DECL = """\
+suites:
+  flutter:
+    prefixes: [lib/, test/, integration_test/, macos/, docs/, assets/]
+    files: [pubspec.yaml, pubspec.lock, l10n.yaml, analysis_options.yaml]
+    command: [fvm, flutter, test]
+    artifacts:
+      - path: .dart_tool/package_config.json
+        generate: [fvm, flutter, pub, get]
+"""
+
+
+def declare(root, text):
+    _touch(Path(root), DECL_REL, text)
+
+
+class TestDeclaration:
+    def test_declared_prefix_and_file_hit(self, skel):
+        declare(skel, WEB_DECL)
+        assert mg.select_suites(["web/a.js"], skel) == ["web"]
+        assert mg.select_suites(["package.json"], skel) == ["web"]
+
+    def test_declared_replaces_builtin_flutter_miss(self, skel):
+        """E1 未命中向：宣告取代內建，lib/ 不再對應 flutter。"""
+        declare(skel, WEB_DECL)
+        assert mg.select_suites(["lib/main.dart"], skel) == []
+        assert not mg.needs_gate(["lib/main.dart"], mg.load_declaration(skel))
+
+    def test_claude_mapping_kept_with_declaration(self, skel):
+        declare(skel, WEB_DECL)
+        assert mg.select_suites([".claude/hooks/a.py"], skel) == [mg.SUITE_HOOKS]
+
+    def test_declared_command(self, skel):
+        declare(skel, WEB_DECL)
+        assert mg.suite_command("web", skel) == ["npm", "test"]
+
+    def test_builtin_flutter_equals_declared_flutter(self, skel):
+        paths = ["lib/a.dart", "pubspec.lock", "docs/x.md", "assets/a.json", "tools/z.py",
+                 ".claude/hooks/h.py", "README.md"]
+        builtin = ([mg.select_suites([p], skel) for p in paths], mg.suite_command("flutter", skel),
+                   [mg.needs_gate([p]) for p in paths], mg.unmapped_paths(paths))
+        declare(skel, FLUTTER_DECL)
+        decl = mg.load_declaration(skel)
+        declared = ([mg.select_suites([p], skel) for p in paths], mg.suite_command("flutter", skel),
+                    [mg.needs_gate([p], decl) for p in paths], mg.unmapped_paths(paths, decl))
+        assert declared == builtin
+        assert mg.declared_artifacts("flutter", decl) == mg.REQUIRED_ARTIFACTS["flutter"]
+
+    def test_absent_declaration_is_none(self, skel):
+        assert mg.load_declaration(skel) is None
+
+
+BAD_DECLS = [
+    ("suites: [1]\n", "suites"),
+    ("suites:\n  web:\n    prefixes: [web/]\n", "suites.web.command"),
+    ("suites:\n  web:\n    command: [npm, test]\n", "suites.web.prefixes"),
+    ("suites:\n  web:\n    prefixes: []\n    files: []\n    command: [npm]\n", "suites.web.prefixes"),
+    ("suites:\n  hooks:\n    prefixes: [a/]\n    command: [x]\n", "suites.hooks"),
+    ("suites:\n  scripts:\n    prefixes: [a/]\n    command: [x]\n", "suites.scripts"),
+    ("suites:\n  skill:foo:\n    prefixes: [a/]\n    command: [x]\n", "suites.skill:foo"),
+    ("suites:\n  web:\n    prefixes: [a/]\n    command: [x]\n    artifacts: [{path: p}]\n",
+     "suites.web.artifacts[0].generate"),
+    ("suites: {\n", "YAML"),
+]
+
+
+class TestDeclarationInvalid:
+    @pytest.mark.parametrize("text,field", BAD_DECLS)
+    def test_load_raises_naming_file_and_field(self, skel, text, field):
+        declare(skel, text)
+        with pytest.raises(mg.DeclarationError) as exc:
+            mg.load_declaration(skel)
+        assert DECL_REL in str(exc.value) and field in str(exc.value)
+
+    @pytest.mark.parametrize("text,field", BAD_DECLS)
+    def test_gate_red_fail_closed(self, repo, text, field):
+        """E2：格式錯誤的宣告使閘門判紅（正向對照見 TestDeclaredGate 的合法宣告通過）。"""
+        commit_file(repo, DECL_REL, text, "bad decl")
+        head = git(repo, "rev-parse", "HEAD")
+        calls = []
+        res = mg.MergeGate(str(repo), green_runner(calls))(head, "main", head, 1)
+        assert not res.passed and DECL_REL in res.reason and field in res.reason
+        assert calls == []
+
+
+class TestYamlUnavailable:
+    def test_no_declaration_passes_declared_fails_closed(self, repo, monkeypatch):
+        monkeypatch.setitem(sys.modules, "yaml", None)  # import yaml 觸發 ImportError
+        head = git(repo, "rev-parse", "HEAD")
+        assert mg.MergeGate(str(repo), green_runner([]))(head, "main", head, 1).passed
+        commit_file(repo, DECL_REL, WEB_DECL, "decl")
+        head = git(repo, "rev-parse", "HEAD")
+        res = mg.MergeGate(str(repo), green_runner([]))(head, "main", head, 1)
+        assert not res.passed and "pyyaml" in res.reason and DECL_REL in res.reason
+
+
+class TestDeclaredGate:
+    def _gate(self, repo, monkeypatch, paths, calls):
+        monkeypatch.setattr(mg, "changed_paths_between", lambda *_a: paths)
+        head = git(repo, "rev-parse", "HEAD")
+
+        def run(argv, cwd):
+            calls.append(argv[argv.index("--") + 1:])
+            if "ci" in argv:
+                _touch(Path(cwd), "node_modules/.ready")
+            elif "pub" in argv:
+                make_artifact(cwd)
+            return 0, ""
+
+        return mg.MergeGate(str(repo), run)(head, "main", head, 1)
+
+    def test_hit_runs_declared_command_after_artifact(self, repo, monkeypatch):
+        commit_file(repo, DECL_REL, WEB_DECL, "decl")
+        calls = []
+        assert self._gate(repo, monkeypatch, ["web/a.js"], calls).passed
+        assert calls == [["npm", "ci"], ["npm", "test"]]
+
+    def test_miss_runs_nothing(self, repo, monkeypatch, capsys):
+        commit_file(repo, DECL_REL, WEB_DECL, "decl")
+        calls = []
+        assert self._gate(repo, monkeypatch, ["lib/a.dart"], calls).passed
+        assert calls == [] and "免跑" in capsys.readouterr().out
+
+    def test_declared_prefix_not_warned_as_unmapped(self, repo, monkeypatch, capsys):
+        commit_file(repo, DECL_REL, WEB_DECL, "decl")
+        self._gate(repo, monkeypatch, ["web/a.js", "tools/x.py"], [])
+        out = capsys.readouterr().out
+        assert "tools/x.py" in out and "web/a.js" not in out
+
+    def test_absent_declaration_prints_info_and_uses_flutter(self, repo, monkeypatch, capsys):
+        calls = []
+        assert self._gate(repo, monkeypatch, ["lib/a.dart"], calls).passed
+        out = capsys.readouterr().out
+        assert "INFO" in out and DECL_REL in out
+        assert ["fvm", "flutter", "test"] in calls

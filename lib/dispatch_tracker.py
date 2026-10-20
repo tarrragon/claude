@@ -59,8 +59,11 @@ turn_ended_at 欄位：
 
 agent_handle 欄位（identifier namespace 修復）：
   `mark_turn_ended_by_id` 依賴 `tool_response.agentId` 記錄的 `agent_id`
-  做精準比對，實測該欄位 68% 派發缺席，且即使有值也是不同識別碼命名
-  空間（未命名派發的純 hex，如 `ac6c923bb6253aa3a`），與 SubagentStop
+  做精準比對。早期實測該欄位 68% 缺席（量測日期與 CC 版本未記錄）；
+  2026-10-20 於 CC 2.1.303 複測 2026-10-13 至 2026-10-20 共 410 筆，
+  缺席 0（未命名 309／309、named 101／101）。有值時仍屬不同識別碼命名
+  空間：同日 SubagentStop 清理日誌 135 筆皆為無匹配，故保留 agent_handle。
+  該欄位為未命名派發的純 hex（如 `ac6c923bb6253aa3a`），與 SubagentStop
   自己回報、CC runtime 保證存在的 `agent_id`（named 派發格式為
   `a<handle>-<hex>`，如 `afix-abc123-73070ca5c1d3f849`）對不上。named
   派發（帶 `name` 參數）在平行情境下（同批次派發多個代理人）必然產生
@@ -379,9 +382,9 @@ def record_dispatch(
         files: 代理人處理的檔案清單
         branch_name: worktree 分支名稱（用於 orphan 偵測精確比對）
         agent_id: 代理人 ID（可選，通常由 PostToolUse/SubagentStop 補寫）。
-            實測 `tool_response.agentId` 68% 派發缺席，且即使有值也與
-            SubagentStop 自己回報的 `agent_id` 屬不同識別碼命名空間（見
-            `mark_turn_ended_by_handle` docstring）——本欄位對 named
+            `tool_response.agentId` 早期曾缺席，2026-10-20 複測缺席 0，但有值時
+            仍與 SubagentStop 自己回報的 `agent_id` 屬不同識別碼命名空間
+            （數字與樣本見模組 docstring「agent_handle 欄位」段）——本欄位對 named
             派發的精準比對已不可靠，named 派發請改用 `agent_handle`。
         session_id: 派發者（PM）的 CC session_id（multi-PM 協調層，
             供 pm-registry 交叉比對「哪個 PM session 派發了哪些工作」）

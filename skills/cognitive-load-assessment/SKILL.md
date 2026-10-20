@@ -2,7 +2,7 @@
 name: cognitive-load-assessment
 description: "認知負擔評估與審查工具。作為決策樹、代理人、Code Review 的基本參考標準。用於: (1) 任務複雜度評估, (2) 代理人升級判斷, (3) 任務拆分建議, (4) 程式碼品質審查與熱點識別"
 metadata:
-  version: 2.0.0
+  version: 2.1.1
 ---
 
 # 認知負擔評估與審查工具
@@ -227,6 +227,7 @@ Code Review 的目標不只是找出錯誤，更重要的是確保程式碼對�
 - [認知負擔量化標準](./thresholds.md) - 詳細閾值參考
 - [Code Review 報告模板](./references/review-report-template.md) - 完整審查報告格式
 - [常見 Review 問題模式](./references/common-review-patterns.md) - 熱點識別和改善方法
+- [以同檔競爭判斷拆分](./references/file-split-by-contention.md) - 不同主題的票反覆改同一檔時，何時拆、如何拆（文字規則與 Python）
 - [認知負擔設計方法論](.claude/methodologies/cognitive-load-design-methodology.md) - 完整理論基礎
 - [自然語言程式設計方法論](.claude/methodologies/natural-language-programming-methodology.md) - 命名最佳實踐
 - [任務拆分指南](.claude/pm-rules/task-splitting.md) - 拆分方法

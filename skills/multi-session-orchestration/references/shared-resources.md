@@ -1,6 +1,6 @@
 # 共用資源協調
 
-多條線共用三種資源：合併閘門（`worktree merge` 預設的合併前全套件）、全機重度測試名額（`run-with-timeout` 取得的 heavy slot）、主 checkout 的本地 main。本檔記錄協調這三種資源的做法、每條暫行規則的撤除條件，以及兩種環境異常的處置。
+多條線共用三種資源：合併閘門（`worktree merge` 預設的合併前全套件）、全機重度測試名額（`run-with-timeout` 取得的 heavy slot）、主 checkout 的本地 main。本檔記錄協調這三種資源的做法、每條暫行規則的撤除條件、兩種環境異常的處置，以及讀取各線 session 狀態的方法。
 
 ---
 
@@ -11,6 +11,7 @@
 | 狀況 | 判別 | 處置 |
 |------|------|------|
 | 合併在 CAS 時反覆失敗，期間 main 有非豁免改動 | 閘門 log 結束行的結果為「拒絕」，或出現 CAS 失敗訊息 | 閘門尚未做到「先取得名額、持有到寫入完成」時（包含閘門本身正在上線的自舉情境），通知各線暫停推送非票面檔，完成後解除；已做到者，驗證期間他線無法寫入 main，不需人工暫停 |
+| 閘門驗證期間，有人在主 checkout 直接提交或推送非豁免檔（包含 PM 自己） | 閘門 log 同一分支出現第二輪套件結果；嘗試次數大於 1，且第二輪不是「沿用」 | 名額只管經閘門的合併，管不到主 checkout 的直接推送。驗證期間 main 有非豁免改動，寫入時 CAS 失敗，所有套件都會重跑。佇列中還有自己的合併時，非票面修改先累積在工作區或 worktree，等佇列清空再一次提交。閘門空出後同樣不在主 checkout 提交：非票面修改一律在 worktree 提交、經閘門合併（§4） |
 | 閘門紅燈 | 閘門 log 結束行的結果為「紅燈」 | 先用 main 跑同一個失敗測試。main 也紅 → 屬 main 既有回歸，開票交給造成回歸的那條線（查 `git log` 最後改到該函式或測試的 commit）；main 綠 → 本分支造成 |
 | 想略過閘門（skip-gate） | — | 必須由用戶裁定，PM 不得自行授權他線略過；理由寫入 merge commit 與票面 |
 
@@ -73,3 +74,39 @@
 |------|------|------|
 | 推送失敗：SSL self signed certificate | `openssl s_client -connect github.com:443` 看 issuer；若是網路過濾設備（例如 DNS 過濾的封鎖頁憑證）→ 網路攔截 | 交用戶處理網路；**禁止** `http.sslVerify=false`：驗證失敗正是在告知「對方不是 GitHub」，關閉驗證等於信任攔截設備，推送內容可被讀取或竄改。期間本地閘門合併照常，推送暫停；worktree 派發守衛若要求票已在 origin，新票派不出去 |
 | load 高、swap 接近用盡 | `uptime`、`sysctl vm.swapusage`、依 CPU 與 RSS 排序的 `ps` | 名額機制只限制重度任務數量，不限制記憶體；向用戶回報並提供減壓選項（關掉已停止的 session 等），不自行終止他線程序 |
+
+---
+
+## 6. 讀取各線 session 的狀態
+
+**用途**：主控 PM 判斷哪條線停在等用戶回答、哪條線正在執行，不必逐一傳訊詢問。訊息要到對方下一輪工具呼叫才會被讀取，停在等用戶的線要等用戶回答之後才讀得到詢問；狀態檔則隨時可讀。
+
+**量測版本**：Claude Code 2.1.303（2026-10-19，macOS）。這是 Claude Code 的內部格式，沒有相容承諾；升版後依本節末的確認方式重新核對，再沿用。
+
+**位置與讀法**：`~/.claude/sessions/<pid>.json`，每個 session 一檔。只讀 `*.json`。同目錄的 `*.key` 不讀：它不是狀態資料，協調用不到，讀取只會把非必要的內容帶進對話。
+
+| 欄位 | 內容 |
+|------|------|
+| `name` | session 名稱，與 `ListAgents` 顯示的名稱相同，傳訊與票面記錄都用這個值 |
+| `cwd` | 該 session 的工作目錄，用來篩出同一個 repo 的線 |
+| `status` | 目前狀態，值見下表 |
+| `waitingFor` | 只在 `status` 為 `waiting` 時出現，說明在等什麼 |
+| `pid`、`procStart` | 程序編號與啟動時間，存活判定用 |
+| `statusUpdatedAt` | `status` 最後變更的時間（毫秒時間戳） |
+
+| `status` 值 | 意義 |
+|------------|------|
+| `busy` | 正在執行 |
+| `shell` | 正在執行 shell 命令，語意上屬於執行中 |
+| `idle` | 閒置，等待下一則輸入 |
+| `waiting` | 停在等用戶，例如 AskUserQuestion，此時 `waitingFor` 為 `input needed` |
+
+**存活判定**：session 結束後狀態檔可能還留著，pid 也可能被其他程序重複使用，只看 `ps -p <pid>` 的結束碼會把已結束的 session 判為存活。改用 `TZ=UTC ps -p <pid> -o lstart=` 與 `procStart` 比對：`procStart` 是 UTC，格式與 `lstart` 相同，去掉頭尾空白並把連續空白壓成一個後逐字相等，才算同一個程序。不加 `TZ=UTC` 時，`ps` 輸出本機時間，會與 `procStart` 相差時區偏移而全部判為不符。
+
+**升版後的確認方式**：
+
+1. 開一個 session 停在 AskUserQuestion，讀它的狀態檔，確認 `status` 為 `waiting`、`waitingFor` 有值
+2. 讓一個 session 執行較長的 shell 命令，確認 `status` 為 `shell`
+3. 任取一個存活的 session，確認 `TZ=UTC ps -p <pid> -o lstart=` 與 `procStart` 在空白正規化後相等
+
+任一項不符，表示格式已變，先修正本節再沿用。

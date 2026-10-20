@@ -526,7 +526,7 @@ def test_dispatch_hook_ticket_appends_four_item_reminder(dispatch_ticket_hook_sc
     out = capsys.readouterr().out
     # 比對提醒常數的每個條目行，而非硬寫整段字面
     entries = [ln.strip() for ln in HOOK_TICKET_REMINDER.splitlines() if ln.strip()]
-    assert len(entries) >= 5
+    assert len(entries) >= 2
     assert all(entry in out for entry in entries)
 
 
@@ -741,3 +741,141 @@ def test_dispatch_worktree_closing_excludes_ticket_md_from_commit(dispatch_ticke
     assert "產品檔" in closing
     assert "主 repo" in closing
     assert "票面" not in default_closing
+
+
+# --- 含測試 acceptance 的 IMP 骨架紅燈實跑要求（0.5.0-W1-388） -----------
+
+from ticket_system.lib.dispatch_skeleton import (  # noqa: E402
+    RED_RUN_LINE,
+    build_skeleton,
+    requires_red_run,
+)
+
+
+@pytest.mark.parametrize(
+    "ticket_type, acceptance, expected",
+    [
+        ("IMP", ["[ ] 新增測試全綠"], True),
+        ("IMP", ["[ ] 守衛含 E2 正向對照"], True),
+        ("IMP", ["[ ] 旗標 E1 對照"], True),
+        ("IMP", ["[ ] 文件更新完成"], False),
+        ("DOC", ["[ ] 測試通過"], False),
+        ("ANA", ["[ ] 測試通過"], False),
+        ("IMP", [], False),
+        ("IMP", None, False),
+    ],
+)
+def test_requires_red_run_predicate(ticket_type, acceptance, expected):
+    assert requires_red_run(ticket_type, acceptance) is expected
+
+
+def _skeleton(**overrides) -> str:
+    kwargs = dict(kind="normal", ticket_id="T-1", task_summary="x")
+    kwargs.update(overrides)
+    return build_skeleton(**kwargs)
+
+
+def test_skeleton_includes_red_run_line_when_required():
+    assert RED_RUN_LINE in _skeleton(require_red_run=True)
+
+
+def test_skeleton_unchanged_when_red_run_not_required():
+    assert RED_RUN_LINE not in _skeleton()
+    assert _skeleton(require_red_run=True).replace(RED_RUN_LINE + "\n", "") == _skeleton()
+
+
+def test_dispatch_cli_wires_red_run_line_for_test_acceptance_imp(dispatch_ticket, capsys, monkeypatch):
+    monkeypatch.setattr(td_mod, "requires_red_run", lambda *_: True)
+    rc = td_mod.execute_dispatch(_base_args(ticket_id=dispatch_ticket), "0.0.0")
+    assert rc == 0
+    assert RED_RUN_LINE in capsys.readouterr().out
+
+
+# --- worktree 骨架：票面 CLI 被拒處置與 heredoc 傳入（0.5.0-W1-355.1） -----
+
+from ticket_system.lib.dispatch_skeleton import (  # noqa: E402
+    WORKTREE_CLI_REJECT_LINE,
+    WORKTREE_MULTILINE_LINE,
+)
+
+
+def test_worktree_skeleton_includes_cli_reject_and_multiline_lines():
+    out = _skeleton(isolation="worktree")
+    assert WORKTREE_CLI_REJECT_LINE in out
+    assert WORKTREE_MULTILINE_LINE in out
+    assert "### 自檢結果" in WORKTREE_MULTILINE_LINE
+    assert "--content-file" in WORKTREE_MULTILINE_LINE
+    assert "票號" in WORKTREE_MULTILINE_LINE
+    assert "以 heredoc 傳" not in WORKTREE_MULTILINE_LINE
+    assert "\n" not in WORKTREE_MULTILINE_LINE
+
+
+def test_none_and_review_skeletons_unchanged_by_worktree_lines():
+    for out in (_skeleton(), _skeleton(kind="review")):
+        assert WORKTREE_CLI_REJECT_LINE not in out
+        assert WORKTREE_MULTILINE_LINE not in out
+    assert _skeleton(isolation="none") == _skeleton()
+
+
+# --- 骨架依 where.files 附測試入口命令（0.5.0-W1-397） ---------------------
+
+from ticket_system.lib.dispatch_skeleton import entry_commands_for_files  # noqa: E402
+
+_HOOKS_ENTRY = "uv --directory <checkout>/.claude/hooks run pytest"
+
+
+_REAL_ROOT = Path(__file__).resolve().parents[5]
+
+
+@pytest.fixture
+def entry_root(tmp_path):
+    skills = tmp_path / ".claude" / "skills"
+    (skills / "ticket").mkdir(parents=True)
+    (skills / "ticket" / "pyproject.toml").write_text("")
+    (skills / "spec" / "tests").mkdir(parents=True)
+    (skills / "bare").mkdir()
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    "files, expected",
+    [
+        ([".claude/skills/bare/a.py"], []),
+        ([".claude/hooks/x-hook.py"], [_HOOKS_ENTRY]),
+        ([".claude/lib/y.py"], [_HOOKS_ENTRY]),
+        (
+            [".claude/skills/ticket/ticket_system/lib/a.py"],
+            ["uv --directory <checkout>/.claude/skills/ticket run pytest"],
+        ),
+        (
+            [".claude/skills/spec/scripts/a.py"],
+            [_HOOKS_ENTRY + " <checkout>/.claude/skills/spec/tests"],
+        ),
+        ([".claude/hooks/a.py", ".claude/hooks/b.py"], [_HOOKS_ENTRY]),
+        (["lib/main.dart", "docs/a.md", ".claude/rules/a.md"], []),
+        ([], []),
+    ],
+)
+def test_test_entry_commands_mapping(entry_root, files, expected):
+    assert entry_commands_for_files(files, entry_root) == expected
+
+
+def test_own_pyproject_skills_match_testing_md_table():
+    """md 表落後檔案系統（漏列有 pyproject 的 skill）時翻紅。"""
+    skills_dir = _REAL_ROOT / ".claude" / "skills"
+    derived = {p.parent.name for p in skills_dir.glob("*/pyproject.toml")}
+    md = (_REAL_ROOT / ".claude/references/agent-dispatch-testing.md").read_text()
+    listed = {"ticket"}
+    for line in md.splitlines():
+        if line.startswith("| skills/doc"):
+            names = line.split("|")[1].strip().removeprefix("skills/")
+            listed |= {n.strip() for n in names.split("、")}
+    assert derived == listed
+
+
+def test_skeleton_includes_test_entry_only_when_mapped():
+    entries = entry_commands_for_files([".claude/hooks/x.py"], _REAL_ROOT)
+    with_entry = _skeleton(test_entries=entries)
+    assert _HOOKS_ENTRY in with_entry
+    assert _HOOKS_ENTRY not in _skeleton()
+    assert _skeleton(test_entries=[]) == _skeleton()

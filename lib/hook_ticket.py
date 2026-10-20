@@ -20,6 +20,7 @@ Hook Ticket 操作模組
 
 import logging
 import re
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
@@ -626,55 +627,111 @@ def find_ticket_file(
     return None
 
 
-def extract_where_files_from_frontmatter(frontmatter: Optional[dict]) -> List[str]:
-    """從已解析的 frontmatter dict 提取 where.files 路徑清單（W11-004.7.2）。
+# where.files 佔位符值（經 ticket_parser 供 god_ticket_scale_checker /
+# responsibility_scope_checker 共用）
+_WHERE_FILES_PLACEHOLDERS = frozenset({"待定義", "TBD", "tbd"})
 
-    相容三種 YAML 解析結果：
-    - dict where:{files: [...]} → 取 files
-    - 字串 where: 'a\\nb' → 換行分隔
-    - 其他類型 → 視為空
+_TICKET_SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / "ticket"
 
-    回傳原始（已 strip）路徑字串，不做大小寫或規範化。
 
-    Args:
-        frontmatter: 已解析的 ticket frontmatter dict，或 None
+def _parse_file_intent(raw: str) -> Tuple[str, Optional[str]]:
+    """剝除 ::read / ::write 後綴，回傳 (純路徑, 意圖)；實作在 ticket_system，
+    此處延遲載入以免 lib 匯入期即依賴 skill 目錄。"""
+    if str(_TICKET_SKILL_DIR) not in sys.path:
+        sys.path.insert(0, str(_TICKET_SKILL_DIR))
+    from ticket_system.lib.file_conflict import parse_file_intent
 
-    Returns:
-        List[str]: 路徑清單（無 where.files 或解析失敗時回傳 []）
+    return parse_file_intent(raw)
+
+
+def _where_files_candidates(frontmatter: dict, strict: bool) -> List[str]:
+    """取出 where.files 的原始候選字串。
+
+    寬鬆（strict=False）：where 可為 dict 或換行字串，list 項目一律 str()。
+    嚴格（strict=True）：where 必為 dict，list 項目只收 str。
     """
-    if not frontmatter:
-        return []
-
-    where_value = frontmatter.get("where", {})
+    where_value = frontmatter.get("where", None if strict else {})
     if isinstance(where_value, dict):
-        files_raw = where_value.get("files", [])
+        files_raw = where_value.get("files", None if strict else [])
+    elif strict:
+        return []
     else:
         files_raw = where_value
 
     if isinstance(files_raw, list):
-        items = files_raw
-    elif isinstance(files_raw, str):
-        if not files_raw:
-            return []
-        items = files_raw.split("\n")
-    else:
+        if strict:
+            return [f for f in files_raw if isinstance(f, str)]
+        return [str(f) for f in files_raw if f]
+    if isinstance(files_raw, str):
+        return files_raw.split("\n") if files_raw else []
+    return []
+
+
+def extract_where_files_from_frontmatter(
+    frontmatter: Optional[dict],
+    logger: "Optional[logging.Logger]" = None,
+    *,
+    intent: Optional[str] = None,
+    canonical: bool = False,
+) -> List[str]:
+    """從已解析的 frontmatter dict 提取 where.files 路徑清單（單一實作）。
+
+    相容 YAML 解析結果：dict where:{files: [...]} / files 為換行字串 /
+    （寬鬆模式）where 本身為換行字串；其他類型視為空。
+
+    Args:
+        frontmatter: 已解析的 ticket frontmatter dict，或 None
+        logger: 可選 Logger（僅 canonical 模式記 debug）
+        intent: 讀寫意圖後綴處理。None=原樣回傳不剝後綴；
+            "all"=剝 ::read/::write 後綴、全數保留；
+            "write"=剝後綴並排除 ::read 標記者（未標記視為寫入）
+        canonical: True 時套用 ticket_parser 語意——嚴格型別、去重（剝後綴
+            之後）、去佔位符（待定義/TBD）；intent 為 None 時視同 "all"
+
+    Returns:
+        List[str]: 路徑清單（已 strip；無 where.files 或解析失敗時回傳 []）
+    """
+    if not frontmatter:
         return []
 
-    return [str(f).strip() for f in items if f and str(f).strip()]
+    strip_intent = canonical or intent is not None
+    seen = set()
+    result: List[str] = []
+    for raw in _where_files_candidates(frontmatter, strict=canonical):
+        item = raw.strip()
+        if not item or (canonical and item in _WHERE_FILES_PLACEHOLDERS):
+            continue
+        file_intent = None
+        if strip_intent:
+            item, file_intent = _parse_file_intent(item)
+            item = item.strip()
+            if not item or (canonical and item in _WHERE_FILES_PLACEHOLDERS):
+                continue
+        if intent == "write" and file_intent == "read":
+            continue
+        if canonical:
+            if item in seen:
+                continue
+            seen.add(item)
+        result.append(item)
+
+    if canonical and result and logger:
+        logger.debug("where.files 正規化後 {} 個有效路徑".format(len(result)))
+    return result
 
 
 def extract_where_files(
     ticket_id: str,
     project_root: Optional[Path] = None,
     logger: "Optional[logging.Logger]" = None,
+    *,
+    intent: Optional[str] = None,
+    canonical: bool = False,
+    raise_on_missing: bool = False,
 ) -> List[str]:
-    """讀取 Ticket frontmatter 的 where.files 欄位（共用 helper，W11-004.7.2）。
+    """讀取 Ticket frontmatter 的 where.files 欄位（單一實作）。
 
-    統一三個 hook（agent-dispatch-validation / file-ownership-guard /
-    parallel-dispatch-verification）的 where.files 解析邏輯。
-
-    回傳原始（已 strip）路徑字串，不做大小寫或路徑規範化；
-    需要規範化的呼叫端自行套用 normalize_path。
+    不做大小寫或路徑規範化；需要規範化的呼叫端自行套用 normalize_path。
 
     流程：
     1. 透過 find_ticket_file 定位 ticket md（支援 flat + hierarchical 結構）
@@ -683,8 +740,12 @@ def extract_where_files(
 
     Args:
         ticket_id: Ticket ID（如 "0.18.0-W11-004"）
-        project_root: 專案根目錄；None 時呼叫 get_project_root()
+        project_root: 專案根目錄；None 時呼叫 get_shared_state_root()
         logger: 可選 Logger 實例
+        intent / canonical: 見 extract_where_files_from_frontmatter
+        raise_on_missing: True 時票檔找不到或 frontmatter 解析不出拋
+            ValueError（呼叫端據此退回快照）；預設回傳 []。票檔可讀但
+            where.files 為空時兩種模式皆回傳 []
 
     Returns:
         List[str]: 路徑字串清單（已 strip），ticket 不存在或無 where.files 時回傳 []
@@ -699,17 +760,23 @@ def extract_where_files(
 
     ticket_file = find_ticket_file(ticket_id, project_root, logger)
     if not ticket_file or not ticket_file.exists():
+        if raise_on_missing:
+            raise ValueError("找不到票檔 {}".format(ticket_id))
         if logger:
             logger.debug("Ticket 檔案不存在: {}".format(ticket_id))
         return []
 
     frontmatter = parse_ticket_frontmatter(ticket_file, logger)
     if not frontmatter:
+        if raise_on_missing:
+            raise ValueError("票檔 {} frontmatter 解析失敗".format(ticket_id))
         if logger:
             logger.debug("無法解析 Ticket frontmatter: {}".format(ticket_id))
         return []
 
-    return extract_where_files_from_frontmatter(frontmatter)
+    return extract_where_files_from_frontmatter(
+        frontmatter, logger, intent=intent, canonical=canonical
+    )
 
 
 def extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:

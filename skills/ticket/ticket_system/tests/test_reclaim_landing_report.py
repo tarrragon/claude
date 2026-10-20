@@ -90,6 +90,9 @@ def patch_reclaim_and_append_log_paths(tmp_ticket_dir, monkeypatch):
         monkeypatch.setattr(mod, "get_ticket_path", _fake_get_ticket_path, raising=False)
         monkeypatch.setattr(mod, "load_ticket", _fake_load_ticket, raising=False)
 
+    # 隔離 dispatch-active 讀取路徑，避免讀到真實專案狀態檔
+    monkeypatch.setattr(lease, "_dispatch_state_path", lambda: tmp_ticket_dir.parent / "absent.json")
+
     yield
 
     try:

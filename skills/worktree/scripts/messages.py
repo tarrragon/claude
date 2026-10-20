@@ -135,9 +135,9 @@ class CleanupMessages:
 
     SCAN_NO_CLEANUP_NEEDED = "目前沒有需要清理的 worktree。"
 
-    SCAN_CLEANUP_HINT = "  執行清理：/worktree cleanup {ticket_id}"
+    SCAN_CLEANUP_HINT = "  執行清理：/worktree cleanup {target}"
 
-    SCAN_FORCE_HINT = "  強制清理（略過警告）：/worktree cleanup {ticket_id} --force"
+    SCAN_FORCE_HINT = "  強制清理（略過警告）：/worktree cleanup {target} --force"
 
     # ===== 錯誤訊息 =====
     REMOVE_FAILED = "[錯誤] 移除 worktree 失敗：{error}"

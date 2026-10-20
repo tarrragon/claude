@@ -47,6 +47,7 @@
 | 專案 hook（`.claude/hooks/` 的 PreToolUse 等）拒絕 | 否。專案 hook 的拒絕訊息會附處置方式，依該訊息處理 |
 | 拒絕訊息不是「too complex to verify」 | 否。回到規則 2 第三列 |
 | 拆分後把中間結果寫到 scratchpad 檔供下一條讀取 | 可以，前提是寫檔與讀檔本身都是可見的單一命令，沒有被執行的腳本 |
+| worktree 內多行內容（heredoc 被守衛拒收含換行參數）傳給 `append-log` | 可以，首選：以 Write 寫入 scratchpad 內容檔（非票檔），再以 `append-log --content-file <路徑>` 單一命令讀取；命令列不含換行。分次單行 append 降為 `--content-file` 不可用時的替代 |
 | 管線（`a \| b`）或命令替換（`$(...)`）拆開後需要傳遞中間結果 | 可以，做法同上一列：前一條以可見的重導向寫入 scratchpad 檔，下一條以單一命令讀取該檔。不得改用 `xargs`、`eval`、`bash -c` 把兩段串回一條 |
 | 拆分時順便改寫成原命令沒有的操作 | 否。拆分只改形狀，不改內容 |
 

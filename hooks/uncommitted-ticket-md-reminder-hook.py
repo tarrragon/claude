@@ -48,6 +48,17 @@ try:
 except ImportError as e:
     # ImportError 不應 exit(1) 阻斷流程；降級為 no-op（fail-open）
     print(f"[Hook Import Warning] {Path(__file__).name}: {e}", file=sys.stderr)
+    # lib 不可用，僅用 stdlib 補寫檔案日誌（規則 4：stderr + 檔案雙通道）
+    try:
+        import os as _os
+        from datetime import datetime as _dt
+        _root = Path(_os.environ.get("CLAUDE_PROJECT_DIR") or Path(__file__).resolve().parents[2])
+        _log_dir = _root / ".claude" / "hook-logs" / "uncommitted-ticket-md-reminder"
+        _log_dir.mkdir(parents=True, exist_ok=True)
+        with open(_log_dir / f"uncommitted-ticket-md-reminder-{_dt.now():%Y%m%d}.log", "a", encoding="utf-8") as _fh:
+            _fh.write(f"{_dt.now():%Y-%m-%d %H:%M:%S} - uncommitted-ticket-md-reminder - ERROR - lib import failed, fallback active: {e}\n")
+    except Exception as _log_err:
+        print(f"[Hook Import Warning] uncommitted-ticket-md-reminder: log write failed: {_log_err}", file=sys.stderr)
 
     def setup_hook_logging(name):
         import logging

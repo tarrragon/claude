@@ -47,6 +47,7 @@ from lib import (
 
 # W17-127.1：framework 類別清單改由 SSOT 提供（避免與 layer-boundary 雙寫漂移）
 from lib.framework_paths import get_categories as _get_framework_categories
+from lib.checkout_identity import owning_checkout_root, same_repo
 
 # 0.2.1-W3-269：dispatch_mode=readonly 豁免 worktree 強制（框架 issue 36 落地）
 #
@@ -101,6 +102,33 @@ _RELATIVE_CLAUDE_PATTERN = re.compile(r"(?<![/\w])\.claude/")
 # W11-016: 加 lookbehind 限定 match 起點為「絕對路徑開頭」（前面非路徑字元），
 # 避免 finditer 對含巢狀 .claude/ 的路徑產生多重匹配導致誤判 external。
 _ABSOLUTE_CLAUDE_PATTERN = re.compile(r"(?<![\w./-])(/[^\s]+?)/\.claude/")
+
+# 佔位字樣：路徑段含三點、省略號或角括號者不是具體路徑
+_PLACEHOLDER_PATTERN = re.compile(r"\.\.\.|…|[<>]")
+
+
+def _is_placeholder_path(prefix: str) -> bool:
+    return bool(_PLACEHOLDER_PATTERN.search(prefix))
+
+
+def _is_same_repo_sibling_checkout(prefix: str, project_root_str: Optional[str]) -> bool:
+    """prefix（.claude/ 之前的絕對路徑）是否為本 repo 的同層 checkout（worktree）。
+
+    條件全數成立才回 True：兩端 git common dir 皆可解析且相同，且該 checkout 與
+    目前 checkout 位於同一父目錄（框架標準版面）。repo 外（如系統暫存目錄）的
+    worktree 即使同 repo，CC runtime 仍拒絕其 .claude/ 寫入（ARCH-015），維持阻擋。
+    任何解析失敗皆回 False（落在阻擋側）。
+    """
+    if not project_root_str:
+        return False
+    owner = owning_checkout_root(prefix + "/x")
+    if owner is None:
+        return False
+    if os.path.dirname(os.path.realpath(owner)) != os.path.dirname(
+        os.path.realpath(project_root_str)
+    ):
+        return False
+    return same_repo(owner, project_root_str)
 
 # 偵測 prompt 中非 .claude/ 的實作目標路徑
 # 策略：匹配常見專案路徑開頭（避免誤判 `.claude/docs` 這類巢狀路徑為 docs/）
@@ -318,6 +346,10 @@ def _classify_paths(paths: List[str], project_root_str: str) -> Tuple[bool, bool
         if abs_match:
             if project_root_str and p.startswith(project_root_str):
                 has_main = True
+            elif _is_placeholder_path(abs_match.group(1)):
+                pass
+            elif _is_same_repo_sibling_checkout(abs_match.group(1), project_root_str):
+                has_main = True
             else:
                 has_ext = True
             continue
@@ -366,7 +398,12 @@ def _classify_prompt_paths(prompt: str) -> Tuple[bool, bool, bool]:
         if project_root_str:
             root_prefix = project_root_str + "/"
             is_main = prompt[start:start + len(root_prefix)] == root_prefix
+        prefix = match.group(1)
         if is_main:
+            has_main_repo_claude = True
+        elif _is_placeholder_path(prefix):
+            continue
+        elif _is_same_repo_sibling_checkout(prefix, project_root_str):
             has_main_repo_claude = True
         else:
             has_external_claude = True

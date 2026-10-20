@@ -79,7 +79,7 @@
 | 生命週期 | 跨 session 保留，專案 git 正常 track |
 | 跨專案共用 | 不可，但檔案留在專案 git history 中 |
 | .gitignore | 不加入（與 A/B/C 不同） |
-| 範例 | `skills/*/references/project-integration/`（per-project 落地層） |
+| 範例 | `skills/*/references/project-integration/`（per-project 落地層）；根層 `project-integration/` 同樣受排除，作為專案宣告的放置處（如合併閘門的 `merge-gate.yaml`） |
 
 **辨識問題**：這個檔案需要留在專案 git 中（便於團隊協作），但不應隨 sync 推到框架 repo？若是，屬類型 E。
 

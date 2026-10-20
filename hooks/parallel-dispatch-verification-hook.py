@@ -246,18 +246,17 @@ def read_ticket_where_files(ticket_id: str, project_root: Path,
         list[str]: 規範化後的路徑清單（空列表若讀取失敗）
     """
     try:
-        raw_files = extract_where_files(ticket_id, project_root, logger)
+        # 剝除 ::read / ::write 後綴；::read 為讀取範圍，不列入預期修改
+        raw_files = extract_where_files(
+            ticket_id, project_root, logger, intent="write"
+        )
         if not raw_files:
             logger.debug(f"Ticket 無 where.files: {ticket_id}")
             return []
 
         normalized = []
         for file_path in raw_files:
-            # 剝除 ::read / ::write 後綴；::read 為讀取範圍，不列入預期修改
-            path, intent = parse_file_intent(str(file_path))
-            if intent == "read":
-                continue
-            n = normalize_path(path)
+            n = normalize_path(file_path)
             if n:
                 normalized.append(n)
 

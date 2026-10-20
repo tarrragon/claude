@@ -93,7 +93,10 @@ ticket create ... --acceptance "條件A|條件B|條件C"
 #   若 acceptance 內文本身需含該字元（如描述 shell pipe「-q | tail」），
 #   用反斜線跳脫保留字面，避免被靜默拆條：
 ticket create ... --acceptance "重現實證 -q \| tail 導致 0 行"
-#   未跳脫時，單一 --acceptance 值被拆成多條會印出 [WARNING] 供確認。
+#   shell 的「或」（雙分隔符）同樣會被拆，中間的空段被丟棄，一條變兩條；需寫成 \|\|：
+ticket create ... --acceptance "a \|\| b 兩種寫法都被擋"
+#   未跳脫時，單一 --acceptance 值被拆成多條會印出 [WARNING] 供確認（輸出到 stderr；
+#   以 2>&1 擷取後若再用 grep 白名單過濾，警告行會被濾掉，見 bash-tool-usage-rules 規則二）。
 #
 #   建立成功訊息一律回報本次實際存入的驗收條數與逐條內容（不限分隔符拆條
 #   時才印）。--acceptance 不吃逗號分隔（與 --where 等三參數不同），逗號
@@ -202,9 +205,12 @@ ticket create --wave 1 --action "實作" --target "XXX" --allow-duplicate \
 | where.files 含任一非 `.claude/` 路徑（如 `lib/`、`src/`、`test/`） | 不觸發，正常建票 |
 | where.files 全數 `.claude/` 下 + 未帶 `--dedup-checked` | 阻擋，印出查重指令範本與二擇一處置 |
 | where.files 全數 `.claude/` 下 + `--dedup-checked ""`（空字串） | 阻擋（只給旗標不給結論仍視為未查重） |
-| where.files 全數 `.claude/` 下 + `--dedup-checked <issue號或 none>` | 放行 |
+| where.files 全數 `.claude/` 下 + `--dedup-checked <issue號>` | 放行 |
+| where.files 全數 `.claude/` 下 + `--dedup-checked` 值非 none 且非 issue 參照（如 `no`、`-`、`0`、`n/a`） | 阻擋（`PORTABLE_ISSUE_DEDUP_VALUE_INVALID`） |
+| where.files 全數 `.claude/` 下 + `--dedup-checked none` 未附 `--dedup-keywords` | 阻擋（`PORTABLE_ISSUE_DEDUP_KEYWORDS_MISSING`） |
+| where.files 全數 `.claude/` 下 + `--dedup-checked none --dedup-keywords "k1" "k2"` | 放行；關鍵字逐字寫入新票 Problem Analysis〈查重紀錄〉 |
 
-`--dedup-checked` 的值即查重結論本身（命中的 issue 號如 `#102`，或確認未命中的 `none`），不是純存在性旗標。
+`--dedup-checked` 的值即查重結論本身（命中的 issue 號如 `#102`，或確認未命中的 `none`），不是純存在性旗標。`none` 須附 `--dedup-keywords`（一至多組查重所用關鍵字）：未查重填 `none` 與已查重得 `none` 在票面無從區分，關鍵字留在〈查重紀錄〉供覆核。值只接受 `none`（大小寫與空白不拘）或 issue 參照：`#N`、`N`、`owner/repo#N`，可逗號分隔多個（如 `tarrragon/claude#102,#105`）；其他值一律阻擋。附 `--dedup-keywords` 時 create 會以子程序執行 `section_comment.py dedup`，把命中 issue（號碼＋標題）寫入〈查重紀錄〉供覆核；命中與否不阻擋建票。dedup 失敗（離線、逾時、非零退出）時建票照常，〈查重紀錄〉寫「查重未完成：<錯誤摘要>」並於 stderr 警告。部分 token 查詢失敗時，保留已有的命中，並標「查重部分未完成」。範例：`--dedup-checked none --dedup-keywords "關鍵字一" "關鍵字二"`。
 
 **命中 issue 不等於不該建票**：`framework-issue` skill 的核心模型是「ticket 記執行，issue 記問題」。命中既有 issue 後要先判斷本票性質：
 

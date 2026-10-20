@@ -346,6 +346,31 @@ def _collect_new_commits_with_parents(
     return commits
 
 
+def _collect_parent_counts(
+    new_oids: List[str], project_root: Path
+) -> Dict[str, int]:
+    """各新 commit 的 parent 數（`rev-list --parents` 同一查詢語意）。
+
+    合併豁免依此逐 commit 判定（parent 數 > 1），不依賴 MERGE_HEAD：
+    `merge-tree` + `commit-tree` + `update-ref` 的 CAS 合併路徑不建立
+    MERGE_HEAD，而 MERGE_HEAD 存在時的單 parent 提交也不是合併。
+    """
+    if not new_oids:
+        return {}
+    ok, out = run_git_command(
+        ["rev-list", "--parents"] + list(new_oids) + ["--not", "--all"],
+        cwd=str(project_root),
+    )
+    if not ok:
+        return {}  # 取不到 parent 數 -> 全部視為非合併（保守：不給豁免）
+    counts: Dict[str, int] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if parts:
+            counts[parts[0]] = len(parts) - 1
+    return counts
+
+
 def _split_patch_sections(patch_text: str) -> List[str]:
     """把全量 patch 依 `diff --git ` 標頭切成每個檔案一段（順序即 diff 佇列
     順序，與 name-status 的條目一一對應）。
@@ -501,7 +526,15 @@ def main() -> int:
         logger.debug("本次 transaction 無新 commit（純 ref 重新指向），放行")
         return EXIT_ALLOW
 
-    is_merge = _merge_in_progress(project_root)
+    # MERGE_HEAD 只留給 deny 提示與預驗證 token；合併豁免改逐 commit 依 parent 數判定。
+    merge_head_present = _merge_in_progress(project_root)
+    parent_counts = _collect_parent_counts(new_oids, project_root)
+    merge_flags = {sha: parent_counts.get(sha, 0) > 1 for sha in new_commits}
+    for sha in sorted(new_commits):
+        logger.info(
+            "commit %s parents=%d is_merge=%s merge_head_present=%s",
+            sha[:12], parent_counts.get(sha, 0), merge_flags[sha], merge_head_present,
+        )
 
     scan_files = _build_scan_files_batched(new_commits, project_root)
     findings: List[Finding] = []
@@ -511,7 +544,7 @@ def main() -> int:
             findings.extend(
                 _run_all_checks(
                     files, project_root, logger,
-                    is_merge_commit=is_merge, branch=written_branch,
+                    is_merge_commit=merge_flags[commit_sha], branch=written_branch,
                 )
             )
 
@@ -520,8 +553,8 @@ def main() -> int:
 
     if deny_findings:
         logger.warning(
-            "ref transaction 被阻擋：deny=%d warn=%d new_commits=%d is_merge=%s",
-            len(deny_findings), len(warn_findings), len(new_commits), is_merge,
+            "ref transaction 被阻擋：deny=%d warn=%d new_commits=%d merge_head_present=%s",
+            len(deny_findings), len(warn_findings), len(new_commits), merge_head_present,
         )
         header = (
             "[git-ref-transaction-content-guard] ref 寫入被阻擋：新提交內容經"
@@ -530,7 +563,7 @@ def main() -> int:
             "故由本 reference-transaction 原生 hook 補上）。\n"
             "請修正後重新提交：\n"
         )
-        if is_merge:
+        if merge_head_present:
             # merge 情境下 git 已在本次 ref 寫入被擋前完成合併計算，寫入
             # index 並建立 MERGE_HEAD——本次 deny 只中止 ref 更新，不會撤銷
             # 這兩者，終端上除本訊息外不會有其他提示（規則 4：Hook 失敗必須
@@ -556,7 +589,7 @@ def main() -> int:
         return EXIT_ALLOW
 
     logger.debug("新 commit 內容無發現，放行：new_commits=%d", len(new_commits))
-    if os.environ.get(ENV_PREVALIDATE_ONLY) == "1" and not is_merge:
+    if os.environ.get(ENV_PREVALIDATE_ONLY) == "1" and not merge_head_present:
         sys.stdout.write(PREVALIDATE_CLEAN_TOKEN + "\n")
     return EXIT_ALLOW
 

@@ -438,3 +438,105 @@ def test_none_closing_still_contains_complete():
 def test_worktree_skeleton_within_prompt_limit():
     skeleton = _build_skeleton_by_isolation("worktree")
     assert _skeleton_line_count(skeleton) <= PROMPT_LINE_LIMIT
+
+
+# ----------------------------------------------------------------------------
+# 0.5.0-W1-403：守衛涵蓋全部骨架變體，最長組合留出 PM 填寫空間
+#
+# 既有守衛各只量單一組合，worktree、測試入口、紅燈句疊加後的最長組合
+# （修正前 34 行）無人量測。以參數化窮舉 hook-scope x isolation x 測試入口 x
+# 紅燈句，斷言每組 <= SKELETON_MAX_LINES（PROMPT_LINE_LIMIT 減 PM 填寫所需至少 8 行）。
+# ----------------------------------------------------------------------------
+
+import itertools
+
+import pytest
+
+PM_RESERVED_LINES = 8
+SKELETON_MAX_LINES = PROMPT_LINE_LIMIT - PM_RESERVED_LINES
+
+_ENTRY_VARIANTS = {
+    "no_entry": (),
+    "one_entry": ("uv --directory <checkout>/.claude/skills/ticket run pytest",),
+    "two_entries": (
+        "uv --directory <checkout>/.claude/skills/ticket run pytest",
+        "uv --directory <checkout>/.claude/hooks run pytest",
+    ),
+}
+
+_ALL_COMBOS = list(itertools.product(
+    (False, True), ("none", "worktree"), tuple(_ENTRY_VARIANTS), (False, True),
+    ("agent", "pm", "none"),
+))
+_AGENT_COMBOS = [c for c in _ALL_COMBOS if c[4] == "agent"]
+_COMBO_PARAMS = "hook_scope, isolation, entry_key, red_run, commit_policy"
+
+
+def _build_combo(hook_scope, isolation, entry_key, red_run, commit_policy="agent") -> str:
+    module = _load_dispatch_skeleton_module()
+    return module.build_skeleton(
+        kind="normal",
+        ticket_id="0.5.0-W1-XXXX",
+        task_summary="一句話動作描述測試填空",
+        agent_name="thyme-python-developer",
+        commit_policy=commit_policy,
+        touches_hook_scope=hook_scope,
+        isolation=isolation,
+        require_red_run=red_run,
+        test_entries=_ENTRY_VARIANTS[entry_key],
+    )
+
+
+@pytest.mark.parametrize(_COMBO_PARAMS, _ALL_COMBOS)
+def test_every_skeleton_variant_leaves_room_for_pm(
+    hook_scope, isolation, entry_key, red_run, commit_policy,
+):
+    skeleton = _build_combo(hook_scope, isolation, entry_key, red_run, commit_policy)
+    count = _skeleton_line_count(skeleton)
+    assert count <= SKELETON_MAX_LINES, (
+        f"骨架組合 hook_scope={hook_scope} isolation={isolation} "
+        f"entries={entry_key} red_run={red_run} commit_policy={commit_policy} "
+        f"為 {count} 行，超過 {SKELETON_MAX_LINES}；PM 填寫空間不足 {PM_RESERVED_LINES} 行"
+    )
+
+
+def test_review_skeleton_leaves_room_for_pm():
+    review = _load_dispatch_skeleton_module().build_skeleton(
+        kind="review", ticket_id="T-1", task_summary="x",
+    )
+    assert _skeleton_line_count(review) <= SKELETON_MAX_LINES
+
+
+@pytest.mark.parametrize(_COMBO_PARAMS, _AGENT_COMBOS)
+def test_every_skeleton_variant_passes_staging_phrase_guard(
+    hook_scope, isolation, entry_key, red_run, commit_policy,
+):
+    """壓縮後 Commit 區塊仍含 Category A/B/C 片語與 no fallback。"""
+    spec = importlib.util.spec_from_file_location(
+        "dispatch_staging_phrase_guard_hook_403",
+        _HOOKS_DIR / "dispatch-staging-phrase-guard-hook.py",
+    )
+    phrase_hook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(phrase_hook)
+    skeleton = _build_combo(hook_scope, isolation, entry_key, red_run, commit_policy)
+    assert phrase_hook._missing_categories(skeleton.lower()) == []
+    assert "no fallback" in skeleton
+
+
+# E1／E2：worktree 實作骨架含「搜尋姊妹測試」句；none 與 review 不含。
+_SIBLING_SEARCH_MARK = "相關測試檔怎麼找"
+
+
+def test_worktree_skeleton_has_sibling_test_search_sentence():
+    skeleton = _build_combo(False, "worktree", "no_entry", False)
+    assert _SIBLING_SEARCH_MARK in skeleton
+    assert "where.files" in skeleton
+    assert "停手回報" in skeleton
+
+
+def test_none_and_review_skeletons_lack_sibling_test_search_sentence():
+    assert _SIBLING_SEARCH_MARK not in _build_combo(False, "none", "no_entry", False)
+    review = _load_dispatch_skeleton_module().build_skeleton(
+        kind="review", ticket_id="T-1", task_summary="x",
+    )
+    assert _SIBLING_SEARCH_MARK not in review

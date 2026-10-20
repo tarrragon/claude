@@ -2,7 +2,7 @@
 name: mermaid-ascii
 description: "Mermaid 圖表 ASCII 渲染工具。Use for: (1) 將 Mermaid 圖表轉為純文字 ASCII, (2) 在不支援圖形的環境中顯示流程圖, (3) 文件中嵌入文字版圖表"
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Mermaid ASCII Renderer

@@ -596,11 +596,43 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
     有效 --section 值見 CANONICAL_BODY_SECTIONS（單一序列來源）。body 的 H1
     容器標題 "Execution Log" 不是合法值，沿革見 DOC-007。
     """
+    if not _resolve_content_file(args):
+        return 1
+
     # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
     # append-log 為高頻並發 caller（PM/agent 持續寫入），race 風險最高。
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         return _execute_append_log_locked(args, version)
+
+
+def _resolve_content_file(args: argparse.Namespace) -> bool:
+    """解析 content 來源（位置參數 xor --content-file），失敗時不碰票面。
+
+    --content-file 的內容逐字讀入並寫回 args.content，後續流程與位置參數一致。
+    """
+    import sys as _sys
+
+    content_file = getattr(args, "content_file", None)
+    content = getattr(args, "content", None)
+    if content_file is None:
+        if content is None:
+            _sys.stderr.write("[ERROR] 需提供 content 位置參數或 --content-file 擇一\n")
+            return False
+        return True
+    if content is not None:
+        _sys.stderr.write("[ERROR] content 位置參數與 --content-file 不可同時使用\n")
+        return False
+    try:
+        with open(content_file, encoding="utf-8", newline="") as fh:
+            args.content = fh.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        _sys.stderr.write(f"[ERROR] 無法讀取 --content-file {content_file}: {exc}\n")
+        return False
+    if not args.content.strip():
+        _sys.stderr.write(f"[ERROR] --content-file {content_file} 內容為空或僅空白，拒絕寫入\n")
+        return False
+    return True
 
 
 def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:

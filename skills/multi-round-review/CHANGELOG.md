@@ -2,6 +2,18 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.29.2 — 同 compositional-writing 1.45.2：principle 卡與 3-I 的集中登記型文件改名、刪「或只追加」、補 `merge=union`
+
+**Version**: 2.29.1 — principle 卡 `section-scope-is-bounded-by-the-category-too` 補判定上的補充（2-C 分類欄第一次實際使用的回饋），同 compositional-writing 1.45.1
+
+**Version**: 2.29.0 — 2-C 題目範圍檢查的逐段標表加「在不在所屬分類範圍內」一欄，與標題那一欄分開判（標題常常不寫分類已經限定的條件，一節講得比分類更泛的內容會在標題那一欄通過）；新增 3-I 規則類文件的職責稽核：讀規則檔的修改紀錄、依主題歸類、對照落在哪幾節，產出主題 / 修改次數 / 落在哪幾節 / 處置的表，處置含拆完之後的原檔路由表與外部引用；不給門檻。新增 principle 卡 `section-scope-is-bounded-by-the-category-too` 與 `change-history-counts-a-documents-responsibilities`（與 compositional-writing 1.45.0 同批）
+
+**Version**: 2.28.0 — 1-A 物理化錯配條目加入清單其他動詞的判讀（拖垮、壓垮寫出失效形態與傳遞路徑、硬扛寫出承擔者與工作、掛在多半是合規的技術附掛或關係），並把「修法把容量數字寫進通則句」列為新違規。判讀在 compositional-writing 1.44.0 的 `physical-verbs-stand-in-for-content`。
+
+**Version**: 2.27.0 — 1-A 物理化錯配的修法改成依句子分兩種：描述關係的換成依賴、佐證、負責；足夠性斷言裡的「撐」要寫出需求、判斷標準與機制，換成「足以支持」「可靠」「維持不久」回報為未修。取消系統負載的豁免。完整判讀在 compositional-writing 1.43.0。
+
+**Version**: 2.26.0 — 框架詞造出的句型列入審查：1-A 新增一條必跑項，涵蓋「問題」與「回答」當框架詞、正反問句當名詞、排比的同義反覆與命名的旁白（三種常在同一篇一起出現，找到一種就掃另外兩種；回報 clean 要附逐處判定）；reviewer-prompt 的必修量尺新增「動詞、受詞或動作者填的是框架詞而不是內容」一項（讀者說不出元件實際做的動作、『問題』是哪一種、接手的是哪一個具名對象、『對』照什麼標準）；2-B⁵ 翻譯探針建議把評價謂語的判斷標準與「問題」的所指寫進派發指令的例子；同步 `unnamed-halves-are-unextracted-variables` 副本的〈命名由句子結構完成，取名的動作不寫進正文〉一節。判讀的完整版住在 compositional-writing 1.42.0。
+
 **Version**: 2.25.0 — 讀者會先想到別的東西的譯名列為嚴重問題、審查時逐個確認：1-A 新增必跑的譯名檢查（範圍不含產品名、協定名、程式識別字與通行縮寫；逐個問「除了要譯的這個概念，軟體或介面裡還有沒有另一個讀者常碰到的東西也叫這個名字」；軟體以外的日常意思不算；比對台灣介面上實際顯示的中文名稱；日常功能相似不能當合規理由；回報 clean 要附逐個譯名的判定表；替代譯名也要過同一問）；嚴重度量尺的必修加這一項；2-B⁶ 術語探針把 1-A 拿不準的譯名列為固定對象，問法加「在<領域>技術文件裡讀到這個詞，第一個想到什麼」「那個東西在軟體或介面裡是什麼」，判讀加兩條（一份想到軟體或介面裡的另一個東西即照讀錯處理，軟體以外的日常意思與英文同名反推不算、「約定俗成」先問常見在哪一種中文的語料）；新增 principle 卡 borrowed-everyday-word-as-translated-term
 
 **Version**: 2.24.0 — 嚴重度量尺的必修補一項：被反覆談論的概念沒有被界定與命名就被引用（「一部分／另一半／那一側」或每次換描述重講），逐個概念點名檢查；新增 principle 卡 unnamed-halves-are-unextracted-variables

@@ -631,7 +631,9 @@ def _run_real_raw_where(raw_where, repo, ticket_id=SUB_ID):
                       return_value=_real_payload(f"ticket track complete {ticket_id}")), \
          patch.object(hook_module, "is_subagent_environment", return_value=False), \
          patch.object(hook_module, "get_project_root", return_value=repo), \
-         patch.object(hook_module, "extract_where_files", return_value=raw_where), \
+         patch("lib.hook_ticket.find_ticket_file", return_value=repo), \
+         patch("lib.hook_ticket.parse_ticket_frontmatter",
+               return_value={"where": {"files": raw_where}}), \
          patch.object(hook_module, "read_ticket_type_and_children",
                       return_value=("IMP", False)), \
          patch("sys.stdout", out):
@@ -672,8 +674,10 @@ class TestIntentSuffixStripping:
 
     def test_read_where_files_structured_result(self):
         files = hook_module.read_ticket_where_files
-        with patch.object(hook_module, "extract_where_files",
-                          return_value=["A/B.py::write", "c.py::read", "d.py"]):
+        with patch("lib.hook_ticket.find_ticket_file", return_value=Path(".")), \
+             patch("lib.hook_ticket.parse_ticket_frontmatter",
+                   return_value={"where": {"files": [
+                       "A/B.py::write", "c.py::read", "d.py"]}}):
             assert files("x", Path("."), logging.getLogger("t")) == ["a/b.py", "d.py"]
 
     def test_parser_is_shared_with_track_commit(self):

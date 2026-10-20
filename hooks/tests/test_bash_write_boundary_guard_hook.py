@@ -31,6 +31,7 @@ spec = importlib.util.spec_from_file_location(
 hook_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook_module)
 
+_REPO_ROOT = hook_dir.parent.parent  # 本 checkout 根目錄（含 .git）
 _extract_candidate_paths = hook_module._extract_candidate_paths
 _find_boundary_violation = hook_module._find_boundary_violation
 main = hook_module.main
@@ -215,18 +216,37 @@ class TestMainEntryPoint:
         )
         assert exit_code == 0
 
-    def test_subagent_environment_allowed(self, monkeypatch):
+    def test_subagent_environment_denied_for_scope_write(self, monkeypatch):
+        # 0.5.0-W1-284.1：subagent 不再一律放行，寫入範圍內路徑改為 deny
         exit_code = self._run_main(
             monkeypatch,
-            {"tool_name": "Bash", "tool_input": {"command": "cat > lib/foo.dart <<'EOF'\nx\nEOF"}, "agent_id": "sub-1"},
+            {"tool_name": "Bash", "tool_input": {"command": "cat > lib/foo.dart <<'EOF'\nx\nEOF"}, "agent_id": "sub-1", "cwd": str(_REPO_ROOT)},
+            is_subagent=True,
+        )
+        assert exit_code == 2
+
+    def test_subagent_environment_out_of_scope_allowed(self, monkeypatch):
+        exit_code = self._run_main(
+            monkeypatch,
+            {"tool_name": "Bash", "tool_input": {"command": "echo x > docs/notes.md"}, "agent_id": "sub-1", "cwd": str(_REPO_ROOT)},
             is_subagent=True,
         )
         assert exit_code == 0
 
-    def test_dev_branch_allowed(self, monkeypatch):
+    def test_dev_branch_still_denied_for_scope_write(self, monkeypatch):
+        # 新的路徑範圍檢查不受開發分支跳過影響（feat/* worktree 內不得失效）
         exit_code = self._run_main(
             monkeypatch,
-            {"tool_name": "Bash", "tool_input": {"command": "cat > lib/foo.dart <<'EOF'\nx\nEOF"}},
+            {"tool_name": "Bash", "tool_input": {"command": "cat > lib/foo.dart <<'EOF'\nx\nEOF"}, "cwd": str(_REPO_ROOT)},
+            branch="feat/some-feature",
+        )
+        assert exit_code == 2
+
+    def test_dev_branch_skips_main_thread_layer_only(self, monkeypatch):
+        # 開發分支跳過仍作用於既有主線程層：*.dart 在範圍外目錄不被擋
+        exit_code = self._run_main(
+            monkeypatch,
+            {"tool_name": "Bash", "tool_input": {"command": "cat > docs/x.dart <<'EOF'\nx\nEOF"}, "cwd": str(_REPO_ROOT)},
             branch="feat/some-feature",
         )
         assert exit_code == 0
@@ -447,7 +467,11 @@ class TestHeredocAndQuotedTextIgnored:
         assert _find_boundary_violation(cmd, logger) is None
 
     @pytest.mark.parametrize("cmd,expected", [
-        ("echo hi 2> lib/foo.dart", []),
+        ("echo hi 2> lib/foo.dart", ["lib/foo.dart"]),
+        ("echo hi &> lib/foo.dart", ["lib/foo.dart"]),
+        ("echo hi >& lib/foo.dart", ["lib/foo.dart"]),
+        ("echo hi 2>> lib/foo.dart", ["lib/foo.dart"]),
+        ("echo hi 2>&1", []),
         ("echo hi >&2", []),
         ("echo hi > lib/foo.dart", ["lib/foo.dart"]),
         ("echo hi >> \"lib/foo.dart\"", ["lib/foo.dart"]),
@@ -460,3 +484,1007 @@ class TestHeredocAndQuotedTextIgnored:
     ])
     def test_real_write_forms(self, cmd, expected):
         assert _extract_candidate_paths(cmd) == expected
+
+
+# ============================================================================
+# 0.5.0-W1-284.1：主線程與代理人共用的路徑範圍阻擋
+# ============================================================================
+
+_SCOPE_TARGETS = [
+    ".claude/hooks/x-hook.py",
+    "lib/a.dart",
+    "test/a_test.dart",
+    "integration_test/a_test.dart",
+]
+
+# 各寫入寫法，{t} 為目標路徑
+_WRITE_FORMS = {
+    "cat_append_heredoc": "cat >> {t} <<'EOF'\nx\nEOF",
+    "printf_append": "printf '%s' x >> {t}",
+    "tee_append": "echo x | tee -a {t}",
+    "python_open": "python3 - <<'EOF'\nopen('{t}', 'w').write('x')\nEOF",
+    "sed_inplace_bsd_empty": "sed -i \"\" 's/a/b/' {t}",
+    "cp_dest": "cp /tmp/src.txt {t}",
+    "mv_dest": "mv /tmp/src.txt {t}",
+}
+
+
+@pytest.fixture
+def checkout(tmp_path):
+    """假 checkout 根目錄（含 .git 目錄）。"""
+    (tmp_path / ".git").mkdir()
+    return tmp_path.resolve()
+
+
+def _scope(cmd, cwd, logger):
+    return hook_module._find_scope_violation(cmd, str(cwd), logger)
+
+
+class TestScopeViolationDenied:
+    """正向對照：範圍內路徑對任何呼叫身份（主線程、代理人）皆 deny。"""
+
+    @pytest.mark.parametrize("target", _SCOPE_TARGETS)
+    @pytest.mark.parametrize("form", sorted(_WRITE_FORMS))
+    def test_write_form_to_scope_target_denied(self, form, target, checkout, logger):
+        cmd = _WRITE_FORMS[form].format(t=target)
+        assert _scope(cmd, checkout, logger) == target
+
+    def test_relative_path_resolved_against_cwd(self, checkout, logger):
+        (checkout / "docs").mkdir()
+        assert _scope("cat > ../lib/a.dart", checkout / "docs", logger) == "lib/a.dart"
+
+    def test_cwd_inside_scope_dir(self, checkout, logger):
+        (checkout / "lib").mkdir()
+        assert _scope("echo x > a.dart", checkout / "lib", logger) == "lib/a.dart"
+
+    def test_cd_then_write_in_same_command(self, checkout, logger):
+        assert _scope("(cd lib && cat > a.dart <<'EOF'\nx\nEOF\n)", checkout, logger) == "lib/a.dart"
+
+    def test_absolute_path_inside_checkout(self, checkout, logger):
+        assert _scope(f"echo x > {checkout}/test/a.dart", checkout, logger) == "test/a.dart"
+
+    def test_claude_project_dir_variable_resolved(self, checkout, logger):
+        assert _scope("echo x > $CLAUDE_PROJECT_DIR/lib/a.dart", checkout, logger) == "lib/a.dart"
+        assert _scope("echo x > ${CLAUDE_PROJECT_DIR}/lib/a.dart", checkout, logger) == "lib/a.dart"
+
+    def test_worktree_path_seen_from_main_checkout(self, checkout, logger):
+        (checkout / ".claude" / "worktrees" / "w1").mkdir(parents=True)
+        assert _scope("echo x > .claude/worktrees/w1/lib/a.dart", checkout, logger) == "lib/a.dart"
+        assert _scope("echo x > .claude/worktrees/w1/.claude/rules/r.md", checkout, logger) == ".claude/rules/r.md"
+
+    def test_main_checkout_path_seen_from_worktree(self, checkout, logger):
+        wt = checkout / ".claude" / "worktrees" / "w1"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: x\n")
+        assert _scope(f"echo x > {checkout}/lib/a.dart", wt, logger) == "lib/a.dart"
+        assert _scope("echo x > lib/a.dart", wt, logger) == "lib/a.dart"
+
+    def test_symlink_into_scope_denied(self, checkout, logger):
+        (checkout / "lib").mkdir()
+        (checkout / "docs").mkdir()
+        (checkout / "docs" / "ln").symlink_to(checkout / "lib")
+        assert _scope("echo x > docs/ln/a.dart", checkout, logger) == "lib/a.dart"
+
+
+class TestScopeViolationAllowed:
+    """豁免與範圍外：每個豁免項一筆應放行。"""
+
+    @pytest.mark.parametrize("cmd", [
+        # 暫存區、變數路徑、/dev/null
+        "echo x > /tmp/out.txt",
+        "echo x > $S/x",
+        "echo x > ${S}/x",
+        "echo x > ~/note.txt",
+        "echo x > /dev/null",
+        "cmd > /dev/null 2>&1",
+        # git 自身
+        "git mv old.dart lib/new.dart",
+        "git -C . mv test/a.dart test/b.dart",
+        "git worktree add .claude/worktrees/w2 -b feat/x",
+        "git worktree remove .claude/worktrees/w2",
+        "echo x > .git/info/exclude",
+        # worktree 目錄本身與其範圍外內容
+        "echo x > .claude/worktrees/w2/notes.txt",
+        # 建置與快取產物
+        "echo x > .venv/pyvenv.cfg",
+        "echo x > .pytest_cache/v",
+        "echo x > lib/.dart_tool/x",
+        # 執行期狀態檔（.gitignore 列出的 .claude 本地產物）
+        "echo x > .claude/pm-status.json",
+        "echo x > .claude/plans/p.md",
+        "touch .claude/.zhtw-mcp-skip",
+        "echo x > .claude/.zhtw-mcp-skip",
+        # 例行作業：路徑不出現在命令文字
+        "uv --directory .claude/hooks run pytest tests/test_x.py -q",
+        "uv --directory .claude/hooks run pytest tests/test_x.py -q 2>&1 | tail -20",
+        "ticket track claim 0.5.0-W1-1 --as x",
+        "doc validate",
+        "git worktree add .claude/worktrees/x",
+        "git mv a.md b.md",
+        "git -C . mv a.md b.md",
+        "GIT_X=1 git -c core.a=b -C . mv a.md b.md",
+        # 一般文件與其他目錄
+        "echo x > docs/notes.md",
+        "cat lib/a.dart",
+        "grep -rn foo lib/ test/",
+        "flutter test test/unit/foo_test.dart",
+        # CLI 自寫檔：目標路徑不出現在命令文字，不是 shell 重導向
+        "ticket track append-log 0.5.0-W1-1 --section Solution \"text\"",
+        "ticket track commit --worktree 0.5.0-W1-1",
+        "doc validate",
+        "doc uc verify 2>&1",
+        # 描述文字不是寫入
+        "git commit -m \"fix: cat > lib/a.dart\"",
+    ])
+    def test_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    def test_path_outside_checkout_allowed(self, checkout, tmp_path_factory, logger):
+        other = tmp_path_factory.mktemp("other").resolve()
+        assert _scope(f"echo x > {other}/lib/a.dart", checkout, logger) is None
+
+    def test_scratchpad_style_absolute_path_allowed(self, checkout, logger):
+        cmd = "cat > /private/tmp/claude-501/proj/session/scratchpad/lib/x.txt <<'EOF'\nx\nEOF"
+        assert _scope(cmd, checkout, logger) is None
+
+
+class TestScopeUnparseableFailOpen:
+    """動態組成的路徑無法靜態判定：放行並記錄為殘留風險（盤點表列）。"""
+
+    @pytest.mark.parametrize("cmd", [
+        "python3 -c \"p=input()+'/a.dart'; open(p,'w')\"",
+        "echo x > $OTHER/lib/a.dart",
+    ])
+    def test_dynamic_path_not_resolved(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+
+def _git(*args, cwd):
+    import subprocess
+    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True,
+                   env={"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
+                        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+                        "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"})
+
+
+def _make_repo(base, name):
+    repo = base / name
+    repo.mkdir()
+    _git("init", "-q", "-b", "main", cwd=repo)
+    (repo / "README.md").write_text("x\n")
+    _git("add", "README.md", cwd=repo)
+    _git("commit", "-q", "-m", "init", cwd=repo)
+    return repo
+
+
+@pytest.fixture
+def repo_pair(tmp_path):
+    """真實主 repo + git worktree add 出的同層 worktree（<repo>-<ticket> 版面）。"""
+    main_repo = _make_repo(tmp_path, "proj")
+    sibling = tmp_path / "proj-T1"
+    _git("worktree", "add", "-q", "-b", "feat/T1", str(sibling), cwd=main_repo)
+    return main_repo.resolve(), sibling.resolve()
+
+
+class TestSiblingWorktreeScope:
+    """E2：cwd 與目標分屬同 repo 的不同 checkout（主 checkout 與同層 worktree）。"""
+
+    _SCOPE_FILES = ["lib/a.dart", "test/a_test.dart", "integration_test/a.dart", ".claude/skills/x/y.py"]
+
+    @pytest.mark.parametrize("target", _SCOPE_FILES)
+    def test_redirect_main_cwd_to_sibling(self, repo_pair, logger, target):
+        main_repo, sibling = repo_pair
+        assert _scope(f"echo x > {sibling}/{target}", main_repo, logger) == target
+
+    @pytest.mark.parametrize("target", _SCOPE_FILES)
+    def test_redirect_sibling_cwd_to_main(self, repo_pair, logger, target):
+        main_repo, sibling = repo_pair
+        assert _scope(f"echo x > {main_repo}/{target}", sibling, logger) == target
+
+    def test_python_heredoc_open_main_cwd_to_sibling(self, repo_pair, logger):
+        main_repo, sibling = repo_pair
+        cmd = f"python3 - <<'EOF'\nopen('{sibling}/.claude/skills/w/x.py', 'w').write('x')\nEOF"
+        assert _scope(cmd, main_repo, logger) == ".claude/skills/w/x.py"
+
+    def test_python_heredoc_open_sibling_cwd_to_main(self, repo_pair, logger):
+        main_repo, sibling = repo_pair
+        cmd = f"python3 - <<'EOF'\nopen('{main_repo}/lib/x.dart', 'w').write('x')\nEOF"
+        assert _scope(cmd, sibling, logger) == "lib/x.dart"
+
+    def test_nonexistent_ancestors_resolved(self, repo_pair, logger):
+        main_repo, sibling = repo_pair
+        assert _scope(f"echo x > {sibling}/lib/deep/er/new.dart", main_repo, logger) == "lib/deep/er/new.dart"
+
+    def test_sibling_non_scope_file_allowed(self, repo_pair, logger):
+        main_repo, sibling = repo_pair
+        assert _scope(f"echo x > {sibling}/docs/n.md", main_repo, logger) is None
+        assert _scope(f"echo x > {sibling}/.claude/plans/p.md", main_repo, logger) is None
+
+    def test_different_repo_same_layout_allowed(self, repo_pair, tmp_path, logger):
+        main_repo, _ = repo_pair
+        other = _make_repo(tmp_path, "proj-other")
+        assert _scope(f"echo x > {other}/lib/a.dart", main_repo, logger) is None
+        assert _scope(f"echo x > {other}/.claude/hooks/a.py", main_repo, logger) is None
+
+    def test_same_repo_predicate_contrast(self, repo_pair, tmp_path):
+        main_repo, sibling = repo_pair
+        other = _make_repo(tmp_path, "proj-other")
+        assert hook_module._same_repo(str(sibling), str(main_repo)) is True
+        assert hook_module._same_repo(str(other), str(main_repo)) is False
+
+    def test_routine_commands_allowed(self, repo_pair, logger):
+        main_repo, sibling = repo_pair
+        for cmd in [
+            f"git worktree add {main_repo}-T2 -b feat/T2",
+            f"git -C {sibling} status",
+            f"git worktree add {main_repo}/.claude/worktrees/merge-gate-1 HEAD",
+            f"uv --directory {sibling}/.claude/hooks run pytest tests/x.py -q",
+            "echo x > /dev/null",
+            f"echo x > {sibling}/../notes.txt",
+        ]:
+            assert _scope(cmd, main_repo, logger) is None, cmd
+
+    def test_unresolvable_gitlink_not_blocked(self, tmp_path, logger):
+        """gitlink 無法解析 common dir：不額外阻擋（取向 fail-open，見 Solution）。"""
+        main_repo = _make_repo(tmp_path, "proj")
+        broken = tmp_path / "proj-broken"
+        broken.mkdir()
+        (broken / ".git").write_text("gitdir: /nonexistent/zzz\n")
+        assert _scope(f"echo x > {broken}/lib/a.dart", main_repo, logger) is None
+
+
+class TestFailClosedDeclaration:
+    """異常語意：守衛宣告 fail_closed（分派層掃描此宣告決定逾時／例外時 exit 2）。"""
+
+    def test_hook_declares_fail_closed(self):
+        import re
+        text = (hook_dir / "bash-write-boundary-guard-hook.py").read_text(encoding="utf-8")
+        assert re.search(r"fail_closed\s*=\s*True", text)
+
+    def test_exception_in_scope_check_yields_block_exit(self, monkeypatch):
+        import io
+        import json as json_mod
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json_mod.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "echo hi"}, "cwd": str(_REPO_ROOT)})))
+
+        def boom(*a, **k):
+            raise RuntimeError("boom")
+
+        with patch.object(hook_module, "_find_scope_violation", boom), \
+             patch.object(hook_module, "get_current_branch", return_value="main"):
+            assert hook_module.run_hook_safely(main, "bash-write-boundary-guard-test", fail_closed=True) == 2
+
+
+class TestReviewFixes:
+    """合併前審查 #1 至 #8 的修正；每筆先紅後綠。"""
+
+    # #1 open() 只有寫入模式才算寫入
+    @pytest.mark.parametrize("cmd", [
+        "python3 -c \"import json;json.load(open('.claude/settings.json'))\"",
+        "python3 - <<'EOF'\nprint(open('lib/x.dart').read())\nEOF",
+        "python3 -c \"open('lib/x.dart', 'r')\"",
+        "python3 -c \"open('lib/x.dart', 'rb')\"",
+        "python3 -c \"open('lib/x.dart', mode='r')\"",
+    ])
+    def test_open_read_modes_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    @pytest.mark.parametrize("mode", ["w", "a", "x", "r+", "wb", "ab"])
+    def test_open_write_modes_denied(self, mode, checkout, logger):
+        cmd = f"python3 -c \"open('lib/x.dart', '{mode}')\""
+        assert _scope(cmd, checkout, logger) == "lib/x.dart"
+
+    def test_open_mode_keyword_write_denied(self, checkout, logger):
+        assert _scope("python3 -c \"open('lib/x.dart', mode='w')\"", checkout, logger) == "lib/x.dart"
+
+    # #2 1> 與 1>> 是寫入；2> 等 fd 檔案目標亦為寫入
+    @pytest.mark.parametrize("cmd", ["echo x 1> lib/a.dart", "echo x 1>> lib/a.dart"])
+    def test_fd1_redirect_denied(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) == "lib/a.dart"
+
+    @pytest.mark.parametrize("cmd,path", [
+        ("cmd &> lib/a.dart", "lib/a.dart"),
+        ("cmd 2> test/log", "test/log"),
+        ("cmd 2>> .claude/x", ".claude/x"),
+        ("cmd >& lib/a", "lib/a"),
+        ("cmd &>> lib/a.dart", "lib/a.dart"),
+        ("cmd 0> lib/a.dart", "lib/a.dart"),
+        ("cmd 0>> test/x", "test/x"),
+    ])
+    def test_fd_redirect_file_target_denied(self, cmd, path, checkout, logger):
+        assert _scope(cmd, checkout, logger) == path
+
+    def test_fd_redirect_worktree_path_denied(self, checkout, logger):
+        (checkout / ".claude" / "worktrees" / "w1").mkdir(parents=True)
+        assert _scope("cmd 2> .claude/worktrees/w1/lib/a.dart", checkout, logger) == "lib/a.dart"
+
+    @pytest.mark.parametrize("cmd", [
+        "echo x 2>&1", "echo x 1>&2", "echo x >&2", "echo x <&0",
+        "echo x 2> /dev/null", "echo x &>/dev/null", "echo x >& /dev/null",
+        "cmd >&-", "cmd < lib/a.dart", "cmd 0<&-", "uv run pytest 2>&1 | tail -20",
+    ])
+    def test_fd_dup_and_devnull_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    # #3 五種新增偵測
+    @pytest.mark.parametrize("cmd", [
+        "perl -pi -e 's/a/b/' lib/a.dart",
+        "perl -i.bak -pe 's/a/b/' lib/a.dart",
+        "perl -pi -e 's/a/b/' lib/a.dart test/b.dart",
+        "python3 -c \"open(f'lib/a.dart','w')\"",
+        "python3 -c \"from pathlib import Path; Path('lib/a.dart').write_text('x')\"",
+        "python3 -c \"import pathlib; pathlib.Path('lib/a.dart').write_bytes(b'x')\"",
+        "cp -t lib/ a.dart",
+        "mv -t lib a.dart",
+        "cp --target-directory=lib a.dart",
+        "exec 3> lib/a.dart",
+        "exec 4>> lib/a.dart",
+    ])
+    def test_newly_detected_forms_denied(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is not None
+
+    @pytest.mark.parametrize("cmd", [
+        "perl -e 'print 1' lib/a.dart",
+        "perl lib/script.pl",
+        "python3 -c \"from pathlib import Path; Path('lib/a.dart').read_text()\"",
+        "cp -t /tmp a.dart",
+        "exec 3>&1",
+        "exec 3> /tmp/x",
+    ])
+    def test_new_forms_nonwrite_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    # #4 #5 子殼內的 cd 位移在 ) 後還原
+    def test_subshell_cd_restored_after_close(self, checkout, logger):
+        (checkout / "lib").mkdir()
+        assert _scope("(cd /tmp); echo hi > lib/a.dart", checkout, logger) == "lib/a.dart"
+
+    def test_subshell_cd_into_scope_not_leaked(self, checkout, logger):
+        (checkout / "lib").mkdir()
+        assert _scope("(cd lib); echo > x", checkout, logger) is None
+
+    def test_cd_inside_subshell_still_applies_inside(self, checkout, logger):
+        assert _scope("(cd lib && echo > x)", checkout, logger) == "lib/x"
+
+    # #6 pushd 視同 cd；cd - 無法判定
+    def test_pushd_acts_like_cd(self, checkout, logger):
+        assert _scope("pushd lib && echo > a", checkout, logger) == "lib/a"
+
+    def test_cd_dash_is_undecidable(self, checkout, logger):
+        assert _scope("cd - && echo > lib/a", checkout, logger) is None
+
+    # #8 脫困指引
+    def test_deny_message_has_escape_hint(self, monkeypatch, capsys):
+        import io
+        import json as json_mod
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json_mod.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "echo x >> lib/a.dart"}, "cwd": str(_REPO_ROOT)})))
+        with patch.object(hook_module, "get_current_branch", return_value="main"):
+            assert main() == 2
+        assert ".claude/hooks/bash-write-boundary-guard-hook.py" in capsys.readouterr().out
+
+
+class TestDenyMessage:
+    def test_deny_reason_names_edit_write_and_git_mv(self, monkeypatch, capsys):
+        import io
+        import json as json_mod
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json_mod.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "echo x >> test/a_test.dart"},
+             "agent_id": "sub-1", "cwd": str(_REPO_ROOT)})))
+        with patch.object(hook_module, "get_current_branch", return_value="main"):
+            assert main() == 2
+        out = capsys.readouterr().out
+        assert "Edit" in out and "Write" in out and "git mv" in out
+        assert "test/a_test.dart" in out
+
+    def test_deny_reason_forbids_bash_retry_and_names_move_lines(self, monkeypatch, capsys):
+        """0.5.0-W1-365.6：被擋當下明示禁止換 Bash 寫法重試，並指向 move-lines 通道。"""
+        import io
+        import json as json_mod
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json_mod.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "echo x >> test/a_test.dart"},
+             "agent_id": "sub-1", "cwd": str(_REPO_ROOT)})))
+        with patch.object(hook_module, "get_current_branch", return_value="main"):
+            assert main() == 2
+        out = capsys.readouterr().out
+        assert "不得改用其他 Bash 寫法" in out and "python heredoc" in out
+        assert "NeedsContext" in out and "回報 PM" in out
+        assert "ticket track move-lines" in out and "where.files" in out
+
+
+class TestExemptionNarrowing:
+    """0.5.0-W1-369：收窄後的豁免。E2 應擋輸入、E1 例行放行見 TestScopeViolationAllowed。"""
+
+    @pytest.mark.parametrize("target", [
+        ".claude/settings.local.json",
+        ".claude/dispatch-active.json", ".claude/dispatch-active.lock",
+        ".claude/hook-state/s.json", ".claude/state/s.json", ".claude/handoff/h.json",
+        ".claude/hook-logs/foo/a.log", ".claude/logs/worktree-merge.log",
+        ".claude/.sync-state.json", ".claude/.version-release.yaml",
+    ])
+    def test_state_files_with_readers_denied(self, target, checkout, logger):
+        assert _scope(f"echo x > {target}", checkout, logger) == target
+
+    @pytest.mark.parametrize("target", [
+        ".claude/hooks/__pycache__/a.pyc", ".claude/hooks/.venv/pyvenv.cfg",
+        ".claude/lib/__pycache__/a.pyc", ".claude/skills/ticket/.venv/x",
+        ".claude/hooks/tests/__pycache__/a.pyc",
+    ])
+    def test_build_artifacts_under_claude_denied(self, target, checkout, logger):
+        assert _scope(f"echo x > {target}", checkout, logger) == target
+
+    def test_cp_pyc_into_hooks_denied(self, checkout, logger):
+        t = ".claude/hooks/__pycache__/a.pyc"
+        assert _scope(f"cp a.pyc {t}", checkout, logger) == t
+
+    @pytest.mark.parametrize("cmd", [
+        "echo git; mv x .claude/y",
+        "git status && mv x .claude/y",
+        "git log | mv x .claude/y",
+        "echo git mv; cp x .claude/y",
+    ])
+    def test_non_command_word_git_does_not_exempt_mv(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) == ".claude/y"
+
+    @pytest.mark.parametrize("cmd", [
+        "git mv x .claude/y", "git -C . mv x .claude/y",
+        "FOO=1 git --no-pager mv x .claude/y", "git -c a=b mv x .claude/y",
+    ])
+    def test_git_mv_command_word_still_exempt(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+
+class TestDecisionLog:
+    """0.5.0-W1-366：每個放行／阻擋分支記一行 decision=... source=... reason=... targets=... cmd=..."""
+
+    def _run(self, monkeypatch, payload, is_subagent=False, branch="main"):
+        import io
+        import json as json_mod
+
+        records = []
+
+        class _H(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("test-decision-log")
+        lg.handlers = [_H()]
+        lg.setLevel(logging.DEBUG)
+        lg.propagate = False
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json_mod.dumps(payload)))
+        with patch.object(hook_module, "setup_hook_logging", return_value=lg), \
+             patch.object(hook_module, "is_subagent_environment", return_value=is_subagent), \
+             patch.object(hook_module, "get_current_branch", return_value=branch), \
+             patch.object(hook_module, "is_allowed_branch", return_value=(branch != "main")):
+            code = main()
+        lines = [m for m in records if m.startswith("decision=")]
+        assert len(lines) == 1, records
+        return code, lines[0]
+
+    def _bash(self, cmd, **extra):
+        d = {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": str(_REPO_ROOT)}
+        d.update(extra)
+        return d
+
+    def test_allow_no_boundary_violation(self, monkeypatch):
+        code, line = self._run(monkeypatch, self._bash("echo hi > docs/x.md"))
+        assert code == 0
+        assert line.startswith("decision=allow source=main reason=no_boundary_violation ")
+        assert "targets=['docs/x.md']" in line and "cmd=echo hi > docs/x.md" in line
+
+    def test_allow_empty_targets(self, monkeypatch):
+        _, line = self._run(monkeypatch, self._bash("ls -la"))
+        assert "reason=no_boundary_violation" in line and "targets=[]" in line
+
+    def test_allow_dev_branch_skip(self, monkeypatch):
+        _, line = self._run(monkeypatch, self._bash("echo x > docs/y.dart"), branch="feat/a")
+        assert "decision=allow source=main reason=dev_branch_skip" in line
+        assert "docs/y.dart" in line
+
+    def test_allow_subagent_source(self, monkeypatch):
+        _, line = self._run(
+            monkeypatch, self._bash("echo x > docs/n.md", agent_id="sub-9"), is_subagent=True)
+        assert "decision=allow source=agent:sub-9 reason=subagent_no_scope_hit" in line
+
+    def test_allow_non_bash(self, monkeypatch):
+        _, line = self._run(monkeypatch, {"tool_name": "Read", "tool_input": {}})
+        assert "decision=allow" in line and "reason=non_bash_tool" in line
+
+    def test_allow_empty_command(self, monkeypatch):
+        _, line = self._run(monkeypatch, self._bash(""))
+        assert "decision=allow" in line and "reason=empty_command" in line
+
+    def test_allow_empty_input(self, monkeypatch):
+        code, line = self._run(monkeypatch, {})
+        assert code == 0 and "decision=allow" in line and "reason=empty_input" in line
+
+    def test_deny_scope_violation_has_source(self, monkeypatch):
+        code, line = self._run(
+            monkeypatch, self._bash("echo x >> test/a_test.dart", agent_id="sub-1"), is_subagent=True)
+        assert code == 2
+        assert "decision=deny source=agent:sub-1 reason=scope_violation targets=['test/a_test.dart']" in line
+
+    def test_deny_boundary_violation(self, monkeypatch):
+        # 第一層（範圍阻擋）關閉，單獨觸發第二層主線程模型
+        with patch.object(hook_module, "_find_scope_violation", return_value=None):
+            code, line = self._run(monkeypatch, self._bash("echo x > lib/q.dart"))
+        assert code == 2
+        assert "decision=deny source=main reason=boundary_violation targets=['lib/q.dart']" in line
+
+    def test_long_heredoc_not_fully_logged(self, monkeypatch):
+        body = "SECRETBODY" * 500
+        _, line = self._run(monkeypatch, self._bash(f"cat > docs/h.md <<'EOF'\n{body}\nEOF"))
+        assert "SECRETBODY" in line
+        assert len(line) < 600 and line.count("SECRETBODY") <= 20
+        assert "\n" not in line
+
+
+class TestDenyMessageNoBangClaim:
+    def test_deny_reason_states_bang_not_restricted(self, monkeypatch, capsys):
+        import io
+        import json as json_mod
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json_mod.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "echo x >> test/a_test.dart"},
+             "cwd": str(_REPO_ROOT)})))
+        with patch.object(hook_module, "get_current_branch", return_value="main"):
+            assert main() == 2
+        out = capsys.readouterr().out
+        assert "同樣會被擋" not in out
+        assert "不經過本 hook" in out
+
+
+# ============================================================================
+# 0.5.0-W1-365.1：python 內嵌腳本以 ast 追蹤「變數持有字面路徑後寫入」
+# ============================================================================
+
+_AST_WRITE_BODIES = {
+    "var_open_w": "p = '.claude/skills/x.md'\nopen(p, 'w').write('x')",
+    "path_var_write_text": "from pathlib import Path\np = Path('lib/x.dart')\np.write_text('x')",
+    "concat_open": "open('lib/' + 'x.dart', 'w')",
+    "path_div_write_bytes": "from pathlib import Path\nq = Path('lib') / 'x.dart'\nq.write_bytes(b'x')",
+    "os_path_join": "import os\np = os.path.join('lib', 'x.dart')\nopen(p, 'a')",
+    "shutil_copy_dest": "import shutil\nd = 'lib/x.dart'\nshutil.copy('/tmp/a', d)",
+    "shutil_move_literal": "import shutil\nshutil.move('/tmp/a', 'lib/x.dart')",
+    "os_replace_dest": "import os\nd = 'lib/x.dart'\nos.replace('/tmp/a', d)",
+    "os_rename_dest": "import os\nos.rename('/tmp/a', 'lib/x.dart')",
+    "func_local": "def f():\n    p = 'lib/x.dart'\n    with open(p, mode='w') as h:\n        h.write('x')\nf()",
+    "path_var_open_w": "from pathlib import Path\np = Path('lib/x.dart')\np.open('w')",
+}
+_AST_READ_BODIES = {
+    "open_read": "p = 'lib/x.dart'\nopen(p).read()",
+    "open_r": "p = 'lib/x.dart'\nopen(p, 'r').read()",
+    "read_text": "from pathlib import Path\np = Path('lib/x.dart')\np.read_text()",
+    "read_bytes": "from pathlib import Path\nPath('lib') / 'x.dart'\np = Path('lib/x.dart')\np.read_bytes()",
+    "copy_source_only": "import shutil\ns = 'lib/x.dart'\nshutil.copy(s, '/tmp/out')",
+}
+
+
+def _heredoc(body):
+    return "python3 - <<'EOF'\n" + body + "\nEOF"
+
+
+class TestPythonAstVariablePaths:
+    @pytest.mark.parametrize("name", sorted(_AST_WRITE_BODIES))
+    def test_heredoc_write_extracted(self, name):
+        paths = _extract_candidate_paths(_heredoc(_AST_WRITE_BODIES[name]))
+        assert any(p.endswith("x.dart") or p.endswith("x.md") for p in paths)
+
+    def test_python_c_variable_write_extracted(self):
+        cmd = "python3 -c \"p = 'lib/x.dart'; open(p, 'w').write('x')\""
+        assert "lib/x.dart" in _extract_candidate_paths(cmd)
+
+    @pytest.mark.parametrize("name", sorted(_AST_READ_BODIES))
+    def test_heredoc_read_only_not_extracted(self, name):
+        paths = _extract_candidate_paths(_heredoc(_AST_READ_BODIES[name]))
+        assert not any(p.endswith("x.dart") for p in paths)
+
+    def test_syntax_error_falls_back_to_regex(self):
+        body = "open('lib/x.dart', 'w')\nthis is $(not python"
+        assert "lib/x.dart" in _extract_candidate_paths(_heredoc(body))
+
+    def test_syntax_error_does_not_extract_variable_form(self):
+        body = "p = 'lib/x.dart'\nopen(p, 'w')\nthis is $(not python"
+        assert "lib/x.dart" not in _extract_candidate_paths(_heredoc(body))
+
+
+# ============================================================================
+# 0.5.0-W1-365.2：shell 層解析（-c／eval、同命令變數、~／$HOME／$(pwd)、cwd 不在 checkout）
+# ============================================================================
+
+
+class TestShellLayerDenied:
+    """七種形態寫入受限路徑：修正前放行、修正後 deny。"""
+
+    @pytest.mark.parametrize("shell", ["bash", "sh", "zsh"])
+    def test_shell_dash_c_literal(self, shell, checkout, logger):
+        assert _scope("%s -c 'echo x > lib/a'" % shell, checkout, logger) == "lib/a"
+
+    def test_bash_combined_flags_dash_c(self, checkout, logger):
+        assert _scope("bash -lc 'echo x > lib/a'", checkout, logger) == "lib/a"
+
+    def test_eval_literal(self, checkout, logger):
+        assert _scope("eval 'echo x > lib/a'", checkout, logger) == "lib/a"
+
+    def test_dash_c_respects_outer_cd(self, checkout, logger):
+        assert _scope("cd lib && bash -c 'echo x > a'", checkout, logger) == "lib/a"
+
+    @pytest.mark.parametrize("use", ["$F", "${F}"])
+    def test_var_literal_assignment(self, use, checkout, logger):
+        assert _scope("F=lib/a; echo x > %s" % use, checkout, logger) == "lib/a"
+
+    def test_export_assignment(self, checkout, logger):
+        assert _scope("export F=lib/a && echo x > $F", checkout, logger) == "lib/a"
+
+    def test_var_chain_of_literals(self, checkout, logger):
+        assert _scope("F=lib/a; G=$F; echo x > $G", checkout, logger) == "lib/a"
+
+    def test_var_in_tee_argument(self, checkout, logger):
+        assert _scope("F=lib/a; echo x | tee $F", checkout, logger) == "lib/a"
+
+    @pytest.mark.parametrize("prefix", ["~", "$HOME", "${HOME}"])
+    def test_home_prefix(self, prefix, checkout, logger, monkeypatch):
+        monkeypatch.setenv("HOME", str(checkout))
+        assert _scope("echo x > %s/lib/a" % prefix, checkout, logger) == "lib/a"
+
+    def test_var_holding_home_prefix(self, checkout, logger, monkeypatch):
+        monkeypatch.setenv("HOME", str(checkout))
+        assert _scope("F=~/lib/a; echo x > $F", checkout, logger) == "lib/a"
+
+    @pytest.mark.parametrize("pwd", ["$(pwd)", "`pwd`"])
+    def test_pwd_prefix(self, pwd, checkout, logger):
+        assert _scope("echo x > %s/lib/a" % pwd, checkout, logger) == "lib/a"
+
+    def test_cwd_outside_checkout_uses_project_dir(self, tmp_path, logger, monkeypatch):
+        proj = tmp_path / "proj"
+        (proj / ".git").mkdir(parents=True)
+        out = tmp_path / "out"
+        out.mkdir()
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(proj))
+        cmd = "echo x > %s/lib/a" % proj.resolve()
+        assert _scope(cmd, out, logger) == "lib/a"
+
+
+class TestShellLayerAllowed:
+    """E1：只讀、範圍外、無法判定、無 CLAUDE_PROJECT_DIR 時維持放行。"""
+
+    @pytest.mark.parametrize("cmd", [
+        "bash -c 'cat lib/a'",
+        "bash -c 'echo x > docs/a'",
+        "eval 'cat lib/a'",
+        "F=/tmp/out.txt; echo x > $F",
+        "F=docs/a; echo x > $F",
+        "F=$(date); echo x > $F",
+        "F=$OTHER/lib/a; echo x > $F",
+        "echo x > $UNSET/lib/a",
+        "echo x > ~other/lib/a",
+        "F=$(pwd)/lib/a; echo x > $F",
+        "bash -c 'echo x > $UNSET/lib/a'",
+    ])
+    def test_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    def test_cwd_outside_without_project_dir_unchanged(self, tmp_path, logger, monkeypatch):
+        proj = tmp_path / "proj"
+        (proj / ".git").mkdir(parents=True)
+        out = tmp_path / "out"
+        out.mkdir()
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        assert _scope("echo x > %s/lib/a" % proj.resolve(), out, logger) is None
+
+    def test_home_outside_checkout_allowed(self, checkout, logger, monkeypatch, tmp_path):
+        other = tmp_path / "elsewhere"
+        other.mkdir()
+        monkeypatch.setenv("HOME", str(other))
+        assert _scope("echo x > ~/lib/a", checkout, logger) is None
+
+
+class TestSkippedReasons:
+    """逐候選跳過原因併入判定日誌，不改變放行／阻擋結果。"""
+
+    def test_skipped_collects_reasons(self, checkout, logger):
+        skipped = []
+        cmd = "echo a > docs/x.md; echo b > $UNSET/y"
+        assert hook_module._find_scope_violation(cmd, str(checkout), logger, skipped) is None
+        assert skipped == ["docs/x.md:out_of_scope", "$UNSET/y:unresolvable"]
+
+    def test_deny_does_not_list_hit(self, checkout, logger):
+        skipped = []
+        cmd = "echo a > docs/x.md; echo b > lib/y"
+        assert hook_module._find_scope_violation(cmd, str(checkout), logger, skipped) == "lib/y"
+        assert skipped == ["docs/x.md:out_of_scope"]
+
+    def test_log_line_has_skipped_field(self, monkeypatch):
+        code, line = TestDecisionLog._run(
+            self, monkeypatch, TestDecisionLog._bash(self, "echo hi > docs/x.md; echo b > $UNSET/y"))
+        assert code == 0
+        assert "skipped=['docs/x.md:out_of_scope', '$UNSET/y:unresolvable']" in line
+
+    def test_log_line_empty_skipped_on_early_exit(self, monkeypatch):
+        code, line = TestDecisionLog._run(
+            self, monkeypatch, {"tool_name": "Read", "tool_input": {}})
+        assert code == 0 and "skipped=[]" in line
+
+
+# ============================================================================
+# 0.5.0-W1-365.2 第二輪：非必然執行的賦值、CLAUDE_PROJECT_DIR／HOME 命令內賦值、L7 實例
+# ============================================================================
+
+
+class TestAssignmentCertainty:
+    """子殼、管線、&&／|| 之後的賦值不得成為放行依據；CLAUDE_PROJECT_DIR／HOME 賦值不得覆寫。"""
+
+    @pytest.mark.parametrize("cmd", [
+        "(CLAUDE_PROJECT_DIR=/tmp); echo x > $CLAUDE_PROJECT_DIR/lib/a",
+        "true && CLAUDE_PROJECT_DIR=/tmp; echo x > $CLAUDE_PROJECT_DIR/lib/a",
+        "false || CLAUDE_PROJECT_DIR=/tmp; echo x > ${CLAUDE_PROJECT_DIR}/lib/a",
+        "CLAUDE_PROJECT_DIR=/tmp; echo x > $CLAUDE_PROJECT_DIR/lib/a",
+        "echo y | CLAUDE_PROJECT_DIR=/tmp; echo x > $CLAUDE_PROJECT_DIR/lib/a",
+    ])
+    def test_project_dir_assignment_never_allows(self, cmd, checkout, logger, monkeypatch):
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(checkout))
+        assert _scope(cmd, checkout, logger) == "lib/a"
+
+    def test_home_assignment_expands_tilde(self, checkout, logger):
+        assert _scope("HOME=%s; echo x > ~/lib/a" % checkout, checkout, logger) == "lib/a"
+
+    def test_home_assignment_expands_dollar_home(self, checkout, logger):
+        assert _scope("HOME=%s; echo x > $HOME/lib/a" % checkout, checkout, logger) == "lib/a"
+
+    def test_real_home_form_still_checked(self, checkout, logger, monkeypatch):
+        monkeypatch.setenv("HOME", str(checkout))
+        assert _scope("HOME=/tmp; echo x > ~/lib/a", checkout, logger) == "lib/a"
+
+    def test_unresolvable_home_assignment_still_checks_real_home(self, checkout, logger, monkeypatch):
+        monkeypatch.setenv("HOME", str(checkout))
+        assert _scope("HOME=$(date); echo x > ~/lib/a", checkout, logger) == "lib/a"
+
+    @pytest.mark.parametrize("cmd", [
+        "(F=lib/a); echo x > $F",
+        "true && F=lib/a; echo x > $F",
+        "echo y | F=lib/a; echo x > $F",
+    ])
+    def test_uncertain_plain_assignment_is_unresolvable(self, cmd, checkout, logger):
+        # 365.4：不確定賦值的新值併入可能值集合（原未知併入 unresolvable），新值落在範圍內即擋
+        skipped = []
+        assert hook_module._find_scope_violation(cmd, str(checkout), logger, skipped) == "lib/a"
+
+    @pytest.mark.parametrize("cmd", [
+        "F=/tmp/x; echo > $F",
+        "HOME=/tmp; echo > ~/x",
+        "true; F=lib/a; echo x > $F",
+    ])
+    def test_e1_unchanged(self, cmd, checkout, logger):
+        expected = "lib/a" if "lib/a" in cmd else None
+        assert _scope(cmd, checkout, logger) == expected
+
+
+class TestL7SiblingWorktreeVariable:
+    """變數持有同層 worktree 路徑，代理人身份下 sed -i 受限路徑須 deny。"""
+
+    def test_agent_var_sed_inplace_sibling_denied(self, repo_pair, monkeypatch):
+        main_repo, sibling = repo_pair
+        cmd = "T=%s/.claude/skills/worktree/tests; sed -i 's/a/b/' $T/x.py" % sibling
+        payload = {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": str(main_repo),
+                   "agent_id": "sub-371"}
+        code, line = TestDecisionLog._run(None, monkeypatch, payload, is_subagent=True, branch="feat/x")
+        assert code == 2
+        assert "decision=deny source=agent:sub-371 reason=scope_violation" in line
+
+
+class TestExtraCommandWriteTargets:
+    """365.3：十種命令的寫入目標抽取（E2：寫受限路徑 deny；E1：只讀與範圍外放行）。"""
+
+    @pytest.mark.parametrize("cmd,expected", [
+        ("dd if=/tmp/a of=lib/x bs=1", "lib/x"),
+        ("install -m 644 /tmp/a lib/x", "lib/x"),
+        ("install -t lib /tmp/a", "lib"),
+        ("install -d lib/newdir", "lib/newdir"),
+        ("truncate -s 0 lib/x", "lib/x"),
+        ("truncate --size=0 lib/x", "lib/x"),
+        ("ln -s /tmp/a lib/x", "lib/x"),
+        ("ln -sf /tmp/a .claude/hooks/x", ".claude/hooks/x"),
+        ("rsync -a /tmp/src/ lib/", "lib"),
+        ("rsync -a --exclude '*.o' /tmp/src/ lib/", "lib"),
+        ("tar -xzf /tmp/a.tgz -C lib", "lib"),
+        ("tar xzf /tmp/a.tgz --directory=lib", "lib"),
+        ("tar --extract -f /tmp/a.tar --directory lib", "lib"),
+        ("patch lib/a.py /tmp/d.patch", "lib/a.py"),
+        ("patch -p1 -d lib < /tmp/d.patch", "lib"),
+        ("patch -o lib/out.py /tmp/a.py /tmp/d.patch", "lib/out.py"),
+        ("awk -i inplace '{print}' lib/a", "lib/a"),
+        ("gawk -i inplace -v x=1 '{print}' lib/a", "lib/a"),
+        ("touch lib/new.dart", "lib/new.dart"),
+        ("touch -t 202001010000 lib/new.dart", "lib/new.dart"),
+        ("ruby -e 'File.write(\"lib/a\", \"x\")'", "lib/a"),
+        ("perl -e 'File.write(\"lib/a\", 1)'", "lib/a"),
+        ("ruby -e 'File.open(\"lib/a\", \"w\") { }'", "lib/a"),
+    ])
+    def test_denied(self, cmd, expected, checkout, logger):
+        assert _scope(cmd, checkout, logger) == expected
+
+    @pytest.mark.parametrize("cmd", [
+        "tar -czf /tmp/a.tgz lib",
+        "tar -tf lib/a.tar",
+        "tar -xzf lib/a.tgz -C /tmp/out",
+        "dd if=lib/a bs=1 count=1",
+        "dd if=lib/a of=/tmp/out",
+        "rsync -a lib/ /tmp/out/",
+        "rsync -a lib/ host:/srv/lib/",
+        "ln -s lib/a /tmp/link",
+        "patch --dry-run lib/a.py /tmp/d.patch",
+        "patch -d /tmp/x < /tmp/d.patch",
+        "touch .claude/.zhtw-mcp-skip",
+        "touch /tmp/a",
+        "truncate -s 0 /tmp/a",
+        "awk '{print}' lib/a",
+        "awk -i inplace '{print}' /tmp/a",
+        "install -m 644 lib/a /tmp/b",
+        "ruby -e 'puts File.read(\"lib/a\")'",
+        "ruby -e 'File.write(\"/tmp/a\", 1)'",
+        "ticket track move-lines 0.5.0-W1-362 --src .claude/skills/ticket/ticket_system/tests/test_track_move_lines.py --lines 1-1 --dst .claude/skills/ticket/references/track-command-update.md --at 1 2>/tmp/ml.err",
+    ])
+    def test_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+
+# ============================================================================
+# 0.5.0-W1-365.5：python heredoc／-c 以 sys.argv[n] 作為寫入目標
+# ============================================================================
+
+
+class TestPythonArgvTargets:
+    """sys.argv[n] 對應命令列引數，展開後送邊界檢查。"""
+
+    @pytest.mark.parametrize("cmd", [
+        # 386 實例：同命令內字面賦值 W，python3 - "$W" heredoc，p=sys.argv[1] 後 open
+        "W=lib/sub\npython3 - \"$W\" <<'EOF'\nimport sys\np = sys.argv[1]\nopen(p, 'w').write('x')\nEOF",
+        # 直接作寫入目標
+        "python3 - lib/a <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF",
+        # 第二個引數
+        "python3 - /tmp/x lib/b <<'EOF'\nimport sys\nopen(sys.argv[2], 'a').write('x')\nEOF",
+        # 直譯器選項不算引數
+        "python3 -u - lib/a <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF",
+        # -c 變形：[1] 為 code 之後第一個引數
+        "python3 -c \"import sys; open(sys.argv[1], 'w').write('x')\" lib/a",
+        # os.path.join 與 Path 變形
+        "python3 - lib <<'EOF'\nimport sys, os\nopen(os.path.join(sys.argv[1], 'a.dart'), 'w').write('x')\nEOF",
+        "python3 - lib <<'EOF'\nimport sys\nfrom pathlib import Path\n(Path(sys.argv[1]) / 'a').write_text('x')\nEOF",
+    ])
+    def test_denied(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is not None
+
+    @pytest.mark.parametrize("cmd", [
+        "python3 - /tmp/a <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF",
+        "python3 - lib/a <<'EOF'\nimport sys\nprint(open(sys.argv[1]).read())\nEOF",
+        # argv[0] 為 '-'，不是第一個引數
+        "python3 - lib/a <<'EOF'\nimport sys\nopen(sys.argv[0], 'w').write('x')\nEOF",
+        # 索引超出引數個數
+        "python3 - lib/a <<'EOF'\nimport sys\nopen(sys.argv[2], 'w').write('x')\nEOF",
+        "python3 -c \"import sys; open(sys.argv[1], 'w').write('x')\" /tmp/a",
+    ])
+    def test_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    @pytest.mark.parametrize("cmd,raw", [
+        # $W 未在同命令內賦值（來自前一個 Bash 呼叫）：本票固有邊界
+        ("python3 - \"$W\" <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF", "$W"),
+        ("python3 - \"$(date)x\" <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF", "$(date)x"),
+    ])
+    def test_unresolvable_argument_allowed_and_logged(self, cmd, raw, checkout, logger):
+        skipped = []
+        assert hook_module._find_scope_violation(cmd, str(checkout), logger, skipped) is None
+        assert "%s:unresolvable" % raw in skipped
+
+
+# ============================================================================
+# 0.5.0-W1-365.4：變數保留可能值集合（不確定賦值併入、延遲綁定、複合命令賦值）
+# ============================================================================
+
+
+class TestPossibleValueSets:
+    """E2：不確定賦值、延遲綁定、複合命令內賦值不得讓受限路徑放行。"""
+
+    @pytest.mark.parametrize("cmd", [
+        "F=lib/a; false && F=/tmp/x; echo x > $F",
+        "F=lib/a; true || F=/tmp/x; echo x > $F",
+        "F=lib/a; echo y | F=/tmp/x; echo x > $F",
+        "F=lib/a; (F=/tmp/x); echo x > $F",
+        "F=lib/a; F=/tmp/x & echo x > $F",
+    ])
+    def test_uncertain_assignment_keeps_prior_value(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) == "lib/a"
+
+    def test_uncertain_assignment_new_value_also_checked(self, checkout, logger):
+        assert _scope("F=/tmp/x; false && F=lib/a; echo x > $F", checkout, logger) == "lib/a"
+
+    def test_tilde_bound_at_assignment_time(self, checkout, logger):
+        cmd = "HOME=%s; D=~/lib; HOME=/tmp; echo x > $D/a" % checkout
+        assert _scope(cmd, checkout, logger) == "lib/a"
+
+    def test_dollar_home_bound_at_assignment_time(self, checkout, logger):
+        cmd = "HOME=%s; D=$HOME/lib; HOME=/tmp; echo x > $D/a" % checkout
+        assert _scope(cmd, checkout, logger) == "lib/a"
+
+    @pytest.mark.parametrize("cmd", [
+        "F=lib/a\nif false; then\nF=/tmp/x\nfi\necho x > $F",
+        "F=lib/a\nwhile false; do\nF=/tmp/x\ndone\necho x > $F",
+        "F=lib/a\ncase y in\nn) F=/tmp/x ;;\nesac\necho x > $F",
+        "F=lib/a\nf() {\nF=/tmp/x\n}\necho x > $F",
+        "F=lib/a\nfor i in 1; do\nF=/tmp/x\ndone\necho x > $F",
+        "F=lib/a\nif false; then F=/tmp/x; fi\necho x > $F",
+    ])
+    def test_compound_command_assignment_is_uncertain(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) == "lib/a"
+
+    def test_project_dir_newline_if_still_denied(self, checkout, logger, monkeypatch):
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(checkout))
+        cmd = "if false; then\nCLAUDE_PROJECT_DIR=/tmp\nfi\necho x > $CLAUDE_PROJECT_DIR/lib/a"
+        assert _scope(cmd, checkout, logger) == "lib/a"
+
+    def test_e1_certain_reassignment_outside_scope_allowed(self, checkout, logger):
+        assert _scope("F=lib/a; F=/tmp/x; echo x > $F", checkout, logger) is None
+
+    def test_e1_sequential_statements_after_compound_are_certain(self, checkout, logger):
+        cmd = "if true; then\ntrue\nfi\nF=lib/a\nF=/tmp/x\necho x > $F"
+        assert _scope(cmd, checkout, logger) is None
+
+    def test_combination_limit_blocks_conservatively(self, checkout, logger):
+        cmd = ("A=/tmp/a; true && A=/tmp/b; true && A=/tmp/c; "
+               "B=/tmp/a; true && B=/tmp/b; true && B=/tmp/c; "
+               "C=/tmp/a; true && C=/tmp/b; true && C=/tmp/c; "
+               "echo x > $A/$B/$C")
+        assert _scope(cmd, checkout, logger) == "lib/_bash_guard_combination_overflow"
+
+    def test_within_limit_all_outside_allowed(self, checkout, logger):
+        cmd = "A=/tmp/a; true && A=/tmp/b; B=/tmp/a; true && B=/tmp/b; echo x > $A/$B"
+        assert _scope(cmd, checkout, logger) is None
+
+    def test_python_argv_checked_for_every_possible_value(self, checkout, logger):
+        cmd = ("F=lib/a; false && F=/tmp/x; "
+               "python3 - $F <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF")
+        assert _scope(cmd, checkout, logger) == "lib/a"
+
+
+# ============================================================================
+# 0.5.0-W1-365.7：argv 的三種常見慣用形態（from sys import argv、負索引、別名）
+# ============================================================================
+
+
+class TestPythonArgvIdioms:
+    """from sys import argv（含 as）、sys.argv[-k]、a = sys.argv 後 a[n] 對應出的引數沿用邊界檢查。"""
+
+    @pytest.mark.parametrize("cmd", [
+        "W=lib/sub\npython3 - \"$W\" <<'EOF'\nfrom sys import argv\nopen(argv[1], 'w').write('x')\nEOF",
+        "python3 - lib/a <<'EOF'\nfrom sys import argv as av\nopen(av[1], 'w').write('x')\nEOF",
+        "python3 - lib/a <<'EOF'\nimport sys\nopen(sys.argv[-1], 'w').write('x')\nEOF",
+        "python3 - lib/a /tmp/x <<'EOF'\nimport sys\nopen(sys.argv[-2], 'w').write('x')\nEOF",
+        "python3 - lib/a <<'EOF'\nimport sys\na = sys.argv\nopen(a[1], 'w').write('x')\nEOF",
+        "python3 - lib/a <<'EOF'\nfrom sys import argv\na = argv\np = a[-1]\nopen(p, 'w').write('x')\nEOF",
+    ])
+    def test_denied(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is not None
+
+    @pytest.mark.parametrize("cmd", [
+        "python3 - /tmp/a <<'EOF'\nfrom sys import argv\nopen(argv[1], 'w').write('x')\nEOF",
+        "python3 - lib/a <<'EOF'\nfrom sys import argv\nprint(open(argv[1]).read())\nEOF",
+        "python3 - lib/a <<'EOF'\nfrom sys import argv\nopen(argv[2], 'w').write('x')\nEOF",
+        # 負索引超出範圍
+        "python3 - lib/a <<'EOF'\nimport sys\nopen(sys.argv[-3], 'w').write('x')\nEOF",
+        # -k 指向範圍外的引數
+        "python3 - lib/a /tmp/x <<'EOF'\nimport sys\nopen(sys.argv[-1], 'w').write('x')\nEOF",
+        "python3 - /tmp/a <<'EOF'\nimport sys\na = sys.argv\nopen(a[1], 'w').write('x')\nEOF",
+        "python3 - lib/a <<'EOF'\nimport sys\na = sys.argv\nprint(open(a[1]).read())\nEOF",
+    ])
+    def test_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    @pytest.mark.parametrize("idx,args", [("True", "\"$W\" x"), ("-True", "x \"$W\"")])
+    def test_bool_index_follows_python_int_semantics(self, idx, args, checkout, logger):
+        """True 視為 1、-True 視為 -1（倒數第 1 個）；該位置為受限目錄時 deny。"""
+        cmd = "W=lib/sub\npython3 - %s <<'EOF'\nimport sys\nopen(sys.argv[%s], 'w').write('x')\nEOF" % (args, idx)
+        assert _scope(cmd, checkout, logger) is not None
+
+    def test_bool_index_outside_scope_allowed(self, checkout, logger):
+        cmd = "python3 - x /tmp/a <<'EOF'\nimport sys\nopen(sys.argv[True], 'w').write('x')\nEOF"
+        assert _scope(cmd, checkout, logger) is None

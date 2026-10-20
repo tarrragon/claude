@@ -337,8 +337,10 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"lib/l10n/app_en.arb"}}' | \
 
 ### 測試 3: ARB 檔案（未同步）
 
+執行限制：下方的 `touch lib/l10n/...` 會被 `bash-write-boundary-guard` 擋下（Claude 的 Bash 不得寫入 `lib/`，含只改 mtime 的 touch）。此步驟由用戶在 session 中以 `!` 前綴執行（`!` 命令不經過該守衛），或在終端機直接執行；Claude 不以 Bash 代為執行。
+
 ```bash
-# 修改 ARB 檔案的 mtime (使其新於生成檔案)
+# 修改 ARB 檔案的 mtime (使其新於生成檔案)；由用戶以 ! 前綴或在終端機執行
 touch lib/l10n/app_zh_TW.arb
 
 # 執行 Hook

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.16.0（2026-10-19）— tripwire hook 依職責拆為 `hooks/tripwire/` 套件（config、state、signals、render），hook 檔只留流程組裝；狀態檔依 payload 的 session_id 分檔，並清理過期的他 session 狀態檔；警示改走 `additionalContext`；S1 訊號改認 Agent，以 PostToolUseFailure 為失敗來源；票號改從 Agent payload 推導，推不出時不顯示空的 Ticket 欄位；框架標記改為在開頭數行內比對行首，非使用者回合不計入限制性關鍵詞；清掉套件內的專案層路徑與票號，符合 portable 宣告。
+
 **Version**: 2.15.1 — 〈與其他決策類 Skill 的關係〉補 system-design 一列：它決定範圍與時機，WRAP 處理個別決定；延後項目的觸發指標是絆腳索的輸入
 
 **Version**: 2.15.0 — 錨點確認補第三錨點「評估單位」（實例還是模式；嚴重性在單位固定並量過普及度之後才給），推導在 detailed-techniques.md 新子節，principle 卡 evaluation-unit-before-severity（case：同一個發現當句子評是校對、當形態評是 33 篇的規範問題）；pm-checklist 1.3.0 同步；iterative-research 首次標號 1.0.0；hooks 硬路徑加 portability-allow 註記

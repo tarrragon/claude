@@ -55,6 +55,18 @@ def _load_hook_module():
     return mod
 
 
+def _module_of(hook_mod, obj):
+    """取得定義該函式/類別的模組物件（鎖行為不鎖位置：時鐘與專案根目錄的
+    注入點屬被測行為，其所在模組隨檔案拆分而變，故由符號反查而非寫死模組）。"""
+    return sys.modules.get(obj.__module__, hook_mod)  # hook 本體未註冊於 sys.modules
+
+
+def _impl_sources():
+    """hook 本體加上同目錄 tripwire/ 套件各模組（拆分後實作分散於多檔）。"""
+    files = [HOOK_PATH] + sorted((HOOK_PATH.parent / "tripwire").glob("*.py"))
+    return [f.read_text(encoding="utf-8") for f in files]
+
+
 @pytest.fixture(scope="module")
 def hook_mod():
     return _load_hook_module()
@@ -179,7 +191,7 @@ def frozen_now(hook_mod, monkeypatch):
             self.t = dt
 
     clock = Clock()
-    monkeypatch.setattr(hook_mod, "_now", lambda: clock.t)
+    monkeypatch.setattr(_module_of(hook_mod, hook_mod.save_state_atomic), "_now", lambda: clock.t)
     return clock
 
 
@@ -737,7 +749,7 @@ class TestE_S3:
                 body += "## WRAP 三問\n\nW: xxx\n"
             p.write_text(body, encoding="utf-8")
 
-        monkeypatch.setattr(hook_mod, "get_project_root", lambda: root)
+        monkeypatch.setattr(_module_of(hook_mod, hook_mod.AnaClaimStrategy), "get_project_root", lambda: root)
         return _write_ticket, root
 
     def test_e1_bash_claim_ana_triggers(self, hook_mod, strategy, sd_s3, fake_project):
@@ -854,7 +866,7 @@ class TestF_Resets:
         # tmp_path 沒有 dispatch-active.json 也沒有 git repo
         def fake_run(*args, **kwargs):
             raise subprocess.SubprocessError("no git")
-        monkeypatch.setattr(hook_mod.subprocess, "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         import logging
         t = hook_mod.derive_ticket({}, tmp_path, logging.getLogger("t"))
         assert t is None
@@ -871,7 +883,7 @@ class TestF_Resets:
         (d / "dispatch-active.json").write_text("not-json{{{", encoding="utf-8")
         def fake_run(*args, **kwargs):
             raise subprocess.SubprocessError("no git")
-        monkeypatch.setattr(hook_mod.subprocess, "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         import logging
         t = hook_mod.derive_ticket({}, tmp_path, logging.getLogger("t"))
         assert t is None  # 損毀 → fallthrough → layer 3 fail → None
@@ -880,7 +892,7 @@ class TestF_Resets:
         monkeypatch.delenv("TICKET_ID", raising=False)
         def fake_run(*args, **kwargs):
             raise FileNotFoundError("no git")
-        monkeypatch.setattr(hook_mod.subprocess, "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         import logging
         t = hook_mod.derive_ticket({}, tmp_path, logging.getLogger("t"))
         assert t is None
@@ -900,7 +912,7 @@ class TestF_Resets:
 
         def fake_run(*args, **kwargs):
             raise subprocess.SubprocessError("no git")
-        monkeypatch.setattr(hook_mod.subprocess, "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         assert hook_mod.derive_ticket({}, tmp_path, logging.getLogger("t")) is None
 
     def test_f11_agent_prompt_wins_over_dispatch_active(self, hook_mod, monkeypatch, tmp_path):
@@ -1053,11 +1065,14 @@ class TestI_YamlFallback:
 class TestJ_SourceOfTruth:
     @pytest.fixture(scope="class")
     def hook_source(self):
-        return HOOK_PATH.read_text(encoding="utf-8")
+        return "\n".join(_impl_sources())
 
     @pytest.fixture(scope="class")
-    def hook_ast(self, hook_source):
-        return ast.parse(hook_source)
+    def hook_ast(self):
+        body = []
+        for src in _impl_sources():
+            body.extend(ast.parse(src).body)
+        return ast.Module(body=body, type_ignores=[])
 
     def test_j1_yaml_keyword_change_changes_behavior(self, hook_mod, tmp_path):
         """修改 YAML keywords 改變 Hook 行為（核心反硬編碼證明）。"""

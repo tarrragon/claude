@@ -11,7 +11,8 @@ Worktree 和分支檢查 Hook - PreToolUse Hook
 防護措施: 避免遺漏其他 session 在不同 worktree 或 feature branch 上的進度，
           以及避免合併到錯誤的分支。
 
-觸發時機: Bash 工具執行前，命令包含 "git push"、"git merge" 或 "git cherry-pick"
+觸發時機: Bash 工具執行前，命令實際呼叫 git push/merge/cherry-pick（含 git -C 等全域選項；
+          echo 或引號內字樣不觸發；無法解析時 fail-open 並記日誌）
 
 行為:
   1. 執行 git worktree list 掃描所有 worktree
@@ -35,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 try:
+    from lib.git_command_parse import contains_git_word, find_git_invocations
     from lib import (
         setup_hook_logging,
         run_hook_safely,
@@ -43,12 +45,27 @@ try:
     )
 except ImportError as e:
     print(f"[Hook Import Warning] {Path(__file__).name}: {e}", file=sys.stderr)
+    # lib 不可用，僅用 stdlib 補寫檔案日誌（規則 4：stderr + 檔案雙通道）
+    try:
+        import os as _os
+        from datetime import datetime as _dt
+        _root = Path(_os.environ.get("CLAUDE_PROJECT_DIR") or Path(__file__).resolve().parents[4])
+        _log_dir = _root / ".claude" / "hook-logs" / "worktree-branch-check"
+        _log_dir.mkdir(parents=True, exist_ok=True)
+        with open(_log_dir / f"worktree-branch-check-{_dt.now():%Y%m%d}.log", "a", encoding="utf-8") as _fh:
+            _fh.write(f"{_dt.now():%Y-%m-%d %H:%M:%S} - worktree-branch-check - ERROR - lib import failed, fallback active: {e}\n")
+    except Exception as _log_err:
+        print(f"[Hook Import Warning] worktree-branch-check: log write failed: {_log_err}", file=sys.stderr)
     # Fallback: 最小化日誌設定，run_hook_safely 退化為直接呼叫（無 liveness 記錄）
     import logging
     def setup_hook_logging(name):
         return logging.getLogger(name)
     def run_hook_safely(main_func, hook_name, fail_closed=False):
         return main_func()
+    def contains_git_word(command):
+        return False  # 解析模組不可用：fail-open（匯入警告已輸出至 stderr）
+    def find_git_invocations(command, subcommands, base_dir=None, scan=False):
+        return []
     def emit_model_reminder(event, text, *, audience="all", input_data=None):
         return None
     def read_hook_input():
@@ -77,6 +94,10 @@ GIT_COMMAND_TIMEOUT = 10
 
 # 預期的合併目標分支名稱
 EXPECTED_TARGET_BRANCHES = ("main", "master")
+
+# 以共用命令解析辨識的 git 子命令
+MERGE_SUBCOMMANDS = frozenset({"merge", "cherry-pick"})
+CHECKED_SUBCOMMANDS = MERGE_SUBCOMMANDS | {"push"}
 
 # 目標分支比對警告訊息
 TARGET_BRANCH_WARNING_HEADER = "[WARNING] 主倉庫 HEAD 未指向預期的合併目標分支"
@@ -251,19 +272,15 @@ def get_unmerged_branches() -> List[str]:
     Returns:
         未合併分支名稱列表
     """
-    success, output = run_git_command(["branch", "--no-merged", "main"])
+    # plumbing 輸出不含 porcelain 的 '* ' / '+ ' 前綴（worktree checkout 分支）
+    success, output = run_git_command([
+        "for-each-ref", "--no-merged=main",
+        "--format=%(refname:short)", "refs/heads",
+    ])
     if not success or not output:
         return []
 
-    # 分支名稱，移除開頭的 * 或空格
-    branches = []
-    for line in output.split('\n'):
-        if line.strip():
-            branch_name = line.strip().lstrip('* ')
-            if branch_name:
-                branches.append(branch_name)
-
-    return branches
+    return [line.strip() for line in output.split('\n') if line.strip()]
 
 
 def check_git_state() -> CheckResult:
@@ -352,33 +369,27 @@ def extract_command(bash_command: str) -> str:
     return bash_command.strip().split()[0] if bash_command else ""
 
 
+def _find_invocations(bash_command: str, subcommands) -> list:
+    """以共用解析找出指定子命令的 git 呼叫；無法解析時 fail-open 回空清單並記日誌。"""
+    if not contains_git_word(bash_command):
+        return []
+    invocations = find_git_invocations(bash_command, subcommands)
+    if invocations is None:
+        logging.getLogger("worktree-branch-check").warning(
+            f"無法解析命令（長度 {len(bash_command)}），fail-open 不檢查"
+        )
+        return []
+    return invocations
+
+
 def is_merge_or_cherry_pick(bash_command: str) -> bool:
-    """
-    判斷命令是否為 git merge 或 git cherry-pick
-
-    Args:
-        bash_command: Bash 命令內容
-
-    Returns:
-        是否為 merge 或 cherry-pick 命令
-    """
-    cmd_lower = bash_command.lower()
-    return "git merge" in cmd_lower or "git cherry-pick" in cmd_lower
+    """判斷命令是否實際呼叫 git merge 或 git cherry-pick（含 git -C 等全域選項形式）。"""
+    return bool(_find_invocations(bash_command, MERGE_SUBCOMMANDS))
 
 
 def should_check_git_operation(bash_command: str) -> bool:
-    """
-    判斷是否應執行 worktree/分支檢查
-
-    Args:
-        bash_command: Bash 命令內容
-
-    Returns:
-        是否應檢查（push、merge 或 cherry-pick）
-    """
-    cmd_lower = bash_command.lower()
-    return ("git push" in cmd_lower or "git merge" in cmd_lower
-            or "git cherry-pick" in cmd_lower)
+    """判斷是否應執行 worktree/分支檢查（實際呼叫 push、merge 或 cherry-pick）。"""
+    return bool(_find_invocations(bash_command, CHECKED_SUBCOMMANDS))
 
 
 def check_target_branch() -> Optional[str]:

@@ -27,6 +27,11 @@ _spec = importlib.util.spec_from_file_location(
 hook_module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hook_module)
 
+# 佔用判定與進行中操作偵測分別在 lib.dispatch_scope／lib.git_operation_state；
+# patch 必須作用在函式實際查名稱的模組，只換 hook_module 的 re-export 不會生效。
+from lib import dispatch_scope as scope_module  # noqa: E402
+from lib import git_operation_state as ops_module  # noqa: E402
+
 
 def _dispatch(ticket_id, files, session_id):
     return {"ticket_id": ticket_id, "files": list(files), "session_id": session_id}
@@ -46,13 +51,12 @@ def _run(monkeypatch, sessions, available, dispatches):
     payload = {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     monkeypatch.setattr(hook_module, "get_project_root", lambda: Path("/fake"))
-    monkeypatch.setattr(hook_module, "_merge_in_progress", lambda *a, **k: False)
+    monkeypatch.setattr(ops_module, "_merge_in_progress", lambda *a, **k: False)
     monkeypatch.setattr(hook_module, "_get_active_dispatches_safe", lambda r: dispatches)
     monkeypatch.setattr(hook_module, "_get_staged_files", lambda r: ["a.py", "b.py"])
     monkeypatch.setattr(hook_module, "_with_live_declared_files", lambda d, r, lg: d)
     monkeypatch.setattr(
-        hook_module, "_read_registry_sessions", lambda r, lg: (sessions, available),
-        raising=False,  # 修正前守衛無此函式；容許以原版暫換驗證紅燈
+        scope_module, "_read_registry_sessions", lambda r, lg: (sessions, available),
     )
     monkeypatch.setattr(
         hook_module, "resolve_session_id", lambda data: "s-self", raising=False
@@ -87,7 +91,7 @@ def test_unknown_owner_still_blocks(monkeypatch):
 
 def test_exclusion_logs_warning(monkeypatch, caplog):
     monkeypatch.setattr(
-        hook_module, "_read_registry_sessions",
+        scope_module, "_read_registry_sessions",
         lambda r, lg: ({"s-alive": _fresh()}, True),
     )
     logger = logging.getLogger("t-exclude")

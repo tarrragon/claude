@@ -76,6 +76,7 @@ FALLBACK_FAIL_CLOSED_GUARDS = {
     "PreToolUse:Bash": [
         ".claude/hooks/bash-git-protected-branch-guard-hook.py",
         ".claude/hooks/workspace-wipe-guard-hook.py",
+        ".claude/hooks/bash-write-boundary-guard-hook.py",
     ],
     "PostToolUseFailure:Bash": [],  # 失敗事件無阻擋語意：無 fail_closed 守衛
 }

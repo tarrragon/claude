@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 6.8.0 — 資料庫列的預設產物補 seed，判斷標準指向 `saas-tech-selection` state-storage 新增的〈種子資料與 schema 規格的驗證〉；〈權威缺席時〉「框架內確實無承接者」列移除「資料庫 seed」這個已知的判準層缺口；`examples.md` 中以 seed 為「產物有、判準無」示範的案例改用維度表未列的「資料匯入匯出格式」，示範的判定與驗證問句不變
+
 **Version**: 6.7.2 — 開頭加框架綁定說明：指名依附的框架資產（ticket、doc、version-bootstrap、.claude/rules、.claude/pm-rules），沒裝框架的專案裡這些路徑失效是預期狀態，可只取維度表與判斷方法並走降級模式；原本這件事只寫在檔尾的〈移植前置條件〉
 
 **Version**: 6.7.1 — 〈本 skill 不做什麼〉補一條：不決定地基什麼時候做，時機由 system-design 的決策時機分類決定，本 skill 接手其中判為先做的地基項目

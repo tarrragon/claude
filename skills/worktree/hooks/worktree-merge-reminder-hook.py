@@ -17,6 +17,7 @@ Hook 類型：PostToolUse
 """
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -38,6 +39,37 @@ from lib.ticket_command_parse import has_complete_command
 from lib.bash_tool_response import (
     FAILURE_EVENT_NAME, is_failure_event, auto_commit_failure_as_success,
 )
+
+
+def merge_command(branch: str, logger) -> str:
+    """落地 main 的建議指令（`/worktree merge`）。
+
+    lazy import worktree_manager，避免為建議字串在載入期引入約 2000 行模組的
+    import 失敗點；失敗時退回通用字面並記 warning。
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        from worktree_manager import merge_suggestion_command
+        return merge_suggestion_command(branch)
+    except Exception as exc:  # 建議字串不得使 hook 失效；已記日誌後退回
+        logger.warning("無法載入 worktree_manager，建議退回通用字面：%s", exc)
+        return "/worktree merge --branch {}".format(shlex.quote(branch))
+
+
+def cleanup_command(branch: str, logger) -> str:
+    """已合併 worktree 的清理建議（`/worktree cleanup`）。
+
+    判定沿用 worktree_manager 的 `_cleanup_target_arg`（ticket ID 走 positional，
+    其餘走 `--branch <quoted>`）；lazy import 與失敗退回同 merge_command。
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        from worktree_manager import _cleanup_target_arg, extract_ticket_id_from_branch
+        target = _cleanup_target_arg(extract_ticket_id_from_branch(branch) or branch)
+        return "/worktree cleanup {}".format(target)
+    except Exception as exc:  # 建議字串不得使 hook 失效；已記日誌後退回
+        logger.warning("無法載入 worktree_manager，建議退回通用字面：%s", exc)
+        return "/worktree cleanup --branch {}".format(shlex.quote(branch))
 
 
 def parse_worktree_list(logger) -> List[Tuple[str, str]]:
@@ -270,7 +302,7 @@ def main() -> int:
                 lines.append(f"    - {commit}")
             if len(commits) > 5:
                 lines.append(f"    ... 還有 {len(commits) - 5} 個")
-            lines.append(f"  建議: git merge {branch} --no-edit")
+            lines.append(f"  建議: {merge_command(branch, logger)}")
             lines.append("")
         lines.append("請在 ticket 完成前合併這些 worktree 的變更。")
         if merged:
@@ -318,23 +350,24 @@ def main() -> int:
                 # --force，故不建議捨棄路徑再加 --force）。
                 lines.append("  建議（擇一）：")
                 lines.append("    1. 保留變更並落地 main：")
-                lines.append(
-                    f"         git -C {wt_path} add <paths> && "
-                    f'git -C {wt_path} commit -m "<message>" -- <paths>'
-                )
-                lines.append(f"         git merge {branch} --no-edit")
+                # 規則七：精確 add → 核對 index → 裸 commit（禁 pathspec 提交）；
+                # linked worktree 有獨立 index，核對僅涵蓋本 worktree。
+                lines.append(f"         git -C {wt_path} add <exact-path>")
+                lines.append(f"         git -C {wt_path} diff --cached --name-only   # 確認只含目標檔")
+                lines.append(f'         git -C {wt_path} commit -m "<message>"')
+                lines.append(f"         {merge_command(branch, logger)}")
                 lines.append("    2. 確認變更確為可捨棄後清除：")
                 lines.append(f"         git -C {wt_path} restore .   # 還原已追蹤檔案的未提交修改")
                 lines.append(f"         git -C {wt_path} clean -fd .   # 清除未追蹤檔案與目錄")
                 lines.append("  驗證（處理後執行，確認已 clean 才可 remove）：")
                 lines.append(f"    git -C {wt_path} status --porcelain   # 無輸出即代表 clean")
                 lines.append(
-                    f"    git worktree remove {wt_path}   "
+                    f"    {cleanup_command(branch, logger)}   "
                     "# 不需 --force；dirty 狀態下 --force 會被 Guard C 阻擋"
                 )
             else:
                 lines.append("  狀態: clean")
-                lines.append(f"  建議: git worktree remove {wt_path}")
+                lines.append(f"  建議: {cleanup_command(branch, logger)}")
             lines.append("")
         lines.append("PC-149: ticket 完成後 worktree 殘留會累積 disk 與視圖污染。")
 

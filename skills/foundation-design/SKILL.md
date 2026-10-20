@@ -3,7 +3,7 @@ name: foundation-design
 description: "地基工作的單一入口與路由層。逐維度決定「本專案的地基產物是什麼」，權威只提供預設產物，形態不符時改寫產物而非跳過維度。維度含 UI／測試／資料庫／DevOps／可觀測性／事件流仲裁，各指名既有權威並標明權威缺席時的處置。新舊專案一體適用：接手他人專案先盤點萃取再命名固化。觸發詞：地基、地基波、元件庫、design token、fixture、seed、migration、scaffold、鷹架、腳手架、接手老專案。Do NOT use for 環境安裝（用 project-init）。"
 license: MIT
 metadata:
-  version: 6.7.2
+  version: 6.8.0
   category: engineering-workflow
 ---
 
@@ -50,7 +50,7 @@ metadata:
 |------|--------------------------------|------------------|---------|
 | **UI** | 元件庫雙向約束方法論的〈地基波 build 順序〉，四塊依序：i18n → design-system → UX 審查 → 元件庫。UX 審查那塊的執行方法見 `ux-design-evaluation` skill；元件庫那塊實作前的契約程序（元件契約欄位表、容器元件）見 `component-contract-design` skill | 四塊各自的實作票；元件庫 `blockedBy` 前三塊與契約齊全 | 不限（權威非 SaaS 特定） |
 | **測試** | `tdd` skill 的分層測試策略，以及其 Phase 2 測試設計檢驗 Q9–Q14（資料是否碰巧通過、error path 覆蓋、資料工廠版本、防哪種改壞、斷言是否 flaky、資料代表性） | fixture 策略、分層地基 | 不限（權威非 SaaS 特定） |
-| **資料庫** | `saas-tech-selection` skill 的 state-storage 維度（migration 版本化紀律、多租戶資料模型、**防護底線的自動備份與還原驗證**） | migration baseline、**備份與還原驗證**。seed 見〈權威缺席時〉形態 3 | SaaS/伺服器端專案照預設；非 SaaS 專案見下方處置 |
+| **資料庫** | `saas-tech-selection` skill 的 state-storage 維度（migration 版本化紀律、多租戶資料模型、**防護底線的自動備份與還原驗證**） | migration baseline、**備份與還原驗證**、seed（判斷標準在同一維度的〈種子資料與 schema 規格的驗證〉） | SaaS/伺服器端專案照預設；非 SaaS 專案見下方處置 |
 | **DevOps** | `saas-tech-selection` skill 的 reliability 維度（CI gate 構成與起始門檻） | CI gate、部署與還原配方 | SaaS/伺服器端專案照預設；非 SaaS 專案見下方處置 |
 | **可觀測性** | 專案的可觀測性規則（統一 log 入口、catch 區塊要求；屬自動載入層，多半已在 context 中），以及 `saas-tech-selection` skill 的 observability 維度（錯誤分類） | log 接線點、錯誤分類骨架 | log 接線點不限；`saas-tech-selection` 的錯誤分類部分限 SaaS/伺服器端，非 SaaS 專案見下方處置 |
 | **事件流仲裁** | 事件流負載仲裁方法論（判準在此，本 skill 不複述） | 通道清單＋每通道的仲裁器落層＋九格卸載順序表 | 有兩個以上的請求來源會對同一個稀缺通道發出請求的專案，不限 SaaS |
@@ -85,7 +85,7 @@ metadata:
 |------|------|
 | **權威是框架資產但執行本流程的 session 未安裝** | 產物欄填「待定：權威缺席（補票 `<ticket-id>`）」，**不得填「無」**。「沒有依據」與「不產出」是兩件事。建一張補該權威的票，該維度的地基票 `blockedBy` 它；或指定替代權威並記錄於被盤點 repo 的決策文件。**這一格不看被盤點的 repo**，它沒有框架是常態，不構成權威缺席 |
 | **權威存在但形態不符** | 只取權威中與形態無關的部分，記錄不適用的範圍；改寫後的產物是否合格，答 `references/dimension-product-notes.md`〈改寫產物是主路徑〉推導問句「這個維度要防的失效，在本專案會長成什麼樣子」——答得出具體形狀即完成，填入產物欄「改寫產物」，不需再回頭比對〈工作流〉步驟 3；答不出時不得填「改寫產物」，改標「待定」。來源是 SaaS skill 不構成整條跳過的理由 |
-| **框架內確實無承接者** | **拆兩問，分開填**。產物層：依〈產物欄的五種合法答案〉四種作答——改寫產物／已存在於 X／無／待定（不含「照預設」，因無權威可提供預設產物）；選「無」仍須符合 `references/dimension-product-notes.md`〈判定「失效不存在」的理由〉的證明要求，不得僅因該產物（如 seeder）目前不存在就代入。判準層：框架有無判斷它合格與否的依據，沒有則另標「無判準」並建框架缺口票。**兩者獨立**，「產物有、判準無」是常見狀態。現已知的判準缺口：**資料庫 seed**（本框架搜尋「種子資料／seed data／seeding」0 命中，因此無從判斷既有 seeder 的量級與冪等策略是否合格） |
+| **框架內確實無承接者** | **拆兩問，分開填**。產物層：依〈產物欄的五種合法答案〉四種作答——改寫產物／已存在於 X／無／待定（不含「照預設」，因無權威可提供預設產物）；選「無」仍須符合 `references/dimension-product-notes.md`〈判定「失效不存在」的理由〉的證明要求，不得僅因該產物（如 seeder）目前不存在就代入。判準層：框架有無判斷它合格與否的依據，沒有則另標「無判準」並建框架缺口票。**兩者獨立**，「產物有、判準無」是常見狀態。（資料庫 seed 曾是登記在此的判準層缺口，現由 `saas-tech-selection` state-storage 維度的〈種子資料與 schema 規格的驗證〉承接，走資料庫列的權威） |
 | **工作流自身引用的 skill 缺席**（如無 `version-sequencing` 承接產物） | 本 skill 的產物改為文件形式留在決策記錄。決策記錄須含四欄：本輪已判定的維度清單、各維度依步驟 2–4 已產出的產物內容、缺席的 skill 名稱、重排觸發條件。**重排觸發條件**固定為「該 skill 出現在執行本流程 session 的 `.claude/skills/`」——下次執行本流程時，〈移植前置條件〉的權威清點確認其已存在，即讀取此決策記錄直接交給它，不重新走一次維度盤點 |
 
 ## 與 orchestration 的協作

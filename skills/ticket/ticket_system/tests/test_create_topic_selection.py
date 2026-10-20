@@ -67,6 +67,7 @@ def _make_args(**overrides):
         # 非測可攜問題分流硬閘門），該路徑組合會被新增的硬閘門判定為可攜
         # 問題而阻擋；帶查重結論放行，語意上等同「已查過重、確認非重複」。
         dedup_checked="none",
+        dedup_keywords=["測試佔位"],
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -85,6 +86,13 @@ def _capture(args):
     return out_buf.getvalue(), err_buf.getvalue(), exit_code
 
 
+def _seed(args):
+    """建立種子票並斷言成功；失敗時於種子處即紅並顯示 stderr。"""
+    out, err, exit_code = _capture(args)
+    assert exit_code == 0, f"種子票建立失敗 rc={exit_code} stderr={err} stdout={out}"
+    return out, err, exit_code
+
+
 class TestTopicRejectsUnknownName:
     def test_unknown_topic_rejected_without_creating_ticket(self, seeded_repo_root):
         append_topic("既有主題 A")
@@ -97,7 +105,8 @@ class TestTopicRejectsUnknownName:
         append_topic("既有主題 A")
         append_topic("既有主題 B")
         args = _make_args(topic="不存在的主題")
-        stdout, _, _ = _capture(args)
+        stdout, _, exit_code = _capture(args)
+        assert exit_code == 1
         assert "既有主題 A" in stdout
         assert "既有主題 B" in stdout
 
@@ -279,7 +288,7 @@ class TestTopicInferenceS1UpstreamInheritance:
     """
 
     def test_inherits_topic_from_source_ticket(self, seeded_repo_root):
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
         args = _make_args(source_ticket="1.0.1-W1-001", target="S1 繼承驗證")
         out, _, exit_code = _capture(args)
         assert exit_code == 0
@@ -287,7 +296,7 @@ class TestTopicInferenceS1UpstreamInheritance:
         assert "S1" in out
 
     def test_inherits_topic_from_parent(self, seeded_repo_root):
-        _capture(_make_args(new_topic="父票主題"))
+        _seed(_make_args(new_topic="父票主題"))
         args = _make_args(parent="1.0.1-W1-001", target="S1 父票驗證")
         out, _, exit_code = _capture(args)
         assert exit_code == 0
@@ -296,7 +305,7 @@ class TestTopicInferenceS1UpstreamInheritance:
         assert "S1" in out
 
     def test_no_inheritance_when_upstream_has_no_topic(self, seeded_repo_root):
-        _capture(_make_args())
+        _seed(_make_args())
         args = _make_args(source_ticket="1.0.1-W1-001", target="S1 空上游驗證")
         _, _, exit_code = _capture(args)
         assert exit_code == 0
@@ -317,7 +326,7 @@ class TestDiscoveredDuringSkipsS1AndRecordsLineage:
     # create.py）不重疊的路徑，避免 S2 意外命中而混淆「S1 是否短路」的判定。
 
     def test_upstream_topic_not_inherited(self, seeded_repo_root):
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
         args = _make_args(
             parent="1.0.1-W1-001",
             discovered_during="1.0.1-W1-001",
@@ -332,7 +341,7 @@ class TestDiscoveredDuringSkipsS1AndRecordsLineage:
         assert "S1" not in out
 
     def test_frontmatter_records_discovered_during_lineage(self, seeded_repo_root):
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
         args = _make_args(
             parent="1.0.1-W1-001",
             discovered_during="1.0.1-W1-001",
@@ -356,7 +365,7 @@ class TestTopicInferenceS2FileCluster:
     """
 
     def test_infers_topic_from_overlapping_file_path(self, seeded_repo_root):
-        _capture(_make_args(
+        _seed(_make_args(
             new_topic="叢集主題",
             where_files=".claude/hooks/sample-guard-hook.py",
         ))
@@ -367,7 +376,7 @@ class TestTopicInferenceS2FileCluster:
         assert "S2" in out
 
     def test_no_inference_when_no_path_overlap(self, seeded_repo_root):
-        _capture(_make_args(
+        _seed(_make_args(
             new_topic="無關主題",
             where_files=".claude/hooks/other-hook.py",
         ))
@@ -402,7 +411,7 @@ class TestExplicitTopicUnaffectedByInference:
     """
 
     def test_explicit_topic_wins_over_inferable_upstream(self, seeded_repo_root):
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
         append_topic("顯式主題")
         args = _make_args(source_ticket="1.0.1-W1-001", topic="顯式主題", target="顯式優先驗證")
         out, _, exit_code = _capture(args)
@@ -421,7 +430,7 @@ class TestTopicInferenceRejectsShallowClusterPaths:
     """
 
     def test_single_segment_cluster_path_does_not_infer(self, seeded_repo_root):
-        _capture(_make_args(new_topic="淺層路徑主題", where_files="docs/"))
+        _seed(_make_args(new_topic="淺層路徑主題", where_files="docs/"))
         args = _make_args(where_files="docs/spec/unrelated-area.md", target="淺層門檻驗證")
         out, _, exit_code = _capture(args)
         assert exit_code == 0
@@ -429,7 +438,7 @@ class TestTopicInferenceRejectsShallowClusterPaths:
         assert "S2" not in out
 
     def test_sufficiently_deep_cluster_path_still_infers(self, seeded_repo_root):
-        _capture(_make_args(
+        _seed(_make_args(
             new_topic="深層路徑主題",
             where_files=".claude/skills/ticket/lib/sample.py",
         ))
@@ -453,11 +462,11 @@ class TestTopicInferenceDeterministicOnTie:
     """
 
     def test_same_input_yields_same_topic_across_repeated_calls(self, seeded_repo_root):
-        _capture(_make_args(
+        _seed(_make_args(
             new_topic="主題甲",
             where_files=".claude/skills/ticket/lib/shared.py",
         ))
-        _capture(_make_args(
+        _seed(_make_args(
             new_topic="主題乙",
             where_files=".claude/skills/ticket/lib/shared.py",
             target="第二個主題來源",
@@ -524,7 +533,7 @@ class TestNoTopicOverridesAutoInference:
     """
 
     def test_no_topic_blocks_s1_inheritance(self, seeded_repo_root):
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
         args = _make_args(
             source_ticket="1.0.1-W1-001",
             no_topic=True,
@@ -536,7 +545,7 @@ class TestNoTopicOverridesAutoInference:
         assert "S1" not in out
 
     def test_no_topic_blocks_s2_file_cluster(self, seeded_repo_root):
-        _capture(_make_args(
+        _seed(_make_args(
             new_topic="叢集主題",
             where_files=".claude/hooks/sample-guard-hook.py",
         ))
@@ -553,13 +562,14 @@ class TestNoTopicOverridesAutoInference:
     def test_no_topic_reports_explicit_opt_out_when_inference_would_hit(
         self, seeded_repo_root
     ):
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
         args = _make_args(
             source_ticket="1.0.1-W1-001",
             no_topic=True,
             target="S1 命中時的訊息驗證",
         )
-        out, _, _ = _capture(args)
+        out, _, exit_code = _capture(args)
+        assert exit_code == 0
         assert "--no-topic 明示不指派" in out
 
     def test_same_batch_with_and_without_flag_differ(self, seeded_repo_root):
@@ -568,7 +578,7 @@ class TestNoTopicOverridesAutoInference:
         只斷言「傳了之後產物正確」的測試在旗標完全無效時照樣全綠；唯有把
         未傳旗標的那一次也跑出來並比對差異，斷言才能反映旗標是否有作用。
         """
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
 
         # 兩次建票除旗標外逐欄相同（含 target），差異才能唯一歸因於旗標；
         # allow_duplicate 用來旁路同窗口相似度防護，該防護正是因兩次輸入
@@ -610,7 +620,7 @@ class TestUnassignedTopicWarnsInTransition:
         assert "--no-topic" in out
 
     def test_no_warning_when_inference_hits(self, seeded_repo_root):
-        _capture(_make_args(new_topic="上游主題"))
+        _seed(_make_args(new_topic="上游主題"))
         args = _make_args(source_ticket="1.0.1-W1-001", target="推導命中免警告")
         out, _, exit_code = _capture(args)
         assert exit_code == 0

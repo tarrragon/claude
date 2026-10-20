@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.6.1 — 步驟 8 改以 CLI `readme_index.py sync --write` 為主要路徑；Python API 片段降為次要，並註明只能放進 `.py` 檔執行、不能以 heredoc 或 `python -c` 執行（Bash 寫入邊界守衛會解析命令文字中的 python 程式碼，`open(readme_path, "w")` 落在 `.claude/` 下會被擋）。無流程或命令變更
+**Last Updated**: 2026-10-20
+
 **Version**: 1.6.0 — 步驟 8 補「順序要求（強制）」：欄位補齊須早於 sync（保守 upsert 使佔位符列無法事後更正）；建議程式碼片段改為先呼叫 `find_incomplete_new_rows` 把關；CLI `sync --write` 預設阻擋含缺漏欄位的新增列，逃生閥 `--allow-placeholder`，`--dry-run` 僅預警不阻擋
 **Last Updated**: 2026-08-21
 

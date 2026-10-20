@@ -2,7 +2,7 @@
 name: continuous-learning
 description: "Extracts reusable patterns from Claude Code sessions and captures knowledge with capture-time triage: framework-relevant learnings (still true after swapping project names/paths) go straight to the canonical framework layer (error-patterns/rules/methodologies/references), project-relevant learnings go to docs/CLAUDE.md, and session-only findings are not recorded. Claude Code's native memory is excluded as a destination — this framework's error-patterns layer replaces it for cross-project reuse. Use when session ends (Stop hook), when recording technical decisions, implementation insights, or lessons learned. Handles automatic pattern detection and structured knowledge capture with interconnected links, preventing cross-project principles from being trapped in single-project storage."
 metadata:
-  version: 4.1.0
+  version: 4.2.0
 ---
 
 # Continuous Learning

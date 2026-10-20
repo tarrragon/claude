@@ -19,6 +19,29 @@ from testpaths_coverage_warning import (  # noqa: F401
     pytest_terminal_summary,
 )
 
+import importlib.util
+
+# hooks 測試必要的第三方依賴（對應 pyproject.toml dependencies：pyyaml 的匯入名為 yaml）。
+# 缺依賴時讀票等路徑會退回快照，以業務斷言失敗出現而被誤判為回歸。
+_REQUIRED_MODULES = ("yaml",)
+
+
+def _missing_required_modules():
+    return [m for m in _REQUIRED_MODULES if importlib.util.find_spec(m) is None]
+
+
+def pytest_sessionstart(session):
+    missing = _missing_required_modules()
+    if missing:
+        import pytest
+
+        pytest.exit(
+            "hooks 測試缺少必要依賴: %s。請改用正確指令執行："
+            "uv --directory <checkout>/.claude/hooks run pytest <path>" % ", ".join(missing),
+            returncode=4,
+        )
+
+
 _TIMING_ENV = "HOOKS_TEST_GATE_TIMING_FILE"
 _timing_marks = {}
 

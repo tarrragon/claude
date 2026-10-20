@@ -36,6 +36,7 @@ from ticket_system.lib.claude_lib_loader import (
     empty_registry_skeleton,
     load_claude_lib,
 )
+from ticket_system.lib import file_contention
 from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_loader import list_tickets
@@ -252,8 +253,14 @@ def _drop_directory_level_hits(
     return [c for c in conflicts if not _is_directory_level_hit(c, project_root)]
 
 
-def _render_json(conflicts: List[Dict[str, Any]]) -> str:
-    return json.dumps({"conflicts": conflicts}, ensure_ascii=False, indent=2)
+def _render_json(
+    conflicts: List[Dict[str, Any]],
+    contention: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    payload: Dict[str, Any] = {"conflicts": conflicts}
+    if contention:
+        payload["contention"] = contention
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -310,12 +317,41 @@ def execute_conflicts(args: argparse.Namespace) -> int:
     ):
         sys.stderr.write(f"[track conflicts] {warning}\n")
 
+    contention = _collect_contention(
+        conflicts, project_root, getattr(args, "since_days", None)
+    )
     if fmt == FORMAT_JSON:
-        print(_render_json(conflicts))
+        print(_render_json(conflicts, contention))
     else:
         print(_render_table(conflicts))
+        for line in file_contention.render_contention_lines(contention):
+            print(line)
 
     return 1 if conflicts else 0
+
+
+def _collect_contention(
+    conflicts: List[Dict[str, Any]],
+    project_root: Optional[Path],
+    since_days: Optional[int],
+) -> List[Dict[str, Any]]:
+    """衝突檔的票樹競爭記錄；無衝突或 git 失敗回傳空清單（失敗時 stderr 說明，
+    不影響 conflicts 原輸出）。"""
+    if not conflicts or project_root is None:
+        return []
+    days = since_days or file_contention.DEFAULT_SINCE_DAYS
+    paths = [
+        p
+        for c in conflicts
+        for entry in c["matched_files"]
+        for p in file_contention.split_matched_entry(entry)
+    ]
+    try:
+        roots_by_file = file_contention.collect_tree_roots(str(project_root), days)
+    except file_contention.ContentionUnavailable as exc:
+        sys.stderr.write(f"[track conflicts] 略過同檔票樹競爭訊號：{exc}\n")
+        return []
+    return file_contention.contention_for_files(paths, roots_by_file, days)
 
 
 def register_conflicts(
@@ -359,6 +395,17 @@ def register_conflicts(
         default=None,
         metavar="ID1,ID2,...",
         help="僅比對指定票組彼此之間（逗號分隔，不含票組外的票）",
+    )
+    p.add_argument(
+        "--since-days",
+        dest="since_days",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "同檔票樹競爭統計的回溯天數（預設 "
+            f"{file_contention.DEFAULT_SINCE_DAYS}）"
+        ),
     )
     p.add_argument(
         "--include-heuristic",

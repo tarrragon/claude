@@ -986,6 +986,67 @@ _DEFAULT_PLACEHOLDERS = {
 }
 
 
+def _render_dedup_outcome(outcome) -> str:
+    """把 dedup 執行結果（DedupOutcome 或 None）轉為〈查重紀錄〉附段。"""
+    if outcome is None:
+        return ""
+    text = ""
+    if outcome.error:
+        label = "查重部分未完成" if getattr(outcome, "partial", False) else "查重未完成"
+        text += f"{label}：{outcome.error}\n\n"
+    if outcome.hits:
+        hit_lines = "\n".join(f"- #{num} {title}" for num, title in outcome.hits)
+        text += f"dedup 命中 issue（請覆核關係：重複／切分／引用）：\n\n{hit_lines}\n\n"
+    elif not outcome.error:
+        text += "dedup 命中 issue：無\n\n"
+    return text
+
+
+def insert_dedup_record(
+    body: str, keywords: Optional[List[str]], dedup_outcome=None
+) -> str:
+    """在 Problem Analysis 末端（調查過程註解之前）插入〈查重紀錄〉。
+
+    關鍵字逐字列出供覆核；dedup_outcome 非 None 時附命中清單或未完成說明；
+    無關鍵字時原樣回傳。
+    """
+    kws = [k for k in (keywords or []) if (k or "").strip()]
+    if not kws:
+        return body
+    lines = "\n".join(f"- {_as_inline_code(k)}" for k in kws)
+    section = (
+        "### 查重紀錄\n\n"
+        "`--dedup-checked none`，查重關鍵字（逐字）：\n\n"
+        f"{lines}\n\n"
+        f"{_render_dedup_outcome(dedup_outcome)}"
+    )
+    pa_start = body.find("## Problem Analysis")
+    if pa_start < 0:
+        sys.stderr.write("[WARNING] insert_dedup_record: 找不到 Problem Analysis，未寫入查重紀錄\n")
+        return body
+    anchor_pos = body.find("<!-- 調查過程記錄（可選）：", pa_start)
+    if anchor_pos >= 0:
+        return body[:anchor_pos] + section + body[anchor_pos:]
+    sys.stderr.write(
+        "[WARNING] insert_dedup_record: 找不到調查過程註解錨點，"
+        "查重紀錄改附加於 Problem Analysis 段尾\n"
+    )
+    next_sec = body.find("\n## ", pa_start + 1)
+    end = next_sec if next_sec >= 0 else len(body)
+    # 回退到段尾分隔線之前，使紀錄留在 PA 段內
+    sep = body.rfind("\n---", pa_start, end)
+    insert_at = sep + 1 if sep >= 0 else end
+    return body[:insert_at] + section + body[insert_at:]
+
+
+def _as_inline_code(text: str) -> str:
+    """換行換空白後包成 inline code；內含反引號改用雙反引號包覆。"""
+    flat = text.replace("\r", " ").replace("\n", " ")
+    if "`" in flat:
+        return f"``{flat}``"
+    return f"`{flat}`"
+
+
 def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
     """建立 Ticket body。
 

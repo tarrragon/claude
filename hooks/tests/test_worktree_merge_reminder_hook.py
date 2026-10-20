@@ -250,8 +250,8 @@ def test_main_merged_worktree_post_complete_reminder(hook_module, capsys):
     assert out, "expected hook to emit cleanup reminder for merged worktree (PC-149)"
     message = _extract_message(out)
     # 必須包含 cleanup 命令建議
-    assert "git worktree remove" in message, \
-        f"expected 'git worktree remove' suggestion in message:\n{message}"
+    assert "/worktree cleanup" in message, \
+        f"expected '/worktree cleanup' suggestion in message:\n{message}"
     # 必須指出哪個 worktree 需要清理
     assert "/tmp/wt-merged" in message or "feat/W1-001" in message
     # 不應誤判為 dirty
@@ -272,7 +272,7 @@ def test_main_merged_worktree_dirty_warns_dirty_first(hook_module, capsys):
     assert rc == 0
     assert out, "expected reminder for merged-dirty worktree"
     message = _extract_message(out)
-    assert "git worktree remove" in message
+    assert "/worktree cleanup" in message
     # dirty 必須有顯性提示（dirty 字眼 / 未提交 / 未追蹤之一）
     assert any(kw in message for kw in ("dirty", "未提交", "未追蹤", "未清理")), \
         f"expected dirty hint in message:\n{message}"
@@ -320,7 +320,7 @@ def test_main_mixed_merged_and_unmerged_worktrees(hook_module, capsys):
     # 未合併分支應出現
     assert "feat/W1-001" in message or "/tmp/wt-unmerged" in message
     # 已合併且 cleanup 建議應出現
-    assert "git worktree remove" in message
+    assert "/worktree cleanup" in message
     assert "feat/W1-002" in message or "/tmp/wt-merged" in message
 
 
@@ -344,7 +344,7 @@ def test_main_merged_clean_excludes_main_branch(hook_module, capsys):
         # main 不應出現在 cleanup 訊息
         assert "/tmp/main-repo" not in message
         # 但 feat/W1-001 應出現
-        assert "git worktree remove" in message
+        assert "/worktree cleanup" in message
         assert "feat/W1-001" in message or "/tmp/wt-merged" in message
 
 
@@ -450,6 +450,7 @@ def test_main_locked_worktree_not_suggested_for_removal(hook_module, capsys):
     message = _extract_message(capsys.readouterr().out)
     assert rc == 0
     assert "git worktree remove" not in message
+    assert "/worktree cleanup" not in message
     assert "不建議清理" in message
 
 

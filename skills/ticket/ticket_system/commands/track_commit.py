@@ -36,6 +36,12 @@ from ticket_system.lib.git_ops import (
     commit_files_isolated,
 )
 from ticket_system.lib.messages import ErrorMessages, format_error
+from ticket_system.lib.write_scope import (
+    out_of_scope_files as _out_of_scope_files,
+    resolve_repo_root,
+    to_repo_relative as _to_repo_relative,
+    unsafe_paths,
+)
 from ticket_system.lib.paths import get_ticket_path, get_ticket_state_root
 from ticket_system.lib.project_root import resolve_project_cwd
 from ticket_system.lib.topic_assignments import TOPIC_ASSIGNMENTS_RELATIVE_PATH
@@ -86,28 +92,7 @@ def _resolve_repo_root(worktree: Optional[str]) -> Optional[str]:
         repo root 絕對路徑；``--worktree`` 指定但非合法 git 目錄時回傳
         None（呼叫端應視為錯誤並拒絕提交）。
     """
-    if not worktree:
-        return resolve_project_cwd()
-
-    abs_worktree = os.path.abspath(worktree)
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=abs_worktree,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
-
-
-def _to_repo_relative(path: str, repo_root: str, base_dir: str) -> str:
-    """將輸入路徑（可能為絕對路徑或相對於 base_dir 的相對路徑）正規化為
-    repo-relative posix 路徑，供與 where.files 宣告路徑比對。
-    """
-    abs_path = path if os.path.isabs(path) else os.path.join(base_dir, path)
-    return os.path.relpath(os.path.abspath(abs_path), repo_root).replace(os.sep, "/")
+    return resolve_repo_root(worktree, resolve_project_cwd())
 
 
 def _own_ticket_md(version: str, ticket_id: str, repo_root: str) -> str:
@@ -138,23 +123,6 @@ def _cli_managed_paths(version: str, ticket_id: str, repo_root: str) -> set:
         worklog,
         TOPIC_ASSIGNMENTS_RELATIVE_PATH,
     }
-
-
-def _out_of_scope_files(
-    input_files: List[str], declared: set, repo_root: str, base_dir: str
-) -> List[str]:
-    """回傳 input_files 中未落在 declared（where.files 寫入子集）內的原始輸入項。
-
-    複用 file_conflict.files_intersect 做路徑段前綴比對（非集合精確字串
-    比對）：declared 內含目錄型宣告（如某測試目錄路徑）時，其下個別檔名
-    視為在範圍內——精確字串比對永遠不會命中目錄字面值，是原缺陷成因。
-    """
-    out_of_scope = []
-    for orig in input_files:
-        normalized = _to_repo_relative(orig, repo_root, base_dir)
-        if not any(files_intersect(normalized, d) for d in declared):
-            out_of_scope.append(orig)
-    return out_of_scope
 
 
 def _git_status_porcelain(repo_root: str) -> str:
@@ -238,6 +206,8 @@ def _expand_directory_to_changed_files(
     for line in status_out.split("\0"):
         if len(line) < 4:
             continue
+        # 解析依賴 _git_status_porcelain 帶 --no-renames：拿掉該旗標，R 項
+        # 會帶出舊名（多一段 NUL 欄位），line[3:] 會截壞路徑。
         path = line[3:]
         if not files_intersect(path, directory):
             continue
@@ -356,8 +326,8 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
     repo_root = _resolve_repo_root(worktree)
     if repo_root is None:
         print(
-            f"[ERROR] --worktree {worktree} 不是合法的 git 目錄（"
-            "git rev-parse --show-toplevel 失敗），拒絕提交"
+            f"[ERROR] --worktree {worktree} 不是合法的 git 目錄，或不屬本 repo 的 "
+            "git worktree list（rev-parse／worktree list 失敗亦拒絕），拒絕提交"
         )
         return 1
 
@@ -427,12 +397,27 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         )
         return 1
 
+    unsafe = unsafe_paths(args.files, repo_root, base_dir)
+
     # 目錄型輸入展開為具體變更檔案：commit_files_isolated 的自我驗證比對
     # 精確檔案清單，目錄字面值不會出現在該比對結果中（見
     # _expand_directory_to_changed_files docstring）。展開後恆為具體檔案。
     normalized_input = _expand_directories(
         args.files, repo_root, base_dir, args.ticket_id
     )
+    # 展開結果（git status 列出的 symlink 項目）須再過同一判準
+    unsafe += [
+        f for f in unsafe_paths(normalized_input, repo_root, repo_root)
+        if f not in unsafe
+    ]
+    if unsafe:
+        print(
+            "[ERROR] 以下檔案是 symlink 或解析後落在 repo 之外，拒絕提交：\n"
+            + "\n".join(f"  - {f}" for f in unsafe)
+            + "\n"
+            + CRITERIA_REJECTION_GUIDANCE
+        )
+        return 1
     if not normalized_input:
         print(
             "[ERROR] 宣告範圍內的目錄底下無任何變更檔案，無可提交內容，拒絕提交：\n"

@@ -324,6 +324,50 @@ class TestMergeExemption:
         assert "merge 殘局提醒" in result.stderr
         assert "git merge --abort" in result.stderr
 
+    def test_cas_merge_commit_without_merge_head_allows_non_exempt_path(self, scratch_repo):
+        """W1-356 對照表第 1 列：merge-tree + commit-tree 產生的雙 parent 合併
+        commit 不建立 MERGE_HEAD，含非豁免檔仍應放行（逐 commit 依 parent 數判定）。"""
+        main_head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        _run_git(["checkout", "-q", "-b", "feature/x"], cwd=scratch_repo)
+        (scratch_repo / "lib").mkdir(exist_ok=True)
+        (scratch_repo / "lib" / "app.dart").write_text("void main() {}\n", encoding="utf-8")
+        _run_git(["add", "."], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "feature work"], cwd=scratch_repo)
+        feature_head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        _run_git(["checkout", "-q", "main"], cwd=scratch_repo)
+        merge_sha = _make_commit_from_files(
+            scratch_repo, main_head, {"lib/app.dart": b"void main() {}\n"},
+            extra_parents=(feature_head,),
+        )
+        assert _run_git(["rev-parse", "-q", "--verify", "MERGE_HEAD"], cwd=scratch_repo)[0] != 0
+
+        result = _run_guard(scratch_repo, "prepared", f"{main_head} {merge_sha} refs/heads/main\n")
+
+        assert result.returncode == 0, result.stderr
+
+    def test_single_parent_commit_with_merge_head_still_denied(self, scratch_repo):
+        """W1-356 對照表第 3 列（#101）：MERGE_HEAD 存在但新 commit 只有單一
+        parent，不得因 MERGE_HEAD 而豁免。"""
+        main_head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        _run_git(["checkout", "-q", "-b", "feature/x"], cwd=scratch_repo)
+        (scratch_repo / "other.txt").write_text("x\n", encoding="utf-8")
+        _run_git(["add", "."], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "feature work"], cwd=scratch_repo)
+        _run_git(["checkout", "-q", "main"], cwd=scratch_repo)
+        rc, _o, err = _run_git(["merge", "--no-ff", "--no-commit", "feature/x"], cwd=scratch_repo)
+        assert rc == 0, err
+        assert _run_git(["rev-parse", "-q", "--verify", "MERGE_HEAD"], cwd=scratch_repo)[0] == 0
+        (scratch_repo / "lib").mkdir(exist_ok=True)
+        (scratch_repo / "lib" / "app.dart").write_text("void main() {}\n", encoding="utf-8")
+        _run_git(["add", "lib/app.dart"], cwd=scratch_repo)
+        tree = _capture(["write-tree"], cwd=scratch_repo)
+        single = _capture(["commit-tree", tree, "-p", main_head, "-m", "single"], cwd=scratch_repo)
+
+        result = _run_guard(scratch_repo, "prepared", f"{main_head} {single} refs/heads/main\n")
+
+        assert result.returncode == 87
+        assert "branch-verify" in result.stderr
+
     def test_commit_on_feature_branch_unaffected(self, scratch_repo):
         """worktree／feature 分支內提交行為不變：目標 ref 非保護分支時，
         merge 與直接提交皆不受 branch-verify 管轄（is_merge_commit 旗標

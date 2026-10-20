@@ -216,6 +216,20 @@ def seeded_repo_root(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _mock_create_dedup_runner(monkeypatch):
+    """建票測試不得打外部服務：create 的 dedup 執行端預設換成空命中。
+
+    Why：create 附 --dedup-keywords 時會實際執行 dedup（gh 查詢）。個別測試
+    需驗證執行行為時自行 monkeypatch `dedup_runner.run_dedup` 覆蓋（後注入者勝）。
+    """
+    from ticket_system.lib import dedup_runner
+
+    monkeypatch.setattr(
+        dedup_runner, "run_dedup", lambda keywords, **_kw: dedup_runner.DedupOutcome()
+    )
+
+
+@pytest.fixture(autouse=True)
 def _isolate_commit_retry_log(tmp_path_factory, monkeypatch):
     """提交重試日誌導向 tmp，避免測試的 mock 值污染真實並行失敗率日誌。"""
     from ticket_system.lib import git_utils

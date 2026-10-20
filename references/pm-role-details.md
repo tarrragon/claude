@@ -14,7 +14,9 @@
 
 **PM 不可直接寫入 `test/`**——`main-thread-edit-restriction-hook` 對 `test/*`、`*.dart` 一律 deny（實測確認，與 `pm-rules/skip-gate.md` 規則 5 一致）。
 
-RED 測試仍屬 Phase 2 規格定義由 PM 起草，但須寫成 `docs/` 下 companion doc（如 `docs/work-logs/.../tickets/<id>-red-tests.md`，內含程式碼區塊），派發代理人材料化進 `test/`；GREEN 實作一律派發。
+RED 測試仍屬 Phase 2 規格定義由 PM 起草，但須寫成 `docs/` 下 companion doc（內含程式碼區塊），派發代理人材料化進 `test/`；GREEN 實作一律派發。
+
+**companion doc 路徑**：`docs/work-logs/v{major}/v{major.minor}/v{major.minor.patch}/companions/<ticket-id>-red-tests.md`（版本目錄與 `tickets/` 平行的 `companions/` 子目錄）。**Why**：`tickets/` 目錄受 ticket 檔案守衛管轄，Write 該目錄下任何檔案會被擋下（「禁止直接建立或覆寫 ticket 檔案」），companion doc 不是 ticket，不應放在其下。**Consequence**：寫入 `tickets/` 會撞守衛，PM 需改路徑重寫。**Action**：起草前確認 `companions/` 存在（不存在則 Write 時一併建立），路徑以版本目錄為準。
 
 **PM 實際可寫路徑**：`.claude/**`、`docs/**`、`CLAUDE.md`、`CHANGELOG.md`、`package.json`、`manifest.json`、`.gitignore`、`.gitattributes`、任意層級 `README.md`。
 
@@ -179,6 +181,7 @@ SOP 詳見 `.claude/references/agent-dispatch-template.md`「tests/ 修改派發
 
 ---
 
-**Last Updated**: 2026-09-29
+**Last Updated**: 2026-10-15
+**Version**: 1.2.0 — 〈產品程式碼與測試的寫入邊界〉companion doc 路徑由 `tickets/` 下改為版本目錄的 `companions/`，並補三明示（`tickets/` 受 ticket 檔案守衛管轄，原路徑 Write 被擋）。
 **Version**: 1.1.0 — 〈tests/ 修改派發 SOP〉加註已被 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉取代，改路由至〈派發位置判準（強制）〉（框架 issue 101）。
 **Version**: 1.0.0 — 初始建立：承接 `rules/core/pm-role.md` 外移的 substance（職責邊界完整判準、行為循環執行細節、Caveat 判讀、Session-start 清點、Re-center Protocol）。外移依據 `rules/README.md`「自動載入預算原則」與 `references/auto-load-stub-conventions.md` 外移 SOP。

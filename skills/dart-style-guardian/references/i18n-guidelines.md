@@ -4,7 +4,7 @@
 
 本 skill 為跨專案共用資產，支援語系數量與清單依各專案的 `l10n.yaml` 與實際 ARB 檔案為準，不在此列舉——寫死一份語系清單，其他專案讀到的就是一份與己身設定不符的清單。所有使用者可見文字必須經 Flutter 內建 localization 系統國際化。
 
-**下方範例統一以 `context.l10n!.keyName` 示範存取語法，此為示意寫法之一。** 實際存取子形態（`AppLocalizations.of(context).keyName` 或專案自建 extension）以 `.claude/config/dart-style-guardian.json`〈i18n.accessor〉與專案 `l10n.yaml` 為準，套用前先確認本專案慣例（見 `SKILL.md`〈Internationalization〉）。
+**下方範例統一以 `context.l10n!.keyName` 示範存取語法，此為示意寫法之一。** 實際存取子形態（`AppLocalizations.of(context).keyName` 或專案自建 extension）以 `.claude/project-integration/dart-style-guardian.json`〈i18n.accessor〉與專案 `l10n.yaml` 為準，套用前先確認本專案慣例（見 `SKILL.md`〈Internationalization〉）。
 
 ---
 

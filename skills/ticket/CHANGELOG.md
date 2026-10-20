@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.45.1（本地變更）— `track commit` 與 `track move-lines` 的寫入範圍判定抽到 `lib/write_scope.py`（公開函式，move-lines 不再 import track_commit 的底線私有函式），並收緊：目標是 symlink 或解 symlink 後落在 repo 之外一律拒絕；`--worktree` 須出現在本 repo 的 `git worktree list --porcelain`，git 查詢失敗時拒絕。一般檔案與本 repo worktree 行為不變。文件同步：`references/track-command-commit.md` Exit code 表。測試：`tests/test_write_scope.py`、`test_track_commit.py::TestWriteScopeHardening`、`test_track_move_lines.py::TestSymlinkAndForeignWorktree`（改前 8 紅，改後綠）。
+
+**Version**: 2.45.0（2026-10-19）— frontmatter 由 2.44.47 同步至本版，並彙整上次發佈以來未逐筆記錄的主要變更：`track conflicts` 新增同檔票樹競爭統計與 `--since-days`（達門檻且非聚合檔附拆分建議）；hook 票在 create／set-where 帶入 acceptance 模板，且重複執行不再重複帶入；acceptance-gate 對 hook 票改查 Test Results／Solution 的實測證據與 how.strategy 的產生路徑盤點表；complete 同步 tdd_phase 等欄位；`track commit` 缺 Co-Authored-By 時自動補上、拒絕訊息區分判準性與環境性、版本工作日誌與 topic-assignments 視為隱含可寫；完成類 hook 處理 PostToolUseFailure 與結束碼 75 並改用分層成功判定；提醒類 hook 改走 `additionalContext`；`track-command.md` 與派發範本依職責分檔。
+
 **Version**: 2.44.48（本地變更）— 身份綁定與守衛：`dispatch-identity-bind-hook` 的 `UNBOUND_WHO_VALUES` 移除 PM 身份，PM 持有的票派發唯讀審查者不再被覆寫 who，綁定改用 `set-who --current`（保留 who.history）；PM 持有票的讓出（`reassign_who_from_pm_if_takeover`）由 complete／finish 前置延伸到 `identity_guard.check_identity`，涵蓋所有帶 `--as` 的守衛命令；守衛 deny 訊息移除 `--as <who.current>` 可複製範例，改為回報 PM `set-who` 改派。
 
 **Version**: 2.44.47（本地變更）— `references/architecture.md` 在 named agent 三態表後補一行路由：經 SendMessage 進入 running 前，先確認 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉。純文件路由，CLI 行為不變。此變更原本隨派發範本的恢復判準一起修改時漏升版號，導致本地與發佈庫出現版號相同但內容不同，本版補升。

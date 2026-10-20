@@ -31,6 +31,7 @@ Hook 類型：PreToolUse
 
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
@@ -38,6 +39,7 @@ from typing import Callable, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
+from lib.git_command_parse import contains_git_word, find_git_invocations
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -49,12 +51,13 @@ from lib import (
 )
 
 
-# git worktree remove [--force] <path>
+# 僅用於 find_git_invocations 回傳 None（命令無法解析）時的退路；
+# 可解析的命令一律走 lib.git_command_parse。
 _REMOVE_PATTERN = re.compile(
     r"git\s+worktree\s+remove\b(?P<rest>[^\n;&|]*)",
 )
 
-BLOCK_MESSAGE = """[1.2.0-W1-028 Guard A] worktree 分支有未 merge 進 main 的交付物，禁止 remove
+BLOCK_MESSAGE ="""[1.2.0-W1-028 Guard A] worktree 分支有未 merge 進 main 的交付物，禁止 remove
 
 worktree: {path}
 分支: {branch}
@@ -65,9 +68,9 @@ worktree: {path}
 （git fsck 無 unreachable）。這正是 1.2.0-W1-028 事故一的根因。
 
 修復方式（擇一）：
-  1. 先 merge：git checkout main && git merge {branch} --no-edit
-     若被擋下（fatal: ref updates aborted by hook）：git merge --abort 清理
-     MERGE_HEAD 殘局後依 stderr 訊息修正重試（合併本身已對 branch-verify
+  1. 先 merge（走合併閘門，隔離索引一步完成，不留 MERGE_HEAD 殘局）：
+       {merge_cmd}
+     若被擋下，依 stderr 訊息修正後重試（合併本身已對 branch-verify
      豁免，仍被擋通常是其他內容 guard，如 reference-stability-rule8）
   2. 或 cherry-pick 有價值 commit 後再 remove
   3. 用世界平面固定值驗證交付物已在 main（tool-output-trust 規則 3）：
@@ -98,7 +101,26 @@ def _split_dirty_lines(dirty_lines: List[str]) -> Tuple[List[str], List[str]]:
     return untracked, tracked_modified
 
 
-def _format_dirty_block_message(path: str, branch: Optional[str], dirty_lines: List[str]) -> str:
+def _merge_command(branch: Optional[str], logger) -> str:
+    """落地 main 的建議指令（`/worktree merge`）。
+
+    lazy import worktree_manager：本 hook 是阻擋型守衛，不為建議字串在載入期
+    引入約 2000 行模組的 import 失敗點；失敗時退回通用字面並記 warning。
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        from worktree_manager import merge_suggestion_command
+        if branch:
+            return merge_suggestion_command(branch)
+    except Exception as exc:  # 建議字串不得使守衛失效；已記日誌後退回
+        logger.warning("無法載入 worktree_manager，建議退回通用字面：%s", exc)
+    target = shlex.quote(branch) if branch else "<branch>"
+    return "/worktree merge --branch {}".format(target)
+
+
+def _format_dirty_block_message(
+    path: str, branch: Optional[str], dirty_lines: List[str], logger
+) -> str:
     """組出 Guard C（未提交變更）阻擋訊息。
 
     0.2.1-W3-285 三項修正：(a) 依未追蹤/已追蹤分組列出檔案，比照
@@ -131,12 +153,13 @@ def _format_dirty_block_message(path: str, branch: Optional[str], dirty_lines: L
         "",
         "修復方式（擇一，完成後執行下方「驗證」步驟確認）：",
         "  1. 保留變更並落地 main：",
-        '       git -C {} add <paths> && git -C {} commit -m "<message>" -- <paths>'.format(path, path),
+        "       git -C {} add <exact-path>".format(path),
+        "       git -C {} diff --cached --name-only   # 確認只含目標檔".format(path),
+        '       git -C {} commit -m "<message>"'.format(path),
     ])
-    if branch:
-        lines.append("       git merge {} --no-edit".format(branch))
-    else:
-        lines.append("       git merge <branch> --no-edit   # <branch> 為此 worktree 對應分支")
+    lines.append("       {}".format(_merge_command(branch, logger)))
+    if not branch:
+        lines.append("       # <branch> 為此 worktree 對應分支")
     lines.extend([
         "  2. 確認變更確為可捨棄（如暫存/測試殘留）後清除：",
         "       git -C {} restore .   # 還原已追蹤檔案的未提交修改".format(path),
@@ -151,7 +174,12 @@ def _format_dirty_block_message(path: str, branch: Optional[str], dirty_lines: L
 
 
 def _extract_remove_paths(command: str, logger) -> List[str]:
-    """從 Bash 命令抽取所有 `git worktree remove` 的目標路徑。
+    """只取路徑部分的 `_extract_remove_targets`（保留既有呼叫端與測試的介面）。"""
+    return [path for path, _ in _extract_remove_targets(command, logger)]
+
+
+def _extract_remove_targets(command: str, logger) -> List[Tuple[str, Optional[str]]]:
+    """從 Bash 命令抽取所有 `git worktree remove` 的（目標路徑, repo 基準）。
 
     支援單命令與 `&&` / `;` 串接的多個 remove。批量清理（while read）形式
     無法靜態解析路徑，回傳空清單由呼叫端略過（不阻擋，避免誤擋批次腳本）。
@@ -161,21 +189,58 @@ def _extract_remove_paths(command: str, logger) -> List[str]:
         logger: hook logger，供記錄解析結果（可觀測性規則 4）
 
     Returns:
-        目標 worktree 路徑清單（去除 flag）
+        (目標 worktree 路徑, repo 基準) 清單。repo 基準為 `-C` 指向的目錄
+        （inv.effective_dir）；無 `-C` 或退回正則時為 None，表示以 hook 行程 cwd 為準。
     """
+    targets: List[Tuple[str, Optional[str]]] = []
+    if not contains_git_word(command):
+        return targets
+    invocations = find_git_invocations(command, {"worktree"})
+    if invocations is None:
+        targets = [(p, None) for p in _regex_fallback_paths(command)]
+        logger.warning(
+            "無法解析命令（長度 %d），退回正則擷取 %d 個路徑", len(command), len(targets)
+        )
+        return targets
+    for inv in invocations:
+        args = inv.args
+        if not args or args[0] != "remove":
+            continue
+        # 濾掉 flag（--force / -f 等），第一個非 flag token 視為路徑
+        operands = [t for t in args[1:] if not t.startswith("-")]
+        if not operands:
+            continue
+        path = _resolve_remove_path(operands[0], inv, logger)
+        if path is not None:
+            repo_dir = inv.effective_dir if inv.dash_c_paths else None
+            targets.append((path, repo_dir or None))
+    logger.debug("解析到 %d 個 remove 目標：%s", len(targets), targets)
+    return targets
+
+
+def _regex_fallback_paths(command: str) -> List[str]:
+    """命令無法解析時的退路：以正則擷取路徑（如 `echo "..." | sh` 管線接 shell）。"""
     paths: List[str] = []
     for match in _REMOVE_PATTERN.finditer(command):
-        rest = match.group("rest").strip()
-        # 拆 token，濾掉 flag（--force / -f 等）
-        tokens = [t for t in rest.split() if not t.startswith("-")]
+        tokens = [t for t in match.group("rest").split() if not t.startswith("-")]
         if tokens:
-            # 第一個非 flag token 視為路徑
             paths.append(tokens[0].strip("'\""))
-    logger.debug("解析到 %d 個 remove 路徑：%s", len(paths), paths)
     return paths
 
 
-def _branch_of_worktree(worktree_path: str, logger) -> Optional[str]:
+def _resolve_remove_path(path: str, inv, logger) -> Optional[str]:
+    """相對路徑以 `-C` 指定的目錄為基準解析；目錄無法確定時回傳 None（fail-open）。"""
+    if os.path.isabs(path) or not inv.dash_c_paths:
+        return path
+    if inv.dir_unknown or not inv.effective_dir:
+        logger.warning("-C 目錄含動態值，無法解析相對路徑 %s，fail-open 略過", path)
+        return None
+    return os.path.normpath(os.path.join(inv.effective_dir, path))
+
+
+def _branch_of_worktree(
+    worktree_path: str, logger, repo_dir: Optional[str] = None
+) -> Optional[str]:
     """查 worktree 路徑對應的分支名。
 
     0.2.1-W3-286：改用共用層 lib.git_utils.get_worktree_list，路徑比對鍵
@@ -188,7 +253,7 @@ def _branch_of_worktree(worktree_path: str, logger) -> Optional[str]:
         分支名（get_worktree_list 已剝除 refs/heads/ 前綴），或 None
         （detached / 找不到 / git 失敗）
     """
-    worktrees = get_worktree_list()
+    worktrees = get_worktree_list(cwd=repo_dir)
     if not worktrees:
         return None
 
@@ -200,7 +265,9 @@ def _branch_of_worktree(worktree_path: str, logger) -> Optional[str]:
     return None
 
 
-def _unmerged_files(branch: str, logger) -> Optional[List[str]]:
+def _unmerged_files(
+    branch: str, logger, repo_dir: Optional[str] = None
+) -> Optional[List[str]]:
     """查 `main..<branch>` 未合併 commit 觸及的檔案。
 
     Returns:
@@ -208,7 +275,8 @@ def _unmerged_files(branch: str, logger) -> Optional[List[str]]:
     """
     # 先確認有未合併 commit
     log_out = run_git(
-        ["git", "log", "main..{}".format(branch), "--oneline"], timeout=10, logger=logger
+        ["git", "log", "main..{}".format(branch), "--oneline"],
+        cwd=repo_dir, timeout=10, logger=logger,
     )
     if log_out is None:
         return None  # git 失敗，不阻擋
@@ -216,19 +284,20 @@ def _unmerged_files(branch: str, logger) -> Optional[List[str]]:
         return []  # 無未合併 commit
 
     diff_out = run_git(
-        ["git", "diff", "--name-only", "main...{}".format(branch)], timeout=10, logger=logger
+        ["git", "diff", "--name-only", "main...{}".format(branch)],
+        cwd=repo_dir, timeout=10, logger=logger,
     )
     if diff_out is None:
         return None
     return [f for f in diff_out.splitlines() if f.strip()]
 
 
-def _all_patches_on_main(branch: str, logger) -> bool:
+def _all_patches_on_main(branch: str, logger, repo_dir: Optional[str] = None) -> bool:
     """`git cherry main <branch>` 輸出全為 `-`（每個 commit 的 patch 在 main 已有等價者）。
 
     無輸出或 git 失敗回傳 False（維持 Guard A 既有阻擋判定，不放寬）。
     """
-    out = run_git(["git", "cherry", "main", branch], timeout=10, logger=logger)
+    out = run_git(["git", "cherry", "main", branch], cwd=repo_dir, timeout=10, logger=logger)
     lines = [ln for ln in (out or "").splitlines() if ln.strip()]
     return bool(lines) and all(ln.startswith("-") for ln in lines)
 
@@ -250,18 +319,20 @@ def _dirty_status(worktree_path: str, logger) -> List[str]:
     return [str(fs) for fs in get_uncommitted_files(cwd=worktree_path)]
 
 
-def _guard_a(path: str, branch: Optional[str], logger) -> Optional[str]:
+def _guard_a(
+    path: str, branch: Optional[str], logger, repo_dir: Optional[str] = None
+) -> Optional[str]:
     """Guard A：檢查分支是否有未 merge 進 main 的交付物。
 
     回傳非 None 即為阻擋訊息；回傳 None 表示放行（含分支查找失敗、無對應
     分支、git 查詢失敗、無未合併交付物等各種放行情境，皆已於函式內記錄
-    對應日誌）。
+    對應日誌）。repo_dir 為 `-C` 指向的 repo（None = hook 行程 cwd）。
     """
     if not branch:
         logger.info("worktree %s 無對應分支（detached/找不到），略過 Guard A", path)
         return None
 
-    files = _unmerged_files(branch, logger)
+    files = _unmerged_files(branch, logger, repo_dir)
     if files is None:
         logger.warning("分支 %s 未合併檢查失敗（git 錯誤），放行 Guard A", branch)
         return None
@@ -269,19 +340,25 @@ def _guard_a(path: str, branch: Optional[str], logger) -> Optional[str]:
         logger.info("分支 %s 無未合併交付物，Guard A 放行", branch)
         return None
 
-    if _all_patches_on_main(branch, logger):
+    if _all_patches_on_main(branch, logger, repo_dir):
         logger.info("分支 %s 內容已在 main（patch 等價，git cherry 全為 -），Guard A 放行", branch)
         return None
 
     files_list = "\n".join("  - {}".format(f) for f in sorted(files))
     logger.warning("阻擋 remove：分支 %s 有 %d 個未合併交付物檔案", branch, len(files))
-    return BLOCK_MESSAGE.format(path=path, branch=branch, count=len(files), files=files_list)
+    return BLOCK_MESSAGE.format(
+        path=path, branch=branch, count=len(files), files=files_list,
+        merge_cmd=_merge_command(branch, logger),
+    )
 
 
-def _guard_c(path: str, branch: Optional[str], logger) -> Optional[str]:
+def _guard_c(
+    path: str, branch: Optional[str], logger, repo_dir: Optional[str] = None
+) -> Optional[str]:
     """Guard C（0.2.1-W3-280，0.2.1-W3-285 由 Guard B 改名避免撞號）：檢查
     target working tree 本身是否有未提交變更。不依賴 Guard A 的分支查找是否
     成功——即使找不到分支，working tree 仍可能有需要保留的未提交內容。
+    repo_dir 僅為與 Guard A 統一簽章，Guard C 以 path 本身為查詢目錄。
     """
     dirty_lines = _dirty_status(path, logger)
     if dirty_lines is None:
@@ -292,15 +369,27 @@ def _guard_c(path: str, branch: Optional[str], logger) -> Optional[str]:
         return None
 
     logger.warning("阻擋 remove：worktree %s 有 %d 項未提交變更", path, len(dirty_lines))
-    return _format_dirty_block_message(path, branch, dirty_lines)
+    return _format_dirty_block_message(path, branch, dirty_lines, logger)
 
 
 # 表驅動 Guard 清單：新增 Guard 只需在此 tuple 加一個元素，不需在 main() 加分支。
-# 每個 guard 簽章一致：(path, branch, logger) -> Optional[str]（阻擋訊息或 None）。
-GUARDS: Tuple[Callable[[str, Optional[str], "object"], Optional[str]], ...] = (
+# 每個 guard 簽章一致：(path, branch, logger, repo_dir) -> Optional[str]（阻擋訊息或 None）。
+GUARDS: Tuple[Callable[..., Optional[str]], ...] = (
     _guard_a,
     _guard_c,
 )
+
+
+def _log_empty_targets(command: str, logger) -> None:
+    """未取得任何 remove 目標時，依 find_git_invocations 結果分三種情況記日誌。"""
+    invocations = find_git_invocations(command, {"worktree"})
+    if invocations is None:
+        logger.warning("命令無法解析且正則退路未命中任何 remove 路徑，放行")
+        return
+    if any(inv.args and inv.args[0] == "remove" for inv in invocations):
+        logger.info("worktree remove 命令但無法靜態解析路徑（批量腳本？），放行")
+        return
+    logger.debug("非 remove 命令（字面含 worktree 與 remove 但無 git worktree remove 呼叫），放行")
 
 
 def main() -> int:
@@ -317,15 +406,15 @@ def main() -> int:
         logger.debug("非 worktree remove 命令，放行")
         return 0
 
-    paths = _extract_remove_paths(command, logger)
-    if not paths:
-        logger.info("worktree remove 命令但無法靜態解析路徑（批量腳本？），放行")
+    targets = _extract_remove_targets(command, logger)
+    if not targets:
+        _log_empty_targets(command, logger)
         return 0
 
-    for path in paths:
-        branch = _branch_of_worktree(path, logger)
+    for path, repo_dir in targets:
+        branch = _branch_of_worktree(path, logger, repo_dir)
         for guard in GUARDS:
-            message = guard(path, branch, logger)
+            message = guard(path, branch, logger, repo_dir)
             if message:
                 print(message, file=sys.stderr)
                 return 2

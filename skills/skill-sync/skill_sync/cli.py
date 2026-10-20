@@ -106,6 +106,13 @@ class DivergedSkill(NamedTuple):
     display string (short SHA + timestamp) for that match; it stays `None`
     for every other direction, so existing construction sites need no
     change.
+
+    `direction` can also be `"push_prune"`: a `"pull"` classification whose
+    only difference is remote-only files that the local history shows were
+    deleted on purpose (`push` keeps remote-only files by default, so the
+    sync base makes the remote look newer) — see
+    `_remote_extras_deleted_locally`. The fix is `push_prune_command`; a pull
+    would resurrect the deleted files.
     """
 
     name: str
@@ -115,6 +122,7 @@ class DivergedSkill(NamedTuple):
     push_command: str
     direction: str = "unknown"
     suspect_revert_commit: str | None = None
+    push_prune_command: str | None = None
 
 
 class SyncStatus(NamedTuple):
@@ -955,6 +963,93 @@ def _cloned_skill_history(repo_url: str, skill_name: str):
             yield tmp, entries
         except (OSError, subprocess.SubprocessError):
             yield None, []
+
+
+def _deleted_in_local_history(skills_dir: Path, skill_name: str, rel: str) -> bool:
+    """本地 git 歷史是否有刪除 `<skill_name>/<rel>` 的提交。
+
+    git 不可用或 skills_dir 不在倉庫內時拋 RuntimeError，由呼叫端退回現行行為。
+    """
+    result = subprocess.run(
+        ["git", "-C", str(skills_dir), "log", "--diff-filter=D", "--format=%H",
+         "-1", "--", f"{skill_name}/{rel}"],
+        capture_output=True, text=True, timeout=REMOTE_FETCH_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git log failed: {result.stderr.strip()}")
+    return bool(result.stdout.strip())
+
+
+def _remote_files(repo_url: str, skill_name: str) -> dict[str, str]:
+    """發佈庫 HEAD 中該 skill 的 {相對路徑: blob sha}；不下載檔案內容。"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "repo"
+        clone = subprocess.run(
+            ["git", "-c", "core.autocrlf=false", "clone", "--depth", "1",
+             "--filter=blob:none", "--no-checkout", repo_url, str(tmp)],
+            capture_output=True, text=True, timeout=REMOTE_FETCH_TIMEOUT_SECONDS,
+        )
+        if clone.returncode != 0:
+            raise RuntimeError(f"git clone failed: {clone.stderr.strip()}")
+        tree = subprocess.run(
+            ["git", "ls-tree", "-r", "-z", "HEAD", f"{skill_name}/"],
+            cwd=tmp, capture_output=True, text=True,
+        )
+        if tree.returncode != 0:
+            raise RuntimeError(f"git ls-tree failed: {tree.stderr.strip()}")
+        files: dict[str, str] = {}
+        for record in filter(None, tree.stdout.split("\0")):
+            meta, path = record.split("\t", 1)
+            files[path[len(skill_name) + 1:]] = meta.split()[2]
+        return files
+
+
+def _local_blob_sha(path: Path) -> str:
+    result = subprocess.run(
+        ["git", "hash-object", "--", str(path)], capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git hash-object failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def _remote_extras_deleted_locally(
+    repo_url: str, skills_dir: Path, skill_name: str
+) -> bool:
+    """"pull" 候選的差異是否只有「發佈庫多出、且本地 git 歷史刪除過」的檔。
+
+    是 -> True，報告應建議 `push --prune`：`push` 預設保留遠端多出的檔，同步基準
+    因此把遠端判為較新，照 pull 會把本地刻意刪掉的檔拉回來。成立需同時滿足：
+    遠端有本地沒有的檔；本地每個檔與遠端 blob 相同；遠端多出的每個檔都在本地
+    git 歷史被刪除過。遠端真的新增了本地從未有過的檔 -> False（仍是 pull）。
+
+    任何判斷失敗（網路、git 不可用、不在倉庫內）皆寫 stderr 並回傳 False，
+    退回現行 "pull" 行為——這是報告的加值判斷，不是主流程。
+    """
+    try:
+        remote = _remote_files(repo_url, skill_name)
+        skill_dir = skills_dir / skill_name
+        local_rels = {
+            rel
+            for rel in (
+                p.relative_to(skill_dir).as_posix()
+                for p in skill_dir.rglob("*") if p.is_file()
+            )
+            if not _should_exclude_file(rel)
+        }
+        extras = sorted(set(remote) - local_rels)
+        if not extras or not local_rels <= set(remote):
+            return False
+        if any(_local_blob_sha(skill_dir / rel) != remote[rel] for rel in local_rels):
+            return False
+        return all(_deleted_in_local_history(skills_dir, skill_name, rel) for rel in extras)
+    except Exception as e:  # 加值判斷失敗不得中斷報告；寫日誌後退回 pull
+        sys.stderr.write(
+            f"[skill-sync] could not tell whether remote-only files of "
+            f"'{skill_name}' were deleted locally ({type(e).__name__}: {e}); "
+            "keeping 'pull' suggestion\n"
+        )
+        return False
 
 
 def _check_suspect_revert(repo_url: str, skill_name: str) -> str | None:
@@ -1881,6 +1976,8 @@ def sync_status_report(
             suspect_revert_commit = _check_suspect_revert(resolved_url, name)
             if suspect_revert_commit is not None:
                 direction = "suspect_revert"
+            elif _remote_extras_deleted_locally(resolved_url, skills_dir, name):
+                direction = "push_prune"
         diverged_skills.append(
             DivergedSkill(
                 name=name,
@@ -1890,6 +1987,7 @@ def sync_status_report(
                 push_command=f"skill-sync push {name}",
                 direction=direction,
                 suspect_revert_commit=suspect_revert_commit,
+                push_prune_command=f"skill-sync push {name} --prune",
             )
         )
 
@@ -2004,12 +2102,20 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
     conflicts = [e for e in status.diverged if e.direction == "conflict"]
     unresolved = [e for e in status.diverged if e.direction == "unknown"]
     suspect_reverts = [e for e in status.diverged if e.direction == "suspect_revert"]
+    push_prunes = [e for e in status.diverged if e.direction == "push_prune"]
 
     if should_pull:
         _print_single_command_group(
             f"[SHOULD PULL] {len(should_pull)} skill(s) — local unchanged since last "
             "sync, remote has moved on:",
             should_pull, "pull_command",
+        )
+    if push_prunes:
+        _print_single_command_group(
+            f"[SHOULD PUSH --PRUNE] {len(push_prunes)} skill(s) — remote only "
+            "differs by files deleted from local on purpose; pulling would "
+            "restore them:",
+            push_prunes, "push_prune_command",
         )
     if should_push:
         _print_single_command_group(

@@ -24,7 +24,7 @@ BASE = ["[ ] 既有條件"]
 
 def test_templates_carry_placeholder_and_no_gate_keywords():
     checker = create_mod._load_hook_protection_checker()
-    assert all("<待填>" in t for t in TEMPLATES)
+    assert all("<待填" in t for t in TEMPLATES)
     # 未填模板本身不得讓 gate 的三類關鍵詞通過
     assert len(checker._missing_categories("\n".join(TEMPLATES))) == 3
 
@@ -33,6 +33,38 @@ def test_create_touching_hook_appends_four_templates():
     result, touched = apply_hook_acceptance_template(HOOK_FILES, list(BASE))
     assert touched is True
     assert result == BASE + TEMPLATES
+
+
+def test_read_marked_hook_path_adds_no_template_e2():
+    result, touched = apply_hook_acceptance_template(
+        [".claude/hooks/foo-hook.py::read"], list(BASE)
+    )
+    assert touched is False
+    assert result == list(BASE)
+
+
+def test_unmarked_hook_path_still_adds_template_e1():
+    result, touched = apply_hook_acceptance_template(
+        [".claude/hooks/foo-hook.py"], list(BASE)
+    )
+    assert touched is True
+    assert len(result) > len(BASE)
+
+
+def test_write_marked_hook_path_still_adds_template_e1():
+    result, touched = apply_hook_acceptance_template(
+        [".claude/hooks/x.py::write"], list(BASE)
+    )
+    assert touched is True
+    assert len(result) > len(BASE)
+
+
+def test_escaped_read_marker_still_adds_template():
+    result, touched = apply_hook_acceptance_template(
+        [".claude/hooks/foo-hook.py\\::read"], list(BASE)
+    )
+    assert touched is True
+    assert len(result) > len(BASE)
 
 
 def test_create_not_touching_hook_unchanged():
@@ -119,7 +151,7 @@ def _run_create_e2e(tmp_path, monkeypatch, where_files):
     calls = []
     monkeypatch.setattr(create_mod, "print_hook_ticket_reminder", lambda: calls.append(1))
 
-    args = _make_args(where_files=where_files, dedup_checked="none", acceptance=list(BASE))
+    args = _make_args(where_files=where_files, dedup_checked="none", dedup_keywords=["測試佔位"], acceptance=list(BASE))
     assert create_mod.execute(args) == 0
     (path,) = tickets_dir.glob("*.md")
     fm = yaml.safe_load(path.read_text(encoding="utf-8").split("---", 2)[1])
@@ -167,3 +199,53 @@ def test_set_where_e1_contrast(tmp_path, monkeypatch, value, expect_templates):
     else:
         assert acceptance == BASE
         assert reminder_calls == 0
+
+
+# ---- 0.5.0-W1-394：佔位符寫明 set-acceptance --edit 改寫 ----
+
+# 389 實例：代理人改寫條目時刪掉前綴中的說明性括號
+REWRITTEN_389 = "[ ] 載入與執行的確認方式：已貼 hook-logs 引文"
+
+
+def _prefix(template):
+    return template.split("<待填")[0]
+
+
+def test_placeholder_points_to_set_acceptance_edit():
+    for t in TEMPLATES:
+        placeholder = t[t.index("<待填"):]
+        assert "set-acceptance" in placeholder and "--edit" in placeholder
+
+
+def test_prefix_has_no_explanatory_parentheses():
+    for t in TEMPLATES:
+        assert "（" not in _prefix(t) and "(" not in _prefix(t)
+
+
+def test_gate_still_treats_new_placeholder_as_unfilled_e2():
+    checker = create_mod._load_hook_protection_checker()
+    for t in TEMPLATES:
+        assert checker._is_template_placeholder(t)
+    filled = _prefix(TEMPLATES[0]) + "已貼 hook-logs/x.log 引文"
+    assert not checker._is_template_placeholder(filled)
+
+
+def test_rewritten_entry_keeps_prefix_and_is_not_readded_e1():
+    result, _ = apply_hook_acceptance_template(
+        HOOK_FILES, BASE + [REWRITTEN_389]
+    )
+    assert TEMPLATES[1] not in result
+    assert result.count(REWRITTEN_389) == 1
+
+
+def test_dispatch_readiness_counts_rewritten_389_entry_as_template_e1():
+    from ticket_system.commands.track_dispatch_readiness import (
+        _count_hook_template_items,
+    )
+
+    with_rewritten = BASE + [
+        REWRITTEN_389 if t == TEMPLATES[1] else t for t in TEMPLATES
+    ]
+    assert _count_hook_template_items(BASE + TEMPLATES) == 4
+    assert _count_hook_template_items(with_rewritten) == 4
+    assert _count_hook_template_items(BASE) == 0

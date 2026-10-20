@@ -18,7 +18,9 @@ registry 讀寫一律經 `.claude/lib/pm_registry` 動態載入（lazy import �
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -585,12 +587,18 @@ class GhostReport:
     dirty_files: List[str] = field(default_factory=list)
     dirty_intersection_unknown: bool = False
     exit_status_missing: bool = False
+    dispatch_record_unknown: bool = False
+    # 警告欄位（不計入 clean）：已合併分支的 worktree 已失效（需 prune）、
+    # 不與 ticket_files 交集的未追蹤檔（多為建置產物）
+    stale_worktrees: List[str] = field(default_factory=list)
+    untracked_warning_files: List[str] = field(default_factory=list)
 
     @property
     def clean(self) -> bool:
         return not (
             self.unmerged_branch
             or self.dirty_intersection
+            or self.dispatch_record_unknown
             or self.unmerged_branch_unknown
             or self.dirty_intersection_unknown
         )
@@ -620,6 +628,160 @@ def _dirty_file_paths(status_lines: List[str]) -> List[str]:
     return paths
 
 
+def _branch_names_ticket(branch: str, ticket_id: str) -> bool:
+    """分支名含 ticket_id 且前後皆為票號邊界才算命中。
+
+    前邊界：行首或非數字、非點字元（字母緊接如 `fix<id>` 仍命中，偏向不漏判殘留）；後邊界：行尾，或接非英數、非 `.`
+    的字元（`X-36` 不命中 `X-363`，也不命中子票 `X-36.1`）。
+    """
+    pattern = r"(?<![0-9.])" + re.escape(ticket_id) + r"(?![0-9A-Za-z]|\.[0-9])"
+    return re.search(pattern, branch) is not None
+
+
+AGENT_BRANCH_PREFIX = "worktree-agent-"
+
+
+def _dispatch_state_path() -> Optional[Path]:
+    """dispatch-active.json 路徑（經 dispatch_tracker 公開函式；模組不可用回 None）。"""
+    tracker = load_claude_lib("dispatch_tracker")
+    root = _current_project_root()
+    if tracker is None or root is None:
+        return None
+    return tracker.get_state_file_path(Path(root))
+
+
+def _dispatch_branches_for_ticket(ticket_id: str) -> Optional[List[str]]:
+    """dispatch-active 中 ticket_id 全等本票的紀錄所推得的 worktree-agent 分支名。
+
+    檔案不存在回 `[]`（僅用輔訊號）；路徑無法解析或內容讀取／解析失敗回
+    `None`（無法判定）。
+    """
+    path = _dispatch_state_path()
+    if path is None:
+        return None
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        records = data["dispatches"]
+        return [
+            AGENT_BRANCH_PREFIX + str(r["agent_id"])
+            for r in records
+            if r.get("ticket_id") == ticket_id and r.get("agent_id")
+        ]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        sys.stderr.write(f"[lease] dispatch-active 讀取失敗，判無法判定: {exc}\n")
+        return None
+
+
+_WORKTREE_LIST_FAILED = object()
+
+
+def _worktree_of_branch(branch: str) -> Any:
+    """分支所在 worktree：`(路徑, 是否 prunable)`；無此分支回 None；
+    `git worktree list` 失敗回 `_WORKTREE_LIST_FAILED`（與「無此分支」區分）。
+    """
+    lines = _run_git_lines(["worktree", "list", "--porcelain"])
+    if lines is None:
+        return _WORKTREE_LIST_FAILED
+    path: Optional[str] = None
+    prunable = False
+    found = False
+    for line in lines + [""]:
+        if line.startswith("worktree "):
+            path, prunable, found = line[len("worktree "):], False, False
+        elif line.startswith("prunable"):
+            prunable = True
+        elif line == f"branch refs/heads/{branch}":
+            found = True
+        elif line == "" and found and path is not None:
+            return (path, prunable)
+    return None
+
+
+def _worktree_hit_by_changes(
+    wt: str, report: "GhostReport", ticket_files: List[str]
+) -> bool:
+    """worktree 有已追蹤未提交變更、未追蹤檔與 ticket_files 交集、或查詢失敗即命中。
+
+    其餘未追蹤檔（建置產物）只記入 `untracked_warning_files`。
+    """
+    status = _run_git_lines(["status", "--porcelain", "--untracked-files=no"], cwd=wt)
+    if status is None or status:
+        return True
+    untracked = _run_git_lines(["ls-files", "--others", "--exclude-standard"], cwd=wt)
+    if untracked is None:
+        return True
+    hit = False
+    for path in untracked:
+        if any(files_intersect(path, tf) for tf in ticket_files):
+            hit = True
+        elif path not in report.untracked_warning_files:
+            report.untracked_warning_files.append(path)
+    return hit
+
+
+def _branch_hit_by_dispatch(
+    branch: str, unmerged: List[str], report: "GhostReport", ticket_files: List[str]
+) -> bool:
+    """分支未合併，或其 worktree 有未提交變更，即判殘留。
+
+    worktree 已失效（prunable）、僅有不相關未追蹤檔屬放寬方向，只記警告；
+    `worktree list` 失敗標 `unmerged_branch_unknown`（偏向拒絕）。
+    """
+    if branch in unmerged:
+        return True
+    info = _worktree_of_branch(branch)
+    if info is _WORKTREE_LIST_FAILED:
+        report.unmerged_branch_unknown = True
+        return False
+    if info is None:
+        return False
+    wt, prunable = info
+    if prunable:
+        if branch not in report.stale_worktrees:
+            report.stale_worktrees.append(branch)
+        return False
+    return _worktree_hit_by_changes(wt, report, ticket_files)
+
+
+def _subject_hit_branches(unmerged: List[str], ticket_id: str) -> Optional[List[str]]:
+    """未合併 worktree-agent-* 分支中，commit 主旨命中本票號的分支；git 失敗回 None。"""
+    hits: List[str] = []
+    for name in unmerged:
+        if not name.startswith(AGENT_BRANCH_PREFIX):
+            continue
+        subjects = _run_git_lines(["log", "--format=%s", name, "--not", "HEAD"])
+        if subjects is None:
+            return None
+        if any(_branch_names_ticket(s, ticket_id) for s in subjects):
+            hits.append(name)
+    return hits
+
+
+def _apply_dispatch_signals(
+    report: "GhostReport", ticket_id: str, unmerged: List[str],
+    ticket_files: List[str],
+) -> None:
+    """主訊號（dispatch-active 全等票號）與輔訊號（commit 主旨）補命中。"""
+    candidates = _dispatch_branches_for_ticket(ticket_id)
+    if candidates is None:
+        report.dispatch_record_unknown = True
+        candidates = []
+    hits = [
+        b for b in candidates
+        if _branch_hit_by_dispatch(b, unmerged, report, ticket_files)
+    ]
+    subject_hits = _subject_hit_branches(unmerged, ticket_id)
+    if subject_hits is None:
+        report.unmerged_branch_unknown = True
+        subject_hits = []
+    for name in hits + subject_hits:
+        report.unmerged_branch = True
+        if name not in report.unmerged_branch_names:
+            report.unmerged_branch_names.append(name)
+
+
 def run_ghost_forensics(ticket_id: str, ticket_files: List[str], body: str) -> GhostReport:
     """執行 reclaim 前 ghost 鑑識三查：
 
@@ -635,15 +797,18 @@ def run_ghost_forensics(ticket_id: str, ticket_files: List[str], body: str) -> G
     """
     report = GhostReport()
 
-    branch_lines = _run_git_lines(["branch", "--no-merged"])
+    branch_lines = _run_git_lines(
+        ["for-each-ref", "--no-merged=HEAD", "--format=%(refname:short)", "refs/heads"]
+    )
     if branch_lines is None:
         report.unmerged_branch_unknown = True
     else:
-        for line in branch_lines:
-            name = line.strip().lstrip("* ").strip()
-            if ticket_id in name:
+        unmerged = [line.strip() for line in branch_lines]
+        for name in unmerged:
+            if _branch_names_ticket(name, ticket_id):
                 report.unmerged_branch = True
                 report.unmerged_branch_names.append(name)
+        _apply_dispatch_signals(report, ticket_id, unmerged, ticket_files)
 
     if ticket_files:
         status_lines = _run_git_lines(["status", "--porcelain"])
@@ -681,7 +846,21 @@ def render_ghost_report(ticket_id: str, report: GhostReport) -> str:
     lines.append(f"  2. 髒檔交集: {dirty_status}{dirty_detail}")
     exit_status_label = "缺失/佔位符（警告，不影響鑑識結果）" if report.exit_status_missing else "已填寫"
     lines.append(f"  3. Exit Status 章節: {exit_status_label}")
-    lines.append(f"  結論: {'鑑識通過，允許 reclaim' if report.clean else '鑑識未通過，拒絕 reclaim'}")
+    if report.dispatch_record_unknown:
+        lines.append("  4. dispatch-active 紀錄: 無法判定（讀取失敗）")
+    if report.stale_worktrees:
+        lines.append(
+            f"  警告: worktree 已失效（需 prune）: {', '.join(report.stale_worktrees)}"
+        )
+    if report.untracked_warning_files:
+        lines.append(
+            f"  警告: worktree 內有未追蹤檔（與本票檔案無交集，不影響鑑識）: "
+            f"{', '.join(report.untracked_warning_files)}"
+        )
+    verdict = '鑑識通過，允許 reclaim' if report.clean else '鑑識未通過，拒絕 reclaim'
+    if report.untracked_warning_files:
+        verdict += "；有未追蹤檔，接手前先檢查舊 worktree"
+    lines.append(f"  結論: {verdict}")
     return "\n".join(lines)
 
 

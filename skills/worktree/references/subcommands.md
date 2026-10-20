@@ -153,6 +153,7 @@ $ /worktree status
 |------|------|
 | 計算 | `git merge-tree --write-tree` 對「當下 main 與分支」做三方合併，只寫物件庫，不碰任何 index |
 | 空合併守衛 | 合併 tree 等於第一親代 tree 即中止，不寫任何 ref |
+| 預檢 | 閘門進場排隊前先呼叫 `precheck_merge_conflict`（同一份試算），有文字衝突即回報並結束，不排隊；取得名額後仍重算，應對排隊期間的新衝突 |
 | 衝突 | 有文字衝突即中止，列出衝突檔，HEAD 不變，不留 MERGE_HEAD |
 | 提交 | `commit-tree`（親代：舊 main、分支）後，`update-ref refs/heads/main <新> <舊>` CAS |
 | HEAD 被並行推進 | CAS 失敗即以新 HEAD 整段重做（重試預算與 ticket skill 的 `retry_commit_attempt` 相同：前 3 次必做，其後累計等待 5 秒內） |
@@ -166,7 +167,7 @@ $ /worktree status
 
 ### 合併前檢查掛點（pre_merge_check）
 
-程式入口 `worktree_manager.merge_branch_cas(branch, repo=None, base="main", pre_merge_check=None, message=None)`，`cmd_merge(ticket_id, pre_merge_check=None, *, branch=None, pre_acceptance_reason=None)` 透傳。
+程式入口 `merge_cas.merge_branch_cas(branch, repo=None, base="main", pre_merge_check=None, message=None)`，`cmd_merge(ticket_id, pre_merge_check=None, *, branch=None, pre_acceptance_reason=None)` 透傳。
 
 | 項目 | 規格 |
 |------|------|

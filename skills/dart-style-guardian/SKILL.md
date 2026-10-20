@@ -16,7 +16,7 @@ metadata:
 
 ## 起手
 
-**第一個動作是讀 `.claude/config/dart-style-guardian.json`**，確認本專案的 token 類別名（`tokens` 欄位）與 i18n 存取子形態（`i18n.accessor`）。不先讀它就掃，拿到的建議會是「改用專案 design system 的 color token」這種無法直接照做的描述性敘述。
+**第一個動作是讀 `.claude/project-integration/dart-style-guardian.json`**，確認本專案的 token 類別名（`tokens` 欄位）與 i18n 存取子形態（`i18n.accessor`）。不先讀它就掃，拿到的建議會是「改用專案 design system 的 color token」這種無法直接照做的描述性敘述。
 
 校準檔缺席時**不要自己編一組類別名**——指名一套不存在的命名，讀者照做會寫出編譯不過的程式碼。缺席的正確處置見〈Project Calibration〉。
 
@@ -75,7 +75,7 @@ uv run .claude/skills/dart-style-guardian/scripts/style_checker.py scan lib/
 
 ### Key Files
 
-檔案位置因專案而異，故以角色描述而非路徑列出——寫死某專案的路徑，其他專案讀到的就是一份指向不存在檔案的清單。實際位置見 `.claude/config/dart-style-guardian.json` 的 `tokens` 欄位所指的類別，以及專案的 `l10n.yaml`。
+檔案位置因專案而異，故以角色描述而非路徑列出——寫死某專案的路徑，其他專案讀到的就是一份指向不存在檔案的清單。實際位置見 `.claude/project-integration/dart-style-guardian.json` 的 `tokens` 欄位所指的類別，以及專案的 `l10n.yaml`。
 
 | Role | 內容 |
 |------|------|
@@ -86,7 +86,7 @@ uv run .claude/skills/dart-style-guardian/scripts/style_checker.py scan lib/
 
 ---
 
-**下方〈Color System〉〈Spacing System〉〈Typography System〉〈Border Radius System〉〈Common Violations and Fixes〉〈Quick Reference Card〉出現的 `UIColors`／`UISpacing`／`UIFontSizes`／`UIBorderRadius` 一律是示意類別名，不是本專案的真實類別**——本 skill 為跨專案共用資產，正文用統一的示意名稱維持表格可讀，實際類別名以 `.claude/config/dart-style-guardian.json`〈Project Calibration〉的 `tokens` 欄位為準：套用建議寫法時，把示意類別名換成該欄位對應的真實類別，階名（`primary`／`md`／`bodyMedium` 等）若校準檔沒有另外覆寫則沿用正文所列。
+**下方〈Color System〉〈Spacing System〉〈Typography System〉〈Border Radius System〉〈Common Violations and Fixes〉〈Quick Reference Card〉出現的 `UIColors`／`UISpacing`／`UIFontSizes`／`UIBorderRadius` 一律是示意類別名，不是本專案的真實類別**——本 skill 為跨專案共用資產，正文用統一的示意名稱維持表格可讀，實際類別名以 `.claude/project-integration/dart-style-guardian.json`〈Project Calibration〉的 `tokens` 欄位為準：套用建議寫法時，把示意類別名換成該欄位對應的真實類別，階名（`primary`／`md`／`bodyMedium` 等）若校準檔沒有另外覆寫則沿用正文所列。
 
 ## Color System
 
@@ -290,7 +290,7 @@ Text(ErrorHandler.getUserMessage(context, state.errorCode))
 
 偵測規則本身跨專案通用（硬編碼的顏色、間距、字級一律該進 design system），但**替代方案的名字是專案專屬的**。校準檔告訴掃描器本專案的詞彙：
 
-`.claude/config/dart-style-guardian.json`
+`.claude/project-integration/dart-style-guardian.json`
 
 ```json
 {
@@ -353,7 +353,7 @@ The style checker is integrated into PostEdit Hook:
 
 ### Project Files
 
-同上節，以角色而非路徑指涉：design system token 定義、theme 組裝入口、`l10n.yaml` 與其指向的 ARB、設計規格文件。要知道本專案的實際位置，讀 `.claude/config/dart-style-guardian.json` 與 `l10n.yaml`，或直接搜尋 token 類別名的定義處。
+同上節，以角色而非路徑指涉：design system token 定義、theme 組裝入口、`l10n.yaml` 與其指向的 ARB、設計規格文件。要知道本專案的實際位置，讀 `.claude/project-integration/dart-style-guardian.json` 與 `l10n.yaml`，或直接搜尋 token 類別名的定義處。
 
 ### Reference Files (in this SKILL)
 

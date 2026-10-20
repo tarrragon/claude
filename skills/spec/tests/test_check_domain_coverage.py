@@ -9,6 +9,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import check_domain_coverage as cdc  # noqa: E402
+from domain_coverage import fr_extract  # noqa: E402
 
 
 def _covered_by(spec_text, map_text, map_name="domain-map.md"):
@@ -337,7 +338,7 @@ def test_spec_id_outside_spec_nnn_form_falls_back_to_compat(capsys):
     assert "WARNING" in capsys.readouterr().err
 
 
-# --- 多 domain 解析鏈（0.5.0-W1-086.1）---
+# --- 多 domain 解析鏈（SPEC 與 domain map 分處不同目錄時的定位）---
 
 def _write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -393,7 +394,7 @@ def test_single_domain_root_map_unchanged(tmp_path, monkeypatch, capsys):
     assert cdc.main([str(spec)]) == 0
 
 
-# --- 多 map 聯集在集合層（0.5.0-W1-086.3）---
+# --- 多 map 聯集在集合層（跨 map 的 FR 聯集）---
 
 def _map(specs, body):
     return f"---\nsource_specs: [{specs}]\n---\n{body}"
@@ -432,7 +433,7 @@ def test_union_untitled_map_falls_back_to_its_source_specs(tmp_path, monkeypatch
 
 
 def test_union_untitled_multi_source_specs_counts_to_inspected_spec(tmp_path, monkeypatch, capsys):
-    """整份無歸屬的 map 其 FR 計給受檢 SPEC，與 source_specs 值數無關（0.5.0-W1-086.5）。"""
+    """整份無歸屬的 map 其 FR 計給受檢 SPEC，與 source_specs 值數無關。"""
     monkeypatch.chdir(tmp_path)
     spec = tmp_path / "docs/spec/ui/SPEC-101-x.md"
     _write(spec, SPEC_A)
@@ -441,7 +442,7 @@ def test_union_untitled_multi_source_specs_counts_to_inspected_spec(tmp_path, mo
     assert cdc.main([str(spec)]) == 0, capsys.readouterr().out
 
 
-# --- 0.5.0-W1-086.5：審查的四種由綠轉紅輸入 + 一例反向假綠 ---
+# --- 審查的四種由綠轉紅輸入 + 一例反向假綠 ---
 
 def _in_domain_dir(tmp_path, monkeypatch, map_text, system=None, extra_map=None):
     """SPEC-101 在 docs/spec/a/（domain 目錄內），同目錄 map 為未帶 SPEC 標題的 map_text。"""
@@ -511,7 +512,7 @@ def test_union_filter_loads_only_listing_maps(tmp_path, monkeypatch):
     assert [p.as_posix() for p in found] == ["docs/spec/a/domain-map.md"]
 
 
-# --- 0.5.0-W1-157：FR 標題全形冒號 + 空集合兩種性質分流 ---
+# --- FR 標題全形冒號 + 空集合兩種性質分流 ---
 
 def test_extract_spec_frs_fullwidth_colon():
     assert cdc.extract_spec_frs("### FR-01：A\n#### FR-02: B\n") == {1, 2}
@@ -604,7 +605,7 @@ def test_declared_false_letter_continuation_headings_not_contradiction(tmp_path,
         assert rc == 0, h
 
 
-# --- 0.5.0-W1-086.5 追修：系統層不適用整份無歸屬規則 + stderr 訊號 ---
+# --- 追修：系統層不適用整份無歸屬規則 + stderr 訊號 ---
 
 SYSTEM_PROSE = "涉及 FR-02 與 FR-03\n"
 
@@ -637,7 +638,7 @@ def test_no_signal_when_explicitly_attributed(tmp_path, monkeypatch, capsys):
     assert "無任何 SPEC 歸屬" not in capsys.readouterr().err
 
 
-# --- 層級 SPEC 以系統層判定（0.5.0-W1-149.1）---
+# --- 層級 SPEC 以系統層判定（層級模式的判定）---
 
 LAYER_SPEC = ("---\nid: SPEC-101\ndomain: \"ui\"\n---\n"
               "### FR-01: A\n### FR-02: B\n")
@@ -922,7 +923,7 @@ def test_locate_domain_map_compat_entry_removed():
     assert not hasattr(cdc, "locate_domain_map")
 
 
-# --- 層級模式訊息不稱 domain map（0.5.0-W1-086.4 併入項）---
+# --- 層級模式訊息不稱 domain map（併入項）---
 
 def test_layer_mode_coverage_title_says_system_layer(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
@@ -966,7 +967,7 @@ def test_non_layer_event_flow_tail_unchanged(tmp_path, monkeypatch, capsys):
     assert f"（domain map：{map_path}）{EVENT_TAIL}" in lines
 
 
-# --- source_specs 解析的修正與變異守衛（0.5.0-W1-086.4 審查 R1-R5）---
+# --- source_specs 解析的修正與變異守衛（審查 R1-R5）---
 
 MSG_NOT_LISTED = ("domain 覆蓋檢核：有 domain map（docs/spec/*/domain-map.md），但無一份的 source_specs 列入本 SPEC。"
                   "請於對應 domain map frontmatter 的 source_specs 補上本 SPEC id，或以 --domain-map 指定。")
@@ -1055,7 +1056,7 @@ def test_id_problem_reported_before_unparseable_map(tmp_path, monkeypatch, capsy
     assert rc == 1 and MSG_ID_UNRECOGNIZED in lines and MSG_UNPARSEABLE not in lines
 
 
-# --- 0.5.0-W1-200：source_specs 下一行 flow 清單與井號邊界（各邊界附相鄰對照輸入）---
+# --- source_specs 下一行 flow 清單與井號邊界（各邊界附相鄰對照輸入）---
 
 def test_b1_flow_list_after_blank_and_comment_lines_accepted(tmp_path, monkeypatch, capsys):
     rc, _ = _run_ss(tmp_path, monkeypatch, capsys, "source_specs:\n\n# note\n[SPEC-101]")
@@ -1107,7 +1108,7 @@ def test_b5_contrast_other_key_before_source_specs_does_not_matter(tmp_path, mon
     assert rc == 0
 
 
-# --- 0.5.0-W1-166：FR 抽取完整性（部分漏抓警告 / 略過圍欄 / 全形冒號端到端）---
+# --- FR 抽取完整性（部分漏抓警告 / 略過圍欄 / 全形冒號端到端）---
 
 def _map_covering(tmp_path, frs="FR-01,02"):
     (tmp_path / "domain-map.md").write_text(
@@ -1157,7 +1158,7 @@ def test_fenced_like_line_no_warning(tmp_path, monkeypatch, capsys):
     spec = tmp_path / "SPEC-900-x.md"
     spec.write_text(_fm() + "### FR-01: a\n```\n## FR-05 範例\n**FR-06** 範例\n```\n", encoding="utf-8")
     assert cdc.main([str(spec)]) == 0
-    assert "未被抽出" not in capsys.readouterr().err  # 漏抓警告不出現；略過區段提醒另計（0.5.0-W1-172）
+    assert "未被抽出" not in capsys.readouterr().err  # 漏抓警告不出現；略過區段提醒另計
 
 
 def test_unclosed_fence_fails_with_line_number(tmp_path, monkeypatch, capsys):
@@ -1189,7 +1190,7 @@ def test_inline_triple_backtick_extracts_all():
     assert cdc.extract_spec_frs("### FR-01: a\n```inline``` 說明\n### FR-02: b\n") == {1, 2}
 
 
-# --- 0.5.0-W1-172：宣告讀取（重複鍵 / 多行字串續行）與宣告矛盾比對（漏放 / 誤判 / 共用判定）---
+# --- 宣告讀取（重複鍵 / 多行字串續行）與宣告矛盾比對（漏放 / 誤判 / 共用判定）---
 
 def _fm_raw(*lines):
     return "---\nid: SPEC-900\n" + "".join(f"{ln}\n" for ln in lines) + "---\n"
@@ -1284,13 +1285,16 @@ def test_extraction_warning_and_contradiction_agree(tmp_path, capsys, line):
 
 def test_both_consumers_use_shared_fr_like_judgment(tmp_path, capsys, monkeypatch):
     # 只改共用判定的一端：兩個消費端都必須跟著變，任一端自帶規則則此測試翻紅
+    # 兩個消費端分居不同模組（find_unextracted_fr_lines 在 fr_extract、judge_fr_declaration 在入口檔），
+    # 各自以模組全域名稱解析 fr_like_lines，故兩處都換成同一個哨兵
+    monkeypatch.setattr(fr_extract, "fr_like_lines", lambda text: [(3, "SENTINEL-LINE", 7)])
     monkeypatch.setattr(cdc, "fr_like_lines", lambda text: [(3, "SENTINEL-LINE", 7)])
     assert cdc.find_unextracted_fr_lines("# s\n元件\n") == [(3, "SENTINEL-LINE")]
     rc, out = _run_nomap(tmp_path, _fm("false") + "# s\n元件\n", capsys)
     assert rc != 0 and "SENTINEL-LINE" in out
 
 
-# --- 0.5.0-W1-172 審查必修：註解遮蔽的行內程式碼邊界 / 略過區段提醒 / 誤判方向守護 ---
+# --- 審查必修：註解遮蔽的行內程式碼邊界 / 略過區段提醒 / 誤判方向守護 ---
 
 CODE_SPAN_OPEN = "說明 `<!--` 是註解開頭\n"
 

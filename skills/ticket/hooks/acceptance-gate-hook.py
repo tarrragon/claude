@@ -409,6 +409,28 @@ def detect_chained_pre_complete_write(command: str) -> bool:
     return False
 
 
+_APPEND_LOG_RE = re.compile(r'\bticket\s+track\s+append-log\b')
+
+
+def detect_chained_multi_view_write(command: str) -> bool:
+    """偵測 complete 之前的同鏈片段是否有 append-log 且內容含 multi_view_status。
+
+    比 detect_chained_pre_complete_write 窄：只有 git merge 或寫其他內容的
+    append-log 不會補上 multi_view_status，不應略過其未標註警告。
+    """
+    statements = parse_command_statements(command)
+    if statements is None:
+        return False
+    for idx, tokens in enumerate(statements):
+        if is_complete_statement(tokens):
+            for prev in statements[:idx]:
+                text = " ".join(prev)
+                if _APPEND_LOG_RE.search(text) and "multi_view_status" in text:
+                    return True
+            return False
+    return False
+
+
 # ============================================================================
 # 主協調函式
 # ============================================================================
@@ -474,7 +496,15 @@ def check_acceptance_status(
             )
 
         # 0.4.1-W2-006：偵測 complete 是否與同鏈寫入操作串接
-        chained_write_detected = bool(command) and detect_chained_pre_complete_write(command)
+        # 偵測本身拋例外時視為未命中（fail-toward-warn：照常輸出警告，不讓整個
+        # 檢查因偵測失敗而中止、連同其他警告一起消失）
+        try:
+            chained_write_detected = bool(command) and detect_chained_pre_complete_write(command)
+        except Exception as detect_exc:
+            logger.warning(
+                f"acceptance-gate-hook 同鏈偵測失敗，視為未串接（照常輸出警告）: {detect_exc}"
+            )
+            chained_write_detected = False
         if chained_write_detected:
             logger.info(
                 f"Ticket {ticket_id}：偵測到 complete 與同鏈寫入操作串接，"
@@ -549,6 +579,21 @@ def check_acceptance_status(
                     return AcceptanceCheckResult(
                         True, False, mv_msg + fix_hint, False, [], [], "", "", [], [], False
                     )
+                try:
+                    mv_chained = chained_write_detected and detect_chained_multi_view_write(command)
+                except Exception as mv_exc:
+                    logger.warning(
+                        f"acceptance-gate-hook multi_view 同鏈偵測失敗，照常警告: {mv_exc}"
+                    )
+                    mv_chained = False
+                if mv_chained:
+                    # 同鏈 append-log 確實寫入 multi_view_status，讀到的是滯後內容；
+                    # 僅此情況略過「未標註」警告
+                    logger.info(
+                        f"Ticket {ticket_id}：同命令鏈偵測命中，略過 multi_view_status 未標註警告"
+                    )
+                    mv_msg = None
+            if mv_should_warn and mv_msg:
                 multi_view_warning = mv_msg
                 if warning_msg:
                     warning_msg = warning_msg + "\n\n" + mv_msg
@@ -765,7 +810,9 @@ def generate_hook_output(
 
     # 項目 6: multi_view_status（W10-051，只對 ANA 顯示）
     if ticket_type_upper_for_checklist == "ANA":
-        if check_result.multi_view_warning:
+        if check_result.chained_write_detected:
+            checklist_items.append("[--] 6. multi_view_status（同命令鏈偵測，略過本次判定）")
+        elif check_result.multi_view_warning:
             checklist_items.append("[WARNING] 6. multi_view_status 未標註或不完整（ANA）")
         else:
             checklist_items.append("[x] 6. multi_view_status 已標註（ANA）")

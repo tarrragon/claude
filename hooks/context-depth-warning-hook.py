@@ -3,27 +3,29 @@
 # requires-python = ">=3.10"
 # dependencies = []
 # ///
-"""context-depth-warning-hook (Stop event) — 0.20.0-W2-013
+"""context-depth-warning-hook (Stop event)
 
 Why:
-  W2-012 ANA 結論：count-token malformed tool-call 的根因在模型 sampling 層，
-  cache_read ~230K tokens 後 malformed 復發率升至 41.5%。W2-011 的偵測 + retry
-  已攔截實際危害，但未消除 retry 的 token 與回合開銷——每進入高 context 深度，
-  retry 窗口的累積成本仍在。本 hook 在 context 深度接近高頻 retry 窗口前主動提示
-  用戶考慮 /clear 或 ticket handoff，降低進入高 retry 窗口的機率。
+  用戶需求：context 合計超過 400K 時，提示做 compact 或寫 handoff 換 session。
+  背景：早期分析發現 cache_read 達 ~230K 後 tool-call malformed 復發率升高，
+  深 context 的 retry 成本也是提早收斂的理由之一。
 
 Consequence（不處理的代價）:
-  用戶在無提示下持續累積 context，進入 ~230K 後的高頻 retry 窗口，每 2.4 個
-  tool-call turn 即有一次 retry，浪費回合與重發 token，且難以察覺根因。
+  用戶在無提示下持續累積 context，品質與回合成本惡化而難以察覺根因。
 
 Action:
-  每個 Stop event 讀 transcript 最後一則 assistant entry 的
-  message.usage.cache_read_input_tokens。超過 THRESHOLD 且該 session 的當前
-  tier 尚未提示過 → stderr 提示 + 更新去重 state + 檔案日誌。
+  每個 Stop event 讀 transcript 最後一則 assistant entry 的 usage，
+  合計 input_tokens + cache_creation_input_tokens + cache_read_input_tokens。
+  合計 >= THRESHOLD（預設 400K）且當前 tier 尚未提示 → 以 emit_hook_output
+  輸出 additionalContext（模型可見；含 K 數、請用戶 /compact、或寫 handoff 後
+  claude -n 開新 session）+ 更新去重 state + 檔案日誌。
 
-  分層去重（避免提示疲勞）：tier = cache_read // TIER_STEP。每跨入更深的 tier
-  才再提示一次，同 tier 內重複的 Stop event 不重發。state file 記
-  {session_id: last_warned_tier}。
+  分層去重（避免提示疲勞）：tier = 合計 // TIER_STEP（預設 50K）。每跨入更深
+  的 tier 才再提示一次。state file 記 {session_id: last_warned_tier}；
+  合計降回 THRESHOLD 以下時清除該 session 的 state，再超過會重新提示。
+
+  環境變數覆寫：CONTEXT_DEPTH_WARNING_THRESHOLD、CONTEXT_DEPTH_WARNING_TIER_STEP、
+  CONTEXT_DEPTH_WARNING_STATE（state 檔路徑，供測試隔離）。
 
   永遠 exit 0：本 hook 為提示性質，禁 exit 2 阻擋 Stop（與同 Stop event 的
   malformed-tool-call-detector 職責分離——後者 exit 2 阻擋格式錯誤，本 hook
@@ -38,14 +40,34 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib import emit_hook_output  # noqa: E402
+
 HOOK_DIR = Path(__file__).resolve().parent
 LOG_DIR = HOOK_DIR / "hook-logs"
 LOG_FILE = LOG_DIR / "context-depth-warning.log"
 DEFAULT_STATE_FILE = LOG_DIR / "context-depth-warning-state.json"
 
 # 常數（集中管理，模組頂層）
-THRESHOLD = 180_000  # W2-012 onset ~230K，提前 50K 緩衝主動提示
-TIER_STEP = 30_000   # 每加深 30K 再提示一次，避免每回合疲勞
+DEFAULT_THRESHOLD = 400_000  # 用戶需求：合計 context 超過 400K 提示
+DEFAULT_TIER_STEP = 50_000   # 每加深 50K 再提示一次，避免每回合疲勞
+
+
+def _env_int(name: str, default: int) -> int:
+    """讀整數環境變數，非法值回預設。"""
+    try:
+        return int(os.environ.get(name, default))
+    except ValueError:
+        return default
+
+
+THRESHOLD = _env_int("CONTEXT_DEPTH_WARNING_THRESHOLD", DEFAULT_THRESHOLD)
+TIER_STEP = _env_int("CONTEXT_DEPTH_WARNING_TIER_STEP", DEFAULT_TIER_STEP)
+USAGE_FIELDS = (
+    "input_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+)
 
 
 def _state_file() -> Path:
@@ -65,9 +87,9 @@ def log(message: str) -> None:
         sys.stderr.write(f"[context-depth-warning] log 失敗: {exc}\n")
 
 
-def read_last_cache_read(transcript_path: str) -> Optional[int]:
+def read_last_total_context(transcript_path: str) -> Optional[int]:
     """從 transcript JSONL 取最後一則 assistant entry 的
-    message.usage.cache_read_input_tokens。讀不到回 None。"""
+    usage 合計（input + cache_creation + cache_read）。讀不到回 None。"""
     path = Path(transcript_path)
     if not path.is_file():
         return None
@@ -89,25 +111,28 @@ def read_last_cache_read(transcript_path: str) -> Optional[int]:
                 usage = message.get("usage")
                 if not isinstance(usage, dict):
                     continue
-                value = usage.get("cache_read_input_tokens")
-                if isinstance(value, int):
-                    last_value = value
+                if not isinstance(usage.get("cache_read_input_tokens"), int):
+                    continue
+                last_value = sum(
+                    v for v in (usage.get(f) for f in USAGE_FIELDS)
+                    if isinstance(v, int)
+                )
     except Exception as exc:  # noqa: BLE001
         log(f"讀 transcript 失敗: {exc}")
         return None
     return last_value
 
 
-def tier_of(cache_read: int) -> int:
-    """cache_read 對應的去重 tier。"""
-    return cache_read // TIER_STEP
+def tier_of(total_context: int) -> int:
+    """total_context（三項合計）對應的去重 tier。"""
+    return total_context // TIER_STEP
 
 
-def should_warn(cache_read: int, last_warned_tier: int) -> bool:
+def should_warn(total_context: int, last_warned_tier: int) -> bool:
     """是否應提示：超閾值且當前 tier 比已提示的 tier 更深。"""
-    if cache_read < THRESHOLD:
+    if total_context < THRESHOLD:
         return False
-    return tier_of(cache_read) > last_warned_tier
+    return tier_of(total_context) > last_warned_tier
 
 
 def load_state(state_file: Path) -> dict:
@@ -133,12 +158,13 @@ def save_state(state_file: Path, state: dict) -> None:
         log(f"寫 state 失敗: {exc}")
 
 
-def _warning_text(cache_read: int) -> str:
+def _warning_text(total_context: int) -> str:
     return (
-        f"[context-depth-warning] 當前 context 深度約 {cache_read // 1000}K tokens"
-        "（cache_read）。依 W2-012，~230K 後 tool-call malformed 復發率升至 41.5%，"
-        "每次 retry 浪費回合與 token。建議在進入高頻 retry 窗口前考慮 /clear 或 "
-        "ticket handoff 保存進度。\n"
+        f"[context-depth-warning] 當前 context 合計約 {total_context // 1000}K tokens"
+        f"（input + cache_creation + cache_read），已超過 {THRESHOLD // 1000}K。"
+        "請告知用戶擇一處理：(1) 請用戶執行 /compact（模型無法自行觸發）；"
+        "(2) 先把進度寫入 ticket 與 handoff，再請用戶以 "
+        "`claude -n <線主題>` 開新 session 接續。"
     )
 
 
@@ -156,8 +182,8 @@ def main() -> int:
     if not transcript_path:
         return 0
 
-    cache_read = read_last_cache_read(transcript_path)
-    if cache_read is None:
+    total_context = read_last_total_context(transcript_path)
+    if total_context is None:
         return 0
 
     state_file = _state_file()
@@ -166,16 +192,22 @@ def main() -> int:
     if not isinstance(last_warned_tier, int):
         last_warned_tier = -1
 
-    if not should_warn(cache_read, last_warned_tier):
+    if total_context < THRESHOLD:
+        if session_id in state:  # 降回門檻以下：清除去重，再超過會重新提示
+            del state[session_id]
+            save_state(state_file, state)
         return 0
 
-    state[session_id] = tier_of(cache_read)
+    if not should_warn(total_context, last_warned_tier):
+        return 0
+
+    state[session_id] = tier_of(total_context)
     save_state(state_file, state)
     log(
-        f"提示 context 深度 session={session_id!r} cache_read={cache_read} "
-        f"tier={tier_of(cache_read)}"
+        f"提示 context 深度 session={session_id!r} total={total_context} "
+        f"tier={tier_of(total_context)}"
     )
-    sys.stderr.write(_warning_text(cache_read))
+    emit_hook_output("Stop", additional_context=_warning_text(total_context))
     return 0
 
 

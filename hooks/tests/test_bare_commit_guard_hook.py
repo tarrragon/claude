@@ -76,6 +76,10 @@ _is_index_discarding_form = hook_module._is_index_discarding_form
 _staged_scope_is_safe_for_bare_commit = hook_module._staged_scope_is_safe_for_bare_commit
 main = hook_module.main
 
+# 偵測函式與其 subprocess 呼叫位於 lib.git_operation_state；patch 必須作用在
+# 函式實際查名稱的模組，只換 hook_module 的 re-export 不會影響 _pending_operation。
+from lib import git_operation_state as ops_module  # noqa: E402
+
 
 def _dispatch(ticket_id: str, files) -> dict:
     """建構最小化的活躍派發記錄（供 `_get_active_dispatches_safe` 回傳）。"""
@@ -98,8 +102,8 @@ def _run_hook(
     stdin_buffer = io.StringIO(json.dumps(payload))
     monkeypatch.setattr(sys, "stdin", stdin_buffer)
     monkeypatch.setattr(hook_module, "get_project_root", lambda: project_root)
-    monkeypatch.setattr(hook_module, "_merge_in_progress", lambda *a, **k: merge_head)
-    monkeypatch.setattr(hook_module, "_other_operation_state", lambda *a, **k: None)
+    monkeypatch.setattr(ops_module, "_merge_in_progress", lambda *a, **k: merge_head)
+    monkeypatch.setattr(ops_module, "_other_operation_state", lambda *a, **k: None)
     monkeypatch.setattr(
         hook_module, "_get_active_dispatches_safe", lambda root: dispatches or []
     )
@@ -1161,7 +1165,7 @@ class TestMergeDetectFailureSemantics:
         def boom(*a, **k):
             return subprocess.CompletedProcess(a, 128, "", "fatal: not a git repository")
 
-        monkeypatch.setattr(hook_module.subprocess, "run", boom)
+        monkeypatch.setattr(ops_module.subprocess, "run", boom)
         assert hook_module._merge_in_progress(tmp_path, sink) is False
         assert len(sink.warnings) == 1
         assert "rc=128" in sink.warnings[0] and str(tmp_path) in sink.warnings[0]
@@ -1172,7 +1176,7 @@ class TestMergeDetectFailureSemantics:
         def slow(*a, **k):
             raise subprocess.TimeoutExpired("git", 10)
 
-        monkeypatch.setattr(hook_module.subprocess, "run", slow)
+        monkeypatch.setattr(ops_module.subprocess, "run", slow)
         assert hook_module._merge_in_progress(tmp_path, sink) is False
         assert len(sink.warnings) == 1 and "TimeoutExpired" in sink.warnings[0]
 
@@ -1193,7 +1197,7 @@ class TestMergeDetectFailureStderr:
 
     def test_rc_failure_writes_stderr(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(
-            hook_module.subprocess, "run",
+            ops_module.subprocess, "run",
             lambda *a, **k: subprocess.CompletedProcess(a, 128, "", "fatal"),
         )
         assert hook_module._merge_in_progress(tmp_path, _Sink()) is False
@@ -1204,7 +1208,7 @@ class TestMergeDetectFailureStderr:
         def slow(*a, **k):
             raise subprocess.TimeoutExpired("git", 10)
 
-        monkeypatch.setattr(hook_module.subprocess, "run", slow)
+        monkeypatch.setattr(ops_module.subprocess, "run", slow)
         assert hook_module._merge_in_progress(tmp_path, _Sink()) is False
         assert self._MARK in capsys.readouterr().err
 
@@ -1333,7 +1337,7 @@ class TestPendingOperationMutation:
     def test_blind_detector_lets_cherry_pick_through(self, monkeypatch, tmp_path):
         r = _conflict_repo(tmp_path)
         _g(r, "cherry-pick", "side", check=False)
-        monkeypatch.setattr(hook_module, "_other_operation_state", lambda *a, **k: None)
+        monkeypatch.setattr(ops_module, "_other_operation_state", lambda *a, **k: None)
         assert _run_real(monkeypatch, 'git commit -m x', r, cwd=r) == 0
 
 
@@ -1417,3 +1421,197 @@ class TestParseCauseMessages:
         err = capsys.readouterr().err
         assert "非命令位置" in err
         assert "未閉合引號" not in err
+
+
+# ============================================================================
+# 進行中操作偵測涵蓋全部 commit 目標與 GIT_DIR／--git-dir 覆寫目標
+# 不 mock 偵測函式；E2：應擋寫法配乾淨倉庫／單一目標的放行對照
+# ============================================================================
+
+
+@pytest.fixture
+def merging_and_clean(tmp_path):
+    merging = tmp_path / "merging"
+    merging.mkdir()
+    _real_git(merging, "init", "-q", "-b", "main")
+    (merging / "a.txt").write_text("a\n")
+    _real_git(merging, "add", "a.txt")
+    _real_git(merging, "commit", "-q", "-m", "base")
+    _real_git(merging, "checkout", "-q", "-b", "side")
+    (merging / "b.txt").write_text("b\n")
+    _real_git(merging, "add", "b.txt")
+    _real_git(merging, "commit", "-q", "-m", "side")
+    _real_git(merging, "checkout", "-q", "main")
+    _real_git(merging, "merge", "--no-ff", "--no-commit", "side")
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    _real_git(clean, "init", "-q", "-b", "main")
+    return merging, clean
+
+
+def _run_all_targets(monkeypatch, command, cwd, root):
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(cwd)}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: root)
+    monkeypatch.setattr(hook_module, "_get_active_dispatches_safe", lambda r: [])
+    monkeypatch.setattr(hook_module, "_get_staged_files", lambda r: [])
+    monkeypatch.setattr(hook_module, "_get_unstaged_tracked_files", lambda r: [])
+    return main()
+
+
+class TestPendingOperationAllTargets:
+    def test_chained_second_dash_c_targets_merging_checkout_blocks(
+        self, monkeypatch, merging_and_clean
+    ):
+        merging, clean = merging_and_clean
+        cmd = f'git -C {clean} commit -m a && git -C {merging} commit -m b'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 2
+
+    def test_git_dir_env_prefix_blocks(self, monkeypatch, merging_and_clean):
+        merging, clean = merging_and_clean
+        cmd = f'GIT_DIR={merging}/.git GIT_WORK_TREE={merging} git commit -m b'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 2
+
+    def test_git_dir_option_blocks(self, monkeypatch, merging_and_clean):
+        merging, clean = merging_and_clean
+        cmd = f'git --git-dir={merging}/.git --work-tree={merging} commit -m b'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 2
+
+    def test_git_dir_option_separate_token_blocks(self, monkeypatch, merging_and_clean):
+        merging, clean = merging_and_clean
+        cmd = f'git --git-dir {merging}/.git commit -m b'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 2
+
+    def test_clean_repo_single_target_passes(self, monkeypatch, merging_and_clean):
+        _, clean = merging_and_clean
+        cmd = f'git -C {clean} commit -m a'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 0
+
+    def test_chained_both_clean_passes(self, monkeypatch, merging_and_clean, tmp_path):
+        _, clean = merging_and_clean
+        other = tmp_path / "other"
+        other.mkdir()
+        _real_git(other, "init", "-q", "-b", "main")
+        cmd = f'git -C {clean} commit -m a && git -C {other} commit -m b'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 0
+
+    def test_git_dir_override_to_clean_repo_passes(self, monkeypatch, merging_and_clean):
+        _, clean = merging_and_clean
+        cmd = f'git --git-dir={clean}/.git commit -m a'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 0
+
+
+class TestUnresolvableOverrideTargetBlocks:
+    """覆寫值含變數或 ~ 而無法靜態解析：保守阻擋（E2：應擋 + 字面路徑放行對照）。"""
+
+    def test_variable_git_dir_blocks(self, monkeypatch, merging_and_clean):
+        merging, clean = merging_and_clean
+        cmd = f'V={merging}; GIT_DIR=$V/.git GIT_WORK_TREE=$V git commit --allow-empty -m b'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 2
+
+    def test_tilde_git_dir_option_blocks(self, monkeypatch, merging_and_clean):
+        _, clean = merging_and_clean
+        cmd = 'git --git-dir=~/somewhere/.git commit --allow-empty -m b'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 2
+
+    def test_literal_git_dir_to_clean_repo_still_passes(self, monkeypatch, merging_and_clean):
+        _, clean = merging_and_clean
+        cmd = f'GIT_DIR={clean}/.git GIT_WORK_TREE={clean} git commit --allow-empty -m a'
+        assert _run_all_targets(monkeypatch, cmd, clean, clean) == 0
+
+
+class _AllLevelsSink:
+    """記錄所有級別日誌行（setup_hook_logging 替身；沿用本檔 _Sink 的字串格式化寫法）。"""
+
+    def __init__(self):
+        self.lines = []
+
+    def _rec(self, msg, *args, **kwargs):
+        self.lines.append(msg % args if args else msg)
+
+    debug = info = warning = error = critical = exception = _rec
+
+
+class TestBlockLogWording:
+    """阻擋日誌措辭依種類分流：無法解析覆寫不得沿用「進行中」樣板（E1 對照：merge 原文不變）。"""
+
+    def _logged(self, monkeypatch, cmd, cwd, root):
+        sink = _AllLevelsSink()
+        monkeypatch.setattr(hook_module, "setup_hook_logging", lambda name: sink)
+        assert _run_all_targets(monkeypatch, cmd, cwd, root) == 2
+        return "\n".join(sink.lines)
+
+    def test_unresolvable_override_log_wording(self, monkeypatch, merging_and_clean):
+        _, clean = merging_and_clean
+        log = self._logged(monkeypatch, "GIT_DIR=$X git commit -m x", clean, clean)
+        assert "無法靜態解析" in log
+        assert "進行中" not in log
+        assert "收尾他方操作" not in log
+
+    def test_merge_in_progress_log_unchanged(self, monkeypatch, merging_and_clean):
+        merging, clean = merging_and_clean
+        log = self._logged(monkeypatch, f"git -C {merging} commit -m b", clean, clean)
+        assert "進行中，裸 commit 會收尾他方操作，阻擋" in log
+
+
+def test_every_blocking_op_has_deny_message():
+    from bare_commit_guard.messages import _build_pending_operation_deny_message
+
+    for op in ops_module._BLOCKING_OPS:
+        assert _build_pending_operation_deny_message(op).strip()
+
+
+# ============================================================================
+# 串接多筆 commit 逐筆判定（0.5.0-W1-341.2.1；實測表 A2/B/C/D/E/F）
+# ============================================================================
+
+_P2_DISPATCHES = [_dispatch("T-1", ["a.txt"]), _dispatch("T-2", ["b.txt"])]
+
+
+class TestChainedCommitsJudgedPerInvocation:
+    def test_A2_amend_then_bare_denied_with_merge_head(self, monkeypatch):
+        """amend ; 裸 commit，MERGE_HEAD：第二筆會收尾他方合併，須擋。"""
+        cmd = 'git commit --amend --no-edit ; git commit -m "x"'
+        assert _run_hook(monkeypatch, cmd, merge_head=True) == 2
+
+    def test_F_amend_then_all_denied_with_merge_head(self, monkeypatch):
+        cmd = 'git commit --amend --no-edit ; git commit -a -m "x"'
+        assert _run_hook(monkeypatch, cmd, merge_head=True) == 2
+
+    def test_E_bare_then_all_denied_when_all_absorbs_other_dispatch(self, monkeypatch):
+        """P2：staged 僅 a.txt（裸 commit 安全），第二筆 -a 掃入 b.txt。"""
+        cmd = 'git commit -m "x" ; git commit -a -m "y"'
+        assert _run_hook(
+            monkeypatch, cmd,
+            dispatches=_P2_DISPATCHES, staged_files=["a.txt"],
+            unstaged_files=["b.txt"],
+        ) == 2
+
+    def test_B_bare_then_amend_denied_with_merge_head(self, monkeypatch):
+        cmd = 'git commit -m "x" && git commit --amend --no-edit'
+        assert _run_hook(monkeypatch, cmd, merge_head=True) == 2
+
+    def test_C_amend_then_amend_allowed_with_merge_head(self, monkeypatch):
+        cmd = "git commit --amend --no-edit && git commit --amend --no-edit"
+        assert _run_hook(monkeypatch, cmd, merge_head=True) == 0
+
+    def test_D_bare_then_bare_denied_with_merge_head(self, monkeypatch):
+        cmd = 'git commit -m "x" && git commit -m "y"'
+        assert _run_hook(monkeypatch, cmd, merge_head=True) == 2
+
+    def test_bare_then_bare_allowed_in_p2(self, monkeypatch):
+        """E1 對照：P2 下兩筆裸 commit 範圍皆安全，維持放行。"""
+        cmd = 'git commit -m "x" && git commit -m "y"'
+        assert _run_hook(
+            monkeypatch, cmd,
+            dispatches=_P2_DISPATCHES, staged_files=["a.txt"],
+            unstaged_files=["b.txt"],
+        ) == 0
+
+    def test_single_all_denied_in_p2_control(self, monkeypatch):
+        """G 單筆對照：單筆 -a 在 P2 被擋。"""
+        assert _run_hook(
+            monkeypatch, 'git commit -a -m "y"',
+            dispatches=_P2_DISPATCHES, staged_files=["a.txt"],
+            unstaged_files=["b.txt"],
+        ) == 2

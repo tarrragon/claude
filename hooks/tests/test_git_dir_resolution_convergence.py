@@ -30,6 +30,10 @@ def _load(name: str, filename: str):
 
 
 bare = _load("bare_commit_guard_conv", "bare-commit-guard-hook.py")
+
+# 進行中操作偵測在 lib.git_operation_state；patch 必須作用在函式實際查名稱的
+# 模組，只換 bare 的 re-export 不會影響 _pending_operation。
+from lib import git_operation_state as ops_module  # noqa: E402
 merge_guard = _load("merge_staged_conv", "merge-staged-index-guard-hook.py")
 lock_cleanup = _load("lock_cleanup_conv", "git-index-lock-cleanup-hook.py")
 
@@ -110,9 +114,9 @@ def _run_bare(monkeypatch, command, cwd, root, state_dirs):
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     monkeypatch.setattr(bare, "get_project_root", lambda: root)
     monkeypatch.setattr(
-        bare, "_merge_in_progress", lambda d, *a, **k: str(d) in state_dirs
+        ops_module, "_merge_in_progress", lambda d, *a, **k: str(d) in state_dirs
     )
-    monkeypatch.setattr(bare, "_other_operation_state", lambda *a, **k: None)
+    monkeypatch.setattr(ops_module, "_other_operation_state", lambda *a, **k: None)
     monkeypatch.setattr(bare, "_get_active_dispatches_safe", lambda r: [])
     monkeypatch.setattr(bare, "_get_staged_files", lambda r: [])
     monkeypatch.setattr(bare, "_get_unstaged_tracked_files", lambda r: [])
@@ -158,7 +162,7 @@ def _fake_run(merge_rc, other_rc):
 
 def test_git_wholly_failing_reports_once(monkeypatch, capsys):
     run, calls = _fake_run(128, 128)
-    monkeypatch.setattr(bare.subprocess, "run", run)
+    monkeypatch.setattr(ops_module.subprocess, "run", run)
     assert bare._pending_operation("/d", None) is None
     err = capsys.readouterr().err
     assert err.count("偵測失敗") == 1
@@ -168,7 +172,7 @@ def test_git_wholly_failing_reports_once(monkeypatch, capsys):
 
 def test_only_other_state_failing_labelled_as_other(monkeypatch, capsys):
     run, _ = _fake_run(1, 128)
-    monkeypatch.setattr(bare.subprocess, "run", run)
+    monkeypatch.setattr(ops_module.subprocess, "run", run)
     assert bare._pending_operation("/d", None) is None
     err = capsys.readouterr().err
     assert err.count("偵測失敗") == 1
@@ -189,6 +193,6 @@ def test_mutation_no_expanduser_diverges_from_expected(env, monkeypatch):
 def test_mutation_single_dir_detection_misses_root(monkeypatch, tmp_path):
     cwd, root = tmp_path / "cwd", tmp_path / "root"
     monkeypatch.setattr(
-        bare, "_resolve_detect_dirs", lambda c, inv, r: [str(c)]
+        bare, "_resolve_detect_dirs_multi", lambda c, invs, r: [str(c)]
     )
     assert _run_bare(monkeypatch, _UNKNOWN_CMD, cwd, root, {str(root)}) == 0

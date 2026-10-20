@@ -311,6 +311,19 @@ def _is_hooks_tests_path(path: PurePosixPath) -> bool:
     return _is_skill_hooks_path(path) and len(parts) >= 5 and parts[4] == "tests"
 
 
+# 頂層 hooks/ 下的 pytest 基礎設施檔：不經 run_hook_safely、不產生 hook-logs，
+# 也不被 runtime 當 hook 載入，只改它們的票無從提供 hook 四項證據。
+# conftest.py 與其匯入的 testpaths_coverage_warning.py 為明列清單（名稱比對，
+# 無 I/O）；新增同類檔須在此增列，漏列的方向是多要求證據（fail-closed）。
+_PYTEST_INFRA_FILENAMES = frozenset({"conftest.py", "testpaths_coverage_warning.py"})
+
+
+def _is_pytest_infra_path(path: PurePosixPath) -> bool:
+    """path 是否為頂層 `.claude/hooks/` 直屬的 pytest 基礎設施檔（子目錄、
+    skill hooks 下的同名檔不豁免）。"""
+    return path.parent == _TOP_LEVEL_HOOKS_PREFIX and path.name in _PYTEST_INFRA_FILENAMES
+
+
 def _in_hook_scope(path: PurePosixPath) -> bool:
     """已正規化路徑是否命中 hook 範圍（tests 排除在外）。"""
     if _is_hooks_tests_path(path):
@@ -334,6 +347,14 @@ def touches_hook_protection_scope(
     normalized = _normalize_path(file_path)
     if _escapes_root(normalized):
         return True
+    if _is_pytest_infra_path(normalized):
+        # 檔案存在時以實際路徑再判一次：同名 symlink 指向 hook 本體仍視為 hook
+        real = _resolve_real_relative(normalized, project_root or _PROJECT_ROOT)
+        if real is None:
+            return False
+        return _escapes_root(real) or (
+            not _is_pytest_infra_path(real) and _in_hook_scope(real)
+        )
     if _in_hook_scope(normalized):
         return True
     if not _is_hooks_tests_path(normalized):
@@ -363,8 +384,11 @@ _TEMPLATE_SUFFIX = "：" + _PLACEHOLDER
 
 
 def _is_template_placeholder(line: str) -> bool:
-    """條目是否為以「：<待填>」結尾的未填寫模板。"""
-    return line.rstrip().endswith(_TEMPLATE_SUFFIX)
+    """條目是否為未填寫模板：以「：<待填>」結尾，或以「：<待填：…>」指引形式結尾。"""
+    stripped = line.rstrip()
+    if stripped.endswith(_TEMPLATE_SUFFIX):
+        return True
+    return stripped.endswith(">") and "：<待填：" in stripped
 
 
 def _placeholder_acceptance_items(frontmatter: dict) -> List[str]:

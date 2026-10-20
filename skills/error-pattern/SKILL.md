@@ -2,7 +2,7 @@
 name: error-pattern
 description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯誤經驗和防護措施 (query), (2) 記錄新發現的錯誤模式和教訓 (add), (3) Ticket 開始前查詢歷史問題避免再犯, (4) 系統化管理錯誤學習經驗。Use when: user mentions error pattern, 錯誤模式, 教訓, 經驗記錄, 學習經驗, 防護措施, 錯誤紀錄, or needs to avoid recurring issues."
 metadata:
-  version: 1.6.0
+  version: 1.6.1
 ---
 
 # error-pattern SKILL
@@ -149,9 +149,16 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
      sync 也不會覆寫既有列，且 sync 會回報「已與現況一致，無需更新」，看似
      正常卻使佔位符永久卡住，只能人工改 README（與下方「禁止手動編輯」矛盾）。
      故步驟 7 接續動作（Edit 填入實際內容）**必須先完成**，再執行本步驟。
-   - 寫入新錯誤記錄檔案並確認「基本資訊」表已填妥後，呼叫 `readme_index.sync`
-     做保守 upsert（只新增本次新建 pattern 的索引列與清掉死連結列，既有列一律
-     不動）。建議先呼叫 `find_incomplete_new_rows` 把關，避免遺漏欄位仍被寫入：
+   - 寫入新錯誤記錄檔案並確認「基本資訊」表已填妥後，執行 CLI 做保守 upsert
+     （只新增本次新建 pattern 的索引列與清掉死連結列，既有列一律不動）：
+     `uv run .claude/skills/error-pattern/lib/readme_index.py sync --write`
+     ——`--write` 模式預設會先執行缺漏欄位檢查，偵測到即阻擋寫入（回傳
+     非 0）並印出缺漏檔案清單；確有正當理由需以佔位符建立時，加
+     `--allow-placeholder` 逃生閥略過此檢查。`--dry-run`（預設）僅印警告不阻擋。
+   - 需在程式中呼叫時，等效的 Python API 如下。**此片段只能放進 `.py` 檔執行，
+     不能以 heredoc 或 `python -c` 執行**：`bash-write-boundary-guard` 會解析
+     命令文字中的 python 程式碼，`open(readme_path, "w")` 的目標落在 `.claude/`
+     下，會被擋下。
      ```python
      import sys; sys.path.insert(0, ".claude/skills/error-pattern/lib")
      from readme_index import find_incomplete_new_rows, format_incomplete_warning, sync
@@ -167,10 +174,6 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
          with open(readme_path, "w", encoding="utf-8") as f:
              f.write(_updated)
      ```
-   - 或等效 CLI：`uv run .claude/skills/error-pattern/lib/readme_index.py sync --write`
-     ——`--write` 模式預設會先執行同樣的缺漏欄位檢查，偵測到即阻擋寫入（回傳
-     非 0）並印出缺漏檔案清單；確有正當理由需以佔位符建立時，加
-     `--allow-placeholder` 逃生閥略過此檢查。`--dry-run`（預設）僅印警告不阻擋。
    - **禁止**手動編輯 README.md 的「現有模式」表格資料列（結構化內容由工具生成，
      見 structured-content-generation 原則）；新增列的風險等級一律取自檔案內文
      「基本資訊」區塊，**不取自 frontmatter `severity`**（0.2.1-W3-105 診斷分歧、

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 4.2.0（2026-10-19）— Stop 與 UserPromptSubmit 對模型的提醒改走 `additionalContext`（exit 0 加 stderr 對模型不可見）；language-guard 與 evaluate-session 改讀 payload 的 `transcript_path`。
+
 **Version**: 4.1.0 - `references/memory-capture-guide.md` 已刪除（該檔 7 章中原子性已由 compositional-writing 覆蓋，結論式標題經驗證未被覆蓋、判定綁定「原子記憶檔案」已排除形態不需跨載體抽取）；修正「知識記錄撰寫指引」章節內對 compositional-writing 覆蓋範圍的錯誤宣稱（原稱結論式標題已跨載體通用化，實測不成立）（承接用戶裁示）
 **Last Updated**: 2026-07-27
 

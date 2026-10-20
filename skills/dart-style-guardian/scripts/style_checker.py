@@ -69,7 +69,9 @@ class ScanResult:
 # Project Calibration
 # =============================================================================
 
-CONFIG_RELATIVE_PATH = ".claude/config/dart-style-guardian.json"
+CONFIG_RELATIVE_PATH = ".claude/project-integration/dart-style-guardian.json"
+# 舊位置在框架層（會被 sync 覆寫）；僅作遷移期 fallback。
+LEGACY_CONFIG_RELATIVE_PATH = ".claude/config/dart-style-guardian.json"
 
 # 中性預設：不指名任何 token 類別。指名等於斷言某套命名是對的，而各專案的
 # design system 命名並不相同——把某一專案的命名寫成預設，讀者照建議動手就會
@@ -125,6 +127,14 @@ def load_config(start: Path | None = None) -> StyleConfig:
         return StyleConfig()
 
     config_path = root / CONFIG_RELATIVE_PATH
+    legacy_path = root / LEGACY_CONFIG_RELATIVE_PATH
+    if not config_path.is_file() and legacy_path.is_file():
+        print(
+            f"[style-guardian] 遷移提示：校準檔仍在舊位置 {LEGACY_CONFIG_RELATIVE_PATH}，"
+            f"請移到 {CONFIG_RELATIVE_PATH}（舊位置會被框架 sync 覆寫）。",
+            file=sys.stderr,
+        )
+        config_path = legacy_path
     if not config_path.is_file():
         print(
             f"[style-guardian] 未找到 {CONFIG_RELATIVE_PATH}，使用中性預設。"

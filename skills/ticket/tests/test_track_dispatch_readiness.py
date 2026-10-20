@@ -63,6 +63,52 @@ class TestResponsibilityCount:
         assert n == 0
 
 
+class TestResponsibilityCountHookTemplate:
+    """0.5.0-W1-387：閾值 1 計數前排除 hook 證據模板條目。"""
+
+    # 取自 create 的模板常數（0.5.0-W1-394：佔位符改寫後硬編碼副本會漂移）
+    from ticket_system.commands.create import _HOOK_ACCEPTANCE_TEMPLATES
+
+    TEMPLATES = [t for _, t in _HOOK_ACCEPTANCE_TEMPLATES]
+
+    def test_templates_excluded_from_count(self):
+        """E2：4 項模板 + 3 項功能項 → 以 3 計並註明排除 4 項。"""
+        acc = self.TEMPLATES + ["[ ] f1", "[ ] f2", "[ ] f3"]
+        status, n, msg = check_responsibility_count(acc)
+        assert n == 3
+        assert status == "warn"
+        assert "排除" in msg and "4" in msg
+
+    def test_filled_template_still_excluded(self):
+        acc = ["[x] 當次執行環境下的觸發驗證結果：已確認", "[ ] f1"]
+        _, n, _ = check_responsibility_count(acc)
+        assert n == 1
+
+    def test_functional_over_hard_max_still_fails(self):
+        """E2：扣除模板後功能項仍 > 4 照樣 FAIL。"""
+        acc = self.TEMPLATES + [f"[ ] f{i}" for i in range(5)]
+        status, n, _ = check_responsibility_count(acc)
+        assert n == 5
+        assert status == "fail"
+
+    def test_no_template_count_unchanged(self):
+        """E1：無模板條目計數不變，訊息不含排除字樣。"""
+        status, n, msg = check_responsibility_count(["[ ] a", "[ ] b", "[ ] c"])
+        assert (status, n) == ("warn", 3)
+        assert "排除" not in msg
+
+    def test_template_load_failure_counts_all(self):
+        """模板清單載入失敗 → 保守退回全數計入。"""
+        acc = self.TEMPLATES + ["[ ] f1"]
+        with patch(
+            "ticket_system.commands.track_dispatch_readiness._load_hook_template_prefixes",
+            side_effect=RuntimeError("boom"),
+        ):
+            status, n, _ = check_responsibility_count(acc)
+        assert n == 5
+        assert status == "fail"
+
+
 class TestFileCount:
     def test_five_or_fewer_pass(self):
         status, _, _ = check_file_count(["a", "b", "c", "d", "e"])

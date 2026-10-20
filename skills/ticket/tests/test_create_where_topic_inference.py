@@ -63,6 +63,7 @@ def _parse_create(argv):
         "--decision-tree-rationale", "測試情境",
         # where 全在 .claude/ 下會觸發可攜問題分流硬閘門；帶查重結論放行。
         "--dedup-checked", "none",
+        "--dedup-keywords", "測試佔位",
         *argv,
     ])
 

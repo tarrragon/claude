@@ -1567,6 +1567,7 @@ def test_public_contract_names_exist_for_consumers(tmp_path, monkeypatch):
         "push_command",
         "direction",
         "suspect_revert_commit",
+        "push_prune_command",
     )
 
 
@@ -3437,3 +3438,110 @@ def test_version_address_readers_extract_each_address(tmp_path):
     assert _changelog_leading_version(tmp_path / "CHANGELOG.md") == "9.9.9"
     assert _extract_single_version(tmp_path / "SKILL.md") == "8.8.8"
     assert _pyproject_version(tmp_path / "pyproject.toml") == "7.7.7"
+
+
+# --- 本地已刪、發佈庫仍有：建議 push --prune 而非 pull -----------------------
+#
+# push 預設保留遠端多出的檔，push 後同步基準 = 本地雜湊，遠端雜湊因多出的檔而
+# 不同，三方比對判成 "pull"。照建議 pull 會把本地刻意刪掉的檔拉回來。
+
+
+def _commit_all(repo: Path, message: str) -> None:
+    _git(["add", "-A"], cwd=repo)
+    _git(["commit", "-q", "-m", message], cwd=repo)
+
+
+def _push_demo(cli_module, monkeypatch, skills_dir: Path, message: str) -> None:
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: skills_dir)
+    cli_module.cmd_push(
+        argparse.Namespace(name="demo-skill", message=message, force=True, prune=False)
+    )
+
+
+def test_status_report_suggests_push_prune_when_remote_extra_was_deleted_locally(
+    tmp_path, monkeypatch
+):
+    """本地 git 歷史刪除過、發佈庫仍有的檔：報告建議 push --prune（修正前為 pull）。"""
+    bare = tmp_path / "bare.git"
+    _init_bare_with_head(bare)
+    jia = tmp_path / "jia"
+    _init_consumer(jia)
+    skills = jia / ".claude" / "skills"
+    monkeypatch.setenv("SKILL_SYNC_REPO", str(bare))
+    import skill_sync.cli as cli_module
+
+    _write_skill_with_frontmatter_version(skills, "demo-skill", "1.0.0", "body")
+    (skills / "demo-skill" / "extra.md").write_text("extra\n")
+    _commit_all(jia, "add extra")
+    _push_demo(cli_module, monkeypatch, skills, "v1")
+
+    (skills / "demo-skill" / "extra.md").unlink()
+    _write_skill_with_frontmatter_version(skills, "demo-skill", "1.1.0", "body v2")
+    _commit_all(jia, "delete extra")
+    _push_demo(cli_module, monkeypatch, skills, "v1 without extra")  # 不 prune：遠端保留 extra.md
+
+    status = cli_module.sync_status_report(skills)
+
+    assert len(status.diverged) == 1
+    entry = status.diverged[0]
+    assert entry.direction == "push_prune"
+    assert entry.push_prune_command == "skill-sync push demo-skill --prune"
+
+
+def test_status_report_still_suggests_pull_when_remote_added_new_file(
+    tmp_path, monkeypatch
+):
+    """E1 對照：遠端多出的檔本地從未有過 -> 仍是 pull。與上一測試同結構，
+    唯一差異是該檔不在本地 git 刪除歷史中，兩者產物必須不同。"""
+    bare = tmp_path / "bare.git"
+    _init_bare_with_head(bare)
+    jia = tmp_path / "jia"
+    yi = tmp_path / "yi"
+    _init_consumer(jia)
+    _init_consumer(yi)
+    jia_skills = jia / ".claude" / "skills"
+    yi_skills = yi / ".claude" / "skills"
+    monkeypatch.setenv("SKILL_SYNC_REPO", str(bare))
+    import skill_sync.cli as cli_module
+
+    _write_skill_with_frontmatter_version(jia_skills, "demo-skill", "1.0.0", "body")
+    _commit_all(jia, "v1")
+    _push_demo(cli_module, monkeypatch, jia_skills, "v1")
+
+    _write_skill_with_frontmatter_version(yi_skills, "demo-skill", "1.0.0", "body")
+    (yi_skills / "demo-skill" / "new.md").write_text("new\n")
+    _push_demo(cli_module, monkeypatch, yi_skills, "yi adds new.md")
+
+    status = cli_module.sync_status_report(jia_skills)
+
+    assert len(status.diverged) == 1
+    assert status.diverged[0].direction == "pull"
+
+
+def test_status_report_falls_back_to_pull_and_logs_when_history_unreadable(
+    tmp_path, monkeypatch, capsys
+):
+    """判斷失敗（歷史查詢拋例外）：退回現行行為 pull，並寫 stderr 日誌。"""
+    bare = tmp_path / "bare.git"
+    _init_bare_with_head(bare)
+    jia = tmp_path / "jia"
+    _init_consumer(jia)
+    skills = jia / ".claude" / "skills"
+    monkeypatch.setenv("SKILL_SYNC_REPO", str(bare))
+    import skill_sync.cli as cli_module
+
+    _write_skill_with_frontmatter_version(skills, "demo-skill", "1.0.0", "body")
+    (skills / "demo-skill" / "extra.md").write_text("extra\n")
+    _push_demo(cli_module, monkeypatch, skills, "v1")
+    (skills / "demo-skill" / "extra.md").unlink()
+    _write_skill_with_frontmatter_version(skills, "demo-skill", "1.1.0", "body v2")
+    _push_demo(cli_module, monkeypatch, skills, "v1 without extra")
+
+    def boom(*_a, **_k):
+        raise OSError("git unavailable")
+
+    monkeypatch.setattr(cli_module, "_deleted_in_local_history", boom)
+    status = cli_module.sync_status_report(skills)
+
+    assert status.diverged[0].direction == "pull"
+    assert "demo-skill" in capsys.readouterr().err

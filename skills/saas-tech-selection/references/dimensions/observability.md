@@ -21,13 +21,15 @@
 
 | 訊號            | 最小實作                                                                  |
 | --------------- | ------------------------------------------------------------------------- |
-| 活著沒有        | 外部 uptime 監控（打 health endpoint）+ alert 到手機層級管道              |
+| 活著沒有        | 外部 uptime 監控（打 health endpoint，條件只看回應碼與連線）+ alert 到手機層級管道；連續失敗的次數乘上探測間隔長過短暫尖峰、短過使用者能忍受的時間才發 |
 | Request log     | structured JSON：request id、路由、狀態碼、duration、user / tenant id     |
 | 錯誤分類        | 4xx（client 問題）/ 5xx（自己的 bug）/ 依賴失敗（DB、第三方）三類分開計數 |
 | 錯誤聚合        | error tracking 服務（Sentry 類）：同錯誤聚合、新錯誤通知、帶 stack trace  |
 | 主機 / 平台訊號 | CPU、記憶體、磁碟、連線數 — 託管平台多半內建、確認打開並設基本 alert      |
 
 系統進入卸載（load shedding）時的額外訊號 — 每個仲裁決策的可觀測事件、被丟棄請求的留痕粒度、告警綁狀態變遷而非「佔用量高」— 判斷標準見事件流負載仲裁方法論〈可觀測性〉、欄位範本與訪談流程見 `event-flow-arbitration-design` skill，以本維度的 structured log 與 request id 為前提。
+
+**「掛了」與「變慢」分成兩個判斷**：存活探測的條件只放回應碼與連線，延遲用一段時間內的百分位數另外判斷（request log 的 duration 或後端輸出的延遲分布），不放進存活探測。兩個條件放在同一個探測裡時，主機過載讓服務變慢就被報成「掛了」，而原因在服務之外。告警的條件都要持續一段時間才發（Prometheus 的 `for`、uptime 工具的連續失敗次數），單次的慢或失敗不吵醒人。
 
 這個集合的設計原則：每個訊號都直接回答一個事故當下的問題。「掛了嗎」→ uptime；「誰受影響」→ request log 的 user 欄；「是我的 bug 還是依賴掛了」→ 錯誤分類；「哪行程式」→ error tracking。訊號回答不了任何具體問題的、不進 day one 集合。
 
@@ -64,7 +66,7 @@
 
 | 可延後項                      | 建議重評條件                                     |
 | ----------------------------- | ------------------------------------------------ |
-| Metrics 平台（Prometheus 類） | 需要容量趨勢與自訂業務指標、平台內建訊號不夠用   |
+| Metrics 平台（Prometheus 類） | 需要容量趨勢與自訂業務指標、平台內建訊號不夠用；決定自建之後的設計、實作與驗收走 `observability-stack` skill |
 | Distributed tracing           | 服務數 > 2、跨服務延遲無法用 log 定位            |
 | Log 聚合平台                  | 多實例 / 多服務、ssh 看 log 開始出現在排障流程裡 |
 | On-call 輪值與 escalation     | 團隊 > 3 人、單一接收者成為單點                  |

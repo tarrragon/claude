@@ -814,6 +814,56 @@ def test_mixed_tests_and_hook_body_still_blocks(logger):
     assert should_block is True
 
 
+def test_pytest_infra_only_write_set_not_treated_as_hook_ticket(logger):
+    """只改 pytest 基礎設施檔（conftest.py 等，非 hook）的票不要求 hook 四項證據。"""
+    for name in ("conftest.py", "testpaths_coverage_warning.py"):
+        fm = _fm("IMP", [f".claude/hooks/{name}"], _EMPTY_ACCEPTANCE)
+        assert check_hook_protection_acceptance(fm, logger, content="") == (False, None), name
+
+
+def test_pytest_infra_plus_real_hook_still_blocks(logger):
+    """E2 正向對照：寫入集含真 hook 檔，即使同含 conftest.py 仍命中。"""
+    fm = _fm(
+        "IMP",
+        [".claude/hooks/conftest.py", ".claude/hooks/new-guard-hook.py"],
+        _EMPTY_ACCEPTANCE,
+    )
+    should_block, _ = check_hook_protection_acceptance(fm, logger, content="")
+    assert should_block is True
+
+
+def test_real_hook_file_alone_still_blocks_e2(logger):
+    fm = _fm("IMP", [".claude/hooks/new-guard-hook.py"], _EMPTY_ACCEPTANCE)
+    should_block, _ = check_hook_protection_acceptance(fm, logger, content="")
+    assert should_block is True
+
+
+def test_infra_name_in_other_dirs_still_hook_scope():
+    """排除只限頂層 hooks/ 的檔名，skill hooks 或子目錄同名檔不豁免。"""
+    assert touches_hook_protection_scope(".claude/hooks/lib/conftest.py") is True
+    assert touches_hook_protection_scope(".claude/skills/ticket/hooks/conftest.py") is True
+
+
+def test_infra_exclusion_failure_lands_on_hook_side(logger, monkeypatch):
+    """判定本身失敗（例外）落在『視為 hook、要求證據』一側。"""
+    import acceptance_checkers.hook_protection_acceptance_checker as mod
+
+    def boom(*a, **k):
+        raise OSError("read failure")
+
+    monkeypatch.setattr(mod, "_is_pytest_infra_path", boom)
+    assert mod._any_path_touches_hook_scope([".claude/hooks/conftest.py"], logger) is True
+
+
+def test_infra_symlink_to_hook_body_is_not_excluded(tmp_path):
+    """conftest.py 若為指向 hook 本體的 symlink，實際路徑非基礎設施，仍命中。"""
+    hooks = tmp_path / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    (hooks / "real-hook.py").write_text("x")
+    (hooks / "conftest.py").symlink_to(hooks / "real-hook.py")
+    assert touches_hook_protection_scope(".claude/hooks/conftest.py", project_root=tmp_path) is True
+
+
 def test_placeholder_in_acceptance_blocks_and_names_item(logger):
     item = "[ ] 實地觸發：<待填>"
     acceptance = _PASSING_ACCEPTANCE + [item]

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.11.0（2026-10-19）— PreToolUse 提醒類 hook 改走 `additionalContext`；version-release-guard 的警告路徑保留核准決策。
+
 **Version**: 2.10.5 - `finish` 前移對撞號的 dry-run 改為續行並在結尾列對照表：`ticket migrate --dry-run` 撞號現回 rc=0 與改號預覽（配套 ticket skill 2.44.41），`migrate_overflow_tickets` 不再把撞號預覽當失敗中止，後續 preflight 與文件更新步驟在 dry-run 下可見。每張票的 dry-run 呼叫經 `--reserve-id` 帶入前面各張的預覽目標，使連環撞號的預覽與正式執行一致；新增 `print_overflow_mapping`，finish 在殘留守衛前列出「來源 ID：原目標 -> 實際目標」對照表（取自 `[MIGRATE-MAP]` 標記行，未改號者原目標等於實際目標）。`tests/test_finish_migrate_collision.py` 的 dry-run 撞號案依新語意由 rc=1 失敗改為 rc=0 續行，新增保留目標傳遞與對照表測試。
 
 **Version**: 2.10.4 - 修復 `finish`／`release` 的 git 寫入命令以固定 10 秒逾時殺掉 git、可能殘留 index.lock 或 HEAD.lock：commit 與 tag 會建立 ref 並觸發 reference-transaction hook，hook 耗時（如 uv 內容掃描）在負載高時可超過 10 秒，被殺的 git 留下的鎖會擋住所有 session 的 git 寫入。命令分兩類。本地寫入（add、commit、tag、merge、checkout、branch -d）新增 `GIT_WRITE_TIMEOUT = None`，`run_git_with_lock_retry` 預設改用它，不設逾時（與 ticket 側 update-ref／update-index 同機制）。網路命令（push main、push tag、push --delete、`publish_activation_commit` 的 push，以及取代 `git pull` 的 `git fetch`）改走 `run_git_network`：逾時 `GIT_NETWORK_TIMEOUT = 300` 秒、帶 `GIT_TERMINAL_PROMPT=0`；逾時回傳 rc 124 與可見 stderr，並掃描 `.git` 下的 `*.lock`（index.lock、HEAD.lock、refs 底下）逐一列出路徑與「確認沒有其他 git 程序後再手動刪除」的補救說明，不自動刪鎖，finish 以非 0 結束。`pull origin main` 拆成 `fetch origin main`（網路逾時）加 `merge --no-edit FETCH_HEAD`（本地寫入，不設逾時），語意與 pull 的預設合併一致。唯讀命令（status、log、rev-parse、branch --show-current、describe）維持原逾時。`tests/test_release_git_write_failure.py` 新增慢速 reference-transaction hook 的 tmp repo E1 對照（逾時壓縮 seam：修正前 commit 被殺，修正後完成且無殘留 `*.lock`）、無 hook 對照，以及網路逾時三個測試（push 卡住 rc 非 0 且 stderr 可見、預置鎖檔被列出且仍存在、正常推送不報鎖）。

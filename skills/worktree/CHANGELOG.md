@@ -2,6 +2,16 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.6.6（2026-10-19）— `_is_branch_pushed` 改問「分支 tip 是否在任一遠端 ref 上」（`git for-each-ref --contains --format=%(refname) refs/remotes`，只看結束碼與是否有輸出），不再比對 origin 同名分支；feat／agent 分支從不推送，原判定恆為未推送，使 cleanup Level 2 恆報警。含遠端沒有的 commit、worktree checkout 中、分支不存在三種情況仍判為未推送。
+**Version**: 1.6.5（2026-10-19）— `_is_branch_merged_to_base` 改用 `git merge-base --is-ancestor <branch> <base>` 判定，不再解析 `git branch --merged` 輸出；修正 worktree 已 checkout 的分支（輸出帶「+ 」前綴）恆判為未合併，使 cleanup Level 3 對已合併分支不再恆報警。未合併分支（含 worktree checkout 中者、分支不存在）仍判為未合併。
+**Version**: 1.6.4（2026-10-19）— `cleanup` 新增 `--branch <分支名>`（與 ticket_id 擇一），用於萃取不到 ticket ID 的 `worktree-agent-<id>`，仍經三閘門；掃描報告對非 ticket 分支改印 `/worktree cleanup --branch <分支名>`（含 `--force` 版），ticket 分支印法不變。
+**Version**: 1.6.3（2026-10-19）— 預檢無衝突時 gate 日誌於開始行與結束行之間多記一行 `[合併閘門] 預檢｜…｜結果 無衝突`，使無衝突的合併也能觀測預檢已執行；格式沿用 `gate_line`，`[合併前測試]` 行不變。
+**Version**: 1.6.2（2026-10-19）— 合併閘門進場排隊前以 `merge_cas.precheck_merge_conflict` 預檢文字衝突，有衝突即不排隊、結束碼 1，結束行結果為「預檢衝突」；`_prepare_candidate` 與預檢共用 `_trial_merge`。取得名額後的衝突判定保留。
+
+**Version**: 1.6.1（2026-10-19）— 隔離索引 CAS 合併引擎（CheckResult、PreMergeCheck、MergeOutcome、merge_branch_cas 及其輔助函式與 _sleep／_clock 測試接縫）移到 `scripts/merge_cas.py`，行為不變；`worktree_manager.py` 改為匯入。程式入口改為 `merge_cas.merge_branch_cas`，測試接縫只在 `merge_cas` 替換。`merge_branch_cas` 的 repo 為 None 時才延後匯入 get_project_root，worktree_manager 的呼叫端一律明確傳 repo。
+
+**Version**: 1.6.0（2026-10-19）— 合併閘門：`worktree merge` 在快照內先取得 heavy 名額再跑全套件，持有至 update-ref，紅燈不合併並保留失敗細節；以隔離索引 CAS 完成合併，CAS 重試時若期間只改了豁免檔（ticket md、版本工作日誌、topic-assignments）就沿用前次驗證結果；新增 `--branch`、`--pre-acceptance`、`--message`、`--ticket`；名額佇列依先來後到並帶心跳，等待上限只用來偵測持有者卡住。其他：PreToolUse 提醒改走 `additionalContext`；唯讀 git 呼叫補 `--no-optional-locks`；zombie-cleanup 改溫和終止並以整體期限扣減逾時；merge-reminder 排除進行中的派發。
+
 **Version**: 1.5.1 — `worktree-remove-deliverable-check-hook.py` 的 Guard A 對內容已由 main 取代的分支加出口：`git cherry main <branch>` 全為 `-` 時放行並記 info；含 `+` 時照擋，訊息附三步顯式丟棄出口（先以 `git diff main <branch>` 核對取代關係，再 `checkout --detach`、`branch -D`、`worktree remove`），不再建議 `merge -s ours`。另隨框架統一以 `-c core.quotepath=false`／`-z` 讀取 git 路徑清單。
 
 **Version**: 1.5.0 — `worktree-remove-deliverable-check-hook.py` 的修復指引補合併被擋下時的處置：`git merge` 若回 `fatal: ref updates aborted by hook`，先 `git merge --abort` 清掉 MERGE_HEAD 殘局，再依 stderr 訊息修正重試；並註明合併本身已對 branch-verify 豁免，此時仍被擋通常來自其他內容 guard（如 reference-stability-rule8）。原指引只給「先 merge」而未涵蓋 merge 被擋的分支，讀者停在一個半完成的合併狀態上沒有下一步。豁免本體位於框架 `.claude/hooks/`，不在本 skill 範圍。

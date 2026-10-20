@@ -30,13 +30,21 @@ How much content belongs in a single file, and when do you cut?
 
 ### Decision table
 
-| Condition                                                                                         | Action                                      | Reason                                |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------- |
-| One document covers one concept cleanly, body < ~500 lines                                        | Keep single file                            | Atomic at file level                  |
-| Body crosses ~500 lines but concept is still one                                                  | Split into sub-sections, not separate files | File is still atomic                  |
-| Body contains two independently retrievable concepts (reader consults only one at a time)         | Split into two files                        | Violates atomicity                    |
-| Single file is consulted as five different situations (e.g. worklog + spec + methodology stacked) | Split by situation                          | Situation match beats line count      |
-| Document is < 100 lines and only referenced from one place                                        | Consider merging upward                     | Under-atomic, creates navigation cost |
+| Condition                                                                                         | Action                                                | Reason                                     |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------ |
+| One document covers one concept cleanly, body < ~500 lines                                        | Keep single file                                      | Atomic at file level                       |
+| Body crosses ~500 lines but concept is still one                                                  | Split into sub-sections, not separate files           | File is still atomic                       |
+| Body contains two independently retrievable concepts (reader consults only one at a time)         | Split into two files                                  | Violates atomicity                         |
+| Single file is consulted as five different situations (e.g. worklog + spec + methodology stacked) | Split by situation                                    | Situation match beats line count           |
+| Document is < 100 lines and only referenced from one place                                        | Consider merging upward                               | Under-atomic, creates navigation cost      |
+| Commit history shows the file modified by several unrelated topics, at any length                 | Split by topic (one candidate file per topic)         | One file per reason to change              |
+| Aggregator file (changelog, index, glossary) modified by every topic                              | Keep; switch to one fragment per entry or append-only | Splitting by topic only moves the conflict |
+
+The line counts in this table decide sections versus files **within one concept only**. Whether to split at all is decided by responsibility: a 600-line parameter reference can be one responsibility, an 80-line README can hold four. Count responsibilities from history — `git log --follow --no-merges --format='%h %s' -- <file-path>`, group the commit subjects by topic, the number of groups is the number of responsibilities. See [change-history-counts-a-documents-responsibilities](principles/change-history-counts-a-documents-responsibilities.md).
+
+### Before adding a section to an existing document
+
+A document gains a second responsibility in the edit that adds a section, and each such edit looks reasonable on its own. Before adding, ask: **is this section's reason to change one of the reasons this file already has** — read the existing reasons from its history, not from its title. If not, find the file that owns that reason; only if none exists open a new file and leave a one-line link here. Also ask whether the section would sit better under another category of the same collection: a document's scope is the intersection of its title and its category, and titles often omit what the category already constrains (see [section-scope-is-bounded-by-the-category-too](principles/section-scope-is-bounded-by-the-category-too.md)). Rule documents that accumulate (project conventions, agent instructions, skill files) need this check most.
 
 ### Split heuristics by document type
 

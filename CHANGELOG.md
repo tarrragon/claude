@@ -1,3 +1,212 @@
+## [2.83.0] - 2026-10-20
+
+### Summary
+feat: dart-style-guardian 校準檔遷至 project-integration 並加舊位置 fallback; feat: 以專案宣告接上 line-board 測試套件於合併閘門; feat: 合併閘門讀取專案宣告的套件對應 (某票.3.1) (+196 more)
+
+Changes: 29 feat, 12 refactor, 69 fix, 67 docs, 6 chore, 1 style, 15 test
+
+- feat: dart-style-guardian 校準檔遷至 project-integration 並加舊位置 fallback
+- feat: 以專案宣告接上 line-board 測試套件於合併閘門
+- feat: 合併閘門讀取專案宣告的套件對應 (某票.3.1)
+- feat: 合併閘門免跑時列出未對應路徑並警告
+- feat: context-depth hook 改合計口徑 400K additionalContext
+- feat: 多線協調狀態列 wrapper
+- feat: worktree 骨架多行內容句改 --content-file 並同步三份文件
+- feat: create dedup execution
+- feat: 壓縮 dispatch 骨架並以參數化守衛涵蓋全部變體
+- feat: hook 證據模板佔位符指引 set-acceptance --edit
+- feat: dispatch 骨架依 where.files 附測試入口命令
+- feat: --dedup-checked 值限定 none 或 issue 參照
+- feat: bash-write-boundary-guard 補 python argv 三種慣用形態
+- feat: set- 範圍欄位變更後提示同步其餘範圍欄位
+- feat: bash-write-boundary-guard deny 訊息補禁止換 Bash 寫法重試與 move-lines 通道
+- feat: append-log 新增 --content-file
+- feat: bash-write-boundary-guard 偵測 python sys.argv[n] 寫入目標
+- feat: --dedup-checked none 須附 --dedup-keywords 並寫入查重紀錄
+- feat: bash-write-boundary-guard 補十種命令的寫入目標抽取
+- feat: ticket track move-lines 依行範圍搬移並驗證行數守恆
+- feat: bash-write-boundary-guard 補 shell 層解析與逐候選跳過日誌
+- feat: bash-write-boundary-guard 以 ast 追蹤 python 內嵌腳本的變數路徑寫入
+- feat: bash-write-boundary-guard 放行與阻擋分支記判定日誌，修正 deny 訊息 ! 句
+- feat: worktree cleanup 新增 --branch，掃描報告對非 ticket 分支印可執行指令
+- feat: 合併閘門預檢無衝突時記一行 gate 日誌
+- feat: bash-write-boundary-guard 對主線程與代理人改為路徑範圍阻擋
+- feat: 合併閘門排隊前以 merge-tree 預檢文字衝突
+- feat: track conflicts table 只列票樹數 >= 2 的檔
+- feat: conflicts 輸出同檔票樹競爭數與拆分建議
+- refactor: needs_gate 與未對應警告共用範圍判準
+- refactor: tier_of/should_warn/_warning_text 形參改名 total_context
+- refactor: rename 7 ticket_system tests to facet-based names
+- refactor: 模板與條目共用同一去框函式
+- refactor: merge_gate 改用 merge_cas.CheckResult，刪除 GateVerdict
+- refactor: 隔離索引 CAS 引擎自 worktree_manager.py 純搬移到 scripts/merge_cas.py
+- refactor: 依職責拆分 bare-commit-guard（純搬移，行為不變）
+- refactor: wrap-decision-tripwire-hook 依職責拆為 tripwire/ 套件（config/state/signals/render），hook 保留 main 並 re-export
+- refactor: 拆分 check_domain_coverage 為 domain_coverage 套件四模組（純搬移）
+- refactor: parallel-dispatch-verification 改呼叫 extract_where_files(intent=write)
+- refactor: bare-commit-guard 與 ticket_parser 改呼叫 hook_ticket 單一實作
+- refactor: hook_ticket 增設 where.files 單一實作（intent/canonical/raise_on_missing）與行為測試
+- fix: yaml 延遲匯入並補無 yaml 測試 (某票.3.1)
+- fix: context-depth-warning 日誌欄位 cache_read 改 total
+- fix: rule8 守衛不掃描 gitignore 命中且未受版控的本機檔
+- fix: 合併閘門 flutter 範圍納入 assets/
+- fix: append-log content-file 空內容拒收
+- fix: 多行內容句補檔名含票號並加字面斷言
+- fix: dedup 失敗寫日誌並區分部分未完成
+- fix: 守衛測試在無 tomllib 的 3.10 改用最小解析
+- fix: 審查修正 搜尋句不列目錄、守衛涵蓋 commit_policy 與 review、hook 提醒補 liveness
+- fix: 判定收純路徑並補 ::write 對照測試
+- fix: 建票模板判定濾掉 ::read 唯讀宣告，還原 checker
+- fix: hook 範圍判定不將 ::read 唯讀宣告視為改動 hook
+- fix: track commit 目錄展開後再檢查 symlink 與逸出
+- fix: move-lines 其餘兩條拒絕路徑改 stderr 加 logger
+- fix: move-lines 錯誤路徑補日誌並保留 _stage_temp 原例外
+- fix: lease 鑑識放寬 prunable 與無關未追蹤檔，worktree list 失敗落 unknown
+- fix: 測試入口改以檔案系統推導並與 md 表比對
+- fix: dedup 值 fullmatch 與 ASCII 限定
+- fix: move-lines 補測試鑑別力與未攔截例外訊息
+- fix: dispatch hook 外部 .claude 判定排除佔位字樣與同層同 repo worktree
+- fix: argv 下標 bool 依 Python 語意視為 int
+- fix: bash-write-boundary-guard 變數展開改為可能值集合
+- fix: worktree 骨架補票面 CLI 被拒處置與 heredoc 句
+- fix: worktree-remove-deliverable-check 空目標日誌分三種情況
+- fix: 寫入範圍判定抽共用模組，解 symlink 並要求 --worktree 屬本 repo
+- fix: lease 鑑識以 dispatch-active 與 commit 主旨對回票號
+- fix: dispatch 骨架對含測試 acceptance 的 IMP 加紅燈實跑要求
+- fix: 同鏈略過 multi_view_status 警告僅限 append-log 確實寫入該欄位
+- fix: worktree remove Guard A 以 -C 指向的 repo 為基準查詢
+- fix: 查重紀錄關鍵字中和、錨點定位、僅 none 寫入
+- fix: dispatch-readiness 閾值 1 排除 hook 證據模板條目
+- fix: move-lines 保留權限、行界只認 LF、還原失敗訊息、CRLF 補行
+- fix: 票號前邊界僅排除數字與點，字母緊接仍命中
+- fix: dirty 區塊的 remove 驗證行改印 /worktree cleanup
+- fix: 已合併 worktree 清理建議改印 /worktree cleanup
+- fix: hook 匯入 fallback 補寫檔案日誌 ERROR 行
+- fix: lease 殘留鑑識以票號邊界比對並去除 worktree 前綴
+- fix: 同鏈偵測失敗日誌升為 warning
+- fix: acceptance gate 防護類判定排除 hooks 下 pytest 基礎設施檔
+- fix: 同命令鏈偵測命中時略過 multi_view_status 未標註警告
+- fix: 命令無法解析時退回正則擷取 remove 路徑，不再直接 fail-open
+- fix: hook acceptance 模板去重先去除核取框前綴
+- fix: 非必然執行的賦值不入 env，HOME／CLAUDE_PROJECT_DIR 賦值不得成為放行依據
+- fix: worktree-remove-deliverable-check 改用 git_command_parse 辨識 remove 呼叫，git -C 形式受 Guard A/C 檢查
+- fix: create 失敗清理每步寫入 worktree-merge.log
+- fix: hook 改 lazy import worktree_manager，失敗退回通用字面
+- fix: worktree hook 落地建議改走 /worktree merge 合併閘門
+- fix: worktree-branch-check 未合併分支改用 for-each-ref 取名
+- fix: worktree create add 逾時或失敗時清理自建 worktree 與分支
+- fix: 0> 與 0>> 的檔案目標亦為寫入
+- fix: fd 重導向檔案目標納入寫入候選
+- fix: bash-write-boundary-guard 涵蓋同 repo 同層 worktree 的絕對路徑寫入
+- fix: 收窄 bash-write-boundary-guard 豁免（狀態檔、建置快取、git mv 命令字）
+- fix: _is_branch_pushed 改判分支 tip 是否在任一遠端 ref 上
+- fix: worktree-branch-check 改用共用 git 命令解析，git -C 形式觸發、引號內字樣不觸發
+- fix: worktree 兩支 hook 建議指令改為規則七合規提交形式
+- fix: cleanup Level 3 合併判定改用 merge-base --is-ancestor
+- fix: fail_closed 守衛清單同步加入 bash-write-boundary-guard
+- fix: 合併前審查修正（open 模式、fd 1/3+、perl/-t/exec、子殼 cd、pushd、脫困指引）
+- fix: hooks conftest 缺 yaml 時單一明確訊息結束並指出正確指令
+- fix: bare-commit-guard 串接多筆 commit 逐筆判定，--amend 只豁免該筆
+- fix: 預檢納入 try，例外記中止結束行
+- fix: content guard 合併豁免改逐 commit 依 parent 數判定
+- fix: bare-commit-guard 無法解析覆寫的阻擋日誌措辭分流
+- fix: bare-commit-guard 追隨 gitlink 檔指向偵測進行中操作
+- fix: skill-sync status report suggests push --prune for locally deleted files
+- fix: bare-commit-guard 對無法解析的 GIT_DIR 覆寫目標保守阻擋
+- fix: bare-commit-guard 進行中操作偵測涵蓋全部 commit 目標與目錄覆寫
+- fix: hook acceptance 模板帶入具冪等性
+- docs: 改寫 hook docstring 為現行行為
+- docs: session-naming 名稱字元處理段改為實測結論
+- docs: session-naming §1 依用戶裁定改為命名底線
+- docs: 新增 PC-GPD-038 並行代理人共用 scratchpad 通用檔名互相覆蓋
+- docs: session-naming 依主控審閱修正四項
+- docs: multi-session-orchestration 新增 session 命名與換 session 時機規則
+- docs: 派發要明示的句子改為 --content-file 寫法
+- docs: 新增 PC-GPD-037 閘門行為判斷前未讀現行判定碼
+- docs: 新增 PC-GPD-036 收尾段未開票發現無人接手
+- docs: 新增 TEST-GPD-006 相容性 fallback 在閘門環境從未被執行
+- docs: multi-session-orchestration 收尾程序補未開票發現須建票
+- docs: 同步 agent-dispatch-template 骨架節至壓縮後字面
+- docs: 新增 TEST-GPD-005 上限守衛測試只量產生器的單一組合
+- docs: 註明 porcelain 解析依賴 --no-renames
+- docs: PC-BAL-061 變體補模組名為常見字時改以 import 語句 grep
+- docs: PC-BAL-040 補 2026-10-20 續案：以字面格式消費的跨套件讀取端
+- docs: 更正守衛測試 docstring 的同名檔成因敘述
+- docs: PC-GPD-035 守衛收斂後推送後審查反覆重報已登記殘留風險
+- docs: multi-session-orchestration 補已知回歸暫留 main、移票挑選判準、收斂後審查標記查表三條規則
+- docs: IMP-GPD-006 執行者位置變體補派發驗證守衛第二例
+- docs: 處置判準的回歸判別法補基準輸入要求
+- docs: 處置判準補回歸分兩輪處理的三條件
+- docs: 處置判準第 3 步區分既有差異與修改自身引入的回歸
+- docs: create-command 補 --acceptance 雙分隔符（shell 或）會被拆的例子與跳脫寫法
+- docs: 處置判準第 2 步納入常見慣用寫法，無實例紀錄不構成殘留風險理由
+- docs: 處置判準第 3 步要求登記殘留風險時指明並核對稽核欄位
+- docs: 處置判準的判定日誌列補稽核欄位區分（跳過原因 vs 命令文字）
+- docs: hook 參考新增靜態解析守衛的 parser differential 處置判準
+- docs: PC-GPD-031 補「被守衛擋下後換寫法重試」變體，強制層列改為已實作
+- docs: dispatch_tracker 68% 缺席註記改為帶日期與樣本的實測記錄
+- docs: 派發範本補相關測試檔的找法（以改動物字面 grep 所有測試目錄）
+- docs: move-lines 範圍段補 symlink 與 worktree 歸屬
+- docs: 同步 track commit 拒絕情形與 CHANGELOG
+- docs: PC-BAL-061 補變體：改 hook 輸出字面時同名測試跨套件分散
+- docs: L10N 驗證說明測試 3 的 touch lib/ 步驟註明執行限制
+- docs: 派發範本測試入口佔位符改 <checkout> 並補單檔指令，與 conftest 提示字面一致
+- docs: IMP-GPD-008 補汰換正則時保留退路
+- docs: IMP-GPD-007、008 依 Layer 2 審查修正
+- docs: IMP-GPD-007、008 檔名補描述後綴
+- docs: hook 參考的必載表補 fail_closed 宣告時同步 fallback 清單一列
+- docs: multi-session-orchestration 收緊分級列補合併前查框架文件例行範例
+- docs: error-pattern SKILL 步驟 8 改以 CLI 為主要路徑，python 片段限 .py 檔執行
+- docs: IMP-GPD-006 補「以執行者位置推導判定範圍」變體，交叉引用 IMP-GPD-008
+- docs: 新增 IMP-GPD-008 守衛以正則或子字串比對 git 命令，全域選項使比對落空
+- docs: multi-session-orchestration 1.3.0 — 行為變更判準與放行方向分級、程式讀者的介面約定、驗收證據時序、交接中轉知
+- docs: 新增 IMP-GPD-007 解析 git branch 輸出漏掉 worktree 前綴
+- docs: multi-session-orchestration 1.2.1 — shared-resources §1 閘門期間提交列指向 §4 提交位置
+- docs: multi-session-orchestration 1.2.0 — shared-resources 補讀取各線 session 狀態的方法
+- docs: multi-session-orchestration 1.1.0 — 補可預見裁決提前問、驗收需他線分支時由 owner 自行合併
+- docs: worktree SKILL/CHANGELOG 同步 cleanup --branch (1.6.4)
+- docs: 新增 IMP-GPD-006 守衛以實作路徑副產物判定操作類型
+- docs: PC-GPD-034 文字修正——歸因語氣、定語堆疊、口語結論句、不可解析的票引用
+- docs: add PC-GPD-034 suggested command not validated by own parser
+- docs: multi-session-orchestration 1.0.1 — 收尾流程補 PM 換 session 時的 CLI handoff 寫法
+- docs: file-split-by-contention 補 portable skill 拆分時搬移來源記在 commit 訊息；cognitive-load-assessment 2.1.1
+- docs: 新增 IMP-GPD-005 fail-open 守衛新增阻擋種類漏補資源
+- docs: 回寫拆分與閘門協調教訓、補 track conflicts --since-days 文件
+- docs: 文字拆分補「用拆分前後的差值驗證」
+- docs: 分檔後本檔自引改跨檔引用、hook 註解指向新檔、原檔頭補分檔索引
+- docs: 純搬移 track-command 與 agent-dispatch-template 依職責分檔，原檔留路由
+- docs: 文字拆分補引用盤點、權威文字不搬、圍欄內標題
+- docs: 拆分流程補注入點不 re-export 與盤點單檔前提工具
+- docs: 萃取模組補「re-export 保不住 patch」
+- docs: 拆分前置補「派發前把新模組與相關測試列入 where.files」
+- docs: 拆分流程補「分辨鎖行為與鎖位置的測試」
+- docs: 拆分流程補「新模組不與標準庫同名」
+- docs: 同檔競爭作為拆分訊號：rule 觸發列與 skill 拆分流程
+- chore: sync skill-sync version to 1.25.0 in pyproject and uv.lock
+- chore: wrap-decision 升版 2.16.0，供 skill-sync push
+- chore: 移除 spec 與 wrap-decision 的專案層路徑與票號
+- chore: 8 個 skill 升版並補 CHANGELOG，供 skill-sync push
+- chore: skill-sync pull 4 個 skill 至發佈庫最新版
+- chore: sync-push --clean 回寫框架版本 某版本
+- style: fields.py 補 working = 等號後空格
+- test: content-file 讀檔失敗兩案例斷言 stderr 與票面不變
+- test: 補 3.10 後備解析直接測試並限定 pytest 區段
+- test: 補兩個受測呼叫的回傳碼斷言
+- test: 種子票建立補回傳碼斷言
+- test: 改名 hook 模板去重測試為面向化檔名，加測試根同名守衛
+- test: reclaim 落地測試隔離 dispatch-active 路徑
+- test: append-log 測試輸入補 content_file=None
+- test: 建票測試 helper 隨收緊補 dedup_keywords
+- test: linked worktree 與 symlink 路徑混用的放行測試
+- test: hooks 套件同名測試改斷言 /worktree cleanup 形式
+- test: 注入失敗重現 locked initializing；正向對照斷言不經 add
+- test: 測試名與 docstring 的 path-limited 改為精確 add 加裸 commit
+- test: 補 lib.dispatch_scope／git_operation_state 單元測試
+- test: 時鐘與專案根注入點改由符號反查模組，J 系列掃描涵蓋 tripwire 套件
+- test: 後綴剝除測試改 patch lib 層，不再釘住 hook 內剝除接縫
+
+---
+
 ## [2.82.1] - 2026-10-16
 
 ### Summary

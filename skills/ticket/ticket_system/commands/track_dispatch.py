@@ -38,11 +38,14 @@ import io
 import re
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple
 
 from ticket_system.commands.track_dispatch_readiness import execute_dispatch_readiness
 from ticket_system.commands.track_dispatch_validate import execute_dispatch_validate
+from ticket_system.lib.file_conflict import write_files
 from ticket_system.lib.dispatch_skeleton import (
+    entry_commands_for_files,
     DRY_RUN_WATERMARK,
     HOOK_TICKET_REMINDER,
     SKELETON_TEMPLATE_NORMAL,
@@ -52,6 +55,7 @@ from ticket_system.lib.dispatch_skeleton import (
     STAGING_PHRASE_NONE,
     STAGING_PHRASE_PM,
     build_skeleton,
+    requires_red_run,
     non_exempt_paths,
 )
 from ticket_system.lib.file_lock import file_lock
@@ -60,6 +64,9 @@ from ticket_system.lib import git_utils
 from ticket_system.lib.ticket_loader import get_ticket_path, load_ticket, save_ticket
 from ticket_system.lib.messages import ErrorMessages, format_error
 from ticket_system.lib.ticket_ops import resolve_ticket_path
+
+# 本程式碼所在 checkout 的根（測試入口推導用；skill 目錄存在性以此判斷）。
+_CHECKOUT_ROOT = Path(__file__).resolve().parents[5]
 
 # 派發日誌章節名。掛在 Schema H2「Problem Analysis」下的 H3 子節（非獨立 H2，
 # 不受 SCHEMA_H2_SECTIONS canonical 順序與 body-schema-checker 必填檢查約束），
@@ -87,7 +94,7 @@ CLI_MANAGED_H3_HEADINGS = (DISPATCH_LOG_SECTION, COMMIT_SECTION_HEADING)
 # 一律走下方 `_build_skeleton` 轉呼叫的 `build_skeleton`。
 
 
-def _build_skeleton(args: argparse.Namespace) -> str:
+def _build_skeleton(args: argparse.Namespace, test_entries=()) -> str:
     """依 --kind 產生骨架文字（review 變體不含 claim/收尾協議）。
 
     薄轉接層：將 argparse.Namespace 攤平為關鍵字參數後轉呼叫
@@ -107,6 +114,8 @@ def _build_skeleton(args: argparse.Namespace) -> str:
         commit_policy=commit_policy,
         touches_hook_scope=getattr(args, "_touches_hook_scope", False),
         isolation=getattr(args, "isolation", None) or "none",
+        require_red_run=getattr(args, "_require_red_run", False),
+        test_entries=test_entries,
     )
 
 
@@ -435,8 +444,13 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
 
     _warn_missing_isolation(ticket, args)
     args._touches_hook_scope = _touches_hook_protection_scope(ticket)
+    args._require_red_run = requires_red_run(
+        ticket.get("type"), ticket.get("acceptance")
+    )
 
-    skeleton = _build_skeleton(args)
+    test_entries = entry_commands_for_files(write_files(ticket), _CHECKOUT_ROOT)
+
+    skeleton = _build_skeleton(args, test_entries)
     if dry_run:
         skeleton = f"{DRY_RUN_WATERMARK}\n{skeleton}"
     print(skeleton)

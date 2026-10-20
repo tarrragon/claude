@@ -14,6 +14,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 import worktree_manager as wm  # noqa: E402
+import merge_cas as mc  # noqa: E402
 
 A_LINES = [f"line{i}\n" for i in range(1, 11)]
 
@@ -38,7 +39,7 @@ def replace_line(repo, name, lineno, text):
 
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
-    monkeypatch.setattr(wm, "_sleep", lambda _s: None)
+    monkeypatch.setattr(mc, "_sleep", lambda _s: None)
     r = tmp_path / "repo"
     r.mkdir()
     git(r, "init", "-b", "main")

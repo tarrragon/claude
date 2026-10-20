@@ -2,6 +2,18 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.45.2 — principle 卡 `change-history-counts-a-documents-responsibilities`、`structuring-with-solid.md` 與 SKILL.md 刪掉集中登記型文件處置裡的「或只追加」（兩邊在尾端追加照樣是相鄰衝突，與兩篇示範文章矛盾），補 `merge=union` 當逐行清單的替代；「聚合型文件」改名「集中登記型文件」（術語探針：與 DDD 的聚合撞名）、原檔「路由表」改「導覽表」，與 blog 文章對齊
+
+**Version**: 1.45.1 — principle 卡 `section-scope-is-bounded-by-the-category-too` 補判定上的補充（multi-round-review 2-C 分類欄第一次實際使用的回饋）：同篇分類內實作節依賴的語言無關原則節判在範圍內、目錄頁描述的出處條件不限定範圍、寬分類的這一欄判別力低
+
+**Version**: 1.45.0 — 新增 principle 卡 `section-scope-is-bounded-by-the-category-too`（文章範圍是標題與所屬分類的交集，標題常常不寫分類的限定條件）與 `change-history-counts-a-documents-responsibilities`（職責數從修改紀錄讀出、長度當拆分訊號的兩種誤判、加段落之前的檢查、規則檔稽核、拆完之後的外部引用與原檔路由表）。`structuring-with-solid.md` 1.2.0：S 單一責任的觸發條件從「越寫越長」改成「要往既有文件加一節、或被不同主題反覆修改」，判別測試加修改紀錄測試與分類範圍測試；交界檢查加外部引用與原檔路由表兩項，「六條」改成不帶計數。`writing-documents.md` 決策表加兩列（依修改紀錄拆、聚合型文件例外）並寫明行數只在一個概念之內決定分節，新增〈Before adding a section to an existing document〉。SKILL.md 原子化一節加一段摘要，交界檢查的列舉補上兩項並拿掉計數
+
+**Version**: 1.44.0 — 新增 principle 卡 `physical-verbs-stand-in-for-content`：物理化清單裡每一個動詞依佔住的格分類（足夠性、失效結果、負擔、關係、可信度、字面或技術），各自要寫出的內容；負載情境分容量、過載、故障擴散、突發緩衝與耗盡時間並對應業界術語；容量數字只留在範例情境並標明來源。bank 物理化條目加入其他動詞的判讀，`word-choice-fits-concept-attributes` 補下游指標。
+
+**Version**: 1.43.0 — 物理化錯配的修法改寫：足夠性斷言裡的「撐」（撐得住、撐不起、撐不久、會垮、扛不住）與「問題」同一類，佔著需求與判斷標準的位置，改寫要寫出需求、判斷標準與機制，換成「足以支持」「維持不久」不算修好；描述關係的（掛在前提上、扛責任）照舊換成依賴、佐證、負責。物理條件的問法降為偵測方法。取消系統負載的豁免（「撐住尖峰流量」「拖垮 OLTP」要寫出負載量、判斷標準與瓶頸），結構連接（route table 掛在 subnet）仍合規。`word-choice-fits-concept-attributes` 新增〈足夠性斷言要寫出需求、判斷標準與機制〉一節，`question-answer-frame-blurs-problem-issue-request` 新增〈同一類的其他詞〉一節。
+
+**Version**: 1.42.0 — 新增三個 principle 卡與 bank 類別、補一條命名規則：`a-not-a-question-as-noun-clause`（正反問句當主語、受詞、介系詞受詞時沒有開頭標記；判讀分位置（讀到它之前是否有前導詞告訴讀者是問句）與謂語的判斷標準；bank 新增 PCRE2 pattern）、`parallel-clause-filled-with-the-topics-definition`（排比的變動格填了話題定義推得出的描述時資訊量是零；定義代換與語序翻轉兩個檢查；bank 新增無 pattern 的逐句讀類別）、`question-answer-frame-blurs-problem-issue-request`（「問題」同時指問句、故障、事項、主題與需求，「回答」不是元件的動作；SKILL.md〈每一句先填槽位再成句〉加框架詞也要過槽位一段；bank 新增框架詞 pattern）；`unnamed-halves-are-unextracted-variables` 補〈命名由句子結構完成，取名的動作不寫進正文〉一節（刪除測試；兩三個成員寫成「分成 A 與 B」，更多時用清單列名字），SKILL.md 命名段與 bank 的「命名的旁白」同步。來源是一篇服務端監控教材多輪審查期間一位讀者的指認。
+
 **Version**: 1.41.0 — 新增「譯名不用讀者會先想到別的東西的詞」（嚴重寫作錯誤）：SKILL.md 術語段加寫作當下的判斷問句（除了要譯的這個概念，軟體或介面裡還有沒有另一個讀者常碰到的東西也叫這個名字；軟體以外的日常意思不算；比對台灣介面上實際顯示的中文名稱、英文同名不算；日常功能相似不能當合規理由；拿不準交術語探針）與修法（先查知識卡定案寫法、自組描述功能的短語、替代譯名再過一次同一問、定案寫回知識卡、量過仍無可靠中譯的詞第一次出現附一句中文描述、之後以中文為主、附「其他中文資料常寫作 X」）；keyword bank 新增「讀者會先想到別的東西的譯名」類別；translation-review 加 cursor case、日常詞佔用檢查層、三條反模式與兩條檢查項；新增 principle 卡 borrowed-everyday-word-as-translated-term。判斷問句改寫三次，依據是四批各三份的規則探針：「軟體領域裡是不是另一個東西的名字」讓兩份把鉤子判成違規（把要譯的概念本身算進去）；改問「讀者第一個想到的是不是要譯的概念」之後，一份因書籤的日常功能相似判合規、三份把旗標或執行個體判違規（把軟體以外的日常意思算進去）；定案的問句排除要譯的概念本身、只比對軟體與介面裡的同名東西，第四批（頁籤／標頭／叢集）頁籤三份皆判違規、叢集三份皆判合規，標頭有兩份從英文 header 的其他意思反推而判違規，因此補「比對台灣介面上實際顯示的中文名稱」
 
 **Version**: 1.40.0 — 標題與段標規則補一條：沒有下斷言的標籤式段標（「往下讀」「判讀方式」）與帶指示詞的名詞子句（「為什麼只收這幾本」）同樣要改成寫出對象的主旨，固定收尾段名不是例外；寫不出有意義主旨的段標就移除並把那一節併進相鄰的節；標題為了寫出成員而變長可以接受。principle 卡 title-states-the-subject-not-a-premised-conclusion 的合規邊界與 SKILL.md 同步

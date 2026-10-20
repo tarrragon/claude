@@ -278,6 +278,7 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
             return 2
 
         acceptance_list = ticket.get("acceptance", [])
+        prior_acceptance = list(acceptance_list)
         # --add 允許目前無任何條目（追加是唯一不需既有條目的模式）
         if not acceptance_list and mode != "add":
             print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_NOT_FOUND, ticket_id=args.ticket_id))
@@ -354,4 +355,9 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
     else:
         scope = f"index {indices}" if indices else f"{changed} 項"
     print(f"[INFO] {args.ticket_id} {action} {scope}：變更 {changed} 項")
+    # 勾選／取消勾選不改範圍；新增、編輯、移除條目才提示同步其餘範圍欄位
+    if mode in ("add", "edit", "remove"):
+        from ticket_system.lib.scope_sync_hint import print_scope_sync_hint
+
+        print_scope_sync_hint(ticket, "acceptance", args.ticket_id, prior_acceptance)
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0

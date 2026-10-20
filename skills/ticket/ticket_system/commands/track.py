@@ -113,6 +113,7 @@ from .track_acceptance import (
 # 導入 dispatch 子命令（派發即落票：--note 落票 + normal/review 骨架輸出）
 from .track_dispatch import execute_dispatch, register_dispatch_command
 from .track_commit import execute_commit, register_commit_command
+from .track_move_lines import execute_move_lines, register_move_lines_command
 # 導入 PC-093-exempt marker 補標記子命令
 from .track_exempt_marker import execute_add_exempt_marker
 from .track_multi_view_status import execute_fix_multi_view_status
@@ -532,6 +533,7 @@ def _create_command_handlers() -> dict:
         "append-log": execute_append_log,
         "dispatch": execute_dispatch,
         "commit": execute_commit,
+        "move-lines": execute_move_lines,
         "add-spawn-request": execute_add_spawn_request,
         "resolve-spawn-request": execute_resolve_spawn_request,
         "add-exempt-marker": execute_add_exempt_marker,
@@ -1347,7 +1349,15 @@ def _register_acceptance_commands(
         required=True,
         help=TrackMessages.ARG_SECTION
     )
-    p_append_log.add_argument("content", help=TrackMessages.ARG_CONTENT)
+    p_append_log.add_argument(
+        "content", nargs="?", default=None, help=TrackMessages.ARG_CONTENT
+    )
+    p_append_log.add_argument(
+        "--content-file",
+        dest="content_file",
+        default=None,
+        help="自檔案讀取內容（逐字），與 content 位置參數擇一；內容不經命令列",
+    )
     p_append_log.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_append_log.add_argument(
         "--force",
@@ -1697,6 +1707,7 @@ def _register_all_subcommands(
     register_onboard(track_subparsers)
     register_dispatch_command(track_subparsers)
     register_commit_command(track_subparsers)
+    register_move_lines_command(track_subparsers)
 
 
 def _register_global_state_commands(

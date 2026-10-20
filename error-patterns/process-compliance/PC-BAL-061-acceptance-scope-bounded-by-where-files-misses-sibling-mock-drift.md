@@ -44,6 +44,14 @@ severity: high
 | 覆核重跑 | PM 覆核時對 diff 中每個被修改的函式呼叫，grep 其名稱在測試目錄的命中檔並全跑；命中檔數寫進驗收記錄 |
 | 結構層 | fake / stub 函式改用 `*args, **kwargs` 轉發或以 `unittest.mock.create_autospec` 綁定真實簽名，讓簽名漂移在定義處而非執行處暴露 |
 
+## 變體：改 hook 輸出字面，同一支 hook 的測試跨套件分散
+
+**症狀**：修改 hook 的提示或建議字面後，代理人與 PM 只跑 skill 目錄下的同名測試，結果全綠。另一個套件（如 `.claude/hooks/tests/`）裡有一份同名的測試檔，同樣測這支 hook，仍斷言舊字面，要到合併閘門跑全套件時才轉紅。兩份測試的函式名沒有交集，但覆蓋同一行為，因此改完後一份斷言新字面、另一份斷言舊字面，彼此矛盾。
+
+**根因**：「相關測試」憑目錄或檔名挑選。檔名完全相同，讓人誤以為那份測試已經改過了。
+
+**做法**：以被測 hook 的檔名在所有套件的測試目錄取集合，例如 `grep -rl <hook 檔名> .claude/hooks/tests .claude/skills/*/tests`，全數執行，並把命中檔數寫進驗收記錄。hook 檔名含連字號，測試只能以路徑載入，所以檔名必定出現在測試檔內，這個 grep 可以取到全集。已知盲區是經 dispatcher 或 registry 間接執行的整合測試，這類測試不會寫出檔名，仍由合併閘門的全套件兜底。被測對象是一般 Python 模組、且模組名是常見字（如 `lease` 會命中 `please`）時，裸名 grep 會混入大量無關檔，改以 import 語句形式取集合，例如 `grep -rlE "lib\.lease|import lease|from \.?lease"`。
+
 ## 判別與邊界
 
 - 與 PC-BAL-040 的分工：040 是 where.files 宣告不足（承載檔漏列）；061 是 where.files 即使正確，也不能當作回歸測試範圍。兩者可同時命中。

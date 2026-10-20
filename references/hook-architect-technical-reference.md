@@ -848,11 +848,12 @@ if __name__ == "__main__":
 
 守衛的失效方向必須在設計期決定：「決定擋下、但輸出 deny 的動作失敗」不得退化為放行。以 PreToolUse 為例，Claude Code 只在 exit 0 且 stdout 含 deny JSON、或 exit 2 時才擋下；輸出失敗（stdout 關閉、BrokenPipe、編碼錯誤）的例外由 `run_hook_safely`（預設 `fail_closed=False`）接住並回 exit 1；exit 1 屬非阻擋錯誤，結果仍是放行。
 
-### 三項必載
+### 必載項目
 
 | 項目 | 要求 | Why / Consequence |
 |------|------|------------------|
 | fail_closed 只用於不可逆守衛 | `run_hook_safely(..., fail_closed=True)` 僅限放行後無法復原的守衛（如破壞性操作、不可逆寫入）；其餘維持預設 `fail_closed=False` | fail_closed 讓 hook 自身 crash 也擋下操作；濫用會使任何 hook bug 變成全域卡死，用戶學會繞過守衛 |
+| 宣告 fail_closed 時同步 fallback 清單 | 經 `hook-dispatcher.py` 分派的 hook 新增或移除 `fail_closed=True` 時，同一個 commit 同步 `FALLBACK_FAIL_CLOSED_GUARDS` 對應群組，並在本機提交前執行 `tests/test_hook_dispatcher_fail_closed.py` | 該清單刻意不依賴 registry（registry 讀不到時才用），只能手動維護；漏同步由漂移測試擋下，但若只跑 hook 自己的測試檔，要到合併閘門跑全套件才發現，多耗一輪閘門 |
 | deny 輸出失敗由 `emit_hook_output` 兜底 | 輸出 deny 一律走 `lib` 的 `emit_hook_output`：deny 輸出失敗時寫 stderr 後 `SystemExit(2)`；allow 輸出失敗原樣 re-raise。無法改用它的守衛（直接 print、自組輸出）須自行兜底：包住輸出動作，失敗時寫 stderr 並 `sys.exit(2)` | 直接 `print(json.dumps(deny))` 輸出失敗時，例外被 fail-open 路徑吞掉，守衛無聲放行 |
 | 自帶 except-all 的守衛不得吞 SystemExit | `except Exception` 不攔 SystemExit，但 `except BaseException` / 裸 `except:` 會；必須攔時先 `except SystemExit: raise` | 吞掉兜底拋出的 SystemExit(2) 使兜底失效，回到放行 |
 
@@ -863,6 +864,27 @@ if __name__ == "__main__":
 - [ ] **E1 對照**：同一組 fixture 下各模擬一次「deny 輸出失敗」與「allow 輸出失敗」，斷言結果不同（deny 失敗為 exit 2 且 stderr 有訊息；allow 失敗為原例外 re-raise，不得 exit 2）。只測 deny 單邊時，兜底退化為對所有輸出失敗一律 exit 2 仍全綠
 - [ ] **E2 正向對照輸入**：測試必含一個已知該被擋下的輸入，注入輸出失敗（如 stdout 換成 write 時拋 `BrokenPipeError` 的物件），斷言 exit code 為 2。只餵正常輸入的測試分辨不出兜底在工作還是已死
 - [ ] 自帶 except-all 的守衛：含一個讓兜底拋 SystemExit 的輸入，斷言 SystemExit 穿出 except-all。否則 except-all 吞掉 SystemExit 時，測試照樣全綠
+
+---
+
+## 靜態解析命令的守衛：parser differential 的處置判準
+
+以靜態解析 Bash 命令文字做判定的守衛（例如寫入邊界守衛），與 shell 的實際語意之間必然存在差異（parser differential）：變數、展開、子殼、複合命令、直譯器內嵌程式碼，每補一層解析，就會出現下一層可構造的繞過。審查若逐一回報這類差異，守衛的修補沒有終點。判準如下，依序套用。
+
+### 處置順序
+
+1. **先確認守衛的定位**：防誤用層（攔下代理人或主線程在一般工作中誤用寫法，例如被規則禁止但順手用 Bash 改檔）或對抗層（防止有意規避的一方）。靜態解析命令文字的守衛只能是防誤用層；對抗層需要在執行層（檔案系統權限、沙箱）實作，不在本判準範圍。
+2. **防誤用層，且繞過寫法是代理人或主線程實際用過的**（判定日誌、票面或審查回報有實例），**或是該語言的常見慣用寫法**（不需堆疊不自然結構即可自然寫出，例如 python 的 `from sys import argv`、負索引）：補偵測。被擋後換寫法重試的實例優先處理。「尚無實例紀錄」本身不構成記為殘留風險的理由。
+3. **只有刻意構造才會觸發的繞過**（無實際使用紀錄，需要在同一命令中堆疊不自然的結構才能成立）：記為殘留風險，寫入守衛的殘留風險分類，以判定日誌事後稽核，不另開修正票。登記時逐項寫明該失效會出現在判定日誌的哪一欄，並核對該欄確實會記到：守衛自知無法判定的情況（值無法展開、路徑在範圍外）記在跳過原因欄；守衛誤判後靜默得出結論的情況（解析錯判，例如把不必然執行的賦值當成必然執行）不會出現在跳過原因欄，只能從命令文字欄回查。只寫「以判定日誌稽核」而不指明欄位，稽核者會到錯的欄位找而找不到案例。本步驟只適用守衛原本就擋不到的既有差異；某次修改使守衛原本擋得到的寫法改為放行（本次修改自己引入的回歸），不論是否需刻意構造，一律在同一張票修回，不記為殘留風險。判別方式：以修改前的版本執行同一輸入，若修改前擋、修改後放，即屬回歸。比對時必須附一筆兩版都應擋下的基準輸入（例如以字面路徑直接重導向寫入受限目錄）；基準輸入在任一版被放行，代表該版未正確載入（例如舊版副本放在別處而找不到相依模組，例外路徑一律放行），整輪比對作廢。比對工具失效時的輸出（全部放行）與「舊版確實放行」同形，沒有基準輸入就無從區分。回歸在合併閘門進行中才被發現時，可分兩輪處理：第一輪照常合併，同票補修後走第二輪；條件為第二輪合併前不 complete、票面先寫明「main 上有已知回歸、尚未補修」（中斷時接手者據此回報）、第二輪做不成就 revert 第一輪合併提交。
+
+### 配套要求
+
+| 項目 | 要求 | Why / Consequence |
+|------|------|------------------|
+| 判定日誌 | 放行與阻擋都記一行判定，含截斷命令、抽出目標、逐候選的跳過原因（範圍外、無法靜態解析） | 殘留風險的處置依賴事後稽核；放行時不記命令，無法分辨「沒偵測到目標」與「偵測到但無法解析」。跳過原因只涵蓋守衛自知無法判定的情況；守衛誤判後靜默得出結論的殘留（例如把不必然執行的賦值當成必然執行），只能從命令文字欄比對，登記殘留風險時要寫明以哪一欄稽核 |
+| 擴大解析範圍時模擬生效條件 | 新增變數展開、賦值追蹤等解析能力時，同時處理賦值是否必然執行（子殼、管線、條件分支、複合命令）與綁定時點 | 只加展開不模擬生效條件，原本以固定值處理的變數會被不生效的賦值覆寫，產生修前沒有的繞過（回歸） |
+| deny 訊息 | 寫明「不得改用其他 Bash 寫法重試同一寫入；Edit／Write 不可用時停手回報」 | 代理人被擋當下讀到的是 deny 訊息而非規則檔；只寫替代工具時，deny 會被讀成「換寫法」的訊號 |
+| 收緊前反查 | 守衛判準收緊前，在框架文件（SKILL、references、pm-rules）grep 會被新判準擋下的例行範例，同票改為等效 CLI 或註明執行限制 | 守衛收緊後，依賴舊漏洞的文件範例會讓照文件操作的讀者撞上 deny |
 
 ---
 
@@ -903,7 +925,9 @@ if __name__ == "__main__":
 
 ---
 
-**Last Updated**: 2026-10-06
+**Last Updated**: 2026-10-20
+**Version**: 新增「靜態解析命令的守衛：parser differential 的處置判準」章節：先確認守衛定位（防誤用層或對抗層），防誤用層對實際用過的繞過補偵測、僅刻意構造才觸發者記為殘留風險並以判定日誌稽核；配套要求判定日誌、擴大解析時模擬賦值生效條件、deny 訊息禁止換寫法重試、收緊前反查文件範例（來源：用戶裁定，2026-10-20）。
+**Version**: 「deny 輸出失敗語意」必載表補一列：經 hook-dispatcher 分派的 hook 增刪 `fail_closed=True` 時，同一 commit 同步 `FALLBACK_FAIL_CLOSED_GUARDS`，並於本機提交前執行 `tests/test_hook_dispatcher_fail_closed.py`（漏同步原本要到合併閘門才發現）；小節標題改為不寫死數量的「必載項目」。
 **Version**: 新增「deny 輸出失敗語意」章節：fail_closed 僅限不可逆守衛、deny 輸出失敗由 emit_hook_output 兜底（無法改用者自行 exit 2）、自帶 except-all 不得吞 SystemExit；新守衛檢查項「deny 輸出失敗測試」含 E1 對照與 E2 正向對照輸入要求。
 **Version**: 校正 Stop 8-block cap 段落的過期計數（Hook 改造附帶發現：文件記載 5 個 Stop hook，settings.json 實際已達 10 個）。以 settings.json 為準逐檔確認實際輸出後改寫：本專案註冊 10 個 Stop hook，其中僅 2 個（handoff-auto-resume-stop-hook、malformed-tool-call-detector-hook）具 block 能力，其餘 8 個皆不含 block 決策；最壞情況合計 2 blocks < 8，結論仍在安全範圍內。同步校正變更總覽表（14-23 行）與版本異動表（846-851 行）的對應計數，並調整 Action 段落區分「註冊總數」與「具 block 能力數」
 **Version**: 修正「effort 感知範例」（327-352 行）與同檔設計鐵則（369-391 行）矛盾：舊範例示範 `if effort == "low": return 0` 無條件短路，與鐵則「事實判斷型 hook 核心 block 邏輯永不依 effort 短路」相悖，為 W14-034/036/037 三批次 12 個 hook 複製此缺陷之散播源；改寫範例為 effort 僅控制 audit log 詳細度，並前置交叉引用指向鐵則章節。

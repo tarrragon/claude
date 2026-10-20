@@ -1132,3 +1132,98 @@ class TestGetRepoRootTimeoutLogging:
         with caplog.at_level("WARNING"):
             assert hook_mod._get_repo_root(str(tmp_path)) is not None
         assert "rev-parse" not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# 0.5.0-W1-425：gitignore 命中且未受版控的本機檔不掃描
+#
+# sync-push 只取 tracked 樹，settings.local.json 這類 gitignore 內的本機設定
+# 不會擴散到其他 consumer。放寬的失效方向是放行，故每個放行案例都配一個
+# 仍須阻擋的對照（E1／E2），並驗證 gitignore 判斷本身失敗時落在阻擋側。
+# ---------------------------------------------------------------------------
+
+_SETTINGS_WITH_TICKET_ID = (
+    '{\n  "statusLine": {\n    "type": "command",\n'
+    '    "command": "statusline.py docs/work-logs/9.9.9-W9-901.md"\n  }\n}\n'
+)
+
+
+def _write_payload(target: Path) -> dict:
+    return {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(target), "content": _SETTINGS_WITH_TICKET_ID},
+    }
+
+
+def _ignore_local_settings(repo_dir: Path) -> None:
+    (repo_dir / ".gitignore").write_text(".claude/settings.local.json\n", encoding="utf-8")
+
+
+class TestGitignoredLocalFileNotScanned:
+    def test_gitignored_settings_local_write_allowed(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        _ignore_local_settings(tmp_path)
+        target = _claude_path(tmp_path, "settings.local.json")
+
+        rc = _run_main(hook_mod, monkeypatch, _write_payload(target))
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_same_content_to_unignored_claude_file_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """正向對照：同一 repo、同一內容，寫入未被 gitignore 的 .claude/ 檔仍阻擋。"""
+        _ignore_local_settings(tmp_path)
+        target = _claude_path(tmp_path, "settings.json")
+
+        rc = _run_main(hook_mod, monkeypatch, _write_payload(target))
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "9.9.9-W9-901" in err
+
+    def test_tracked_file_matching_gitignore_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """被強制加入版控的 gitignore 命中檔會隨 sync 擴散，仍須阻擋。"""
+        _ignore_local_settings(tmp_path)
+        target = _claude_path(tmp_path, "settings.local.json")
+        target.write_text("{}\n", encoding="utf-8")
+        _git(tmp_path, "add", "-f", str(target))
+
+        rc = _run_main(hook_mod, monkeypatch, _write_payload(target))
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "9.9.9-W9-901" in err
+
+    @pytest.mark.parametrize("failure", ["timeout", "oserror", "fatal_rc"])
+    def test_check_ignore_failure_falls_back_to_blocking(
+        self, hook_mod, monkeypatch, tmp_path, capsys, failure
+    ):
+        """gitignore 判斷本身失敗（逾時／例外／rc=128）時照常掃描並阻擋。"""
+        _ignore_local_settings(tmp_path)
+        target = _claude_path(tmp_path, "settings.local.json")
+        real_run = subprocess.run
+
+        def _fail_check_ignore(cmd, *a, **kw):
+            if "check-ignore" not in cmd:
+                return real_run(cmd, *a, **kw)
+            if failure == "timeout":
+                raise subprocess.TimeoutExpired(cmd=cmd, timeout=5)
+            if failure == "oserror":
+                raise OSError("git not found")
+            return subprocess.CompletedProcess(cmd, 128, "", "fatal: simulated")
+
+        monkeypatch.setattr(hook_mod.subprocess, "run", _fail_check_ignore)
+        rc = _run_main(hook_mod, monkeypatch, _write_payload(target))
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "9.9.9-W9-901" in err
+
+    def test_relative_path_not_treated_as_ignored(self, hook_mod):
+        assert hook_mod.is_gitignored_local_file(".claude/settings.local.json") is False

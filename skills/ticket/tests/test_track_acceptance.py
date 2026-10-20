@@ -44,6 +44,7 @@ class TestCheckAcceptance:
         Then: 應返回 0，保存更新後的 Ticket
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = "3"  # 勾選第三個項目（未勾選狀態）
@@ -73,6 +74,7 @@ class TestCheckAcceptance:
         Then: 應返回 0，完成未勾選的項目
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = "2"  # 第二個項目
@@ -105,6 +107,7 @@ class TestCheckAcceptance:
         用戶輸入錯誤路徑（包含 ticket 無 acceptance 可勾選）均為業務拒絕（return 2）。
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = "1"
@@ -134,6 +137,7 @@ class TestCheckAcceptance:
         依 cli-exit-code-rules.md 規則 2：ticket 不存在屬用戶輸入錯誤 → return 2。
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-999"
         args.version = "0.31.0"
         args.index = "1"
@@ -154,6 +158,7 @@ class TestCheckAcceptance:
         Then: 應顯示進度百分比（完成數/總數）
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = "3"  # 第三個項目，未勾選
@@ -183,6 +188,7 @@ class TestCheckAcceptance:
         Then: 應返回 0，勾選所有未勾選的項目
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = None  # --all 時不提供 index
@@ -213,6 +219,7 @@ class TestCheckAcceptance:
         Then: 應返回 0，取消勾選所有已勾選的項目
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = None  # --all 時不提供 index
@@ -245,6 +252,7 @@ class TestCheckAcceptance:
         依 cli-exit-code-rules.md 規則 2：互斥參數衝突屬用戶輸入錯誤 → return 2。
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = "1"  # 提供 index
@@ -274,6 +282,7 @@ class TestCheckAcceptance:
         依 cli-exit-code-rules.md 規則 2：缺少必填參數屬用戶輸入錯誤 → return 2。
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.index = None  # 未提供 index
@@ -305,6 +314,7 @@ class TestAppendLog:
         Then: 應返回 0，將日誌追加到 Ticket
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.section = "Solution"
@@ -336,6 +346,7 @@ class TestAppendLog:
         Then: 應返回 1，提示日誌內容不能為空
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.section = "Solution"
@@ -364,6 +375,7 @@ class TestAppendLog:
         Then: 應返回錯誤代碼 1
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-999"
         args.version = "0.31.0"
         args.section = "Solution"
@@ -383,6 +395,7 @@ class TestAppendLog:
         Then: 應返回 0，保留舊記錄並新增記錄
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.section = "Solution"
@@ -415,6 +428,7 @@ class TestAppendLog:
         Then: 應返回 0，完整保存長日誌
         """
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.section = "Solution"
@@ -442,6 +456,7 @@ class TestAppendLogH2Warning:
 
     def _run(self, section: str, content: str, capsys):
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.section = section
@@ -538,6 +553,7 @@ class TestAppendLogSectionMatching:
 
     def _build_args(self, body: str, section: str = "Solution"):
         args = Mock()
+        args.content_file = None
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
         args.section = section

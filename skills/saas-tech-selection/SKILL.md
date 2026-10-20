@@ -4,7 +4,7 @@ description: "初始化 SaaS repo 時的設計與選型訪談協議：定錨後�
 license: MIT
 metadata:
   portable: true
-  version: 1.6.0
+  version: 1.9.2
   category: selection-protocol
 ---
 

@@ -17,6 +17,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 _HOOK_FILE = (
     Path(__file__).resolve().parent.parent
     / "hooks"
@@ -102,7 +104,7 @@ class TestCheckGitStateScenarioB:
                 if cwd in dirty_paths:
                     return (True, "M some_file.py")
                 return (True, "")
-            if args[:2] == ["branch", "--no-merged"]:
+            if args[:1] == ["for-each-ref"]:
                 return (True, "")
             raise AssertionError(f"替身遇到未預期的 git 引數: {args}")
 
@@ -192,6 +194,43 @@ def test_get_uncommitted_count_does_not_rewrite_index(tmp_path):
     assert index.read_bytes() == before
 
 
+class TestGetUnmergedBranchesPlumbing:
+    """get_unmerged_branches 以 for-each-ref 取名，worktree checkout 分支不帶 '+ ' 前綴（0.5.0-W1-372）。"""
+
+    @staticmethod
+    def _git(repo, *args):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    def _make_repo(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        self._git(repo, "init", "-q", "-b", "main")
+        self._git(repo, "config", "user.email", "t@example.com")
+        self._git(repo, "config", "user.name", "t")
+        self._git(repo, "commit", "-q", "--allow-empty", "-m", "init")
+        return repo
+
+    def _branch_with_commit(self, repo, name):
+        self._git(repo, "branch", name)
+        self._git(repo, "checkout", "-q", name)
+        self._git(repo, "commit", "-q", "--allow-empty", "-m", name)
+        self._git(repo, "checkout", "-q", "main")
+
+    def test_worktree_checked_out_branch_has_no_prefix(self, tmp_path, monkeypatch):
+        repo = self._make_repo(tmp_path)
+        self._branch_with_commit(repo, "feat/wt")
+        self._git(repo, "worktree", "add", "-q", str(tmp_path / "wt"), "feat/wt")
+        monkeypatch.chdir(repo)
+        assert hook.get_unmerged_branches() == ["feat/wt"]
+
+    def test_merged_excluded_and_plain_unmerged_listed(self, tmp_path, monkeypatch):
+        repo = self._make_repo(tmp_path)
+        self._git(repo, "branch", "merged-one")
+        self._branch_with_commit(repo, "plain-unmerged")
+        monkeypatch.chdir(repo)
+        assert hook.get_unmerged_branches() == ["plain-unmerged"]
+
+
 class TestRunGitCommandFailureLogging:
     """git 呼叫逾時/失敗須寫可區分日誌，回傳值不變。"""
 
@@ -222,6 +261,45 @@ class TestRunGitCommandFailureLogging:
             result = hook.run_git_command(["status"])
         assert result == (True, "x")
         assert caplog.text == ""
+
+
+class TestCommandRecognition:
+    """0.5.0-W1-331：以共用解析辨識 git 子命令，不做子字串比對。"""
+
+    @pytest.mark.parametrize("cmd", [
+        "git push origin main",
+        "git -C /repo push origin main",
+        "git -C /repo merge feat/x",
+        "git -C /repo cherry-pick abc123",
+        "git -c user.name=x -C /repo push",
+        "cd /repo && git -C . push",
+    ])
+    def test_e1_triggers(self, cmd):
+        assert hook.should_check_git_operation(cmd) is True
+
+    @pytest.mark.parametrize("cmd", [
+        "echo 'git push origin main'",
+        'echo "git -C /repo merge x"',
+        'ticket create --why "git push 字樣"',
+        "git status",
+        "git -C /repo log",
+    ])
+    def test_e2_does_not_trigger(self, cmd):
+        assert hook.should_check_git_operation(cmd) is False
+
+    def test_unparseable_fails_open_and_logs(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            assert hook.should_check_git_operation("git push 'unclosed") is False
+        assert "無法解析" in caplog.text
+
+    @pytest.mark.parametrize("cmd,expected", [
+        ("git -C /repo merge x", True),
+        ("git -C /repo cherry-pick x", True),
+        ("git -C /repo push", False),
+        ("echo 'git merge x'", False),
+    ])
+    def test_is_merge_or_cherry_pick(self, cmd, expected):
+        assert hook.is_merge_or_cherry_pick(cmd) is expected
 
 
 class TestMainInputParsing:
