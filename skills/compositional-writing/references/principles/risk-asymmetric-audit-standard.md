@@ -77,7 +77,7 @@ withdraw tier 是高 stakes 跟一般內容的關鍵差異——一般 review �
 
 - **適用**：撰寫或 audit 高 stakes 內容（資安、concurrency、distributed、financial、medical 及任何錯誤不可逆領域）
 - **不適用**：純概念說明（reader 不會直接照做）、實驗性 / playful 內容（reader 預期自行驗證）、一般技術教學（錯誤可逆）
-- **邊界**：「verifiability-first」≠「百科全書化」——不是把所有邊界都寫滿、是讓 audit 標準對應風險量級、必要時引用更深的標準文件而不重述
+- **邊界**：「verifiability-first」≠「百科全書化」——做法是讓 audit 標準對應風險量級、必要時引用更深的標準文件而不重述，而不是把所有邊界都寫滿
 - **過度應用反例**：把每個高 stakes 句子都加滿 boundary / threat / context 補述、文章變密度爆炸、reader 讀不下去——audit 標準對應風險量級、低風險段落（背景介紹 / 概念 anchor）保持簡潔、把 verifiability 投資集中在 mitigation / 標準引用 / 實作 step 段落
 
 ---

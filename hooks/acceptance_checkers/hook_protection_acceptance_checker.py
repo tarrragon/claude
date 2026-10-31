@@ -57,6 +57,7 @@ acceptance 不再要求第四項的數字宣告（迴歸案例：僅含前三項
 不觸發：type 非 IMP（ANA/DOC/ADJ 等）、where.files 不含 hooks 目錄路徑。
 """
 
+import json
 import os
 import posixpath
 import re
@@ -324,11 +325,52 @@ def _is_pytest_infra_path(path: PurePosixPath) -> bool:
     return path.parent == _TOP_LEVEL_HOOKS_PREFIX and path.name in _PYTEST_INFRA_FILENAMES
 
 
-def _in_hook_scope(path: PurePosixPath) -> bool:
-    """已正規化路徑是否命中 hook 範圍（tests 排除在外）。"""
+_HOOK_SCRIPT_SUFFIXES = (".py", ".sh")
+
+
+def _skill_hooks_dir_has_event_hooks(
+    path: PurePosixPath, project_root: Optional[Path]
+) -> bool:
+    """skill hooks/ 的內容是否為 Claude Code 事件 hook（以內容判定，不看 plugin.json）。
+
+    不命中（回傳 False）須兩者皆成立：hooks/ 下沒有 .py／.sh；hooks.json 不存在
+    或沒有頂層 "hooks" 鍵（看板的 {"modules": [...]} 屬此類）。
+    無法解析根、目錄不存在、讀檔或 JSON 解析失敗一律回傳 True（fail-closed）。
+    """
+    if path.suffix in _HOOK_SCRIPT_SUFFIXES:
+        return True
+    if project_root is None:
+        return True
+    hooks_dir = project_root / PurePosixPath(*path.parts[:4]).as_posix()
+    try:
+        if not hooks_dir.is_dir():
+            return True
+        if any(
+            f.suffix in _HOOK_SCRIPT_SUFFIXES for f in hooks_dir.rglob("*") if f.is_file()
+        ):
+            return True
+        hooks_json = hooks_dir / "hooks.json"
+        if not hooks_json.exists():
+            return False
+        data = json.loads(hooks_json.read_text(encoding="utf-8"))
+        return not isinstance(data, dict) or "hooks" in data
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"hook 範圍判定讀檔失敗，fail-closed 視為命中：{exc}\n")
+        return True
+
+
+def _in_hook_scope(path: PurePosixPath, project_root: Optional[Path] = None) -> bool:
+    """已正規化路徑是否命中 hook 範圍（tests 排除在外）。
+
+    project_root 為 None 時 skill hooks/ 無法讀內容，維持命中（fail-closed）。
+    """
     if _is_hooks_tests_path(path):
         return False
-    return _is_under(path, _TOP_LEVEL_HOOKS_PREFIX) or _is_skill_hooks_path(path)
+    if _is_under(path, _TOP_LEVEL_HOOKS_PREFIX):
+        return True
+    return _is_skill_hooks_path(path) and _skill_hooks_dir_has_event_hooks(
+        path, project_root
+    )
 
 
 def touches_hook_protection_scope(
@@ -347,22 +389,23 @@ def touches_hook_protection_scope(
     normalized = _normalize_path(file_path)
     if _escapes_root(normalized):
         return True
+    root = project_root or _PROJECT_ROOT
     if _is_pytest_infra_path(normalized):
         # 檔案存在時以實際路徑再判一次：同名 symlink 指向 hook 本體仍視為 hook
-        real = _resolve_real_relative(normalized, project_root or _PROJECT_ROOT)
+        real = _resolve_real_relative(normalized, root)
         if real is None:
             return False
         return _escapes_root(real) or (
-            not _is_pytest_infra_path(real) and _in_hook_scope(real)
+            not _is_pytest_infra_path(real) and _in_hook_scope(real, root)
         )
-    if _in_hook_scope(normalized):
+    if _in_hook_scope(normalized, root):
         return True
     if not _is_hooks_tests_path(normalized):
         return False
-    real = _resolve_real_relative(normalized, project_root or _PROJECT_ROOT)
+    real = _resolve_real_relative(normalized, root)
     if real is None:
         return False
-    return _escapes_root(real) or _in_hook_scope(real)
+    return _escapes_root(real) or _in_hook_scope(real, root)
 
 
 def _any_path_touches_hook_scope(where_files: List[str], logger=None) -> bool:

@@ -1,0 +1,8 @@
+{
+  "name": "line-board",
+  "version": "0.11.0",
+  "description": "多線開發看板：顯示每條線的現行佇列（協調票的現行佇列行，票狀態只讀主 checkout）、本 repo 各 session 狀態（~/.claude/sessions/*.json）與合併閘門最近紀錄",
+  "author": { "name": "tarragonstop" },
+  "defaultEnabled": true,
+  "types": "./types/index.d.ts"
+}

@@ -1,3 +1,166 @@
+## [2.84.0] - 2026-11-01
+
+### Summary
+feat: line_status 各線補 context 用量、標記、徽章與 phase; feat: 恢復開工通知主管道預設關閉; feat: line-board 恢復開工通知新增送出紀錄檔 resume-notice.log (+150 more)
+
+Changes: 23 feat, 3 refactor, 17 fix, 100 docs, 4 chore, 1 style, 2 test, 3 other
+
+- feat: line_status 各線補 context 用量、標記、徽章與 phase
+- feat: 恢復開工通知主管道預設關閉
+- feat: line-board 恢復開工通知新增送出紀錄檔 resume-notice.log
+- feat: 線標題加待 compact／待 clear 標記與恢復開工徽章
+- feat: line-board 讀 context 用量檔、判定函式與各 session 列用量
+- feat: line-board 線 session 在 compact／clear 後恢復開工時通知主控
+- feat: line-board 各 session 以 session.measure 寫 context 用量檔
+- feat: line-board 新增「用戶待辦」群組
+- feat: 派發骨架依閘門宣告併入逐檔檢查命令
+- feat: line_status 偵測線停在等用戶
+- feat: 主控 clear／compact 後的 SessionStart 接續提示 hook
+- feat: line_status 實作各線接續狀態判讀與過期偵測
+- feat: line-board 註冊 line_status 試水溫工具（回傳固定字串）
+- feat: 協調票佇列行 PostToolUse 檢查 hook 與註冊
+- feat: merge gate changed_files for dart-format
+- feat: statusline 未給 --coord-ticket 時讀 multi-session.json
+- feat: integration 包裝腳本 900 秒總逾時並同步 failure 正規式
+- feat: guard exempts sync PER_PROJECT_PATTERNS path segments with E2 control
+- feat: 合併閘門新增 research-python 套件
+- feat: flutter-integration 閘門改逐檔啟動並宣告 failure 正規式
+- feat: 合併閘門新增 flutter-integration 套件
+- feat: line-board summary/failure regex in merge-gate.yaml
+- feat: 移除 parallel-suggestion-hook 步驟 6.5 Wave 收尾提醒並同步 askuserquestion-rules
+- refactor: cleanup 子命令自 worktree_manager.py 純搬移到 scripts/cleanup_command.py
+- refactor: 搬移看板到 .claude/skills/line-board 並改指閘門套件
+- refactor: 移除 python profile 已失效的 ^ 錨定 skip 樣式
+- fix: 依 linux 審查修正用戶待辦
+- fix: 依 linux 審查修正等用戶偵測的邊界
+- fix: master_resume_hint 的 SessionStart timeout 改為 30
+- fix: research-python 閘門納入 weak-observer-ux 測試
+- fix: 佇列行 hook 報出格式不符的行並附正確格式
+- fix: 收尾同步把己方提交前暫存的中途版本視為己方
+- fix: presence 比對鍵改為命中字面，處理多行合併
+- fix: commit 階段 presence-detection 只回報 pre->post 淨增量
+- fix: Level 1 放行可收尾的半刪 worktree，SKILL.md 標明 branch -d rc 語意變更
+- fix: worktree cleanup 移除逾時 300 秒、半刪條件式收尾、遇鎖停手
+- fix: 看板啟動先讀 session root 設定即開 Pane，啟動檢查失敗送 transcript
+- fix: 看板 plugin.json version 同步為 某版本
+- fix: 防護類 hook 範圍判定改以 skill hooks/ 內容為準
+- fix: 僅含 pytest 測試檔的 skill 才產生合併閘門套件
+- fix: line-board SKILL.md 補 metadata.version
+- fix: commit 層 rule8 補 per-project 區段豁免
+- fix: should_skip_file 對 repo 相對路徑補前導斜線
+- docs: 新增 IMP-GPD-024 plugin 事件中主動跨 session 傳訊於 auto mode 被拒
+- docs: 新增 PC-GPD-065 /clear 後以 repo 最近活動推定自身身份
+- docs: TEST-GPD-1008 補消除根源的實測做法與不可行方案
+- docs: 測試晚於實作時以突變確認補鑑別力的證據
+- docs: 新增 error-pattern TEST-GPD-1008（hidden lifecycle 使 pumpAndSettle 假綠與等幀卡住）
+- docs: IMP-GPD-023 zsh 不拆分變數中的檔案清單，掃描零命中與沒掃到同形
+- docs: 規則 7 補出處型票號例外與拿掉括號的判準
+- docs: parsley 提交前必跑格式化，testing reference 補閘門逐檔檢查分工
+- docs: 派發範本同步閘門逐檔檢查的骨架行為
+- docs: board-screens 記錄測試端 $ 與 plugin $ 的差異
+- docs: multi-session-orchestration 補主控 session 長駐定位與 Stop hook 提醒判讀
+- docs: line-board 補實機驗證時的 plugin 載入時機
+- docs: 新增 IMP-GPD-022 父容器縮放高度壓扁固定高子件
+- docs: worktree 1.6.7 文件同步 cleanup_command 模組位置
+- docs: 同檔競爭計數前先依 commit 主旨合併同一功能的票樹
+- docs: 新增 PC-GPD-063／064 兩條錯誤模式
+- docs: 「繼續工作」先列開線計畫表，表格欄位標準化
+- docs: multi-session-orchestration 補各線接續狀態判讀與主控自我接續
+- docs: 新增 PC-GPD-062 字面 grep 驗收機密會命中檢查描述本身
+- docs: PC-GPD-061 補反方向誤報變體
+- docs: PC-GPD-061 修改閘門套件命令的那次合併不執行該套件
+- docs: PC-GPD-060 凍結閘門的查核輸入來自被閘門擋住的票
+- docs: PC-GPD-059 搬檔重構未更正未結案票面的舊路徑
+- docs: wrap-decision 2.17.0 外移兩節情境性內容，主文 4,825 tokens
+- docs: 要件 B 補記隔離提交的第四平面（提交前快照）
+- docs: IMP-GPD-021 完整路徑搜尋漏列同目錄相對 import
+- docs: 新增 TEST-GPD-1007 以固定行號抽取實驗素材漏掉段落邊界
+- docs: CW 1.51.1 路由列改用 skill 名稱以通過可攜性閘門
+- docs: asd-ste100 1.1.0 語言邊界寫入實測結論，不採英文中轉
+- docs: CW 1.51.0 路由句子與用詞層受控寫作到 asd-ste100
+- docs: 依入口檔讀者探針第五輪修正粒度用詞
+- docs: 依入口檔讀者探針第四輪修正
+- docs: 依入口檔讀者探針第三輪修正 SKILL.md
+- docs: 依入口檔讀者探針第二輪修正 SKILL.md
+- docs: 依入口檔讀者探針第一輪修正 SKILL.md
+- docs: 修正推測改寫成事實的範例、補句長門檻、詞庫分立主控 PM
+- docs: 建立 asd-ste100 skill（語言無關核心＋en/zh-TW pack）
+- docs: compositional-writing 1.50.1 入口檔補審查首步與三個詞的就地定義
+- docs: 新增 PC-GPD-058 閘門範圍只讀專案宣告檔
+- docs: compositional-writing 主文分拆至 5k tokens 以內 1.50.0
+- docs: 新增 TEST-GPD-1006 補測對照測試把缺陷釘成預期值
+- docs: 新增 PC-GPD-057 隔離派發代理人無變更停手後 worktree 被自動移除，續用失效
+- docs: 新增 IMP-GPD-020 假資料期延後註解未綁票，接真資料後路徑慣例靜默失效
+- docs: PC-GPD-056 關聯 PC-GPD-031（平台指令與框架規則衝突的同一類）
+- docs: 新增 PC-GPD-056 平台指令與框架禁令衝突使主線程寫入 scratchpad
+- docs: session-naming 補上名稱被截斷的成因
+- docs: session-naming 補實測：口述名稱與實際記錄不符
+- docs: 新增 TEST-GPD-1005 async override 首幀仍為 loading
+- docs: read_ticket_status 靜默略過補註解
+- docs: TEST-GPD-1003 補截斷證據的可採用例外
+- docs: TEST-GPD-1003 補紅燈原文截斷不可採用的預防
+- docs: 新增 error-pattern TEST-GPD-1004、PC-GPD-055
+- docs: 新增 PC-GPD-054 口頭時段與機械名額脫節使負載實驗與閘門重疊
+- docs: 新增 TEST-GPD-1003 對照測試多斷言同案例使紅燈被誤讀為逐條鑑別力
+- docs: 新增 PC-GPD-053 使用處盤點只搜畫面目錄漏掉入口使用處
+- docs: IMP-GPD-019 補 scopesRoute 強制 explicitChildNodes 使 E2 無法隔離
+- docs: 更正 IMP-GPD-019 的偶然符合判讀（實為 explicitChildNodes 保證）
+- docs: IMP-GPD-019 補 531 盤點結果與偶然符合的預防
+- docs: 新增 PC-GPD-052 跨 session 預告申請被雙方各自解讀而互等
+- docs: 530.1 放行送閘門；TEST-GPD-1002 補反方向與對照輸入案例
+- docs: 新增 IMP-GPD-019 liveRegion 未設 container 併入外層；TEST-GPD-1002 補後續查證
+- docs: 新增 TEST-GPD-1002 依實測形狀斷言比規格嚴且鎖住疑似缺陷
+- docs: 新增 PC-GPD-051 字面計數驗收被說明文件自我污染
+- docs: 新增 IMP-GPD-018 抽共用 helper 時抹掉呼叫點識別
+- docs: PC-GPD-043、PC-GPD-050 的 severity 改為英文值 medium
+- docs: 新增 PC-GPD-050 連續 seed 打亂選項順序使位置偏差同方向累積
+- docs: 新增 IMP-GPD-017 世代守衛誤丟推進世代操作自帶的結果
+- docs: 新增 PC-GPD-049 票面約束以 session 代號指名對口
+- docs: IMP-GPD-016 提交階段守衛只掃新增行，純排版改動被判新違規
+- docs: PC-GPD-048 以識別符 grep 判零覆蓋漏掉斷言渲染字面的測試
+- docs: PC-GPD-047 收尾票 blockedBy 未隨追加兄弟票同步
+- docs: IMP-GPD-015 自動收尾只接在失敗當下、入口閘門擋下既有殘留
+- docs: IMP-GPD-014 重量級操作繼承包裝函式短預設逾時
+- docs: PC-GPD-046 閘門與 CI 環境差異致 CI 恆紅且無接收方
+- docs: 看板合併前型別檢查手動配方入 SKILL，worktree 合併收尾加一列
+- docs: 新增 PC-GPD-045 修法成本以缺陷盤點數呈現而非影響面
+- docs: 新增 PC-GPD-044 子票改寫 acceptance 無聲收窄父票覆蓋
+- docs: 新增 PC-GPD-043 不變性驗收條件派進 worktree 未備妥基準
+- docs: 新增 IMP-GPD-013 過渡路徑執行期行為未凍結
+- docs: PC-GPD-042 補搬移時生成物與 ignore 規則的處置
+- docs: line-board 使用說明、畫面規格與 CHANGELOG，multi-session 路由
+- docs: lanes.ts 註解以描述性標籤取代 337 短號
+- docs: 看板非測試檔註解的 349 改為協調票
+- docs: PC-GPD-042 預防措施改以目錄內容判定，移除過寬的 plugin.json 旁證範例
+- docs: PC-GPD-041 補變體：各 worktree 的守衛副本版本不同
+- docs: PC-GPD-042 補第四種目錄慣例（閘門依 tests/ 產生 pytest 套件）
+- docs: 新增 PC-GPD-042 元件搬入慣例目錄後慣例檢查到閘門才暴露
+- docs: 新增 PC-GPD-041 同一守衛多執行點判定漂移
+- docs: rule8 per-project 豁免註明隨 PER_PROJECT_PATTERNS 擴張
+- docs: multi-session-orchestration 工作流補佇列變動時寫現行佇列行
+- docs: 新增 TEST-GPD-1001 以累計計數器位置推定單一測試結果會歸錯
+- docs: PC-GPD-040 原則型裁定落為票面時以兄弟項結果類推寫死具體值
+- docs: 新增 TEST-GPD-1000 預設值改為動畫狀態使全 App 測試 pumpAndSettle 逾時
+- docs: 新增 IMP-GPD-012 函式型別加選填參數對實作端不相容
+- docs: IMP-GPD-011 補 WidgetRef 於 await 後使用的變體
+- docs: 新增 IMP-GPD-011 回饋排在會讓觸發者卸載的 await 之後被 mounted 守衛吞掉
+- docs: 框架注意事項：工具鏈釘選專案事先確認執行方式並寫入 CLAUDE.md
+- docs: IMP-GPD-009 zsh 變數冒號修飾符吃掉路徑首字母
+- docs: 新增 PC-GPD-039 臨時解析票面欄位的空值與真空同形
+- docs: 框架修補節奏：非 P0/P1 不派修、清理線觸發條件與護欄
+- chore: skill-sync pull 發佈庫較新的 8 個 skill
+- chore: 移除 dart-format 套件宣告，待一次性格式化同 commit 加入
+- chore: 修正 flutter-integration 註解措辭
+- chore: sync-push --clean 回寫框架版本 某版本
+- style: fvm dart format 一次性格式化並啟用閘門 dart-format 套件
+- test: 佇列行共用案例 JSON 與 lanes.test.ts 逐筆斷言
+- test: _suite_of 只依 -- 後的套件命令判套件
+- other: merge-gate 宣告檔本身加入 flutter 套件 files 補守衛觸發缺口
+- other: 縮窄 flutter 套件前綴為 docs-spec 並加漂移守衛測試
+- other: run_integration_tests 加參數解析 help 與未知參數不啟動測試 結束碼 64
+
+---
+
 ## [2.83.0] - 2026-10-20
 
 ### Summary

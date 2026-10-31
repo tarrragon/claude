@@ -120,6 +120,18 @@ def _parse_artifacts(raw, prefix: str) -> tuple:
     return tuple(out)
 
 
+def _parse_pattern(raw, field: str) -> Optional["re.Pattern"]:
+    """選填的行正規式；未填回 None，非字串或無法編譯拋 DeclarationError 指名欄位。"""
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw:
+        raise _bad(field, "必須是非空字串（正規式）")
+    try:
+        return re.compile(raw)
+    except re.error as exc:
+        raise _bad(field, f"不是合法正規式：{exc}") from exc
+
+
 def _parse_suite(name, raw) -> dict:
     prefix = f"suites.{name}"
     if not isinstance(name, str) or name in _RESERVED_SUITES or name.startswith(SUITE_SKILL_PREFIX):
@@ -132,7 +144,10 @@ def _parse_suite(name, raw) -> dict:
         raise _bad(f"{prefix}.prefixes", "與 files 至少須有一項")
     return {"prefixes": tuple(prefixes), "files": tuple(files),
             "command": _str_list(raw.get("command"), f"{prefix}.command", required=True),
-            "artifacts": _parse_artifacts(raw.get("artifacts"), prefix)}
+            "artifacts": _parse_artifacts(raw.get("artifacts"), prefix),
+            "summary": _parse_pattern(raw.get("summary"), f"{prefix}.summary"),
+            "failure": _parse_pattern(raw.get("failure"), f"{prefix}.failure"),
+            "changed_files": _parse_pattern(raw.get("changed_files"), f"{prefix}.changed_files")}
 
 
 def parse_declaration(text: str) -> dict:
@@ -221,7 +236,9 @@ def _skill_name(path: str) -> Optional[str]:
 
 
 def _skill_has_tests(root: str, name: str) -> bool:
-    return os.path.isdir(os.path.join(root, ".claude", "skills", name, "tests"))
+    """tests 目錄內（遞迴）有 pytest 可收的 test_*.py／*_test.py 才算；僅有其他語言測試者不產生 skill 套件。"""
+    tests = Path(root) / ".claude" / "skills" / name / "tests"
+    return any(tests.rglob("test_*.py")) or any(tests.rglob("*_test.py"))
 
 
 _LIB_IMPORT = re.compile(r"^\s*(?:from|import)\s+lib(?:\.|\s|$)", re.MULTILINE)
@@ -232,7 +249,7 @@ def _skills_importing_lib(root: str) -> list:
     base = Path(root) / ".claude" / "skills"
     found = []
     for skill in sorted(p for p in base.iterdir() if p.is_dir()) if base.is_dir() else []:
-        if not (skill / "tests").is_dir():
+        if not _skill_has_tests(root, skill.name):
             continue
         for dirpath, dirnames, filenames in os.walk(skill):
             dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
@@ -322,6 +339,14 @@ def _warn_unmapped(paths: list, decl: Declaration = None) -> None:
           f"{', '.join(shown)}{more}")
 
 
+def _suite_scope_files(suite_decl: dict, paths: list) -> list:
+    """落在套件範圍內的改動路徑；套件宣告 changed_files 時另須符合該正規式。"""
+    pattern = suite_decl.get("changed_files")
+    return [p for p in paths
+            if (p.startswith(suite_decl["prefixes"]) or p in suite_decl["files"])
+            and (pattern is None or pattern.search(p))]
+
+
 def select_suites(changed_paths: list, root: str) -> list:
     """依改動路徑決定套件範圍（root 為合併 commit 的快照，供掃描 skill）。對應表見 SKILL.md。
 
@@ -335,8 +360,7 @@ def select_suites(changed_paths: list, root: str) -> list:
         if any(p.startswith(FLUTTER_SCOPE_PREFIXES) or p in FLUTTER_SCOPE_FILES for p in paths):
             want.add(SUITE_FLUTTER)
     else:
-        want.update(n for n, s in decl.items()
-                    if any(p.startswith(s["prefixes"]) or p in s["files"] for p in paths))
+        want.update(n for n, s in decl.items() if _suite_scope_files(s, paths))
     for p in (p for p in paths if p.startswith(".claude/")):
         skill = _skill_name(p)
         if skill and _skill_has_tests(root, skill):
@@ -355,11 +379,21 @@ def select_suites(changed_paths: list, root: str) -> list:
     return head + sorted(s for s in want if s.startswith(SUITE_SKILL_PREFIX))
 
 
-def suite_command(suite: str, root: str) -> list:
-    """套件的執行命令；skill 有 pyproject 沿用 uv --directory，無則借 hooks 的環境跑其 tests 目錄。"""
+def existing_changed_files(suite: str, decl: Declaration, paths: list, root: str) -> Optional[list]:
+    """宣告 changed_files 的套件：範圍內、符合正規式且仍存在於快照的改動檔；未宣告者回 None。"""
+    if decl is None or suite not in decl or decl[suite].get("changed_files") is None:
+        return None
+    return [p for p in _suite_scope_files(decl[suite], paths) if os.path.isfile(os.path.join(root, p))]
+
+
+def suite_command(suite: str, root: str, files: Optional[list] = None) -> list:
+    """套件的執行命令；skill 有 pyproject 沿用 uv --directory，無則借 hooks 的環境跑其 tests 目錄。
+
+    files 非 None（套件宣告 changed_files）時附加在宣告 argv 尾端。
+    """
     decl = load_declaration(root)
     if decl is not None and suite in decl:
-        return decl[suite]["command"]
+        return decl[suite]["command"] + (files or [])
     if not suite.startswith(SUITE_SKILL_PREFIX):
         return SUITE_COMMANDS[suite]
     name = suite[len(SUITE_SKILL_PREFIX):]
@@ -439,9 +473,19 @@ def default_runner(argv: list, cwd: str) -> tuple:
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
 
-def _failed_items(output: str) -> list:
-    """從 pytest／flutter 輸出摘出失敗項與其 E 行（assertion 訊息）；摘不到時回傳輸出尾段。"""
+def declared_patterns(suite: str, decl: Declaration) -> tuple:
+    """宣告套件的 (summary, failure) 正規式；未宣告或未填為 None。"""
+    entry = (decl or {}).get(suite) or {}
+    return entry.get("summary"), entry.get("failure")
+
+
+def _failed_items(output: str, failure: Optional["re.Pattern"] = None) -> list:
+    """從輸出摘出失敗項：宣告的 failure 正規式優先；否則 pytest／flutter 規則（含 E 行）；再退回輸出尾段。"""
     lines = output.splitlines()
+    if failure is not None:
+        declared = [ln.strip() for ln in lines if failure.search(ln)]
+        if declared:
+            return declared[:_FAILED_ITEMS_MAX]
     items = [ln.strip() for ln in lines if ln.startswith("FAILED ") or "[E]" in ln]
     items += [ln.rstrip() for ln in lines if ln.startswith("E  ")]
     if not items:
@@ -494,12 +538,13 @@ def save_failure_output(log_root: str, tag: str, suite: str, rc: int, output: st
     return str(path)
 
 
-def _rc_reason(suite: str, rc: int, output: str, detail_path: str = "") -> str:
+def _rc_reason(suite: str, rc: int, output: str, detail_path: str = "",
+               failure: Optional["re.Pattern"] = None) -> str:
     if rc == 124:
         return f"[{suite}] 全套件逾時（{SUITE_TIMEOUT_SECONDS} 秒）"
     if rc == 125:
         return f"[{suite}] 等待本機名額逾時，全套件未執行"
-    reason = f"[{suite}] 全套件紅燈（exit {rc}），失敗項：\n  " + "\n  ".join(_failed_items(output))
+    reason = f"[{suite}] 全套件紅燈（exit {rc}），失敗項：\n  " + "\n  ".join(_failed_items(output, failure))
     if detail_path:
         reason += f"\n  全輸出與記憶體快照：{detail_path}"
     return reason
@@ -526,9 +571,15 @@ _SUMMARY_PATTERNS = (
 _LOG_FILE = ".claude/logs/worktree-merge.log"
 
 
-def summarize_output(output: str) -> str:
-    """從輸出尾端取最後一個測試摘要行；取不到回傳「無摘要」。"""
-    for line in reversed(output.strip().splitlines()):
+def summarize_output(output: str, summary: Optional["re.Pattern"] = None) -> str:
+    """從輸出尾端取最後一個測試摘要行（宣告的 summary 正規式優先）；取不到回傳「無摘要」。"""
+    lines = list(reversed(output.strip().splitlines()))
+    if summary is not None:
+        for line in lines:
+            m = summary.search(line)
+            if m:
+                return m.group(0).strip(" =")
+    for line in lines:
         for pat in _SUMMARY_PATTERNS:
             m = pat.search(line)
             if m:
@@ -633,27 +684,37 @@ def emit_gate_line(log_root: str, line: str) -> None:
 
 def _run_suites(suites: list, snapshot: str, project_root: str, runner: SuiteRunner,
                 log_root: Optional[str] = None, on_green: Optional[Callable[[str], None]] = None,
-                tag: str = "nocommit") -> str:
+                tag: str = "nocommit", paths: Optional[list] = None) -> str:
     """依序跑各套件；任一紅燈即停。每個套件結束輸出一行結果（含紅燈、逾時、中斷）。回傳空字串表示全綠。
 
     on_green：套件綠燈時立即回呼，後面套件紅燈時前面已綠者仍可記錄供重試沿用。
     """
     log_root = log_root or project_root
     for suite in suites:
+        decl = load_declaration(snapshot)
+        files = existing_changed_files(suite, decl, paths or [], snapshot)
+        if files is not None and not files:
+            _emit_result(log_root, _suite_result_line(
+                suite, "免跑", "符合 changed_files 的改動檔皆已刪除，無檔可檢查", 0.0))
+            if on_green:
+                on_green(suite)
+            continue
         missing = _ensure_artifacts(suite, snapshot, project_root, runner)
         if missing:
             return missing
+        summary_pat, failure_pat = declared_patterns(suite, decl)
         start = time.monotonic()
         try:
-            rc, out = runner(wrapped_argv(suite_command(suite, snapshot)), snapshot)
+            command = suite_command(suite, snapshot) if files is None else suite_command(suite, snapshot, files)
+            rc, out = runner(wrapped_argv(command), snapshot)
         except BaseException:  # 中斷也留一行紀錄後原樣再拋，讓上層清快照
             _emit_result(log_root, _suite_result_line(suite, "中斷", "無摘要", time.monotonic() - start))
             raise
         _emit_result(log_root, _suite_result_line(
-            suite, _STATUS_BY_RC.get(rc, "紅燈"), summarize_output(out), time.monotonic() - start))
+            suite, _STATUS_BY_RC.get(rc, "紅燈"), summarize_output(out, summary_pat), time.monotonic() - start))
         if rc != 0:
             detail = save_failure_output(log_root, tag, suite, rc, out) if rc not in (124, 125) else ""
-            return _rc_reason(suite, rc, out, detail)
+            return _rc_reason(suite, rc, out, detail, failure_pat)
         if on_green:
             on_green(suite)
     return ""
@@ -762,7 +823,8 @@ class MergeGate:
                 print(f"[合併前測試] 快照內跑全套件：{', '.join(todo)}（合併 commit {commit[:12]}，嘗試 {attempt}）")
                 self.suite_runs += 1
             reason = _run_suites(todo, snap, self.project_root, self.runner, self.repo,
-                                 on_green=lambda s: self.verified_suites.__setitem__(s, commit), tag=commit)
+                                 on_green=lambda s: self.verified_suites.__setitem__(s, commit), tag=commit,
+                                 paths=paths)
         return CheckResult(False, reason) if reason else CheckResult(True)
 
 

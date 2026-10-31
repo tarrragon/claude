@@ -1,6 +1,6 @@
 # Agent Dispatch Template（測試入口政策）
 
-> **用途**：派發 prompt 情境與政策詳解之一：測試入口政策（測試入口、全套件合併閘門、終止長時間測試、tests/ 修改派發 SOP）。
+> **用途**：派發 prompt 情境與政策詳解之一：測試入口政策（測試入口、閘門逐檔檢查、全套件合併閘門、終止長時間測試、tests/ 修改派發 SOP）。
 >
 > **同族檔**：`agent-dispatch-closeout.md`、`agent-dispatch-testing.md`、`agent-dispatch-worktree.md`、`agent-dispatch-pm-edit.md`、`agent-dispatch-variants.md`。原檔 `agent-dispatch-template.md` 保留檔頭與保留段落，並為各被移走段標保留路由，被移走段標在原檔以同名標題加一行路由保留，既有〈段標〉引用不需改寫。
 
@@ -21,6 +21,25 @@
 | skills/framework-issue、broken-link-check、spec、version-bootstrap（無自有 pyproject） | `uv --directory <checkout>/.claude/hooks run pytest <checkout>/.claude/skills/<skill>/tests` | `.claude/hooks/pyproject.toml` |
 
 **邊界**：入口預設安裝 dev group；缺依賴時改 pyproject，不在命令補 `--with`。dispatch 骨架的入口由 `dispatch_skeleton.entry_commands_for_files` 依 `.claude/skills/<skill>/pyproject.toml` 是否存在推導，`test_track_dispatch.py` 的比對測試在本表落後檔案系統時翻紅。
+
+### 閘門逐檔檢查套件由代理人提交前在本機執行
+
+**觸發條件**：checkout 根有合併閘門宣告（`.claude/project-integration/merge-gate.yaml`），且派發票的 where.files 落在宣告中某個套件的範圍內。
+
+**套件分兩類，分工不同**：
+
+| 類別 | 辨識方式 | 誰執行 | 理由 |
+|------|---------|-------|------|
+| 逐檔檢查 | 宣告帶 `changed_files`（例：格式檢查） | 代理人提交前在本機跑，閘門再驗一次 | 只對本次改動檔執行，結果完全由本票改動決定，本機就能重現 |
+| 全套件 | 宣告不帶 `changed_files` | 閘門執行；代理人只跑相關測試檔（見下節） | 命令不帶路徑會跑全套件，與「代理人只跑相關測試檔」的分工衝突 |
+
+**Why/Consequence**：逐檔檢查套件不在本機先跑，紅燈要到合併閘門才出現，分支被退回、多佔一輪閘門名額，排在後面的分支跟著等；而這類紅燈在提交前就能完全發現。
+
+**Action**：
+
+- `ticket track dispatch` 產生的骨架會把逐檔檢查命令併入收尾句的 commit 之前（`提交前跑閘門逐檔檢查（結束碼須為 0）：…`，權威為 `dispatch_skeleton.py` 的 `GATE_CHECK_CLAUSE`）。PM 經 CLI 派發時不需另寫；手寫 prompt 時須照宣告自行補上該句
+- 代理人照子句命令執行，結束碼非 0 時先修正再重跑到 0 才提交：格式類套件去掉 `--set-exit-if-changed` 等檢查旗標、以寫入模式重跑同一命令即可修正；其他類別依該套件的錯誤輸出修正
+- 全套件類套件的相關測試入口，取宣告中該套件的 `command` 並附上相關測試檔路徑；不帶路徑執行即為全套件，不在本任務範圍
 
 ### 全套件由合併閘門執行，代理人只跑相關測試檔（TEST-BAL-006）
 

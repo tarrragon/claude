@@ -1122,3 +1122,65 @@ def test_partial_evidence_blocks_only_unmet_category_without_literal(capture_log
     required = msg.split("依規範必須補齊以下項目，缺少：")[1].split("合格填法範例")[0]
     assert _LABEL_FAILURE in required
     assert _LABEL_TRIGGER not in required and _LABEL_LIVENESS not in required
+
+
+# ---------------------------------------------------------------------------
+# 0.5.0-W1-502：skill hooks/ 以內容（是否為事件 hook）判定，不以 plugin.json 判定
+# ---------------------------------------------------------------------------
+
+from pathlib import PurePosixPath  # noqa: E402
+
+from acceptance_checkers.hook_protection_acceptance_checker import (  # noqa: E402
+    _in_hook_scope,
+)
+
+
+def _make_skill_hooks(root, files):
+    hooks = root / ".claude" / "skills" / "demo" / "hooks"
+    hooks.mkdir(parents=True)
+    for name, text in files.items():
+        (hooks / name).write_text(text, encoding="utf-8")
+    return ".claude/skills/demo/hooks/register.tsx"
+
+
+class TestSkillHooksContentJudgement:
+    def test_line_board_shape_not_hit(self, tmp_path):
+        rel = _make_skill_hooks(
+            tmp_path,
+            {"hooks.json": '{"modules": ["./register.tsx"]}', "register.tsx": "x"},
+        )
+        assert touches_hook_protection_scope(rel, tmp_path) is False
+
+    def test_plugin_with_event_hooks_key_hit(self, tmp_path):
+        rel = _make_skill_hooks(
+            tmp_path,
+            {"hooks.json": '{"hooks": {"PreToolUse": []}}', "register.tsx": "x"},
+        )
+        plugin = tmp_path / ".claude" / "skills" / "demo" / ".claude-plugin"
+        plugin.mkdir()
+        (plugin / "plugin.json").write_text("{}", encoding="utf-8")
+        assert touches_hook_protection_scope(rel, tmp_path) is True
+
+    def test_plain_skill_hooks_py_hit(self, tmp_path):
+        rel = _make_skill_hooks(tmp_path, {"guard.py": "pass"})
+        assert touches_hook_protection_scope(rel, tmp_path) is True
+
+    def test_py_sibling_makes_modules_dir_hit(self, tmp_path):
+        rel = _make_skill_hooks(
+            tmp_path, {"hooks.json": '{"modules": []}', "guard.sh": "x"}
+        )
+        assert touches_hook_protection_scope(rel, tmp_path) is True
+
+    def test_unresolvable_root_hit(self):
+        path = PurePosixPath(".claude/skills/demo/hooks/register.tsx")
+        assert _in_hook_scope(path, None) is True
+
+    def test_invalid_json_hit(self, tmp_path):
+        rel = _make_skill_hooks(tmp_path, {"hooks.json": "{not json"})
+        assert touches_hook_protection_scope(rel, tmp_path) is True
+
+    def test_missing_hooks_dir_hit(self, tmp_path):
+        assert (
+            touches_hook_protection_scope(".claude/skills/demo/hooks/a.tsx", tmp_path)
+            is True
+        )

@@ -10,7 +10,9 @@ Presence-Detection Language Profiles（language-pluggable presence hook 的設�
 
 profile schema（PresenceProfile）：
   - extensions:        本 profile 適用的副檔名（如 (".dart",)）
-  - skip_patterns:     檔路徑命中即整檔跳過（生成檔 / 測試 / 設施本體 sink）
+  - skip_patterns:     檔路徑命中即整檔跳過（生成檔 / 測試 / 設施本體 sink）。
+                       比對前路徑一律正規化為以 `/` 開頭（相對路徑補一格），
+                       目錄類樣式寫 `/dir/` 即同時涵蓋 repo 根與子目錄，不另寫 `^dir/`
   - override_markers:  命中行或前一行含任一即豁免
   - string_detect:     user-facing 字串「內容層級」偵測 regex 清單（任一命中即
                         視為命中；比對對象是引擎 token 化後去除引號的字面內容，
@@ -196,11 +198,6 @@ _PYTHON = PresenceProfile(
         r"/\.claude/config/",
         r"/\.claude/lib/",
         r"/\.claude/scripts/",
-        r"^\.claude/hooks/",
-        r"^\.claude/skills/",
-        r"^\.claude/config/",
-        r"^\.claude/lib/",
-        r"^\.claude/scripts/",
     ]),
     override_markers=[
         "presence-exempt",

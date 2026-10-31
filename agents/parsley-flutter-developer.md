@@ -372,9 +372,13 @@ mcp__dart__analyze_files
 # 執行本票相關測試檔並確認通過（必帶 paths；全套件 100% 由合併閘門確認）
 mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/<本票相關測試檔>"]}])
 
-# 執行格式化（如果需要）
-mcp__dart__dart_format
+# 提交前格式化本票改動的 .dart 檔（必做，經 fvm）
+fvm dart format <本票改動的 .dart 檔>
+# 確認無殘留差異，結束碼須為 0
+fvm dart format --output=none --set-exit-if-changed <本票改動的 .dart 檔>
 ```
+
+**提交前格式化（Why/Consequence/Action）**：合併閘門若宣告了格式檢查套件，會對本次改動的 `.dart` 檔逐檔檢查，結果只由本票的改動決定。不在本機先跑，紅燈要到閘門才出現，整條分支被退回，多佔一輪閘門名額。範圍包含 `lib/`、`test/`、`integration_test/` 下所有被改動的 `.dart` 檔，不限產品碼。派發骨架帶有「提交前跑閘門逐檔檢查」子句時，照該子句的命令跑；沒有帶時，仍執行上面兩行（未以 FVM 釘選 Flutter 版本的專案去掉 `fvm` 前綴）。
 
 #### 4.2 專案規範檢查
 - [ ] **Package 導入**：100% 使用 `package:book_overview_app/` 格式
@@ -920,6 +924,7 @@ mcp__serena__replace_symbol_body
 
 ### 2. Flutter 實作品質標準
 - [ ] **程式碼分析**：`dart analyze` 0 issues
+- [ ] **提交前格式化**：本票改動的 `.dart` 檔經 `fvm dart format --output=none --set-exit-if-changed` 結束碼為 0（見 Step 4.1）
 - [ ] **Package 導入**：100% 使用 `package:` 格式
 - [ ] **函式行數**：平均符合 5-10 行原則
 - [ ] **需求註解**：業務邏輯函式 100% 包含需求編號
@@ -1047,7 +1052,7 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 ---
 
-**Last Updated**: 2026-10-15
-**Version**: 測試指令改為只跑本票相關測試檔（經 run-with-timeout 包裝，MCP 呼叫必帶 paths），全套件由合併閘門執行；先前版本記錄——5 節「品質規範強制遵循」新增一行觸發引用 `.claude/skills/dart-domain-modeling/SKILL.md`（entity / copyWith 收窄判準，不展開內容）；先前版本記錄——新增 5.3「元件庫優先實作」工程端條款（禁自製元件庫已涵蓋的原生元件、缺件回報 PM 開票、豁免依 spec 豁免清單），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；同時修正既有未閉合的 code fence（AppConstants 範例區塊）
+**Last Updated**: 2026-10-31
+**Version**: Step 4.1 的格式化由「如果需要」改為提交前必做（`fvm dart format` 後以 `--set-exit-if-changed` 確認結束碼為 0），並附 Why/Consequence/Action；Phase 3b 成功指標補「提交前格式化」一列。理由：合併閘門的格式檢查套件只看本次改動檔，本機可完全重現，選做措辭使紅燈一再留到閘門才出現；先前版本記錄——測試指令改為只跑本票相關測試檔（經 run-with-timeout 包裝，MCP 呼叫必帶 paths），全套件由合併閘門執行；先前版本記錄——5 節「品質規範強制遵循」新增一行觸發引用 `.claude/skills/dart-domain-modeling/SKILL.md`（entity / copyWith 收窄判準，不展開內容）；先前版本記錄——新增 5.3「元件庫優先實作」工程端條款（禁自製元件庫已涵蓋的原生元件、缺件回報 PM 開票、豁免依 spec 豁免清單），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；同時修正既有未閉合的 code fence（AppConstants 範例區塊）
 
 **完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。

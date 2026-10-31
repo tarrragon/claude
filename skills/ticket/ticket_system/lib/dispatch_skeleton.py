@@ -36,14 +36,16 @@ SKELETON_TEMPLATE_NORMAL = """Ticket: {ticket_id}
 
 # normal 變體收尾句（依 isolation 對表選用，不在 format 字串內寫條件分支）。
 # worktree：代理人收尾止於 ticket track commit 並回報 PM，complete 由 PM 於合併並驗證後執行。
+# {pre_commit} 為閘門逐檔檢查子句（GATE_CHECK_CLAUSE），無檢查時代入空字串，
+# 收尾句與加入本欄位前逐字相同。
 CLOSING_BY_ISOLATION = {
     "none": (
         "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution（含 ### 自檢結果與 Phase 4 評估）/ "
-        "Test Results → commit → `ticket track complete {ticket_id} --as {agent_name}`。"
+        "Test Results → {pre_commit}commit → `ticket track complete {ticket_id} --as {agent_name}`。"
     ),
     "worktree": (
         "收尾：`ticket track set-acceptance {ticket_id} --check <編號>` → 填 Solution（含 ### 自檢結果與 Phase 4 評估）/ "
-        "Test Results → `ticket track commit {ticket_id} -m \"<描述>\" --worktree <worktree 絕對路徑> -- <檔案>`"
+        "Test Results → {pre_commit}`ticket track commit {ticket_id} -m \"<描述>\" --worktree <worktree 絕對路徑> -- <檔案>`"
         "（只提交產品檔；票面由主 repo CLI 寫入並自動提交，禁止複製或提交票面副本）。"
         "收尾到 ticket track commit 為止，回報 PM。"
     ),
@@ -213,6 +215,77 @@ def entry_commands_for_files(files, root: Path) -> list:
     return entries
 
 
+# --- 閘門逐檔檢查（merge-gate.yaml 帶 changed_files 的套件） -----------------
+#
+# 這類套件只對本次改動檔執行（如格式檢查），結果完全由代理人自己的改動決定，
+# 提交前在本機即可重現；未轉成本機要求時，紅燈要到合併閘門才出現，多佔一輪
+# 閘門名額。全套件型套件（無 changed_files）不產生命令：其命令不帶路徑即跑
+# 全套件，與「代理人只跑相關測試檔」的分工衝突。
+#
+# 範圍判定的權威為 worktree skill 的 merge_gate.py（_parse_suite／
+# _suite_scope_files）：prefixes 前綴或 files 精確路徑命中，且符合 changed_files
+# 正規式。兩 skill 各有獨立環境、不互相 import，此處只複製判定所需的最小子集；
+# 宣告格式驗證（欄位必填、保留名）仍以閘門為準，本函式不重複。
+GATE_DECLARATION_PATH = ".claude/project-integration/merge-gate.yaml"
+GATE_CHECK_CLAUSE = "提交前跑閘門逐檔檢查（結束碼須為 0）：{commands} → "
+
+
+class GateDeclarationError(ValueError):
+    """閘門宣告無法解析（YAML 錯誤或結構不符）。"""
+
+
+def _gate_suites(declaration_text):
+    import yaml  # 延遲匯入：骨架其餘部分不需 pyyaml
+
+    if not declaration_text:
+        return {}
+    try:
+        doc = yaml.safe_load(declaration_text)
+    except yaml.YAMLError as exc:
+        raise GateDeclarationError(f"YAML 無法解析：{exc}") from exc
+    suites = doc.get("suites") if isinstance(doc, dict) else None
+    if suites is None and isinstance(doc, dict):
+        return {}
+    if not isinstance(suites, dict):
+        raise GateDeclarationError("suites 必須是套件名對應")
+    return suites
+
+
+def _suite_matches(suite: dict, files) -> list:
+    import re
+
+    pattern = suite.get("changed_files")
+    command = suite.get("command")
+    if not pattern or not isinstance(command, list):
+        return []
+    prefixes = tuple(suite.get("prefixes") or ())
+    exact = tuple(suite.get("files") or ())
+    try:
+        regex = re.compile(pattern)
+    except re.error as exc:
+        raise GateDeclarationError(f"changed_files 正規式無效：{exc}") from exc
+    in_scope = [f for f in files if (prefixes and f.startswith(prefixes)) or f in exact]
+    return [f for f in in_scope if regex.search(f)]
+
+
+def gate_check_commands(files, declaration_text) -> list:
+    """依 where.files 推出閘門逐檔檢查命令（每個命中的套件一條，保宣告順序）。
+
+    declaration_text 為 merge-gate.yaml 內容；None 或空字串回空清單。
+    宣告無法解析時拋 GateDeclarationError，由呼叫端決定如何回報。
+    """
+    import shlex
+
+    commands = []
+    for suite in _gate_suites(declaration_text).values():
+        if not isinstance(suite, dict):
+            continue
+        matched = _suite_matches(suite, [str(f) for f in files or []])
+        if matched:
+            commands.append(shlex.join([str(a) for a in suite["command"]] + matched))
+    return commands
+
+
 _TEST_ACCEPTANCE_MARKERS = ("測試", "E1", "E2")
 
 
@@ -240,6 +313,7 @@ def build_skeleton(
     isolation: str = "none",
     require_red_run: bool = False,
     test_entries=(),
+    gate_checks=(),
 ) -> str:
     """依 `kind` 產生骨架文字（review 變體不含 claim/收尾協議）。
 
@@ -255,12 +329,16 @@ def build_skeleton(
             decision_question=decision_question,
         )
 
+    pre_commit = (
+        GATE_CHECK_CLAUSE.format(commands="；".join(f"`{c}`" for c in gate_checks))
+        if gate_checks else ""
+    )
     skeleton = SKELETON_TEMPLATE_NORMAL.format(
         ticket_id=ticket_id,
         task_summary=task_summary,
         agent_name=agent_name,
         closing=CLOSING_BY_ISOLATION.get(isolation, CLOSING_BY_ISOLATION["none"]).format(
-            ticket_id=ticket_id, agent_name=agent_name
+            ticket_id=ticket_id, agent_name=agent_name, pre_commit=pre_commit
         ),
     )
 

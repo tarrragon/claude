@@ -48,6 +48,9 @@ from presence_profiles import get_profile_for_path
 def should_skip_file(file_path: str, profile) -> bool:
     """檔案是否在偵測範圍外（profile 定義的生成檔 / 測試 / 設施本體 sink）。"""
     normalised = file_path.replace("\\", "/")
+    # repo 相對路徑補前導斜線，使帶前導斜線的 skip_patterns（如 /test/）能比對根目錄
+    if not normalised.startswith("/"):
+        normalised = "/" + normalised
     return any(p.search(normalised) for p in profile.skip_patterns)
 
 

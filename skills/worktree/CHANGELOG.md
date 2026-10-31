@@ -2,6 +2,7 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.6.7（2026-10-31）— cleanup 子命令（`cmd_cleanup`、`_cleanup_*`、Level 2／3 判定 `_is_branch_pushed`／`_is_branch_merged_to_base`、鎖處理、`_timed_git_remove`、`_recovery_unmet_conditions`、`WORKTREE_REMOVE_TIMEOUT_SECONDS`）移到 `scripts/cleanup_command.py`，行為不變；`worktree_manager.main()` 改呼叫 `cleanup_command.cmd_cleanup`，舊名稱經模組層 `__getattr__` 延遲轉出（`WORKTREE_REMOVE_TIMEOUT_SECONDS` 不轉出）。測試替換 cleanup 函式或其查找的名稱須 patch `cleanup_command`，見 `references/subcommands.md`〈cleanup — 模組位置〉。
 **Version**: 1.6.6（2026-10-19）— `_is_branch_pushed` 改問「分支 tip 是否在任一遠端 ref 上」（`git for-each-ref --contains --format=%(refname) refs/remotes`，只看結束碼與是否有輸出），不再比對 origin 同名分支；feat／agent 分支從不推送，原判定恆為未推送，使 cleanup Level 2 恆報警。含遠端沒有的 commit、worktree checkout 中、分支不存在三種情況仍判為未推送。
 **Version**: 1.6.5（2026-10-19）— `_is_branch_merged_to_base` 改用 `git merge-base --is-ancestor <branch> <base>` 判定，不再解析 `git branch --merged` 輸出；修正 worktree 已 checkout 的分支（輸出帶「+ 」前綴）恆判為未合併，使 cleanup Level 3 對已合併分支不再恆報警。未合併分支（含 worktree checkout 中者、分支不存在）仍判為未合併。
 **Version**: 1.6.4（2026-10-19）— `cleanup` 新增 `--branch <分支名>`（與 ticket_id 擇一），用於萃取不到 ticket ID 的 `worktree-agent-<id>`，仍經三閘門；掃描報告對非 ticket 分支改印 `/worktree cleanup --branch <分支名>`（含 `--force` 版），ticket 分支印法不變。

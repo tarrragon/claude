@@ -3,7 +3,7 @@ name: spec
 description: "需求完善度品質閘門。Use for: (1) Phase 1 開始時初始化功能規格骨架 (/spec init), (2) 驗證功能規格的需求完善度 (/spec validate), (3) 判斷需求是否足夠清晰可進入實作。Use when: Phase 1 功能設計代理人在進行功能設計時，作為內部工具使用。不是流程入口——/tdd 管流程編排，/spec 管產出物品質。"
 metadata:
   portable: true
-  version: 1.9.10
+  version: 1.9.11
 
 ---
 
@@ -213,7 +213,7 @@ python3 .claude/skills/spec/scripts/check_domain_coverage.py {spec-file-path} [-
 
 比對 spec 設計決策與 blog 教學對應模組是否一致：
 
-1. 從 spec 的 domain 定位對應教學模組（CLAUDE.md「教學模組對應表」）
+1. 從 spec 的 domain 定位對應教學模組：對照表是使用本 skill 的專案自己在專案 CLAUDE.md 維護的「教學模組對應表」章節（domain → 教學模組的路徑），本 skill 不附這張表；專案沒有這個章節時不執行本步驟，照下方降級條款跳過維度 4
 2. 讀取 blog 對應章節
 3. 逐項比對設計決策面向（API 路徑 / 資料模型 / response format / 行為語意 / 儲存架構）
 4. 產出偏移清單

@@ -55,3 +55,4 @@
 - [question-answer-frame-blurs-problem-issue-request](question-answer-frame-blurs-problem-issue-request.md)——同一類詞：一個字佔著內容格而沒有填進去。
 - [a-not-a-question-as-noun-clause](a-not-a-question-as-noun-clause.md)——評價謂語「對不對」佔住判斷標準，與足夠性斷言佔住的格相同。
 - [written-value-replaces-the-readers-check](written-value-replaces-the-readers-check.md)——數字的寫法所依據的原則。
+- [structural-metaphor-replaces-actor-and-verb](structural-metaphor-replaces-actor-and-verb.md)——同一個機制的另一組詞：空間、路線與居住的譬喻（線、面、接、承接、走、住在、落在）佔住主詞、單位名與動作。這組詞不在本卡的清單裡，在內容集合用來組織自己的句子裡最常見。

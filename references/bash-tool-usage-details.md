@@ -474,6 +474,8 @@ unset GIT_INDEX_FILE
 # 10. 收尾：檢查共用 index 是否留下本次提交檔案的過期 entry
 #     （GIT_INDEX_FILE 已於步驟 9 清除，此處讀寫的是共用 index；
 #      判定準則見下方「隔離索引 CAS 的時間維度要件」要件 B）
+#     本步驟只比對三平面：步驟 4 之前自己 stage 過的中途版本會落入 else 分支，
+#     需自行判斷是否屬己；ticket track commit 另以提交前快照辨認（見要件 B「第四平面」）
 for f in <exact-file-1> <exact-file-2>; do
   INDEX_SHA=$(git show ":$f" 2>/dev/null)
   OLD_SHA=$(git show "$OLD_HEAD:$f" 2>/dev/null)
@@ -571,6 +573,14 @@ git -C "$D" show HEAD:b.txt               # fatal: path 'b.txt' exists on disk, 
 **Consequence**：不清理時，下一次任何裸 commit（不論由誰、為何目的觸發）都會把這些過期 entry 寫回歷史，等同再次回滾 CAS 剛推進的內容——`git diff --cached --name-only` 的檔名核對對此無鑑別力，與「版本邊界」章節同一侷限。
 
 **判定準則（三平面比對，非單一問句）**：不可只問「共用 index 是否有新 HEAD 沒有的內容」——CAS 剛推進 HEAD 後，index 中殘留的可能是（a）自己被取代的舊草稿（CAS 之前就已 staged、此後未再變動），也可能是（b）他人在途、尚未進入任何 commit 的獨立工作；兩者都會呈現「index 有新 HEAD 沒有的內容」，若只問這一句會把 (a) 誤判為 (b) 而放著不清，或把 (b) 誤判為 (a) 而清掉他人尚未提交的工作。正確判準改比對三個平面——CAS 自己記錄的舊基準（`$OLD_HEAD`，剛執行過 CAS 因此仍可直接取用，不需另行推斷）、共用 index、新 HEAD：index 內容與新 HEAD 相同 → 已一致，無需處理；index 內容恰與 `$OLD_HEAD` 相同 → 正是本次 CAS 取代前的內容，判定為過期快照；index 內容與兩者皆不同 → 找不到來源可以解釋為何是那個版本，判定為他人在途工作。可執行版本見上方配方步驟 10。
+
+**第四平面：提交前快照（`ticket track commit` 的實作）**：三平面無法辨認一種己方來源——提交前自己 stage 過、之後又改了檔的中途版本（含 `git mv` 後改檔）。這個版本從未進入任何 commit，與 `$OLD_HEAD`、新 HEAD 都不同，會被判為他人在途而不清理，提交後留下 `MM`。`git_ops.commit_files_isolated` 因此在讀工作區（步驟 4）之前，先快照本次路徑的共用 index entry。收尾時，下列三條件同時成立的 entry 判為己方，並同步到新 HEAD（`git_ops._is_superseded_pre_commit_stage`）：
+
+1. 路徑以整檔提交。append-only 路徑只提交「HEAD 加上本次行」，不算。
+2. 本次 commit 確實改動該路徑。
+3. entry 自快照後未變動，且不是衝突 stage。
+
+成立的理由：整檔提交讀的是工作區全文，被取代的 stage 若保留，下一次裸 commit 會把該路徑回滾到 stage 版本，等於回滾本次提交。以下情形仍依三平面判為他人在途，不清理：快照後才出現的 stage、本次未改動的路徑、append-only 路徑。手動執行本配方時，步驟 10 未做快照，else 分支須自行確認是否為己方中途暫存。來源：tarrragon/claude#55。
 
 **處置**：
 
@@ -899,6 +909,8 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 
 ---
 
+**Last Updated**: 2026-10-30
+**Version**: 1.22.0 — 要件 B 新增〈第四平面：提交前快照〉：說明 `ticket track commit` 以提交前快照辨認己方中途暫存（含 `git mv` 後改檔），列出三條件與成立理由，並列出仍判為他人在途的情形；配方步驟 10 加註，指出手動配方未做快照、else 分支須自行確認。手動配方的命令與三平面判準不變。來源 tarrragon/claude#55。
 **Last Updated**: 2026-10-15
 **Version**: 1.21.0 — 〈並行期工作位置的放行殘留〉同步修正後的判定：新增「判定基準」（commit 目標取命令內全部 commit 的聯集；帶 `GIT_DIR`、`GIT_WORK_TREE`、`--git-dir`、`--work-tree` 時不過濾、全數計入），殘留由兩條增為三條（新增事先 export 的 `GIT_DIR`、`GIT_WORK_TREE`：觸發條件、放行方向、判定端無解理由、自律承擔），承擔者 Action 補不事先 export 與 commit 前檢查環境。
 **Version**: 1.20.0 — 〈守衛如何辨識 commit〉新增子節「並行期工作位置的放行殘留」：依工作位置過濾後的兩條放行殘留（非隔離代理人跨 checkout stage、登記後切換 cwd）的觸發條件、失敗方向、判定端無解的理由、自律承擔，以及位置不明與 runtime 未提供 worktree 路徑時的多擋方向；僅新增小節。

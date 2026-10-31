@@ -64,7 +64,9 @@
           （該目錄為歷史紀錄，規則 8 明文豁免）；gitignore 命中且未受版控的
           本機檔（如 settings.local.json）不掃描——sync-push 只取 tracked 樹，
           這類檔案不會到達其他 consumer。gitignore 判斷失敗時照常掃描
-          （見 is_gitignored_local_file）
+          （見 is_gitignored_local_file）；路徑任一區段屬 sync 排除契約
+          PER_PROJECT_PATTERNS 者同理不掃描，manifest 載入失敗時照常掃描
+          （見 is_per_project_path）
 偵測樣式（ticket ID 軌，exit 2 可阻擋）:
   - 版本化 ticket ID：`\\d+\\.\\d+\\.\\d+-W\\d+-\\d+`（如 9.9.9-W9-999）
   - 裸格式 ticket ID：`W\\d+-\\d+`（如 W9-999）
@@ -336,6 +338,37 @@ def is_gitignored_local_file(file_path: str) -> bool:
             file_path, result.returncode, result.stderr.strip(),
         )
     return result.returncode == 0
+
+
+def _load_per_project_patterns() -> Optional[frozenset]:
+    """取 sync 排除契約的 PER_PROJECT_PATTERNS（SSOT：lib.sync_exclude_manifest）。
+
+    import 失敗回傳 None，呼叫端落在保守側（不豁免、照常掃描）；失敗寫 stderr
+    與日誌（規則 4：失敗必須可見）。
+    """
+    try:
+        from lib.sync_exclude_manifest import PER_PROJECT_PATTERNS
+        return frozenset(PER_PROJECT_PATTERNS)
+    except Exception as e:  # 任何載入失敗都須落在不豁免側，且已寫 stderr 與日誌
+        msg = f"sync_exclude_manifest 載入失敗（不豁免，照常掃描）: {type(e).__name__}: {e}"
+        logging.getLogger("reference-stability-rule8-guard").warning(msg)
+        print(f"[reference-stability-rule8-guard] {msg}", file=sys.stderr)
+        return None
+
+
+def is_per_project_path(file_path: str) -> bool:
+    """路徑任一區段（整段相等）屬 PER_PROJECT_PATTERNS 時回傳 True。
+
+    這類目錄被 sync 雙向排除，不會到達其他 consumer，規則 8 的失效軸
+    （跨專案 sync）不成立。區段須整段相等，部分包含不算。
+    """
+    rel = normalize_relpath(file_path)
+    if rel is None:
+        return False
+    patterns = _load_per_project_patterns()
+    if not patterns:
+        return False
+    return any(part in patterns for part in rel.split("/"))
 
 
 def is_class4_whitelisted(file_path: str) -> bool:
@@ -816,6 +849,10 @@ def main() -> int:
 
     if is_gitignored_local_file(file_path):
         logger.info(f"路徑 {file_path} 為 gitignore 命中且未受版控的本機檔，不隨 sync 擴散，跳過")
+        return EXIT_ALLOW
+
+    if is_per_project_path(file_path):
+        logger.info(f"路徑 {file_path} 屬 sync 排除的 per-project 區段，不隨 sync 擴散，跳過")
         return EXIT_ALLOW
 
     if is_class4_whitelisted(file_path):

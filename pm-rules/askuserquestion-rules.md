@@ -378,7 +378,7 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 |---|------|---------|--------|-----------|
 | 1 | 驗收方式確認 | ticket track complete 前（P0 優先級時觸發；DOC/ANA/非 P0 IMP 自動決定，不觸發） | ticket-lifecycle 驗收階段 | acceptance-gate-hook |
 | 2 | Complete 後下一步 | ticket track complete 後 | ticket-lifecycle 完成階段 | acceptance-gate-hook |
-| 3 | Wave/任務收尾確認 | 當前 Wave 無 pending Ticket（**前置步驟**：強制執行 `/parallel-evaluation` Wave 多視角審查，審查完成並建立發現 Ticket 後才進入 #3 選項；情境 C1：有其他 Wave → #3a；情境 C2：全完成 → 技術債整理 + /version-release check） | ticket-lifecycle 收尾 | parallel-suggestion-hook |
+| 3 | Wave/任務收尾確認 | 當前 Wave 無 pending Ticket（**前置步驟**：強制執行 `/parallel-evaluation` Wave 多視角審查，審查完成並建立發現 Ticket 後才進入 #3 選項；情境 C1：有其他 Wave → #3a；情境 C2：全完成 → 技術債整理 + /version-release check） | ticket-lifecycle 收尾 | post-git-commit-hook |
 | 4 | 方案選擇 | 多個技術方案 | 決策樹第負一層 | prompt-submit-hook |
 | 5 | 優先級確認 | 多任務排序 | 決策樹第負一層 | prompt-submit-hook |
 | 6 | 任務拆分確認 | 認知負擔 > 10 | 決策樹第負一層 | prompt-submit-hook |
@@ -493,7 +493,8 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 | Hook | 觸發時機 | 覆蓋場景 |
 |------|---------|---------|
-| parallel-suggestion-hook | 繼續請求但無 pending Ticket | #3 Wave 收尾 + #15 批量備份 |
+| parallel-suggestion-hook | 繼續請求且最近完成的任務鏈內有可並行的 pending Ticket | #15 批量備份 |
+| post-git-commit-hook | git commit 成功後，in_progress 票所在 Wave 的 pending=0 | #3 Wave 完成審查 |
 | prompt-submit-hook | 用戶提問含決策關鍵字 | #4 方案 + #5 優先級 + #6 拆分 + #8 執行方向 |
 | askuserquestion-reminder-hook | Task 派發含多個 Ticket ID | #7 派發方式 |
 | commit-handoff-hook | git commit 成功後 | #11 Commit Handoff + #16 錯誤學習 |

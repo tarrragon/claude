@@ -879,3 +879,133 @@ def test_skeleton_includes_test_entry_only_when_mapped():
     assert _HOOKS_ENTRY in with_entry
     assert _HOOKS_ENTRY not in _skeleton()
     assert _skeleton(test_entries=[]) == _skeleton()
+
+
+# --- 閘門逐檔檢查套件併入收尾句（0.5.0-W1-563.1） ---------------------------
+#
+# merge-gate.yaml 帶 changed_files 的套件只對本次改動檔執行，結果由代理人自己的
+# 改動決定；骨架依 where.files 推出命令併入收尾句，代理人提交前在本機先跑。
+
+from ticket_system.lib.dispatch_skeleton import (  # noqa: E402
+    GATE_DECLARATION_PATH,
+    GateDeclarationError,
+    gate_check_commands,
+)
+
+_GATE_YAML = """suites:
+  dart-format:
+    prefixes: [lib/, test/, integration_test/]
+    command: [fvm, dart, format, --output=none, --set-exit-if-changed]
+    changed_files: '\\.dart$'
+  flutter:
+    prefixes: [lib/, test/]
+    files: [pubspec.yaml]
+    command: [fvm, flutter, test]
+  pinned:
+    files: [tool/gen.dart]
+    command: [dart, run, tool/check.dart]
+    changed_files: 'gen'
+"""
+
+_FORMAT_CMD = "fvm dart format --output=none --set-exit-if-changed"
+
+
+def test_gate_check_commands_only_changed_files_suites():
+    files = ["lib/a.dart", "test/b_test.dart", "docs/x.md", "pubspec.yaml", "lib/c.json"]
+    assert gate_check_commands(files, _GATE_YAML) == [
+        f"{_FORMAT_CMD} lib/a.dart test/b_test.dart"
+    ]
+
+
+def test_gate_check_commands_matches_exact_files_entry():
+    assert gate_check_commands(["tool/gen.dart"], _GATE_YAML) == [
+        "dart run tool/check.dart tool/gen.dart"
+    ]
+
+
+@pytest.mark.parametrize("files", [[], ["docs/x.md"], ["pubspec.yaml"], ["lib/c.json"]])
+def test_gate_check_commands_empty_when_no_file_matches(files):
+    assert gate_check_commands(files, _GATE_YAML) == []
+
+
+@pytest.mark.parametrize("text", [None, "", "suites: {}\n"])
+def test_gate_check_commands_empty_without_declaration(text):
+    assert gate_check_commands(["lib/a.dart"], text) == []
+
+
+@pytest.mark.parametrize("text", ["suites: [1, 2\n", "suites: 3\n", "- a\n"])
+def test_gate_check_commands_raises_on_malformed_declaration(text):
+    with pytest.raises(GateDeclarationError):
+        gate_check_commands(["lib/a.dart"], text)
+
+
+def test_quotes_paths_with_spaces():
+    cmds = gate_check_commands(["lib/a b.dart"], _GATE_YAML)
+    assert cmds == [f"{_FORMAT_CMD} 'lib/a b.dart'"]
+
+
+@pytest.mark.parametrize("isolation", ["none", "worktree"])
+def test_skeleton_closing_contains_gate_check_before_commit(isolation):
+    cmd = f"{_FORMAT_CMD} lib/a.dart"
+    with_gate = _skeleton(isolation=isolation, gate_checks=[cmd])
+    without = _skeleton(isolation=isolation)
+    assert with_gate != without  # E1：傳與不傳產物不同
+    assert cmd not in without
+    closing = next(l for l in with_gate.splitlines() if l.startswith("收尾："))
+    assert cmd in closing
+    commit_word = "ticket track commit" if isolation == "worktree" else "→ commit →"
+    assert closing.index(cmd) < closing.index(commit_word)
+    assert len(with_gate.splitlines()) == len(without.splitlines())  # 不新增行
+
+
+def test_skeleton_unchanged_when_gate_checks_empty():
+    assert _skeleton(gate_checks=[]) == _skeleton()
+    assert _skeleton(isolation="worktree", gate_checks=()) == _skeleton(isolation="worktree")
+
+
+def _write_gate_declaration(root: Path, text: str) -> None:
+    path = root / GATE_DECLARATION_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def test_dispatch_cli_wires_gate_check_from_declaration(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "checkout"
+    _write_gate_declaration(root, _GATE_YAML)
+    monkeypatch.setattr(td_mod, "_CHECKOUT_ROOT", root)
+    _make_dispatch_ticket(tmp_path, monkeypatch, where_files=["lib/a.dart", "docs/x.md"])
+    rc, out, err = _dispatch_out(_base_args(isolation="worktree"), capsys)
+    assert rc == 0
+    assert f"{_FORMAT_CMD} lib/a.dart" in out
+    assert "docs/x.md" not in out.split("收尾：", 1)[1].split("\n", 1)[0]
+
+
+def test_dispatch_cli_no_gate_check_without_declaration(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "checkout"
+    root.mkdir()
+    monkeypatch.setattr(td_mod, "_CHECKOUT_ROOT", root)
+    _make_dispatch_ticket(tmp_path, monkeypatch, where_files=["lib/a.dart"])
+    rc, out, err = _dispatch_out(_base_args(isolation="worktree"), capsys)
+    assert rc == 0
+    assert "閘門逐檔檢查" not in out
+
+
+def test_dispatch_cli_warns_on_malformed_declaration(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "checkout"
+    _write_gate_declaration(root, "suites: [1, 2\n")
+    monkeypatch.setattr(td_mod, "_CHECKOUT_ROOT", root)
+    _make_dispatch_ticket(tmp_path, monkeypatch, where_files=["lib/a.dart"])
+    rc, out, err = _dispatch_out(_base_args(isolation="worktree"), capsys)
+    assert rc == 0
+    assert "WARNING" in err and GATE_DECLARATION_PATH in err
+    assert "ticket track claim" in out  # 骨架照常輸出
+    assert "閘門逐檔檢查" not in out
+
+
+def test_real_declaration_yields_dart_format_for_dart_files():
+    """本 checkout 的宣告若含 changed_files 套件，對 .dart 檔應產出命令（宣告不存在則略過）。"""
+    path = _REAL_ROOT / GATE_DECLARATION_PATH
+    if not path.is_file():
+        pytest.skip("本 checkout 無閘門宣告")
+    cmds = gate_check_commands(["lib/x.dart"], path.read_text(encoding="utf-8"))
+    assert all(c.endswith(" lib/x.dart") for c in cmds)

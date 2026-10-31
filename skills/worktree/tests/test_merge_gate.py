@@ -189,6 +189,8 @@ def skel(tmp_path):
         if pyproject:
             _touch(r, f".claude/skills/{name}/pyproject.toml")
     _touch(r, ".claude/skills/docsonly/SKILL.md")
+    _touch(r, ".claude/skills/tsonly/tests/a.test.ts")
+    _touch(r, ".claude/skills/tsonly/mod.py", "from lib import x\n")
     return str(r)
 
 
@@ -255,6 +257,21 @@ class TestScope:
         assert mg.select_suites([".claude/skills/lone/mod.py"], skel) == ["skill:lone"]
         _touch(Path(skel), ".claude/hooks/g.py", "p = '.claude/skills/lone/x.json'\n")
         assert mg.select_suites([".claude/skills/lone/mod.py"], skel) == [mg.SUITE_HOOKS, "skill:lone"]
+
+    def test_skill_without_pytest_files_gets_no_suite(self, skel):
+        assert mg.select_suites([".claude/skills/tsonly/mod.py"], skel) != ["skill:tsonly"]
+        assert "skill:tsonly" not in mg.select_suites([".claude/lib/x.py"], skel)
+
+    def test_e2_skill_with_pytest_file_keeps_suite(self, skel):
+        assert mg.select_suites([".claude/skills/lone/mod.py"], skel) == ["skill:lone"]
+        _touch(Path(skel), ".claude/skills/tsonly/tests/sub/x_test.py")
+        assert "skill:tsonly" in mg.select_suites([".claude/skills/tsonly/mod.py"], skel)
+
+    def test_skill_with_only_non_test_named_py_gets_no_suite(self, skel):
+        """刻意行為：conftest.py／helper 命名的 .py，pytest 預設也收不到測試。"""
+        _touch(Path(skel), ".claude/skills/helperonly/tests/conftest.py")
+        _touch(Path(skel), ".claude/skills/helperonly/tests/helpers.py")
+        assert not mg._skill_has_tests(skel, "helperonly")
 
     def test_suite_commands(self, skel):
         assert mg.suite_command("skill:withpy", skel) == ["uv", "--directory", ".claude/skills/withpy", "run", "pytest"]
@@ -432,9 +449,11 @@ class TestPerSuiteReuse:
 
     @staticmethod
     def _suite_of(argv):
-        if "flutter" in argv:
+        # 只看 "--" 之後的套件命令：包裝前綴含直譯器路徑，在 hooks venv 下會含 .claude/hooks
+        cmd = argv[argv.index("--") + 1:] if "--" in argv else argv
+        if "flutter" in cmd:
             return mg.SUITE_FLUTTER
-        joined = " ".join(argv)
+        joined = " ".join(cmd)
         if "../skills/foo/tests" in joined:
             return "skill:foo"
         return mg.SUITE_HOOKS if ".claude/hooks" in joined else "other"
@@ -1289,3 +1308,49 @@ class TestDeclaredGate:
         out = capsys.readouterr().out
         assert "INFO" in out and DECL_REL in out
         assert ["fvm", "flutter", "test"] in calls
+
+
+BUN_PASS = "bun test v1.2\n(pass) a > ok [1.00ms]\n\n 12 pass\n 0 fail\nRan 12 tests across 3 files. [90.00ms]\n"
+BUN_FAIL = ("bun test v1.2\n(pass) a > ok [1.00ms]\n(fail) a > broken [2.00ms]\n(pass) b > ok [1.00ms]\n"
+            "\n 11 pass\n 1 fail\nRan 12 tests across 3 files. [90.00ms]\n")
+SUMMARY_DECL = ("suites:\n  web:\n    prefixes: [web/]\n    command: [bun, test]\n"
+                "    summary: '^Ran \\d+ tests.*'\n    failure: '^\\(fail\\)'\n")
+
+
+class TestDeclaredPatterns:
+    def _run(self, tmp_path, decl_text, out, rc):
+        declare(tmp_path, decl_text)
+        return mg._run_suites(["web"], str(tmp_path), str(tmp_path), lambda a, c: (rc, out), str(tmp_path))
+
+    def test_declared_summary_on_green(self, tmp_path, capsys):
+        assert self._run(tmp_path, SUMMARY_DECL, BUN_PASS, 0) == ""
+        assert "Ran 12 tests across 3 files" in capsys.readouterr().out
+
+    def test_declared_failure_lines_on_red(self, tmp_path, capsys):
+        reason = self._run(tmp_path, SUMMARY_DECL, BUN_FAIL, 1)
+        assert "(fail) a > broken" in reason and "(pass)" not in reason
+        assert "Ran 12 tests across 3 files" in capsys.readouterr().out
+
+    def test_undeclared_keeps_current_behavior(self, tmp_path, capsys):
+        """E2 對照：同一份 bun 輸出，未填時無摘要、失敗項為尾段（含 pass 行）。"""
+        plain = "suites:\n  web:\n    prefixes: [web/]\n    command: [bun, test]\n"
+        reason = self._run(tmp_path, plain, BUN_FAIL, 1)
+        assert "無摘要" in capsys.readouterr().out and "(fail)" in reason
+        assert mg.summarize_output(BUN_FAIL) == "無摘要"
+
+    def test_declared_failure_no_match_falls_back(self):
+        pat = mg.re.compile("NOPE")
+        assert mg._failed_items("FAILED x::y\n", pat) == ["FAILED x::y"]
+
+    @pytest.mark.parametrize("field", ["summary", "failure"])
+    def test_uncompilable_regex_names_field(self, skel, field):
+        declare(skel, f"suites:\n  web:\n    prefixes: [web/]\n    command: [x]\n    {field}: '('\n")
+        with pytest.raises(mg.DeclarationError) as exc:
+            mg.load_declaration(skel)
+        assert f"suites.web.{field}" in str(exc.value) and DECL_REL in str(exc.value)
+
+    def test_gate_red_on_uncompilable_regex(self, repo):
+        commit_file(repo, DECL_REL, "suites:\n  web:\n    prefixes: [a/]\n    command: [x]\n    failure: '['\n", "bad")
+        head = git(repo, "rev-parse", "HEAD")
+        res = mg.MergeGate(str(repo), green_runner([]))(head, "main", head, 1)
+        assert not res.passed and "suites.web.failure" in res.reason

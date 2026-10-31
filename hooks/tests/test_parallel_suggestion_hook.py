@@ -3,11 +3,7 @@ parallel-suggestion-hook 測試套件（0.2.1-W3-233）
 
 驗證：
 1. extract_ticket_info() 回傳 dict 含 wave 欄位，既有欄位不受影響
-2. count_current_wave_pending() 依 in_progress Ticket 判斷當前 Wave 並統計同 Wave pending 數
-   （涵蓋 pending 為零、非零兩種情形）
-3. build_wave_wrap_up_status_line() 依實查結果組出斷言語氣或降級查證指引
-4. WAVE_WRAP_UP_REMINDER 常數支援 {status_line} 參數化，且不殘留 0.2.1-W3-061 移除的
-   偽裝偵測表述
+2. main() 在繼續請求且無並行建議時不輸出 additionalContext；有並行建議時仍輸出
 """
 
 import logging
@@ -15,8 +11,6 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-
-from lib.ask_user_question_reminders import AskUserQuestionReminders
 
 hooks_path = Path(__file__).parent.parent
 
@@ -82,114 +76,6 @@ def test_extract_ticket_info_missing_wave_defaults_none(tmp_path, logger):
     info = parallel_suggestion_hook.extract_ticket_info(ticket_file, logger)
 
     assert info["wave"] is None
-
-
-# ============================================================================
-# count_current_wave_pending()：pending 為零 / 非零兩種情形
-# ============================================================================
-
-
-def test_count_current_wave_pending_nonzero(logger):
-    """驗證同 Wave 有 pending Ticket 時回傳正確計數（非零情形）"""
-    tickets_info = [
-        {"id": "A", "status": "in_progress", "wave": 3},
-        {"id": "B", "status": "pending", "wave": 3},
-        {"id": "C", "status": "pending", "wave": 3},
-        {"id": "D", "status": "pending", "wave": 2},  # 不同 Wave，不計入
-        {"id": "E", "status": "completed", "wave": 3},  # 非 pending，不計入
-    ]
-
-    current_wave, pending_count = parallel_suggestion_hook.count_current_wave_pending(
-        tickets_info, logger
-    )
-
-    assert current_wave == 3
-    assert pending_count == 2
-
-
-def test_count_current_wave_pending_zero(logger):
-    """驗證同 Wave 無 pending Ticket 時回傳 0（零情形）"""
-    tickets_info = [
-        {"id": "A", "status": "in_progress", "wave": 3},
-        {"id": "B", "status": "completed", "wave": 3},
-        {"id": "C", "status": "pending", "wave": 2},  # 不同 Wave，不計入
-    ]
-
-    current_wave, pending_count = parallel_suggestion_hook.count_current_wave_pending(
-        tickets_info, logger
-    )
-
-    assert current_wave == 3
-    assert pending_count == 0
-
-
-def test_count_current_wave_pending_no_in_progress(logger):
-    """驗證找不到 in_progress Ticket 時安全降級為 (None, None)"""
-    tickets_info = [
-        {"id": "A", "status": "pending", "wave": 3},
-        {"id": "B", "status": "completed", "wave": 3},
-    ]
-
-    current_wave, pending_count = parallel_suggestion_hook.count_current_wave_pending(
-        tickets_info, logger
-    )
-
-    assert current_wave is None
-    assert pending_count is None
-
-
-# ============================================================================
-# build_wave_wrap_up_status_line()
-# ============================================================================
-
-
-def test_build_status_line_nonzero_pending():
-    """pending 非零時使用斷言語氣並帶入真實數字"""
-    line = parallel_suggestion_hook.build_wave_wrap_up_status_line(3, 2)
-
-    assert "偵測到 Wave 3" in line
-    assert "2 個 pending Ticket" in line
-    assert "ticket track list --wave 3 --status pending" in line
-
-
-def test_build_status_line_zero_pending():
-    """pending 為零時使用斷言語氣說明已無 pending"""
-    line = parallel_suggestion_hook.build_wave_wrap_up_status_line(3, 0)
-
-    assert "偵測到 Wave 3" in line
-    assert "已無 pending Ticket" in line
-    assert "ticket track list --wave 3 --status pending" in line
-
-
-def test_build_status_line_unknown_wave_degrades_to_verification_hint():
-    """無法判斷當前 Wave 時降級為條件式查證指引，不得使用斷言語氣"""
-    line = parallel_suggestion_hook.build_wave_wrap_up_status_line(None, None)
-
-    assert "偵測到" not in line
-    assert "需自行查證" in line
-
-
-# ============================================================================
-# WAVE_WRAP_UP_REMINDER 常數參數化 + 偽裝偵測表述不得回歸
-# ============================================================================
-
-
-def test_wave_wrap_up_reminder_supports_status_line_placeholder():
-    """驗證 WAVE_WRAP_UP_REMINDER 可用 status_line 參數格式化"""
-    status_line = parallel_suggestion_hook.build_wave_wrap_up_status_line(3, 0)
-    message = AskUserQuestionReminders.WAVE_WRAP_UP_REMINDER.format(status_line=status_line)
-
-    assert "偵測到 Wave 3" in message
-    assert "已無 pending Ticket" in message
-    assert "AskUserQuestion" in message
-
-
-def test_wave_wrap_up_reminder_no_fabricated_detection_claim():
-    """驗證常數本體（未帶入真實數字前）不含 0.2.1-W3-061 移除的偽裝偵測表述"""
-    raw_template = AskUserQuestionReminders.WAVE_WRAP_UP_REMINDER
-
-    assert "偵測到 Wave 可能已完成" not in raw_template
-    assert "{status_line}" in raw_template
 
 
 # ============================================================================
@@ -346,3 +232,44 @@ def test_extract_ticket_files_nested_where_respects_read_intent(tmp_path, logger
 
     # ANA 型別未標記路徑預設 read 被過濾，僅保留逐檔標記 ::write 的路徑
     assert files == {"lib/b.dart"}
+
+
+# ============================================================================
+# main()：繼續請求的輸出（無並行建議不輸出提醒；有並行建議仍輸出）
+# ============================================================================
+
+
+def _run_main(monkeypatch, capsys, parallel_groups):
+    """以 stub 掃描結果執行 main()，回傳解析後的 hook 輸出 JSON"""
+    import json
+
+    ticket = {"id": "T-1", "status": "pending", "wave": 1, "chain": {"root": "R"}}
+    hook = parallel_suggestion_hook
+    monkeypatch.setattr(hook, "read_json_from_stdin", lambda logger: {"prompt": "繼續"})
+    monkeypatch.setattr(hook, "find_ticket_files", lambda root, logger=None: [Path("a.md")])
+    monkeypatch.setattr(hook, "extract_ticket_info", lambda f, logger: ticket)
+    monkeypatch.setattr(hook, "find_latest_completed_ticket_root", lambda t, logger: "R")
+    monkeypatch.setattr(hook, "find_pending_tickets_in_chain", lambda r, t, logger: [ticket])
+    monkeypatch.setattr(
+        hook, "find_parallelizable_tickets", lambda p, logger, seed_tickets=None: parallel_groups
+    )
+    monkeypatch.setattr(
+        hook, "generate_parallel_suggestion_report", lambda g, p, logger: "PARALLEL_SUGGESTION"
+    )
+    monkeypatch.setattr(hook, "save_analysis_log", lambda *a, **k: None)
+    assert hook.main() == 0
+    return json.loads(capsys.readouterr().out)
+
+
+def test_continuation_without_parallel_suggestion_has_no_additional_context(monkeypatch, capsys):
+    """繼續請求且無並行建議時，輸出不含 additionalContext"""
+    output = _run_main(monkeypatch, capsys, parallel_groups=[])
+
+    assert "additionalContext" not in output["hookSpecificOutput"]
+
+
+def test_continuation_with_parallel_tickets_still_outputs_suggestion(monkeypatch, capsys):
+    """正向對照：任務鏈有可並行 pending 票時仍輸出並行建議"""
+    output = _run_main(monkeypatch, capsys, parallel_groups=[[{"id": "T-1"}]])
+
+    assert output["hookSpecificOutput"]["additionalContext"] == "PARALLEL_SUGGESTION"

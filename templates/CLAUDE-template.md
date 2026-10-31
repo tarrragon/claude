@@ -33,6 +33,18 @@ another agent. Therefore:
 | **語言** | <!-- Flutter/Dart, Python, Node.js 等 --> |
 | **實作代理人** | <!-- parsley-flutter-developer 等 --> |
 | **識別特徵** | <!-- pubspec.yaml, package.json 等 --> |
+| **執行方式** | <!-- 例如：`fvm flutter test`、`uv run pytest`、`pnpm test`；見下方提示 --> |
+
+<!-- 「執行方式」必填，建立或接手專案時就要確認，不要等第一次出錯才補。
+     若專案以工具管理語言或工具鏈版本，所有人和代理人都必須透過該工具執行；
+     直接呼叫 PATH 上的指令，會落在本機全域版本，測試、分析與生成檔都不是釘選版的結果。
+     常見識別檔與寫法：
+     - Flutter：.fvmrc → `fvm flutter ...`、`fvm dart ...`
+     - Python：uv.lock 或 .python-version（搭配 uv）→ `uv run ...`
+     - Node／Vue：.nvmrc、.node-version、package.json 的 volta 或 packageManager 欄位 → 先切換版本，再以宣告的 package manager 執行（例：`pnpm ...`）
+     - PHP：composer.lock、.php-version → `composer ...`，PHP 版本依版本管理器
+     - 多語言：.tool-versions（asdf／mise）→ 經 asdf 或 mise 執行
+     確認方式：用這個寫法實際跑一次版本查詢（例：`fvm flutter --version`），版本與釘選值一致才填。 -->
 
 **啟用的 MCP/Plugin**:
 

@@ -2,6 +2,34 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.51.1 — 觸發路由表 asd-ste100 一列的目的地由檔案路徑改為 skill 名稱。本 skill 宣告為可攜，指向其他 skill 的檔案路徑在別的專案不一定存在，skill-sync 的可攜性閘門因此拒絕推送。路由的意思不變
+
+**Version**: 1.51.0 — 觸發路由表新增一列：句子與用詞層的受控寫作（一事一名、一詞一義、情態詞只用可以／會／必須、句長門檻）路由到 `asd-ste100` skill，正體中文讀它的 zh-TW pack（句子規則與詞庫）。本 skill 不重寫這組規則，避免同一組規則有兩個定義處。篇章結構仍由本 skill 負責
+
+**Version**: 1.50.1 — 分拆後的入口檔讀者探針回饋：觸發路由表前補審查稿件的三步（先跑體裁 reference 的檢查項，再跑 keyword bank，最後依原則 6 換 frame 重讀）；「序列連接詞」「canonical 名字」「行自足」三個詞在入口檔首次出現處就地帶定義，行自足另連到 sentence-self-sufficiency-by-consumption-unit 卡
+
+**Version**: 1.50.0 — SKILL.md 從約 40.5k tokens 分拆到 5k tokens 以內（入口檔預算；估算公式見 skill-design-guide），論證與清單外移、內容逐字保留：字句層 keyword bank 全節移到新檔 `references/keyword-bank.md`（H1 沿用節名〈字句層 keyword bank（完整清單）〉，指名式引用仍可解析；其內 51 條 rg 指令與拆分前逐字相同）；原則 1 至 5 的論證、定位的裝置清單、特化流程分工移到新檔 `references/core-principles.md`；原則 6 全文移入 `principles/writing-multi-pass-review.md`；生成端規格全文移入 `principles/noun-without-its-owner-passes-the-slot-check.md`；示範指令的引數檢查全文移入 `references/demonstrating-commands.md`。SKILL.md 每條原則只留主張與路由，觸發路由表新增「涵蓋章節」欄寫出外移節名，Directory Index 與 Reading Order 併入路由表；frontmatter description 不再逐類列舉 bank 類別，改指向節名。外部引用 PC-111 改為指名式。
+
+**Version**: 1.49.0 — bank〈結構譬喻頂替主詞與動詞〉跟規則檔 sentences.md 新節對齊：規則類文件的未判定範圍從兩個片語改成依用法分類（承接、住在、落在描述路由目的地、資料夾、或規則與推導寫在哪個檔），處置加「改寫到這些行時保留原詞」；合規邊界補讀者或改動「落在」某個條件、選項或分類；描述系統、市場或領域對象的命中多半合規，仍逐處問主詞做不做得了這個動作。〈替讀者假設情境與頻率〉的來源寫法從「依來源（書、文件）中的分析」改成寫出來源的名字（前者的「來源」缺所屬）。principle 卡同步。
+
+**Version**: 1.48.0 — 字句層 keyword bank 新增兩類：〈結構譬喻頂替主詞與動詞〉（集合的組織譬喻「線、面、接、承接、走、住在、落在、承擔的角色」與轉化句「把 X 從印象變成數字」「X 的決定落在 Y」佔住主詞、單位名與動作；三種形態的修法；同一組詞在其他集合也大量出現，先用 pattern 掃再補集合特有的詞；與〈連貫靠句句推進〉的「承接」分工；合規邊界列實際會命中的形態）（判讀分兩種問法：空間與搬運譬喻先問是不是集合的結構，轉化句與「承擔的角色」改問主詞做不做得了這個動作；替換詞再掃一次、不全篇換成同一個詞；補集合特有的詞先抽樣、違規義項佔多數才加，逐類表寫出補了什麼）與〈替讀者假設情境與頻率〉（「每週都會遇到的那場對話」把條件寫成讀者的日常；寫成職責或條件並寫出前提，誇大的頻率換回機制；判讀問這個頻率描述的是誰的經歷，條件要是讀者對照得了的事實；主要防線是異源冷讀，pattern 是輔助）；〈連貫靠鞏固形狀〉與〈連貫靠句句推進〉的範例與修法名稱拿掉「承接」，改寫出實際的動作；`managing-article-collections` 的場景導讀模板拿掉「接住」，補一句模板會跟著範本進正文；〈批量 sibling 寫作的生成端輪替〉補一段：範本與生成端自己的習慣都可能把同一組句型缺陷帶進新稿，寫之前掃範本、寫完掃自己的初稿；frontmatter description 的 bank 摘要補兩類；新增 principle 卡 `structural-metaphor-replaces-actor-and-verb`、`sentence-assumes-the-readers-situation`；`physical-verbs-stand-in-for-content`、`no-fabricated-experience-or-attribution`、`cadence-homogenization`、`coherence-by-advancing-not-recapping`、`topic-first-sentence-drops-actor-and-timing`、`word-choice-fits-concept-attributes` 補連到新卡的相關原則。
+
+**Version**: 1.47.0 — `managing-article-collections.md` 新增〈同一個對象在兩個集合各有一頁〉：兩頁各自從所屬集合的讀者要做的判斷往回寫，逐段依序問兩件事（是不是操作細節；其餘段落原封不動放進另一頁還成立嗎），分成操作細節、知識卡（單一概念；沒有知識卡系統時寫成概念短頁）、對象層深度內容、本集合觀點、寫錯頁的另一集合觀點；集合規定的固定章節照工程師的視角寫出不同的順序與權重；兩頁互相連結；重疊時不合併；SKILL.md 路由表加這個觸發；新增 principle 卡 `same-tool-page-per-module-derives-from-the-modules-question`。
+
+**Version**: 1.46.6 — 對齊專案寫作規則的改版：判斷標準的第三層從「條件到行動的映射」改成條件層（讀者判斷得出自己落在哪一個條件、各條件的後果與理由），條件到行動的逐項對應標明是 skill 與手冊 surface 的形態（SKILL.md、criteria-need-condition-action-mapping、criteria-fold-away-the-condition-that-produces-the-symptom、rule-must-point-at-something-openable、teaching-is-not-lecturing）；教室形式形態一刪掉「或用一兩句話寫明內容」、teaching-is-not-lecturing 的開場改成逐一列出各段主題；write-for-readers-not-audiences 與 no-fabricated-experience-or-attribution 的事件來源改成開場之前的事件說明（日期、環境、做什麼操作時發生）、開頭改成逐一列出內容；command-fragment-as-subject-hides-the-actor 的讀者疑問順序寫明是段與段之間的順序、工具的動作寫成對什麼對象做什麼與輸出；management-reportable-info、translation-review 的句數規定改成寫出要交付的內容；writing-articles 的段落順序句寫明是描述同一個工具的幾段之間的順序，教室形式的判讀徵兆從「開場超過一句話的情境敘事」改成「開場是情境敘事、沒有逐一列出內容」（writing-articles 與 teaching-is-not-lecturing 同步）；managing-article-collections 的模板：抽象層原則與情境檢討兩份模板的關係段名統一成「跟其他抽象層原則的關係」（Idiom 5 的位置說明同步），「[一句話、加粗]」「[一兩句說明這條路徑的閱讀邏輯]」兩種句數佔位改成寫出要交付的內容；字句層 keyword bank 節末補逐類表要寫進版本控制看得到的位置
+
+**Version**: 1.46.5 — 教室形式形態一改成開場寫出這篇討論哪些東西（逐一列出各段落主題或寫明內容），判別改成不熟這個主題的讀者讀完開場能不能判斷這篇與他要找的東西有沒有關係；只交代範圍起點與終點不算
+
+**Version**: 1.46.4 — 教室形式形態一到三的範例改寫：結果寫成可觀察的狀態（安裝、執行、成功、失敗、沒有回應、回傳錯誤碼）而不用「裝得起來」「被擋住」「撈到」；開場範例補上句型依範圍取決於什麼而不同；`dumpsys window` 範例寫出 `mCurrentFocus` 與 `mFocusedApp` 兩個欄位名與讀輸出的人
+
+**Version**: 1.46.3 — `judgment-content-needs-scenarios` 例三的正例引文把「系統憑證下放到客戶端」改成「系統存取憑證下放到客戶端」，對齊來源章節把 credential 義的「憑證」寫成存取憑證的用詞
+
+**Version**: 1.46.2 — 正文與 principle 卡的否定起手句（「不是 X、是 Y」）改成重點先行，核心概念移到句首、被否定的一半留作句尾對照；同步 blog 對應 report 卡的同一批改寫，語意不變
+
+**Version**: 1.46.1 — principle 卡 `topic-first-sentence-drops-actor-and-timing` 與 SKILL.md 補逐個動詞探針在一篇 214 句文章上的實跑結果：雜訊高（狀態動詞與無主詞祈使句讓幾乎每句都被標記），候選要再過兩條條件——只看工作流程裡的動作、這一句與所在段落的第一句都沒有動作者；判斷問句的範圍同步放寬到所在段落的第一句（同段祈使句沿用）。限制段改寫成「只在一篇上跑過、條件未在另一篇驗證」。
+
+**Version**: 1.46.0 — 新增 principle 卡 `topic-first-sentence-drops-actor-and-timing`：〈每一句先填槽位再成句〉補一段——動作者那一格要問主詞能不能做這個動作（被動句、「由……」與指標當主詞讓格子看起來是滿的），槽位另加時機（讀者工作流程裡的一步）與觸發原因，寫作順序是誰 → 什麼時機 → 做什麼 → 為什麼；審查修正是這一類最常見的產地。keyword bank 新增「對象起手句」類別（三條候選 pattern、逐個動詞引出的探針與實測命中數）；description 的類別清單同步。
+
 **Version**: 1.45.2 — principle 卡 `change-history-counts-a-documents-responsibilities`、`structuring-with-solid.md` 與 SKILL.md 刪掉集中登記型文件處置裡的「或只追加」（兩邊在尾端追加照樣是相鄰衝突，與兩篇示範文章矛盾），補 `merge=union` 當逐行清單的替代；「聚合型文件」改名「集中登記型文件」（術語探針：與 DDD 的聚合撞名）、原檔「路由表」改「導覽表」，與 blog 文章對齊
 
 **Version**: 1.45.1 — principle 卡 `section-scope-is-bounded-by-the-category-too` 補判定上的補充（multi-round-review 2-C 分類欄第一次實際使用的回饋）：同篇分類內實作節依賴的語言無關原則節判在範圍內、目錄頁描述的出處條件不限定範圍、寬分類的這一欄判別力低

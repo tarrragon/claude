@@ -24,7 +24,7 @@ Yes/No 問句的隱含預設：
 4. **沒有「順便加 X」** — 想疊加策略要破格自己提
 5. **沒有「先做一半」** — 全做 vs 不做、沒有分批選項
 
-實際上多數決策不是 1 bit 寬。當 agent 寫「要繼續嗎？」、使用者經常回答「等等、我想先 X」、「順便也做 Y」、「先做 A 不做 B」 — 這些回應全部都不是 yes 也不是 no、是**對話越過 yes/no 結構自我修正**。
+實際上多數決策不是 1 bit 寬。當 agent 寫「要繼續嗎？」、使用者經常回答「等等、我想先 X」、「順便也做 Y」、「先做 A 不做 B」 — 這些回應都是**對話越過 yes/no 結構自我修正**，既不是 yes 也不是 no。
 
 修正成本由使用者承擔 = 反過來 [decision-presentation-options-recommendation](./decision-presentation-options-recommendation.md) 的問題（把整理成本丟回使用者）。
 

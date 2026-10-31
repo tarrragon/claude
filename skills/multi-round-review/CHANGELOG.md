@@ -2,6 +2,24 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.34.0 — round-2-cadence〈2-B′ 冷讀〉加一問：稿件寫到讀者的處境或一本書、一個做法的用途時，問這一句描述的處境沒經歷過的讀者對不對得上（替讀者假設經歷或頻率的句子對同源 reviewer 讀起來是順的），判斷標準連到 compositional-writing bank〈替讀者假設情境與頻率〉。
+
+**Version**: 2.33.0 — round-1-compliance〈1-A〉的字句層摘要拿掉「這裡沒有列到的至少有…四類」這份封閉列舉：compositional-writing 的 bank 新增類別之後它就過期，執行者照摘要跑會漏掉新類別；改成類別清單以 bank 那一節為準。
+
+**Version**: 2.32.0 — round-2-probes〈探針的處置門檻〉加「規則類文件的探針量讀錯，不量歧義數」：要探針列出有兩種讀法的位置是審查題，同檔兩批總數 20 與 13；改用封閉案例題加預期答案、換題目先量雜訊、同一組案例當回歸測試，停止條件改看讀錯。integrating-findings〈修完拿任務重走〉加修法預算、保守預設與交給異源讀者驗收。新增 principle 卡 listing-ambiguities-is-a-review-task-not-a-probe，rule-fixes-pass-per-sentence-and-collide-per-case 同步修法。
+
+**Version**: 2.31.0 — integrating-findings 加〈修完拿任務重走一次，再派下一輪〉與工作流第 8 步：審查對象是規則類文件時，修完拿探針的任務與本輪 finding 的案例重走修改後的規則，查同一步的兩種處置與沒有規則管的缺口；走之前查共用概念的時點與同一個對象上的其他規則。新增 principle 卡 rule-fixes-pass-per-sentence-and-collide-per-case。
+
+**Version**: 2.30.3 — SKILL.md 嚴重度量尺補連卡的例外：術語連到卡、定義住在卡上不算「離頁才讀得懂」，判定看離開那張卡之後本段的論證還走不走得下去；與專案規則檔的嚴重度轉述對齊
+
+**Version**: 2.30.2 — 對齊專案寫作規則的改版：round-1-compliance 1-E 的判斷標準成熟度與重算測試改成「讀者判斷得出自己落在哪一個條件與它的後果、理由」，教學文章寫成「看到 A → 做 X」列為手冊裝置的 finding；1-A 敘事姿態的「標題承載結論、開頭承載情境定位」改成標題寫主旨、開頭逐一列出內容、事件來源寫成開場之前的事件說明；teaching-is-not-lecturing（開場逐一列出各段主題、判讀徵兆改成「開場是情境敘事」、自問句的改法改成寫出條件與通過標準）、command-fragment-as-subject-hides-the-actor、criteria-fold-away 三份 principle 同步本體；SKILL.md 補審查紀錄（逐類表與探針歸因）要寫進 commit message 或工作紀錄
+
+**Version**: 2.30.1 — round-2-cadence 2-D 的教學定位特徵補第四項（輸出的讀法寫在指令旁邊），開場由「一句話交代適用範圍」改成逐一列出各段主題；round-2-probes〈2-B⁶ 術語探針〉的詞頻判讀補「有把握而給別的定義」與「詞頻為零」兩格的讀法，繼承來源補使用者層級指令、記憶索引與 skill description；〈探針的派發契約〉補跨模型家族沒有測過
+
+**Version**: 2.30.0 — round-2-probes〈2-B⁶ 術語探針〉補上兩段：派發前先查測試詞在規範檔的詞頻（同向記本批無結論、逆向可採信、不嘗試換目錄重測），以及安慰劑詞的四個條件與「本批無污染對照」。這兩段原本只寫在專案規則檔，規則檔重寫時移到這裡當唯一住址
+
+**Version**: 2.29.3 — 正文與 principle 卡的否定起手句（「不是 X、是 Y」）改成重點先行，核心概念移到句首、被否定的一半留作句尾對照；同步 blog 對應 report 卡的同一批改寫，語意不變
+
 **Version**: 2.29.2 — 同 compositional-writing 1.45.2：principle 卡與 3-I 的集中登記型文件改名、刪「或只追加」、補 `merge=union`
 
 **Version**: 2.29.1 — principle 卡 `section-scope-is-bounded-by-the-category-too` 補判定上的補充（2-C 分類欄第一次實際使用的回饋），同 compositional-writing 1.45.1

@@ -155,6 +155,10 @@
         {
           "path": ".claude/hooks/session-context-guard-hook.py",
           "timeout": 30
+        },
+        {
+          "path": ".claude/hooks/coordination-queue-line-check-hook.py",
+          "timeout": 30
         }
       ]
     },

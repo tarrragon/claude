@@ -73,7 +73,7 @@ compositional-writing 的核心主張是「寫原子卡片」，但完整文章�
 
 **判定者不代填槽位。** 單位要寫在句子裡，從上下文推得出來不算——判斷標準是是非題「有沒有寫在句子裡」，寫成「推不推得出來」它永遠通過，因為判定者永遠推得出來。這一節放在生成端的理由也在這裡：寫的人跟審的人是同一個模型時，審查端對這一類偵測率是零（一次實測三輪十七個 reviewer 零命中、逐句填槽位得十四處），bank 的反模式清單是給審查者掃已寫好的稿，生成器需要的是正向規格。
 
-動作者格填對之後，段落順序通常自動修正——操作者視角的順序就是讀者的問題序：讀者會看到什麼 → 這個工具做什麼 → 為什麼需要它 → 不做的具體後果 → 副作用。判斷標準與 before/after 見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md)（動作者格）與 [spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)（受詞與量詞格）。教學定位的文章另有兩條形狀層的檢查：開場是不是超過一句話的情境敘事、正文有沒有「該問誰」「容易搞錯」「前面提到的」這類教室互動語句（[teaching-is-not-lecturing](principles/teaching-is-not-lecturing.md)）；先備知識與環境陷阱有沒有跟在所屬的指令旁邊，判斷問句是「讀者在讀到哪個位置時會需要這段資訊」（[supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)）。
+動作者格填對之後，描述同一個工具的幾段之間的順序通常自動修正——操作者視角的順序就是讀者的問題序：讀者會看到什麼 → 這個工具做什麼 → 為什麼需要它 → 不做的具體後果 → 副作用。判斷標準與 before/after 見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md)（動作者格）與 [spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)（受詞與量詞格）。教學定位的文章另有兩條形狀層的檢查：開場是不是情境敘事而沒有逐一列出這篇討論的內容、正文有沒有「該問誰」「容易搞錯」「前面提到的」這類教室互動語句（[teaching-is-not-lecturing](principles/teaching-is-not-lecturing.md)）；先備知識與環境陷阱有沒有跟在所屬的指令旁邊，判斷問句是「讀者在讀到哪個位置時會需要這段資訊」（[supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)）。
 
 **這一節的判定單位是句子，所以它走到程式碼區塊就停下來。** 指令沒有主詞也沒有謂語，逐句填槽位的動作對它不產生任何判定，區塊裡的每一個字面值因此通過。示範指令另有一條檢查：四個位置（工具 / 子命令 / 選項 / 引數）裡引數最需要寫，因為它的語意常常只有文章講得出來，而且它是讀者唯一要動手改的位置。判斷標準是「讀者把這條指令用在自己的環境上要改哪幾個位置，每個位置文章有沒有說過它填什麼」，掃描入口是區塊裡的字面值而不是佔位符——`<serial>` 自帶「這裡要換」的訊號，`/sdcard/screen.png` 長得像一個完整可用的答案。**引數的有無改變行為時，兩種形態要並列在同一個程式碼區塊裡、各帶一行註解**——補一段文字說明不足以修好它，讀者選哪一種的依據是兩條指令擺在一起的樣子。五種形態與修法見 [literal-operand-hides-the-change-point](principles/literal-operand-hides-the-change-point.md)。 區塊的排法、註解的分工與參數表的判斷標準在 [demonstrating-commands](demonstrating-commands.md)。
 
@@ -692,7 +692,7 @@ build-炸-修循環。明顯划算。
 | 程式碼區塊裡出現讀者要換掉的值（路徑、套件名、op 名稱、namespace） | 讀者把這條指令用在自己的環境上要改哪幾個位置？每個位置文章說過它填什麼嗎？字面值與 `<佔位符>` 都算要改的位置。（[literal-operand-hides-the-change-point](principles/literal-operand-hides-the-change-point.md)） |
 | 一句操作描述的主詞是參數、管線一段、或子命令               | 動作者是誰——人、腳本、工具、還是系統元件？受詞是動詞在領域裡作用得到的對象嗎？（[command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md)） |
 | 「完全」「任何」「所有」「一個 X 都沒」                    | 量詞的範圍寫在句內了嗎？句子自己說了「全部」的話，全部的什麼？（[spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)）                                     |
-| 開場超過一句話的情境敘事、或正文出現「該問誰」「容易搞錯」 | 刪掉這一段之後讀者還知不知道這篇在講什麼？這一句是在給正確做法還是在模擬課堂？（[teaching-is-not-lecturing](principles/teaching-is-not-lecturing.md)）                                     |
+| 開場是情境敘事、或正文出現「該問誰」「容易搞錯」 | 刪掉這一段之後，不熟這個主題的讀者還能不能判斷這篇跟他要找的東西有沒有關係？這一句是在給正確做法還是在模擬課堂？（[teaching-is-not-lecturing](principles/teaching-is-not-lecturing.md)）                                     |
 | 一段「為什麼要這樣做」離它解釋的指令超過一段               | 讀者在讀到哪個位置時會需要這段資訊？（[supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)）                             |
 
 ## 術語

@@ -4,7 +4,7 @@ description: "Use this skill whenever the user needs to check or set up developm
 argument-hint: "<subcommand>"
 allowed-tools: Bash(project-init *), Read, Write, Edit
 metadata:
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Project Init Tool v1.0
@@ -164,6 +164,15 @@ project-init --version
 ---
 
 ## 常見使用情境
+
+### 建立或接手專案：確認執行方式
+
+專案若以工具管理語言或工具鏈版本（例：`.fvmrc`、`uv.lock`、`.nvmrc`、`.tool-versions`、`composer.lock`），先確認實際的執行寫法，再寫進 CLAUDE.md §1 的「執行方式」列。
+
+- **怎麼確認**：用該寫法跑一次版本查詢，例如 `fvm flutter --version`、`uv run python --version`，版本與釘選值一致才算確認。
+- **為什麼**：直接呼叫 PATH 上的指令，會落在本機的全域版本。代理人跑出的測試、分析結果與生成檔，就不是釘選版的結果。差異會被提交進主幹，各線合併前都得手動還原。合併閘門若有經過工具執行，閘門本身仍然有效，但代理人在本機的結果不可信。
+- **寫進 CLAUDE.md 的理由**：代理人會載入 CLAUDE.md，寫在那裡的規定才會送達每一個執行者。
+- **識別檔與寫法對照**：見 `.claude/templates/CLAUDE-template.md` §1 的提示。
 
 ### 新開發者加入
 

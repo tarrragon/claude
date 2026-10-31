@@ -290,8 +290,8 @@ class TestMergeValidatePreconditions:
 class TestCleanupVerifyAllGates:
     """測試 _cleanup_verify_all_gates"""
 
-    @patch('worktree_manager._cleanup_check_level2_and_3')
-    @patch('worktree_manager._cleanup_check_level1')
+    @patch('cleanup_command._cleanup_check_level2_and_3')
+    @patch('cleanup_command._cleanup_check_level1')
     def test_all_gates_pass(self, mock_level1, mock_level2_3, capsys):
         """場景 7.1：全部閘門通過"""
         mock_level1.return_value = (True, 0)
@@ -305,8 +305,8 @@ class TestCleanupVerifyAllGates:
 
         assert result == 0
 
-    @patch('worktree_manager._cleanup_check_level2_and_3')
-    @patch('worktree_manager._cleanup_check_level1')
+    @patch('cleanup_command._cleanup_check_level2_and_3')
+    @patch('cleanup_command._cleanup_check_level1')
     def test_level1_fails(self, mock_level1, mock_level2_3, capsys):
         """場景 7.2：Level 1 檢查失敗（永不可繞過）"""
         mock_level1.return_value = (False, 2)
@@ -322,8 +322,8 @@ class TestCleanupVerifyAllGates:
         captured = capsys.readouterr()
         assert "拒絕" in captured.out or "2" in captured.out
 
-    @patch('worktree_manager._cleanup_check_level2_and_3')
-    @patch('worktree_manager._cleanup_check_level1')
+    @patch('cleanup_command._cleanup_check_level2_and_3')
+    @patch('cleanup_command._cleanup_check_level1')
     def test_level2_3_fails(self, mock_level1, mock_level2_3, capsys):
         """場景 7.3：Level 2/3 檢查失敗"""
         mock_level1.return_value = (True, 0)

@@ -2,6 +2,24 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.13.0 — security〈管理通道〉「建立主機之前的檢查」的讀官方文件那一項補作業系統版本這一層的支援檢查：文件只寫到作業系統時，用映像的作業系統版本欄位的值查業者依版本查詢的工具；同時拿不存在的版本值查一次當對照，結果跟對照不同才採用，相同時改從逐版本的文件或建好的主機確認；建好之後代理程式設定裡啟用、回報的元件清單裡沒有這一項時，多半是這個版本不提供它，查證之後改走另一條路徑或換版本重建。容量稀缺那一項的「作業系統」改成「作業系統與版本」。來源是重建一台 A1 Oracle Linux 10.2 主機的實測：Known Issues 只寫到 Arm 主機要跑 Oracle Linux；查詢工具在版本 10 回傳少了 Bastion 的清單，在 9、8 與不存在的版本回傳同一份全部清單，所以 9 與 8 分不出來。
+
+**Version**: 1.12.0 — security〈管理通道〉的追問與判讀要點新增「建立主機之前的檢查」：找出只能建立時決定的設定、對登入路徑上每個服務讀支援清單與 Known Issues 與前置條件（元件狀態 running 不是支援的證據、換機型演練驗不出機型特有的問題）、兩條登入路徑逐項列出各自依賴的元件（代理程式型的工作階段有的經過 sshd、有的自己開 shell；第二條可以就是救援入口）、第二條路徑用自己公鑰時是暫時的、容量稀缺時選補救代價低的設定（跟機型無關的先在容易重建的機型上驗）與重送腳本重啟前再對一次；訪談階段的產出是決策記錄裡的兩列。來源是一次 A1 加 Ubuntu 主機建好之後登不進去的實測：managed SSH session 是官方列的不支援組合、Run Command 的 `ocarun` 沒有 sudo、建立時沒放公鑰而公鑰欄位建立後不能改。
+
+**Version**: 1.11.1 — implementations/gcp-spend-kill-switch.md 依測試專案上的第二次實跑補正：建立預算的兩道權限檢查（serviceusage 再帳單帳戶）、從既有預算拿掉 topic 要用預算 API PATCH、通知管道只接受電子郵件且 webhook 被拒時不說原因、抵免類型的寫法與 FREE_TIER 的推論、跨 zone 停 VM 的做法與角色、Policy Troubleshooter 的指令、心跳監看（日誌指標加缺席條件、時間窗上限 23 小時 30 分）、管理專案與帳單停用期間撤銷金鑰的實測結果、同專案函式停用後約一分鐘內仍會執行。
+
+**Version**: 1.11.0 — 新增 references/implementations/：gcp-spend-kill-switch.md（預算、Pub/Sub、函式部署、判斷規則、驗收、停用後的恢復）與 gcp-management-access.md（IAP 與 OS Login 的設定指令、舊規則的停用與回退、由 template 建的主機、GKE 控制平面與節點除錯、稽核紀錄、人員離職）。capacity-performance〈支出停損〉與 security〈管理通道〉只留決策點、三層表與平台無關的判讀要點，GCP 實作外移（兩段各約佔原檔四成，訪談時每次都載入）。SKILL.md 路由表兩列改成訪談讀維度檔、實際建置時再讀實作檔；目錄樹補 implementations/。
+
+**Version**: 1.10.4 — 多輪審查 Round 4 修正：〈支出停損〉的決策點改成依停機影響誰與資料能否重建判斷，補上只停止花錢的資源那一格；驗收改成排在停機可接受的時段、有不能遺失的資料才用分段驗證，複本要換函式名稱與 topic，寫出 Policy Troubleshooter 要查的兩個權限；「已實測」標籤改成寫明哪些未實跑。baseline-protections 的管理 port 列縮短並指向 security。觸發詞拿掉 IAP、OS Login、救援入口（排查連線改由 linux-install-debug 承接）。principle 卡：完整證據、合成觸發的時機改成停機可接受的時段、中途注入一列標明是推導、靜默監看改名心跳監看。
+
+**Version**: 1.10.3 — 多輪審查 Round 3 修正：〈支出停損〉示範改成另建接停損的預算（create，不接到既有警示預算）、一個 topic 只接一個預算、金額扣掉延遲期間的花費；驗收分成 topic 之前（第一則真實通知對照帳單報表）與 topic 之後兩段，超出預算那一則只在未上線專案做、已上線改用可拋棄複本，測完重新連結。〈管理通道〉：外部 IP 只在管理用途時移除；底線第 8 條與 baseline-protections 的 Kubernetes API 改用 IAM 端點或只列維運與 CI 的 authorized networks；舊規則停用前先觀察、盤點 metadata 金鑰、寫出回退指令；離職移出群組而非移除群組綁定；救援入口測完關回；logging 初期的假陰性註解。principle 卡補上第四個位置「測試從中途注入」、處置指令的假陰性、事件型觸發來源的靜默監看與合成觸發有損害時的分段驗證。觸發詞的 IAP 改成 GCP IAP。
+
+**Version**: 1.10.2 — 多輪審查 Round 2 修正：capacity-performance〈支出停損〉補上接停損的預算要用 --filter-projects 限定單一專案、金額設成能承受的上限、大額抵免時用 exclude-all-credits；指令補 --billing-project、--condition=None、--max-instances=1、TARGET_PROJECT_ID 與 run.invoker 的 --region；實測段壓成三個可執行的結論並補上超支停用後的恢復順序。security〈管理通道〉：OS Login 範例先綁登入角色再啟用；Kubernetes 節點除錯另立一條、分開 debug profile 與 PSA 兩個同名的 baseline；離職完成判斷指名 pgrep。
+
+**Version**: 1.10.1 — capacity-performance〈支出停損〉依多輪審查與官方文件查證修正：強制執行支出上限一個只涵蓋一個專案的一項服務、暫停到預算期間結束、持續性資源的固定費用不暫停；停用帳單時雲端文件警告資源可能被永久刪除；部署指令明確指定 --trigger-service-account（gcloud 說明的預設值與實測不同）並補齊必填旗標；測試訊息給出 publish 指令；預算門檻統一成 50% / 90% / 100%；花費為 0 也可能來自抵免。security〈管理通道〉：kubectl debug 只有 general 與 sysadmin profile 掛節點目錄、authorized networks 寫明更新時整組取代、IAM Condition 的期限格式、撤銷角色只擋住之後的新登入、救援入口補英文錨點。principle 卡 protection-proves-itself-by-firing 同 system-design 0.13.1 的修正。
+
+**Version**: 1.10.0 — security 維度新增「管理通道（主機與叢集的管理存取）」子領域：網路可達性、通道授權、主機登入驗證三層加救援入口的 day one 預設，GCP 的防火牆規則、帶 Condition 的 IAP 角色與 OS Login 設定範例（已實測），舊規則的停用順序、由 template 建的主機、Kubernetes 控制平面與 `kubectl debug node` 的權限、稽核紀錄的類型（IAP 開通道是 `ADMIN_READ`）、離職時結束既有工作階段；防護底線加第 8 條、tripwire 補 SSH 憑證與組織層級護欄兩列。capacity-performance 修正反向問的「預算 alert 讓你當天發現」為計費資料的延遲，day one 的預算 alert 加預測花費一檔，防護底線寫明警示不停止扣款；新增「支出停損」段（何時值得建、GCP 的 Pub/Sub 加 function 做法與三個實測踩到的設定：`run.invoker`、`billing.projectManager` 讀不到帳單狀態要加 `browser`、預設不重試要加 `--retry`；實測反應時間與計費延遲、帳單停用期間資源清單為空、驗收要合成觸發），tripwire 與決策記錄各補一項。baseline-protections 的入口段加「管理 port 只放行身分感知代理或 VPN」、觀測段加「防護機制實際觸發過一次」。新增 principle 卡 `protection-proves-itself-by-firing`。SKILL.md 補兩條路由、目錄索引與觸發詞。來源是一次 GCP 測試專案上的管理通道與帳單停損開關實機驗證。
+
 **Version**: 1.9.2 — 多輪審查 Round 3（誤用梯度）：約束驗證腳本從 `pg_constraint` 檢查涵蓋全部約束、改壞預期的結束碼寫進決策記錄；schema 規格在空資料庫跑的指令與結束碼寫進決策記錄；多套實作的 dump 差異逐項處理到空，常見差異清單不是放行清單
 
 **Version**: 1.9.1 — state-storage 的「下一條」改為指名「只有一份語言中立的產生器」；observability 的連續失敗次數補換算依據

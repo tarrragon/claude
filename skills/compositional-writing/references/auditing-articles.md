@@ -217,7 +217,7 @@ Q4：weakness 在容忍範圍（背景段 / 低 stakes 段、reader 不會直接
 3. **違反 current best practice 的步驟說明**：教 reader 主動關閉 mitigation（disable HSTS / CSP / SameSite）作為 workaround、沒明示「workaround 引入的新 risk」
 4. **Defense theater 例子當示範**：用名稱層 mitigation 對位（rate limit「擋」brute force）作為步驟、reader 照做不擋實際 mechanism
 
-四訊號共通：**reader 照做後實作會主動 worse than not having read**。Withdraw 不是嚴格、是 risk-asymmetric（[risk-asymmetric-audit-standard](./principles/risk-asymmetric-audit-standard.md)）下的必要決策。
+四訊號共通：**reader 照做後實作會主動 worse than not having read**。Withdraw 是 risk-asymmetric（[risk-asymmetric-audit-standard](./principles/risk-asymmetric-audit-standard.md)）下的必要決策，而不是嚴格。
 
 ---
 

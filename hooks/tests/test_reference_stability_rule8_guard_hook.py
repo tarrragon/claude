@@ -1227,3 +1227,59 @@ class TestGitignoredLocalFileNotScanned:
 
     def test_relative_path_not_treated_as_ignored(self, hook_mod):
         assert hook_mod.is_gitignored_local_file(".claude/settings.local.json") is False
+
+
+# ---------------------------------------------------------------------------
+# per-project 路徑區段豁免（PER_PROJECT_PATTERNS 取自 sync_exclude_manifest）
+# 放寬的失效方向是放行：每個放行案例配一個仍須阻擋的對照（E2）。
+# ---------------------------------------------------------------------------
+
+_PER_PROJECT_DIR = "project" + "-integration"
+
+
+class TestPerProjectSegmentExempt:
+    def test_per_project_segment_write_allowed(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        target = _claude_path(tmp_path, _PER_PROJECT_DIR, "multi-session.json")
+
+        rc = _run_main(hook_mod, monkeypatch, _write_payload(target))
+
+        assert rc == 0
+        assert capsys.readouterr().err == ""
+
+    @pytest.mark.parametrize(
+        "parts",
+        [
+            (_PER_PROJECT_DIR + "-extra", "multi-session.json"),
+            ("my-" + _PER_PROJECT_DIR, "multi-session.json"),
+            ("skills", _PER_PROJECT_DIR + ".json"),
+            ("config", "multi-session.json"),
+        ],
+    )
+    def test_non_segment_claude_paths_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys, parts
+    ):
+        """E2 正向對照：區段僅部分包含、或完全無關的 .claude/ 路徑仍阻擋。"""
+        target = _claude_path(tmp_path, *parts)
+
+        rc = _run_main(hook_mod, monkeypatch, _write_payload(target))
+
+        assert rc == 2
+        assert "9.9.9-W9-901" in capsys.readouterr().err
+
+    def test_manifest_import_failure_falls_back_to_blocking(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """manifest 載入失敗時不豁免（落在阻擋側），並寫 stderr。"""
+        monkeypatch.setitem(sys.modules, "lib.sync_exclude_manifest", None)
+        target = _claude_path(tmp_path, _PER_PROJECT_DIR, "multi-session.json")
+
+        rc = _run_main(hook_mod, monkeypatch, _write_payload(target))
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "sync_exclude_manifest 載入失敗" in err
+
+    def test_hook_source_has_no_per_project_literal(self):
+        assert _PER_PROJECT_DIR not in HOOK_PATH.read_text(encoding="utf-8")

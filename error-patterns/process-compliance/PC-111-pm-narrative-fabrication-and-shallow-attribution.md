@@ -216,7 +216,7 @@ W17-072/074 事件的「working memory 混淆」論述，素材溯源結果如�
 | 要求 | 落地位置 |
 |------|---------|
 | 新建 PC 必填「抽象層級分析」5 欄位表格 | `.claude/error-patterns/README.md` 模板（W17-080 已落地） |
-| compositional-writing 原則 3 顯性化「層級貼合」 | `.claude/skills/compositional-writing/SKILL.md` 原則 3 標題與粗體層級標記行（W17-081 已落地） |
+| compositional-writing 原則 3 顯性化「層級貼合」 | `compositional-writing` skill 的〈3. 意圖顯性與層級貼合〉標題（SKILL.md）與其粗體層級標記句（`.claude/skills/compositional-writing/references/core-principles.md`〈Core Principles 原則 1 至 5 全文〉，SKILL.md 1.50.0 外移）（W17-081 已落地） |
 | 既有 PC 追溯補欄（按需 backfill） | 延後執行，3 個月觀察 README 模板與原則 3 升級效果後決定（pending ticket，待 W17-079 Worth-It Filter C 觸發時建立） |
 | Lint hook 偵測跨層誤推 | 延後評估，需 D / B' 觀察期累積證據（W17-079 Worth-It Filter F） |
 

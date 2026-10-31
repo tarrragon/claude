@@ -13,8 +13,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
+import cleanup_command  # noqa: E402
 import worktree_manager  # noqa: E402
-from worktree_manager import cmd_cleanup, main  # noqa: E402
+from cleanup_command import cmd_cleanup  # noqa: E402
+from worktree_manager import main  # noqa: E402
 
 AGENT_BRANCH = "worktree-agent-a1b2c3d4"
 AGENT_PATH = "/path/.claude/worktrees/agent-a1b2c3d4"
@@ -32,15 +34,16 @@ def env(monkeypatch):
         {"path": TICKET_PATH, "branch": TICKET_BRANCH},
     ]
     monkeypatch.setattr("worktree_manager.get_worktree_list", lambda: worktrees)
+    monkeypatch.setattr("cleanup_command.get_worktree_list", lambda: worktrees)
     monkeypatch.setattr("worktree_manager.get_worktree_uncommitted_count", lambda p: 0)
-    monkeypatch.setattr("worktree_manager._is_branch_pushed", lambda b: True)
-    monkeypatch.setattr("worktree_manager._is_branch_merged_to_base", lambda b, base="main": True)
+    monkeypatch.setattr("cleanup_command._is_branch_pushed", lambda b: True)
+    monkeypatch.setattr("cleanup_command._is_branch_merged_to_base", lambda b, base="main": True)
 
-    def fake_execute(path, branch):
+    def fake_execute(path, branch, unlock=False):
         removed.append((path, branch))
         return True, "ok"
 
-    monkeypatch.setattr("worktree_manager._cleanup_execute", fake_execute)
+    monkeypatch.setattr("cleanup_command._cleanup_execute", fake_execute)
     return removed
 
 
@@ -57,7 +60,7 @@ def _run_main(monkeypatch, argv):
 class TestSuggestedCommandRoundTrip:
     def test_scan_suggestion_for_agent_branch_parses_and_locates(self, env, monkeypatch, capsys):
         """主防線：掃描建議指令照原文執行，可解析並清理到該 worktree"""
-        assert worktree_manager._cleanup_scan_all() == 0
+        assert cleanup_command._cleanup_scan_all() == 0
         cmds = [c for c in _suggested_commands(capsys) if AGENT_BRANCH in c]
         assert cmds, "掃描報告應對 agent 分支印出建議指令"
         for cmd in cmds:
@@ -73,14 +76,14 @@ class TestSuggestedCommandRoundTrip:
 
     def test_scan_suggestion_for_ticket_unchanged(self, env, capsys):
         """E2：ticket 分支仍印 ticket ID 用法，不帶 --branch"""
-        worktree_manager._cleanup_scan_all()
+        cleanup_command._cleanup_scan_all()
         cmds = [c for c in _suggested_commands(capsys) if "0.1.1-W9-001" in c]
         assert cmds and all("--branch" not in c for c in cmds)
 
     def test_force_suggestion_for_agent_branch_parses(self, env, monkeypatch, capsys):
         """warnings 清單（未合併）的 --force 建議同樣可解析"""
-        monkeypatch.setattr("worktree_manager._is_branch_merged_to_base", lambda b, base="main": False)
-        worktree_manager._cleanup_scan_all()
+        monkeypatch.setattr("cleanup_command._is_branch_merged_to_base", lambda b, base="main": False)
+        cleanup_command._cleanup_scan_all()
         cmds = [c for c in _suggested_commands(capsys) if AGENT_BRANCH in c and "--force" in c]
         assert cmds
         argv = shlex.split(cmds[0].split("：", 1)[-1])

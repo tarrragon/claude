@@ -500,6 +500,41 @@ def test_every_skeleton_variant_leaves_room_for_pm(
     )
 
 
+# 0.5.0-W1-563.1：閘門逐檔檢查併入收尾句，不得新增行。
+_GATE_VARIANTS = {
+    "one_gate": ("fvm dart format --output=none --set-exit-if-changed lib/a.dart",),
+    "two_gates": (
+        "fvm dart format --output=none --set-exit-if-changed lib/a.dart test/b_test.dart",
+        "dart run tool/check.dart tool/gen.dart",
+    ),
+}
+
+
+@pytest.mark.parametrize("gate_key", tuple(_GATE_VARIANTS))
+@pytest.mark.parametrize(_COMBO_PARAMS, _ALL_COMBOS)
+def test_every_skeleton_variant_with_gate_checks_leaves_room_for_pm(
+    hook_scope, isolation, entry_key, red_run, commit_policy, gate_key,
+):
+    skeleton = _load_dispatch_skeleton_module().build_skeleton(
+        kind="normal",
+        ticket_id="0.5.0-W1-XXXX",
+        task_summary="一句話動作描述測試填空",
+        agent_name="parsley-flutter-developer",
+        commit_policy=commit_policy,
+        touches_hook_scope=hook_scope,
+        isolation=isolation,
+        require_red_run=red_run,
+        test_entries=_ENTRY_VARIANTS[entry_key],
+        gate_checks=_GATE_VARIANTS[gate_key],
+    )
+    count = _skeleton_line_count(skeleton)
+    assert count <= SKELETON_MAX_LINES, (
+        f"含閘門逐檔檢查（{gate_key}）的骨架組合 hook_scope={hook_scope} "
+        f"isolation={isolation} entries={entry_key} red_run={red_run} "
+        f"commit_policy={commit_policy} 為 {count} 行，超過 {SKELETON_MAX_LINES}"
+    )
+
+
 def test_review_skeleton_leaves_room_for_pm():
     review = _load_dispatch_skeleton_module().build_skeleton(
         kind="review", ticket_id="T-1", task_summary="x",

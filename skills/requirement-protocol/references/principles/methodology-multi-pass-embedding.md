@@ -123,9 +123,9 @@
 | Methodology 文件結尾有「最後 review 一下」            | 升 pillar                                       |
 | Pillar 列表只 3 條、但 reference 多次提到「再過一次」 | 缺 multi-pass pillar                            |
 | Multi-pass 內容散在 ≥ 3 個地方                        | 抽 pillar、各 reference 引用                    |
-| 「進階使用者再 review」這類分級                       | 結構訊號錯位 — multi-pass 不是進階、是 baseline |
+| 「進階使用者再 review」這類分級                       | 結構訊號錯位 — multi-pass 是 baseline，而不是進階 |
 | 使用者反饋「我忘了 review」                           | 結構問題、不是紀律問題、升 pillar               |
 | Reference 結尾 self-check 沒人用                      | 位置太尾、提升結構地位                          |
 | 新 methodology 文件第一版                             | 預設加 multi-pass pillar、不是寫完才補          |
 
-**核心**：Methodology 設計的 pillar / appendix 切分**不是內容深淺問題、是執行率問題**。Pillar 層必跑、appendix 層不跑。把 multi-pass 視為「附帶」= 結構性確保它不被執行。**真正必要的東西要升結構、不能藏在末尾**。
+**核心**：Methodology 設計的 pillar / appendix 切分**依據是執行率，而不是內容深淺**。Pillar 層必跑、appendix 層不跑。把 multi-pass 視為「附帶」= 結構性確保它不被執行。**真正必要的東西要升結構、不能藏在末尾**。

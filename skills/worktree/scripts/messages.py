@@ -141,3 +141,9 @@ class CleanupMessages:
 
     # ===== 錯誤訊息 =====
     REMOVE_FAILED = "[錯誤] 移除 worktree 失敗：{error}"
+
+    REMOVE_LOCKED = "[停手] worktree 已被鎖定，未移除。\n  鎖原因：{reason}\n  持鎖者：{holder}\n鎖可能屬仍在使用的代理人；確認後以 --unlock 解鎖並移除。"
+
+    UNLOCK_FAILED = "[錯誤] 解鎖 worktree 失敗：{error}"
+
+    RECOVER_REFUSED = "[錯誤] 移除 worktree 失敗：{error}\n未自動收尾，以下條件不成立：\n{unmet}"

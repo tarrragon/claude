@@ -66,6 +66,6 @@
 
 ## 相關原則
 
-- [criteria-need-condition-action-mapping](criteria-need-condition-action-mapping.md)：相鄰而不同層。那張卡管判斷標準有沒有走到「條件成立就做什麼」，本卡管那個「做什麼」指不指得到實體；一條判斷標準可以在條件映射完整的前提下，動作那一端仍然落空。
+- [criteria-need-condition-action-mapping](criteria-need-condition-action-mapping.md)：相鄰而不同層。那張卡管判斷標準寫到哪一層，並把「條件成立就做什麼」的逐項對應歸給照著執行的 surface（規範、skill、agent 指令）；本卡管的正是那個 surface 上的「做什麼」指不指得到實體——一條規則可以在條件到行動的對應完整的前提下，動作那一端仍然落空。
 - [reference-by-semantic-title-not-number](reference-by-semantic-title-not-number.md)：同一種無聲失效的另一種載體。那裡的編號在結構重排後字面完好而指向錯的內容，本卡的檔名在改名後字面完好而指向不存在的東西，兩者都不報錯。
 - [sentence-self-sufficiency-by-consumption-unit](sentence-self-sufficiency-by-consumption-unit.md)：同一個消費單位的另一半。那張卡管單句消費位的資訊夠不夠讀懂，本卡管它指不指得到東西——一個 checklist 項可以命題完整、指涉閉合，而仍然說不出第一個動作。

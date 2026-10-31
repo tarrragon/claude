@@ -471,6 +471,11 @@
           },
           {
             "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/multi-session-orchestration/scripts/master_resume_hint.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-ownership-guard-hook.py"
           },
           {
@@ -618,6 +623,11 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/coordination-queue-line-check-hook.py",
+            "timeout": 30
           }
         ]
       },
@@ -700,6 +710,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ana-ticket-metadata-validation-hook.py",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/coordination-queue-line-check-hook.py",
+            "timeout": 30
           }
         ]
       },
@@ -719,6 +734,11 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/coordination-queue-line-check-hook.py",
+            "timeout": 30
           }
         ]
       },

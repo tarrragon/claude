@@ -113,6 +113,29 @@ def test_engine_dart_skip_sink_file():
     assert should_skip_file("app/lib/theme/app_spacing.dart", DART)
 
 
+# repo 相對路徑正規化（0.5.0-W1-457.1）
+def test_skip_relative_root_dir_patterns_dart():
+    # E2 正向對照：根目錄 integration_test/、test/ 的相對路徑應被跳過
+    assert should_skip_file("integration_test/foo.dart", DART)
+    assert should_skip_file("test/helpers/bar.dart", DART)
+
+
+def test_skip_lib_path_not_skipped_relative_and_absolute():
+    # E1 對照組：產品碼不論相對或絕對路徑都不跳過
+    assert not should_skip_file("lib/foo.dart", DART)
+    assert not should_skip_file("/x/lib/foo.dart", DART)
+
+
+def test_skip_absolute_integration_test_path_unchanged():
+    assert should_skip_file("/x/integration_test/foo.dart", DART)
+
+
+def test_skip_python_framework_relative_path():
+    # python profile：.py 會被選到 profile，框架來源相對路徑被跳過
+    assert get_profile_for_path(".claude/hooks/x.py") is PYTHON
+    assert should_skip_file(".claude/hooks/x.py", PYTHON)
+
+
 def test_main_blocks_dart_violation():
     payload = {
         "tool_name": "Write",

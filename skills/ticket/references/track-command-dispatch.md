@@ -39,6 +39,16 @@ ticket track dispatch <ticket_id> --as <agent_name> --dry-run   # 只看骨架�
 
 輸出的骨架文字**直接貼進 Agent prompt**，不需另行改寫。骨架文字的權威來源是 `ticket_system/lib/dispatch_skeleton.py` 的 `SKELETON_TEMPLATE_NORMAL` / `SKELETON_TEMPLATE_REVIEW`，`.claude/references/agent-dispatch-template.md`「骨架（3 段）」節引用其輸出，不手動同步逐字模板。
 
+### 閘門逐檔檢查併入收尾句
+
+normal 骨架會讀 checkout 根的 `.claude/project-integration/merge-gate.yaml`。宣告中帶 `changed_files` 的套件，若有 where.files 命中其範圍（`prefixes` 前綴或 `files` 精確路徑）且符合 `changed_files` 正規式，命令與命中檔就會併入收尾句的 commit 之前：`提交前跑閘門逐檔檢查（結束碼須為 0）：<命令> <檔案>`。
+
+- Why：這類套件只對本次改動檔執行，結果完全由代理人自己的改動決定，提交前在本機即可重現；不轉成本機要求，紅燈要到合併閘門才出現，多佔一輪閘門名額
+- 併入既有收尾句而不新增行：骨架最長組合已達 PM 填寫空間的上限（守衛見 `test_agent_prompt_length_guard_hook.py`）
+- 不產生命令的情形：宣告不存在、無 `changed_files` 套件、where.files 無命中。此時骨架與未加此功能前逐字相同。全套件型套件（無 `changed_files`）刻意不產生命令，因為命令不帶路徑會跑全套件，與「代理人只跑相關測試檔」的分工衝突
+- 宣告無法解析時，stderr 印 `[WARNING]`，骨架照常輸出（不含逐檔檢查），exit 0
+- 權威：`GATE_CHECK_CLAUSE`、`gate_check_commands`；範圍判定以 worktree skill 的 `merge_gate.py` 為準
+
 ### `--dry-run` 與正常呼叫的差異
 
 | 項目 | 正常呼叫 | `--dry-run` |

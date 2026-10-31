@@ -219,6 +219,8 @@ class TestCommitFilesIsolated:
                 return MagicMock(returncode=0, stdout="", stderr="")
             if args[:2] == ["git", "add"]:
                 return MagicMock(returncode=1, stdout="", stderr="add failed")
+            if args[:2] == ["git", "ls-files"]:  # 提交前快照（唯讀）
+                return MagicMock(returncode=0, stdout="", stderr="")
             raise AssertionError(f"未預期的 git 呼叫: {args}")
 
         with patch.object(git_ops, "_run_with_graceful_timeout", side_effect=fake_run):
@@ -309,13 +311,15 @@ class TestCommitFilesIsolated:
                 return MagicMock(returncode=0, stdout="", stderr="")
             if args[:2] == ["git", "add"]:
                 return MagicMock(returncode=1, stdout="", stderr="add failed")
+            if args[:2] == ["git", "ls-files"]:  # 提交前快照：唯讀，不寫共用 index
+                return MagicMock(returncode=0, stdout="", stderr="")
             raise AssertionError(f"未預期的 git 呼叫: {args}")
 
         with patch.object(git_ops, "_run_with_graceful_timeout", side_effect=fake_run):
             result = git_ops.commit_files_isolated([_TARGET], "msg")
         assert result["status"] == "failed"
         # fake_run 對 ls-tree/update-index 會 raise AssertionError，
-        # 測試通過即代表這些呼叫從未發生（共用 index 未被觸碰）。
+        # 測試通過即代表這些呼叫從未發生（共用 index 未被寫入）。
 
     def test_sync_force_removes_paths_missing_from_new_tree(self):
         """新 HEAD tree 中不存在的 path（如已刪除）以 --force-remove 同步。"""
@@ -829,11 +833,17 @@ class TestSharedIndexSyncAfterCommit:
         assert "[WARNING]" in capsys.readouterr().err
 
     def test_history_lookback_is_bounded(self, repo, monkeypatch):
-        """歷史比對有上限：己方舊版本超出回溯範圍即視為他方（保守不覆寫）。"""
+        """歷史比對有上限：己方舊版本超出回溯範圍即視為他方（保守不覆寫）。
+
+        不帶提交前快照：快照比對（0.5.0-W1-553）會把凍結 entry 認作被取代的
+        提交前狀態而同步，此處只驗歷史回溯本身的上限。
+        """
         monkeypatch.setattr(git_ops, "_OWN_HISTORY_LOOKBACK", 1, raising=False)
         _first, second, _third = self._three_commits(repo)
         frozen = self._index_blob(repo)
-        self._run_deferred_sync(second)
+        git_ops._sync_shared_index_after_commit(
+            second["paths"], second["tree_sha"], second["cwd"], second["args"][0]
+        )
         assert self._index_blob(repo) == frozen
 
     def test_update_index_never_killed_by_timeout_leaves_no_lock(self, repo, monkeypatch):
@@ -860,6 +870,106 @@ class TestSharedIndexSyncAfterCommit:
         self._run_deferred_sync(first)
         assert not lock.exists()
         assert self._index_blob(repo) == self._head_blob(repo)
+
+
+class TestPreCommitOwnStagedEntry:
+    """0.5.0-W1-553（tarrragon/claude#55）：提交前己方暫存的中途版本須同步。
+
+    先 ``git add``（或 ``git mv``）再改檔，再以隔離索引提交：共用 index 停在中途
+    版本，該 blob 從未進過 commit，舊判準將其視為他方 stage 而不同步，留下 MM。
+    E2 正向對照：該同步的路徑（中途版本）須同步；他方在途的 stage
+    （提交期間才 stage、本次提交未改動的路徑、append-only 路徑）須保留並印 WARNING。
+    """
+
+    @pytest.fixture
+    def repo(self, tmp_path):
+        _run_git(tmp_path, "init", "-q", "-b", "main")
+        _run_git(tmp_path, "config", "user.email", "t@example.com")
+        _run_git(tmp_path, "config", "user.name", "t")
+        for name in ("a.md", "b.md", "log.txt"):
+            (tmp_path / name).write_text("v1\n")
+        _run_git(tmp_path, "add", "-A")
+        _run_git(tmp_path, "commit", "-q", "-m", "init")
+        return tmp_path
+
+    @staticmethod
+    def _porcelain(repo: Path, rel: str) -> str:
+        return _run_git(repo, "status", "--porcelain", "--", rel).stdout.strip()
+
+    @staticmethod
+    def _index_blob(repo: Path, rel: str) -> str:
+        return _run_git(repo, "rev-parse", f":{rel}").stdout.strip()
+
+    @staticmethod
+    def _stage(repo: Path, rel: str, content: str) -> str:
+        (repo / rel).write_text(content)
+        _run_git(repo, "add", rel)
+        return _run_git(repo, "rev-parse", f":{rel}").stdout.strip()
+
+    def test_add_then_edit_leaves_no_stale_entry(self, repo):
+        """正向：先 add 中途版本再改檔，提交後共用 index 無過期 entry。"""
+        self._stage(repo, "a.md", "mid\n")
+        (repo / "a.md").write_text("final\n")
+        result = git_ops.commit_files_isolated([str(repo / "a.md")], "m", cwd=str(repo))
+        assert result["status"] == "committed"
+        assert self._porcelain(repo, "a.md") == ""
+
+    def test_mv_then_edit_leaves_no_stale_entry(self, repo):
+        """正向：git mv 後改新檔，提交後新舊路徑皆無殘留。"""
+        _run_git(repo, "mv", "a.md", "c.md")
+        (repo / "c.md").write_text("v2\n")
+        result = git_ops.commit_files_isolated(
+            [str(repo / "a.md"), str(repo / "c.md")], "rename", cwd=str(repo)
+        )
+        assert result["status"] == "committed"
+        assert _run_git(repo, "status", "--porcelain").stdout.strip() == ""
+
+    def test_stage_during_commit_is_kept(self, repo, capsys):
+        """他方：提交之後才出現的 stage（快照後變動）不被覆寫。"""
+        self._stage(repo, "a.md", "mid\n")
+        (repo / "a.md").write_text("final\n")
+        captured: dict = {}
+
+        def capture(paths, tree_sha, cwd, *args, **kwargs):
+            captured.update(paths=paths, tree_sha=tree_sha, cwd=cwd, args=args, kwargs=kwargs)
+
+        with patch.object(git_ops, "_sync_shared_index_after_commit", side_effect=capture):
+            result = git_ops.commit_files_isolated([str(repo / "a.md")], "m", cwd=str(repo))
+        assert result["status"] == "committed"
+        foreign = self._stage(repo, "a.md", "foreign\n")
+        git_ops._sync_shared_index_after_commit(
+            captured["paths"], captured["tree_sha"], captured["cwd"],
+            *captured["args"], **captured["kwargs"],
+        )
+        assert self._index_blob(repo, "a.md") == foreign
+        err = capsys.readouterr().err
+        assert "[WARNING]" in err and "a.md" in err
+
+    def test_preexisting_stage_on_unchanged_path_is_kept(self, repo, capsys):
+        """他方：路徑列在本次提交但內容未改動，提交前的 stage 不被覆寫。"""
+        foreign = self._stage(repo, "b.md", "foreign\n")
+        (repo / "b.md").write_text("v1\n")  # 工作區回到 HEAD 版，本次提交不改動 b.md
+        (repo / "a.md").write_text("v2\n")
+        result = git_ops.commit_files_isolated(
+            [str(repo / "a.md"), str(repo / "b.md")], "m", cwd=str(repo)
+        )
+        assert result["status"] == "committed"
+        assert self._index_blob(repo, "b.md") == foreign
+        assert self._porcelain(repo, "a.md") == ""
+        err = capsys.readouterr().err
+        assert "[WARNING]" in err and "b.md" in err
+
+    def test_preexisting_stage_on_appended_path_is_kept(self, repo, capsys):
+        """他方：append-only 路徑只提交 HEAD + 本次行，提交前他方 stage 的行不被覆寫。"""
+        foreign = self._stage(repo, "log.txt", "v1\nforeign\n")
+        (repo / "a.md").write_text("v2\n")
+        result = git_ops.commit_files_isolated(
+            [str(repo / "a.md")], "m", cwd=str(repo),
+            append_lines={str(repo / "log.txt"): "mine\n"},
+        )
+        assert result["status"] == "committed"
+        assert self._index_blob(repo, "log.txt") == foreign
+        assert "[WARNING]" in capsys.readouterr().err
 
 
 class TestStageAppendedBlobProjection:

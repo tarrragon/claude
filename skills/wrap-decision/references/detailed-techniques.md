@@ -60,6 +60,10 @@ W 階段「擴增選項」擴增的是選項空間，但選項的意義取決於
 
 各專案可建立個人化建議的三層機制（識別 / 分級 / 誠實）。
 
+### 與 requirement-protocol 的分工邊界
+
+Step 0、premortem context 閘門、`requirement-protocol` 都做「資訊不足先補齊」但問法不同：Step 0 問決策諮詢的**當事人條件**；premortem context 閘門問**計畫輪廓**（見 `references/premortem-workflow.md` 步驟 0）；requirement-protocol 問使用者**指令**是否明確。三者皆「一次一問、問到門檻即停」，互為前置不重複問：卡在「要什麼」用 requirement-protocol，「當事人條件」用 Step 0，「計畫輪廓」用 premortem context 閘門。
+
 ---
 
 ## W — 擴增選項詳細技巧
@@ -298,6 +302,20 @@ Gary Klein 方法：先假設計畫失敗了，然後問「是什麼殺了它？
 
 ---
 
-**Last Updated**: 2026-09-08
+## 與其他決策類 Skill 的關係
+
+| Skill 類型 | 分工 |
+|---|---|
+| 技術方案比較 | 比較用專用 skill；認知偏誤防護用 WRAP |
+| Bug 證據驅動修復 | 明確 bug 用證據驅動修復 skill；被困住用 WRAP |
+| 任務認知負擔評估 | 拆分用專用 skill；決策品質用 WRAP |
+| 決策格式模板（5W1H） | 格式負責「怎麼寫」；WRAP 負責「怎麼想」 |
+| 學習捕捉 | WRAP 正面絆腳索串接學習捕捉 skill |
+| 系統設計的範圍與時機（system-design） | system-design 決定這一版要做哪些決定、哪些延後；WRAP 處理其中個別的決定。system-design 的延後項目附帶的觸發指標，就是 WRAP 絆腳索的輸入 |
+
+---
+
+**Last Updated**: 2026-10-30
+**Version**: 1.4.0 — SKILL.md 再次收斂至 5,000 tokens 門檻下：「與 requirement-protocol 的分工邊界」（Step 0 章節末）與「與其他決策類 Skill 的關係」（檔尾新章節）兩節自 SKILL.md 逐字移入，SKILL.md 各留一行路由
 **Version**: 1.3.0 — SKILL.md 收斂至 5,000 tokens 門檻下：新增「Step 0 — 資料充足度閘門詳細操作」章節（為什麼必須在 W 之前完整版、反模式偵測完整版），新增「二元處置取捨：完整論證與實證」子節（W 階段）；SKILL.md 對應段落壓縮為核心定義 + 路由，完整 Why/Consequence/實證移入本檔
 **Version**: 1.2.0 — A 階段新增工具選擇檢查（Tool selection check）4 問 + 情境反向驗證

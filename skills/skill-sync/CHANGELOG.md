@@ -2,6 +2,12 @@
 
 新到舊。版號有三個住址，bump 時必須一起動：本檔最上方的 `**Version**:` 條目、`SKILL.md` frontmatter 的 `metadata.version`、`pyproject.toml` 的 `project.version`。三者相等由 `tests/test_cli.py::test_three_version_addresses_agree` 斷言，漏動任何一處測試即紅並印出三個值。（`uv.lock` 也帶版號，但由 uv 依 `pyproject.toml` 自動重算，不是人工住址。）版號規則見專案的 skill 同步規範。
 
+**Version**: 1.25.3 — 警告處置表的 `pruned N file(s) but preview promised M` 一列註明它在 prune 套用之後才印，`echo n` 的預覽裡看不到。
+
+**Version**: 1.25.2 — SKILL.md 補 push 預覽的 `[WARNING]` 處置表（六種警告各自的意思與預設處置），以及兩種不會印出完整預覽的情形（portable 閘門中止、沒有變更）；行為不變
+
+**Version**: 1.25.1 — SKILL.md 補〈Report categories and non-interactive use〉：`pull`（不帶名字）的全部分類與預設處置（含 `[SKIP]` 兩種、`[OVERRIDE]`、`[SHOULD PUSH --PRUNE]`、`[SUSPECT REVERT]`），這條路徑會改寫 `.skill-sync-base`，以及非互動環境用 `echo n` 預覽、`echo y` 套用的兩段式；行為不變
+
 **Version**: 1.25.0 — The status report (`skill-sync pull` with no name) no longer recommends `pull` when the only difference is remote-only files that the local git history shows were deleted on purpose. `push` keeps remote-only files by default, so after such a push the sync base makes the remote look newer and the report said `[SHOULD PULL]`; following it restored files that had been removed deliberately, with the version number unchanged so nothing signalled it. For a `pull` candidate the report now also checks that every local file is byte-identical to the remote copy, that the remote has files local lacks, and that each of those was deleted in the local git log (`git log --diff-filter=D`); when all hold it lists the skill under `[SHOULD PUSH --PRUNE]` with `skill-sync push <name> --prune` (new direction `push_prune`, new `DivergedSkill.push_prune_command`). A file the remote genuinely added, which local never had, still yields `[SHOULD PULL]`. If the check cannot be answered (git unavailable, local skills directory outside a repository, clone failure) it writes a line to stderr and keeps the previous `pull` suggestion.
 
 **Version**: 1.24.4 — 只新增測試、行為不變：`tests/test_python_floor_declaration.py` 以 `uv run --python <版本>` 實際 import 套件全部模組，斷言 `requires-python` 宣告的下限可用、下限減一版不可用，避免宣告與實際最低版本漂移。這個檔案在 1.24.3 之後加入、當時沒有升版，造成本機與發佈庫同為 1.24.3 而內容不同；補升本版，讓版號重新能區分兩份內容。

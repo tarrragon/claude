@@ -702,5 +702,34 @@ class TestPrevalidateOnlyMode:
         assert bad.returncode == hook_module.EXIT_BLOCK and bad.stdout.strip() == ""
 
 
+class TestCheckRule8PerProject:
+    """commit 層 _check_rule8 對 per-project 區段的豁免（與編輯層一致）。"""
+
+    @staticmethod
+    def _findings(rel_path):
+        from lib import commit_content_guards as ccg
+
+        text = "引用 W9-501 的分析結論。\n"
+        sf = ccg.StagedFile(rel_path, "", text, text)
+        return ccg._check_rule8(sf, _Logger())
+
+    def test_project_integration_segment_allowed(self):
+        assert self._findings(".claude/project-integration/multi-session.json") == []
+
+    @pytest.mark.parametrize(
+        "rel_path",
+        [
+            ".claude/references/y.md",
+            ".claude/my-project-integration/y.md",
+            ".claude/project-integration-notes/y.md",
+            ".claude/references/project-integration.md",
+        ],
+    )
+    def test_other_claude_paths_still_deny(self, rel_path):
+        """E2 正向對照：同字面在非整段相等路徑仍 deny。"""
+        findings = self._findings(rel_path)
+        assert any(f.severity == "deny" for f in findings)
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

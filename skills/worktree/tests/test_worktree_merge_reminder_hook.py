@@ -460,6 +460,7 @@ def test_cleanup_other_branch_prints_quoted_branch_form(monkeypatch, capsys):
 def test_cleanup_forms_parse_with_worktree_argparse(monkeypatch, capsys):
     """PC-GPD-034：印出的清理建議必須能被 argparse 解析並導向 cmd_cleanup。"""
     sys.path.insert(0, str(_HOOK_FILE.parent.parent / "scripts"))
+    import cleanup_command
     import worktree_manager
 
     for branch, expect in (
@@ -473,7 +474,7 @@ def test_cleanup_forms_parse_with_worktree_argparse(monkeypatch, capsys):
         assert argv[0] == "/worktree"
         seen = {}
         monkeypatch.setattr(
-            worktree_manager, "cmd_cleanup",
+            cleanup_command, "cmd_cleanup",
             lambda ticket_id, **kw: seen.update(t=ticket_id, b=kw.get("branch")) or 0,
         )
         monkeypatch.setattr(sys, "argv", ["worktree_manager.py"] + argv[1:])

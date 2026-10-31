@@ -40,6 +40,8 @@
 
 > **紅燈實跑行由 CLI 條件式加入**：票 type 為 IMP 且 acceptance 含測試字樣或 E1／E2 時，骨架多一行「修改產品碼前先實跑新增測試，於 Test Results 貼紅燈輸出摘要；未實跑者須標為推論」（權威為 `dispatch_skeleton.py` 的 `RED_RUN_LINE` 與 `requires_red_run`），DOC／ANA 與無測試 acceptance 的 IMP 骨架不變；PM 不需再手寫此句。
 
+> **閘門逐檔檢查由 CLI 條件式併入收尾句**：checkout 根有合併閘門宣告（`.claude/project-integration/merge-gate.yaml`）時，若 where.files 落在帶 `changed_files` 的套件範圍內，該套件命令與命中檔會插進收尾句的 commit 之前，寫成「提交前跑閘門逐檔檢查（結束碼須為 0）：…」。這類套件只檢查本次改動檔，代理人在本機就能重現。如果沒有轉成本機要求，紅燈要到合併閘門才會出現，多佔一輪閘門名額。插進既有句子而不新增行，因為最長骨架已達 PM 填寫空間的上限。沒有宣告或沒有命中時，骨架不變。權威為 `dispatch_skeleton.py` 的 `GATE_CHECK_CLAUSE` 與 `gate_check_commands`，細節見 ticket skill `references/track-command-dispatch.md`〈閘門逐檔檢查併入收尾句〉；PM 不需再手寫格式檢查句。
+
 > **claim 行必帶 `--as {agent_name}`**（派發身份前移，W5-005 F1a）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
 
 > **停手上報而非定義優先序**：在只讀得到 prompt 與正本兩份文本的條件下，agent 無可靠判別依據——故不定義三方優先序表，交由 PM 裁決；裁決回票面方式見「衝突裁決回票面（PM 端）」節。
@@ -441,7 +443,8 @@ ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 
 ---
 
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-31
+**Version**: 1.50.0 — 〈骨架（3 段）〉在紅燈實跑行說明後補「閘門逐檔檢查由 CLI 條件式併入收尾句」一段：合併閘門宣告中帶 `changed_files` 的套件，依 where.files 推出的命令插進收尾句的 commit 之前，權威為 `GATE_CHECK_CLAUSE`／`gate_check_commands`（CLI 行為變更的同 commit 文件同步）。
 **Version**: 1.49.0 — 骨架同步壓縮：模板去分隔空行、短版指標句改 3 行（示意區塊逐字對應 `STAGING_PHRASE_AGENT_PROMPT`）、hook 提醒壓為 2 行、worktree 骨架新增「改行為前以改動物字面 grep 所有測試目錄（範圍見 agent-dispatch-testing.md〈相關測試檔怎麼找〉），需改的測試檔不在 where.files 內即停手回報」一句，骨架不另列目錄清單（`WORKTREE_SIBLING_TEST_LINE`）；最長組合 34 行降為 22 行，參數化守衛涵蓋全部變體。
 **Version**: 1.48.0 — `agent-dispatch-testing.md`〈全套件由合併閘門執行，代理人只跑相關測試檔〉補〈相關測試檔怎麼找〉：以被改動物的字面（hook 檔名、模組名、參數的 dest 與旗標名、改動前的輸出字面）grep 所有測試目錄，命中幾個套件就各以該套件入口跑一次；寫明只憑目錄或檔名挑選會漏的兩類（同名檔分處兩套件、以被改參數作旁路的使用端）與間接執行的盲區。兩類各有一次合併閘門紅燈實例。
 **Version**: 1.47.0 — 〈骨架（3 段）〉補一句路由：IMP 票 acceptance 含測試或 E1／E2 時，CLI 骨架條件式加入「修改產品碼前先實跑紅燈並貼輸出摘要」一行，權威在 `dispatch_skeleton.py`。

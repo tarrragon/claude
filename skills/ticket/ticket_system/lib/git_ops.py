@@ -441,8 +441,30 @@ def _run_sync_step_with_budget(
     return bool(last["ok"]), str(last["err"])
 
 
+def _is_superseded_pre_commit_stage(
+    path: str,
+    entry: Optional[str],
+    pre_commit_entries: Dict[str, Optional[str]],
+    tree_entries: Dict[str, str],
+    parent_entries: Dict[str, str],
+) -> bool:
+    """entry 是否為本次整檔提交所取代的提交前暫存（含己方中途版本、git mv）。
+
+    三條件同時成立才算：路徑以整檔提交（在快照內，append 路徑不在）、本次 commit
+    確實改動該路徑、entry 自快照後未變動。整檔提交讀的是工作區全文，被取代的
+    stage 若保留，日後裸 commit 會回滾本次提交，故同步。快照後才變動的 entry
+    （提交期間他方 stage）與本次未改動的路徑不在此列，維持他方保護。
+    """
+    if path not in pre_commit_entries or entry == "conflict":
+        return False
+    if tree_entries.get(path) == parent_entries.get(path):
+        return False
+    return entry == pre_commit_entries[path]
+
+
 def _sync_shared_index_after_commit(
-    paths: List[str], tree_sha: str, cwd: str, old_head: Optional[str] = None
+    paths: List[str], tree_sha: str, cwd: str, old_head: Optional[str] = None,
+    pre_commit_entries: Optional[Dict[str, Optional[str]]] = None,
 ) -> List[str]:
     """提交成功（update-ref 已推進 HEAD）後，將本次 ``paths`` 同步至共用
     index，避免共用 index 對這些路徑停留在舊 HEAD 狀態（凍結累積），日後
@@ -455,7 +477,9 @@ def _sync_shared_index_after_commit(
     他方保護：共用 index 該 entry 既不等於本次 commit 的 parent 版本
     （``old_head``），也不等於本次 tree 版本、也不等於當下 HEAD 版本，且其 blob
     未出現在該路徑最近 ``_OWN_HISTORY_LOOKBACK`` 次提交歷史中，代表有人另外
-    stage 了內容，不覆寫，改印 WARNING。
+    stage 了內容，不覆寫，改印 WARNING。例外：``pre_commit_entries``（提交前
+    共用 index 快照，僅含整檔提交的路徑）顯示 entry 是本次提交所取代的提交前
+    暫存時視為己方（判準見 ``_is_superseded_pre_commit_stage``）。
 
     僅動共用 index 中本次 ``paths`` 涉及的項目，不做全量 read-tree（避免
     覆蓋共用 index 中其他未提交的 staged 內容），不刪任何鎖。
@@ -489,7 +513,9 @@ def _sync_shared_index_after_commit(
         entry = index_entries.get(path)
         # 歷史比對辨認「前次同步失敗而凍結的己方舊版本」；否則凍結 entry 在其後
         # 每次同步都落在 known 之外，被永久當成他方 stage
-        is_own = entry in known or (
+        is_own = entry in known or _is_superseded_pre_commit_stage(
+            path, entry, pre_commit_entries or {}, tree_entries, parent_entries
+        ) or (
             entry is not None
             and entry != "conflict"
             and entry in _path_history_entries(path, cwd)
@@ -792,6 +818,11 @@ def _commit_files_isolated_impl(
     if not ok:
         return {"status": "failed", "commit_sha": None, "error": err or "rev-parse HEAD 失敗"}
     old_head = old_head_out.strip()
+    # 提交前快照（整檔路徑），須在讀工作區之前取得；收尾同步據此辨認己方中途暫存
+    snapshot = _shared_index_entries(deduped, cwd)
+    pre_commit_entries: Optional[Dict[str, Optional[str]]] = (
+        None if snapshot is None else {p: snapshot.get(p) for p in deduped}
+    )
 
     fd, temp_index_path = tempfile.mkstemp(prefix="ticket-commit-isolated-index-")
     os.close(fd)
@@ -893,7 +924,7 @@ def _commit_files_isolated_impl(
             }
 
         sync_failed = _sync_shared_index_after_commit(
-            expected_changes, tree_sha, cwd, old_head
+            expected_changes, tree_sha, cwd, old_head, pre_commit_entries
         )
         # rc 維持成功：HEAD 已推進，回報失敗會讓呼叫端重試造成重複提交；
         # 以欄位明示過期 entry 路徑，WARNING 已附補救指令（restore --staged）

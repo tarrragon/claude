@@ -8,6 +8,7 @@
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -15,11 +16,15 @@ from pathlib import Path
 from typing import Optional
 
 SOLUTION_HEADING = "## Solution"
-# 與 tools/line-board/hooks/lanes.ts 的 LANE_LINE 同一規則：只比對行首。
+# 與 .claude/skills/line-board/hooks/lanes.ts 的 LANE_LINE 同一規則：只比對行首。
 LANE_LINE = re.compile(r"^\*\*L(\d+) 現行佇列\*\*(?:（([^）]*)）)?：(.*)$")
 ENDED_MARKERS = frozenset({"（結束）", "（無）"})  # 看板用（無），票面慣例亦見（結束）
 INNER_TIMEOUT_SECONDS = 10
 PREFIX_SEPARATOR = " │ "
+CONFIG_RELATIVE_PATH = ".claude/project-integration/multi-session.json"
+WORK_LOGS_DIR = "docs/work-logs"
+# 與 line-board hooks/shared.ts 的 TICKET_ID 同一規則。
+TICKET_ID = re.compile(r"^(.+?)-(W\d+-)\d+(?:\.\d+)*$")
 
 
 def _warn(message: str) -> None:
@@ -77,6 +82,42 @@ def active_lanes(ticket_text: str) -> dict:
     return {n: s for n, (s, queue) in latest.items() if queue not in ENDED_MARKERS}
 
 
+def ticket_file_candidates(ticket_id: str) -> list:
+    """票號對應票檔路徑候選（相對專案根）：hierarchical 優先，再 flat；非票號為空。"""
+    match = TICKET_ID.match(ticket_id)
+    if match is None:
+        return []
+    version = match.group(1).lstrip("v")
+    file = f"v{version}/tickets/{ticket_id}.md"
+    flat = f"{WORK_LOGS_DIR}/{file}"
+    parts = version.split(".")
+    if len(parts) < 2:
+        return [flat]
+    major, minor = parts[0], parts[1]
+    return [f"{WORK_LOGS_DIR}/v{major}/v{major}.{minor}/{file}", flat]
+
+
+def resolve_ticket_file(ticket_id: str, project_dir: Path) -> Optional[Path]:
+    """第一個存在的候選；皆不存在取第一個候選（與 shared.ts resolveTicketFile 一致）。"""
+    candidates = [project_dir / c for c in ticket_file_candidates(ticket_id)]
+    return next((c for c in candidates if c.exists()), candidates[0] if candidates else None)
+
+
+def coord_ticket_from_config(project_dir: Path) -> Optional[Path]:
+    """讀專案設定的 coordinationTicket 並推導票檔路徑；任何失敗回傳 None 並寫 stderr。"""
+    config_path = project_dir / CONFIG_RELATIVE_PATH
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        _warn(f"專案設定不可用 {config_path}：{exc}")
+        return None
+    ticket_id = config.get("coordinationTicket") if isinstance(config, dict) else None
+    ticket_path = resolve_ticket_file(ticket_id, project_dir) if isinstance(ticket_id, str) else None
+    if ticket_path is None:
+        _warn(f"專案設定缺少有效的 coordinationTicket：{config_path}")
+    return ticket_path
+
+
 def lane_label(name: str, ticket_path: Path) -> str:
     """名稱對到的線號，例如 `L6·L13`；無對應回傳空字串。"""
     try:
@@ -93,11 +134,15 @@ def build_prefix(payload: dict, coord_ticket: Optional[str]) -> str:
     if not name:
         return ""
     label = ""
+    ticket_path = None
     if coord_ticket:
         ticket_path = Path(coord_ticket)
         if not ticket_path.is_absolute():
             project_dir = (payload.get("workspace") or {}).get("project_dir")
             ticket_path = Path(project_dir or ".") / ticket_path
+    elif os.environ.get("CLAUDE_PROJECT_DIR"):
+        ticket_path = coord_ticket_from_config(Path(os.environ["CLAUDE_PROJECT_DIR"]))
+    if ticket_path is not None:
         label = lane_label(name, ticket_path)
     return f"{label}{PREFIX_SEPARATOR}{name}" if label else name
 

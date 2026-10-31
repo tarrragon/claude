@@ -177,3 +177,16 @@ $ /worktree status
 | 預設 | `None`：不檢查，直接 `update-ref` |
 | 重現待合併內容 | `merge_commit_sha` 已在物件庫但無 ref 指向，`git worktree add --detach <path> <merge_commit_sha>` 即可在隔離環境檢出（`worktree add` 需要 commit-ish，故傳 commit 而非 tree） |
 | 重試成本 | CAS 重試時每次嘗試依新 HEAD 產生不同的合併 commit，**每次嘗試都以該次 commit 重新呼叫檢查**。檢查若很貴，總成本隨重試次數倍增；是否在檢查內快取、縮短或只重跑差異，由掛載檢查的一方（如全套件綠燈閘門）決定 |
+
+## cleanup — 模組位置
+
+行為與參數見 `SKILL.md`〈子命令詳細說明〉的 cleanup 列；本節只說明程式位置與測試替換規則。
+
+| 項目 | 規格 |
+|------|------|
+| 實作 | `scripts/cleanup_command.py`：`cmd_cleanup`、三層閘門（`_cleanup_check_level1`～`3`、`_is_branch_pushed`、`_is_branch_merged_to_base`）、鎖處理、逾時移除與半刪收尾 |
+| 入口分派 | `worktree_manager.main()` 的 cleanup 分支呼叫 `cleanup_command.cmd_cleanup` |
+| 共用函式 | worktree 查找與 git 包裝（`_validate_and_find_worktree`、`_check_working_tree_clean`、`run_git_command` 等）留在 `worktree_manager`，`cleanup_command` 匯入使用 |
+| 舊名稱取用 | `worktree_manager` 以模組層 `__getattr__` 延遲轉出 cleanup 的函式（清單 `_CLEANUP_REEXPORTS`），`from worktree_manager import <名稱>` 仍可用；不以頂層匯入轉出，避免與 `cleanup_command` 互相匯入 |
+| 測試替換 | 要替換 cleanup 的函式，或 cleanup 函式查找的共用名稱，patch `cleanup_command`；patch `worktree_manager` 上的轉出名稱不影響 cleanup 行為。共用名稱同時被留在 `worktree_manager` 的函式查找時（例如 `get_worktree_list` 也被 `_validate_and_find_worktree` 使用），兩個模組都要 patch |
+| 測試注入點 | `WORKTREE_REMOVE_TIMEOUT_SECONDS` 只在 `cleanup_command`，不轉出 |
