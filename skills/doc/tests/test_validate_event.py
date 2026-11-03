@@ -297,3 +297,34 @@ class TestValidateEventConsumersByCategory:
         )
         assert code == 1
         assert "producer" in out.lower()
+
+    def test_unknown_category_empty_consumers_still_reports_consumer(self, tmp_path, capsys):
+        """未知 category 且 consumers 為空：category 錯誤之外，訊息仍含缺 consumer。"""
+        extra = "producers: [CheckoutService]\nconsumers: []"
+        code, out = self._run(tmp_path, capsys, "EVT-LIBRARY-025", "bogus_event", extra)
+        assert code == 1
+        assert "consumer" in out
+
+
+class TestValidateEventCategoryDomain:
+    """category 值域單一來源：與 tracking_schema.EVT_CATEGORIES 相等。"""
+
+    def test_valid_categories_follow_schema(self, monkeypatch):
+        """值域跟著 tracking_schema 走：schema 多一個值，validate 值域隨之多一個。
+
+        集合相等比對擋不住「自持同值 tuple」，故改注入新值再 reload 觀察。
+        """
+        import importlib
+
+        from doc_system.commands import validate
+        from doc_system.core import tracking_schema
+
+        extra = "probe_category_for_test"
+        patched = frozenset(tracking_schema.EVT_CATEGORIES) | {extra}
+        monkeypatch.setattr(tracking_schema, "EVT_CATEGORIES", patched)
+        try:
+            importlib.reload(validate)
+            assert extra in validate.EVENT_VALID_CATEGORIES
+        finally:
+            monkeypatch.undo()
+            importlib.reload(validate)

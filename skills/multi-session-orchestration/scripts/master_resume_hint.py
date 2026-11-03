@@ -28,6 +28,9 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import coordination_ticket as ct  # noqa: E402
+
 # 主控線的 session 名稱（用戶裁定：名稱為「主控」的 session 就是主控線）
 MASTER_NAME = "主控"
 # 要提示的 SessionStart 來源：clear 清空對話、compact 只剩摘要；startup／resume 不提示
@@ -38,7 +41,6 @@ MAX_ANCESTOR_DEPTH = 6
 CLAUDE_COMM_MARK = "claude"
 # ps -o lstart 須以 UTC、C locale 輸出，才能與 session 檔的 procStart 逐字比對（line-board sessions.ts 同一判準）
 PS_ENV = {"TZ": "UTC", "LC_ALL": "C", "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
-PROJECT_CONFIG = Path(".claude/project-integration/multi-session.json")
 CONTINUITY_DOC = ".claude/skills/multi-session-orchestration/references/line-continuity.md"
 LOG_DIR_PARTS = (".claude", "hook-logs", "master-resume-hint")
 
@@ -135,20 +137,28 @@ def session_name(session_id: str) -> str | None:
     return by_id if by_id is not None else name_by_ancestor()
 
 
-def coordination_ticket(project_dir: Path) -> str | None:
-    """專案設定的協調票；設定不存在或不成立時回傳 None。"""
-    data = read_json_file(project_dir / PROJECT_CONFIG)
-    ticket = data.get("coordinationTicket") if data is not None else None
-    return ticket if isinstance(ticket, str) and ticket else None
+def coordination_ticket(project_dir: Path) -> dict:
+    """協調票解析結果（coordination_ticket.resolve_coordination_ticket 的回傳 dict）。"""
+    return ct.resolve_coordination_ticket(project_dir)
 
 
-def hint_text(source: str, ticket: str | None) -> str:
+def ticket_step(resolved: dict) -> str:
+    """提示第 2 步：依 ok／none／multiple（及 error）給不同文字。"""
+    kind = resolved["kind"]
+    if kind == "ok":
+        ticket = resolved["ticket"]
+        return f"2. 讀協調票 {ticket} 的 ## Solution 最後幾段（ticket track full {ticket}），找出前一個主控最後處理的事項與待辦"
+    if kind == "multiple":
+        listed = "、".join(c["ticket"] for c in resolved["candidates"])
+        return f"2. 找到多張協調票（{listed}），無法自動判定：列出候選請用戶裁定哪一張，再繼續"
+    if kind == "none":
+        return "2. 找不到進行中的協調票（active 版本無 coordination: true 且 in_progress 的票）：先請用戶確認協調票，再繼續"
+    return f"2. 協調票解析失敗（{resolved['reason']}）：先請用戶確認協調票，再繼續"
+
+
+def hint_text(source: str, resolved: dict) -> str:
     """提示模型的文字：要求先呼叫 line_status 完成自我接續，再處理訊息。"""
-    ticket_line = (
-        f"2. 讀協調票 {ticket} 的 ## Solution 最後幾段（ticket track full {ticket}），找出前一個主控最後處理的事項與待辦"
-        if ticket is not None
-        else f"2. 專案設定 {PROJECT_CONFIG} 讀不到協調票：先請用戶確認協調票，再繼續"
-    )
+    ticket_line = ticket_step(resolved)
     return "\n".join(
         [
             f"[主控接續提示] 本 session 名為「{MASTER_NAME}」，剛經過 /{source}。處理任何訊息之前，先完成自我接續：",

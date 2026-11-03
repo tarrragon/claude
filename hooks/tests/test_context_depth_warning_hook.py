@@ -240,7 +240,11 @@ def test_above_threshold_emits_additional_context(hook_mod, tmp_path):
     )
     assert rc == 0
     ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
-    assert "410K" in ctx and "/compact" in ctx and "claude -n" in ctx
+    assert "410K" in ctx and "/compact" in ctx
+    # 正向對照：依主軸分流，主軸不變用 /clear；claude -n 僅限主軸改變
+    assert "/clear" in ctx and "主軸" in ctx and "T_compact" in ctx
+    assert "主軸改變，才請用戶" in ctx
+    assert "再請用戶以 `claude -n" not in ctx
     assert hook_mod.load_state(state_file).get("sess-x") is not None
 
 

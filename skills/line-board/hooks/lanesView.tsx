@@ -18,6 +18,8 @@ import type {
 } from '../types'
 import { dispatchNotice, dispatchRowsOf } from './dispatchView'
 import {
+  COORDINATION_HOWTO,
+  COORDINATION_NONE,
   GROUP_INDENT,
   OTHER_LANE_LABEL,
   UNKNOWN_STATUS,
@@ -151,30 +153,26 @@ function lanesNotice(Text: ElementConstructor<TextProps>, lanes: LanesResult) {
   return lanes.lanes.length === 0 ? [<Text color="yellow">協調票尚無現行佇列行</Text>] : []
 }
 
-/** 專案設定檔的格式說明，設定不成立時顯示在提示中。 */
-export const PROJECT_CONFIG_FORMAT = '{ "coordinationTicket": "<協調票的完整票號>" }'
-
-/** 設定不成立的原因文字，各原因可區分。 */
+/** 協調票不成立的原因文字，0 張、多張、解析失敗可區分。 */
 function unsetReason(config: UnsetProjectConfig): string {
   switch (config.kind) {
-    case 'missing':
-      return `設定檔讀不到（${config.message}）`
-    case 'invalid-json':
-      return `設定檔不是有效的 JSON（${config.message}）`
-    case 'missing-field':
-      return '設定檔缺少 coordinationTicket 欄位'
-    case 'invalid-format':
-      return `coordinationTicket 不是完整票號（${JSON.stringify(config.value)}）`
+    case 'none':
+      return COORDINATION_NONE
+    case 'multiple':
+      return '有多張標記 coordination: true 的進行中票，不自行擇一，請用戶裁定'
+    case 'error':
+      return `協調票解析失敗（${config.message}）`
   }
 }
 
-/** 專案設定不成立時 Pane 的全部內容：原因、設定檔的絕對路徑與格式，不畫任何群組。 */
+/** 協調票不成立時 Pane 的全部內容：原因，加上 0 張的補法或多張的候選清單，不畫任何群組。 */
 export function renderConfigNotice({ Box, Text }: Elements, board: Extract<BoardSnapshot, { kind: 'unconfigured' }>) {
+  const { config } = board
   return (
     <Box flexDirection="column">
-      <Text color="yellow">尚未設定協調票：{unsetReason(board.config)}</Text>
-      <Text>設定檔：{board.configPath}</Text>
-      <Text>格式：{PROJECT_CONFIG_FORMAT}</Text>
+      <Text color="yellow">尚未設定協調票：{unsetReason(config)}</Text>
+      {config.kind === 'none' && <Text>{COORDINATION_HOWTO}</Text>}
+      {config.kind === 'multiple' && config.candidates.map(ticket => <Text key={ticket}>候選：{ticket}</Text>)}
     </Box>
   )
 }

@@ -40,23 +40,57 @@ export function ticketPrefixOf(coordinatorId: string): string | null {
   return match === null ? null : `${match[1]}-${match[2]}`
 }
 
+/** 0 張時的說明（看板 /board 與 line_status 共用）：與 coordination_ticket.py 的 none 結果對應。 */
+export const COORDINATION_NONE = 'active 版本沒有標記 `coordination: true` 的進行中票'
+
+/** 0 張時的補法。 */
+export const COORDINATION_HOWTO = '補法：以 `ticket create --coordination` 建立協調票，或對既有進行中票執行 `ticket track set-coordination <票號>`'
+
 /**
- * 專案設定檔內容的判定：須為 JSON 物件，coordinationTicket 為可推導出短票號前綴的完整票號（ticketPrefixOf）。
- * 只判定已讀到的文字；讀不到檔案（missing）由 readers.ts readProjectConfig 判定。
+ * 協調票解析 CLI（--json）stdout 的判定：kind 為 ok 且 ticket 可推導出短票號前綴（ticketPrefixOf）時成立；
+ * none、multiple 照 CLI 結果；JSON 無效、欄位不符、CLI 回報 error 皆為 error 並帶原因。
+ * 只判定已取得的文字；CLI 無法執行與非零結束碼由 readers.ts readProjectConfig 判定。
  */
 export function parseProjectConfig(text: string): ProjectConfigResult {
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch (error) {
-    return { kind: 'invalid-json', message: messageOf(error) }
+    return { kind: 'error', message: `輸出不是有效的 JSON（${messageOf(error)}）` }
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) || !('coordinationTicket' in parsed)) {
-    return { kind: 'missing-field' }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { kind: 'error', message: '輸出不是 JSON 物件' }
+  const record = parsed as Record<string, unknown>
+  switch (record.kind) {
+    case 'ok': {
+      const ticket = record.ticket
+      if (typeof ticket !== 'string' || ticketPrefixOf(ticket) === null) {
+        return { kind: 'error', message: `ticket 不是完整票號（${JSON.stringify(ticket)}）` }
+      }
+      return { kind: 'ok', coordinationTicket: ticket, warnings: stringList(record.warnings) }
+    }
+    case 'none':
+      return { kind: 'none' }
+    case 'multiple':
+      return { kind: 'multiple', candidates: candidateTickets(record.candidates) }
+    case 'error':
+      return { kind: 'error', message: typeof record.reason === 'string' ? record.reason : '未附原因' }
+    default:
+      return { kind: 'error', message: `未知的 kind（${JSON.stringify(record.kind)}）` }
   }
-  const value: unknown = parsed.coordinationTicket
-  if (typeof value !== 'string' || ticketPrefixOf(value) === null) return { kind: 'invalid-format', value }
-  return { kind: 'ok', coordinationTicket: value }
+}
+
+/** 字串陣列欄位：非陣列為空，陣列內非字串的元素略去。 */
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+/** multiple 的候選：CLI 每項為 `{ ticket, path }`，取票號；不符形狀的項略去。 */
+function candidateTickets(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(item => {
+    const ticket = typeof item === 'object' && item !== null ? (item as Record<string, unknown>).ticket : undefined
+    return typeof ticket === 'string' ? [ticket] : []
+  })
 }
 
 /** 票檔讀不到或沒有 status 欄時顯示的狀態。 */
@@ -124,6 +158,12 @@ export function formatAge(nowMs: number, thenMs: number | null): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} 小時前`
   return `${Math.floor(hours / 24)} 天前`
+}
+
+/** 本機時間 `YYYY-MM-DD HH:MM:SS`。register.tsx 的刷新時間與 line_status、resumeFlow.ts 的通知與紀錄時間都用它。 */
+export function formatTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 /** 例外的訊息文字：Error 取 message，其他值轉字串。readers.ts 的讀取失敗日誌與 register.tsx 的刷新、切換失敗日誌都用它。 */

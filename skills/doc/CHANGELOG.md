@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.25.0（2026-11-03）— `GRAPH_EDGE_TYPES` 新增 `uc_ticket_refs`：UC 的 `ticket_refs` 欄位，指向 Ticket，class 為 `see-also`，layer 為 `established`。`tracking_schema.json` 匯出同步，`test_schema_export.py` 補新邊的匯出斷言，一致性測試的邊計數隨之調整。
+
 **Version**: 1.24.12 — 三份 SPEC 模板（`spec-template.md`、`component-library-spec-template.md`、`design-system-spec-template.md`）frontmatter 新增 `has_functional_requirements: true` 與行內註解，說明預設 true、只認小寫 true/false、false 時 FR 覆蓋檢查略過且輸出為未執行比對、宣告 false 但內容有以 FR 開頭的標題行報錯（行為以 `.claude/skills/spec/scripts/check_domain_coverage.py` 為準）。兩份專用模板預設同為 true。僅改模板，無程式碼變更。
 
 **Version**: 1.24.11 — `doc validate` 對 EVT 的 consumers 非空檢查依 category 分流（依 `tracking_schema.EVT_CATEGORIES` 定義）：`domain_event` 仍必須非空，`process_event` 允許為空或缺鍵；producers 對所有 category 仍必填。`validate.py` 的 category 值域改引用 `EVT_CATEGORIES`，不再自持。同步 SKILL.md、event-template.md、validate docstring、測試檔頭敘述。測試：E1 對照（同一 fixture 只換 category，結果相反）、producers 空仍紅。`doc schema export` 輸出與型別表 JSON 不變。

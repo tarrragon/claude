@@ -31,7 +31,8 @@ from doc_system.core.tracking_schema import (
 COMPLETENESS_SEMANTICS = (
     "completeness_fields 內每個型別的欄位清單代表：欄位必須存在於文件，"
     "值可為 null 或空清單 []，代表明確沒有。這不是「值不能為空」——"
-    "更嚴格的值規則（例如 EVT 的 producers/consumers 不得為空）屬各型別"
+    "更嚴格的值規則（例如 category 為 domain_event 的 EVT，其 producers/"
+    "consumers 不得為空；process_event 允許 consumers 為空）屬各型別"
     "獨立的 validator 附加規則，不在此表示。"
 )
 

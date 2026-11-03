@@ -222,6 +222,7 @@ EXPECTED_FORWARD_CARDINALITY = {
     "branching": "one",
     "returning": "one",
     "bundle_dependency": "many",
+    "uc_ticket_refs": "many",
 }
 
 
@@ -299,6 +300,34 @@ class TestEdgeDirection:
         broken = dict(GRAPH_EDGE_TYPES)
         broken["mutant_bad"] = {**GRAPH_EDGE_TYPES["blood"], "direction": "both"}
         assert "mutant_bad" in find_edge_types_with_invalid_direction(broken)
+
+
+def _edge_targets_from_frontmatter(edge_name, frontmatter):
+    """依 schema 宣告的 forward_field 從 frontmatter 取邊終點（many 的純量視為單項清單）。"""
+    value = frontmatter.get(GRAPH_EDGE_TYPES[edge_name]["forward_field"])
+    if value is None:
+        return []
+    return [value] if isinstance(value, str) else list(value)
+
+
+class TestUcTicketRefsEdge:
+    """UC -> Ticket 邊（0.6.0-W1-102）：established，forward_field 為 ticket_refs。"""
+
+    def test_edge_contract(self):
+        edge = GRAPH_EDGE_TYPES["uc_ticket_refs"]
+        assert edge["forward_field"] == "ticket_refs"
+        assert edge["layer"] == "established"
+        assert edge["class"] == "see-also"
+        assert edge["reverse_field"] is None
+
+    def test_with_and_without_ticket_refs_differ(self):
+        uc = {"id": "UC-01"}
+        without = _edge_targets_from_frontmatter("uc_ticket_refs", uc)
+        with_refs = _edge_targets_from_frontmatter(
+            "uc_ticket_refs", {**uc, "ticket_refs": ["0.6.0-W1-001"]}
+        )
+        assert without == []
+        assert with_refs == ["0.6.0-W1-001"]
 
 
 class TestCompatVersionDecoupledFromFrameworkVersion:

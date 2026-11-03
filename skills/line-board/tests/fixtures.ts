@@ -88,6 +88,99 @@ export const QUEUE_LINE_CASES: {
   expect: { lane: number; session: string | null; tickets: { serial: string; id: string; note: string }[] }[]
 }[] = JSON.parse(QUEUE_LINE_CASES_RAW).cases
 
+/**
+ * user-todo-cases.json 全文的逐字副本（理由同上；改案例時兩處同改）。
+ * Python 的 coordination_ticket.parse_user_todos 讀 JSON 本體，漂移守衛比對本副本。
+ */
+// BEGIN user-todo-cases.json
+const USER_TODO_CASES_RAW = String.raw`{
+  "_doc": "用戶待辦（U1）配對的唯一案例來源：userTodos.test.ts（經 fixtures.ts 的逐字副本）與 Python coordination_ticket.parse_user_todos 共用。text 為協調票全文，expect 為未配對的 {key, item}，依各鍵最後一次寫入待辦行的順序。category: positive_control = 容易被誤判的寫法，normal = 一般寫法。",
+  "cases": [
+    {
+      "name": "正常寫法：帶鍵與不帶鍵的待辦行各一",
+      "category": "normal",
+      "text": "## Solution\n**用戶待辦**（560）：裁定 SPEC 內文\n**用戶待辦**：開 L44 session\n",
+      "expect": [
+        { "key": "560", "item": "裁定 SPEC 內文" },
+        { "key": null, "item": "開 L44 session" }
+      ]
+    },
+    {
+      "name": "正向對照：完成行以鍵配對，移除該項",
+      "category": "positive_control",
+      "text": "## Solution\n**用戶待辦**（560）：裁定\n**用戶待辦**（sync-push）：授權\n**用戶待辦完成**（560）：已裁定\n",
+      "expect": [{ "key": "sync-push", "item": "授權" }]
+    },
+    {
+      "name": "完成後再寫待辦行，重新列出且排在後面",
+      "category": "normal",
+      "text": "## Solution\n**用戶待辦**（a）：一\n**用戶待辦**（b）：二\n**用戶待辦完成**（a）：好\n**用戶待辦**（a）：再一\n",
+      "expect": [
+        { "key": "b", "item": "二" },
+        { "key": "a", "item": "再一" }
+      ]
+    },
+    {
+      "name": "不帶鍵的完成行須事項全文逐字相同",
+      "category": "positive_control",
+      "text": "## Solution\n**用戶待辦**：開 session\n**用戶待辦完成**：開 session 了\n",
+      "expect": [{ "key": null, "item": "開 session" }]
+    },
+    {
+      "name": "不帶鍵的完成行全文相同時配對",
+      "category": "normal",
+      "text": "## Solution\n**用戶待辦**：開 session\n**用戶待辦完成**：開 session\n",
+      "expect": []
+    },
+    {
+      "name": "帶鍵與不帶鍵分開配對：不帶鍵完成行內容等於某鍵，不解除該帶鍵項",
+      "category": "positive_control",
+      "text": "## Solution\n**用戶待辦**（560）：裁定\n**用戶待辦完成**：560\n",
+      "expect": [{ "key": "560", "item": "裁定" }]
+    },
+    {
+      "name": "完成行配不到待辦時不影響其他項",
+      "category": "normal",
+      "text": "## Solution\n**用戶待辦**（a）：一\n**用戶待辦完成**（zzz）：無此項\n",
+      "expect": [{ "key": "a", "item": "一" }]
+    },
+    {
+      "name": "空括號與空內容的行略過",
+      "category": "positive_control",
+      "text": "## Solution\n**用戶待辦**（）：空鍵\n**用戶待辦**：\n**用戶待辦**（a）：正常\n",
+      "expect": [{ "key": "a", "item": "正常" }]
+    },
+    {
+      "name": "鍵含全形右括號的行不符格式",
+      "category": "positive_control",
+      "text": "## Solution\n**用戶待辦**（a）b）：壞鍵\n",
+      "expect": []
+    },
+    {
+      "name": "縮排行與清單項不算（fenced code block 案例因 String.raw 副本不能含反引號，另在 Python 測試覆蓋）",
+      "category": "positive_control",
+      "text": "## Solution\n  **用戶待辦**（a）：縮排\n- **用戶待辦**（b）：清單項\n**用戶待辦**（d）：真的\n",
+      "expect": [{ "key": "d", "item": "真的" }]
+    },
+    {
+      "name": "Solution 段以外的行不算",
+      "category": "positive_control",
+      "text": "## Problem Analysis\n**用戶待辦**（pa）：段外\n## Solution\n**用戶待辦**（s）：段內\n## Test Results\n**用戶待辦**：段外二\n",
+      "expect": [{ "key": "s", "item": "段內" }]
+    }
+  ]
+}
+`
+// END user-todo-cases.json
+
+/** 用戶待辦共用案例（解析自上方逐字副本）。 */
+export const USER_TODO_CASES: {
+  name: string
+  category: 'normal' | 'positive_control'
+  text: string
+  expect: { key: string | null; item: string }[]
+}[] = JSON.parse(USER_TODO_CASES_RAW).cases
+
 /** 〈看板讀取約定〉的格式說明行：行首不是 `**L`，行內以反引號引用範本，不得被當成一條線。 */
 export const TEMPLATE_NOTE =
   '337 看板掃本票整個 Solution，每個 `L<n>` 只取最後一次出現的現行佇列行。格式：`**L<n> 現行佇列**（<ListAgents 顯示的 session 名稱>）：<短票號，以 → 與 ∥ 分隔>`，獨立成段、行首即 `**L`。'

@@ -45,7 +45,7 @@
       "title"
     ]
   },
-  "completeness_semantics": "completeness_fields 內每個型別的欄位清單代表：欄位必須存在於文件，值可為 null 或空清單 []，代表明確沒有。這不是「值不能為空」——更嚴格的值規則（例如 EVT 的 producers/consumers 不得為空）屬各型別獨立的 validator 附加規則，不在此表示。",
+  "completeness_semantics": "completeness_fields 內每個型別的欄位清單代表：欄位必須存在於文件，值可為 null 或空清單 []，代表明確沒有。這不是「值不能為空」——更嚴格的值規則（例如 category 為 domain_event 的 EVT，其 producers/consumers 不得為空；process_event 允許 consumers 為空）屬各型別獨立的 validator 附加規則，不在此表示。",
   "edge_types": {
     "association": {
       "class": "see-also",
@@ -199,6 +199,15 @@
       "layer": "established",
       "maintainer": "手動",
       "reverse_field": null
+    },
+    "uc_ticket_refs": {
+      "class": "see-also",
+      "direction": "directed",
+      "forward_cardinality": "many",
+      "forward_field": "ticket_refs",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
     }
   },
   "id_pattern_dialect": "python-re",
@@ -303,5 +312,5 @@
   "non_domain_paths_file": "docs/non-domain-paths.yaml",
   "non_domain_paths_key": "non_domain_path_patterns",
   "notice": "本檔為 tracking_schema.py 的衍生產物，唯一 SSOT 為該 .py 檔。禁止直接編輯本 JSON，修改型別表請改 tracking_schema.py 後重新執行`doc schema export` 產生。",
-  "schema_generated_at_framework_version": "2.77.1"
+  "schema_generated_at_framework_version": "2.84.0"
 }

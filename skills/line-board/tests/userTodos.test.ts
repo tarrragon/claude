@@ -4,12 +4,21 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { parseUserTodos, userTodoRows } from '../hooks/userTodos'
 import type { WaitingItem } from '../types'
+import { USER_TODO_CASES } from './fixtures'
 
 const PREFIX = '0.5.0-W1-'
 
 /** 協調票：Solution 段以 lines 為內容，前後各有一段非 Solution 的二級標題。 */
 const coordination = (lines: readonly string[]): string =>
   ['## Problem Analysis', '**用戶待辦**（pa）：Solution 段以外的待辦', '', '## Solution', ...lines, '', '## Test Results', '**用戶待辦**：Test Results 段的待辦'].join('\n')
+
+describe('parseUserTodos 共用案例（user-todo-cases.json 的 TS 副本 USER_TODO_CASES，Python 配對函式讀同一份）', () => {
+  for (const c of USER_TODO_CASES) {
+    test(c.name, () => {
+      expect(parseUserTodos(c.text)).toEqual(c.expect)
+    })
+  }
+})
 
 describe('parseUserTodos', () => {
   test('正向對照：帶鍵與不帶鍵的待辦行各一，都列出；不帶鍵的行鍵為 null', () => {

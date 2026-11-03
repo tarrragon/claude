@@ -72,26 +72,39 @@ describe('ticketPrefixOf', () => {
 })
 
 describe('parseProjectConfig', () => {
-  test('coordinationTicket 為完整票號時成立，取其值', () => {
-    expect(parseProjectConfig('{ "coordinationTicket": "0.6.0-W2-010" }')).toEqual({
+  test('CLI 回 ok 且 ticket 為完整票號時成立，取票號與警告', () => {
+    expect(parseProjectConfig('{ "kind": "ok", "ticket": "0.6.0-W2-010", "warnings": ["w1"] }')).toEqual({
       kind: 'ok',
       coordinationTicket: '0.6.0-W2-010',
+      warnings: ['w1'],
+    })
+    expect(parseProjectConfig('{ "kind": "ok", "ticket": "0.6.0-W2-010" }')).toEqual({
+      kind: 'ok',
+      coordinationTicket: '0.6.0-W2-010',
+      warnings: [],
     })
   })
 
-  test('JSON 無效時為 invalid-json', () => {
-    expect(parseProjectConfig('{ "coordinationTicket": ').kind).toBe('invalid-json')
+  test('CLI 回 none 為 none', () => {
+    expect(parseProjectConfig('{ "kind": "none", "ticket": null }')).toEqual({ kind: 'none' })
   })
 
-  test('不是 JSON 物件或缺 coordinationTicket 時為 missing-field', () => {
-    expect(parseProjectConfig('{ "otherField": "0.6.0-W2-010" }')).toEqual({ kind: 'missing-field' })
-    expect(parseProjectConfig('["0.6.0-W2-010"]')).toEqual({ kind: 'missing-field' })
-    expect(parseProjectConfig('null')).toEqual({ kind: 'missing-field' })
+  test('CLI 回 multiple 時取候選票號，不符形狀的項略去', () => {
+    const text = '{ "kind": "multiple", "candidates": [{ "ticket": "0.6.0-W1-001", "path": "p" }, "x", { "path": "q" }] }'
+    expect(parseProjectConfig(text)).toEqual({ kind: 'multiple', candidates: ['0.6.0-W1-001'] })
   })
 
-  test('coordinationTicket 不是完整票號時為 invalid-format，帶原值', () => {
-    expect(parseProjectConfig('{ "coordinationTicket": "010" }')).toEqual({ kind: 'invalid-format', value: '010' })
-    expect(parseProjectConfig('{ "coordinationTicket": 10 }')).toEqual({ kind: 'invalid-format', value: 10 })
+  test('CLI 回 error 時帶 reason，缺 reason 寫未附原因', () => {
+    expect(parseProjectConfig('{ "kind": "error", "reason": "todolist 不可用" }')).toEqual({ kind: 'error', message: 'todolist 不可用' })
+    expect(parseProjectConfig('{ "kind": "error" }')).toEqual({ kind: 'error', message: '未附原因' })
+  })
+
+  test('JSON 無效、不是物件、kind 未知或 ok 的 ticket 不是完整票號時為 error', () => {
+    expect(parseProjectConfig('not json').kind).toBe('error')
+    expect(parseProjectConfig('["x"]')).toEqual({ kind: 'error', message: '輸出不是 JSON 物件' })
+    expect(parseProjectConfig('{ "kind": "weird" }').kind).toBe('error')
+    expect(parseProjectConfig('{ "kind": "ok", "ticket": "010" }').kind).toBe('error')
+    expect(parseProjectConfig('{ "kind": "ok" }').kind).toBe('error')
   })
 })
 

@@ -128,14 +128,14 @@ def test_normal_forms_do_not_prompt():
 
 # ---------------------------------------------------------------- 4 main() 端到端
 def _setup_project(tmp_path, monkeypatch, body, with_config=True):
+    """with_config 沿用舊參數名：True 時票 frontmatter 帶 `coordination: true`。"""
     root = tmp_path / "proj"
     tdir = root / "docs/work-logs/v0/v0.5/v0.5.0/tickets"
     tdir.mkdir(parents=True)
-    (tdir / (COORD + ".md")).write_text("---\nstatus: in_progress\n---\n## Solution\n" + body, encoding="utf-8")
-    if with_config:
-        cfg = root / ".claude/project-integration"
-        cfg.mkdir(parents=True)
-        (cfg / "multi-session.json").write_text(json.dumps({"coordinationTicket": COORD}), encoding="utf-8")
+    flag = "coordination: true\n" if with_config else ""
+    (tdir / (COORD + ".md")).write_text(
+        "---\nstatus: in_progress\n" + flag + "---\n## Solution\n" + body, encoding="utf-8"
+    )
     home = tmp_path / "home"
     (home / ".claude/sessions").mkdir(parents=True)
     (home / ".claude/sessions/1.json").write_text(
@@ -192,6 +192,68 @@ def test_main_unrelated_command_is_silent(tmp_path, monkeypatch, capsys):
     assert _run(monkeypatch, other, capsys) == ""
 
 
-def test_main_silent_without_multi_session_config(tmp_path, monkeypatch, capsys):
+def test_main_e2_flagged_emits_unflagged_silent(tmp_path, monkeypatch, capsys):
+    """E2：同樣的錯誤佇列行，帶 coordination 標記的票有輸出，不帶標記的票無輸出（兩路徑皆驗）。"""
+    body = "**L5 現行佇列**（bad）：100\n"
+    for i, payload in enumerate((BASH, EDIT)):
+        _setup_project(tmp_path / f"flagged{i}", monkeypatch, body, with_config=True)
+        assert "[協調票佇列行檢查]" in _run(monkeypatch, payload, capsys)
+        _setup_project(tmp_path / f"plain{i}", monkeypatch, body, with_config=False)
+        assert _run(monkeypatch, payload, capsys) == ""
+
+
+def test_main_zero_flagged_tickets_silent(tmp_path, monkeypatch, capsys):
+    """0 張：專案內沒有任何帶標記的票。"""
     _setup_project(tmp_path, monkeypatch, "**L5 現行佇列**（bad）：100\n", with_config=False)
+    assert _run(monkeypatch, EDIT, capsys) == ""
+
+
+def test_main_multiple_flagged_tickets_each_checked(tmp_path, monkeypatch, capsys):
+    """多張：兩張都帶標記時，寫入哪一張就檢查哪一張，不互相干擾。"""
+    root = _setup_project(tmp_path, monkeypatch, "**L5 現行佇列**（bad）：100\n")
+    other = "0.5.0-W1-350"
+    tdir = root / "docs/work-logs/v0/v0.5/v0.5.0/tickets"
+    (tdir / (other + ".md")).write_text(
+        "---\nstatus: in_progress\ncoordination: true\n---\n## Solution\n**L5 現行佇列**（s-a）：100\n",
+        encoding="utf-8",
+    )
+    edit_other = {"tool_name": "Edit", "tool_input": {"file_path": "/x/%s.md" % other}}
+    assert _run(monkeypatch, edit_other, capsys) == ""
+    assert "[協調票佇列行檢查] " + COORD in _run(monkeypatch, EDIT, capsys)
+
+
+# ---------------------------------------------------------------- 5 檢查 4：未配對用戶待辦（U1）
+def test_main_unpaired_u1_emits_key_item_and_done_format(tmp_path, monkeypatch, capsys):
+    """E2 正向對照：帶未配對 U1 的協調票，兩條寫入路徑都輸出該鍵、事項與完成行格式。"""
+    for i, payload in enumerate((BASH, EDIT)):
+        _setup_project(tmp_path / f"u{i}", monkeypatch, "**用戶待辦**（560）：裁定 SPEC 內文\n")
+        ctx = json.loads(_run(monkeypatch, payload, capsys))["hookSpecificOutput"]["additionalContext"]
+        assert "560" in ctx and "裁定 SPEC 內文" in ctx
+        assert "**用戶待辦完成**（560）：<結果>" in ctx
+
+
+def test_main_unpaired_u1_keyless_shows_full_text_done_line(tmp_path, monkeypatch, capsys):
+    _setup_project(tmp_path, monkeypatch, "**用戶待辦**：開 L44 session\n")
+    ctx = json.loads(_run(monkeypatch, BASH, capsys))["hookSpecificOutput"]["additionalContext"]
+    assert "**用戶待辦完成**：開 L44 session" in ctx
+
+
+def test_main_paired_u1_is_silent(tmp_path, monkeypatch, capsys):
+    """未配對數為 0 時不輸出（對照上一個測試：加上完成行即無輸出）。"""
+    body = "**用戶待辦**（560）：裁定\n**用戶待辦完成**（560）：已裁定\n"
+    _setup_project(tmp_path, monkeypatch, body)
     assert _run(monkeypatch, BASH, capsys) == ""
+
+
+def test_find_unpaired_todos_counts_only_unpaired():
+    text = "## Solution\n**用戶待辦**（a）：一\n**用戶待辦**（b）：二\n**用戶待辦完成**（a）：好\n"
+    msgs = hook.find_unpaired_todos(text)
+    assert len(msgs) == 1 and "1 項" in msgs[0] and "b：二" in msgs[0] and "a：一" not in msgs[0]
+    assert hook.find_unpaired_todos("## Solution\n") == []
+
+
+def test_has_coordination_flag_parsing():
+    assert hook.has_coordination_flag("---\ncoordination: true\n---\n")
+    assert not hook.has_coordination_flag("---\ncoordination: false\n---\n")
+    assert not hook.has_coordination_flag("---\nstatus: x\n---\ncoordination: true\n")
+    assert not hook.has_coordination_flag("no frontmatter")

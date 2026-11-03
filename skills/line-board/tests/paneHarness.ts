@@ -6,7 +6,7 @@ import { mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { sessionJson } from './fixtures'
-import { PROJECT_CONFIG_PATH } from '../hooks/readers'
+import { COORDINATION_CLI_PATH } from '../hooks/readers'
 import { SESSIONS_DIR } from '../hooks/sessions'
 
 /** 家目錄與 session 狀態檔目錄（測試用的固定值）。 */
@@ -15,17 +15,31 @@ export const SESSIONS = `${HOME}/${SESSIONS_DIR}`
 /** 讀取當下的時間：2026-10-19 08:00:00 UTC（epoch 毫秒）。 */
 export const NOW_MS = Date.UTC(2026, 9, 19, 8, 0, 0)
 
-/** 預設專案設定的協調票：fixtures 的佇列票檔與 lanes.ts 的票檔路徑皆以它為準。 */
+/** 預設的協調票：fixtures 的佇列票檔與 lanes.ts 的票檔路徑皆以它為準。 */
 export const COORDINATION_TICKET = '0.5.0-W1-349'
-/** 主 checkout `/repo` 內的專案設定檔。 */
-export const PROJECT_CONFIG = `/repo/${PROJECT_CONFIG_PATH}`
-/** 專案設定檔內容：fields 原樣寫成 JSON。 */
-export const configJson = (fields: Record<string, unknown>): string => JSON.stringify(fields)
+
+/** 協調票解析 CLI --json 的輸出（欄位與 coordination_ticket.py 的 _result 一致）。 */
+const cliResult = (kind: string, fields: Record<string, unknown>): string =>
+  JSON.stringify({ kind, ticket: null, path: null, source: null, warnings: [], candidates: [], reason: null, ...fields })
+/** CLI 解析出一張協調票。 */
+export const cliOk = (ticket: string, warnings: string[] = []): string => cliResult('ok', { ticket, source: 'auto', warnings })
+/** CLI 找不到協調票（0 張）。 */
+export const cliNone = (): string => cliResult('none', {})
+/** CLI 找到多張協調票。 */
+export const cliMultiple = (tickets: string[]): string =>
+  cliResult('multiple', { candidates: tickets.map(ticket => ({ ticket, path: `/x/${ticket}.md` })) })
+/** CLI 自己回報 error（結束碼 1，stdout 仍是 JSON）。 */
+export const cliError = (reason: string): string => cliResult('error', { reason })
+
+/** 解析 CLI 的非常規回應：exit 與輸出照給，或呼叫本身拒絕（python3 不存在等）。 */
+export type CliFailure = { exitCode: number; stdout: string; stderr: string } | { throws: string }
 
 export type Stub = {
   files: Record<string, string>
-  /** 專案設定檔的內容；未給時為以 COORDINATION_TICKET 為協調票的有效設定，null 表示設定檔不存在。 */
+  /** 主 checkout `/repo` 的協調票解析 CLI stdout；未給時為以 COORDINATION_TICKET 為協調票的 ok，null 表示 0 張。session root `/wt` 一律 0 張。 */
   projectConfig?: string | null
+  /** 給定時取代解析 CLI 的回應（CLI 不可用等情形）。 */
+  cliFailure?: CliFailure
   /** `~/.claude/sessions/` 內的檔名；undefined 表示該目錄無法列出。 */
   sessionEntries?: string[]
   /** `ps -p` 回報已結束的 pid。 */
@@ -52,15 +66,24 @@ function stubRepo(on: On, stub: Stub) {
   const registered: string[] = []
   const logs: { text: string; to: string }[] = []
   const callOrder: string[] = []
-  const fileOf = (path: string): string | undefined => {
-    if (path !== PROJECT_CONFIG) return stub.files[path]
-    if (stub.projectConfig === null) return undefined
-    return stub.projectConfig ?? configJson({ coordinationTicket: COORDINATION_TICKET })
+  const cliCwds: string[] = []
+  const coordinationStdout = (cwd: string | undefined): string => {
+    if (cwd !== '/repo' || stub.projectConfig === null) return cliNone()
+    return stub.projectConfig ?? cliOk(COORDINATION_TICKET)
   }
   mock.env(on, { HOME })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.root', () => (stub.rootError === undefined ? { value: stub.sessionRoot ?? '/wt' } : { deny: stub.rootError }))
   on('process.run', (_$, e) => {
+    if (e.argv[1] === COORDINATION_CLI_PATH) {
+      cliCwds.push(e.init?.cwd ?? '')
+      if (stub.cliFailure !== undefined) {
+        if ('throws' in stub.cliFailure) return { deny: stub.cliFailure.throws }
+        return { value: { ...stub.cliFailure, isStdoutTruncated: false, isStderrTruncated: false } }
+      }
+      const stdout = coordinationStdout(e.init?.cwd)
+      return { value: { exitCode: stdout.includes('"kind":"error"') ? 1 : 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     const isPs = e.argv[0] === 'ps'
     if (e.argv[0] === 'git') callOrder.push(e.argv.join(' '))
     const pid = Number(e.argv[2])
@@ -82,7 +105,7 @@ function stubRepo(on: On, stub: Stub) {
   })
   on('fs.read', (_$, e) => {
     readPaths.push(e.path)
-    const text = fileOf(e.path)
+    const text = stub.files[e.path]
     return text === undefined ? { deny: `ENOENT: ${e.path}` } : { value: text }
   })
   on('command.register', (_$, e) => {
@@ -98,7 +121,7 @@ function stubRepo(on: On, stub: Stub) {
     logs.push({ text: e.text, to: e.to })
     return { value: undefined }
   })
-  return { readPaths, psCalls, opened, registered, logs, callOrder }
+  return { readPaths, psCalls, opened, registered, logs, callOrder, cliCwds }
 }
 
 const PANE = {
@@ -117,7 +140,7 @@ const PANE = {
 /** bodyColumns：面板內容寬（欄），預設 100；停靠在側邊的窄面板以 60 測。 */
 export async function startBoard($: Engine, on: On, stub: Stub, bodyColumns: number = PANE.props.bodyColumns) {
   const clock = mock.clock(on, { now: NOW_MS })
-  const { readPaths, psCalls, opened, registered, logs, callOrder } = stubRepo(on, stub)
+  const { readPaths, psCalls, opened, registered, logs, callOrder, cliCwds } = stubRepo(on, stub)
   await $.session.start({ cwd: stub.sessionRoot ?? '/wt', surface: 'terminal', isInteractive: true })
   await clock.advance(1)
   const ui = await $.ui.mount({
@@ -126,7 +149,7 @@ export async function startBoard($: Engine, on: On, stub: Stub, bodyColumns: num
     ...PANE,
     props: { ...PANE.props, bodyColumns },
   })
-  return { ui, readPaths, psCalls, opened, registered, logs, callOrder, clock }
+  return { ui, readPaths, psCalls, opened, registered, logs, callOrder, cliCwds, clock }
 }
 
 /** 使用者在終端機輸入 `/board`；回傳指令的輸出文字。 */

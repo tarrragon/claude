@@ -75,19 +75,18 @@ export type ContextUsageRecord = {
 }
 
 /** line_status 工具的判讀結果：各線接續狀態（依線號）、過期項、等用戶（與過期項分列，等用戶不代表過期）。 */
-export type LineStatusReport = { lanes: LaneContinuity[]; stale: StaleItem[]; waiting: WaitingItem[] }
+export type LineStatusReport = { lanes: LaneContinuity[]; stale: StaleItem[]; todos: UserTodo[]; waiting: WaitingItem[] }
 
 /**
- * 主 checkout 專案設定檔（.claude/project-integration/multi-session.json）的讀取結果：ok 為協調票的完整票號；
- * 其餘為設定不成立的原因——missing 讀不到檔案、invalid-json JSON 無效、missing-field 不是物件或缺 coordinationTicket、
- * invalid-format 值不是完整票號（value 為原值）。
+ * 協調票解析 CLI（multi-session-orchestration 的 scripts/coordination_ticket.py --json）的讀取結果：
+ * ok 為協調票的完整票號與解析警告；none 為沒有標記 `coordination: true` 的進行中票；multiple 為多張候選票號；
+ * error 為 CLI 無法執行、輸出不可解析或 CLI 自己回報 error（message 為原因）。
  */
 export type ProjectConfigResult =
-  | { kind: 'ok'; coordinationTicket: string }
-  | { kind: 'missing'; message: string }
-  | { kind: 'invalid-json'; message: string }
-  | { kind: 'missing-field' }
-  | { kind: 'invalid-format'; value: unknown }
+  | { kind: 'ok'; coordinationTicket: string; warnings: string[] }
+  | { kind: 'none' }
+  | { kind: 'multiple'; candidates: string[] }
+  | { kind: 'error'; message: string }
 
 /** 設定不成立的讀取結果。 */
 export type UnsetProjectConfig = Exclude<ProjectConfigResult, { kind: 'ok' }>
@@ -225,7 +224,7 @@ export type SessionsResult =
  */
 export type BoardSnapshot =
   | { kind: 'loading' }
-  | { kind: 'unconfigured'; configPath: string; config: UnsetProjectConfig }
+  | { kind: 'unconfigured'; config: UnsetProjectConfig }
   | {
       kind: 'ready'
       updatedAt: string

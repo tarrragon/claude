@@ -23,6 +23,7 @@
 | `finish` | `complete` 別名（CLI 仍保留；隔離代理人不以它收尾，收尾止於 `ticket track commit`，complete 由 PM 於合併後執行） | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `close` | 關閉 Ticket（已在其他 Ticket 一併解決） | --help |
 | `set-closed-by` | 修正已 closed 票的 `closed_by` 欄位 | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
+| `set-coordination` | 寫入／清除 frontmatter `coordination: true`（協調票旗標；`<id> [--clear]`，冪等；建票時等價旗標為 `create --coordination`） | --help |
 | `restore` | 還原 closed 票為 pending（closed 態唯一合法出邊，需 `--reason`） | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `release` | 釋放 Ticket（退回等待態） | 〈UPDATE 操作〉 |
 | `reclaim` | 回收 STALE session 持有的 in_progress 票（鑑識三查） | 〈track reclaim 子命令〉 |

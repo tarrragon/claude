@@ -1,5 +1,5 @@
 // 用戶待辦：協調票 Solution 的用戶待辦行（U1，主控寫）與完成行配對，以及看板「用戶待辦」群組的各行（U1 + 各線等用戶 U2）。
-// U2 的判定沿用 continuity.ts（與 line_status 的「等用戶」段同一份），本檔只負責組成顯示列。
+// U2 的判定沿用 waiting.ts（與 line_status 的「等用戶」段同一份），本檔只負責組成顯示列。
 // 格式權威：multi-session-orchestration 的 references/line-continuity.md〈用戶待辦〉。
 // 不碰 $（無檔案、無行程），讓 *.test.ts 能直接驗證；讀檔由 readers.ts 負責、繪製由 userTodosView.tsx 負責。
 

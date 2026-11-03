@@ -3,8 +3,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { session } from './fixtures'
-import { continuityTicketIds, formatLineStatus, lastSourceOf, lineStatusReport, parseSourceLog, parseWaitingMark, ticketStatusOf } from '../hooks/continuity'
+import { continuityTicketIds, formatLineStatus, lastSourceOf, lineStatusReport, parseSourceLog } from '../hooks/continuity'
+import { parseWaitingMark, ticketStatusOf } from '../hooks/waiting'
 import { endedForm, parseLaneLines, parseLanes } from '../hooks/lanes'
+import { parseUserTodos } from '../hooks/userTodos'
 import type { ContextUsageRecord, LaneLine, SessionState, SourceLogEntry, TicketStatus } from '../types'
 
 const PREFIX = '0.5.0-W1-'
@@ -294,6 +296,7 @@ describe('formatLineStatus', () => {
           { lane: 36, session: 'y', state: 'ended', evidence: '票序「（無）」' },
         ],
         stale: [{ lane: 35, kind: 'ended-with-note', detail: '說明' }],
+        todos: [{ key: null, item: '開 L44 session' }],
         waiting: [
           { lane: 3, session: '看板工具', ticketId: '0.5.0-W1-580', item: '開 --debug 重啟', source: 'S1' },
           { lane: 3, session: '看板工具', ticketId: null, item: 'approve Bash', source: 'S2' },
@@ -308,6 +311,8 @@ describe('formatLineStatus', () => {
       '已收線：L35、L36',
       '過期項（1）：',
       '- L35 收線寫法：說明',
+      '用戶待辦（1）：',
+      '- 開 L44 session｜主控',
       '等用戶（3）：',
       '- L3（看板工具）0.5.0-W1-580：開 --debug 重啟（S1）',
       '- L3（看板工具）：approve Bash（S2）',
@@ -324,6 +329,7 @@ describe('formatLineStatus', () => {
           { lane: 2, session: 'b', state: 'orphan', evidence: 'e2' },
         ],
         stale: [],
+        todos: [],
         waiting: [],
       },
       { coordinationTicket: 'c', readAt: 't' },
@@ -333,10 +339,36 @@ describe('formatLineStatus', () => {
   })
 
   test('沒有未收線的線、沒有過期項、沒有等用戶時明寫「無」', () => {
-    const text = formatLineStatus({ lanes: [], stale: [], waiting: [] }, { coordinationTicket: 'c', readAt: 't' })
+    const text = formatLineStatus({ lanes: [], stale: [], todos: [], waiting: [] }, { coordinationTicket: 'c', readAt: 't' })
     expect(text).toContain('未收線的線：無')
     expect(text).toContain('過期項：無')
+    expect(text).toContain('用戶待辦：無')
     expect(text).toContain('等用戶：無')
+  })
+
+  describe('用戶待辦段（U1）', () => {
+    const coordination = (lines: string[]) => ['## Solution', '', ...lines, ''].join('\n')
+    const textFor = (lines: string[]) =>
+      formatLineStatus(lineStatusReport({ lanes: [], todos: parseUserTodos(coordination(lines)), sessions: [], log: [], tickets: [], prefix: PREFIX }), {
+        coordinationTicket: 'c',
+        readAt: 't',
+      })
+
+    test('有未配對 U1 時逐條列出（帶鍵寫鍵、不帶鍵寫「主控」），位於等用戶段之前', () => {
+      const text = textFor(['**用戶待辦**（560）：裁定標注', '**用戶待辦**：開 L44 session'])
+      expect(text).toContain('用戶待辦（2）：\n- 裁定標注｜560\n- 開 L44 session｜主控\n')
+      expect(text.indexOf('用戶待辦（2）')).toBeLessThan(text.indexOf('等用戶：無'))
+    })
+
+    test('沒有 U1 時寫「用戶待辦：無」', () => {
+      expect(textFor([])).toContain('用戶待辦：無')
+    })
+
+    test('已配對（有完成行）的 U1 不列出', () => {
+      const text = textFor(['**用戶待辦**（560）：裁定標注', '**用戶待辦完成**（560）：已裁定'])
+      expect(text).toContain('用戶待辦：無')
+      expect(text).not.toContain('裁定標注')
+    })
   })
 })
 

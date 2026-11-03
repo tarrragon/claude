@@ -6,7 +6,7 @@
 """
 coordination-queue-line-check-hook - PostToolUse Hook（Bash / Edit / Write / MultiEdit）
 
-目的: 協調票（multi-session.json 的 coordinationTicket）被寫入後，從磁碟重讀票檔，
+目的: 協調票（票本身 frontmatter 有 `coordination: true`）被寫入後，從磁碟重讀票檔，
       檢查現行佇列行的兩種寫法錯誤，以 additionalContext 提示模型（不阻擋，exit 0）。
       文字約定兩度失守，故由機械層在寫入當下指出。
 
@@ -17,7 +17,10 @@ coordination-queue-line-check-hook - PostToolUse Hook（Bash / Edit / Write / Mu
   3. 以「**L<n> 現行佇列**」開頭卻不符 LANE_LINE 的行（如漏冒號），若在該線最後一筆合格行之後
      -> 報出原文與格式；解析層照 lanes.ts 不採用此行，不報會被誤以為已寫入
 
-受眾: 模型 -> emit_model_reminder("PostToolUse", ...)。multi-session.json 缺席/不成立時不輸出。
+  4. 未配對的用戶待辦（U1，規則同 line-board userTodos.ts parseUserTodos，Python 版在
+     multi-session-orchestration/scripts/coordination_ticket.py）數大於 0 -> 列鍵、事項與完成行格式；為 0 不輸出
+
+受眾: 模型 -> emit_model_reminder("PostToolUse", ...)。被寫入的票不帶標記時不輸出。
 """
 
 import json
@@ -38,11 +41,19 @@ from lib import (  # noqa: E402
     setup_hook_logging,
 )
 
+sys.path.insert(
+    0, str(Path(__file__).parent.parent / "skills" / "multi-session-orchestration" / "scripts")
+)
+from coordination_ticket import parse_user_todos  # noqa: E402
+
 HOOK_NAME = "coordination-queue-line-check"
-CONFIG_PATH = ".claude/project-integration/multi-session.json"
+TICKET_ID_IN_TEXT = re.compile(r"(?<![\w.-])(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)(?![\w.-])")
 LANE_ENDED = "（無）"
 TERMINAL_STATUSES = ("completed", "closed")
 WRITE_TOOLS = ("Edit", "Write", "MultiEdit")
+# 檢查 4 的完成行格式（line-continuity.md §2〈用戶待辦〉）
+TODO_DONE_FORMAT = "**用戶待辦完成**（%s）：<結果>"
+TODO_DONE_KEYLESS = "**用戶待辦完成**：%s"
 
 # 以下常數與解析函式逐項對應 lanes.ts / shared.ts
 LANE_LINE = re.compile(r"^\*\*L(\d+) 現行佇列\*\*(?:（([^）]*)）)?：(.*)$")
@@ -178,6 +189,21 @@ def find_malformed_lines(text: str) -> List[str]:
     ]
 
 
+def find_unpaired_todos(text: str) -> List[str]:
+    """檢查 4：未配對的用戶待辦（U1）。數量為 0 時不輸出；否則列各鍵、事項與完成行格式。"""
+    todos = parse_user_todos(text)
+    if not todos:
+        return []
+    lines = ["尚有 %d 項用戶待辦未寫完成行（已處理的請補完成行，未處理的忽略）：" % len(todos)]
+    for todo in todos:
+        key = todo["key"]
+        if key is None:
+            lines.append("- （不帶鍵）%s -> %s" % (todo["item"], TODO_DONE_KEYLESS % todo["item"]))
+        else:
+            lines.append("- %s：%s -> %s" % (key, todo["item"], TODO_DONE_FORMAT % key))
+    return ["\n".join(lines)]
+
+
 def alive_session_names(logger, checkouts: List[str]) -> Optional[set]:
     sessions_dir = Path(os.environ.get("HOME", "")) / ".claude" / "sessions"
     if not sessions_dir.is_dir():
@@ -213,24 +239,42 @@ def list_checkouts(logger, root: Path) -> List[str]:
         return [str(root)]
 
 
-def read_coordination_ticket(logger, root: Path) -> Optional[str]:
-    try:
-        d = json.loads((root / CONFIG_PATH).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        logger.debug("multi-session.json 不可用: %s", e)
-        return None
-    cid = d.get("coordinationTicket") if isinstance(d, dict) else None
-    return cid if isinstance(cid, str) and ticket_prefix_of(cid) else None
-
-
-def touches_coordination_ticket(input_data: dict, coord_id: str) -> bool:
+def written_ticket_ids(input_data: dict) -> List[str]:
+    """本次寫入涉及的票號：Edit 類取檔名，Bash 的 ticket track 命令取命令中的票號。"""
     tool = input_data.get("tool_name", "")
     ti = input_data.get("tool_input") or {}
     if tool == "Bash":
         cmd = ti.get("command", "")
-        return "ticket track" in cmd and re.search(r"(?<![\w.-])%s(?![\w.-])" % re.escape(coord_id), cmd) is not None
+        if "ticket track" not in cmd:
+            return []
+        return list(dict.fromkeys(TICKET_ID_IN_TEXT.findall(cmd)))
     if tool in WRITE_TOOLS:
-        return Path(str(ti.get("file_path", ""))).name == coord_id + ".md"
+        stem = Path(str(ti.get("file_path", ""))).stem
+        return [stem] if ticket_prefix_of(stem) else []
+    return []
+
+
+def read_ticket_text(root: Path, ticket_id: str) -> Optional[str]:
+    for rel in ticket_file_candidates(ticket_id):
+        try:
+            return (root / rel).read_text(encoding="utf-8")
+        except OSError:
+            # 候選路徑逐一試讀；全部失敗回傳 None，視為非協調票（IMP-013）
+            continue
+    return None
+
+
+def has_coordination_flag(text: str) -> bool:
+    """票本身 frontmatter 是否有 `coordination: true`。"""
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return False
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return False
+        m = re.match(r"^coordination:\s*['\"]?(\w+)['\"]?\s*$", line)
+        if m:
+            return m.group(1).lower() == "true"
     return False
 
 
@@ -240,27 +284,20 @@ def main() -> int:
     if input_data is None:
         return 0
     root = get_project_root()
-    coord_id = read_coordination_ticket(logger, root)
-    if coord_id is None:
-        return 0
-    if not touches_coordination_ticket(input_data, coord_id):
-        logger.debug("跳過: 未寫入協調票")
-        return 0
-    text = None
-    for rel in ticket_file_candidates(coord_id):
-        try:
-            text = (root / rel).read_text(encoding="utf-8")
-            break
-        except OSError:
-            continue
-    if text is None:
-        logger.info("協調票檔讀不到: %s", coord_id)
-        return 0
+    for coord_id in written_ticket_ids(input_data):
+        text = read_ticket_text(root, coord_id)
+        if text is not None and has_coordination_flag(text):
+            return check_coordination_ticket(logger, root, input_data, coord_id, text)
+    logger.debug("跳過: 未寫入帶 coordination 標記的票")
+    return 0
+
+
+def check_coordination_ticket(logger, root: Path, input_data: dict, coord_id: str, text: str) -> int:
     lanes = parse_lanes(text, ticket_prefix_of(coord_id))
     alive = alive_session_names(logger, list_checkouts(logger, root))
     msgs = find_malformed_lines(text) + find_problems(
         lanes, alive, lambda tid: read_ticket_status(root, tid)
-    )
+    ) + find_unpaired_todos(text)
     if not msgs:
         return 0
     logger.info("協調票佇列行提示 %d 項", len(msgs))

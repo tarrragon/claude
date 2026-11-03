@@ -1,3 +1,59 @@
+## [2.85.0] - 2026-11-03
+
+### Summary
+feat: acceptance-gate 補 batch-complete --wave 協調票待辦檢查; feat: acceptance-gate 對 ticket track close 檢查協調票未配對用戶待辦; feat: acceptance-gate 擋下帶未配對用戶待辦的協調票 complete (+43 more)
+
+Changes: 11 feat, 4 refactor, 5 fix, 22 docs, 1 chore, 1 style, 2 test
+
+- feat: acceptance-gate 補 batch-complete --wave 協調票待辦檢查
+- feat: acceptance-gate 對 ticket track close 檢查協調票未配對用戶待辦
+- feat: acceptance-gate 擋下帶未配對用戶待辦的協調票 complete
+- feat: Python U1 配對函式、契約 fixture 與佇列行 hook 未配對提示
+- feat: line_status 新增用戶待辦（U1）段
+- feat: line-board 協調票來源改接解析 CLI，刪除 multi-session.json
+- feat: 三個協調票消費者改用自動解析
+- feat: ticket create --coordination 與 track set-coordination
+- feat: 協調票解析模組 coordination_ticket.py 與測試
+- feat: merge-gate add dart-analyze suite
+- feat: add UC to Ticket edge uc_ticket_refs
+- refactor: 移除 readers.ts 無呼叫方的 readLaneLines
+- refactor: continuity.ts 拆出等用戶偵測至 waiting.ts
+- refactor: readers.ts 拆出用量檔讀取與清理至 usageReaders.ts
+- refactor: register.tsx 拆出用量檔寫入、恢復開工流程與 Pane 組裝
+- fix: 測試替身改用 AcceptanceCheckResult 建構
+- fix: acceptance-gate 阻擋 WARNING 行依來源寫原因
+- fix: context-depth-warning 換 session 提示依主軸分流
+- fix: todolist 解析出 0 版本時回 error 並補測試
+- fix: completeness_semantics EVT example split by category, sync embedded copy
+- docs: import 守衛變體補兩句（某票 第二次閘門紅燈）
+- docs: PC-GPD-079 推論出口讓跳過紅燈成為合規路徑
+- docs: 四個 skill 補升版號與 CHANGELOG
+- docs: PC-BAL-061 補變體：改動 import 時架構守衛測試不在相關測試內
+- docs: 新增 PC-GPD-078 「沒有指示就照做」後結束回合致線閒置
+- docs: 新增 PC-GPD-077 改 skill 內容未同步升版號（某票）
+- docs: 新增 error-pattern PC-GPD-076 分類判準派發前要先用已知正例試跑
+- docs: 新增 error-pattern PC-GPD-075 被契約測試綁住的規格與實作要同批進 main
+- docs: 換 session 依主軸分流，主軸不變時原 session /clear 後重新派發
+- docs: 依 Layer 2 審查修正（某票 同線待辦）
+- docs: 新增 TEST-GPD-1009 依行為名稱判定自動化測不到（某票）
+- docs: 新增 PC-GPD-074 授權須在執行動作的 session 取得
+- docs: PC-GPD-072 補首例實際成因（對方工具輸出失效）
+- docs: 新增 PC-GPD-073 派發 prompt 範圍限制與驗收衝突
+- docs: 新增 PC-GPD-072 指派訊息送出成功未確認對方開工
+- docs: 新增 PC-GPD-071 了結寫成敘事未寫配對行（某票）
+- docs: README 補登 PC-GPD-070
+- docs: 新增 PC-GPD-070 同回合並行發出動作與已成功紀錄
+- docs: 新增 error-pattern PC-GPD-069 腳本與 harness 共用 API key 變數名
+- docs: 三種記錄錯誤形態入 error-pattern（ARCH-BAL-005 補案例、新增 PC-GPD-067／068）
+- docs: 新增 error-pattern PC-GPD-066 沿用隔離樹測試結果的論證缺項
+- docs: 用戶待辦補列入時機：只列現在就能做的事項
+- chore: sync-push 回寫框架版本 2.84.0
+- style: 佇列行 hook 常數歸位並補空格
+- test: 值域測試改為注入新值驗證跟隨 tracking_schema
+- test: 補 EVT consumers 分流與 category 值域兩個回歸測試
+
+---
+
 ## [2.84.0] - 2026-11-01
 
 ### Summary

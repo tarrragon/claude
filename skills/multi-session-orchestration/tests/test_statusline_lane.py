@@ -87,58 +87,78 @@ def test_inner_from_settings_and_no_recursion(tmp_path):
     assert r.stdout == "L6 │ alpha\n"
 
 
-CONFIG_REL = Path(".claude/project-integration/multi-session.json")
+TODOLIST = """versions:
+  - version: "0.5.0"
+    status: "active"
+    worklog: "docs/work-logs/v0/v0.5/v0.5.0/"
+"""
 COORD_ID = "0.5.0-W1-349"
 
 
-def make_project(tmp_path, layout, config='{"coordinationTicket": "%s"}' % COORD_ID):
+def add_ticket(proj, ticket_id, status="in_progress", coordination=True, body=LIVE_TICKET):
+    d = proj / "docs/work-logs/v0/v0.5/v0.5.0/tickets"
+    d.mkdir(parents=True, exist_ok=True)
+    flag = "coordination: true\n" if coordination else ""
+    (d / f"{ticket_id}.md").write_text(f"---\nid: {ticket_id}\nstatus: {status}\n{flag}---\n{body}", encoding="utf-8")
+
+
+def make_project(tmp_path, ticket_ids=(COORD_ID,)):
     proj = tmp_path / "proj"
-    proj.mkdir(exist_ok=True)
-    if config is not None:
-        (proj / CONFIG_REL).parent.mkdir(parents=True, exist_ok=True)
-        (proj / CONFIG_REL).write_text(config, encoding="utf-8")
-    base = "docs/work-logs/v0/v0.5/v0.5.0" if layout == "hier" else "docs/work-logs/v0.5.0"
-    ticket = proj / base / "tickets" / f"{COORD_ID}.md"
-    ticket.parent.mkdir(parents=True, exist_ok=True)
-    ticket.write_text(LIVE_TICKET, encoding="utf-8")
+    (proj / "docs").mkdir(parents=True, exist_ok=True)
+    (proj / "docs/todolist.yaml").write_text(TODOLIST, encoding="utf-8")
+    for ticket_id in ticket_ids:
+        add_ticket(proj, ticket_id)
     return proj
 
 
-def run_cfg(tmp_path, proj):
+def run_auto(tmp_path, proj):
     return run(tmp_path, payload(), ["--inner", INNER], project_dir=proj)
 
 
-def test_config_hierarchical(tmp_path):
-    r = run_cfg(tmp_path, make_project(tmp_path, "hier"))
+def test_auto_one_coordination_ticket(tmp_path):
+    r = run_auto(tmp_path, make_project(tmp_path))
     assert r.stdout == "L6 │ alpha\nINNER-OUT\n"
 
 
-def test_config_flat_fallback(tmp_path):
-    r = run_cfg(tmp_path, make_project(tmp_path, "flat"))
-    assert r.stdout == "L6 │ alpha\nINNER-OUT\n"
+def test_auto_zero_tickets_omits_lane_with_stderr(tmp_path):
+    r = run_auto(tmp_path, make_project(tmp_path, ticket_ids=()))
+    assert r.stdout == "alpha\nINNER-OUT\n"
+    assert "[statusline_lane]" in r.stderr and "none" in r.stderr
 
 
-def test_e1_config_vs_no_config(tmp_path):
-    proj = make_project(tmp_path, "hier")
-    with_cfg = run_cfg(tmp_path, proj)
-    (proj / CONFIG_REL).unlink()
-    without_cfg = run_cfg(tmp_path, proj)
-    assert with_cfg.stdout != without_cfg.stdout
-    assert without_cfg.stdout == "alpha\nINNER-OUT\n"
+def test_auto_multiple_tickets_omits_lane_with_stderr(tmp_path):
+    r = run_auto(tmp_path, make_project(tmp_path, ticket_ids=(COORD_ID, "0.5.0-W1-350")))
+    assert r.stdout == "alpha\nINNER-OUT\n"
+    assert "multiple" in r.stderr and "Traceback" not in r.stderr
 
 
-def test_config_failures_degrade_with_stderr(tmp_path):
-    for config in (None, "{bad", "{}", '{"coordinationTicket": 5}', '{"coordinationTicket": "x"}'):
-        proj = make_project(tmp_path, "hier", config=config)
-        if config is None:
-            (proj / CONFIG_REL).unlink(missing_ok=True)
-        r = run_cfg(tmp_path, proj)
-        assert r.stdout == "alpha\nINNER-OUT\n", config
-        assert "Traceback" not in r.stderr
-        assert "[statusline_lane]" in r.stderr, config
+def test_e1_coordination_flag_vs_no_flag(tmp_path):
+    proj = make_project(tmp_path)
+    with_flag = run_auto(tmp_path, proj)
+    add_ticket(proj, COORD_ID, coordination=False)
+    without_flag = run_auto(tmp_path, proj)
+    assert with_flag.stdout != without_flag.stdout
+    assert without_flag.stdout == "alpha\nINNER-OUT\n"
 
 
-def test_explicit_coord_ticket_ignores_config(tmp_path):
-    proj = make_project(tmp_path, "hier", config='{"coordinationTicket": "9.9.9-W1-001"}')
+def test_missing_todolist_degrades_with_stderr(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    r = run_auto(tmp_path, proj)
+    assert r.stdout == "alpha\nINNER-OUT\n"
+    assert "[statusline_lane]" in r.stderr and "Traceback" not in r.stderr
+
+
+def test_explicit_coord_ticket_overrides_auto(tmp_path):
+    proj = make_project(tmp_path, ticket_ids=())
     r = run(tmp_path, payload(), coord_args(tmp_path), LIVE_TICKET, project_dir=proj)
     assert r.stdout == "L6 │ alpha\nINNER-OUT\n"
+
+
+def test_closed_override_warns_and_falls_back_to_auto(tmp_path):
+    proj = make_project(tmp_path)
+    closed = tmp_path / "coord.md"
+    closed.write_text("---\nstatus: completed\n---\n## Solution\n**L9 現行佇列**（alpha）：1\n", encoding="utf-8")
+    r = run(tmp_path, payload(), ["--coord-ticket", str(closed), "--inner", INNER], project_dir=proj)
+    assert r.stdout == "L6 │ alpha\nINNER-OUT\n"
+    assert "已結案" in r.stderr

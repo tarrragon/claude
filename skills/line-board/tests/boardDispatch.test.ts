@@ -8,7 +8,7 @@ import { MERGE_LOG_HOLDING, TICKET_349, dispatchJson, overlapLogUntil, ticketFil
 import { GROUP_BORDER_STYLE, groupFrameKey, groupTitleKey } from '../hooks/lanesView'
 import { MERGE_GATE_GROUP_ID, OTHER_GROUP_ID, SESSIONS_GROUP_ID, groupBodyKey, groupToggleKey, laneGroupId } from '../hooks/layout'
 import { MERGE_LOG_PATH } from '../hooks/mergeGate'
-import { COORDINATION_TICKET, configJson, sessionStub, startBoard } from './paneHarness'
+import { COORDINATION_TICKET, cliOk, sessionStub, startBoard } from './paneHarness'
 import { ticketFileCandidates } from '../hooks/shared'
 
 /** 預設協調票的票檔（相對 repo root）：由票號推導，取 ticketFileCandidates 的第一個候選（hierarchical）。 */
@@ -414,12 +414,12 @@ describe('Pane', () => {
         dispatchJson({ agent_id: 'a06', session_id: 'sid-103', ticket_id: '0.6.0-W2-12.3' }),
       ],
     })
-    const stub = { ...dispatchFiles(records), projectConfig: configJson({ coordinationTicket: '0.5.0-W1-349' }) }
+    const stub = { ...dispatchFiles(records), projectConfig: cliOk('0.5.0-W1-349') }
     const { ui, clock } = await startBoard($, on, stub)
     const otherRows = async () => ((await bodyOf(ui, OTHER_GROUP_ID)) ?? []).filter(line => DISPATCH_ROW.test(line)).map(withoutAge)
     const under05 = await otherRows()
     // 對照：同一批派發紀錄，設定檔改為另一版本的協調票後重讀
-    stub.projectConfig = configJson({ coordinationTicket: '0.6.0-W2-349' })
+    stub.projectConfig = cliOk('0.6.0-W2-349')
     await clock.advance(REFRESH_MS)
     const under06 = await otherRows()
     await ui.unmount()

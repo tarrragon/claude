@@ -285,6 +285,7 @@ def _parse_cli_args_to_config(
         "source_ticket": args.source_ticket,
         "discovered_during": getattr(args, "discovered_during", None),
         "scope_blocker": getattr(args, "scope_blocker", None) or None,
+        "coordination": bool(getattr(args, "coordination", False)),
         # 紀錄文字寫的是「--dedup-checked none」，僅 none 時寫入
         "dedup_keywords": (
             getattr(args, "dedup_keywords", None)
@@ -1363,6 +1364,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             "版本範圍凍結硬閘門的放行理由：目標版本 scope: frozen 時"
             "必填，須帶非空理由才放行；僅給旗標不給理由仍阻擋建票"
         ),
+    )
+    parser.add_argument(
+        "--coordination",
+        action="store_true",
+        help="標記為協調票（frontmatter 寫入 coordination: true，供 multi-session-orchestration 消費）",
     )
     # --how / --ho 攔截：exact match 優先於縮寫展開，給友善提示
     # （1.0.0-W1-024.1 A3 + 1.0.0-W1-028 模式化）。--ho 為更短前綴同類誤打，

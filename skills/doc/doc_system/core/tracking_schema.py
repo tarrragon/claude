@@ -167,7 +167,7 @@ GRAPH_EDGE_MAINTAINERS = frozenset({"手動", "CLI 自動", "手動/CLI"})
 # GRAPH_EDGE_TYPES 等型別表內容變更時手動升版，升為變更當下的框架版本。
 # 鍵名不改的理由：改名會影響所有舊 consumer；舊 consumer 照舊寫入的框架
 # 版本與本常數落在同一條遞增序列，消費端閘門無需修改即可比較。
-TYPE_TABLE_COMPAT_VERSION = "2.77.1"
+TYPE_TABLE_COMPAT_VERSION = "2.84.0"
 
 # 節點型別表：A 層 5 節點 + B 層 2 節點。FR 與 Test 不列為獨立節點型別
 # （無獨立檔案/ID 空間，語意由 SPEC / traceability 節點欄位承載）。
@@ -280,7 +280,8 @@ CARRIER_PATH_TYPES = frozenset(
 # 完整性集合的共通語意（#99 第三項裁決，2026-09-24）：欄位必須存在；值
 # 可為 None（單值）或空清單 []（多值），代表「明確沒有」。此語意對應
 # JSON Schema 的 `required`（只管鍵存在，不管值是否為空）。更嚴格的值
-# 規則（例如 EVT 的 producers/consumers 不得為空）屬各型別 validator 的
+# 規則（例如 category 為 domain_event 的 EVT，其 producers/consumers 不得
+# 為空；process_event 允許 consumers 為空）屬各型別 validator 的
 # 附加規則，不放進本節的完整性集合。判斷一律用 `in`（鍵是否存在），不
 # 用真值判斷，否則合法的 null/[] 會被誤判為缺漏。
 
@@ -399,7 +400,7 @@ def find_edge_types_with_invalid_direction(edge_types: dict) -> dict[str, str]:
 # 語意邊表：A 層（established）+ B 層（proposed），欄位齊全：class / 正向欄位（儲存
 # 側）/ 正向基數 / 方向性 / 反向欄位 / 維護方 / status。
 GRAPH_EDGE_TYPES = {
-    # --- A 層（12 條，established）---
+    # --- A 層（13 條，established）---
     "provenance": {
         "class": "provenance",
         "forward_field": "source_proposal",
@@ -430,6 +431,15 @@ GRAPH_EDGE_TYPES = {
     "proposal_association": {
         "class": "see-also",
         "forward_field": "related_proposals",
+        "forward_cardinality": "many",
+        "direction": "directed",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "layer": GRAPH_LAYER_ESTABLISHED,
+    },
+    "uc_ticket_refs": {
+        "class": "see-also",
+        "forward_field": "ticket_refs",
         "forward_cardinality": "many",
         "direction": "directed",
         "reverse_field": None,

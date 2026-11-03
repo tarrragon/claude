@@ -28,6 +28,7 @@ ESTABLISHED_EDGE_NAMES = frozenset(
         "provenance", "spec_association", "uc_association", "proposal_association",
         "requirement_impl", "domain_dependency", "domain_coverage", "blood",
         "spawn", "blocking", "association", "discovery",
+        "uc_ticket_refs",
     }
 )
 

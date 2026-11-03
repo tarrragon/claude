@@ -20,16 +20,30 @@ import {
 import { GROUP_BORDER_COLUMNS, groupTitleKey, laneDetailId } from '../hooks/lanesView'
 import { GROUP_INDENT, MERGE_GATE_GROUP_ID, SESSIONS_GROUP_ID, groupBodyKey, groupToggleKey, laneGroupId } from '../hooks/layout'
 import { MERGE_LOG_PATH } from '../hooks/mergeGate'
-import { PROJECT_CONFIG_PATH } from '../hooks/readers'
-import { COORDINATION_TICKET, PROJECT_CONFIG, SESSIONS, configJson, runBoardCommand, sessionStub, startBoard } from './paneHarness'
+import {
+  COORDINATION_TICKET,
+  SESSIONS,
+  cliError,
+  cliMultiple,
+  cliNone,
+  cliOk,
+  runBoardCommand,
+  sessionStub,
+  startBoard,
+} from './paneHarness'
+import type { CliFailure } from './paneHarness'
 import { ticketFileCandidates } from '../hooks/shared'
 
 /** 預設協調票的票檔（相對 repo root）：由票號推導，取 ticketFileCandidates 的第一個候選（hierarchical）。 */
 const COORDINATION_TICKET_FILE = ticketFileCandidates(COORDINATION_TICKET)[0] ?? ''
 /** 與預設協調票同版本的票檔所在目錄（相對 repo root）。 */
 const TICKET_FOLDER = COORDINATION_TICKET_FILE.slice(0, COORDINATION_TICKET_FILE.lastIndexOf('/'))
-/** worktree `/wt` 內的專案設定檔路徑（harness 不提供內容，讀取一律失敗）。 */
-const WT_PROJECT_CONFIG = `/wt/${PROJECT_CONFIG_PATH}`
+
+/** 呼叫 line_status 工具，回傳工具結果文字。 */
+async function callLineStatus($: Parameters<typeof runBoardCommand>[0]): Promise<string> {
+  const outcome = await $.tool.call({ tool: 'mcp__line-board__line_status' } as never)
+  return String((outcome as { result?: unknown }).result)
+}
 
 type Ui = Awaited<ReturnType<typeof startBoard>>['ui']
 
@@ -406,14 +420,14 @@ describe('專案設定', () => {
     await ui.unmount()
   })
 
-  test('對照：同一批 fixture 沒有設定檔時不自動開 Pane、不讀協調票也不定時讀取，/board 仍註冊', async ($, on) => {
-    const { ui, opened, registered, readPaths, clock } = await startBoard($, on, { ...sharedFiles(), projectConfig: null })
+  test('對照：同一批 fixture 協調票 0 張時不自動開 Pane、不讀協調票檔也不定時讀取，/board 仍註冊', async ($, on) => {
+    const { ui, opened, registered, readPaths, cliCwds, clock } = await startBoard($, on, { ...sharedFiles(), projectConfig: null })
     expect(opened).toEqual([])
     expect(registered).toEqual(['board'])
     await clock.advance(30_000)
-    expect(readPaths.length).toBeGreaterThan(0)
-    // 啟動時先讀 session root（/wt）的設定檔，讀不到才讀主 checkout 的；兩者以外的檔案都不讀
-    expect(readPaths.every(path => path === PROJECT_CONFIG || path === WT_PROJECT_CONFIG)).toBe(true)
+    // 啟動時先對 session root（/wt）跑解析 CLI，0 張再對主 checkout 跑；定時讀取不啟動，所以只有這兩次，也沒有讀任何檔案
+    expect(cliCwds).toEqual(['/wt', '/repo'])
+    expect(readPaths).toEqual([])
     await ui.unmount()
   })
 
@@ -432,10 +446,10 @@ describe('專案設定', () => {
     await ui.unmount()
   })
 
-  test('對照：session 在主 checkout 啟動但沒有設定時不開 Pane，主 checkout 的設定檔只讀一次', async ($, on) => {
-    const { ui, opened, readPaths } = await startBoard($, on, { ...sharedFiles(), sessionRoot: '/repo', projectConfig: null })
+  test('對照：session 在主 checkout 啟動但協調票 0 張時不開 Pane，解析 CLI 只跑一次', async ($, on) => {
+    const { ui, opened, cliCwds } = await startBoard($, on, { ...sharedFiles(), sessionRoot: '/repo', projectConfig: null })
     expect(opened).toEqual([])
-    expect(readPaths.filter(path => path === PROJECT_CONFIG)).toHaveLength(1)
+    expect(cliCwds).toEqual(['/repo'])
     await ui.unmount()
   })
 
@@ -453,37 +467,82 @@ describe('專案設定', () => {
     await ui.unmount()
   })
 
-  /** 不成立的設定：名稱、設定檔內容（null 為缺席）、提示行的原因。 */
-  const UNSET_CASES: [string, string | null, RegExp][] = [
-    ['設定檔缺席', null, /^尚未設定協調票：設定檔讀不到（/],
-    ['JSON 無效', '{ "coordinationTicket": ', /^尚未設定協調票：設定檔不是有效的 JSON（/],
-    ['coordinationTicket 缺漏', configJson({ coordinator: '0.5.0-W1-001' }), /^尚未設定協調票：設定檔缺少 coordinationTicket 欄位$/],
-    ['設定不是 JSON 物件', '["0.5.0-W1-001"]', /^尚未設定協調票：設定檔缺少 coordinationTicket 欄位$/],
-    ['coordinationTicket 只寫序號', configJson({ coordinationTicket: '001' }), /^尚未設定協調票：coordinationTicket 不是完整票號（"001"）$/],
-    ['coordinationTicket 不是字串', configJson({ coordinationTicket: 1 }), /^尚未設定協調票：coordinationTicket 不是完整票號（1）$/],
+  const NONE_REASON = /^尚未設定協調票：active 版本沒有標記 `coordination: true` 的進行中票$/
+
+  /** 協調票不成立的情形：名稱、解析 CLI 的回應、提示行的原因、另須出現的行。 */
+  const UNSET_CASES: [string, { projectConfig?: string; cliFailure?: CliFailure }, RegExp, (string | RegExp)[]][] = [
+    ['0 張', { projectConfig: cliNone() }, NONE_REASON, [/^補法：.*ticket create --coordination/]],
+    [
+      '多張',
+      { projectConfig: cliMultiple(['0.5.0-W1-349', '0.6.0-W1-099']) },
+      /^尚未設定協調票：有多張標記 coordination: true 的進行中票，不自行擇一，請用戶裁定$/,
+      ['候選：0.5.0-W1-349', '候選：0.6.0-W1-099'],
+    ],
+    ['CLI 回報 error', { projectConfig: cliError('todolist 不可用：ENOENT') }, /^尚未設定協調票：協調票解析失敗（todolist 不可用：ENOENT）$/, []],
+    [
+      'CLI 不可用（python3 無法執行）',
+      { cliFailure: { throws: 'spawn python3 ENOENT' } },
+      /^尚未設定協調票：協調票解析失敗（python3 無法執行（.*spawn python3 ENOENT/,
+      [],
+    ],
+    [
+      'CLI 非零結束且 stdout 不是 JSON',
+      { cliFailure: { exitCode: 127, stdout: '', stderr: 'python3: command not found' } },
+      /^尚未設定協調票：協調票解析失敗（解析 CLI 失敗（exit 127）：python3: command not found）$/,
+      [],
+    ],
+    ['CLI 輸出不是 JSON', { cliFailure: { exitCode: 0, stdout: 'hello', stderr: '' } }, /^尚未設定協調票：協調票解析失敗（輸出不是有效的 JSON/, []],
   ]
 
-  for (const [name, config, reason] of UNSET_CASES) {
-    test(`${name}：不自動開 Pane；執行 /board 後開啟並顯示原因、設定檔路徑與格式，不畫線群組`, async ($, on) => {
-      const { ui, opened, readPaths } = await startBoard($, on, { ...sharedFiles(), projectConfig: config })
+  for (const [name, stubPart, reason, extraLines] of UNSET_CASES) {
+    test(`${name}：不自動開 Pane；執行 /board 後開啟並顯示原因，不畫線群組也不擇一`, async ($, on) => {
+      const { ui, opened, readPaths } = await startBoard($, on, { ...sharedFiles(), ...stubPart })
       expect(opened).toEqual([])
       await runBoardCommand($)
       expect(opened).toEqual(['line-board'])
       expect(await ui.find({ type: 'Text', text: reason })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: `設定檔：${PROJECT_CONFIG}` })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: '格式：{ "coordinationTicket": "<協調票的完整票號>" }' })).toBeDefined()
+      for (const line of extraLines) expect(await ui.find({ type: 'Text', text: line })).toBeDefined()
       expect(await ui.find({ type: 'Button', text: /^[▸▾] L\d+ / })).toBeUndefined()
       expect(readPaths).not.toContain(`/repo/${COORDINATION_TICKET_FILE}`)
       await ui.unmount()
     })
   }
 
-  test('對照：設定檔缺席時執行 /board 顯示提示；補上設定檔後再執行 /board 畫出各線', async ($, on) => {
+  {
+    const cases: [{ projectConfig?: string; cliFailure?: CliFailure }, RegExp][] = [
+      [{ projectConfig: cliNone() }, /^line_status 無法判讀：active 版本沒有標記 `coordination: true` 的進行中票；補法：.*ticket create --coordination/],
+      [
+        { projectConfig: cliMultiple(['0.5.0-W1-349', '0.6.0-W1-099']) },
+        /^line_status 無法判讀：active 版本有多張標記 coordination: true 的進行中票，不自行擇一，請用戶裁定：0\.5\.0-W1-349、0\.6\.0-W1-099/,
+      ],
+      [{ cliFailure: { throws: 'spawn python3 ENOENT' } }, /^line_status 無法判讀：協調票解析失敗：python3 無法執行（.*spawn python3 ENOENT/],
+      [{ projectConfig: cliError('todolist 不可用：ENOENT') }, /^line_status 無法判讀：協調票解析失敗：todolist 不可用：ENOENT/],
+    ]
+    cases.forEach(([stubPart, expected], index) => {
+      test(`line_status：協調票不成立（情形 ${index + 1}）回傳原因文字，不拋出也不讀協調票檔`, async ($, on) => {
+        const { ui, readPaths } = await startBoard($, on, { ...sharedFiles(), sessionRoot: '/repo', ...stubPart })
+        expect(await callLineStatus($)).toMatch(expected)
+        expect(readPaths).not.toContain(`/repo/${COORDINATION_TICKET_FILE}`)
+        await ui.unmount()
+      })
+    })
+  }
+
+  test('line_status：1 張時照常判讀，解析警告列在輸出', async ($, on) => {
+    const warning = '覆寫的協調票 0.5.0-W1-349 已結案，改用自動解析'
+    const { ui } = await startBoard($, on, { ...sharedFiles(), sessionRoot: '/repo', projectConfig: cliOk(COORDINATION_TICKET, [warning]) })
+    const text = await callLineStatus($)
+    expect(text).toContain(`各線接續狀態（協調票 ${COORDINATION_TICKET}`)
+    expect(text).toContain(`協調票解析警告：${warning}`)
+    await ui.unmount()
+  })
+
+  test('對照：協調票 0 張時執行 /board 顯示提示；標記補上後再執行 /board 畫出各線', async ($, on) => {
     const stub = { ...sharedFiles(), projectConfig: null as string | null }
     const { ui } = await startBoard($, on, stub)
     await runBoardCommand($)
     expect(await ui.find({ type: 'Text', text: /^尚未設定協調票：/ })).toBeDefined()
-    stub.projectConfig = configJson({ coordinationTicket: '0.5.0-W1-349' })
+    stub.projectConfig = cliOk('0.5.0-W1-349')
     await runBoardCommand($)
     expect(await ui.find({ type: 'Text', text: /^尚未設定協調票：/ })).toBeUndefined()
     expect(await ui.find({ type: 'Button', text: /^[▸▾] L7 / })).toBeDefined()
@@ -494,7 +553,7 @@ describe('專案設定', () => {
     const path = '/repo/docs/work-logs/v0/v0.6/v0.6.0/tickets/0.6.0-W2-010.md'
     const { ui, readPaths } = await startBoard($, on, {
       files: { [path]: TICKET_349 },
-      projectConfig: configJson({ coordinationTicket: '0.6.0-W2-010' }),
+      projectConfig: cliOk('0.6.0-W2-010'),
     })
     expect(await ui.find({ type: 'Button', text: /^[▸▾] L7 / })).toBeDefined()
     expect(readPaths).toContain(path)
@@ -508,14 +567,14 @@ describe('專案設定', () => {
         [`/repo/${COORDINATION_TICKET_FILE}`]: TICKET_349,
         '/repo/docs/work-logs/v0/v0.6/v0.6.0/tickets/0.6.0-W2-010.md': TICKET_349,
       },
-      projectConfig: configJson({ coordinationTicket: COORDINATION_TICKET }),
+      projectConfig: cliOk(COORDINATION_TICKET),
     }
     const { ui, readPaths, clock } = await startBoard($, on, stub)
     const queueReads = () => readPaths.splice(0).filter(path => path.endsWith('-351.md'))
     expect(await ui.find({ type: 'Button', text: /^[▸▾] L7 / })).toBeDefined()
     const under05 = queueReads()
     // 對照：同一份協調票內容，設定檔改為另一版本與 wave 的協調票後重讀
-    stub.projectConfig = configJson({ coordinationTicket: '0.6.0-W2-010' })
+    stub.projectConfig = cliOk('0.6.0-W2-010')
     await clock.advance(30_000)
     expect(await ui.find({ type: 'Button', text: /^[▸▾] L7 / })).toBeDefined()
     const under06 = queueReads()
@@ -531,7 +590,7 @@ describe('專案設定', () => {
     const flat = '/repo/docs/work-logs/v0.6.0/tickets/0.6.0-W2-010.md'
     const { ui, readPaths } = await startBoard($, on, {
       files: { [flat]: TICKET_349 },
-      projectConfig: configJson({ coordinationTicket: '0.6.0-W2-010' }),
+      projectConfig: cliOk('0.6.0-W2-010'),
     })
     expect(await ui.find({ type: 'Button', text: /^[▸▾] L7 / })).toBeDefined()
     expect(readPaths.indexOf(hierarchical)).toBeGreaterThanOrEqual(0)

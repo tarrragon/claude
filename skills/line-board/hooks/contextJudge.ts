@@ -1,6 +1,6 @@
 // context 用量的讀取端：解析各 session 的用量檔（contextUsage.ts 寫出）、判定待 compact／待 clear、
 // 「各 session」列的用量字尾，以及用量檔清理的路徑檢查與孤兒檔挑選。看板（583.2、583.4）與 line_status（583.3）共用本檔的判定。
-// 不碰 $；讀檔、刪檔由 readers.ts 與 register.tsx 負責。
+// 不碰 $；讀檔、刪檔由 usageReaders.ts、usageWriter.ts 與 register.tsx 負責。
 //
 // 判定（主控裁定，2026-10-31）：
 // - 百分比依 auto-compact 狀態選分母：autoCompactThreshold 有值用 compactPercent，為 null 用 percent；選中值為 null 不判定
@@ -156,7 +156,7 @@ export function laneContextLabel(input: {
   return contextMarkLabel(contextMarkOf({ record, role, holdsInProgress })) + (resumed === null ? '' : resumeBadgeText(resumed))
 }
 
-/** 用量檔存在但解析不成立的 session：以 sessionId 為鍵，值為原因（readers.ts 的 readContextUsageStates 產生）。 */
+/** 用量檔存在但解析不成立的 session：以 sessionId 為鍵，值為原因（usageReaders.ts 的 readContextUsageStates 產生）。 */
 export type ContextUsageFailures = Readonly<Record<string, string>>
 
 /**

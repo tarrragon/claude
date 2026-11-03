@@ -35,10 +35,19 @@ def write_session(home: Path, file_stem: str, name: str, session_id: str, pid: i
     (directory / f"{file_stem}.json").write_text(json.dumps(record), encoding="utf-8")
 
 
-def write_config(project: Path, ticket: str = "0.5.0-W1-349") -> None:
-    path = project / ".claude" / "project-integration" / "multi-session.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"coordinationTicket": ticket}), encoding="utf-8")
+def write_config(project: Path, *tickets: str) -> None:
+    """建 active 版本與帶 coordination: true 的進行中票；不給票號時用單一預設票。"""
+    (project / "docs").mkdir(parents=True, exist_ok=True)
+    (project / "docs" / "todolist.yaml").write_text(
+        'versions:\n  - version: "0.5.0"\n    status: "active"\n    worklog: "docs/work-logs/v0.5.0/"\n',
+        encoding="utf-8",
+    )
+    directory = project / "docs" / "work-logs" / "v0.5.0" / "tickets"
+    directory.mkdir(parents=True, exist_ok=True)
+    for ticket in tickets or ("0.5.0-W1-349",):
+        (directory / f"{ticket}.md").write_text(
+            f"---\nid: {ticket}\nstatus: in_progress\ncoordination: true\n---\n", encoding="utf-8"
+        )
 
 
 def env_for(tmp_path: Path) -> dict:
@@ -104,9 +113,28 @@ def test_dead_process_file_with_same_session_id_is_ignored(tmp_path):
     assert result.stdout == ""
 
 
-def test_missing_config_still_hints_and_says_so(tmp_path):
+def test_zero_tickets_still_hints_and_says_so(tmp_path):
     write_session(tmp_path / "home", "999", "主控", SESSION_ID)
-    assert "讀不到協調票" in context_of(run(tmp_path, "clear"))
+    write_config(tmp_path / "project")
+    for ticket in (tmp_path / "project/docs/work-logs/v0.5.0/tickets").glob("*.md"):
+        ticket.unlink()
+    text = context_of(run(tmp_path, "clear"))
+    assert "找不到進行中的協調票" in text
+    assert "mcp__line-board__line_status" in text
+
+
+def test_unresolvable_still_hints(tmp_path):
+    write_session(tmp_path / "home", "999", "主控", SESSION_ID)
+    assert "協調票解析失敗" in context_of(run(tmp_path, "clear"))
+
+
+def test_multiple_tickets_lists_candidates_for_user(tmp_path):
+    write_session(tmp_path / "home", "999", "主控", SESSION_ID)
+    write_config(tmp_path / "project", "0.5.0-W1-349", "0.5.0-W1-350")
+    text = context_of(run(tmp_path, "clear"))
+    assert "0.5.0-W1-349" in text and "0.5.0-W1-350" in text
+    assert "請用戶裁定" in text
+    assert "ticket track full" not in text
 
 
 def test_invalid_stdin_does_not_block_and_logs_traceback(tmp_path):

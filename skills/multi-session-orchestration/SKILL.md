@@ -2,7 +2,7 @@
 name: multi-session-orchestration
 description: "PM coordinating 2+ peer Claude Code sessions in one repo: split work lines by topic, share the merge gate and test slot, relay user decisions, triage title-only review flags, wrap up for handoff. Use when running parallel session lines."
 metadata:
-  version: 1.19.0
+  version: 1.20.0
 ---
 
 # 多 session 分線協調（主控 PM 統籌多條工作線）
@@ -36,8 +36,9 @@ metadata:
 
 | 步驟 | 做法 |
 |------|------|
+| 開工先建協調票 | 協調票以 `ticket create --coordination ...` 建立；既有票用 `ticket track set-coordination <id>` 補標（`--clear` 清除），寫入 frontmatter `coordination: true`，`scripts/coordination_ticket.py` 讀此旗標 |
 | 按主題分線 | 同一主題（同一組檔案、同一個子系統）的票歸同一條線，前一張讀過的程式與事實下一張可直接用 |
-| 一個 session 一條線，以線主題命名 | 每條線配一個 session，以線主題命名（開新 session 用 `claude -n <名稱>`；格式只守命名底線）；線完結或轉階段就收尾舊 session、另開新 session。改名後舊名立即無法定址，主控要在同一步更新現行佇列行的 session 名稱。規則、改名方法與同步位置見 `references/session-naming.md` |
+| 一個 session 一條線，以線主題命名 | 每條線配一個 session，以線主題命名（開新 session 用 `claude -n <名稱>`；格式只守命名底線）；換 session 依主軸分流：主軸不變（續做、轉階段、context 達門檻）就收尾後在原 session `/clear`，主控重新派發，不關閉重開；主軸改變才 `/rename` 或另開新 session；線完結就收線並關閉。改名後舊名立即無法定址，主控要在同一步更新現行佇列行的 session 名稱。規則、改名方法與同步位置見 `references/session-naming.md` |
 | 每線一份佇列 | 在給該線的訊息中寫明順序與理由，該線在票面維護 |
 | 佇列變動時同一步寫現行佇列行 | 排定、改派、開新線、結線，主控都在同一步於協調票的 `## Solution` 段追加該線的現行佇列行（格式見 `references/session-naming.md`〈用語〉），獨立成段、行首即 `**L`，不放進清單或表格；舊行保留作歷史，不改寫。開新線時另寫一行 `**L<n> 目標**：<一句話目標>`；結線時票序寫 `（無）`。看板與狀態列只解析這兩種行，用條列文字記佇列時對不到線：該線的派發被歸入「其他」群組，狀態列也不顯示線號。context 壓縮後最容易改用條列，壓縮後第一次調整佇列時先對照既有的現行佇列行寫法 |
 | 線空出時移票 | 從佇列最長的線按主題移票給空的線，通知兩邊；被移的票若已開工，由原線直接交接。只挑沒有依賴、且改動檔案不與原線剩餘票重疊的票；改同一檔的票群整組留在原線，否則兩線改同一檔又互等 |

@@ -1235,3 +1235,51 @@ def test_second_id_with_incomplete_children_is_checked_and_blocks(project_dir, l
     ids = module.extract_ticket_ids_from_command(cmd, logger)
     results = [module.check_acceptance_status(t, project_dir, logger, cmd) for t in ids]
     assert [r.should_block for r in results] == [False, True]
+
+
+# ----------------------------------------------------------------------------
+# 協調票 complete：未配對用戶待辦（U1）阻擋
+# ----------------------------------------------------------------------------
+
+def _write_todo_ticket(project_dir: Path, ticket_id: str, coordination: bool, solution: str) -> None:
+    version_part = ticket_id.split("-W")[0]
+    ticket_dir = project_dir / "docs" / "work-logs" / f"v{version_part}" / "tickets"
+    ticket_dir.mkdir(parents=True, exist_ok=True)
+    flag = "coordination: true\n" if coordination else ""
+    (ticket_dir / f"{ticket_id}.md").write_text(
+        f"---\nid: {ticket_id}\ntype: IMP\nstatus: in_progress\nversion: {version_part}\n"
+        f"{flag}children: []\nacceptance:\n- '[x] 完成'\n---\n\n## Solution\n\n{solution}\n",
+        encoding="utf-8",
+    )
+
+
+def _check_todo_gate(project_dir, logger, ticket_id):
+    module = _load_gate_module("acceptance_gate_hook_user_todo")
+    return module.check_acceptance_status(
+        ticket_id, project_dir, logger, f"ticket track complete {ticket_id}"
+    )
+
+
+_TODO_T = "0.18.0-W30-001"
+
+
+def test_coordination_ticket_with_unpaired_todo_blocks(project_dir, logger):
+    """E2 正向對照：未配對 U1 的協調票被擋，訊息列鍵與兩條解法。"""
+    _write_todo_ticket(project_dir, _TODO_T, True, "**用戶待辦**（sync-push）：授權 sync-push")
+    result = _check_todo_gate(project_dir, logger, _TODO_T)
+    assert result.should_block is True
+    assert "sync-push" in result.message
+    assert "轉移" in result.message and "用戶待辦完成" in result.message
+
+
+def test_non_coordination_ticket_with_unpaired_todo_passes(project_dir, logger):
+    _write_todo_ticket(project_dir, _TODO_T, False, "**用戶待辦**（sync-push）：授權 sync-push")
+    result = _check_todo_gate(project_dir, logger, _TODO_T)
+    assert not (result.message and "用戶待辦" in result.message)
+
+
+def test_coordination_ticket_with_all_paired_passes(project_dir, logger):
+    sol = "**用戶待辦**（sync-push）：授權\n**用戶待辦完成**（sync-push）：轉移至新協調票"
+    _write_todo_ticket(project_dir, _TODO_T, True, sol)
+    result = _check_todo_gate(project_dir, logger, _TODO_T)
+    assert not (result.message and "用戶待辦" in result.message)

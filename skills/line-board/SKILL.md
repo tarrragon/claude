@@ -2,7 +2,7 @@
 name: line-board
 description: "多線開發看板 plugin：在 Pane 顯示用戶待辦、每條線的現行佇列、各 session 狀態與合併閘門最近紀錄，並註冊模型可呼叫的 line_status 工具（各線接續狀態與過期項）。Use when: 查看多線並行進度、啟用或關閉看板、設定協調票、看板或 line_status 顯示異常。"
 metadata:
-  version: 0.11.0
+  version: 0.12.0
 ---
 
 # line-board
@@ -21,24 +21,22 @@ metadata:
 { "enabledPlugins": { "line-board@skills-dir": false } }
 ```
 
-## 設定檔
+## 協調票來源
 
-看板從專案設定檔讀協調票：`.claude/project-integration/multi-session.json`（主 checkout 內，隨專案提交）。
+不需要設定檔。看板以 `$.process.run` 呼叫 `python3 .claude/skills/multi-session-orchestration/scripts/coordination_ticket.py --json`（與 statusline、主控接續提示共用同一支解析），取得現行協調票：active 版本中 frontmatter 為 `coordination: true` 且 `status: in_progress` 的票。協調票以 `ticket create --coordination` 建立，或對既有進行中票執行 `ticket track set-coordination <票號>`；換版時新版協調票帶標記即生效，不改任何設定。
 
-```json
-{ "coordinationTicket": "<完整票號>" }
-```
-
-- `coordinationTicket` 為字串，必須是完整票號（含版本與 Wave 前綴，如 `<版本>-W<波次>-<序號>`）；看板由它推導票檔位置與短票號前綴
 - 協調票的 `## Solution` 段落放各線的現行佇列行與目標行，格式見 `references/board-screens.md`〈協調票現行佇列行的格式〉；寫入時機與責任屬 `multi-session-orchestration`（路由見下節）
+- 解析警告（例如覆寫票已結案）列在 `line_status` 輸出
 
-## 沒有設定時的行為
+## 協調票不成立時的行為
 
-設定檔不存在、不是合法 JSON、缺 `coordinationTicket` 或值不是完整票號，都視為設定不成立：
+| 解析結果 | 看板 | `line_status` |
+|----------|------|---------------|
+| 0 張 | 不自動開 Pane，也不定時讀取，沒有使用多 session 協調的專案不受影響；`/board` 顯示「active 版本沒有標記 `coordination: true` 的進行中票」與補法 | 同訊息 |
+| 多張 | `/board` 列出候選票號，不自行擇一，請用戶裁定 | 列候選 |
+| CLI 不可用（python3 缺、無法執行、輸出不可解析）或 CLI 回報 error | `/board` 顯示「協調票解析失敗」與原因 | 同原因 |
 
-- session 啟動時不自動開 Pane，也不定時讀取，沒有使用多 session 協調的專案不受影響
-- 輸入 `/board` 開啟後，Pane 顯示設定提示：未成立的原因、設定檔的絕對路徑與格式
-- 補上設定檔後，下次 session 啟動即自動開 Pane；同一 session 內補上後，再輸入 `/board` 開始讀取
+標記補上後，下次 session 啟動即自動開 Pane；同一 session 內補上後，再輸入 `/board` 開始讀取。
 
 ## 合併閘門套件
 

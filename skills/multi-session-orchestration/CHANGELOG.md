@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.20.0（2026-11-03）— 換 session 依主軸分流（用戶裁定）：主軸不變（續做同一條線、轉階段、context 達門檻要交接）時，收尾後在原 session `/clear`，由主控重新派發，不關閉重開；主軸改變才 `/rename` 或另開 `claude -n`；線完結就收線並關閉 session。改動在 SKILL.md 核心原則表與 `references/session-naming.md` §1、§4，§4 末尾另寫明主控給用戶的指令要對應情況。
+
+**Version**: 1.19.1（2026-11-01）— `references/line-continuity.md` §2〈用戶待辦〉補〈列入時機〉：只列用戶現在就能做的事項，需要等待條件的項目，等條件發生後才列入（附反例）；條件由他線回報達成時，主控在同一輪寫完成行；列早時以完成行註明撤回，之後用新的鍵重新列入。
+
 **Version**: 1.19.0（2026-10-31）— `references/line-continuity.md` §3：`line_status` 每條未收線的線多一段 context，新增〈context 段的判讀〉表，逐一列出各寫法（用量、待 compact、待 clear、恢復開工徽章、phase compacted／resumed、未量測、無用量檔、解析失敗）的意義與主控接續動作。
 
 **Version**: 1.18.2（2026-10-31）— `references/line-continuity.md` §4〈線 session 的恢復開工通知〉：主管道標為預設關閉；〈已知限制〉補一條「auto mode 下主管道不可用，以用量檔 phase、看板徽章、`line_status` 為準」，附實測紀錄（classifier 不給判定）與不自動重送、不設法讓 classifier 放行的理由。

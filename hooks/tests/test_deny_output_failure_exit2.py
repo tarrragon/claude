@@ -263,11 +263,13 @@ def _acceptance_setup(mod, monkeypatch, should_block):
     monkeypatch.setattr(
         mod,
         "check_acceptance_status",
-        lambda ticket_id, project_dir, logger, command: SimpleNamespace(
-            should_block=should_block,
-            has_acceptance=True,
-            has_new_error_patterns=False,
-            pending_sibling_tickets=[],
+        lambda ticket_id, project_dir, logger, command: mod.AcceptanceCheckResult(
+            should_block,
+            True,
+            None,
+            False,
+            [],
+            block_source="children" if should_block else "",
         ),
     )
     decision = "deny" if should_block else "allow"

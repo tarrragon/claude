@@ -2,8 +2,10 @@
 """多線協調狀態列 wrapper：在內層狀態列輸出前加一行 `L<n> │ <名稱>`。
 
 用法（statusLine.command）：
-    python3 statusline_lane.py --coord-ticket <協調票路徑> [--inner <命令>]
+    python3 statusline_lane.py [--coord-ticket <協調票路徑>] [--inner <命令>]
 
+協調票預設由 coordination_ticket.resolve_coordination_ticket 自動解析；
+--coord-ticket 為選用覆寫（票已結案時警告並退回自動解析）。
 任何解析失敗只省略前綴，內層輸出照常；不得讓狀態列消失。
 """
 import argparse
@@ -15,16 +17,15 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import coordination_ticket as ct  # noqa: E402
+
 SOLUTION_HEADING = "## Solution"
 # 與 .claude/skills/line-board/hooks/lanes.ts 的 LANE_LINE 同一規則：只比對行首。
 LANE_LINE = re.compile(r"^\*\*L(\d+) 現行佇列\*\*(?:（([^）]*)）)?：(.*)$")
 ENDED_MARKERS = frozenset({"（結束）", "（無）"})  # 看板用（無），票面慣例亦見（結束）
 INNER_TIMEOUT_SECONDS = 10
 PREFIX_SEPARATOR = " │ "
-CONFIG_RELATIVE_PATH = ".claude/project-integration/multi-session.json"
-WORK_LOGS_DIR = "docs/work-logs"
-# 與 line-board hooks/shared.ts 的 TICKET_ID 同一規則。
-TICKET_ID = re.compile(r"^(.+?)-(W\d+-)\d+(?:\.\d+)*$")
 
 
 def _warn(message: str) -> None:
@@ -82,40 +83,30 @@ def active_lanes(ticket_text: str) -> dict:
     return {n: s for n, (s, queue) in latest.items() if queue not in ENDED_MARKERS}
 
 
-def ticket_file_candidates(ticket_id: str) -> list:
-    """票號對應票檔路徑候選（相對專案根）：hierarchical 優先，再 flat；非票號為空。"""
-    match = TICKET_ID.match(ticket_id)
-    if match is None:
-        return []
-    version = match.group(1).lstrip("v")
-    file = f"v{version}/tickets/{ticket_id}.md"
-    flat = f"{WORK_LOGS_DIR}/{file}"
-    parts = version.split(".")
-    if len(parts) < 2:
-        return [flat]
-    major, minor = parts[0], parts[1]
-    return [f"{WORK_LOGS_DIR}/v{major}/v{major}.{minor}/{file}", flat]
-
-
-def resolve_ticket_file(ticket_id: str, project_dir: Path) -> Optional[Path]:
-    """第一個存在的候選；皆不存在取第一個候選（與 shared.ts resolveTicketFile 一致）。"""
-    candidates = [project_dir / c for c in ticket_file_candidates(ticket_id)]
-    return next((c for c in candidates if c.exists()), candidates[0] if candidates else None)
-
-
-def coord_ticket_from_config(project_dir: Path) -> Optional[Path]:
-    """讀專案設定的 coordinationTicket 並推導票檔路徑；任何失敗回傳 None 並寫 stderr。"""
-    config_path = project_dir / CONFIG_RELATIVE_PATH
-    try:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        _warn(f"專案設定不可用 {config_path}：{exc}")
+def auto_resolve_ticket(project_dir: Optional[Path]) -> Optional[Path]:
+    """自動解析協調票；非 ok（0 張、多張、錯誤）或無專案目錄時省略線號並寫 stderr。"""
+    if project_dir is None:
+        _warn("無專案目錄，無法自動解析協調票")
         return None
-    ticket_id = config.get("coordinationTicket") if isinstance(config, dict) else None
-    ticket_path = resolve_ticket_file(ticket_id, project_dir) if isinstance(ticket_id, str) else None
-    if ticket_path is None:
-        _warn(f"專案設定缺少有效的 coordinationTicket：{config_path}")
-    return ticket_path
+    result = ct.resolve_coordination_ticket(project_dir)
+    for warning in result["warnings"]:
+        _warn(warning)
+    if result["kind"] == "ok":
+        return Path(result["path"])
+    detail = result["reason"] or ", ".join(c["ticket"] for c in result["candidates"])
+    _warn(f"協調票解析結果 {result['kind']}，省略線號" + (f"：{detail}" if detail else ""))
+    return None
+
+
+def override_ticket_path(coord_ticket: str, base_dir: Optional[Path]) -> Optional[Path]:
+    """--coord-ticket 覆寫：已結案時警告並回傳 None（呼叫端退回自動解析）。"""
+    path = Path(coord_ticket)
+    if not path.is_absolute():
+        path = (base_dir or Path(".")) / path
+    if ct.read_frontmatter_fields(path).get("status") in ct.CLOSED_STATUSES:
+        _warn(f"--coord-ticket {path} 已結案，改用自動解析")
+        return None
+    return path
 
 
 def lane_label(name: str, ticket_path: Path) -> str:
@@ -133,17 +124,12 @@ def build_prefix(payload: dict, coord_ticket: Optional[str]) -> str:
     name = resolve_session_name(payload)
     if not name:
         return ""
-    label = ""
-    ticket_path = None
-    if coord_ticket:
-        ticket_path = Path(coord_ticket)
-        if not ticket_path.is_absolute():
-            project_dir = (payload.get("workspace") or {}).get("project_dir")
-            ticket_path = Path(project_dir or ".") / ticket_path
-    elif os.environ.get("CLAUDE_PROJECT_DIR"):
-        ticket_path = coord_ticket_from_config(Path(os.environ["CLAUDE_PROJECT_DIR"]))
-    if ticket_path is not None:
-        label = lane_label(name, ticket_path)
+    value = os.environ.get("CLAUDE_PROJECT_DIR") or (payload.get("workspace") or {}).get("project_dir")
+    project_dir = Path(value) if value else None
+    ticket_path = override_ticket_path(coord_ticket, project_dir) if coord_ticket else None
+    if ticket_path is None:
+        ticket_path = auto_resolve_ticket(project_dir)
+    label = lane_label(name, ticket_path) if ticket_path is not None else ""
     return f"{label}{PREFIX_SEPARATOR}{name}" if label else name
 
 

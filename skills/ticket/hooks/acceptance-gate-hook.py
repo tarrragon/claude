@@ -74,6 +74,7 @@ from lib.git_command_parse import parse_command_statements
 from lib.ticket_command_parse import (
     COMPLETE_VERBS,
     find_complete_invocations,
+    find_ticket_track_invocations,
     is_complete_statement,
 )
 
@@ -107,6 +108,7 @@ from acceptance_checkers import (
 # 既有 ana_spawned_checker.py 已 deprecated，僅保留 check_ana_has_spawned_tickets
 # 作為「無後續 ticket」的 missing 警告（不阻擋）。
 from acceptance_checkers.ticket_parser import get_ticket_start_time
+from acceptance_checkers.coordination_todo_checker import check_unpaired_user_todos
 
 
 # ============================================================================
@@ -161,6 +163,25 @@ class AcceptanceCheckResult(NamedTuple):
     # 串接於同一 Bash 呼叫時為 True，代表 acceptance / execution log 檢查因讀檔
     # 時序早於同鏈操作執行而略過（避免滯後誤報，見 detect_chained_pre_complete_write）
     chained_write_detected: bool = False
+    # 阻擋來源識別碼（should_block=True 時填入，供 WARNING 行寫出原因）；
+    # 取值見 BLOCK_REASONS。空字串代表來源未標示，log 退回通用文字。
+    block_source: str = ""
+
+
+# 阻擋來源 -> WARNING 行原因文字（鍵即 AcceptanceCheckResult.block_source）
+BLOCK_REASONS = {
+    "children": "子任務未完成",
+    "hook_protection": "防護類 hook ticket 缺必含項目",
+    "unpaired_user_todos": "協調票帶未配對用戶待辦",
+    "ana_spawn": "ANA Solution spawn 規劃未落地",
+    "multi_view_status": "multi_view_status 值非法",
+    "experiment_artifact": "實驗器材殘留未處置",
+}
+
+
+def describe_block_reason(check_result: "AcceptanceCheckResult") -> str:
+    """依阻擋來源回傳 WARNING 行原因；來源未標示時回通用文字。"""
+    return BLOCK_REASONS.get(check_result.block_source, "驗收檢查未通過（來源未標示）")
 
 
 # ============================================================================
@@ -481,6 +502,7 @@ def check_acceptance_status(
                 return AcceptanceCheckResult(
                     True, False, error_msg, False, [], [],
                     frontmatter.get("type", ""), "", [], [], False,
+                    block_source="children",
                 )
             force_bypassed_children = bypassed
 
@@ -492,7 +514,18 @@ def check_acceptance_status(
         )
         if hook_protection_should_block:
             return AcceptanceCheckResult(
-                True, False, hook_protection_msg, False, [], [], "", "", [], [], False
+                True, False, hook_protection_msg, False, [], [], "", "", [], [], False,
+                block_source="hook_protection",
+            )
+
+        # 步驟 1.6：協調票帶未配對用戶待辦（U1）不得 complete
+        todo_should_block, todo_msg = check_unpaired_user_todos(
+            content, frontmatter, ticket_id, logger
+        )
+        if todo_should_block:
+            return AcceptanceCheckResult(
+                True, False, todo_msg, False, [], [], "", "", [], [], False,
+                block_source="unpaired_user_todos",
             )
 
         # 0.4.1-W2-006：偵測 complete 是否與同鏈寫入操作串接
@@ -550,7 +583,8 @@ def check_acceptance_status(
             )
             if spawn_should_block:
                 return AcceptanceCheckResult(
-                    True, False, spawn_msg, False, [], [], "", "", [], [], False
+                    True, False, spawn_msg, False, [], [], "", "", [], [], False,
+                    block_source="ana_spawn",
                 )
             if spawn_msg:
                 if warning_msg:
@@ -577,7 +611,8 @@ def check_acceptance_status(
                         "--reason \"<修正理由，至少 10 字元>\""
                     )
                     return AcceptanceCheckResult(
-                        True, False, mv_msg + fix_hint, False, [], [], "", "", [], [], False
+                        True, False, mv_msg + fix_hint, False, [], [], "", "", [], [], False,
+                        block_source="multi_view_status",
                     )
                 try:
                     mv_chained = chained_write_detected and detect_chained_multi_view_write(command)
@@ -693,7 +728,8 @@ def check_acceptance_status(
         )
         if exp_should_block:
             return AcceptanceCheckResult(
-                True, False, exp_msg, False, [], [], "", "", [], [], False
+                True, False, exp_msg, False, [], [], "", "", [], [], False,
+                block_source="experiment_artifact",
             )
 
         task_type = frontmatter.get("type", "")
@@ -1055,6 +1091,163 @@ def _parse_and_validate_input(input_data: Dict[str, Any], logger) -> Optional[Tu
     return tool_name, command
 
 
+def extract_close_ticket_ids(command: str, logger) -> List[str]:
+    """掃描 `ticket track close` 命令，回傳其後全部 Ticket ID（保序、去重）。
+
+    失敗語意：命令無法解析（掃描回 None）時視為非 close 命令，回空清單（fail-open）。
+    觸發條件：未閉合引號、管線或 here-string 餵 stdin shell、巢狀過深。
+    """
+    invocations = find_ticket_track_invocations(command, ("close",))
+    if invocations is None:
+        logger.warning("close 命令掃描無法解析，略過協調票待辦檢查（fail-open）")
+        return []
+    return _dedupe([
+        token
+        for _verb, args in invocations
+        for token in args
+        if re.fullmatch(TICKET_ID_PATTERN, token)
+    ])
+
+
+def check_close_coordination_todos(
+    ticket_ids: List[str], project_dir: Path, logger, action: str = "close"
+) -> Optional[Tuple[str, str]]:
+    """close 專用：只做協調票未配對用戶待辦檢查，不套用 complete 的其他步驟。
+
+    回傳第一張應擋票的 (ticket_id, message)；皆放行回 None。
+    票檔不存在或讀取失敗時略過該張（fail-open，已寫日誌）。
+    """
+    for ticket_id in ticket_ids:
+        ticket_file = find_ticket_file(ticket_id, project_dir, logger)
+        if not ticket_file:
+            logger.warning(f"close 檢查找不到 Ticket 檔案，略過: {ticket_id}")
+            continue
+        try:
+            content = ticket_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.error(f"close 檢查讀取票檔失敗，略過 {ticket_id}: {exc}")
+            sys.stderr.write(f"[acceptance-gate] close 檢查讀取失敗，放行 {ticket_id}: {exc}\n")
+            continue
+        should_block, message = check_unpaired_user_todos(
+            content, parse_ticket_frontmatter(content), ticket_id, logger, action=action
+        )
+        if should_block:
+            return ticket_id, message
+    return None
+
+
+def _option_value(args: List[str], name: str) -> Optional[str]:
+    """取 `--name V` 或 `--name=V` 的值；不存在回 None。"""
+    for i, token in enumerate(args):
+        if token == name and i + 1 < len(args):
+            return args[i + 1]
+        if token.startswith(name + "="):
+            return token[len(name) + 1:]
+    return None
+
+
+def extract_batch_wave_selectors(command: str, logger) -> List[Tuple[int, str, Optional[str]]]:
+    """掃描 `batch-complete --wave N`，回傳 (wave, status, version) 清單。
+
+    失敗語意：掃描無法解析（回 None）、--wave 值非整數時略過該項（fail-open），
+    已寫 logger.warning。觸發條件：未閉合引號、管線或 here-string 餵 stdin shell、
+    巢狀過深、`--wave abc`。
+    """
+    invocations = find_ticket_track_invocations(command, ("batch-complete",))
+    if invocations is None:
+        logger.warning("batch-complete 掃描無法解析，略過 --wave 協調票待辦檢查（fail-open）")
+        return []
+    selectors: List[Tuple[int, str, Optional[str]]] = []
+    for _verb, args in invocations:
+        raw_wave = _option_value(args, "--wave")
+        if raw_wave is None:
+            continue
+        if not re.fullmatch(r"\d+", raw_wave):
+            logger.warning(f"--wave 值非整數，略過協調票待辦檢查（fail-open）: {raw_wave}")
+            continue
+        selectors.append((
+            int(raw_wave),
+            _option_value(args, "--status") or "in_progress",
+            _option_value(args, "--version"),
+        ))
+    return selectors
+
+
+def expand_wave_coordination_ids(
+    selectors: List[Tuple[int, str, Optional[str]]], project_dir: Path, logger
+) -> List[str]:
+    """把 --wave 展開為符合條件的協調票 ID（frontmatter coordination: true）。
+
+    與 CLI 一致以 wave 與 status 篩選；有 --version 時限該版本目錄，否則掃全部版本
+    （hook 不知 CLI 自動選版結果，多擋不少放）。讀檔失敗略過該票並寫日誌（fail-open）。
+    """
+    ids: List[str] = []
+    for wave, status, version in selectors:
+        pattern = f"v{version}" if version else "v*"
+        for ticket_file in sorted((project_dir / "docs" / "work-logs").glob(f"{pattern}/tickets/*.md")):
+            try:
+                fm = parse_ticket_frontmatter(ticket_file.read_text(encoding="utf-8"))
+            except OSError as exc:
+                logger.error(f"wave 展開讀取票檔失敗，略過 {ticket_file.name}: {exc}")
+                continue
+            if (
+                str(fm.get("wave", "")).strip() == str(wave)
+                and str(fm.get("status", "")).strip() == status
+                and str(fm.get("coordination", "")).strip().lower() == "true"
+                and fm.get("id")
+            ):
+                ids.append(str(fm["id"]))
+    return _dedupe(ids)
+
+
+def _handle_close_command(command: str, logger) -> int:
+    """處理非 complete 的 Bash 命令：為 close 執行協調票待辦檢查，輸出 allow/deny。"""
+    close_ids = extract_close_ticket_ids(command, logger) if command else []
+    blocked = None
+    if close_ids:
+        project_dir = get_shared_state_root(get_project_root())
+        blocked = check_close_coordination_todos(close_ids, project_dir, logger)
+    if blocked is None:
+        _output_allow_json()
+        return EXIT_SUCCESS
+    ticket_id, message = blocked
+    logger.warning(f"協調票 {ticket_id} close 被阻擋：未配對用戶待辦")
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "additionalContext": message,
+        }
+    }, ensure_ascii=False, indent=2))
+    return EXIT_BLOCK
+
+
+def _check_wave_coordination(selectors, logger) -> List[str]:
+    """batch-complete --wave：展開協調票並檢查未配對待辦。
+
+    擋下時輸出 deny 並以 SystemExit(EXIT_BLOCK) 結束；無協調票或皆已配對時
+    輸出 allow，回空清單（主流程直接放行）。
+    """
+    project_dir = get_shared_state_root(get_project_root())
+    coord_ids = expand_wave_coordination_ids(selectors, project_dir, logger)
+    blocked = check_close_coordination_todos(
+        coord_ids, project_dir, logger, action="complete"
+    ) if coord_ids else None
+    if blocked is None:
+        _output_allow_json()
+        return []
+    ticket_id, message = blocked
+    logger.warning(f"協調票 {ticket_id} 經 batch-complete --wave 被阻擋：未配對用戶待辦")
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "additionalContext": message,
+        }
+    }, ensure_ascii=False, indent=2))
+    raise SystemExit(EXIT_BLOCK)
+
+
 def _extract_ticket_ids_or_skip(tool_name: str, command: str, logger) -> List[str]:
     """識別 complete 命令並提取全部 Ticket ID；非 complete 或無 ID 時輸出 allow 並回空清單。"""
     if tool_name != "Bash":
@@ -1071,6 +1264,9 @@ def _extract_ticket_ids_or_skip(tool_name: str, command: str, logger) -> List[st
 
     ticket_ids = extract_ticket_ids_from_command(command, logger)
     if not ticket_ids:
+        selectors = extract_batch_wave_selectors(command, logger)
+        if selectors:
+            return _check_wave_coordination(selectors, logger)
         logger.error("無法從命令中提取 Ticket ID")
         _output_allow_json()
         return []
@@ -1115,9 +1311,11 @@ def main() -> int:
                 input_data.get("tool_name") == "Bash" and is_complete_command(_fp_command)
             )
             if not _fp_is_complete:
-                logger.debug("Fast-path skip: 非 ticket track complete 命令")
-                _output_allow_json()
-                return EXIT_SUCCESS
+                logger.debug("非 complete 命令：僅檢查 close 的協調票待辦")
+                if input_data.get("tool_name") != "Bash":
+                    _output_allow_json()
+                    return EXIT_SUCCESS
+                return _handle_close_command(_fp_command, logger)
 
         # Effort 感知（v2.1.133+，W14-034）：僅記錄 effort 供除錯，
         # 不再作為短路放行條件（0.2.1-W3-018）。此處已確定為
@@ -1198,7 +1396,9 @@ def main() -> int:
 
         # 步驟 5: 決定 exit code
         if result.should_block:
-            logger.warning("Acceptance Gate Hook：子任務未完成，阻止執行")
+            logger.warning(
+                f"Acceptance Gate Hook：{describe_block_reason(result)}，阻止執行"
+            )
             return EXIT_BLOCK
         logger.info("Acceptance Gate Hook 檢查完成：允許執行")
         return EXIT_SUCCESS

@@ -18,7 +18,7 @@ Action:
   合計 input_tokens + cache_creation_input_tokens + cache_read_input_tokens。
   合計 >= THRESHOLD（預設 400K）且當前 tier 尚未提示 → 以 emit_hook_output
   輸出 additionalContext（模型可見；含 K 數、請用戶 /compact、或寫 handoff 後
-  claude -n 開新 session）+ 更新去重 state + 檔案日誌。
+  依主軸分流 /clear 或 claude -n）+ 更新去重 state + 檔案日誌。
 
   分層去重（避免提示疲勞）：tier = 合計 // TIER_STEP（預設 50K）。每跨入更深
   的 tier 才再提示一次。state file 記 {session_id: last_warned_tier}；
@@ -163,8 +163,10 @@ def _warning_text(total_context: int) -> str:
         f"[context-depth-warning] 當前 context 合計約 {total_context // 1000}K tokens"
         f"（input + cache_creation + cache_read），已超過 {THRESHOLD // 1000}K。"
         "請告知用戶擇一處理：(1) 請用戶執行 /compact（模型無法自行觸發）；"
-        "(2) 先把進度寫入 ticket 與 handoff，再請用戶以 "
-        "`claude -n <線主題>` 開新 session 接續。"
+        "(2) 先把進度寫入 ticket 與 handoff，再依主軸分流："
+        "主軸不變，請用戶在原 session 執行 /clear，由主控重新派發；"
+        "主軸改變，才請用戶 /rename 或以 `claude -n <線主題>` 開新 session。"
+        "例外：主控 session 長駐，依 T_compact（60%）判斷，不適用本提示。"
     )
 
 

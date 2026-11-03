@@ -2,6 +2,11 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 0.12.0（2026-11-03）— 跨專案行為變更：協調票來源由專案設定檔 `.claude/project-integration/multi-session.json` 改為協調票解析 CLI（`multi-session-orchestration` 的 `scripts/coordination_ticket.py --json`，以 `$.process.run` 呼叫）。consumer 不再需要設定檔，換版不用手改；協調票以 `ticket create --coordination` 或 `ticket track set-coordination` 標記。0 張時不自動開 Pane，`/board` 與 `line_status` 顯示「active 版本沒有標記 `coordination: true` 的進行中票」與補法；多張時列候選不自行擇一；CLI 不可用（python3 缺、無法執行、輸出不可解析）或回報 error 時顯示原因。解析警告列在 `line_status` 輸出。`multi-session.json` 若仍存在，其 `coordinationTicket` 仍由 CLI 當覆寫讀取（已結案則警告後退回自動解析）。起因：同一事實（現行協調票）存在設定檔與票面兩份，換版需手改。
+
+- `readers.ts` 的 `readProjectConfig` 改呼叫 CLI（移除 `PROJECT_CONFIG_PATH`，新增 `COORDINATION_CLI_PATH`）；`shared.ts` 的 `parseProjectConfig` 改解析 CLI 的 JSON；`ProjectConfigResult` 型別改為 ok／none／multiple／error，`BoardSnapshot` 的 unconfigured 不再帶設定檔路徑。
+- `SKILL.md` 以〈協調票來源〉〈協調票不成立時的行為〉取代〈設定檔〉〈沒有設定時的行為〉。
+
 **Version**: 0.11.0（2026-10-31）— 跨專案行為變更：`line_status` 每條未收線的線在依據之後接 context 段：`ctx <百分比>%（<距量測>）`、看板線標題同一份的 `［待 compact］`／`［待 clear］` 標記與恢復開工徽章，用量檔有 `phase` 時再接 `｜phase <compacted|resumed>（<來源>，HH:MM）`（不受徽章 10 分鐘限制）。沒有用量檔寫 `ctx 無用量檔`，用量檔存在但解析不成立寫 `ctx 用量檔解析失敗：<原因>`；持有者無從查起的線沒有 context 段。看板 Pane 不變。
 
 - `hooks/contextJudge.ts` 新增 `laneContextStatus`（標記與徽章經 `laneContextLabel`）、`phaseText`、`parseContextUsageDetailed`（失敗附原因：JSON 無效、不是物件、缺必要欄位；`parseContextUsageFile` 改為經此函式）、型別 `ContextUsageParse`、`ContextUsageFailures`。

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.13.0（2026-11-03）— 專案校準檔 `dart-style-guardian.json` 遷至 `.claude/project-integration/`。`scripts/style_checker.py` 先讀新位置，找不到時改讀舊位置並輸出遷移提示，舊位置的專案不必同步搬檔。SKILL.md 與 `references/i18n-guidelines.md` 的路徑同步更新；`test_style_checker.py` 補兩個案例：只有舊位置時讀舊檔並提示，新舊並存時讀新檔且不提示。
+
 **Version**: 1.12.1 — `references/i18n-guidelines.md`〈判準：錯誤碼與使用者可見錯誤訊息的交界〉的指涉修正：原寫「組合方式依上一節走參數化翻譯」，上一節〈標籤＋識別符組合時如何分割〉的主體是範例，讀者只讀條文時找不到可引的規則句。改為直接指名〈Exceptions〉的標籤與識別符組合規則與〈Violation 3: String Interpolation〉，判準內容不變。
 **Version**: 1.12.0 — 補〈Exceptions〉與〈Violation 2: Hardcoded Error Messages〉的交界：兩處條文各自沒寫明錯誤碼所指對象（〈Exceptions〉指識別符值本身、〈Violation 2〉指使用者可見錯誤訊息），也未互相引用，導致「呈現層只顯示錯誤碼、沒有訊息」的情境無法從條文判定。三處修正：〈Exceptions〉第 1 項加註豁免僅限識別符值本身；`references/i18n-guidelines.md` 新增〈判準：錯誤碼與使用者可見錯誤訊息的交界〉小節，明定錯誤碼不得取代訊息單獨顯示，需附參考編號時訊息轉譯、錯誤碼以參數帶入，附 Violation/Fix 對照與判定表；〈Violation 2〉說明段末尾補一句回引新小節。不改變既有裁決「呈現層翻譯」（例外拋出處只丟錯誤碼，翻譯留給持有 context 的呈現層），純釐清交界。
 **Version**: 1.11.1 — 1.11.0 修正後由非撰寫者第二輪複核，兩問仍無法由引文逐詞推出，依修補輪數上限直接刪除，不再改寫：`i18n-guidelines.md`〈判準：標籤＋識別符組合時如何分割〉Q2（預期答案「由呼叫端自行」不在引文內；保留的 Q1 仍檢驗分割核心推導）；`color-system.md`〈Theme 與 Token 判準〉Q1（預期答案「元件庫 token」不在引文內，且以條件式回答「有沒有」問句）。color 範例因此無驗證問句，以註記指向判準段方向句——該方向句即條文依據句，缺口在問句寫法而非條文，故不另立缺引導。

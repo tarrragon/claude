@@ -875,6 +875,8 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         "created": datetime.now().strftime("%Y-%m-%d"),
         "updated": datetime.now().strftime("%Y-%m-%d"),
         "protocol_version": PROTOCOL_VERSION_CURRENT,
+        # 協調票旗標：僅 True 時寫入，未帶 --coordination 的票 frontmatter 不出現此鍵
+        **({"coordination": True} if config.get("coordination") else {}),
     }
 
 
