@@ -1,11 +1,12 @@
 // 線標題的待 compact／待 clear 標記與恢復開工徽章（Pane 端到端）：標題列為 `L<n> <session>［狀態］<標記><徽章>`。
+// 每個 test 以 { timeoutMs: PANE_TEST_TIMEOUT_MS } 設逾時，數值與依據見 paneHarness.ts 的 PANE_TEST_TIMEOUT_MS。
 
 import { describe, expect, test } from 'claude-code/testing'
 
 import { CONTEXT_USAGE_DIR } from '../hooks/contextUsage'
 import { ticketFileCandidates } from '../hooks/shared'
 import { sessionJson, ticketFile } from './fixtures'
-import { COORDINATION_TICKET, NOW_MS, SESSIONS, sessionStub, startBoard } from './paneHarness'
+import { COORDINATION_TICKET, NOW_MS, PANE_TEST_TIMEOUT_MS, SESSIONS, sessionStub, startBoard } from './paneHarness'
 import type { Stub } from './paneHarness'
 
 const COORDINATION_TICKET_FILE = ticketFileCandidates(COORDINATION_TICKET)[0] ?? ''
@@ -63,7 +64,7 @@ function laneStub(usages: Record<string, string>): Stub {
 }
 
 describe('線標題的標記與恢復開工徽章', () => {
-  test('正向對照：持有 in_progress 且達 45 標待 compact、未持有且達 30 標待 clear、主控達 60 標待 compact、10 分鐘內恢復開工顯示徽章', async ($, on) => {
+  test('正向對照：持有 in_progress 且達 45 標待 compact、未持有且達 30 標待 clear、主控達 60 標待 compact、10 分鐘內恢復開工顯示徽章', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const resumedAt = NOW_MS - 120_000
     const stub = laneStub({
       'sid-101': usageJson('sid-101', { percent: 50 }),
@@ -80,7 +81,7 @@ describe('線標題的標記與恢復開工徽章', () => {
     await ui.unmount()
   })
 
-  test('反向對照：低於門檻、主控未達 60、compact 後無用量、收線的線不標；恢復開工超過 10 分鐘不顯示徽章', async ($, on) => {
+  test('反向對照：低於門檻、主控未達 60、compact 後無用量、收線的線不標；恢復開工超過 10 分鐘不顯示徽章', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = laneStub({
       'sid-101': usageJson('sid-101', { percent: 44 }),
       'sid-103': usageJson('sid-103', { percent: 29 }),

@@ -166,6 +166,15 @@ export function parseLaneLines(text: string): LaneLine[] {
     .sort((a, b) => a.lane - b.lane)
 }
 
+/**
+ * 票序不含任何票號、但有非票號文字（如寫錯的收線記號「（結束了）」或說明文字「等主控通知」）。
+ * 看板的線標題標示與 line_status 的 no-ticket 過期項共用此判定，「佇列無票號」的定義只有這一份。
+ * 輸入為 parseQueue 的結果；收線記號由呼叫端先以 endedForm 排除（看板經 parseLanes 濾掉 exact，line_status 跳過收線的線）。
+ */
+export function isQueueWithoutTicket(tokens: readonly QueueToken[]): boolean {
+  return !tokens.some(token => token.kind === 'ticket') && tokens.some(token => token.kind === 'text')
+}
+
 /** 所有線的佇列完整票號，保留首次出現順序並去重。 */
 export function laneTicketIds(lanes: readonly Lane[]): string[] {
   const ids: string[] = []

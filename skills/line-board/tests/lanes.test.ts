@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { QUEUE_LINE_CASES, TEMPLATE_AT_LINE_START,TEMPLATE_NOTE, TICKET_349, TICKET_349_GOALS } from './fixtures'
-import { formatQueue, laneTicketIds, parseLaneGoals, parseLanes, parseQueue } from '../hooks/lanes'
+import { formatQueue, isQueueWithoutTicket, laneTicketIds, parseLaneGoals, parseLanes, parseQueue } from '../hooks/lanes'
 import { ticketPrefixOf } from '../hooks/shared'
 
 /** fixtures 的協調票（349）推導出的短票號前綴；本檔的完整票號皆以它補全。 */
@@ -191,5 +191,23 @@ describe('formatQueue', () => {
       { id: '0.5.0-W1-353.1', status: 'pending' },
     ])
     expect(text).toBe('337.1〔in_progress〕（待驗證） → 353.1〔pending〕 ∥ 999')
+  })
+})
+
+describe('isQueueWithoutTicket', () => {
+  test('E2 正向對照：只含非票號文字的票序（寫錯的收線記號、說明文字、多段文字）判為佇列無票號', () => {
+    for (const queue of ['（結束了）', '等主控通知', '待定 → 再議']) {
+      expect(isQueueWithoutTicket(parseQueue(queue, PREFIX))).toBe(true)
+    }
+  })
+
+  test('E1 對照：含票號的票序（只有票號、票號夾文字、W 寫法、完整票號）不判為佇列無票號', () => {
+    for (const queue of ['100', '100 → 等主控通知', '待定 → W3-012', '0.6.0-W2-010']) {
+      expect(isQueueWithoutTicket(parseQueue(queue, PREFIX))).toBe(false)
+    }
+  })
+
+  test('空票序（沒有任何 token）不判為佇列無票號', () => {
+    expect(isQueueWithoutTicket(parseQueue('', PREFIX))).toBe(false)
   })
 })

@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.7.0 — `add` 流程新增步驟 9「對應系統條目」：新 pattern 涉及系統行為誤判時，更新 `system-misjudgment` skill 對應系統檔（有則補、無則新增，來源欄放 pattern ID）。流程新增一步，既有步驟與命令不變
+**Last Updated**: 2026-11-04
+
 **Version**: 1.6.1 — 步驟 8 改以 CLI `readme_index.py sync --write` 為主要路徑；Python API 片段降為次要，並註明只能放進 `.py` 檔執行、不能以 heredoc 或 `python -c` 執行（Bash 寫入邊界守衛會解析命令文字中的 python 程式碼，`open(readme_path, "w")` 落在 `.claude/` 下會被擋）。無流程或命令變更
 **Last Updated**: 2026-10-20
 

@@ -35,7 +35,7 @@ const LINE_STATUS_TOOL = 'line_status'
 const LINE_STATUS_TOOL_FULL = `mcp__line-board__${LINE_STATUS_TOOL}`
 /** 工具說明（模型讀的）：用途、何時呼叫、輸出內容。 */
 const LINE_STATUS_DESCRIPTION =
-  '多 session 協調：回報協調票上每條線的接續狀態（已收線、/clear 後繼續、/compact 後繼續、新 session 接手、無人持有、來源不明）與判讀依據，並列出過期項（收線寫法不合規、名稱不在存活 session 中但仍有佇列、佇列的票全部 completed 但還沒收線）。主控在 /clear 或 /compact 後自我接續、每輪佇列更新前呼叫。唯讀，不需參數。'
+  '多 session 協調：回報協調票上每條線的接續狀態（已收線、/clear 後繼續、/compact 後繼續、新 session 接手、無人持有、來源不明）與判讀依據，並列出過期項（收線寫法不合規、名稱不在存活 session 中但仍有佇列、佇列的票全部 completed 但還沒收線、佇列只有文字沒有任何票號且不是收線記號）。主控在 /clear 或 /compact 後自我接續、每輪佇列更新前呼叫。唯讀，不需參數。'
 /** 更新間隔：30 秒。 */
 const REFRESH_MS = 30_000
 

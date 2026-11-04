@@ -1248,6 +1248,70 @@ def _check_wave_coordination(selectors, logger) -> List[str]:
     raise SystemExit(EXIT_BLOCK)
 
 
+def extract_batch_parent_ids(command: str, logger) -> List[str]:
+    """掃描 `batch-complete --parent P`，回傳 P 清單。
+
+    失敗語意：掃描無法解析（回 None）時回空清單（fail-open），已寫 logger.warning。
+    觸發條件：未閉合引號、管線或 here-string 餵 stdin shell、巢狀過深。
+    """
+    invocations = find_ticket_track_invocations(command, ("batch-complete",))
+    if invocations is None:
+        logger.warning("batch-complete 掃描無法解析，略過 --parent 協調票待辦檢查（fail-open）")
+        return []
+    return _dedupe([
+        value
+        for _verb, args in invocations
+        for value in [_option_value(args, "--parent")]
+        if value
+    ])
+
+
+def expand_parent_coordination_ids(parent_ids: List[str], project_dir: Path, logger) -> List[str]:
+    """把 --parent P 展開為 P 的子票中 coordination: true 者（對應 track_batch._collect_ids_from_parent）。
+
+    parent 判定同 CLI：parent_id 或 parent 等於 P。讀檔失敗略過該票並寫日誌（fail-open）。
+    """
+    ids: List[str] = []
+    for ticket_file in sorted((project_dir / "docs" / "work-logs").glob("v*/tickets/*.md")):
+        try:
+            fm = parse_ticket_frontmatter(ticket_file.read_text(encoding="utf-8"))
+        except OSError as exc:
+            logger.error(f"parent 展開讀取票檔失敗，略過 {ticket_file.name}: {exc}")
+            continue
+        parent = str(fm.get("parent_id") or fm.get("parent") or "").strip()
+        if (
+            parent in parent_ids
+            and str(fm.get("coordination", "")).strip().lower() == "true"
+            and fm.get("id")
+        ):
+            ids.append(str(fm["id"]))
+    return _dedupe(ids)
+
+
+def _check_parent_coordination(command: str, logger) -> None:
+    """batch-complete --parent：展開子票協調票並檢查；擋下時輸出 deny 並 SystemExit(EXIT_BLOCK)，否則不輸出。"""
+    parent_ids = extract_batch_parent_ids(command, logger)
+    if not parent_ids:
+        return
+    project_dir = get_shared_state_root(get_project_root())
+    coord_ids = expand_parent_coordination_ids(parent_ids, project_dir, logger)
+    blocked = check_close_coordination_todos(
+        coord_ids, project_dir, logger, action="complete"
+    ) if coord_ids else None
+    if blocked is None:
+        return
+    ticket_id, message = blocked
+    logger.warning(f"協調票 {ticket_id} 經 batch-complete --parent 被阻擋：未配對用戶待辦")
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "additionalContext": message,
+        }
+    }, ensure_ascii=False, indent=2))
+    raise SystemExit(EXIT_BLOCK)
+
+
 def _extract_ticket_ids_or_skip(tool_name: str, command: str, logger) -> List[str]:
     """識別 complete 命令並提取全部 Ticket ID；非 complete 或無 ID 時輸出 allow 並回空清單。"""
     if tool_name != "Bash":
@@ -1261,6 +1325,8 @@ def _extract_ticket_ids_or_skip(tool_name: str, command: str, logger) -> List[st
         return []
 
     logger.info(f"識別到 ticket track complete 命令: {command}")
+
+    _check_parent_coordination(command, logger)
 
     ticket_ids = extract_ticket_ids_from_command(command, logger)
     if not ticket_ids:

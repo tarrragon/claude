@@ -66,4 +66,19 @@ requires-python = ">=3.11"
 
 ---
 
-**Last Updated**: 2026-03-05
+## 變體：依賴變更合併進共用 checkout 後，本機解析結果沒有更新
+
+**現象**：一條線在 worktree 裡新增依賴，`pubspec.yaml` 與 `pubspec.lock` 都已同步提交，合併進 main 也沒問題。但共用的主 checkout 沒有重跑 `pub get`，本機的套件解析結果（`.dart_tool/package_config.json`）仍是舊的。之後另一條線在主 checkout 跑 analyze，新依賴的 import 解析不到，回 rc=3，看起來像程式缺陷。
+
+**與主條目的差別**：主條目是 lock 檔沒有重新產生，提交內容本身有缺口。這個變體的提交內容完整，缺的是「合併之後」本機狀態的更新；lock 檔比對檢查（`--check` 類）會通過，偵測不到。
+
+**做法**：
+
+- 合併的變更動到 `pubspec.yaml`、`pyproject.toml`、`package.json` 等依賴宣告檔時，合併後在主 checkout 重跑對應的安裝命令（`fvm flutter pub get`、`uv sync`、`npm install`）。
+- 在主 checkout 遇到「import 解析不到」時，先查最近合併的 commit 有沒有動到依賴宣告檔，再判斷是不是程式缺陷。
+
+**實例**：2026-11-03，某 Flutter 專案的一條線新增 watcher 依賴並合併。另一條線在主 checkout 跑 `dart analyze` 回 rc=3，跑完 `pub get` 後就沒問題了，`pubspec.lock` 沒有變動。同一天另一條線也在新建的 worktree 遇到同樣情況：worktree 從含新依賴的 main 切出，但沒有先跑 `pub get`，analyze 就誤報。新建 worktree 時也要先跑一次安裝命令。2026-11-04 又出現反方向的情況：analyze 通過，但 `flutter test` 編譯失敗。清掉 `.dart_tool` 重跑之後就正常了，判定是本機的分析結果過期。兩個方向的成因相同，都是本機解析狀態沒有跟著依賴或程式碼更新。
+
+---
+
+**Last Updated**: 2026-11-03

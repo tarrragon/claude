@@ -1,5 +1,5 @@
 // line-board Pane 的線群組：每條線一個以框線框起的可折疊群組，標題分三行——標題列為 Button（▸／▾、線號、session 與狀態），
-// 其下為目標、活動計數——展開後依序列出派發列、閘門票、佇列列與佇列細節（按鍵展開，逐張列出佇列票的狀態與 title）；
+// 其下為目標、活動計數——展開後依序列出派發列、閘門票、佇列列與佇列細節（按鍵展開，逐張列出佇列票的狀態與 title；兩者的繪製在 queueView.tsx）；
 // 對不到線的派發歸最後的「其他」群組。標題列為主題鍵 suggestion 色粗體，派發列、閘門票、佇列列中的每張票與佇列細節各行依 statusColor.ts 的五種狀態上色。renderGroup 是各群組共用的
 // 可折疊外框，register.tsx 的「各 session」「合併閘門」兩區塊也用它。元素由 register.tsx 以 $.ui.resolve(e) 取得後傳入；分組經 parse.ts 匯出。
 
@@ -13,7 +13,6 @@ import type {
   LanesResult,
   ReadyBoard,
   SessionsResult,
-  TicketStatus,
   UnsetProjectConfig,
 } from '../types'
 import { dispatchNotice, dispatchRowsOf } from './dispatchView'
@@ -22,24 +21,23 @@ import {
   COORDINATION_NONE,
   GROUP_INDENT,
   OTHER_LANE_LABEL,
-  UNKNOWN_STATUS,
   boardStateColor,
   dispatchStageState,
   formatActivity,
   formatGateTicket,
   formatGroupDispatchRow,
-  formatGroupTitle,
+  formatGroupToggle,
   groupBodyKey,
   groupToggleKey,
   isDefaultExpanded,
   isGroupExpanded,
+  isQueueWithoutTicket,
   laneContextLabel,
   laneGroups,
   laneSessionStatus,
   queueRowSegments,
-  queueTicketState,
 } from './parse'
-import type { QueueSegment } from './parse'
+import { queueColorOf, queueDetail, queueRow } from './queueView'
 
 /** 群組外框的框線樣式（Ink 的 borderStyle）。 */
 export const GROUP_BORDER_STYLE = 'round'
@@ -56,16 +54,11 @@ export function groupFrameKey(id: string): string {
   return `frame:${id}`
 }
 
-/** 線群組的佇列細節 id：`<群組 id>:detail`（如 `lane:7:detail`），也是細節展開狀態的鍵（與群組共用 line-board.expanded）。 */
-export function laneDetailId(id: string): string {
-  return `${id}:detail`
-}
-
-/** 佇列細節按鍵的名稱；按鍵文字為 `▸ 佇列細節`（收合）或 `▾ 佇列細節`（展開）。 */
-export const QUEUE_DETAIL_LABEL = '佇列細節'
-
-/** 佇列細節中讀不到 title 的票（票檔讀不到、沒有 title 欄，或 hot reload 前的舊 snapshot）顯示的文字。 */
-export const MISSING_TITLE = '（讀不到 title）'
+/**
+ * 佇列行只含非票號文字（lanes.ts isQueueWithoutTicket，與 line_status 的 no-ticket 過期項同一判定）時，標題列在 `［狀態］` 之後的標示。
+ * 這類線沒有佇列列（layout.ts queueRowSegments 回傳 null），沒有此標示時看板上只剩標題列、看不出佇列寫錯。
+ */
+export const QUEUE_NO_TICKET_LABEL = '［佇列無票號］'
 
 /** 群組標題 Box 的 key：內含標題列與其下的目標、活動計數各行。 */
 export function groupTitleKey(id: string): string {
@@ -112,7 +105,7 @@ export function renderGroup({ Box, Text, Button }: Elements, frame: GroupFrame, 
       {/* 標題列不隨無活動變淡：實機上淡色會把標題色換成灰色，標題列就與其下的淡色各行同色；無活動由其下各行的淡色與 ▸ 表達 */}
       <Button key={groupToggleKey(frame.id)} plain onPress={() => onToggle(frame.id, frame.isOpen)}>
         <Text color={GROUP_TITLE_COLOR} bold>
-          {formatGroupTitle([frame.title], frame.isOpen)}
+          {formatGroupToggle(frame.title, frame.isOpen)}
         </Text>
       </Button>
       {details}
@@ -209,27 +202,9 @@ function renderLaneGroup(
   ])
 }
 
-/** 佇列票的顏色：以完整票號與短票號查詢。 */
-type TicketColorOf = (id: string, serial: string) => string | undefined
-
 /**
- * 佇列票的顏色，佇列列與佇列細節共用：依該票所有的派發列階段（不限同一群組，以短票號比對任務欄）、
- * 同群組的閘門票列與主 checkout 的狀態，經 queueTicketState 判定。
- */
-function queueColorOf(group: LaneGroup, tickets: readonly TicketStatus[], allRows: readonly DispatchRow[]): TicketColorOf {
-  const statusById = new Map(tickets.map(ticket => [ticket.id, ticket.status]))
-  return (id, serial) => {
-    const stages = [
-      ...allRows.filter(row => row.task === serial).map(row => row.stage),
-      ...(group.gateTickets.some(gate => gate.serial === serial) ? (['閘門'] as const) : []),
-    ]
-    return boardStateColor(queueTicketState(statusById.get(id), stages))
-  }
-}
-
-/**
- * 線群組的標題三行：標題列為線號、session 名稱與狀態，其後接 context 用量的標記與恢復開工徽章
- * （`L<n> <session>［狀態］［待 compact］［/compact 後已恢復 HH:MM］`，contextJudge.ts laneContextLabel），
+ * 線群組的標題三行：標題列為線號、session 名稱與狀態，佇列無票號時接 QUEUE_NO_TICKET_LABEL，其後接 context 用量的標記與恢復開工徽章
+ * （`L<n> <session>［狀態］［佇列無票號］［待 compact］［/compact 後已恢復 HH:MM］`，contextJudge.ts laneContextLabel），
  * 其下為目標、活動計數各一行；「其他」群組的標題列只有名稱，其下為活動計數。缺目標或活動計數時該行為空字串，由 renderGroup 略過。
  */
 function groupTitle(board: ReadyBoard, group: LaneGroup): Pick<GroupFrame, 'title' | 'details'> {
@@ -245,67 +220,9 @@ function groupTitle(board: ReadyBoard, group: LaneGroup): Pick<GroupFrame, 'titl
     usages,
     nowMs: readAtMs,
   })
-  const title = `L${lane} ${session ?? '（未標 session）'}${laneStatusLabel(sessions, session)}${context}`
+  const noTicket = isQueueWithoutTicket(tokens) ? QUEUE_NO_TICKET_LABEL : ''
+  const title = `L${lane} ${session ?? '（未標 session）'}${laneStatusLabel(sessions, session)}${noTicket}${context}`
   return { title, details: [laneGoalLabel(goal), activity] }
-}
-
-/**
- * 佇列列：線有未完成的票時一行（completed 的票不列，segments 為 null 時沒有佇列列）；「其他」群組沒有佇列列。
- * 每張票為一段內嵌 Text，依佇列票的狀態上色；分隔符不上色。
- */
-function queueRow(Text: ElementConstructor<TextProps>, groupId: string, segments: readonly QueueSegment[] | null, colorOf: TicketColorOf) {
-  if (segments === null) return []
-  const parts = segments.map((segment, index) => {
-    if (segment.ticket === null) return segment.text
-    return (
-      <Text key={`${groupId}:queue:${index}`} color={colorOf(segment.ticket.id, segment.ticket.serial)}>
-        {segment.text}
-      </Text>
-    )
-  })
-  return [<Text key={`${groupId}:queue`}>排隊：{parts}</Text>]
-}
-
-/**
- * 佇列細節：有佇列列時，佇列列之下一個細節按鍵，預設收合，按過後依 line-board.expanded 的手動狀態（鍵為 laneDetailId），
- * 每 30 秒的資料刷新不覆寫。展開時按鍵之下縮排，逐張列出佇列列中的票（同一張票只列一次，completed 不列），
- * 每張一行 `<短票號>｜<status>｜<title>`，依佇列票的狀態上色、以 truncate-end 截斷；title 讀不到時為 MISSING_TITLE。
- */
-function queueDetail(
-  { Box, Text, Button }: Elements,
-  groupId: string,
-  segments: readonly QueueSegment[] | null,
-  tickets: readonly TicketStatus[],
-  colorOf: TicketColorOf,
-  toggle: { overrides: GroupOverrides; onToggle: ToggleGroup },
-) {
-  if (segments === null) return []
-  const id = laneDetailId(groupId)
-  const isOpen = isGroupExpanded(id, false, toggle.overrides)
-  const button = (
-    <Button key={groupToggleKey(id)} plain onPress={() => toggle.onToggle(id, isOpen)}>
-      <Text>{formatGroupTitle([QUEUE_DETAIL_LABEL], isOpen)}</Text>
-    </Button>
-  )
-  if (!isOpen) return [button]
-  const byId = new Map(tickets.map(ticket => [ticket.id, ticket]))
-  const queued = segments.flatMap(segment => (segment.ticket === null ? [] : [segment.ticket]))
-  const rows = queued
-    .filter((ticket, index) => queued.findIndex(other => other.id === ticket.id) === index)
-    .map(({ id: ticketId, serial }) => {
-      const ticket = byId.get(ticketId)
-      return (
-        <Text key={`${id}:${serial}`} wrap="truncate-end" color={colorOf(ticketId, serial)}>
-          {`${serial}｜${ticket?.status ?? UNKNOWN_STATUS}｜${ticket?.title ?? MISSING_TITLE}`}
-        </Text>
-      )
-    })
-  return [
-    button,
-    <Box key={groupBodyKey(id)} flexDirection="column" paddingLeft={GROUP_INDENT}>
-      {rows}
-    </Box>,
-  ]
 }
 
 /** 標題的目標行 `目標：<文字>`；沒有目標時為空字串（不畫該行）。hot reload 後舊 snapshot 的線沒有 goal 欄（undefined），同樣為空字串。 */

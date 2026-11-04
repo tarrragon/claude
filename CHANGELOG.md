@@ -1,3 +1,44 @@
+## [2.86.0] - 2026-11-04
+
+### Summary
+feat: 新增 system-misjudgment skill（依系統查 AI 誤判與檢查方法）; feat: 檔案監看實機驗證配方（fseventsd 閘門、金絲雀、seq 連續判讀、trap 收尾); feat: 看板標示佇列行只含非票號文字的線 (+28 more)
+
+Changes: 5 feat, 2 refactor, 4 fix, 17 docs, 2 chore, 1 test
+
+- feat: 新增 system-misjudgment skill（依系統查 AI 誤判與檢查方法）
+- feat: 檔案監看實機驗證配方（fseventsd 閘門、金絲雀、seq 連續判讀、trap 收尾)
+- feat: 看板標示佇列行只含非票號文字的線
+- feat: line_status 將無票號且非收線記號的佇列行列為過期項
+- feat: acceptance-gate 補 batch-complete --parent 子票協調票待辦檢查
+- refactor: 拆分 line-board 佇列列與細節的 view 模組及測試檔
+- refactor: line-board formatGroupToggle 收斂單一標題並合併測試輔助函式
+- fix: vm_log 截斷字串以 getObject 取全文
+- fix: system-misjudgment 讀者探針修正 (1.0.1)
+- fix: 監看目錄取 App workspace.path；PASS 須有 experiment 檔 add/remove 事件
+- fix: line-board 佇列票上色與閘門票去重改以完整票號比對
+- docs: PC-GPD-083 補實例：選項假設了不存在的執行工具
+- docs: system-misjudgment 1.0.3 移除對專案層 verify skill 的引用
+- docs: system-misjudgment 可攜性修正與 MG-3/WV_CPU_LIMIT/FS-3 三項
+- docs: PC-GPD-084 where.files 盤點漏列窮舉 switch 消費端
+- docs: sync-exclusion-guide 補專案專用 skill 以 private 排除的用法與限制
+- docs: 新增 PC-GPD-083 方案比較假設了不存在的承載處
+- docs: 新增 PC-GPD-082 專案專用 skill 未排除推送
+- docs: PANE_TEST_TIMEOUT_MS 註解補冷啟動占比與重新量測條件
+- docs: 新增 PC-GPD-081 裁定只落規格未建實作票
+- docs: IMP-016 變體補 analyze 綠而 test 編譯失敗的實例
+- docs: 新增 TEST-GPD-1010 語法層守衛以字面子字串偵測語法構造
+- docs: PC-GPD-080 實例補重啟 fseventsd 後恢復的因果確認
+- docs: PC-GPD-075 補預防：被測試讀取的文件票不跳過合併閘門
+- docs: 新增 PC-GPD-080 實機否定觀測需環境與觀測工具正向對照
+- docs: TEST-GPD-1000 新增變體——預設值改成另一靜態狀態，依賴預設的測試綠燈但檢查對象已換
+- docs: IMP-016 變體補新建 worktree 未先 pub get 的實例
+- docs: IMP-016 補變體：依賴變更合併進共用 checkout 後本機解析結果未更新
+- chore: line-board 版號升 某版本（依每條 CHANGELOG 升版慣例）
+- chore: sync-push 回寫框架版本 2.85.0
+- test: Pane 測試設明確逾時 PANE_TEST_TIMEOUT_MS=15000
+
+---
+
 ## [2.85.0] - 2026-11-03
 
 ### Summary

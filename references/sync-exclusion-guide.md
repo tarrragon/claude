@@ -107,6 +107,15 @@ private:           # 任何 mode 下排除推送
 
 `sync-skills.yaml` 本身屬類型 B（LOCAL_ONLY_PATTERNS），不跨專案同步。
 
+**專案專用 skill 不推 canonical**：skill 內容寫死本專案的 App、路徑或流程時，維持 `mode: all`，
+把該 skill 目錄名列入 `private:`。push 端在複製與 `--clean` 兩條路徑都跳過它；pull 端在 `mode: all`
+下不受影響，canonical 沒有該 skill 時本地檔案也不會被動到。驗證方式：以 `copy_filtered_from_staging`
+對 `git archive HEAD .claude` 的暫存樹跑一次，確認輸出樹缺該 skill 目錄（`--dry-run` 只產生 commit
+message，不列檔案清單，不能用來驗證）。
+
+**限制**：本檔 gitignored，只存在於執行 sync-push 的那份 checkout。新 clone、另一台機器、或在其他
+worktree 執行 sync-push 時沒有本檔，`private` 清單不生效，該 skill 會被推出且無警告。
+
 ---
 
 ## sync-preserve.yaml — 比對維度為完整檔案路徑

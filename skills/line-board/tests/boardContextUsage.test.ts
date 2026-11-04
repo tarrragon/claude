@@ -1,10 +1,11 @@
 // 「各 session」列的 context 用量字尾（Pane 端到端）：只讀存活 session 的用量檔，有檔加字尾、沒有檔不加。
+// 每個 test 以 { timeoutMs: PANE_TEST_TIMEOUT_MS } 設逾時，數值與依據見 paneHarness.ts 的 PANE_TEST_TIMEOUT_MS。
 
 import { describe, expect, test } from 'claude-code/testing'
 
 import { CONTEXT_USAGE_DIR } from '../hooks/contextUsage'
 import { ticketFileCandidates } from '../hooks/shared'
-import { COORDINATION_TICKET, NOW_MS, sessionStub, startBoard } from './paneHarness'
+import { COORDINATION_TICKET, NOW_MS, PANE_TEST_TIMEOUT_MS, sessionStub, startBoard } from './paneHarness'
 
 const COORDINATION_TICKET_FILE = ticketFileCandidates(COORDINATION_TICKET)[0] ?? ''
 const USAGE_DIR = `/repo/${CONTEXT_USAGE_DIR}`
@@ -25,7 +26,7 @@ const usageJson = (sessionId: string, fields: Record<string, unknown>) =>
   })
 
 describe('各 session 列的用量字尾', () => {
-  test('正向對照：有用量檔的 session 行尾加「ctx <百分比>%（距今）」；compact 後無用量寫「ctx 未量測」；沒有用量檔的不加', async ($, on) => {
+  test('正向對照：有用量檔的 session 行尾加「ctx <百分比>%（距今）」；compact 後無用量寫「ctx 未量測」；沒有用量檔的不加', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = sessionStub({
       [`/repo/${COORDINATION_TICKET_FILE}`]: '## Solution\n',
       [`${USAGE_DIR}/sid-101.json`]: usageJson('sid-101', {}),
@@ -41,7 +42,7 @@ describe('各 session 列的用量字尾', () => {
     await ui.unmount()
   })
 
-  test('反向對照：已結束 session（pid 106）的用量檔不讀；sessionId 不符的用量檔不採用', async ($, on) => {
+  test('反向對照：已結束 session（pid 106）的用量檔不讀；sessionId 不符的用量檔不採用', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = sessionStub({
       [`/repo/${COORDINATION_TICKET_FILE}`]: '## Solution\n',
       [`${USAGE_DIR}/sid-106.json`]: usageJson('sid-106', {}),

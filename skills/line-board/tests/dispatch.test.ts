@@ -152,6 +152,12 @@ describe('dispatchRows', () => {
       [13, 'general-purpose', '337.9', '實作'],
       [null, 'general-purpose', '其他線的派發', '實作'],
     ])
+    // 完整票號欄：有票號為完整票號（任務欄只顯示短票號），沒有票號為 null
+    expect(rows.map(row => [row.task, row.ticketId])).toEqual([
+      ['審查 351', null],
+      ['337.9', '0.5.0-W1-337.9'],
+      ['其他線的派發', null],
+    ])
   })
 
   test('E2：session 不存活或票已 completed 的舊條目不列；對照：同一條目在 session 存活且票未完成時列出', () => {

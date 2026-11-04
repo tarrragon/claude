@@ -16,7 +16,7 @@ import type {
   WaitingItem,
 } from '../types'
 import { type ContextUsageFailures, laneContextStatus } from './contextJudge'
-import { LANE_ENDED, endedForm, parseQueue } from './lanes'
+import { LANE_ENDED, endedForm, isQueueWithoutTicket, parseQueue } from './lanes'
 import { findSessionByName } from './sessions'
 import { COMPLETED_STATUS } from './shared'
 import { userTodoRows } from './userTodos'
@@ -49,6 +49,7 @@ const STALE_LABELS: Readonly<Record<StaleItem['kind'], string>> = {
   'ended-with-note': '收線寫法',
   orphan: '無人持有',
   'all-done': '佇列已完成未收線',
+  'no-ticket': '佇列無票號',
 }
 
 /** 解析來源紀錄：不符格式的行略過（例如手動註記）；保留原順序。 */
@@ -98,14 +99,25 @@ function liveLaneState(lane: LaneLine, sessions: readonly SessionState[], log: r
   return { ...base, state, evidence: `sessionId ${prefix}，log ${entry.time} source=${entry.source}` }
 }
 
-/** 一條線的過期項（收線寫法另判，不在此）：無人持有、佇列的票全部 completed。 */
+/**
+ * 一條線的過期項（收線寫法另判，不在此）：無人持有、佇列的票全部 completed、佇列只有文字沒有票號。
+ * 佇列無票號不自動當成收線：可能是收線記號寫錯（如「（結束了）」），也可能是線仍在進行只寫了說明，交主控判讀後改寫。
+ */
 function liveLaneStale(lane: LaneLine, state: LaneContinuity, tickets: ReadonlyMap<string, TicketStatus>, prefix: string): StaleItem[] {
   const stale: StaleItem[] = []
   // 佇列行沒寫名稱的線同樣沒有可定址的持有者，一併列為無人持有（狀態仍為來源不明，因為持有者無從查起）
   if (state.state === 'orphan' || lane.session === null) {
     stale.push({ lane: lane.lane, kind: 'orphan', detail: `${state.evidence}，佇列仍有內容` })
   }
-  const ids = parseQueue(lane.queue, prefix).flatMap(token => (token.kind === 'ticket' ? [token.id] : []))
+  const tokens = parseQueue(lane.queue, prefix)
+  const ids = tokens.flatMap(token => (token.kind === 'ticket' ? [token.id] : []))
+  if (isQueueWithoutTicket(tokens)) {
+    stale.push({
+      lane: lane.lane,
+      kind: 'no-ticket',
+      detail: `票序「${lane.queue}」不含任何票號，也不是收線記號，看板該線只剩標了［佇列無票號］的線標題；已收線請只寫${LANE_ENDED}或（結束），仍在進行請寫票號`,
+    })
+  }
   if (ids.length > 0 && ids.every(id => tickets.get(id)?.status === COMPLETED_STATUS)) {
     stale.push({ lane: lane.lane, kind: 'all-done', detail: `佇列的 ${ids.length} 張票都已 completed，現行佇列行尚未寫（無）` })
   }

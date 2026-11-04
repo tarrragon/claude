@@ -2,6 +2,34 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 0.12.6（2026-11-04）— 純註解改動，程式碼、數值與測試數不變。`tests/paneHarness.ts` 的 `PANE_TEST_TIMEOUT_MS` 註解補上逾時餘裕的失效條件：非首測單測耗時有 72–77% 是每個 test 的 plugin 冷啟動，冷啟動隨看板原始碼量成長（2026-11-04 量測，多引入約 215 KB 原始碼時多 77%）；原始碼量明顯成長時需依同樣方法重新量測餘裕。
+
+**Version**: 0.12.5（2026-11-04）— 純測試改動，看板畫面、`line_status` 輸出與產品碼不變。6 個 Pane 測試檔（`board*.test.ts`）的每個 test 改傳明確逾時 `{ timeoutMs: PANE_TEST_TIMEOUT_MS }`（15000 ms），取代 `claude plugin test` 預設的 5000 ms。起因：預設 5000 ms 是隱含的計時門檻，高負載時 Pane 測試誤紅（2026-11-04 加壓取樣，load1 約 119 時單測最大 5157 ms），屬機器負載類不可靠斷言。測試名稱與斷言不變。
+
+- `tests/paneHarness.ts` 新增 `PANE_TEST_TIMEOUT_MS`，數值依據只寫在該常數的註解；6 個 Pane 測試檔檔頭各加一行指向它。
+
+**Version**: 0.12.4（2026-11-04）— 內部重構，看板畫面與 `line_status` 輸出不變。佇列列與佇列細節的繪製從 `lanesView.tsx` 移到獨立模組，佇列細節的測試移到獨立測試檔；測試數不變。
+
+- 新增 `hooks/queueView.tsx`：`queueRow`、`queueDetail`、`queueColorOf` 與型別 `TicketColorOf`、常數 `QUEUE_DETAIL_LABEL`、`MISSING_TITLE`、`laneDetailId` 自 `hooks/lanesView.tsx` 移入；`renderLaneGroup` 改為匯入。`queueView.tsx` 對 `lanesView.tsx` 只有 `import type`（`Elements`、`ToggleGroup`），沒有執行期循環匯入。
+- 新增 `tests/boardQueue.test.ts`：〈佇列細節〉三則與〈對照：佇列票全部完成的線沒有佇列列，也沒有細節按鍵〉一則自 `tests/board.test.ts` 移入，測試名稱與內容不改。`COORDINATION_TICKET_FILE`、`TICKET_FOLDER` 由 `tests/board.test.ts` 移到 `tests/paneHarness.ts` 共用。
+
+**Version**: 0.12.3（2026-11-04）— 內部重構，看板畫面與 `line_status` 輸出不變。群組標題列與佇列細節的切換文字只有單一標題，多段以「｜」相接的能力已無呼叫端。
+
+- `hooks/layout.ts` 的 `formatGroupTitle(parts, isOpen)` 改為 `formatGroupToggle(title, isOpen)`，回傳 `▾`／`▸` 加標題；`hooks/lanesView.tsx` 兩個呼叫端同步。`formatQueueRow` 保留為佇列列整行文字的契約（產品碼改用 `queueRowSegments`），註解寫明用途。
+- `tests/board.test.ts` 與 `tests/boardDispatch.test.ts` 各自的 `titleOf` 與抽文字輔助函式合併到 `tests/paneHarness.ts`（`titleOf`、`headerOf`、`textsOf`、`textOf`、`childrenOf`，以及 `Ui`、`Described` 型別）。
+
+**Version**: 0.12.2（2026-11-03）— 佇列票上色與閘門票去重改以派發列的完整票號比對，沒有票號的派發不參與。原本以任務欄比對短票號：沒有票號的派發任務欄退回派發描述，描述剛好等於某張佇列票的短票號時會誤讓該票上色，或誤把該票的閘門票列當成已由派發列表達而不列。任務欄顯示文字不變。
+
+- `types/index.d.ts` 的 `DispatchRow` 新增 `ticketId: string | null`；`hooks/dispatch.ts` 的 `dispatchRows` 填入派發紀錄的完整票號。
+- `hooks/lanesView.tsx` 的 `queueColorOf` 與 `hooks/layout.ts` 的 `laneGateTickets` 改以 `ticketId` 比對佇列 token 的完整票號。
+- `references/board-screens.md`〈五色狀態〉與閘門票列說明同步。
+
+**Version**: 0.12.1（2026-11-03）— 線群組標題列新增 `［佇列無票號］` 標示：現行佇列行的票序不含任何票號、只有非票號文字（如 `（結束了）`、`等主控通知`）時，標在 `［狀態］` 之後。這類線沒有佇列列，原本看板上只剩標題列、沒有任何警示；`line_status` 已列為過期項「佇列無票號」。含票號的票序不標。
+
+- `hooks/lanes.ts` 新增 `isQueueWithoutTicket`（輸入為 `parseQueue` 的 token），看板與 `line_status` 共用；`continuity.ts` 的 `liveLaneStale` 改呼叫它，no-ticket 過期項的說明文字改為「看板該線只剩標了［佇列無票號］的線標題」。
+- `hooks/lanesView.tsx` 新增 `QUEUE_NO_TICKET_LABEL`，`groupTitle` 接上。`layout.ts` 不變。
+- `references/board-screens.md`〈版面：以線分組的可折疊群組〉的線群組標題補標示格式與判定，〈協調票現行佇列行的格式〉同步。
+
 **Version**: 0.12.0（2026-11-03）— 跨專案行為變更：協調票來源由專案設定檔 `.claude/project-integration/multi-session.json` 改為協調票解析 CLI（`multi-session-orchestration` 的 `scripts/coordination_ticket.py --json`，以 `$.process.run` 呼叫）。consumer 不再需要設定檔，換版不用手改；協調票以 `ticket create --coordination` 或 `ticket track set-coordination` 標記。0 張時不自動開 Pane，`/board` 與 `line_status` 顯示「active 版本沒有標記 `coordination: true` 的進行中票」與補法；多張時列候選不自行擇一；CLI 不可用（python3 缺、無法執行、輸出不可解析）或回報 error 時顯示原因。解析警告列在 `line_status` 輸出。`multi-session.json` 若仍存在，其 `coordinationTicket` 仍由 CLI 當覆寫讀取（已結案則警告後退回自動解析）。起因：同一事實（現行協調票）存在設定檔與票面兩份，換版需手改。
 
 - `readers.ts` 的 `readProjectConfig` 改呼叫 CLI（移除 `PROJECT_CONFIG_PATH`，新增 `COORDINATION_CLI_PATH`）；`shared.ts` 的 `parseProjectConfig` 改解析 CLI 的 JSON；`ProjectConfigResult` 型別改為 ok／none／multiple／error，`BoardSnapshot` 的 unconfigured 不再帶設定檔路徑。

@@ -1,13 +1,17 @@
-// Pane 端到端測試共用的 harness：以 test 端 hook 代替 engine 的 repo stub、啟動看板並掛上 Pane、一組 session 狀態檔。
-// 由 board.test.ts 與 boardDispatch.test.ts 匯入；本檔不是測試檔，不含任何 test。
+// Pane 端到端測試共用的 harness：以 test 端 hook 代替 engine 的 repo stub、啟動看板並掛上 Pane、一組 session 狀態檔，
+// 以及從畫出的描述樹取文字的輔助函式（titleOf、textsOf 等）。
+// 由 6 個 Pane 測試檔（board*.test.ts）匯入；本檔不是測試檔，不含任何 test。
 
 import type { On } from 'claude-code'
 import { mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { sessionJson } from './fixtures'
+import { groupTitleKey } from '../hooks/lanesView'
+import { groupToggleKey } from '../hooks/layout'
 import { COORDINATION_CLI_PATH } from '../hooks/readers'
 import { SESSIONS_DIR } from '../hooks/sessions'
+import { ticketFileCandidates } from '../hooks/shared'
 
 /** 家目錄與 session 狀態檔目錄（測試用的固定值）。 */
 export const HOME = '/home/u'
@@ -15,8 +19,25 @@ export const SESSIONS = `${HOME}/${SESSIONS_DIR}`
 /** 讀取當下的時間：2026-10-19 08:00:00 UTC（epoch 毫秒）。 */
 export const NOW_MS = Date.UTC(2026, 9, 19, 8, 0, 0)
 
+/**
+ * Pane 端到端測試的逐測逾時（毫秒），6 個 Pane 測試檔（board*.test.ts）的每個 test 都以 `{ timeoutMs }` 傳入。
+ *
+ * 依據（2026-11-04 加壓取樣，N=30）：`claude plugin test` 預設 5000 ms 是隱含的計時門檻，Pane 測試的斷言本身不計時，
+ * 但 pass／fail 取決於單測耗時是否在門檻內。load1 約 119 時單測最大 5157 ms，逾時重現；程式碼不變、只改負載
+ * 就翻轉結果，屬 test-assertion-design-rules D1 的「機器負載」類不可靠斷言。取 15000 ms，約為該最大值的 3 倍。
+ * 代價：真實的效能退化要到約 3 倍才會以逾時呈現；效能不由本門檻把關。
+ * 餘裕會隨看板成長縮小（2026-11-04 量測）：非首測的單測耗時有 72–77% 是每個 test 一次的 plugin 冷啟動，冷啟動隨原始碼量成長，
+ * 多引入約 215 KB 原始碼時非首測冷啟動多 77%。
+ * 看板原始碼量明顯成長時（例如新增一個 domain 模組群），依同樣的加壓取樣方法重新量測單測最大耗時，確認本值仍有約 3 倍餘裕。
+ */
+export const PANE_TEST_TIMEOUT_MS = 15000
+
 /** 預設的協調票：fixtures 的佇列票檔與 lanes.ts 的票檔路徑皆以它為準。 */
 export const COORDINATION_TICKET = '0.5.0-W1-349'
+/** 預設協調票的票檔（相對 repo root）：由票號推導，取 ticketFileCandidates 的第一個候選（hierarchical）。 */
+export const COORDINATION_TICKET_FILE = ticketFileCandidates(COORDINATION_TICKET)[0] ?? ''
+/** 與預設協調票同版本的票檔所在目錄（相對 repo root）。 */
+export const TICKET_FOLDER = COORDINATION_TICKET_FILE.slice(0, COORDINATION_TICKET_FILE.lastIndexOf('/'))
 
 /** 協調票解析 CLI --json 的輸出（欄位與 coordination_ticket.py 的 _result 一致）。 */
 const cliResult = (kind: string, fields: Record<string, unknown>): string =>
@@ -150,6 +171,52 @@ export async function startBoard($: Engine, on: On, stub: Stub, bodyColumns: num
     props: { ...PANE.props, bodyColumns },
   })
   return { ui, readPaths, psCalls, opened, registered, logs, callOrder, cliCwds, clock }
+}
+
+/** 掛上的 Pane。 */
+export type Ui = Awaited<ReturnType<typeof startBoard>>['ui']
+
+/** 描述節點：子節點在 children 或 props.children；key、color 等在 props。 */
+export type Described = { type?: unknown; children?: unknown; props?: { children?: unknown; color?: unknown; bold?: unknown } }
+
+/** 描述節點的子節點；子節點只有一個字串時也包成陣列。 */
+export function childrenOf(node: unknown): unknown[] {
+  if (typeof node !== 'object' || node === null) return []
+  const element = node as Described
+  const children = element.children ?? element.props?.children
+  if (Array.isArray(children)) return children
+  return children === undefined ? [] : [children]
+}
+
+/** 一個 Text 的文字：字串子節點與內嵌 Text（佇列列的各票分段）的文字依序相接。 */
+export function textOf(node: unknown): string {
+  return childrenOf(node)
+    .map(child => (typeof child === 'string' ? child : (child as Described).type === 'Text' ? textOf(child) : ''))
+    .join('')
+}
+
+/** 描述節點內所有 Text 的文字，依文件順序（Text 包在縮排的 Box 內時往下找）；Button 的文字不在其中。 */
+export function textsOf(nodes: readonly unknown[]): string[] {
+  const texts: string[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    // 標題列（Button）的文字由 headerOf 另取，不在其中
+    if ((node as Described).type === 'Text') texts.push(textOf(node))
+    else if ((node as Described).type !== 'Button') texts.push(...textsOf(childrenOf(node)))
+  }
+  return texts
+}
+
+/** 群組標題列（Button）的文字；群組未畫出時為 undefined。 */
+export async function headerOf(ui: Ui, id: string): Promise<string | undefined> {
+  return (await ui.find({ type: 'Button', key: groupToggleKey(id) }))?.text
+}
+
+/** 群組標題的各行：標題列（Button），其後依序為標題 Box 內各 Text 的文字（目標、活動計數，缺者不畫）；群組未畫出時為 undefined。 */
+export async function titleOf(ui: Ui, id: string): Promise<string[] | undefined> {
+  const header = await headerOf(ui, id)
+  const title = await ui.find({ type: 'Box', key: groupTitleKey(id) })
+  return header === undefined || title === undefined ? undefined : [header, ...textsOf(title.children)]
 }
 
 /** 使用者在終端機輸入 `/board`；回傳指令的輸出文字。 */

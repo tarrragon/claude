@@ -39,6 +39,7 @@
 | `/dart-test-async-guardian` | 測試異步資源管理 |
 | `/test-effectiveness` | 測試有效性驗證（覆蓋是否真實、變異測試） |
 | `/test-assertion-design` | 斷言設計判斷（flaky 與確定性） |
+| `/system-misjudgment` | 依系統查 AI 常見誤判與檢查方法（除錯、實機驗證、否定結果當證據前） |
 
 ## 文件與流程
 

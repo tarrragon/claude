@@ -1,5 +1,6 @@
 // Pane 的端到端繪製：以線分組的可折疊群組（派發列歸線、活動計數、預設展開、手動切換）與派發紀錄的各種讀取失敗。
 // 線標題的 session 狀態與目標、各 session 與合併閘門兩區塊在 board.test.ts；群組的純函式在 layout.test.ts。
+// 每個 test 以 { timeoutMs: PANE_TEST_TIMEOUT_MS } 設逾時，數值與依據見 paneHarness.ts 的 PANE_TEST_TIMEOUT_MS。
 
 import { describe, expect, test } from 'claude-code/testing'
 
@@ -8,46 +9,14 @@ import { MERGE_LOG_HOLDING, TICKET_349, dispatchJson, overlapLogUntil, ticketFil
 import { GROUP_BORDER_STYLE, groupFrameKey, groupTitleKey } from '../hooks/lanesView'
 import { MERGE_GATE_GROUP_ID, OTHER_GROUP_ID, SESSIONS_GROUP_ID, groupBodyKey, groupToggleKey, laneGroupId } from '../hooks/layout'
 import { MERGE_LOG_PATH } from '../hooks/mergeGate'
-import { COORDINATION_TICKET, cliOk, sessionStub, startBoard } from './paneHarness'
+import { COORDINATION_TICKET, PANE_TEST_TIMEOUT_MS, childrenOf, cliOk, headerOf, sessionStub, startBoard, textOf, textsOf, titleOf } from './paneHarness'
+import type { Described, Ui } from './paneHarness'
 import { ticketFileCandidates } from '../hooks/shared'
 
 /** 預設協調票的票檔（相對 repo root）：由票號推導，取 ticketFileCandidates 的第一個候選（hierarchical）。 */
 const COORDINATION_TICKET_FILE = ticketFileCandidates(COORDINATION_TICKET)[0] ?? ''
 /** 與預設協調票同版本的票檔所在目錄（相對 repo root）。 */
 const TICKET_FOLDER = COORDINATION_TICKET_FILE.slice(0, COORDINATION_TICKET_FILE.lastIndexOf('/'))
-
-type Ui = Awaited<ReturnType<typeof startBoard>>['ui']
-
-/** 描述節點：子節點在 children 或 props.children；key、color 等在 props。 */
-type Described = { type?: unknown; children?: unknown; props?: { children?: unknown; color?: unknown; bold?: unknown } }
-
-/** 描述節點的子節點；子節點只有一個字串時也包成陣列。 */
-function childrenOf(node: unknown): unknown[] {
-  if (typeof node !== 'object' || node === null) return []
-  const element = node as Described
-  const children = element.children ?? element.props?.children
-  if (Array.isArray(children)) return children
-  return children === undefined ? [] : [children]
-}
-
-/** 一個 Text 的文字：字串子節點與內嵌 Text（佇列列的各票分段）的文字依序相接。 */
-function textOf(node: unknown): string {
-  return childrenOf(node)
-    .map(child => (typeof child === 'string' ? child : (child as Described).type === 'Text' ? textOf(child) : ''))
-    .join('')
-}
-
-/** 一個描述節點內所有 Text 的文字，依文件順序；Text 的文字為其字串子節點與內嵌 Text 相接。 */
-function textsOf(nodes: readonly unknown[]): string[] {
-  const texts: string[] = []
-  for (const node of nodes) {
-    if (typeof node !== 'object' || node === null) continue
-    // 標題列（Button）的文字由 headerOf 另取，不在其中
-    if ((node as Described).type === 'Text') texts.push(textOf(node))
-    else if ((node as Described).type !== 'Button') texts.push(...textsOf(childrenOf(node)))
-  }
-  return texts
-}
 
 /**
  * 群組展開內容中佇列列（文字以「排隊：」開頭的 Text）內各票分段的文字與顏色，依序；分隔符（字串子節點）不在其中。
@@ -59,18 +28,6 @@ async function queueSegmentsOf(ui: Ui, id: string): Promise<{ text: string; colo
   return childrenOf(row)
     .filter(child => typeof child === 'object' && child !== null && (child as Described).type === 'Text')
     .map(child => ({ text: textOf(child), color: (child as Described).props?.color }))
-}
-
-/** 群組標題列（Button）的文字；群組未畫出時為 undefined。 */
-async function headerOf(ui: Ui, id: string): Promise<string | undefined> {
-  return (await ui.find({ type: 'Button', key: groupToggleKey(id) }))?.text
-}
-
-/** 群組標題的各行：標題列（Button），其後依序為目標、活動計數（缺者不畫）；群組未畫出時為 undefined。 */
-async function titleOf(ui: Ui, id: string): Promise<string[] | undefined> {
-  const header = await headerOf(ui, id)
-  const title = await ui.find({ type: 'Box', key: groupTitleKey(id) })
-  return header === undefined || title === undefined ? undefined : [header, ...textsOf(title.children)]
 }
 
 /** 群組展開內容的各行文字；收合（內容未畫出）時為 undefined。 */
@@ -138,7 +95,7 @@ describe('Pane', () => {
       [`/repo/${MERGE_LOG_PATH}`]: overlapLogUntil('16:19:46'),
     })
 
-  test('以線分組：派發列歸到 session 所在的線、依序接著該線的佇列列；對不到線的派發在最後的「其他」；只讀主 checkout 的派發紀錄', async ($, on) => {
+  test('以線分組：派發列歸到 session 所在的線、依序接著該線的佇列列；對不到線的派發在最後的「其他」；只讀主 checkout 的派發紀錄', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles(DISPATCH_ACTIVE))
     expect(await bodyOf(ui, laneGroupId(7))).toEqual([
       'linux｜Readonly review of 337.8｜審查｜3 分前',
@@ -159,7 +116,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('五色狀態：派發列依階段上色（代理人執行中青、閘門黃、收尾洋紅），佇列票依狀態上色（待辦灰、進行中綠、閘門黃）', async ($, on) => {
+  test('五色狀態：派發列依階段上色（代理人執行中青、閘門黃、收尾洋紅），佇列票依狀態上色（待辦灰、進行中綠、閘門黃）', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(DISPATCH_ACTIVE)
     stub.files[`/repo/${TICKET_FOLDER}/0.5.0-W1-337.3.md`] = ticketFile('pending')
     stub.files[`/repo/${TICKET_FOLDER}/0.5.0-W1-337.2.1.md`] = ticketFile('in_progress')
@@ -194,7 +151,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('對照：同一張票的派發列已結束（收尾）時，佇列票為要人處理（洋紅）', async ($, on) => {
+  test('對照：同一張票的派發列已結束（收尾）時，佇列票為要人處理（洋紅）', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(
       JSON.stringify({
         dispatches: [dispatchJson({ agent_id: 'awrap', session_id: 'sid-102', ticket_id: '0.5.0-W1-337.3', turn_ended_at: '2026-10-19T07:59:00+00:00' })],
@@ -209,7 +166,35 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('線群組標題列為主題鍵 suggestion 色粗體、不變淡；無活動的線（L9）只有標題列下的各行為淡色', async ($, on) => {
+  /** L13 的佇列票 337.3 為 pending，派發紀錄只有一筆 sid-102（L13）的派發。 */
+  const singleDispatchStub = (fields: Record<string, unknown>) => {
+    const stub = dispatchFiles(JSON.stringify({ dispatches: [dispatchJson({ session_id: 'sid-102', ...fields })] }))
+    stub.files[`/repo/${TICKET_FOLDER}/0.5.0-W1-337.3.md`] = ticketFile('pending')
+    return stub
+  }
+
+  test('E2：沒有票號、描述剛好等於某佇列票短票號的派發不讓該票上色（佇列票仍為待辦灰）', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
+    // 無票號派發的任務欄退回描述原文「337.3」，與佇列票 337.3 的短票號同字面
+    const { ui } = await startBoard($, on, singleDispatchStub({ agent_id: 'adesc', agent_description: '337.3' }))
+    expect(await bodyOf(ui, laneGroupId(13))).toContain('general-purpose｜337.3｜實作｜3 分前')
+    expect(await queueSegmentsOf(ui, laneGroupId(13))).toEqual([
+      { text: '337.3〔pending〕', color: 'gray' },
+      { text: '337.2.1〔unknown〕', color: undefined },
+    ])
+    await ui.unmount()
+  })
+
+  test('對照：同一張票改由帶票號的派發執行中時，佇列票上色為代理人執行中（青）', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
+    const { ui } = await startBoard($, on, singleDispatchStub({ agent_id: 'aticket', ticket_id: '0.5.0-W1-337.3' }))
+    expect(await bodyOf(ui, laneGroupId(13))).toContain('general-purpose｜337.3｜實作｜3 分前')
+    expect(await queueSegmentsOf(ui, laneGroupId(13))).toEqual([
+      { text: '337.3〔pending〕', color: 'cyan' },
+      { text: '337.2.1〔unknown〕', color: undefined },
+    ])
+    await ui.unmount()
+  })
+
+  test('線群組標題列為主題鍵 suggestion 色粗體、不變淡；無活動的線（L9）只有標題列下的各行為淡色', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles(DISPATCH_ACTIVE))
     type Styled = { props?: { color?: unknown; bold?: unknown; dimColor?: unknown } }
     // L7、L13、其他有活動，L9 只有排隊票（無活動）
@@ -231,7 +216,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('框線：線群組、其他、各 session、合併閘門各畫在一個有框線的 Box 內；展開的框內為標題與內容，收合的框內只有標題', async ($, on) => {
+  test('框線：線群組、其他、各 session、合併閘門各畫在一個有框線的 Box 內；展開的框內為標題與內容，收合的框內只有標題', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles(DISPATCH_ACTIVE))
     const ids = [laneGroupId(7), laneGroupId(9), laneGroupId(13), OTHER_GROUP_ID, SESSIONS_GROUP_ID, MERGE_GATE_GROUP_ID]
     const frames = await Promise.all(ids.map(id => ui.find({ type: 'Box', key: groupFrameKey(id) })))
@@ -247,7 +232,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('預設展開：有派發中代理人（L7）、session 為 waiting（L13）的線展開；無活動的線（L9）收合為只有標題', async ($, on) => {
+  test('預設展開：有派發中代理人（L7）、session 為 waiting（L13）的線展開；無活動的線（L9）收合為只有標題', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles(JSON.stringify({ dispatches: [] })))
     // 沒有任何派發：L7 的 session 為 busy、無派發，收合；L13 的 session 為 waiting，展開
     expect(await titleOf(ui, laneGroupId(13))).toEqual(['▾ L13 graph-project-docs-manager-1b［waiting：input needed］', '等你處理 · 2 排隊'])
@@ -260,7 +245,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('對照：同一條 L7 在派發紀錄出現 L7 的派發後重讀即展開（預設依每輪資料重算）', async ($, on) => {
+  test('對照：同一條 L7 在派發紀錄出現 L7 的派發後重讀即展開（預設依每輪資料重算）', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(JSON.stringify({ dispatches: [] }))
     const { ui, clock } = await startBoard($, on, stub)
     expect(await bodyOf(ui, laneGroupId(7))).toBeUndefined()
@@ -272,7 +257,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('預設展開：佇列票的 feat 分支持有閘門的線即使沒有派發也展開，內容列出閘門票；對照：同一條線在閘門結束後收合', async ($, on) => {
+  test('預設展開：佇列票的 feat 分支持有閘門的線即使沒有派發也展開，內容列出閘門票；對照：同一條線在閘門結束後收合', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = { files: { [`/repo/${COORDINATION_TICKET_FILE}`]: TICKET_349, [`/repo/${MERGE_LOG_PATH}`]: MERGE_LOG_HOLDING } }
     const { ui, clock } = await startBoard($, on, stub)
     expect(await titleOf(ui, laneGroupId(7))).toEqual(['▾ L7 graph-project-docs-manager-f9［狀態不明］', '1 閘門 · 2 排隊'])
@@ -286,7 +271,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('標題列的活動計數與展開內容一致：派發中＝派發列數、閘門＝階段為閘門的派發列＋閘門票列、排隊＝佇列列的票數（不含 completed）', async ($, on) => {
+  test('標題列的活動計數與展開內容一致：派發中＝派發列數、閘門＝階段為閘門的派發列＋閘門票列、排隊＝佇列列的票數（不含 completed）', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(DISPATCH_ACTIVE)
     stub.files[`/repo/${MERGE_LOG_PATH}`] = `${overlapLogUntil('16:19:46')}\n2026-10-19T16:41:49 [合併閘門] 開始｜target main｜分支 feat/0.5.0-W1-351｜commit 52477a34f0ce\n`
     const { ui } = await startBoard($, on, stub)
@@ -317,7 +302,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('佇列含已完成票：佇列列不列 completed 的票，標頭的排隊數等於佇列列的票數；全部完成的線沒有佇列列也沒有排隊數', async ($, on) => {
+  test('佇列含已完成票：佇列列不列 completed 的票，標頭的排隊數等於佇列列的票數；全部完成的線沒有佇列列也沒有排隊數', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(JSON.stringify({ dispatches: [] }))
     stub.files[`/repo/${TICKET_FOLDER}/0.5.0-W1-351.md`] = ticketFile('completed')
     stub.files[`/repo/${TICKET_FOLDER}/0.5.0-W1-145.md`] = ticketFile('completed')
@@ -333,7 +318,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('手動切換優先於預設：展開預設收合的線、收合預設展開的線；資料刷新後保留，未按過的線仍依新資料的預設', async ($, on) => {
+  test('手動切換優先於預設：展開預設收合的線、收合預設展開的線；資料刷新後保留，未按過的線仍依新資料的預設', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(DISPATCH_ACTIVE)
     const { ui, clock } = await startBoard($, on, stub)
     await ui.press({ key: groupToggleKey(laneGroupId(9)) })
@@ -359,7 +344,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('E2：票已 completed、session 不存活（pid 已結束或狀態檔不存在）、已結束且無票號的舊條目不列出', async ($, on) => {
+  test('E2：票已 completed、session 不存活（pid 已結束或狀態檔不存在）、已結束且無票號的舊條目不列出', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles(DISPATCH_ACTIVE))
     const rows = await allDispatchRows(ui)
     expect(rows.length).toBe(5)
@@ -369,7 +354,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('沒有任何應列出的派發時顯示「（目前沒有派發中的代理人）」，不產生「其他」群組', async ($, on) => {
+  test('沒有任何應列出的派發時顯示「（目前沒有派發中的代理人）」，不產生「其他」群組', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles(JSON.stringify({ dispatches: [] })))
     expect(await ui.find({ type: 'Text', text: /^（目前沒有派發中的代理人）$/ })).toBeDefined()
     expect(await allDispatchRows(ui)).toEqual([])
@@ -385,7 +370,7 @@ describe('Pane', () => {
     expect(await allDispatchRows(ui)).toEqual([])
   }
 
-  test('派發紀錄檔讀不到時，顯示讀取失敗，其餘內容照常', async ($, on) => {
+  test('派發紀錄檔讀不到時，顯示讀取失敗，其餘內容照常', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(DISPATCH_ACTIVE)
     delete stub.files[`/repo/${DISPATCH_ACTIVE_PATH}`]
     const { ui } = await startBoard($, on, stub)
@@ -394,20 +379,20 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('派發紀錄格式錯誤（JSON 無效）時，顯示讀取失敗，其餘內容照常', async ($, on) => {
+  test('派發紀錄格式錯誤（JSON 無效）時，顯示讀取失敗，其餘內容照常', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles('{"dispatches": ['))
     expect(await ui.find({ type: 'Text', text: /^讀取 \.claude\/dispatch-active\.json 失敗（/ })).toBeDefined()
     await expectOtherBlocksIntact(ui)
     await ui.unmount()
   })
 
-  test('派發紀錄格式錯誤（dispatches 不是陣列）時，顯示讀取失敗', async ($, on) => {
+  test('派發紀錄格式錯誤（dispatches 不是陣列）時，顯示讀取失敗', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, dispatchFiles('{"dispatches": {}}'))
     expect(await ui.find({ type: 'Text', text: /^讀取 \.claude\/dispatch-active\.json 失敗（/ })).toBeDefined()
     await ui.unmount()
   })
 
-  test('E1：派發列的短票號以設定檔的協調票推導前綴；同一批派發紀錄換成另一版本的協調票時，改去掉該版本的前綴', async ($, on) => {
+  test('E1：派發列的短票號以設定檔的協調票推導前綴；同一批派發紀錄換成另一版本的協調票時，改去掉該版本的前綴', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const records = JSON.stringify({
       dispatches: [
         dispatchJson({ agent_id: 'a05', session_id: 'sid-103', ticket_id: '0.5.0-W1-337.9' }),
@@ -428,7 +413,7 @@ describe('Pane', () => {
     expect(under06).toEqual(['general-purpose｜0.5.0-W1-337.9｜實作', 'general-purpose｜12.3｜實作'])
   })
 
-  test('協調票讀不到時，派發條目照常列出並全歸「其他」；對照：同一份 fixture 讀得到協調票後歸到對應的線', async ($, on) => {
+  test('協調票讀不到時，派發條目照常列出並全歸「其他」；對照：同一份 fixture 讀得到協調票後歸到對應的線', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(DISPATCH_ACTIVE)
     const ticket349 = stub.files[`/repo/${COORDINATION_TICKET_FILE}`] ?? ''
     delete stub.files[`/repo/${COORDINATION_TICKET_FILE}`]
@@ -451,7 +436,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('閘門紀錄讀不到時，派發條目照常列出且沒有任何一列為「閘門」；對照：同一份 fixture 讀得到閘門紀錄後標為閘門', async ($, on) => {
+  test('閘門紀錄讀不到時，派發條目照常列出且沒有任何一列為「閘門」；對照：同一份 fixture 讀得到閘門紀錄後標為閘門', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const stub = dispatchFiles(DISPATCH_ACTIVE)
     const mergeLog = stub.files[`/repo/${MERGE_LOG_PATH}`] ?? ''
     delete stub.files[`/repo/${MERGE_LOG_PATH}`]
@@ -471,7 +456,7 @@ describe('Pane', () => {
     await ui.unmount()
   })
 
-  test('sessions 目錄無法列出時，不列派發條目，標明無法判定', async ($, on) => {
+  test('sessions 目錄無法列出時，不列派發條目，標明無法判定', { timeoutMs: PANE_TEST_TIMEOUT_MS }, async ($, on) => {
     const { ui } = await startBoard($, on, {
       files: { [`/repo/${COORDINATION_TICKET_FILE}`]: TICKET_349, [`/repo/${DISPATCH_ACTIVE_PATH}`]: DISPATCH_ACTIVE },
     })

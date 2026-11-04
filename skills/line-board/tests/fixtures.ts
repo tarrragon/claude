@@ -251,6 +251,17 @@ export const TICKET_349_GOALS = TICKET_349.replace(
   ].join('\n'),
 )
 
+/**
+ * 佇列無票號的對照組（協調票 Solution 的現行佇列行）：L5 為寫錯的收線記號、L6 為說明文字，兩者都只含非票號文字；
+ * L7 只有票號、L8 為票號夾說明文字，兩者都含票號。
+ */
+export const NO_TICKET_LANE_LINES = [
+  '**L5 現行佇列**（s5）：（結束了）',
+  '**L6 現行佇列**（s6）：等主控通知',
+  '**L7 現行佇列**（s7）：100',
+  '**L8 現行佇列**（s8）：100 → 等主控通知',
+].join('\n')
+
 /** 仿 worktree-merge.log：開始／結束之間夾著驗收、測試、預檢等其他行。 */
 export const MERGE_LOG = [
   '2026-10-19T16:04:26 [合併前驗收] target=0.5.0-W1-328 reason=收尾',

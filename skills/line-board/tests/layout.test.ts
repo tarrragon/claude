@@ -10,7 +10,7 @@ import {
   formatActivity,
   formatGateTicket,
   formatGroupDispatchRow,
-  formatGroupTitle,
+  formatGroupToggle,
   formatQueueRow,
   isDefaultExpanded,
   isGroupExpanded,
@@ -27,6 +27,7 @@ const row = (fields: Partial<DispatchRow> = {}): DispatchRow => ({
   lane: null,
   name: 'general-purpose',
   task: '描述',
+  ticketId: null,
   stage: '實作',
   dispatchedAt: null,
   ...fields,
@@ -56,7 +57,10 @@ describe('laneGroups', () => {
   })
 
   test('活動計數：派發列數、閘門（派發列階段為閘門 + 佇列票的 feat 分支持有閘門）、session 為 waiting、排隊票（completed 不計，讀不到狀態的照計）', () => {
-    const rows = [row({ lane: 13, task: '337.9' }), row({ lane: 13, task: '351', stage: '閘門' })]
+    const rows = [
+      row({ lane: 13, task: '337.9', ticketId: '0.5.0-W1-337.9' }),
+      row({ lane: 13, task: '351', ticketId: '0.5.0-W1-351', stage: '閘門' }),
+    ]
     const groups = laneGroups(LANES, rows, {
       sessions: [session({ name: 'graph-project-docs-manager-1b', status: 'waiting' })],
       tickets: [
@@ -74,13 +78,23 @@ describe('laneGroups', () => {
   })
 
   test('佇列票的 feat 分支持有閘門、而同組已有該票標閘門的派發列時，不重複列為閘門票', () => {
-    const groups = laneGroups(LANES, [row({ lane: 7, task: '351', stage: '閘門' })], {
+    const groups = laneGroups(LANES, [row({ lane: 7, task: '351', ticketId: '0.5.0-W1-351', stage: '閘門' })], {
       ...NO_CONTEXT,
       holders: [{ branch: 'feat/0.5.0-W1-351', since: '16:41:49' }],
     })
     const l7 = groups.find(group => group.id === laneGroupId(7))
     expect(l7?.gateTickets).toEqual([])
     expect(l7?.activity.inGate).toBe(1)
+  })
+
+  test('E2：沒有票號、描述剛好等於佇列票短票號的閘門派發列不算同一張票，該票仍列為閘門票', () => {
+    const groups = laneGroups(LANES, [row({ lane: 7, task: '351', ticketId: null, stage: '閘門' })], {
+      ...NO_CONTEXT,
+      holders: [{ branch: 'feat/0.5.0-W1-351', since: '16:41:49' }],
+    })
+    const l7 = groups.find(group => group.id === laneGroupId(7))
+    expect(l7?.gateTickets).toEqual([{ serial: '351', since: '16:41:49' }])
+    expect(l7?.activity.inGate).toBe(2)
   })
 
   test('閘門持有者不是佇列票的 feat 分支（worktree-agent 分支、其他線的票）時，不算該線的閘門票', () => {
@@ -133,9 +147,9 @@ describe('群組的顯示文字', () => {
     expect(formatActivity({ dispatching: 0, inGate: 0, isWaiting: false, queued: 0 })).toBe('')
   })
 
-  test('標題列：展開為 ▾、收合為 ▸，各段以「｜」分隔，空段略過', () => {
-    expect(formatGroupTitle(['L7', 's［busy］', '', '2 派發中'], true)).toBe('▾ L7｜s［busy］｜2 派發中')
-    expect(formatGroupTitle(['L9', 's［離線］', '4 排隊'], false)).toBe('▸ L9｜s［離線］｜4 排隊')
+  test('切換文字：展開為 ▾ 加標題、收合為 ▸ 加標題', () => {
+    expect(formatGroupToggle('L7 s［busy］', true)).toBe('▾ L7 s［busy］')
+    expect(formatGroupToggle('佇列細節', false)).toBe('▸ 佇列細節')
   })
 
   test('群組內的派發列不帶線號：代理人｜任務｜階段｜距派發時間；缺派發時間為時間不明', () => {

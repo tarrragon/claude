@@ -181,7 +181,40 @@ describe('過期偵測：佇列已完成未收線', () => {
       { id: '0.5.0-W1-200', status: 'in_progress' },
     ]
     expect(report({ lanes: [lane(1, 'a', '100 → 200')], sessions, log, tickets }).stale).toEqual([])
-    expect(report({ lanes: [lane(1, 'a', '等主控通知')], sessions, log }).stale).toEqual([])
+    const noTicket = report({ lanes: [lane(1, 'a', '等主控通知')], sessions, log }).stale
+    expect(noTicket.filter(s => s.kind === 'all-done')).toEqual([])
+  })
+})
+
+describe('過期偵測：佇列無票號', () => {
+  const sessions = [live('a', 'aaaaaaaa-0')]
+  const log = [entry('t', 'startup', 'aaaaaaaa')]
+
+  test('E2 正向對照：佇列行只含非票號文字（寫錯的收線記號）時列為過期項，不當成收線', () => {
+    const result = report({ lanes: [lane(6, 'a', '（結束了）')], sessions, log })
+    expect(result.lanes[0]?.state).toBe('startup')
+    expect(result.stale.map(s => [s.lane, s.kind])).toEqual([[6, 'no-ticket']])
+    expect(formatLineStatus(result, { coordinationTicket: 'X', readAt: 't' })).toContain('L6 佇列無票號：票序「（結束了）」')
+  })
+
+  test('E2 正向對照：說明文字（非收線記號）同樣列為過期項', () => {
+    expect(report({ lanes: [lane(7, 'a', '等主控通知')], sessions, log }).stale.map(s => s.kind)).toEqual(['no-ticket'])
+  })
+
+  test('E1 對照：（無）與（結束）視為收線，不列此過期項', () => {
+    for (const queue of ['（無）', '（結束）']) {
+      const result = report({ lanes: [lane(1, 'a', queue)], sessions, log })
+      expect(result.lanes[0]?.state).toBe('ended')
+      expect(result.stale).toEqual([])
+    }
+  })
+
+  test('E1 對照：含票號的佇列行（含票號夾說明文字）不列此過期項', () => {
+    const tickets = [{ id: '0.5.0-W1-100', status: 'in_progress' }]
+    for (const queue of ['100', '100 → 等主控通知']) {
+      const kinds = report({ lanes: [lane(1, 'a', queue)], sessions, log, tickets }).stale.map(s => s.kind)
+      expect(kinds).not.toContain('no-ticket')
+    }
   })
 })
 

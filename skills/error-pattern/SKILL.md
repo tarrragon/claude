@@ -2,7 +2,7 @@
 name: error-pattern
 description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯誤經驗和防護措施 (query), (2) 記錄新發現的錯誤模式和教訓 (add), (3) Ticket 開始前查詢歷史問題避免再犯, (4) 系統化管理錯誤學習經驗。Use when: user mentions error pattern, 錯誤模式, 教訓, 經驗記錄, 學習經驗, 防護措施, 錯誤紀錄, or needs to avoid recurring issues."
 metadata:
-  version: 1.6.1
+  version: 1.7.0
 ---
 
 # error-pattern SKILL
@@ -180,6 +180,11 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
      0.2.1-W3-106 全量覆核並同步兩者後，`readme_index.extract_row` 維持讀內文
      的既有設計不變——內文是第一手來源，frontmatter 是同步鏡射，讀哪一份理論
      上結果相同，維持讀內文可省一次「若未來又漂移」的防呆成本）。
+
+9. **對應系統條目（`system-misjudgment` skill）**
+   - 新 pattern 的症狀若涉及「判讀者對某個系統的行為想錯」（例：把環境故障讀成程式缺陷、把觀測工具漏行讀成事件不存在），查 `system-misjudgment` skill 的系統索引表：該系統檔已有對應條目就補充或修正，沒有就新增七欄條目，來源欄放本 pattern 的 ID；不屬任何現有系統則新增系統檔。
+   - 與步驟 8 無順序依賴，但須在回報完成前執行。與系統行為判讀無關的 pattern（純流程、文件、命名類）略過本步驟。
+   - incident-responder 結論與實機驗證出現的誤判同樣適用，見 `system-misjudgment` skill 的〈持續更新〉。
 
 **輸出**：
 - 步驟 7 已建立分類檔案（初始檔名 `<CATEGORY>-<PROJ>-NNN.md`），步驟 7 接續動作

@@ -50,6 +50,15 @@ def _write(project_dir: Path, ticket_id: str, coordination: bool, solution: str,
     )
 
 
+def _write_child(project_dir: Path, ticket_id: str, parent: str, coordination: bool,
+                 solution: str) -> None:
+    _write(project_dir, ticket_id, coordination, solution)
+    version = ticket_id.split("-W")[0]
+    f = project_dir / "docs" / "work-logs" / f"v{version}" / "tickets" / f"{ticket_id}.md"
+    f.write_text(f.read_text(encoding="utf-8").replace(
+        "status: in_progress\n", f"status: in_progress\nparent_id: {parent}\n", 1), encoding="utf-8")
+
+
 def _patch_root(gate, monkeypatch, root):
     monkeypatch.setattr(gate, "get_project_root", lambda: root)
     monkeypatch.setattr(gate, "get_shared_state_root", lambda p: p)
@@ -101,3 +110,32 @@ def test_wave_other_wave_or_status_not_expanded(gate, logger, tmp_path):
     _write(tmp_path, "0.6.0-W2-001", True, UNPAIRED, wave=2)
     _write(tmp_path, "0.6.0-W1-003", True, UNPAIRED, status="pending")
     assert gate.expand_wave_coordination_ids([(1, "in_progress", None)], tmp_path, logger) == []
+
+
+def test_parent_selectors_parse(gate, logger):
+    assert gate.extract_batch_parent_ids(
+        "ticket track batch-complete --parent 0.6.0-W1-010", logger
+    ) == ["0.6.0-W1-010"]
+    assert gate.extract_batch_parent_ids('ticket track batch-complete --parent "x', logger) == []
+
+
+def test_parent_with_unpaired_coordination_child_denied(gate, logger, tmp_path, monkeypatch, capsys):
+    _write_child(tmp_path, "0.6.0-W1-011", "0.6.0-W1-010", True, UNPAIRED)
+    _patch_root(gate, monkeypatch, tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        gate._extract_ticket_ids_or_skip(
+            "Bash", "ticket track batch-complete --parent 0.6.0-W1-010", logger
+        )
+    assert exc.value.code == gate.EXIT_BLOCK
+    out = json.loads(capsys.readouterr().out)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "complete 被阻擋" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_parent_without_coordination_child_allowed(gate, logger, tmp_path, monkeypatch):
+    _write_child(tmp_path, "0.6.0-W1-012", "0.6.0-W1-010", False, UNPAIRED)
+    _write_child(tmp_path, "0.6.0-W1-013", "0.6.0-W1-099", True, UNPAIRED)
+    _patch_root(gate, monkeypatch, tmp_path)
+    gate._check_parent_coordination(
+        "ticket track batch-complete --parent 0.6.0-W1-010", logger
+    )
