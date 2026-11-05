@@ -570,6 +570,19 @@ GRAPH_EDGE_TYPES = {
         "maintainer": "手動",
         "layer": GRAPH_LAYER_PROPOSED,
     },
+    "closed_by": {
+        # Ticket → Ticket：票由另一張票收束。值可能不是語料內票號（none、
+        # 框架 issue、他專案票號），消費端只連語料內存在的票。class 取
+        # see-also：非層級、非先後、非衍生來源，是結案時的對照引用。
+        # previous_ids 不納入。
+        "class": "see-also",
+        "forward_field": "closed_by",
+        "forward_cardinality": "one",
+        "direction": "directed",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "layer": GRAPH_LAYER_PROPOSED,
+    },
 }
 
 BUNDLE_DEPENDENCY_FIELD = GRAPH_EDGE_TYPES["bundle_dependency"]["forward_field"]

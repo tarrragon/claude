@@ -1,5 +1,9 @@
 {
   "respondToBashCommands": false,
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); dir=$CLAUDE_PROJECT_DIR; [ -n \"$dir\" ] || dir=$(printf '%s' \"$input\" | python3 -c 'import json,sys; print((json.load(sys.stdin).get(\"workspace\") or {}).get(\"project_dir\") or \"\")' 2>/dev/null); printf '%s' \"$input\" | python3 \"$dir/.claude/skills/multi-session-orchestration/scripts/statusline_lane.py\" || printf '%s' \"$input\" | sh -c \"$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser(\"~/.claude/settings.json\")))[\"statusLine\"][\"command\"])' 2>/dev/null)\""
+  },
   "fallbackModel": [
     "claude-sonnet-4-5[1m]"
   ],

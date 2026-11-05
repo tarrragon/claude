@@ -1,3 +1,22 @@
+## [2.87.0] - 2026-11-05
+
+### Summary
+feat: 狀態列 statusline_lane 改為框架預設啟用; feat: GRAPH_EDGE_TYPES 新增 proposed 層 closed_by 邊; docs: PC-GPD-085 功能隨 sync 擴散但啟用設定在 sync 排除檔 (+6 more)
+
+Changes: 2 feat, 6 docs, 1 chore
+
+- feat: 狀態列 statusline_lane 改為框架預設啟用
+- feat: GRAPH_EDGE_TYPES 新增 proposed 層 closed_by 邊
+- docs: PC-GPD-085 功能隨 sync 擴散但啟用設定在 sync 排除檔
+- docs: IMP-GPD-025 zsh 未加大括號變數後接冒號被當修飾詞
+- docs: PC-GPD-083 補第四例（方案代價依據的權限未查證而被高估）
+- docs: PC-GPD-083 補第三例（維持現狀方案未查現況輸出）
+- docs: README 索引補 PC-GPD-084
+- docs: ticket skill 升 2.48.0 並補 CHANGELOG
+- chore: sync-push 回寫框架版本 2.86.0
+
+---
+
 ## [2.86.0] - 2026-11-04
 
 ### Summary

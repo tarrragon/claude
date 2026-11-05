@@ -806,6 +806,8 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-GPD-081 | 用戶裁定只寫進規格就結票，沒有實作票承接，規格與程式的落差要到別的盤點才被發現 | 中 | 0.6.0 |
 | PC-GPD-082 | 在 .claude/skills/ 新建專案專用的 skill，沒有同時宣告不隨框架同步推送，下一次 sync-push 會把它帶進 canonical | 中 | 0.6.0 |
 | PC-GPD-083 | 方案比較假設了不存在的承載處，用戶裁定方案後才發現要再裁定一次放在哪裡 | 中 | 0.6.0 |
+| PC-GPD-084 | 派發前盤點 where.files 漏列有窮舉 switch 的消費端，代理人動工前就被範圍擋下 | 低 | 0.6.0 |
+| PC-GPD-085 | 框架功能的本體隨 sync 擴散，啟用設定卻寫在 sync 排除檔，consumer 拿到功能卻從未啟用 | 中 | 0.6.0 |
 
 ---
 

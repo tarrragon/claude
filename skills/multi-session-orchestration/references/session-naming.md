@@ -104,16 +104,40 @@
 
 `scripts/statusline_lane.py` 在內層狀態列輸出前加一行 `L<n> │ <名稱>`，讓用戶切換終端機時辨認 session 所屬的線。名稱取 statusLine stdin 的 `session_name`（`/rename` 或 `-n` 設定後才出現），缺席時以 `session_id` 對 `~/.claude/sessions/*.json` 的 `sessionId` 取 `name`。線號從協調票 `## Solution` 段的現行佇列行取得（協調票由 `coordination_ticket.py` 自動解析：active 版本中 frontmatter 帶 `coordination: true` 且 `status: in_progress` 的票；0 張或多張時省略線號並寫一行 stderr；規則同看板：每線取最後一行、票序為 `（結束）` 或 `（無）` 的線視為結束、名稱精確比對；一個名稱對到多條線時列 `L6·L13`）。對不到線時只印名稱，名稱也沒有時不印前綴。任何解析失敗只省略前綴，內層狀態列照常輸出。
 
-**啟用方式**：在專案 `.claude/settings.local.json` 設定（只影響本專案 session，不動全域設定）：
+**預設啟用**：框架的 `.claude/settings.json` 已設定 `statusLine`，隨 sync 進入每個 consumer 專案，不需另外啟用。專案層設定優先於全域設定，所以這行設定會取代全域 `statusLine`；全域那條命令改由本腳本當作內層呼叫，原本的顯示內容仍在，只是前面多一行前綴。
+
+命令以 shell 串成，各段的作用：
+
+| 環節 | 作法 | 理由 |
+|------|------|------|
+| 定位腳本 | 取 `CLAUDE_PROJECT_DIR`，缺席時改讀 stdin 的 `workspace.project_dir` | 不依賴啟動目錄（在子目錄開 session 也找得到），也不寫死本機絕對路徑 |
+| 腳本失敗時 | 腳本缺席、專案目錄解析不出、或以非零結束碼結束，改把同一份 stdin 交給全域 `statusLine.command` | 前綴是附加品；腳本出錯時狀態列退回全域內容，不整條消失 |
+
+命令契約由 `tests/test_statusline_settings.py` 守住（直接以 `/bin/sh` 執行 settings.json 中的命令字串，含腳本缺席、專案目錄解析不出、腳本崩潰三個該退回的對照輸入）。
+
+**關閉或覆寫**：在專案 `.claude/settings.local.json` 寫自己的 `statusLine`，它優先於 `.claude/settings.json`，且屬 sync 排除檔，不會被下次 sync-pull 蓋掉。要關閉前綴、只留全域狀態列時，把全域的命令原樣寫進去：
 
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "python3 .claude/skills/multi-session-orchestration/scripts/statusline_lane.py --coord-ticket <協調票路徑>"
+    "command": "<~/.claude/settings.json 的 statusLine.command>"
   }
 }
 ```
+
+要指定協調票或改內層命令時，改寫成直接呼叫本腳本並帶參數（路徑用 `$CLAUDE_PROJECT_DIR`，不寫本機絕對路徑）：
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/skills/multi-session-orchestration/scripts/statusline_lane.py\" --coord-ticket <協調票路徑>"
+  }
+}
+```
+
+這種寫法沒有上表的「腳本失敗時」退回保護，腳本缺席時狀態列會整條空白。
 
 | 參數 | 說明 |
 |------|------|

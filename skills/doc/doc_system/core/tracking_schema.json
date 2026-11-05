@@ -92,6 +92,15 @@
       "maintainer": "手動",
       "reverse_field": null
     },
+    "closed_by": {
+      "class": "see-also",
+      "direction": "directed",
+      "forward_cardinality": "one",
+      "forward_field": "closed_by",
+      "layer": "proposed",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
     "consumption": {
       "class": "dataflow",
       "direction": "directed",

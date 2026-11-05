@@ -223,6 +223,7 @@ EXPECTED_FORWARD_CARDINALITY = {
     "returning": "one",
     "bundle_dependency": "many",
     "uc_ticket_refs": "many",
+    "closed_by": "one",
 }
 
 
@@ -328,6 +329,23 @@ class TestUcTicketRefsEdge:
         )
         assert without == []
         assert with_refs == ["0.6.0-W1-001"]
+
+
+class TestClosedByEdge:
+    """票間收束邊（0.6.0-W1-169.1）：proposed，forward_field 為 closed_by。"""
+
+    def test_edge_contract(self):
+        edge = GRAPH_EDGE_TYPES["closed_by"]
+        assert edge["forward_field"] == "closed_by"
+        assert edge["layer"] == "proposed"
+        assert edge["direction"] == "directed"
+        assert edge["reverse_field"] is None
+
+    def test_export_contains_edge(self):
+        exported = _load_schema_json_from_disk()["edge_types"]["closed_by"]
+        assert exported["forward_field"] == "closed_by"
+        assert exported["layer"] == "proposed"
+        assert exported["reverse_field"] is None
 
 
 class TestCompatVersionDecoupledFromFrameworkVersion:

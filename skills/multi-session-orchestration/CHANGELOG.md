@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.21.0（2026-11-05）— 狀態列改為框架預設啟用（用戶要求）：`statusLine` 由各專案的 `settings.local.json`（sync 排除檔）移到框架 `.claude/settings.json`，隨 sync 進入每個 consumer。命令以 `CLAUDE_PROJECT_DIR`（缺席時讀 stdin 的 `workspace.project_dir`）定位腳本，不依賴啟動目錄，也不寫死本機路徑；腳本缺席、專案目錄解析不出或腳本失敗時，退回全域 `statusLine.command`。新增 `tests/test_statusline_settings.py`，直接以 `/bin/sh` 執行設定中的命令字串，含三個該退回的對照輸入。`references/session-naming.md` §6 改寫為預設啟用，並寫明以 `settings.local.json` 關閉或覆寫的方法。
+
 **Version**: 1.20.0（2026-11-03）— 換 session 依主軸分流（用戶裁定）：主軸不變（續做同一條線、轉階段、context 達門檻要交接）時，收尾後在原 session `/clear`，由主控重新派發，不關閉重開；主軸改變才 `/rename` 或另開 `claude -n`；線完結就收線並關閉 session。改動在 SKILL.md 核心原則表與 `references/session-naming.md` §1、§4，§4 末尾另寫明主控給用戶的指令要對應情況。
 
 **Version**: 1.19.1（2026-11-01）— `references/line-continuity.md` §2〈用戶待辦〉補〈列入時機〉：只列用戶現在就能做的事項，需要等待條件的項目，等條件發生後才列入（附反例）；條件由他線回報達成時，主控在同一輪寫完成行；列早時以完成行註明撤回，之後用新的鍵重新列入。

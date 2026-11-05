@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.48.0（本地變更）— acceptance-gate 的協調票待辦檢查補上 `ticket track batch-complete --parent <P>` 路徑：展開 P 的子票中標記 `coordination: true` 者，Solution 內仍有未配對完成行的用戶待辦時阻擋該次 batch-complete，並列出未配對的鍵。原本此檢查只覆蓋 `complete`、`track close`、`batch-complete --wave`，協調票可經 `--parent` 繞過。命令掃描無法解析（未閉合引號、管線餵 stdin 的 shell 等）或票檔讀取失敗時 fail-open 並寫日誌。子命令與旗標語意不變，無文件同步需求。
+
 **Version**: 2.47.0（2026-11-03）— frontmatter 由 2.45.0 同步至本版，並記錄協調票的建立與收尾檢查。（1）`ticket create --coordination` 與 `ticket track set-coordination` 標記協調票（`coordination: true`），協調票解析依此標記找出 active 版本內的 in_progress 協調票。（2）acceptance-gate 對協調票的 `complete`、`ticket track close`、`batch-complete --wave` 三條路徑，檢查 Solution 中沒有配對完成行的用戶待辦，有則阻擋，並列出未配對的鍵。（3）阻擋時的 WARNING 行依來源寫原因（協調票待辦、子任務等），不再共用同一句。測試隨各項變更新增，含該紅與對照輸入。
 
 **Version**: 2.46.0（本地變更）— `ticket track dispatch` 的 normal 骨架讀合併閘門宣告（`.claude/project-integration/merge-gate.yaml`），把帶 `changed_files` 的套件（如格式檢查）依 where.files 推出的命令併入收尾句的 commit 之前（`GATE_CHECK_CLAUSE`、`gate_check_commands`）。理由：這類套件的結果只由本次改動決定，提交前在本機就能重現；骨架原本不讀宣告，代理人只跑測試與 analyze，格式紅燈要到閘門才出現，每次多一輪往返。不新增行，因為骨架最長組合已達 PM 填寫空間上限。宣告不存在、無命中時骨架逐字不變；宣告解析失敗時 stderr WARNING、骨架照常輸出。範圍判定以 worktree `merge_gate.py` 為權威，本處複製最小子集。文件同步：`references/track-command-dispatch.md`〈閘門逐檔檢查併入收尾句〉。測試：`test_track_dispatch.py`（純函式、E1 傳與不傳、CLI 三情境：有宣告／無宣告／宣告損壞），`test_agent_prompt_length_guard_hook.py` 新增含 gate_checks 的全組合行數守衛。
