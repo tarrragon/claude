@@ -17,7 +17,7 @@ Domain Map 模板 — 複製到對應 domain 目錄並重新命名。
 ---
 id: DOMAIN-MAP-{domain}
 domain: "{domain 名稱}"
-source_specs: []                 # 本 map 覆蓋的 spec，如 [SPEC-001]
+source_specs: []                 # §7 表列出的 spec 集合（每個 ### SPEC-NNN 子標題一份），如 [SPEC-001]
 related_usecases: []             # 相關 UC，如 [UC-01]
 depends_on_bundles: []           # 選填：本 bundle 依賴的其他 domain-map id，如 [DOMAIN-MAP-{domain}]；彙整見系統層模板
 created: "YYYY-MM-DD"
@@ -185,19 +185,31 @@ Step 5 測試設計逐條列舉為 domain unit test，不靠「剛好出現於 U
 
 - {技術債項目 + 追蹤票/處理指引}
 
-## 7. FR → Bundle 覆蓋對照
+## 7. 驗收條文 → Bundle 覆蓋對照
 
-<!-- 逐一比對 spec 全部 FR 到 bundle，確認無遺漏（涵蓋 FR-01 至最後一個 FR）。非 domain 的 FR 標 presentation/data/cross-cutting。 -->
+<!-- 本節列出哪些 spec 的哪些驗收條文由本 bundle 承接；frontmatter source_specs 即本節子標題的 spec 集合。
+子標題：每份 spec 一組 `### SPEC-NNN（{spec 標題}）` 加表格，source_specs 每多一份 spec 就重複一組。
+相等要求：子標題集合必須等於 source_specs。source_specs 決定圖上 domain_coverage 邊，兩者不一致時圖上的覆蓋與本節宣告不符；doc validate 比對兩者並報錯。
+列型三選一：
+- FR：須涵蓋該 spec FR-01 至最後一個 FR，不得遺漏；非 domain 的 FR 標 presentation/data/cross-cutting。
+- 具名判定式：spec 中無 FR 編號、但逐值可驗收的條文，以節號加條款名稱指名，例如 SPEC-001 §1〈泳道布局規則〉。
+- 整份 spec：spec 全文以本 domain 為主體時只寫一列，驗收條文欄填 `SPEC-NNN 全文`，不逐條列舉。 -->
 
-| FR 群 | 覆蓋 | 備註 |
+### SPEC-NNN（{spec 標題}）
+
+| 驗收條文（FR、具名判定式或全文） | 覆蓋 | 備註 |
 |---|---|---|
 | {FR-NN} | {Bundle} | {備註} |
 | {FR-NN} | presentation（非 domain）| {畫面/i18n/主題} |
 | {FR-NN} | data（非 domain）| {持久化} |
+| SPEC-NNN §N〈{條款名稱}〉 | {Bundle} | 具名判定式，無 FR 編號 |
+| SPEC-NNN 全文 | {Bundle} | 整份 spec 以本 domain 為主體 |
 
 ---
 
 **Last Updated**: YYYY-MM-DD | **Source**: {規劃波 ticket ID}
+**Template Updated**: 2026-11-05 | **Version**: 2.5.1 — §7 註解依三種列型分流（FR 須涵蓋全部、具名判定式、整份 spec 一列），補子標題與 source_specs 必須相等的理由與後果，範例表補具名判定式與全文兩列
+**Template Updated**: 2026-11-05 | **Version**: 2.5.0 — source_specs 註解改「§7 表列出的 spec」、§7 標題改「驗收條文 → Bundle 覆蓋對照」並要求 `### SPEC-NNN` 子標題
 **Template Updated**: 2026-10-07 | **Version**: 2.4.0 — frontmatter 新增選填欄位 `depends_on_bundles`（DomainBundle 出邊，B 層 proposed 邊型 `bundle_dependency`）；檔頭補指向 `system-layer-template.md`，跨 domain 決策改寫在系統層文件
 **Template Updated**: 2026-09-09 | **Version**: 2.3.0 — §2 依賴方向節之後新增「§2.5 通道與協調圖」（三個子項：通道清單、協調圖、到達類別與級別實例），節號用小數點插入不佔用既有 §3-§7 編號；判準以標題文字引用《事件流負載仲裁方法論》，範本內只留欄位與填寫提示
 **Template Updated**: 2026-07-25 | **Version**: 2.2.0 — §3 Bundle 界定表新增「資料契約文件引用連結」欄，僅 data/infrastructure 列需填，連結至 doc skill data-contract-template 產出文件（PROP-002 In Scope 3，0.2.0-W2-003）

@@ -276,6 +276,29 @@ def _find_bundle_dependency_cycles(bundles: dict[str, dict], doc_id: str) -> lis
     return [" -> ".join(cycle) for cycle in _find_reachable_cycles(graph, doc_id)]
 
 
+DOMAIN_MAP_SECTION7_PATTERN = r"^#{2}\s+7[.\s]"
+SPEC_SUBHEADING_PATTERN = re.compile(r"^###\s+(SPEC-\d+)")
+
+
+def _extract_section7_specs(text: str) -> set[str]:
+    """取出 §7 下 '### SPEC-NNN' 子標題的 spec 集合；無 §7 回傳空集合。"""
+    section = _extract_section(text, DOMAIN_MAP_SECTION7_PATTERN) or ""
+    found = (SPEC_SUBHEADING_PATTERN.match(line) for line in section.splitlines())
+    return {m.group(1) for m in found if m}
+
+
+def _find_source_specs_mismatch(path: Path, frontmatter: dict) -> list[str]:
+    """比對 §7 子標題 spec 集合與 frontmatter source_specs，回傳兩側差集描述。"""
+    declared = set(_as_name_list(frontmatter.get("source_specs")))
+    in_section7 = _extract_section7_specs(path.read_text(encoding="utf-8"))
+    problems = []
+    if declared - in_section7:
+        problems.append(f"source_specs 有但 §7 無: {', '.join(sorted(declared - in_section7))}")
+    if in_section7 - declared:
+        problems.append(f"§7 有但 source_specs 無: {', '.join(sorted(in_section7 - declared))}")
+    return problems
+
+
 def _execute_domain_bundle_validation(project_root: str, doc_id: str) -> None:
     """DomainBundle 的 validate 分派路徑：depends_on_bundles 出邊目標須存在且不成環。"""
     bundles = _load_domain_bundles(project_root)
@@ -292,9 +315,15 @@ def _execute_domain_bundle_validation(project_root: str, doc_id: str) -> None:
         for d, paths in _find_duplicate_domains(project_root).items()
         if own_path in paths
     ]
-    if not targets and not cycles and not path_problems and not duplicates:
-        print(f"通過: {doc_id} 的 depends_on_bundles 出邊、path_patterns 與 domain 唯一性皆有效")
+    spec_problems = _find_source_specs_mismatch(own_path, bundles[doc_id])
+    if not targets and not cycles and not path_problems and not duplicates and not spec_problems:
+        print(f"通過: {doc_id} 的 depends_on_bundles 出邊、path_patterns、domain 唯一性與 source_specs 皆有效")
         sys.exit(0)
+
+    if spec_problems:
+        print(f"驗證失敗: {doc_id} 的 source_specs 與 §7 子標題集合不一致")
+        for item in spec_problems:
+            print(f"  - {item}")
 
     if duplicates:
         print(f"驗證失敗: {doc_id} 的 domain 與其他 DomainBundle 重複")

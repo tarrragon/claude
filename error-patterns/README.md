@@ -424,6 +424,8 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-GPD-022 | 父容器的固定高度乘了等比縮放係數，子件高度契約寫的是未縮放 token，小視窗下子件被壓扁，內容被靜默裁切 | 中 | 0.5.0 |
 | IMP-GPD-023 | zsh 不對未加引號的變數做字詞拆分，把檔案清單存進變數再傳給掃描命令時，整串被當成一個不存在的路徑，掃描結果與零命中同形 | 中 | 0.5.0 |
 | IMP-GPD-024 | plugin 在事件處理中主動以 session.send 傳跨 session 訊息，auto mode 的 classifier 因沒有對應的使用者請求而不給判定，訊息不送達；失敗只記 debug 通道時，與「沒觸發」同形 | 中 | 0.5.0 |
+| IMP-GPD-025 | zsh 下未加大括號的變數後接冒號（如 "$B:assets/x"）被解讀為歷史修飾詞，git show 的 <rev>:<path> 被改寫成絕對路徑 | 低 | 0.6.0 |
+| IMP-GPD-026 | 寫入端正規化在補償讀取端的解析缺陷，只修寫入端會造成讀取端回歸 | 中 | v0.6.0 |
 
 ### 流程 (PROC)
 

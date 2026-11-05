@@ -344,3 +344,41 @@ class TestValidateFilenames:
                 execute_filenames(args)
 
         assert exc.value.code in (0, 1)
+
+
+def _write_domain_map(root: Path, source_specs: str, section7_specs: list[str]) -> None:
+    """建立含 §7 與 source_specs 的最小 domain-map。"""
+    path = root / "docs" / "spec" / "alpha" / "domain-map.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    headings = "".join(f"### {spec}（x）\n內容\n\n" for spec in section7_specs)
+    path.write_text(
+        f"---\nid: DOMAIN-MAP-alpha\ndomain: alpha\nsource_specs: {source_specs}\n---\n"
+        f"# map\n\n## 6. 其他\n\n### SPEC-999 非 §7 不計\n\n## 7. 覆蓋對照\n\n{headings}## 8. 後記\n",
+        encoding="utf-8",
+    )
+
+
+def _validate_alpha(root: Path, capsys) -> tuple[int, str]:
+    with patch.object(FileLocator, "get_project_root", return_value=str(root)):
+        with pytest.raises(SystemExit) as exc:
+            execute(argparse.Namespace(doc_id="DOMAIN-MAP-alpha"))
+    return exc.value.code, capsys.readouterr().out
+
+
+class TestDomainMapSourceSpecsMatchSection7:
+    def test_consistent_passes(self, tmp_path, capsys):
+        _write_domain_map(tmp_path, "[SPEC-001, SPEC-002]", ["SPEC-001", "SPEC-002"])
+        code, _ = _validate_alpha(tmp_path, capsys)
+        assert code == 0
+
+    def test_section7_has_extra_spec_fails_with_diff(self, tmp_path, capsys):
+        _write_domain_map(tmp_path, "[SPEC-001]", ["SPEC-001", "SPEC-002"])
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "§7 有但 source_specs 無: SPEC-002" in out
+
+    def test_source_specs_has_extra_spec_fails_with_diff(self, tmp_path, capsys):
+        _write_domain_map(tmp_path, "[SPEC-001, SPEC-003]", ["SPEC-001"])
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "source_specs 有但 §7 無: SPEC-003" in out

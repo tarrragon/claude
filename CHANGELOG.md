@@ -1,3 +1,18 @@
+## [2.89.0] - 2026-11-05
+
+### Summary
+feat: doc validate 比對 domain-map §7 子標題集合與 source_specs; docs: domain-map 範本 §7 註解依三種列型分流並補範例; docs: 新增 IMP-GPD-026 寫入端正規化補償讀取端缺陷 (+2 more)
+
+Changes: 1 feat, 3 docs, 1 chore
+
+- feat: doc validate 比對 domain-map §7 子標題集合與 source_specs
+- docs: domain-map 範本 §7 註解依三種列型分流並補範例
+- docs: 新增 IMP-GPD-026 寫入端正規化補償讀取端缺陷
+- docs: domain-map §7 擴充為驗收條文對照，layout 補 SPEC-001、workspace 補 SPEC-005，同步範本
+- chore: .claude/VERSION 回寫 2.88.0（sync-push 後）
+
+---
+
 ## [2.88.0] - 2026-11-05
 
 ### Summary
