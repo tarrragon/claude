@@ -79,7 +79,9 @@
 | 生命週期 | 跨 session 保留，專案 git 正常 track |
 | 跨專案共用 | 不可，但檔案留在專案 git history 中 |
 | .gitignore | 不加入（與 A/B/C 不同） |
-| 範例 | `skills/*/references/project-integration/`（per-project 落地層）；根層 `project-integration/` 同樣受排除，作為專案宣告的放置處（如合併閘門的 `merge-gate.yaml`） |
+| 範例 | `skills/*/references/project-integration/`（per-project 落地層）；根層 `project-integration/` 同樣受排除，作為專案宣告的放置處（如合併閘門的 `merge-gate.yaml`）與 skill 的每專案狀態（如 `framework-update-adaptation/last-adapted.md`，記錄本專案上次適應到的框架版本） |
+
+**skill 的每專案狀態放根層 `project-integration/<skill 名>/`，不放 skill 目錄內**：skill 目錄內的檔案隨 sync 擴散，狀態放那裡會讓各 consumer 共用同一份進度。放根層 `project-integration/` 時沿用既有的雙向排除，不需在 `sync_exclude_manifest.py` 新增名稱。對照：`cc-release-impact-review` 的 `state/last-reviewed.md` 刻意放在 skill 目錄內、隨 sync 共用，因為 Claude Code 版本評估的結論跨專案通用。
 
 **辨識問題**：這個檔案需要留在專案 git 中（便於團隊協作），但不應隨 sync 推到框架 repo？若是，屬類型 E。
 

@@ -1,3 +1,17 @@
+## [2.88.0] - 2026-11-05
+
+### Summary
+feat: 新增 framework-update-adaptation skill; docs: PC-SCLK-008 補實例（裁定選項文字被逐字寫進規格）; docs: PC-GPD-086 線回報的預告句被當成已派發，線停滯無人察覺 (+1 more)
+
+Changes: 1 feat, 2 docs, 1 chore
+
+- feat: 新增 framework-update-adaptation skill
+- docs: PC-SCLK-008 補實例（裁定選項文字被逐字寫進規格）
+- docs: PC-GPD-086 線回報的預告句被當成已派發，線停滯無人察覺
+- chore: .claude/VERSION 回寫 2.87.0（sync-push 後）
+
+---
+
 ## [2.87.0] - 2026-11-05
 
 ### Summary

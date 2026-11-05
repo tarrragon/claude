@@ -67,6 +67,7 @@
 |------|------|
 | `/sync-push` | 推送 .claude 配置到獨立 repo |
 | `/sync-pull` | 從獨立 repo 拉取配置 |
+| `/framework-update-adaptation` | sync-pull 之後的語意對齊（逐項分類 delta、各類建票、記錄上次適應版本） |
 | `skill-sync push <name>` | 推送單一 skill 到 skill 發佈庫 |
 | `skill-sync pull <name>` | 從 skill 發佈庫拉取單一 skill |
 

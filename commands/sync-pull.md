@@ -93,7 +93,7 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
 
 **Consequence**：跳過清單會讓未解決衝突與衝突標記殘留靜默累積——下次 pull 的新衝突與舊殘留混雜無法分辨、含 `<<<<<<<` 標記的檔案被當正常內容使用、未 commit 的 delta 汙染後續任務的變更邊界。
 
-**Action**：每次 pull 成功後依序執行以下六步。
+**Action**：每次 pull 成功後依序執行以下七步。
 
 ### 1. Delta 檢視
 
@@ -171,6 +171,10 @@ rm -rf .claude/.sync-conflicts/
 **當前 session 的註冊不回溯**：以上處理的都是磁碟上的設定檔。已啟動的 session 在啟動當下就把 hook 註冊讀進記憶體，pull 改了設定檔不會回頭改它。在 session 中途執行 pull 之後，該 session 剩餘時間內 hook 仍以舊路徑執行，直到重啟為止。
 
 實際出現過的樣態：一次 pull 把兩支 hook 從一個 skill 遷到另外兩個 skill，`settings.json` 的四行指向由三方合併正確更新，磁碟狀態無誤，但同一個 session 內 PostToolUse 仍以舊路徑觸發，Agent 派發與 Stop 事件在該 session 剩餘時間內持續報錯。設定檔查過沒問題而錯誤仍在時，先確認 session 是否尚未重啟，不要回頭改一份已經正確的設定檔。
+
+### 7. 交給框架更新適應
+
+前六步只確認合併正確。這次 delta 對本專案要做哪些對齊（重驗產物、復原被覆寫的本地特化、處理廢除與改名、配合新守衛或啟用設定），不在本清單範圍：commit 完成後執行 `framework-update-adaptation` skill。
 
 ## 孤兒稽核（--audit）
 
