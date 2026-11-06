@@ -426,6 +426,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-GPD-024 | plugin 在事件處理中主動以 session.send 傳跨 session 訊息，auto mode 的 classifier 因沒有對應的使用者請求而不給判定，訊息不送達；失敗只記 debug 通道時，與「沒觸發」同形 | 中 | 0.5.0 |
 | IMP-GPD-025 | zsh 下未加大括號的變數後接冒號（如 "$B:assets/x"）被解讀為歷史修飾詞，git show 的 <rev>:<path> 被改寫成絕對路徑 | 低 | 0.6.0 |
 | IMP-GPD-026 | 寫入端正規化在補償讀取端的解析缺陷，只修寫入端會造成讀取端回歸 | 中 | v0.6.0 |
+| IMP-GPD-027 | 紀錄端以比產生端窄的規則抽出衍生欄位，欄位外觀正常而下游聚合失真 | 中 | 0.6.0 |
 
 ### 流程 (PROC)
 
@@ -711,7 +712,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-BAL-058 | 某類別只有一個已知成員時，問題的範圍無法被觀察，答案自動繼承提問的範圍 | 高 | 0.2.1 |
 | PC-GPD-001 | 追加型載體凍結未量測的宣稱——讀者取得的是「現況」，載體記錄的是「當時的推測」 | 高 | 0.1.0 |
 | PC-GPD-002 | 兩個來源共享同一個抽取方法時，一致性不是證據——它們會同時錯且錯得一樣 | 高 | 0.1.0 |
-| PC-GPD-003 | worktree guard 拒收含換行的 CLI 參數，代理人壓平 markdown 後章節標題失效阻擋 complete | 中 | 0.1.0 |
+| PC-GPD-003 | worktree 隔離檢查拒收多行內容加串接的 CLI 命令，代理人壓平 markdown 後章節標題失效阻擋 complete | 中 | 0.1.0 |
 | PC-GPD-004 | 派發前工具清單核對只查 Bash，漏查寫檔工具——DOC 票派給無 Write/Edit 的代理人，開工才撞牆 | 中 | 0.1.0 |
 | PC-GPD-005 | 版號是單調計數器不表達分叉，兩個 consumer 各自前進一步即撞號，內容雜湊只證明不同不證明誰新 | 高 | 0.1.0 |
 | PC-GPD-006 | 「各專案自建」目錄跨 consumer 整包複製，夾帶他方 ticket 編號與指向不存在檔案的索引 | 中 | 0.1.0 |

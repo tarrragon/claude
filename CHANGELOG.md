@@ -1,3 +1,17 @@
+## [2.90.0] - 2026-11-06
+
+### Summary
+feat: 合併閘門宣告 tool/ 參照實作的 selftest 與 compute 套件; docs: PC-GPD-003 觸發判準改為多行內容加串接的組合; docs: 新增 IMP-GPD-027 衍生欄位解析規則比產生端窄致聚合失真 (+1 more)
+
+Changes: 1 feat, 2 docs, 1 chore
+
+- feat: 合併閘門宣告 tool/ 參照實作的 selftest 與 compute 套件
+- docs: PC-GPD-003 觸發判準改為多行內容加串接的組合
+- docs: 新增 IMP-GPD-027 衍生欄位解析規則比產生端窄致聚合失真
+- chore: .claude/VERSION 回寫 2.89.0（sync-push 後）
+
+---
+
 ## [2.89.0] - 2026-11-05
 
 ### Summary
