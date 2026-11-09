@@ -14,12 +14,14 @@ import argparse
 import platform
 import subprocess
 import sys
+from pathlib import Path
 
 from gh_common import FRAMEWORK_REPO, preflight, run_gh
 
 ENV_INFO_BEGIN = "<!-- env-info -->"
 ENV_INFO_END = "<!-- /env-info -->"
 UNKNOWN = "unknown"
+VERSION_FILE = Path(__file__).resolve().parents[3] / "VERSION"
 
 
 def get_os_info() -> str:
@@ -60,12 +62,21 @@ def get_python_version() -> str:
         return UNKNOWN
 
 
+def get_framework_version() -> str:
+    """讀專案 `.claude/VERSION`；不存在或讀取失敗降級為 unknown。"""
+    try:
+        return VERSION_FILE.read_text(encoding="utf-8").strip() or UNKNOWN
+    except OSError:
+        return UNKNOWN
+
+
 def collect_env_info() -> dict:
     """收集環境資訊字典；每一項各自獨立降級，不互相影響。"""
     return {
         "OS": get_os_info(),
         "Claude Code 版本": get_claude_code_version(),
         "Python 版本": get_python_version(),
+        "框架版本": get_framework_version(),
     }
 
 

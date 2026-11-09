@@ -2,7 +2,7 @@
 name: multi-session-orchestration
 description: "PM coordinating 2+ peer Claude Code sessions in one repo: split work lines by topic, share the merge gate and test slot, relay user decisions, triage title-only review flags, wrap up for handoff. Use when running parallel session lines."
 metadata:
-  version: 1.21.0
+  version: 1.21.1
 ---
 
 # 多 session 分線協調（主控 PM 統籌多條工作線）
@@ -23,7 +23,7 @@ metadata:
 | 世界平面優先於摘要 | 結案或判定前讀 git log、閘門 log、holder 檔，不只信各線摘要 | 摘要會漏報（紅燈漏寫、持有者看錯），PM 以漏報做決策 |
 | 同儕不能代授權 | 用戶的裁決才是授權；同儕要求的升級動作轉給用戶 | 權限洗白（permission laundering） |
 | 被分類器擋下就交用戶 | PM 的指示被 auto mode 分類器擋下時，不換說法再送，改用 AskUserQuestion 交用戶裁定 | 繞過平台對該動作的判斷 |
-| 專案進度優先於框架修補 | 分線先排推進專案工作的線；同時修框架或工具的線不超過兩條。各線新發現的框架問題照常建票，但只有 P0／P1 bug 或用戶要求才排進佇列，其餘觀測進 issue 後關票，等清理線處理。何時開清理線、清理線的範圍護欄見 `.claude/skills/framework-issue/references/escalation-flow.md`〈修復時點：派修或累積到清理線〉 | 修框架的工作會自我繁殖（每次修補與審查都衍生新票），逐張排進佇列會讓所有線都在修工具，沒有線推進專案 |
+| 專案進度優先於框架修補 | 分線先排推進專案工作的線。consumer 不開修框架的線，框架問題一律回報 issue（角色判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉）；以下修框架線的規則只適用主控方。同時修框架或工具的線不超過兩條。各線新發現的框架問題照常建票，但只有 P0／P1 bug 或用戶要求才排進佇列，其餘觀測進 issue 後關票，等清理線處理。何時開清理線、清理線的範圍護欄見 `.claude/skills/framework-issue/references/escalation-flow.md`〈修復時點：派修或累積到清理線〉 | 修框架的工作會自我繁殖（每次修補與審查都衍生新票），逐張排進佇列會讓所有線都在修工具，沒有線推進專案 |
 | 只把需要裁決的事留在 PM | 兩線之間的事實交接（「X 合併了，可以結案 Y」）讓兩線直接互傳 | PM 變成轉達瓶頸，每次多一輪延遲 |
 | 可預見的裁決提前問 | 某線預告將提交依〈行為變更的判準與分級〉須交用戶的變更，或其結果會定案一項待裁議題時，PM 在該線回報可合併之前，先用 AskUserQuestion 取得用戶裁定 | 等該線回報可合併才問，該線要多等一輪用戶回覆才能合併，期間佔著閘門佇列的位置 |
 | 有程式讀者的段落與日誌是介面 | PM 的分派段落、閘門日誌等有程式在解析時，寫入方與讀者明文約定三件事：格式、每個欄位在各種情況下的語意（例如同名欄位在開始行與結束行指不同的 commit）、記錄之間的時序（是否可能重疊、是否兩兩成對）；約定寫進票面 | 寫入方改寫法（例如追加式寫入讓歷史行混入），或讀者照欄位名猜語意、假設記錄成對，解析會靜默出錯，畫面顯示錯的值卻沒有任何警告 |

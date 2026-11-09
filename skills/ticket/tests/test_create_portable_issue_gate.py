@@ -84,6 +84,13 @@ class TestValidatePortableIssueGate:
         captured = capsys.readouterr()
         assert "PORTABLE_ISSUE_UNDEDUPED" in captured.out
 
+    def test_undeduped_hint_distinguishes_owner_and_consumer(self, capsys):
+        validate_portable_issue_gate([".claude/hooks/foo.py"], None)
+        out = capsys.readouterr().out
+        assert "只適用主控方" in out
+        assert "consumer" in out
+        assert "不建修改 .claude/ 的本地票" in out
+
     def test_portable_with_empty_string_dedup_checked_blocks(self, capsys):
         # 只給旗標不給結論（空字串）仍阻擋
         result = validate_portable_issue_gate([".claude/hooks/foo.py"], "")

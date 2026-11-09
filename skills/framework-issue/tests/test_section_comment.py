@@ -1616,11 +1616,71 @@ def test_observe_posts_comment_without_owner_requirement(tmp_path, capsys):
     assert rc == 0
     assert run.call_count == 1
     posted_body = run.call_args.args[0][-1]
-    assert posted_body == (
-        "body=<!-- observation: 實測結果 by session-a -->\n以 #81 實測 observe 通道"
-    )
+    assert posted_body.startswith("body=<!-- observation: 實測結果 by session-a -->\n")
+    assert posted_body.endswith("\n以 #81 實測 observe 通道")
     out = capsys.readouterr().out
     assert "issuecomment-999" in out
+
+
+def _observe_posted_body(tmp_path, monkeypatch, version_file_content):
+    """跑一次 observe，回傳 POST 的 comment body（不含 `body=` 前綴）。"""
+    claude_root = tmp_path / "dot-claude"
+    claude_root.mkdir()
+    if version_file_content is not None:
+        (claude_root / "VERSION").write_text(version_file_content, encoding="utf-8")
+    monkeypatch.setattr(section_comment, "_CLAUDE_ROOT", claude_root)
+    content_file = tmp_path / "obs.md"
+    content_file.write_text("內文", encoding="utf-8")
+    with mock.patch.object(
+        section_comment.subprocess, "run", return_value=_completed(stdout="{}")
+    ) as run:
+        rc = section_comment.main(
+            ["observe", "81", "--summary", "s", "--session", "a",
+             "--content-file", str(content_file)]
+        )
+    assert rc == 0
+    return run.call_args.args[0][-1][len("body="):]
+
+
+def test_observe_appends_framework_version_line(tmp_path, monkeypatch):
+    body = _observe_posted_body(tmp_path, monkeypatch, "2.90.0\n")
+    lines = body.splitlines()
+    assert lines[0] == "<!-- observation: s by a -->"
+    assert lines[1] == "<!-- framework-version: 2.90.0 -->"
+    assert lines[2] == "內文"
+
+
+def test_observe_writes_unknown_when_version_file_missing(tmp_path, monkeypatch):
+    body = _observe_posted_body(tmp_path, monkeypatch, None)
+    assert body.splitlines()[1] == "<!-- framework-version: unknown -->"
+
+
+def test_parse_observation_legacy_format_has_no_version_and_keeps_content():
+    parsed = section_comment.parse_observation(
+        "<!-- observation: 摘要 by s -->\n內文第一行\n第二行"
+    )
+    assert parsed == {
+        "summary": "摘要", "session": "s", "version": None,
+        "content": "內文第一行\n第二行",
+    }
+
+
+def test_parse_observation_new_format_excludes_version_line_from_content():
+    parsed = section_comment.parse_observation(
+        "<!-- observation: 摘要 by s -->\n<!-- framework-version: 2.90.0 -->\n內文"
+    )
+    assert parsed["version"] == "2.90.0"
+    assert parsed["content"] == "內文"
+
+
+def test_show_stream_label_unchanged_for_legacy_and_adds_version_for_new():
+    legacy = {"created_at": "1", "html_url": "u1",
+              "body": "<!-- observation: 摘要 by s -->\n內文"}
+    new = {"created_at": "2", "html_url": "u2",
+           "body": "<!-- observation: 摘要 by s -->\n<!-- framework-version: 2.90.0 -->\n內文"}
+    lines = section_comment._render_show_stream([legacy, new])
+    assert lines[1] == "- 1 摘要 by s"
+    assert lines[3] == "- 2 摘要 by s (framework 2.90.0)"
 
 
 def test_observe_failure_degrades_without_crashing(tmp_path, capsys):

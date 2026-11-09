@@ -159,6 +159,10 @@ acceptance-gate-hook（CLI 層）只檢查子 Ticket 的 status 欄位形式值�
 | 任一 FAIL | 未通過 | 不可執行 complete，需修正 |
 | 有 WARN 無 FAIL | 通過（附建議） | 可執行 complete，但建議 PM 確認 WARN 項 |
 
+**FAIL 只能來自三項固定檢查**：能不能跑、有沒有動到範圍外的檔案、輸出格式是否符合派發時票面寫定的產出形態（`.claude/pm-rules/verification-framework.md`〈驗收三項固定檢查〉）。三項以外的觀察一律列為 WARN，並註明「建議排進後續版本」，不判 FAIL。
+
+**檢查 2 與 where 擴充**：以驗收當下的 `where.files` 比對 `git diff --name-only`。執行中由 PM 擴充進 where 的檔案，票面必須有該檔案的加入理由（verification-framework〈檢查 2 的 where 擴充程序〉）；沒有理由紀錄的擴充條目視為範圍外，判 FAIL（屬檢查 2）。
+
 ---
 
 ## 工具使用
@@ -214,7 +218,8 @@ acceptance-gate-hook（CLI 層）只檢查子 Ticket 的 status 欄位形式值�
 
 ---
 
-**Last Updated**: 2026-10-15
+**Last Updated**: 2026-11-09
+**Version**: 1.7.0 - 判定段新增〈檢查 2 與 where 擴充〉：PM 擴充進 where 的檔案缺加入理由時視為範圍外，判 FAIL
 **Version**: 1.6.1 - --skip-gate 處置對齊派發範本例外：有略過行時查 Test Results 的對帳格式全套件回報，有且全綠判 PASS，否則 FAIL；兩者皆無判 FAIL
 **Version**: 1.6.0 - 審查修正：禁止事項補讀 log、測試命令與派發範本一致、補 --skip-gate 與無結束行判定及代理人回報核對、標題改「做法」
 **Version**: 1.5.0 - Step 5 改為不自跑全套件：合併前審查只驗相關測試檔與 dart analyze，complete 時審查讀合併閘門結果行；找不到結果等合併後再驗

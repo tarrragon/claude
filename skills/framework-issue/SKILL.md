@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Manages framework issues on tarrragon/claude: dedup, create, comment-as-section init/update/observe/check, fix-matrix close, folding tickets into issues. Use for: framework issue, 框架 issue, canonical issue, ticket 收束, 跨 consumer 修復追蹤, curator 派發."
 metadata:
-  version: 2.7.0
+  version: 2.8.0
 ---
 
 # Framework Issue
@@ -18,7 +18,7 @@ metadata:
 | 可見範圍 | 單一 consumer | 所有 consumer |
 | 增長語意 | 池增長是負債 | open 數增長不是失效，同領域裂成多張才是 |
 
-工作流四階段：發現問題 → 分析票（ticket）；分析與方案 → issue 區段；實作 → 實作票（依階段裁票）；同步 → `sync-push`。分析 context 留在 ticket 時對其他 consumer 不可見，同一問題會被重複發現、已解的問題後續票不知情。
+工作流四階段：發現問題 → 分析票（ticket）；分析與方案 → issue 區段；實作 → 主控方的實作票（依階段裁票）；同步 → 主控方發版時 `sync-push`，consumer 以 `sync-pull` 取得。consumer 只走前兩階段（角色判定見 `references/escalation-flow.md`〈角色：主控方與 consumer〉）。分析 context 留在 ticket 時對其他 consumer 不可見，同一問題會被重複發現、已解的問題後續票不知情。
 
 ## 決策入口
 
@@ -31,7 +31,7 @@ metadata:
 | 更新自己擁有的區段 | `update <comment-id>`，以 comment id 精準編輯 |
 | 把一群本地 ticket 的分析收進 issue | 收束流程五步（見下節） |
 | 一個壞 change 多個 consumer 各自修 | fix-matrix 命令（`fix-status` / `fix-version` / `close`） |
-| ticket 執行中發現框架問題，決定接不接 | 兩條路徑（先記錄不接手 / 當下接手）與關閉協定 |
+| ticket 執行中發現框架問題，決定接不接 | 先判定角色；consumer 一律先記錄不接手，主控方依兩條路徑（先記錄不接手 / 當下接手）與關閉協定 |
 
 **查重命中不等於重複**：全文檢索涵蓋 comment 內文，互相引用的 issue 會同時命中彼此。三種關係的判定與處置見按需讀取表的協定檔。
 
@@ -50,7 +50,7 @@ metadata:
 | `show` | `section_comment.py` | 以 body 索引為入口，區分區段與觀測流 |
 | `check` | `section_comment.py` | 三項警訊：當前結論落後最新觀測（主）、comment 數、索引一致性 |
 | `todo` | `section_comment.py` | 唯讀，跨 open issue 聚合「待辦與來源*」表格列；預設本 consumer 擁有的 open issue，`--all`／`--issue N` 改範圍，`--status`／`--stage`／`--priority`／`--consumer`／`--json` 可用 |
-| `create` | `create_issue.py` | 建 issue，body 自動附環境資訊 |
+| `create` | `create_issue.py` | 建 issue，body 自動附環境資訊（OS、Claude Code、Python、框架版本） |
 | `list` | `list_issues.py` | 列 issue，`--search` 作粗篩 |
 | `link` | `link_issue.py` | 把 issue ref stamp 進本地 error-pattern 的分類資訊表 |
 | `fix-status` | `fix_status.py` | 查或標記本 consumer 的修復狀態（body 內 fix-matrix 表） |
@@ -83,7 +83,7 @@ exit code：`0` 成功、`3` 降級（gh 未安裝／未登入／Issues 停用�
 |--------|------|---------|
 | 要 init／add／update／transfer-owner／observe／show／check，或判定查重關係、解讀 check 警訊、查 owner 格式 | `references/comment-as-section-protocol.md` | 〈操作一覽〉〈CLI 語法〉〈區段與觀測標記格式〉〈init 前查重：三種關係處置〉〈check 的三項警訊〉〈增長語意與 close 語意〉〈已知限制〉 |
 | 要用 create／list／link／fix-status／fix-version／close | `references/fix-matrix-commands.md` | 〈create 與 list〉〈link〉〈fix-status〉〈fix-version〉〈close〉〈Graceful Degradation〉 |
-| ticket 執行中辨識到框架問題，決定接不接與怎麼關；判斷該派修還是累積到清理線、清理線何時開；或發現當下要判斷能否直接寫定修法；或收束時要判斷某個修法能否寫進「當前結論」區段 | `references/escalation-flow.md` | 〈介入判斷：框架問題 vs 專案問題〉〈兩條路徑〉〈修復時點：派修或累積到清理線〉〈修法時點分離：發現票何時能寫定修法〉〈Issue 關閉協定〉〈回報前查重 SOP〉 |
+| ticket 執行中辨識到框架問題，判定本專案是主控方還是 consumer；決定接不接與怎麼關；主控方判斷該派修還是累積到清理線、清理線何時開；或發現當下要判斷能否直接寫定修法；或收束時要判斷某個修法能否寫進「當前結論」區段 | `references/escalation-flow.md` | 〈角色：主控方與 consumer〉〈介入判斷：框架問題 vs 專案問題〉〈兩條路徑〉〈修復時點：派修或累積到清理線〉〈修法時點分離：發現票何時能寫定修法〉〈Issue 關閉協定〉〈回報前查重 SOP〉 |
 | 要把一群 ticket 收束成 issue，或派 curator 做這件事 | `references/ticket-intake.md` | 〈前提與分工〉〈步驟一：分群〉〈步驟二：查重與落點〉〈步驟三：時序改狀態〉〈步驟四：區段範本〉〈步驟五：ticket 處置〉〈步驟六：驗證與交接〉〈派發 curator〉 |
 | 想看一張 issue 從 dedup 到 check 的完整走查 | `references/worked-example.md` | 〈情境〉〈查重輸出與關係判定〉〈sections.json〉〈init 與索引〉〈ticket close〉〈check 與 owner 更新〉 |
 

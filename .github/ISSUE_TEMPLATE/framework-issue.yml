@@ -1,0 +1,32 @@
+name: 框架問題回報
+description: 回報 Claude Code 框架（.claude/）的問題或改進建議
+body:
+  - type: input
+    id: framework-version
+    attributes:
+      label: 框架版本
+      description: 填 consumer 專案的 .claude/VERSION 內容（例如 3.0.0）
+      placeholder: "3.0.0"
+    validations:
+      required: true
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code 版本
+      description: 執行 claude --version 的輸出
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: 作業系統與版本（例如 macOS 15.1）
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: 問題描述
+      description: 觀察到的現象、預期行為、重現步驟
+    validations:
+      required: true

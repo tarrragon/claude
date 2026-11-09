@@ -128,6 +128,10 @@ OBSERVATION_MARKER_RE = re.compile(
     r"^<!-- observation: (?P<summary>.+?) by (?P<session>.+?) -->"
 )
 
+# 觀測 comment 第二行的框架版本列；舊觀測無此列。
+FRAMEWORK_VERSION_RE = re.compile(r"<!-- framework-version: (?P<version>.+?) -->")
+UNKNOWN_VERSION = "unknown"
+
 # 協定標記：body 含此行代表該 issue 採用 comment-as-section 協定（見
 # comment-as-section-protocol.md 開頭定義）。init／add 回填索引時若 body
 # 缺此標記則於首行 upsert，與索引回填同一次 PATCH 完成（見 _ensure_schema_marker）。
@@ -222,9 +226,43 @@ def render_section_comment(name: str, owner: str, content: str) -> str:
     return f"<!-- section: {name} owner: {owner} -->\n{content}"
 
 
-def render_observation_comment(summary: str, session: str, content: str) -> str:
-    """把觀測內容包上首行標記，供 POST 使用。"""
-    return f"<!-- observation: {summary} by {session} -->\n{content}"
+def render_observation_comment(
+    summary: str, session: str, content: str, version: Optional[str] = None
+) -> str:
+    """把觀測內容包上首行標記，供 POST 使用；`version` 給值時第二行寫入
+    框架版本列（首行標記格式不變，舊解析端仍可讀）。"""
+    header = f"<!-- observation: {summary} by {session} -->\n"
+    if version is not None:
+        header += f"<!-- framework-version: {version} -->\n"
+    return header + content
+
+
+def read_framework_version() -> str:
+    """讀專案 `.claude/VERSION`；不存在或讀取失敗回傳 `unknown`，不阻擋 observe。"""
+    try:
+        return (_CLAUDE_ROOT / "VERSION").read_text(encoding="utf-8").strip() or UNKNOWN_VERSION
+    except OSError:
+        return UNKNOWN_VERSION
+
+
+def parse_observation(body: str) -> Optional[dict]:
+    """解析觀測 comment：回傳 summary／session／version／content；無觀測標記回傳
+    None。無版本列的舊觀測 version 為 None；版本列不計入 content。"""
+    match = OBSERVATION_MARKER_RE.match(body or "")
+    if not match:
+        return None
+    rest = (body or "")[match.end():].lstrip("\n")
+    version = None
+    version_match = FRAMEWORK_VERSION_RE.match(rest)
+    if version_match:
+        version = version_match.group("version")
+        rest = rest[version_match.end():].lstrip("\n")
+    return {
+        "summary": match.group("summary"),
+        "session": match.group("session"),
+        "version": version,
+        "content": rest,
+    }
 
 
 def validate_owner(owner: str) -> None:
@@ -1258,7 +1296,7 @@ def cmd_observe(issue_ref: str, summary: str, session: str, content_file: str) -
             "確認 issue ref 與 content-file 正確後重試",
         )
 
-    rendered = render_observation_comment(summary, session, content)
+    rendered = render_observation_comment(summary, session, content, read_framework_version())
     try:
         result = post_comment(issue_ref, rendered)
     except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
@@ -1291,9 +1329,11 @@ def _render_show_stream(stream: list) -> list:
     ordered = sorted(stream, key=lambda c: c.get("created_at", ""))
     lines = [f"## 觀測流（{len(ordered)} 則，依時間序）"]
     for comment in ordered:
-        marker = OBSERVATION_MARKER_RE.match(comment.get("body", "") or "")
-        if marker:
-            label = f"{marker.group('summary')} by {marker.group('session')}"
+        parsed = parse_observation(comment.get("body", "") or "")
+        if parsed:
+            label = f"{parsed['summary']} by {parsed['session']}"
+            if parsed["version"]:
+                label += f" (framework {parsed['version']})"
         else:
             body_text = comment.get("body", "") or ""
             label = body_text.splitlines()[0][:40] if body_text else "(無內容)"

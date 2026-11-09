@@ -32,14 +32,18 @@ commit-first 行為（M1 根因解，0.19.1-W1-030）:
   本地 git rm 的檔案自然不在 git archive HEAD 的 tracked 樹中 → 遠端 git diff
   顯示 D(elete) → commit 帶刪除，刪除自動傳播到遠端。
 
-VERSION（B3，0.19.1-W1-029）:
-  本地 .claude/VERSION 純鏡像上游，永不手動修改（W1-016 B2）。push 流程在 clone
-  上 bump 遠端 VERSION，base 錨點由 .sync-state.json 的 last_synced_base_sha 承擔。
+發版推送（3.0.0）:
+  推送版號 = 本地 .claude/VERSION，腳本不推算、不遞增、不回寫。發版流程：先更新
+  .claude/CHANGELOG.md 與 .claude/VERSION 並 commit，再執行本腳本。
+  - 本地版號須數值上高於遠端 VERSION，否則 exit 1
+  - 遠端已有 tag v<版號> 時 exit 1
+  - 遠端 VERSION、CHANGELOG.md 逐位元取自本地 .claude/，腳本不產生 CHANGELOG 條目
+  - push 成功後對該 commit 打 annotated tag v<版號> 並推送；tag 失敗 exit 1
+  base 錨點由 .sync-state.json 的 last_synced_base_sha 承擔。
 
 commit 訊息生成:
-  - 無參數時自動分析 .claude/ 相關 commit 生成結構化摘要
+  - 無參數時自動分析 .claude/ 相關 commit 生成結構化摘要（只作 commit 訊息）
   - 提供參數時使用用戶指定的訊息
-  - 自動建議版本遞增幅度（patch/minor/major）
 
 Windows 使用者特別注意:
   Windows NTFS 無 executable bit 概念，git 對新增 .py 檔案的 mode
@@ -146,7 +150,7 @@ PROJECT_SPECIFIC_PATTERNS = [
     (r"\b0\.\d+\.\d+\b", "某版本"),            # 裸版本: 0.2.0
 ]
 
-# commit type 分類對應的版本遞增建議
+# commit type 分類對應的 bump 等級（僅供 commit 訊息摘要與 dry-run 參考，不決定版號）
 VERSION_BUMP_WEIGHTS = {
     "feat": "minor",
     "refactor": "minor",
@@ -241,34 +245,6 @@ def write_base_sha(claude_dir: Path, base_sha: str) -> None:
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-
-
-def write_local_version(claude_dir: Path, new_version: str) -> tuple[bool, str]:
-    """push 成功後將本次推送版本回寫本地 .claude/VERSION（0.2.1-W3-342）。
-
-    本地 .claude/VERSION 為 git tracked 檔，push 只 bump 遠端版本；若不回寫，
-    本地 VERSION 會停留於推送前版本直到下次 sync-pull。fix_version.py 省略
-    --version 時依 docstring 契約把本地 VERSION 當成已同步至框架 repo 的版本號，缺此回寫
-    會令其註記過期版本（W3-050 收尾實測：推送 v2.24.12 後本地仍讀到 2.24.1）。
-
-    寫入失敗（如權限問題）不中止整個 push 流程——遠端 push 此時已成功，本步驟
-    僅影響本地便利性；本函式不直接印警告（單一警告通道由呼叫端統一負責，見
-    0.2.1-W3-343），僅將原始 OSError 訊息透過回傳值往外傳遞，供呼叫端組成含
-    錯誤細節的警告內容（observability 規則 1：日誌內容最低要求為錯誤訊息 + 位置）。
-
-    參數:
-        claude_dir: 本地 .claude 目錄路徑
-        new_version: 本次推送後的版本號（不含 v 前綴）
-
-    傳回:
-        tuple[bool, str]: (是否寫入成功, 錯誤訊息)。成功時錯誤訊息為空字串；
-        失敗時為原始 OSError 的字串內容，呼叫端應警告使用者並附上此訊息。
-    """
-    try:
-        (claude_dir / "VERSION").write_text(new_version + "\n", encoding="utf-8")
-        return True, ""
-    except OSError as exc:
-        return False, str(exc)
 
 
 def _classify_entry_form(status_code: str) -> str:
@@ -857,10 +833,9 @@ def collect_claude_commits(project_root: str, since: str | None) -> list[str]:
 def _commit_touches_only_version_file(project_root: str, commit_sha: str) -> bool:
     """判斷單一 commit 在 .claude/ 底下變更的檔案是否僅有 VERSION（記帳 commit）。
 
-    write_local_version 只回寫檔案不 commit（見該函式 docstring）；使用者事後
-    另行 `git commit` 持久化時，該 commit 在 .claude/ 底下唯一改動的檔案就是
-    VERSION，內容也早已反映於上次 push 計算的 last_push_hash 中，屬於「記帳」
-    而非「實質」變更。
+    歷史上 push 後會回寫本地 VERSION 並由使用者另行 commit（現已不回寫）；該類
+    commit 在 .claude/ 底下唯一改動的檔案就是 VERSION，內容已反映於上次 push
+    計算的 last_push_hash 中，屬於「記帳」而非「實質」變更。
     """
     result = run_git(
         ["diff-tree", "--no-commit-id", "--name-only", "-r", commit_sha, "--", ".claude/"],
@@ -1044,7 +1019,7 @@ def extract_version_string(content: str) -> str:
 
     跳過空行和 # 開頭的註解行，取第一行有效內容並移除 v 前綴。
     移除 UTF-8 BOM（Windows 環境 VERSION 檔案可能含 BOM，
-    若未 strip 會導致 bump_version 正規式 parse 失敗 fallback 至 1.0.1）。
+    若未 strip 會導致版號格式 parse 失敗）。
     """
     for line in content.split("\n"):
         line = line.strip().lstrip("\ufeff")
@@ -1053,105 +1028,104 @@ def extract_version_string(content: str) -> str:
     return ""
 
 
-def validate_version_bump(remote_version: str, new_version: str) -> None:
-    """驗證新版號相對 remote 的跳躍幅度是否合理。
+def read_local_release_version(claude_dir: Path) -> str:
+    """讀本地 .claude/VERSION 作為本次發版的版號（不含 v 前綴）。
 
-    合法 bump 型態（恰好滿足一種）：
-      - major: X+1.0.0
-      - minor: X.Y+1.0
-      - patch: X.Y.Z+1
-
-    任何其他跳躍（如 1.17.0 → 1.36.2 共 19 個 minor）屬異常，
-    可能成因：local VERSION 污染、encoding 陷阱、bump 邏輯錯誤、
-    手動編輯後未同步。此時 fail-fast 而非靜默 push 出異常版號。
-
-    背景：W16-004.2 追蹤的 v1.17.0 → v1.36.2 事件即缺此防護所致。
+    本地 VERSION 是版號唯一來源，腳本不推算、不遞增、不回寫。
+    檔案缺失或內容為空時 exit 1。
     """
-    r_match = re.match(r"(\d+)\.(\d+)\.(\d+)", remote_version)
-    n_match = re.match(r"(\d+)\.(\d+)\.(\d+)", new_version)
-    if not r_match or not n_match:
-        print_color(
-            f"版本格式無法解析: remote={remote_version!r}, new={new_version!r}",
-            "red",
-        )
+    version_path = claude_dir / "VERSION"
+    if not version_path.exists():
+        print_color(f"[FAIL] 找不到本地版號檔: {version_path}", "red")
         sys.exit(1)
-
-    r_maj, r_min, r_pat = (int(x) for x in r_match.groups())
-    n_maj, n_min, n_pat = (int(x) for x in n_match.groups())
-
-    valid_major = n_maj == r_maj + 1 and n_min == 0 and n_pat == 0
-    valid_minor = n_maj == r_maj and n_min == r_min + 1 and n_pat == 0
-    valid_patch = n_maj == r_maj and n_min == r_min and n_pat == r_pat + 1
-
-    if not (valid_major or valid_minor or valid_patch):
-        print_color(
-            f"[FAIL] 版號跳躍異常: remote=v{remote_version} -> new=v{new_version}",
-            "red",
-        )
-        print_color(
-            "預期三種合法 bump: major+1/0/0、major/minor+1/0、或 major/minor/patch+1",
-            "red",
-        )
-        print_color(
-            "可能原因: 本地 .claude/VERSION 被其他來源污染、UTF-8 BOM、"
-            "bump 邏輯錯誤、或手動編輯未同步。",
-            "yellow",
-        )
-        print_color(
-            "建議操作: 檢查本地 .claude/VERSION 是否等於 remote（加 1 patch 內）；"
-            "若已異常，手動設為 remote + 1 patch 再重試。",
-            "yellow",
-        )
+    version = extract_version_string(version_path.read_text(encoding="utf-8"))
+    if not version:
+        print_color(f"[FAIL] 本地版號檔內容為空: {version_path}", "red")
         sys.exit(1)
+    return version
 
 
-def bump_version(version: str, bump_level: str) -> str:
-    """Increment version based on bump level (major/minor/patch)."""
-    match = re.match(r"(\d+)\.(\d+)\.(\d+)", version)
+def _parse_version_tuple(version: str) -> tuple[int, int, int] | None:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
     if not match:
-        return "1.0.1"
-    major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
-    if bump_level == "major":
-        return f"{major + 1}.0.0"
-    if bump_level == "minor":
-        return f"{major}.{minor + 1}.0"
-    return f"{major}.{minor}.{patch + 1}"
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
-def bump_patch_version(version: str) -> str:
-    """Increment the patch version number."""
-    return bump_version(version, "patch")
+def check_release_version(local_version: str, remote_version: str | None) -> None:
+    """本地版號須為合法 X.Y.Z 且數值上高於遠端版號，否則 exit 1。
+
+    remote_version 為 None 表示遠端尚無 VERSION（首次推送），只驗格式。
+    """
+    local = _parse_version_tuple(local_version)
+    if local is None:
+        print_color(f"[FAIL] 本地版號格式無法解析: {local_version!r}", "red")
+        sys.exit(1)
+    if remote_version is None:
+        return
+    remote = _parse_version_tuple(remote_version)
+    if remote is None:
+        print_color(f"[FAIL] 遠端版號格式無法解析: {remote_version!r}", "red")
+        sys.exit(1)
+    if local <= remote:
+        print_color(
+            f"[FAIL] 本地版號 v{local_version} 不高於遠端 v{remote_version}，拒絕推送。",
+            "red",
+        )
+        print_color(
+            "請先更新 .claude/VERSION 與 .claude/CHANGELOG.md（發版流程見 "
+            "docs/roadmap.md），commit 後再推送。",
+            "yellow",
+        )
+        sys.exit(1)
+
+
+def ensure_tag_absent_on_remote(repo_dir: Path, version: str) -> None:
+    """遠端已有 tag v<version> 時 exit 1；查詢失敗也 exit 1（無法確認即不推）。"""
+    tag_name = f"v{version}"
+    result = run_git(
+        ["ls-remote", "--tags", "origin", f"refs/tags/{tag_name}"],
+        cwd=str(repo_dir),
+        check=False,
+    )
+    if result.returncode != 0:
+        print_color(
+            f"[FAIL] 無法查詢遠端 tag {tag_name}: {result.stderr.strip()}", "red"
+        )
+        sys.exit(1)
+    if result.stdout.strip():
+        print_color(
+            f"[FAIL] 遠端已存在 tag {tag_name}，拒絕推送。"
+            "請提高 .claude/VERSION 並更新 .claude/CHANGELOG.md。",
+            "red",
+        )
+        sys.exit(1)
+
+
+def copy_release_files(repo_dir: Path, claude_dir: Path) -> None:
+    """將本地 .claude/VERSION 與 CHANGELOG.md 逐位元複製到 repo_dir 根。
+
+    腳本不產生 CHANGELOG 條目；本地檔即發版內容。缺任一檔 exit 1。
+    """
+    for name in ("VERSION", "CHANGELOG.md"):
+        source = claude_dir / name
+        if not source.exists():
+            print_color(f"[FAIL] 缺少本地發版檔: {source}", "red")
+            sys.exit(1)
+        (repo_dir / name).write_bytes(source.read_bytes())
 
 
 def create_and_push_version_tag(repo_dir: Path, version: str) -> None:
     """對 repo_dir 當前 HEAD 打 annotated tag v<version> 並 push 到 origin。
 
-    tagged-release 機制：每次成功 push 框架更新後，對該版本 commit 打 git tag，
-    使下游 consumer 可 pin 至特定版本（tag commit），收斂壞變更的爆炸半徑——壞版
-    不再瞬時傳染全部 consumer，consumer 可選擇停留在已知良好的 tag。
-
-    冪等性：tag v<version> 已存在時不重複建立（避免同版重 push 失敗）。本地已有
-    tag 但 remote 無時，仍嘗試 push 該 tag。tag push 失敗僅警告不中止整個 push
-    流程（main 分支已成功推送，tag 為附加機制）。
+    每次發版推送對應一個 v<版號> tag，供下游 pin 特定版。tag 建立或推送
+    失敗一律 exit 1（main 已推送，須人工處理 tag 後補推）。
 
     參數:
         repo_dir: 已 push 成功的本地 clone 路徑（含 origin remote）
         version: 純版本號（不含 v 前綴，如 "1.0.1"）
     """
     tag_name = f"v{version}"
-    existing = run_git(["tag", "--list", tag_name], cwd=str(repo_dir), check=False)
-    if existing.returncode == 0 and tag_name in existing.stdout.split():
-        # 本地已有此 tag：確保 remote 也有（容錯前次 tag push 失敗），不重建
-        push_existing = run_git(
-            ["push", "origin", tag_name], cwd=str(repo_dir), check=False
-        )
-        if push_existing.returncode != 0:
-            print_color(
-                f"   警告: 推送既有 tag {tag_name} 失敗: {push_existing.stderr.strip()}",
-                "yellow",
-            )
-        return
-
     create_result = run_git(
         ["tag", "-a", tag_name, "-m", f"Release {tag_name}"],
         cwd=str(repo_dir),
@@ -1159,49 +1133,21 @@ def create_and_push_version_tag(repo_dir: Path, version: str) -> None:
     )
     if create_result.returncode != 0:
         print_color(
-            f"   警告: 建立 tag {tag_name} 失敗: {create_result.stderr.strip()}",
-            "yellow",
+            f"[FAIL] 建立 tag {tag_name} 失敗: {create_result.stderr.strip()}", "red"
         )
-        return
+        sys.exit(1)
 
     push_result = run_git(
         ["push", "origin", tag_name], cwd=str(repo_dir), check=False
     )
     if push_result.returncode != 0:
         print_color(
-            f"   警告: 推送 tag {tag_name} 失敗（main 已推送成功）: "
+            f"[FAIL] 推送 tag {tag_name} 失敗（main 已推送成功，請補推 tag）: "
             f"{push_result.stderr.strip()}",
-            "yellow",
+            "red",
         )
-        return
+        sys.exit(1)
     print_color(f"   已打並推送版本 tag {tag_name}", "green")
-
-
-def update_changelog(repo_dir: Path, new_version: str, commit_message: str, old_content: str = "") -> None:
-    """Update CHANGELOG.md with a new version entry, preserving old entries."""
-    changelog_path = repo_dir / "CHANGELOG.md"
-    current_date = datetime.now().strftime("%Y-%m-%d")
-
-    new_entry = f"## [{new_version}] - {current_date}\n\n### Summary\n{commit_message}\n\n---\n\n"
-
-    if old_content:
-        # strip_project_specific_info() 內部以 .strip() 收尾，直接套用會吃掉
-        # old_content 原有的前後空白，破壞「無 ID 內文逐位元不變」的不變式；
-        # 保存前後空白後重新包回，只讓中段內容經過剝除。
-        leading_ws_match = re.match(r"\A\s*", old_content)
-        trailing_ws_match = re.search(r"\s*\Z", old_content)
-        leading_ws = leading_ws_match.group() if leading_ws_match else ""
-        trailing_ws = trailing_ws_match.group() if trailing_ws_match else ""
-        stripped_old_content = leading_ws + strip_project_specific_info(old_content) + trailing_ws
-        match = re.search(r"^## \[", stripped_old_content, re.MULTILINE)
-        if match:
-            updated = new_entry + stripped_old_content[match.start():]
-        else:
-            updated = new_entry + stripped_old_content
-    else:
-        updated = f"# CHANGELOG\n\n{new_entry}"
-
-    changelog_path.write_text(updated, encoding="utf-8")
 
 
 def _should_check_no_change(
@@ -1833,7 +1779,7 @@ def run_dry_run() -> None:
     print_color("--- 自動生成的 commit 摘要 ---")
     print(commit_message)
     print_color("--- 摘要結束 ---")
-    print_color(f"建議版本 bump: {bump_suggestion}", "green")
+    print_color(f"本次推送版號取自本地 .claude/VERSION: v{read_local_release_version(find_project_root() / '.claude')}", "green")
 
 
 # staging 樹（已 strip .claude/ 前綴）內框架核心套件的相對路徑。
@@ -1881,7 +1827,7 @@ def run_framework_smoke_test(staging_dir: Path) -> None:
     """push / tag 前對 staging 樹的框架核心套件做 import smoke test（C1 生產閘）。
 
     呼叫時機：stage_tracked_tree() 取得 git tracked 樹後、git push（含版本 tag）
-    任何階段「之前」。red 時 sys.exit(1)，與 validate_version_bump 並列為 push 前
+    任何階段「之前」。red 時 sys.exit(1)，與 check_release_version 並列為 push 前
     fail-fast 防護，紅燈時不得進入 push / tag。
 
     Why：機械缺陷（import 殘留——殘留對已刪除/改名內部模組的 import）零審查直推會
@@ -2585,11 +2531,16 @@ def main() -> None:
             remote_version = extract_version_string(version_file.read_text(encoding="utf-8"))
             print_color(f"   遠端版本: v{remote_version}", "green")
         else:
-            remote_version = "1.0.0"
-            print_color("   遠端無版本檔案，使用預設 v1.0.0")
+            remote_version = None
+            print_color("   遠端無版本檔案（首次推送）")
 
-        # 5. Auto-analyze commits since last sync
-        bump_suggestion = "patch"
+        # 4.5 發版閘門：版號取自本地 .claude/VERSION，須高於遠端且遠端無同名 tag。
+        new_version = read_local_release_version(claude_dir)
+        check_release_version(new_version, remote_version)
+        ensure_tag_absent_on_remote(temp_dir, new_version)
+        print_color(f"推送版本: v{new_version}（取自本地 .claude/VERSION）", "green")
+
+        # 5. Auto-analyze commits since last sync（僅用於 commit 訊息）
         if user_message:
             commit_message = user_message
             print_color(f"使用用戶指定的 commit 訊息: {commit_message}")
@@ -2603,18 +2554,15 @@ def main() -> None:
             if subjects:
                 print_color(f"   找到 {len(subjects)} 個相關 commit", "green")
                 categories = categorize_commits(subjects)
-                bump_suggestion = suggest_version_bump(categories)
-                commit_message = generate_commit_summary(categories, bump_suggestion)
+                commit_message = generate_commit_summary(
+                    categories, suggest_version_bump(categories)
+                )
                 print_color("--- 自動生成的 commit 摘要 ---")
                 print(commit_message)
                 print_color("--- 摘要結束 ---")
             else:
                 print_color("   未找到新的 .claude/ commit，使用預設訊息")
                 commit_message = "sync .claude configuration"
-
-        # Save CHANGELOG content before cleaning
-        changelog_path = temp_dir / "CHANGELOG.md"
-        saved_changelog = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else ""
 
         # 6. Merge 模式：不清空遠端內容，直接增量覆蓋
         # 保留遠端獨有的檔案（其他專案推送的內容）
@@ -2720,18 +2668,9 @@ def main() -> None:
         if restored:
             print_color(f"   已還原 {restored} 個 hook 檔案的執行權限（push 前 safety net）", "green")
 
-        # 8. Calculate new version (use bump suggestion for auto-generated messages)
-        new_version = bump_version(remote_version, bump_suggestion)
-
-        # 8.5. Sanity check: 版號跳躍幅度防護（W16-004.2）
-        # v1.17.0 -> v1.36.2 事件即缺此防護，Windows 環境下意外推出跳躍 19 minor 的版號
-        validate_version_bump(remote_version, new_version)
-
-        (temp_dir / "VERSION").write_text(new_version + "\n", encoding="utf-8")
-
-        # 9. Update CHANGELOG (use full commit message for detailed history)
-        update_changelog(temp_dir, new_version, commit_message, saved_changelog)
-        print_color(f"版本: v{new_version} ({bump_suggestion} bump)", "green")
+        # 8-9. 發版檔：VERSION 與 CHANGELOG.md 逐位元取自本地 .claude/，腳本不產生條目
+        copy_release_files(temp_dir, claude_dir)
+        print_color(f"版本: v{new_version}", "green")
 
         # 10. Commit and push
         # For git commit, use only the summary line to keep it clean
@@ -2810,19 +2749,7 @@ def main() -> None:
         # tagged-release：push 成功後對本版打 git tag（remote 可見），供下游 pin 特定版。
         create_and_push_version_tag(temp_dir, new_version)
 
-        # 回寫本地 .claude/VERSION 為本次推送版本（0.2.1-W3-342）。此行之前若 push
-        # 失敗已 sys.exit(1)（見上方 push_result 檢查），故本段只在 push 成功後執行。
-        # 單一警告通道（0.2.1-W3-343）：write_local_version 只回傳結果，警告訊息
-        # 統一由此處組成並印出，避免函式內外重複輸出。
-        version_written, version_error = write_local_version(claude_dir, new_version)
-        if version_written:
-            print_color(f"   已回寫本地 .claude/VERSION -> v{new_version}", "green")  # i18n-exempt
-        else:
-            version_warn_msg = (  # i18n-exempt
-                f"   警告: 回寫本地 .claude/VERSION 失敗（{version_error}），"  # i18n-exempt
-                f"請手動確認 .claude/VERSION 內容為 {new_version}"  # i18n-exempt
-            )
-            print_color(version_warn_msg, "yellow")  # i18n-exempt
+        # 不回寫本地 .claude/VERSION：本地即版號來源（3.0.0 發版推送）。
 
         # 計算內容指紋並寫入 .sync-state.json（保留 last_synced_base_sha，禁覆蓋遺失）
         content_hash = _compute_content_hash(claude_dir)

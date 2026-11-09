@@ -47,7 +47,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.sync_exclude_manifest import (  # noqa: E402
     LOCAL_ONLY_PATTERNS,
-    should_exclude,
+    should_exclude_on_pull as should_exclude,  # pull 方向多排除 .github/（發佈通道資產）
     should_exclude_skill,
     _is_skill_path,
     load_sync_skills_config,

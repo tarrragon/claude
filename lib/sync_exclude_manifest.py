@@ -127,6 +127,11 @@ LOCAL_ONLY_ROOT_DIRS = frozenset({
     "plans",              # 專案計畫 / 設計 / 遷移文件
 })
 
+# 類型 F - 發佈通道資產（只作用於 pull，push 不排除）
+# 發佈通道資產，不屬框架資產：.github/ 隨發版推送到 canonical 根目錄（issue 範本），
+# 但 consumer 的 .claude/ 下不該出現；故僅 pull 方向排除，root-anchored。
+PULL_ONLY_EXCLUDE_ROOT_DIRS = frozenset({".github"})
+
 # 類型 D - 敏感憑證（嚴禁推送至公開 repo；含密鑰/token/環境變數，外流即安全事故）
 CREDENTIAL_PATTERNS = frozenset({
     ".env",
@@ -356,6 +361,14 @@ def should_exclude(path: Path) -> bool:
     # root-anchored：僅第一段命中才排除（logs / state 通用名只在 .claude/ 根層為 runtime）
     parts = path.parts
     return bool(parts) and parts[0].lower() in _LOCAL_ONLY_ROOT_DIRS_LOWER
+
+
+def should_exclude_on_pull(path: Path) -> bool:
+    """pull 方向的排除判定：should_exclude 加上只作用於 pull 的根層分類。"""
+    parts = path.parts
+    if parts and parts[0].lower() in PULL_ONLY_EXCLUDE_ROOT_DIRS:
+        return True
+    return should_exclude(path)
 
 
 def compute_content_hash(claude_dir: Path) -> str:

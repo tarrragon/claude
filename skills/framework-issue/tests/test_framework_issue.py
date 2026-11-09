@@ -109,6 +109,30 @@ def test_create_claude_version_degrades_on_nonzero_exit(monkeypatch):
         assert create_issue.get_claude_code_version() == create_issue.UNKNOWN
 
 
+def test_create_env_info_includes_framework_version(monkeypatch, tmp_path):
+    """版本檔存在時，環境資訊含「框架版本」列，值為檔案內容。"""
+    version_file = tmp_path / "VERSION"
+    version_file.write_text("3.0.0\n", encoding="utf-8")
+    monkeypatch.setattr(create_issue, "VERSION_FILE", version_file)
+    info = create_issue.collect_env_info()
+    assert info["框架版本"] == "3.0.0"
+    assert "- 框架版本: 3.0.0" in create_issue.render_env_info(info)
+
+
+def test_create_env_info_framework_version_unknown_when_file_missing(monkeypatch, tmp_path):
+    """版本檔缺失時，框架版本降級為 unknown，issue 照常建立。"""
+    monkeypatch.setattr(create_issue, "VERSION_FILE", tmp_path / "missing")
+    monkeypatch.setattr(gh_common, "check_gh_available", lambda: True)
+    monkeypatch.setattr(gh_common, "check_gh_authenticated", lambda: True)
+    with mock.patch.object(
+        gh_common.subprocess, "run", return_value=_completed(stdout="issue-url\n")
+    ) as run:
+        rc = create_issue.main(["--title", "T"])
+    assert rc == 0
+    called = run.call_args.args[0]
+    assert "- 框架版本: unknown" in called[called.index("--body") + 1]
+
+
 def test_list_normal_path(monkeypatch):
     """list 正常路徑 → exit 0，stdout 原樣輸出。"""
     monkeypatch.setattr(gh_common, "check_gh_available", lambda: True)

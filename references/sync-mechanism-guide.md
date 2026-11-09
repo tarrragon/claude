@@ -16,11 +16,11 @@
 | 同步範圍 | 本專案 `.claude/` 目錄全部檔案（hook、agent、規則、方法論、skill、project-templates） |
 | 不覆蓋 | 倉庫根目錄 `CLAUDE.md`（保留各專案特定配置） |
 | pull 指令 | `/sync-pull`（從中央 repo 拉取最新配置到本專案） |
-| push 指令 | `/sync-push`（將本專案 `.claude/` 演化推送回中央 repo） |
+| push 指令 | `/sync-push`（只由框架主控方在發版時執行，推送 `.claude/` 並打 `v<版號>` tag；角色判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉） |
 | 狀態檔 | `.claude/.sync-state.json`（記錄上次 push hash、版本、time，與 `last_synced_base_sha`） |
 | preserve 清單 | `.claude/sync-preserve.yaml`（本地特化檔案，pull 時原地保留不被覆蓋或刪除） |
 
-**Why（為何是雙向有狀態）**：中央 repo 是多專案共享的框架來源。各專案會在本地演化框架（新增 hook、修訂規則），同時中央 repo 也會被其他專案推送更新。雙向同步必須以「上次同步點」（base SHA）為基準做三方合併，才能區分「本地新增」與「上游新增」。
+**Why（為何是雙向有狀態）**：中央 repo 是多專案共享的框架來源。主控方在本地演化框架後發版推送；consumer 端則可能保有本地特化（見 preserve 清單），同時中央 repo 持續有新版發佈。雙向同步必須以「上次同步點」（base SHA）為基準做三方合併，才能區分「本地新增」與「上游新增」。
 
 **Consequence（不理解的代價）**：把同步當成單向覆蓋會在兩個方向都出錯——pull 時用上游舊版蓋掉本地演化，push 時用本地版蓋掉上游其他專案的貢獻。
 
@@ -30,16 +30,16 @@
 
 ## 2. pull vs push 使用時機
 
-**核心原則：本地演化超前於中央 repo 時應 push，不應 pull。**
+**核心原則：本地演化超前於中央 repo 時不應 pull。主控方在發版時 push；consumer 不應出現演化超前，發現本地有框架修改時先回報 issue。**
 
 | 情境 | 該執行 | 理由 |
 |------|--------|------|
 | 新 clone 專案、本地 `.claude/` 為空或過舊 | `/sync-pull` | 取得中央 repo 最新框架基線 |
-| 中央 repo 有其他專案推送的更新，本地未改框架 | `/sync-pull` | 拉取上游新增，本地無演化可覆蓋 |
-| 本地剛修訂規則 / 新增 hook / 重組 skill（演化超前） | `/sync-push` | 將本地演化貢獻回中央，避免下次 pull 被舊版回灌 |
-| 同時有本地演化 + 上游更新 | 先 `/sync-push` 再 `/sync-pull` | 先讓本地貢獻入庫成為新 base，再以三方合併收斂上游 |
+| 中央 repo 有新發佈的版本，本地未改框架 | `/sync-pull` | 拉取上游新增，本地無演化可覆蓋 |
+| 主控方剛修訂規則 / 新增 hook / 重組 skill（演化超前） | 發版時 `/sync-push` | 依版本規劃發版，避免下次 pull 被舊版回灌 |
+| consumer 本地有框架修改 | 回報 framework issue，不 `/sync-push`；本專案宣告為開發上游的 skill 改以 `skill-sync push` 送進發佈庫（escalation-flow〈例外：skill 開發上游〉） | consumer 沒有推送通道；修改由主控方在下一版納入，之後以 `/sync-pull` 回到上游版本 |
 
-**Why（演化超前該 push）**：若本地框架已超前但執行 pull，中央 repo 的舊版會被當成「上游狀態」帶入；在 full overlay fallback 下（見 §4）甚至直接覆蓋本地演化，使剛完成的框架改善消失。
+**Why（演化超前不該 pull）**：若本地框架已超前但執行 pull，中央 repo 的舊版會被當成「上游狀態」帶入；在 full overlay fallback 下（見 §4）甚至直接覆蓋本地演化，使剛完成的框架改善消失。
 
 **Consequence**：把「演化超前」誤判為「需要更新」而 pull，會讓本地辛苦累積的框架改善被上游舊版靜默回灌，且難以察覺（diff 反向，像是「退版」）。
 
@@ -102,7 +102,7 @@
 2. **pull 前**：檢視 `.sync-state.json` 的 `last_synced_base_sha`；缺失即預期 full overlay，提高警覺。
 3. **執行時**：詳閱覆蓋預覽（will-overwrite / will-delete）與 AskUserQuestion 清單，逐項確認非預期覆蓋。
 4. **pull 後**：執行 `git diff` 比對本次同步引入的變更；特別檢查是否有孤兒複製（新舊位置同名檔案並存）與非預期刪除。
-5. **發現本地演化被覆蓋**：改用 `/sync-push` 將本地版本推回中央，使本地成為新 base，而非反覆 pull。
+5. **發現本地演化被覆蓋**：主控方以發版推送使本地成為新 base，而非反覆 pull；consumer 把被覆蓋的修改內容回報 framework issue，不推送。
 
 **Why（為何 pull 後必比對）**：full overlay 的覆蓋與刪除即使有預覽，仍可能在大量檔案中夾帶非預期變更；`git diff` 是最後一道人工防線。
 
@@ -162,8 +162,8 @@ Claude Code 的 skill 解析為同名覆蓋，且 `~/.claude/skills/`（personal
 
 | 步驟 | 動作 | 理由 |
 |------|------|------|
-| 1 | 於本專案完成內容修改並 commit | 變更進入版本控制，可追溯可回退 |
-| 2 | 執行 `/sync-push` 推送至 `claude.git` | 內容入庫成為新的 base，其他專案可見 |
+| 1 | 於主控方完成內容修改並 commit（consumer 改為回報 framework issue） | 變更進入版本控制，可追溯可回退 |
+| 2 | 主控方發版時執行 `/sync-push` 推送至 `claude.git` | 內容入庫成為新的 base，其他專案可見 |
 | 3 | 各專案各自執行 `/sync-pull` | 走 §3 的三方合併，保留各專案本地新增而非覆蓋 |
 
 三方合併與直接複製的差別是決定性的：三方合併能同時保留上游新增與本地新增，直接複製只能保留單方。跨專案收斂必須走前者。
@@ -212,6 +212,7 @@ Claude Code 於 session 啟動時載入 skill 註冊表並快取路徑與內容�
 
 ---
 
-**Last Updated**: 2026-07-28
+**Last Updated**: 2026-11-09
+**Version**: 1.2.0 — push 改為只由主控方在發版時執行：§1 push 指令列與 Why、§2 使用時機表（consumer 本地有框架修改改為回報 issue）、§4.3 第 5 步、§6.2 canonical 中轉兩步同步改寫。角色判定路由 escalation-flow〈角色：主控方與 consumer〉。
 **Version**: 1.1.0 — 新增 §6 全域覆蓋層（`~/.claude/`）正規流程：禁止單一專案 rsync 至全域、canonical 中轉三步、消費者數判別提問、包含或分支的雙向 grep 判定、session 快取導致的生效時機落差；檢查清單補 2 項（0.2.1-W3-123，承接 0.2.1-W3-108 acceptance 4）
 **Version**: 1.0.0 — 初版：pull/push 時機、base SHA 與三方合併、full overlay fallback 風險與處理、preserve 維護時機

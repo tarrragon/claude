@@ -152,7 +152,7 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 
 **Consequence**：在單一消費者專案本地改框架檔卻不走上游，會造成兩個後果——其他專案得不到改善（框架分叉），以及本地改動在下次 sync 被靜默覆蓋（白工）。
 
-**Action**：框架資產的新增 / 修改 / 刪除一律先在本專案 commit，再以 sync-push 推回上游 repo，使變更成為下游共用基線。
+**Action**：框架資產的新增 / 修改 / 刪除只在主控方進行：先在主控方 commit，再隨發版以 sync-push 推回上游 repo，使變更成為下游共用基線。consumer 不修改框架資產，需要的改動回報 framework issue。角色判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉。
 
 ### 4.2 刪除 tracked `.claude/` 檔須帶 `--clean` push
 
@@ -184,7 +184,8 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 
 ---
 
-**Last Updated**: 2026-06-15
+**Last Updated**: 2026-11-09
+**Version**: 1.3.0 — §4.1 Action 改為框架資產只在主控方修改並隨發版推送，consumer 改為回報 framework issue。
 **Version**: 1.2.0 — 新增 §4 框架編輯紀律（刪除走上游 + `--clean` 傳播 soft 警告），連結 sync-push.md L58-71（缺口 3）
 **Version**: 1.1.1 — Layer 2 補修：§3.1/3.3/3.6 補三明示（Why / Consequence / Action）；§3.2 補框架共用命名對稱理由；§3.4 原則句前置於表格
 **Version**: 1.1.0 — 新增 §3 Skill Hook 雙層架構章節（命名 / 路徑 / 註冊規範 / 掃描器行為 / 遷移指引）

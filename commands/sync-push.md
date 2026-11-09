@@ -16,12 +16,16 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 
 ## 檢查清單
 
-1. **確認變更已提交到主專案**
-   - 檢查 `.claude` 是否已提交
+1. **發版前置：更新版號與變更紀錄**
+   - 更新 `.claude/CHANGELOG.md`（腳本不產生條目，遠端內容即本地檔）
+   - 更新 `.claude/VERSION` 為新版號，須數值上高於遠端 VERSION，且遠端不得已有 `v<版號>` tag；否則腳本 exit 1 拒絕推送
+
+2. **確認變更已提交到主專案**
+   - 檢查 `.claude` 是否已提交（含上一步的 VERSION 與 CHANGELOG）
    - 確保提交訊息清楚描述變更內容
 
-2. **執行推送腳本**
-   - 自動分析模式（推薦）：腳本自動分析 .claude/ 相關 commit 生成結構化摘要
+3. **執行推送腳本**（推送版號 = 本地 `.claude/VERSION`，腳本不遞增、不回寫）
+   - 自動分析模式（推薦）：腳本自動分析 .claude/ 相關 commit 生成 commit 訊息（僅作訊息，與版號無關）
      ```bash
      python3 ./.claude/scripts/sync-claude-push.py
      ```
@@ -30,8 +34,9 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
      python3 ./.claude/scripts/sync-claude-push.py "提交訊息"
      ```
 
-3. **驗證推送結果**
+4. **驗證推送結果**
    - 確認腳本輸出最後出現「成功推送 .claude 到獨立 repo！」訊息
+   - 確認輸出含「已打並推送版本 tag v<版號>」（tag 失敗時腳本 exit 非 0，須補推 tag）
    - 確認腳本輸出包含 `To https://github.com/tarrragon/claude.git` 推送記錄
    - 注意：腳本使用臨時目錄操作，主專案沒有 `claude-shared` remote，**禁止**執行 `git fetch claude-shared`
 
@@ -42,8 +47,7 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 2. 收集主專案中該時間之後所有涉及 `.claude/` 的 commit
 3. 按 conventional commit 類型分類（feat/fix/refactor/docs 等）
 4. 過濾專案特定資訊（Ticket ID、版本號、Wave 編號）
-5. 根據 commit 類型建議版本遞增幅度（patch/minor/major）
-6. 生成結構化摘要作為 commit 訊息
+5. 生成結構化摘要作為 commit 訊息（版號不由此推算）
 
 ## commit 訊息規範
 
@@ -73,12 +77,12 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 
 腳本在無 `--force`／`--clean`／手動 commit 訊息時，會先比對「當前 `.claude/` 內容指紋」與「上次推送時的內容指紋」，並檢查上次推送後是否有新的 `.claude/` commit：
 
-- 兩者皆無變化（含僅有 `VERSION` 回寫記帳 commit——即 push 成功後腳本自動回寫本地 `.claude/VERSION`，使用者事後 `git add && git commit` 持久化該回寫產生的 commit）→ 印出「無實質變更可推送」並 `exit 0`，不 bump 版本、不打 tag、不寫 CHANGELOG（tarrragon/claude#66：避免 VERSION 回寫本身被誤判為新變更，形成版本永不收斂的自反饋迴路）。
-- 有其他實質變更（即使同批也含 VERSION 記帳 commit）→ 行為與現行完全一致，正常 bump/tag/CHANGELOG/回寫。
+- 兩者皆無變化（含僅有 `VERSION` 記帳 commit）→ 印出「無實質變更可推送」並 `exit 0`，不推送、不打 tag。
+- 有其他實質變更 → 進入發版閘門（版號遞增、tag 不存在檢查），通過後推送並打 tag。
 - 帶 `--force`、`--clean` 或手動指定 commit 訊息時，一律跳過此檢查直接進入推送流程。
 
 ## 注意事項
 
 - 確保變更已在本專案充分測試
 - 根目錄 CLAUDE.md 不會被推送（專案特定配置）
-- 版本遞增由腳本根據 commit 類型自動決定
+- 版號由本地 `.claude/VERSION` 決定，腳本不推算也不回寫；發版流程見 `docs/roadmap.md` §5

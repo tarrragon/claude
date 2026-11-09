@@ -1,3 +1,34 @@
+## [3.0.0] - 2026-11-09
+
+### Summary
+框架改由上游 repo（主控方）規劃與發版。從本版起，tarrragon/claude 的每次推送都對應一個 `v<版號>` tag，版號依 SemVer 由主控方決定，不再每推一次就自動 +0.1。
+
+### 對 consumer 的影響（major）
+- **不再從 consumer 推送框架**：consumer 只開 framework issue，修改與發版只在主控方（`skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉）。宣告為某個 skill 開發上游的 consumer，以 `skill-sync push` 把該 skill 送到 tarrragon/claude-skills。
+- **回報要附版本**：`framework-issue create` 的環境資訊與 `observe` 的觀測 comment 會自動附上 `.claude/VERSION`；新的 issue 範本把框架版本設為必填。
+- **sync-pull 不帶入 `.github/`**：issue 範本只放在發佈通道，不會進到 consumer 的 `.claude/`。
+
+### Changed
+- sync-push 改為發版推送：版號取自本地 `.claude/VERSION`，本地版號不高於遠端或 tag 已存在時拒絕推送；推送後打 annotated tag，tag 失敗時 exit 非 0；CHANGELOG 由人撰寫，腳本不再自動產生條目，也不再回寫本地 VERSION。
+- 每個版本分規劃期與執行期，規劃結束即凍結，執行期的發現排進後續版本（`pm-rules/version-progression.md`〈兩期〉、〈收斂：patch 線與 minor 推進〉）。
+- 驗收只審三項：能跑、範圍內、格式對；where 以外的同概念命中由 PM 擴充 where 並記理由（`pm-rules/verification-framework.md`〈驗收三項固定檢查〉〈檢查 2 的 where 擴充程序〉）。
+- 品質基線規則 2、3、5 對齊兩期（`rules/core/quality-baseline.md` 4.0.0）。
+- 可攜問題分流閘門的提示區分主控方與 consumer。
+
+### Added
+- `.github/ISSUE_TEMPLATE/framework-issue.yml`（框架版本必填）。
+- DOC-008 變體「驗收條件以位置界定範圍」。
+- PC-GPD-081、PC-SCLK-008 的 error-pattern 更新。
+
+### Removed
+- llm-dev 停止追蹤 `analyses/`、`migration-backups/`、`plans/`、`.version-release.yaml`、`settings.local.json`。
+
+### Known issues
+- tarrragon/claude 上仍留有上述 local-only 檔案：`sync-push --clean` 以 should_exclude 過濾刪除傳播，清不掉這些名稱，3.0.1 修正。其中 `settings.local.json` 含舊路徑的 hooks 鍵，以 git clone 安裝時所有 Agent 派發都會失敗（#11）；用 sync-pull 更新的 consumer 不受影響。
+- `skill-sync pull`（不帶名稱）產生的 `.skill-sync-base` 尚未列入 local-only 清單，consumer 會看到 untracked 標記檔，3.0.1 修正。
+
+---
+
 ## [2.90.0] - 2026-11-06
 
 ### Summary

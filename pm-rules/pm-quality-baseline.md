@@ -14,6 +14,13 @@
 
 **`.claude/` 框架改善的優先級永遠高於個別專案的功能進度**
 
+**適用角色**（判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉）：
+
+| 角色 | 規則 6 的落地方式 |
+|------|----------------|
+| 主控方 | 本規則全文：優先修改 `.claude/`，當前 Wave 內建票並執行 |
+| consumer | 優先的是回報，不是修改：發現當下建 issue 或以 `observe` 附加既有 issue，回報不延後。不在 consumer 修改 `.claude/`，也不建修改 `.claude/` 的本地票（例外：本專案 `CLAUDE.md` 宣告為開發上游的 skill，改走 `skill-sync push`，見同一節〈例外：skill 開發上游〉）。下方判斷標準、禁止行為、執行原則中的「修改」「執行」都只適用主控方 |
+
 > **來源**：PM 多次在 WRAP 分析中將框架改善延後到下版本，理由為「專案進度優先」。但框架是跨專案共用基礎設施，一次改善惠及所有後續工作，回報永遠最高。
 
 **判斷標準**：
@@ -55,6 +62,8 @@
 
 **scope 開放的 active 版本內，框架 ticket 應建在當前版本，禁止以主題不符為由改建在 planned 狀態的未來版本**
 
+> **適用角色**：本條款只適用主控方。consumer 不建修改 `.claude/` 的本地票（見規則 6〈適用角色〉）。
+>
 > **已由 scope 凍結模型部分取代**：本條款原以「.claude 工件一律歸活躍版本、免除判斷」為前提。`.claude/pm-rules/version-progression.md`〈版本生命週期〉已改為：active 版本 scope 開放時，本條款「禁止改建未來 planned 版本」的核心主張仍成立；active 版本 scope **凍結**時，框架問題不再進入本地任一版本的判斷，改路由至 canonical framework issue（見 `framework-issue` skill），只有落地實作票才回頭建本地票。以下情境表與 Action 步驟針對 scope 開放情境撰寫，scope 凍結時改依 `version-progression.md` 分流。本條款同受規則 6〈延後禁令的射程〉約束：「禁止改建未來 planned 版本」管建票時點，不管 finish 時的前移。
 >
 > **來源**：規則 6 原條款規定「當前 Wave 內建立」但未明示「Wave 必須屬於 active 版本」。當 active 版本主題與框架 ticket 不符時，PM 易傾向放主題吻合的 planned 版本（如一次框架 ticket 設計時 PM 內心傾向未來版本），實質延後框架改善並違反規則 6 本意。`version-progression.md` 舊制曾強制框架工件免判斷收入 active 版本，但規則 6 未交叉引用，造成 PM 漏看。
@@ -200,7 +209,8 @@
 
 ---
 
-**Last Updated**: 2026-10-01
+**Last Updated**: 2026-11-09
+**Version**: 2.6.0 — 規則 6 新增〈適用角色〉：優先修改只適用主控方；consumer 優先的是回報（issue 或 observe），不修改 `.claude/`、不建修改 `.claude/` 的本地票；宣告為開發上游的 skill 例外，改走 `skill-sync push`（用戶裁定 2026-11-09）。規則 6.1 標明只適用主控方。角色判定路由 `framework-issue` 的 escalation-flow〈角色：主控方與 consumer〉。來源：v3.0.0 主控方轉移（用戶裁定 2026-11-09）。
 **Version**: 2.5.1 — 〈finish 時的框架票處置〉絆腳索的判定依據改為具體欄位 `previous_ids`（ticket skill 2.44.16 起 migrate 每次遷移追加舊 ID，長度即前移次數）；欄位出現前已遷移的票以 `git log --follow` 人工比對。
 **Version**: 2.5.0 — 規則 6 延後禁令收窄為建票時：新增〈延後禁令的射程〉與〈finish 時的框架票處置〉（未完成框架票與其他票同樣前移、版本契約依賴者加 `scope_blocker` 阻擋、同票前移第 2 次收束進 canonical issue 後關票）；禁止行為表兩列措辭限定建票時點；規則 6.1 補同受射程約束一句；檢查清單同步。來源 canonical #114 方案 4（consumer 裁決：改規則不改工具）。
 **Version**: 2.4.0 — 規則 6.1 補「已由 scope 凍結模型部分取代」註記：scope 開放時「禁止改建未來 planned 版本」的核心主張不變，scope 凍結時框架問題改路由至 canonical framework issue，不進本地版本判斷；「當前 active 版本」定義表與〈與其他規則邊界〉表同步改引 `version-progression.md`〈版本生命週期〉，移除已由該模型取代的「.claude 工件歸活躍版本」字面引用。

@@ -1,13 +1,37 @@
 # 框架問題升級流程
 
-處理 ticket 過程中，若問題本質屬於 Claude 框架而非本專案，正確路徑是提 framework issue，不在本地當下修復。環節依序為：介入判斷、兩條後續路徑、修復時點、修法時點分離、issue 關閉協定、回報前查重 SOP。
+處理 ticket 過程中，若問題本質屬於 Claude 框架而非本專案，正確路徑是提 framework issue，不在本地當下修復。環節依序為：角色判定、介入判斷、兩條後續路徑、修復時點、修法時點分離、issue 關閉協定、回報前查重 SOP。
 
+- [角色：主控方與 consumer](#角色主控方與-consumer)
 - [介入判斷：框架問題 vs 專案問題](#介入判斷框架問題-vs-專案問題)
 - [兩條路徑](#兩條路徑)
 - [修復時點：派修或累積到清理線](#修復時點派修或累積到清理線)
 - [修法時點分離：發現票何時能寫定修法](#修法時點分離發現票何時能寫定修法)
 - [Issue 關閉協定](#issue-關閉協定)
 - [回報前查重 SOP](#回報前查重-sop)
+
+## 角色：主控方與 consumer
+
+**判定**：專案的 `CLAUDE.md` 宣告本專案是框架主控方，該專案就是主控方；其他使用本框架的專案都是 consumer。同一時間只有一個主控方。框架規則中提到「主控方」或「consumer」之處，都依本節判定。
+
+| 角色 | 框架問題的處置 | 取得框架的方式 |
+|------|--------------|--------------|
+| 主控方 | 修改 `.claude/`，依版本規劃排入 patch 或 minor，發版時才執行 `sync-push` 並打 `v<版號>` tag | 本身即來源 |
+| consumer | 只回報：建 issue 或以 `observe` 附加既有 issue，回報時附上 `.claude/VERSION`。不修改 `.claude/` 通用資產 | `sync-pull` 拉取已發版的 tag |
+
+**例外：skill 開發上游**。skill 依下游專案的需求而長出來，開發地點可以在 consumer。consumer 的 `CLAUDE.md` 宣告本專案是某個 skill 的開發上游時，該 consumer 可以在本地修改這個 skill，完成後以 `skill-sync push` 送進發佈庫（`tarrragon/claude-skills`），不執行 `sync-push`。主控方發版前以 `skill-sync pull <name>` 從發佈庫收入，隨發版推送到框架 canonical。例外只涵蓋宣告的 skill；同一 consumer 對其他 `.claude/` 資產仍只回報。
+
+| 步驟 | 執行者 | 動作 |
+|------|-------|------|
+| 1 | 宣告為該 skill 上游的 consumer | 修改 skill，`skill-sync push <name>` 送進發佈庫 |
+| 2 | 主控方 | 發版前 `skill-sync pull <name>` 收入，檢查框架引用錨點未斷，commit |
+| 3 | 主控方 | 發版時 `sync-push`，其他 consumer 以 `sync-pull` 取得 |
+
+**Why**：`sync-push` 只在主控方發版時執行，canonical 上的每個 tag 都是一個有規劃的版本。consumer 沒有把修改送上 canonical 的通道；skill 開發上游的修改改走發佈庫，由主控方收入。
+
+**Consequence**：consumer 若在本地修改 `.claude/`，修改只存在該專案，下一次 `sync-pull` 會被上游版本覆蓋，而且 canonical 沒有紀錄，其他 consumer 仍帶著同一缺陷。
+
+**Action**：開始處理框架問題前，先讀本專案 `CLAUDE.md` 判定角色。consumer 一律走〈兩條路徑〉的路徑 A；問題落在本專案宣告為上游的 skill 時，改依上方例外修改並 `skill-sync push`。主控方依〈修復時點〉決定派修，或交給版本分診。
 
 ## 介入判斷：框架問題 vs 專案問題
 
@@ -28,8 +52,8 @@
 
 | 路徑 | 適用情境 | 動作 |
 |------|---------|------|
-| A：先記錄，不接手 | 當下 ticket 的主要目標不是修這個框架問題（順手發現），或依〈修復時點〉不派修 | 建立或附加 framework issue 記錄徵狀；為這個問題建的本地 ticket 以收束配方的 close 命令關閉（reason-note 寫「已遷至 tarrragon/claude#N」，issue 為唯一權威，清理線開線時從 issue 區段重新建票），並**當下**建一張驗證 ticket（pending，`why` 引用該 issue，`when` 寫「sync-pull 帶回含 fix-version 的版本後」），承擔者是執行 `sync-pull` 的 PM，在 runqueue 看到它即接手 |
-| B：當下接手 | 依〈修復時點〉應派修：P0／P1 bug、用戶要求，或已排入的清理線範圍 | 直接在框架 canonical repo 修復，修復後走下方關閉協定 |
+| A：先記錄，不接手 | consumer 的所有框架問題；主控方則是當下 ticket 的主要目標不是修這個框架問題（順手發現），或依〈修復時點〉不派修 | 建立或附加 framework issue 記錄徵狀；為這個問題建的本地 ticket 以收束配方的 close 命令關閉（reason-note 寫「已遷至 tarrragon/claude#N」，issue 為唯一權威，清理線開線時從 issue 區段重新建票），並**當下**建一張驗證 ticket（pending，`why` 引用該 issue，`when` 寫「sync-pull 帶回含 fix-version 的版本後」），承擔者是執行 `sync-pull` 的 PM，在 runqueue 看到它即接手 |
+| B：當下接手 | 只在主控方：依〈修復時點〉應派修：P0／P1 bug、用戶要求，或已排入的清理線範圍 | 在主控方 repo 修復，隨下一次發版推送到 canonical，發版後走下方關閉協定 |
 
 **Why**：框架問題的修復地點是 canonical repo；本地 ticket 若卡在框架缺陷上又不切割，專案層任務的驗收會綁死在框架修復進度上。
 
@@ -38,6 +62,8 @@
 **Action**：路徑 A 的 close 命令與 reason-note 禁詞見 `references/ticket-intake.md` 的〈步驟五：ticket 處置〉；路徑名不可抄進 reason-note。路徑 B 修復完成後立即執行關閉協定。
 
 ## 修復時點：派修或累積到清理線
+
+**適用角色**：本節的派修判準只適用主控方（角色判定見〈角色：主控方與 consumer〉）。consumer 不派修，一律走路徑 A；碰到框架阻礙時仍照下方規則標「拖慢專案」，這些觀測是主控方分診時排優先序的依據。
 
 **原則**：發現框架問題照常當下建票（品質基線規則 5 不變），但建票不等於派修。專案工作是主目標，框架修補是讓專案工作更順的手段；除下表三種情況外，一律走路徑 A，觀測進 issue 後關票，留給清理線一次處理。
 

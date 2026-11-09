@@ -217,7 +217,10 @@ ticket create --wave 1 --action "實作" --target "XXX" --allow-duplicate \
 | 本票性質 | 命中 issue 時的處置 |
 |---------|---------------------|
 | 記錄/分析問題本身（問題可完整寫進 issue 文字，如 ANA/DOC） | 以 `observe` 附加既有 issue，**不建本地票** |
-| 執行程式碼變更（該 issue 解法在本 consumer 的落地實作，如本票這類 IMP） | issue 號本身就是查重結論，**仍應建票**，加 `--dedup-checked <issue 號>` 放行 |
+| 執行程式碼變更（修改 `.claude/`），**只適用主控方** | issue 號本身就是查重結論，**仍應建票**，加 `--dedup-checked <issue 號>` 放行 |
+| 執行程式碼變更，本專案是 consumer | **不建修改 `.claude/` 的本地票**（下次 sync-pull 會覆蓋）：到 issue 回報，以 `observe` 附加既有 issue 或開新 issue，附 `.claude/VERSION` |
+
+角色判定見 `framework-issue` skill `references/escalation-flow.md`〈角色：主控方與 consumer〉。
 
 ```bash
 # 查重指令範本（阻擋訊息會原樣印出）

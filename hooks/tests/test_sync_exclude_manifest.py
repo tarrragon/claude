@@ -141,3 +141,16 @@ def test_gitignore_covers_all_expected():
     names = _parse_gitignore_names(content)
     missing = set(GITIGNORE_EXPECTED) - names
     assert not missing, f".gitignore 未涵蓋 GITIGNORE_EXPECTED：{missing}"
+
+
+# ---------------------------------------------------------------------------
+# W1-004：.github/ 只在 pull 方向排除（發佈通道資產，不屬框架資產）
+# ---------------------------------------------------------------------------
+def test_pull_excludes_github_dir():
+    from lib.sync_exclude_manifest import should_exclude_on_pull
+
+    assert should_exclude_on_pull(Path(".github/ISSUE_TEMPLATE/framework-issue.yml"))
+
+
+def test_push_does_not_exclude_github_dir():
+    assert not should_exclude(Path(".github/ISSUE_TEMPLATE/framework-issue.yml"))

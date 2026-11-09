@@ -182,7 +182,7 @@ Windows 執行 sync-push 時 git 對新增檔案的 mode 處理與 macOS/Linux �
 1. **定期同步** - 有重大變更時推送到獨立 repo
 2. **測試驗證** - 同步後測試 Hook 系統是否正常
 3. **文件更新** - 同步配置變更時更新此 README
-4. **版本管理** - 獨立 repo 使用語意化版本號（自動遞增）
+4. **版本管理** - 獨立 repo 使用語意化版本號（推送版號取自本地 `.claude/VERSION`，發版前先更新該檔與 `.claude/CHANGELOG.md`；每次推送對應一個 `v<版號>` tag）
 
 ## sync-pull Breaking Change Consumer Checklist
 

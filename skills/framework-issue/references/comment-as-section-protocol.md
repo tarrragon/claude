@@ -95,8 +95,11 @@ python3 .claude/skills/framework-issue/scripts/section_comment.py todo \
 
 ```
 <!-- observation: <摘要> by <session識別> -->
+<!-- framework-version: <專案 .claude/VERSION 的值> -->
 （觀測內容）
 ```
+
+第二行版本列由 `observe` 自動寫入，值取自專案 `.claude/VERSION`；檔案不存在或讀取失敗時寫 `unknown`，`observe` 照常完成。首行標記格式不變。解析端相容無版本列的舊觀測（版本視為未記錄、輸出與舊版相同），含版本列者版本列不計入觀測內文，`show` 於該則摘要後附 `(framework <版本>)`。
 
 兩種標記字首不同（`section:`／`observation:`），區段抽取正則只命中前者。`show` 依此區分：有 `section:` 標記者列入區段，其餘（含 `observation:` 標記與手寫的一般 comment）列入觀測流，摘要取自標記。每則區段列輸出格式為 `- <名稱> owner=<值> updated_at=<值>`，owner 從該 comment 首行標記回推——`transfer-owner` 是唯一會改 owner 的操作，若 `show` 不印 owner，驗證移交結果需另外開 comment 核對，驗證手段不在同一套 CLI 內。
 

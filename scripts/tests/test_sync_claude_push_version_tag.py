@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parent.parent / "sync-claude-push.py"
 _spec = importlib.util.spec_from_file_location("sync_claude_push", _SCRIPT)
 assert _spec and _spec.loader
@@ -86,18 +88,23 @@ def test_version_tag_points_to_head_commit(tmp_path: Path):
     assert tag_commit == head
 
 
-def test_create_tag_idempotent_when_tag_exists(tmp_path: Path):
-    """同版號 tag 已存在時不應拋例外（force 更新或安全略過）。"""
-    clone, bare = _setup_clone_with_remote(tmp_path)
-    (clone / "VERSION").write_text("1.0.1\n", encoding="utf-8")
-    _git(["add", "-A"], clone)
-    _git(["commit", "-m", "v1.0.1"], clone)
-    _git(["push", "origin", "main"], clone)
+def test_ensure_tag_absent_passes_when_tag_missing(tmp_path: Path):
+    clone, _bare = _setup_clone_with_remote(tmp_path)
+    sync_mod.ensure_tag_absent_on_remote(clone, "1.0.1")
 
-    sync_mod.create_and_push_version_tag(clone, "1.0.1")
-    # 再呼叫一次不應 raise
-    sync_mod.create_and_push_version_tag(clone, "1.0.1")
-    result = subprocess.run(
-        ["git", "tag", "--list"], cwd=str(bare), capture_output=True, text=True
-    )
-    assert result.stdout.split().count("v1.0.1") == 1
+
+def test_ensure_tag_absent_rejects_when_remote_has_tag(tmp_path: Path):
+    clone, bare = _setup_clone_with_remote(tmp_path)
+    _git(["tag", "-a", "v1.0.1", "-m", "x"], bare)
+    with pytest.raises(SystemExit) as exc:
+        sync_mod.ensure_tag_absent_on_remote(clone, "1.0.1")
+    assert exc.value.code != 0
+
+
+def test_tag_push_failure_exits_nonzero(tmp_path: Path):
+    """tag 建立/推送失敗必須 exit 非 0（原只印警告）。"""
+    clone, _bare = _setup_clone_with_remote(tmp_path)
+    _git(["remote", "set-url", "origin", str(tmp_path / "nonexistent.git")], clone)
+    with pytest.raises(SystemExit) as exc:
+        sync_mod.create_and_push_version_tag(clone, "1.0.1")
+    assert exc.value.code != 0

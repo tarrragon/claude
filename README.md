@@ -296,7 +296,7 @@ grep -c '/Users/' .claude/settings.local.json
 | 項目 | 說明 |
 |------|------|
 | 訓練方式 | 上游以實際文章撰寫與多輪檢討（multi-round review）持續迭代這些 skill |
-| 回流方向 | 上游改良版定期複製回本框架，覆蓋既有版本後 commit + sync-push |
+| 回流方向 | 上游改良版由框架主控方定期複製回本框架，覆蓋既有版本後 commit，隨下一次發版 sync-push |
 | 本地修改警示 | 框架端對這些 skill 的內容修改會在下次回流時被覆蓋；措辭調整、原則增補、跨專案適配需求一律到上游 repo 處理 |
 | 框架端允許動作 | 檢視回流變更、驗證框架引用錨點未斷（hooks / rules 引用路徑）、commit 與同步 |
 
@@ -309,7 +309,7 @@ grep -c '/Users/' .claude/settings.local.json
 | 項目 | 說明 |
 |------|------|
 | 訓練方式 | 上游以實際選型訪談情境與多輪檢討（multi-round review）持續迭代此 skill |
-| 回流方向 | 上游改良版定期複製回本框架，覆蓋既有版本後 commit + sync-push |
+| 回流方向 | 上游改良版由框架主控方定期複製回本框架，覆蓋既有版本後 commit，隨下一次發版 sync-push |
 | 本地修改警示 | 框架端對此 skill 的內容修改會在下次回流時被覆蓋；訪談維度增補、防護底線調整、跨專案適配需求一律到上游 repo 處理 |
 | 框架端允許動作 | 檢視回流變更、驗證框架引用錨點未斷（hooks / rules 引用路徑）、commit 與同步 |
 
