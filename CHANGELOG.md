@@ -1,3 +1,34 @@
+## [3.0.2] - 2026-11-09
+
+### Summary
+修補 3.0.1 承諾未達成的部分：`.skill-sync-base` 的 gitignore 判定原本在 gitignore-check 與 sync-exclusion-check 兩個 SessionStart hook 各寫一份，兩份各錯在不同寫法，一個誤報、一個漏認。本版把判定收到 `lib/sync_exclude_manifest.py` 一處，判定結果以 `git check-ignore` 實測為準。
+
+### 對 consumer 的影響
+- **照 3.0.1 補了 `.claude/**/.skill-sync-base` 的 consumer**：sync-exclusion-check 不再於每次啟動回報 gitignore-drift。3.0.1 的這則警告建議把該行換成 `.claude/.skill-sync-base`，不要照做。已經照做的，請改回 `.claude/**/.skill-sync-base`，否則 skill 目錄下的標記會回到 untracked，sync-push 的 clean-check 會中止。
+- **`.gitignore` 寫不帶斜線的 `.skill-sync-base` 的 consumer**：gitignore-check 不再判為缺項。git 對不帶斜線的樣式比對任何深度，這個寫法本來就涵蓋。
+
+### Fixed
+- 巢狀名稱（目前只有 `.skill-sync-base`）的必要條目與涵蓋判定集中在 `lib/sync_exclude_manifest.py` 的 `required_gitignore_entry`、`is_nested_name_covered`，兩個 hook 都呼叫它，不再各寫一份。判定與 `git check-ignore` 一致：
+  - 涵蓋：`.skill-sync-base`、`**/.skill-sync-base`、`/**/.skill-sync-base`、`.claude/**/.skill-sync-base`、`/.claude/**/.skill-sync-base`
+  - 不涵蓋：`/.skill-sync-base`（只比對 repo 根層）、`.claude/.skill-sync-base`（只比對 `.claude/` 根層）、`.claude/skills/*/.skill-sync-base`（只比對固定一層）、結尾帶斜線的寫法（只比對目錄，標記是檔案）
+- sync-exclusion-check 不再把 `.claude/**/.skill-sync-base` 判為 gitignore-drift。原本的正規化先剝 `**/` 再剝 `.claude/`，剩下的 `**/.skill-sync-base` 比對不到清單裡的名稱。缺項時的建議文字改為 `.claude/**/.skill-sync-base`。
+- gitignore-check 不再把不帶斜線的 `.skill-sync-base` 判為缺項。
+
+### Added
+- PC-LLM-001（process-compliance）：以版本准入規則壓低修法深度。准入規則決定哪些問題進這一版，不決定進來的問題修多深；修法深度由兩個問題決定：這個修法會不會重現缺陷的成因，消除根因需不需要一個還沒做的設計決策。
+- error-pattern 專案代號登記 `LLM`（框架上游）。
+
+### Changed
+- component-contract-design 3.14.0：元件契約欄位表在回饋契約之前新增「套用時點」欄，只適用選擇類元件，判準在 `step-3-fill-contract.md`〈套用時點的四問〉。
+- ticket 2.48.1、doc 1.25.1：版號補升。對應的測試變更已隨 3.0.1 發佈，版號在 3.0.1 發版後才升，本版起 tarrragon/claude 與發佈庫一致。
+
+### Known issues
+- 方法論〈元件契約判準〉（`methodologies/component-library-bidirectional-constraint-methodology.md`）與 doc 的元件庫規格範本（`skills/doc/templates/component-library-spec-template.md`）的欄位表還沒有套用時點欄，與 component-contract-design 3.14.0 不一致。填欄位表時以 skill 為準；補齊已列入 3.1.0 的候選範圍。
+- 巢狀名稱的涵蓋判定不處理否定行：`.gitignore` 先以涵蓋的寫法忽略、再以 `!` 取消時，hook 仍判為涵蓋。
+- 3.0.1 列出的 hook-logs 等其他巢狀名稱問題仍在，處置同 3.0.1。
+
+---
+
 ## [3.0.1] - 2026-11-09
 
 ### Summary

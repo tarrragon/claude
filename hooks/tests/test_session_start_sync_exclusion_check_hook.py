@@ -137,3 +137,43 @@ def test_uses_git_utils_get_project_root():
 
     hook = load_hook_module()
     assert hook.get_project_root is git_utils.get_project_root
+
+
+# ---------------------------------------------------------------------------
+# 8. 巢狀名稱（.skill-sync-base）的 drift 判定與建議文字
+# ---------------------------------------------------------------------------
+def _gitignore_with(hook, tmp_path, nested_line: str) -> Path:
+    """涵蓋其餘所有名稱，只讓巢狀名稱的寫法可變。"""
+    from lib.sync_exclude_manifest import NESTED_LOCAL_ONLY_NAMES
+    lines = [
+        f".claude/{n}" for n in sorted(hook.GITIGNORE_EXPECTED)
+        if n not in NESTED_LOCAL_ONLY_NAMES
+    ]
+    lines.append(nested_line)
+    return _make_gitignore(tmp_path, "\n".join(lines) + "\n")
+
+
+def test_nested_double_star_not_drift(tmp_path):
+    hook = load_hook_module()
+    gi = _gitignore_with(hook, tmp_path, ".claude/**/.skill-sync-base")
+    assert hook.find_gitignore_drift(gi) == []
+
+
+def test_nested_bare_name_not_drift(tmp_path):
+    hook = load_hook_module()
+    gi = _gitignore_with(hook, tmp_path, ".skill-sync-base")
+    assert hook.find_gitignore_drift(gi) == []
+
+
+def test_nested_root_only_still_drift(tmp_path):
+    """正向對照（E2）：只涵蓋根層的寫法仍須判為 drift。"""
+    hook = load_hook_module()
+    gi = _gitignore_with(hook, tmp_path, ".claude/.skill-sync-base")
+    assert hook.find_gitignore_drift(gi) == [".skill-sync-base"]
+
+
+def test_drift_suggestion_for_nested_name_from_lib():
+    from lib.sync_exclude_manifest import required_gitignore_entry
+    section = load_hook_module().build_gitignore_drift_section([".skill-sync-base"])
+    assert f"`{required_gitignore_entry('.skill-sync-base')}`" in section
+    assert ".claude/**/.skill-sync-base" in section

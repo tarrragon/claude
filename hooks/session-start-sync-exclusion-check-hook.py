@@ -45,6 +45,9 @@ from lib.dispatch_tracker import cleanup_expired  # noqa: E402
 from lib.sync_exclude_manifest import (  # noqa: E402
     LOCAL_ONLY_PATTERNS,
     GITIGNORE_EXPECTED,
+    NESTED_LOCAL_ONLY_NAMES,
+    is_nested_name_covered,
+    required_gitignore_entry,
 )
 
 EXIT_SUCCESS = 0
@@ -107,7 +110,17 @@ def find_gitignore_drift(gitignore_path: Path) -> List[str]:
     except OSError:
         return sorted(GITIGNORE_EXPECTED)
     covered = parse_gitignore_entries(content)
-    return sorted(GITIGNORE_EXPECTED - covered)
+    lines = content.splitlines()
+    # 巢狀名稱不可用正規化裸名比對（`.claude/<名稱>` 會被誤判為涵蓋），判定在 lib
+    return sorted(
+        name
+        for name in GITIGNORE_EXPECTED
+        if not (
+            is_nested_name_covered(name, lines)
+            if name in NESTED_LOCAL_ONLY_NAMES
+            else name in covered
+        )
+    )
 
 
 def build_gitignore_drift_section(drift: List[str]) -> str:
@@ -124,7 +137,7 @@ def build_gitignore_drift_section(drift: List[str]) -> str:
     for name in drift:
         lines.append(
             f"- [WARNING] gitignore-drift: `{name}` 在 sync manifest 但未被 "
-            "`.gitignore` 涵蓋 → 請補上 `.claude/" + name + "` 規則"
+            f"`.gitignore` 涵蓋 → 請補上 `{required_gitignore_entry(name)}` 規則"
         )
     lines.append("")
     lines.append(

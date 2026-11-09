@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.25.1（2026-11-09）— 讀宿主專案需求文件的 10 項測試（`test_uc_registry.py` 讀 `docs/app-use-cases.md` 的 2 項、`test_tracking_schema_conformance.py` 讀 `docs/proposals-tracking.yaml` 與 `docs/usecases/UC-*.md` 的 8 項），宿主缺檔時 skip 並寫明缺哪個檔；檔案存在時照常執行，斷言不變。原本在沒有這些文件的專案會 failed 或 setup error。產品碼不變。測試變更隨框架 v3.0.1 發佈；本版號在 v3.0.1 之後補升，tarrragon/claude 自下一版起一致。
+
 **Version**: 1.25.0（2026-11-03）— `GRAPH_EDGE_TYPES` 新增 `uc_ticket_refs`：UC 的 `ticket_refs` 欄位，指向 Ticket，class 為 `see-also`，layer 為 `established`。`tracking_schema.json` 匯出同步，`test_schema_export.py` 補新邊的匯出斷言，一致性測試的邊計數隨之調整。
 
 **Version**: 1.24.12 — 三份 SPEC 模板（`spec-template.md`、`component-library-spec-template.md`、`design-system-spec-template.md`）frontmatter 新增 `has_functional_requirements: true` 與行內註解，說明預設 true、只認小寫 true/false、false 時 FR 覆蓋檢查略過且輸出為未執行比對、宣告 false 但內容有以 FR 開頭的標題行報錯（行為以 `.claude/skills/spec/scripts/check_domain_coverage.py` 為準）。兩份專用模板預設同為 true。僅改模板，無程式碼變更。

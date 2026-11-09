@@ -159,3 +159,64 @@ def test_push_does_not_exclude_github_dir():
 def test_skill_sync_base_excluded_nested_with_control():
     assert should_exclude(Path("skills/doc/.skill-sync-base"))
     assert not should_exclude(Path("skills/doc/SKILL.md"))
+
+
+# ---------------------------------------------------------------------------
+# 巢狀名稱的必要條目與涵蓋判定（以 git check-ignore 實測為 oracle）
+# ---------------------------------------------------------------------------
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+
+from lib.sync_exclude_manifest import (  # noqa: E402
+    NESTED_LOCAL_ONLY_NAMES,
+    is_nested_name_covered,
+    required_gitignore_entry,
+)
+
+_NESTED = ".skill-sync-base"
+# 探針取二層深：`.claude/skills/*/<名稱>` 只涵蓋一層，不算涵蓋巢狀名稱
+_PROBE_PATH = f".claude/skills/x/sub/{_NESTED}"
+
+# (寫法樣板, 是否涵蓋巢狀名稱)；{n} 代入名稱
+_NESTED_TRUTH_TABLE = [
+    ("{n}", True),
+    ("/{n}", False),
+    ("**/{n}", True),
+    ("/**/{n}", True),
+    (".claude/**/{n}", True),
+    ("/.claude/**/{n}", True),
+    (".claude/{n}", False),
+    (".claude/skills/*/{n}", False),
+    ("{n}/", False),
+    (".claude/**/{n}/", False),
+]
+
+
+def _git_ignores_nested(tmp_path, line: str) -> bool:
+    """git 實測：該寫法是否讓 skills/x/ 底下的標記被忽略。"""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    (repo / ".gitignore").write_text(line + "\n", encoding="utf-8")
+    result = subprocess.run(
+        ["git", "-C", str(repo), "check-ignore", "--no-index", _PROBE_PATH],
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+@pytest.mark.parametrize("template,expected", _NESTED_TRUTH_TABLE)
+def test_nested_covered_matches_git_check_ignore(tmp_path, template, expected):
+    line = template.format(n=_NESTED)
+    assert _git_ignores_nested(tmp_path, line) is expected  # oracle 與真值表一致
+    assert is_nested_name_covered(_NESTED, [line]) is expected
+
+
+def test_required_entry_nested_uses_double_star():
+    for name in NESTED_LOCAL_ONLY_NAMES:
+        assert required_gitignore_entry(name) == f".claude/**/{name}"
+
+
+def test_required_entry_root_name_unchanged():
+    assert required_gitignore_entry("hook-state") == ".claude/hook-state"
