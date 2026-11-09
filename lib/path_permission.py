@@ -54,6 +54,8 @@ ALLOWED_PATTERN_ENTRIES: List[_AllowedEntry] = [
     # config 目錄含 presence_profiles.py，為 3 個 hook 的 import 目標；
     # 修改該檔後須跑 .claude/hooks/tests/test_presence_detection_hook.py
     _AllowedEntry(r"^\.claude/config/.*", "config", "框架設定資料（0.2.1-W3-069）"),  # i18n-exempt
+    _AllowedEntry(r"^\.claude/project-integration/.*", "project-integration", "專案整合紀錄（framework-update-adaptation Step 5）"),  # i18n-exempt
+    _AllowedEntry(r"^\.claude/VERSION$", None, None),  # 框架版號檔：roadmap §5 第 3 步由主線程更新
     _AllowedEntry(r"^docs/.*", None, None),
     _AllowedEntry(r"^CLAUDE\.md$", None, None),
     _AllowedEntry(r"^CHANGELOG\.md$", None, None),

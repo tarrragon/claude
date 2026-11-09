@@ -91,7 +91,12 @@ LOCAL_ONLY_PATTERNS = frozenset({
     ".sync-conflicts",         # 三方合併衝突暫存目錄（pull/push 皆不同步，本地手動解決）
     "settings.local.json",
     ".zhtw-mcp-skip",          # 各專案 opt-out 繁中檢查的 flag，per-project 決定
+    ".skill-sync-base",        # skill-sync 同步基準標記，依設計只留本機（寫在 skills/<name>/ 底下）
 })
+
+# 寫在 skills/<name>/ 等巢狀位置的 local-only 名稱：gitignore 條目須用 `.claude/**/<名稱>`，
+# `.claude/<名稱>` 只比對 .claude/ 根層，忽略不了巢狀標記（git 對含中間斜線的條目錨定該目錄）。
+NESTED_LOCAL_ONLY_NAMES = frozenset({".skill-sync-base"})
 
 # 僅 .claude/ 根層的 local-only 目錄（W1-018.2）。
 #

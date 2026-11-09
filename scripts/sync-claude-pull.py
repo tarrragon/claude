@@ -2669,6 +2669,37 @@ def cleanup_old_backups(retention_days: int = DEFAULT_BACKUP_RETENTION_DAYS,
     return removed_count
 
 
+def cleanup_legacy_github_dir(claude_dir: Path, temp_dir: Path) -> list[str]:
+    """清除 2.x 版 pull 帶入 .claude/.github/ 的殘留。
+
+    與 canonical 根目錄 .github/ 同路徑且內容相同者刪除；內容不同或 canonical 無此檔者
+    視為 consumer 自有，保留並輸出提示。傳回被保留的相對路徑清單。
+    """
+    legacy = claude_dir / ".github"
+    if not legacy.is_dir():
+        return []
+    canonical = temp_dir / ".github"
+    kept: list[str] = []
+    for path in sorted(p for p in legacy.rglob("*") if p.is_file()):
+        rel = path.relative_to(legacy)
+        ref = canonical / rel
+        if ref.is_file() and filecmp.cmp(path, ref, shallow=False):
+            path.unlink()
+            print_color(f"   已清除 2.x 帶入的 .claude/.github/{rel.as_posix()}", "green")
+        else:
+            kept.append(rel.as_posix())
+            print_color(
+                f"   保留 .claude/.github/{rel.as_posix()}（與 canonical 範本不同或為自有檔，請自行確認）",
+                "yellow",
+            )
+    for d in sorted((p for p in legacy.rglob("*") if p.is_dir()), reverse=True):
+        if not any(d.iterdir()):
+            d.rmdir()
+    if legacy.is_dir() and not any(legacy.iterdir()):
+        legacy.rmdir()
+    return kept
+
+
 def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None:
     """完成同步：更新專案模板和輸出結果。
 
@@ -2680,6 +2711,7 @@ def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None
         backup_dir: 備份目錄路徑
     """
     _update_project_templates(temp_dir, project_root)
+    cleanup_legacy_github_dir(project_root / ".claude", temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     # 清理超期 backup_dir（W3-076）

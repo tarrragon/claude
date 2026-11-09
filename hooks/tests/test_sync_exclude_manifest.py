@@ -154,3 +154,8 @@ def test_pull_excludes_github_dir():
 
 def test_push_does_not_exclude_github_dir():
     assert not should_exclude(Path(".github/ISSUE_TEMPLATE/framework-issue.yml"))
+
+
+def test_skill_sync_base_excluded_nested_with_control():
+    assert should_exclude(Path("skills/doc/.skill-sync-base"))
+    assert not should_exclude(Path("skills/doc/SKILL.md"))

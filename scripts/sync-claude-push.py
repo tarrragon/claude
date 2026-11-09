@@ -1261,13 +1261,18 @@ def _should_skip_clean_file(  # i18n-exempt
     preserve: set[str],
     lineage_claimed: set[str],
     skills_config: dict | None,
+    include_local_only: bool = False,
 ) -> bool:
-    """clean_stale_files / detect_uncleaned_deletions shared filter."""
+    """clean_stale_files / detect_uncleaned_deletions shared filter.
+
+    include_local_only=True：should_exclude 命中（LOCAL_ONLY / 憑證）的路徑不再
+    一律跳過，交由呼叫端以「推送方 tracked 樹是否有此檔」判定；其餘保護不變。
+    """
     if any(part in _CLEAN_EXCLUDE_DIRS for part in rel.parts):
         return True
     if len(rel.parts) == 1 and rel.name in _CLEAN_EXCLUDE_ROOT_FILES:
         return True
-    if should_exclude(rel):
+    if not include_local_only and should_exclude(rel):
         return True
     if rel.as_posix() in preserve:
         return True
@@ -1547,9 +1552,18 @@ def clean_stale_files(
         if not file_path.is_file():
             continue
         rel = file_path.relative_to(temp_dir)
-        if _should_skip_clean_file(rel, preserve, lineage_claimed, skills_config):
+        if _should_skip_clean_file(
+            rel, preserve, lineage_claimed, skills_config, include_local_only=True
+        ):
             continue
         if not (reference_dir / rel).exists():
+            if should_exclude(rel):
+                # 遠端已追蹤、推送方不追蹤的 local-only 名稱：直接傳播刪除
+                # （磁碟上的未追蹤副本不構成保留理由，也無需三方比對）
+                print(f"   刪除遠端已追蹤的 local-only 檔案: {rel}")
+                file_path.unlink()
+                deleted_count += 1
+                continue
             classification = classify_orphan_candidate(rel, claude_dir, project_root)
             if classification == _ORPHAN_UNTRACKED_LOCAL:
                 print(f"   [保留] 本地磁碟存在但未被追蹤，可能與 .gitignore 分歧: {rel}")

@@ -90,9 +90,8 @@ class TestProposalsTrackingRealFileConformance:
 
     @pytest.fixture(scope="class")
     def real_data(self):
-        assert PROPOSALS_TRACKING_PATH.exists(), (
-            f"真實 tracking 檔不存在：{PROPOSALS_TRACKING_PATH}"
-        )
+        if not PROPOSALS_TRACKING_PATH.exists():
+            pytest.skip(f"宿主缺 {PROPOSALS_TRACKING_PATH}（框架上游無此需求文件）")
         with open(PROPOSALS_TRACKING_PATH, encoding="utf-8") as f:
             return yaml.safe_load(f)
 
@@ -655,6 +654,8 @@ class TestGraphTypeTablesRealFlowStepConformance:
 
     @pytest.fixture(scope="class")
     def flows(self):
+        if not UC_PATHS:
+            pytest.skip(f"宿主缺 {PROJECT_ROOT / 'docs' / 'usecases'}/UC-*.md（框架上游無此需求文件）")
         found_uc_ids = {"-".join(path.name.split("-")[:2]) for path in UC_PATHS}
         missing_uc_ids = REQUIRED_UC_IDS - found_uc_ids
         assert not missing_uc_ids, f"docs/usecases/ 下找不到：{sorted(missing_uc_ids)}"

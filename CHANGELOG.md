@@ -1,3 +1,25 @@
+## [3.0.1] - 2026-11-09
+
+### Summary
+修補 3.0.0 承諾未達成的部分：tarrragon/claude 上已追蹤的 local-only 檔案由本版推送清除，`.skill-sync-base` 列為 local-only，主線程可寫入流程指定的紀錄檔，從 2.x 升級的 consumer 會清掉舊版帶入的 `.claude/.github/`。
+
+### 對 consumer 的影響
+- **tarrragon/claude 不再含 local-only 檔案**：`analyses/`、`migration-backups/`、`plans/`、`.version-release.yaml`、`settings.local.json` 已從發佈通道移除。以 git clone 安裝時，因 `settings.local.json` 的舊路徑 hooks 鍵造成的派發失敗（#11）不再發生；初次安裝不再帶入其他專案的分析產出（#49）。用 sync-pull 更新的 consumer 本地不受影響。
+- **已從 2.x 升級、`.claude/.github/` 仍在的 consumer**：第一次 pull 由本地 2.x 腳本執行，會把 `.claude/.github/` 帶入。升級到 3.0.1 後再執行一次 sync-pull，內容與 canonical 範本相同的 `.claude/.github/` 檔案會自動清除；內容被自己改過的檔案保留並提示，請自行決定去留。
+- **`.gitignore` 要補一條**：SessionStart 的 gitignore-check 會要求 `.claude/**/.skill-sync-base`。`.claude/.skill-sync-base` 只比對 `.claude/` 根層，忽略不了 `skills/<name>/` 底下的標記，不算涵蓋。
+
+### Fixed
+- `sync-push --clean`：遠端已追蹤、推送方不追蹤的 local-only 名稱會被刪除。preserve 清單、lineage、skill 排除的保護不變；copy 階段不變，推送方本地的 local-only 檔不會被複製到遠端。
+- `.skill-sync-base` 列入 local-only 清單（`lib/sync_exclude_manifest.py`），gitignore-check 對它要求 `.claude/**/.skill-sync-base` 形式的條目。
+- 主線程寫入守衛放行 `.claude/VERSION`（主控方發版時更新版號）與 `.claude/project-integration/`（framework-update-adaptation 的狀態檔）。
+- sync-pull 清除舊版帶入、與 canonical 範本相同的 `.claude/.github/`。
+- 以宿主專案檔案為輸入的框架測試，在沒有這些檔案的 consumer 上不再紅燈：ticket 的 `TestWhereFilesRealTicketSample` 改用自帶 fixture，不再讀宿主專案的真實票；doc 測試讀 `docs/app-use-cases.md`、`docs/proposals-tracking.yaml`、`docs/usecases/` 的 10 項，宿主缺檔時 skip 並寫明缺哪個檔，檔案存在時照常執行。
+
+### Known issues
+- gitignore-check 對其他可能出現在巢狀位置的名稱（如 `hook-logs`），仍把 `.claude/<名稱>` 判為涵蓋，巢狀的 hook-logs 目錄可能仍顯示為 untracked。可在專案 `.gitignore` 加一條不帶前導斜線的 `hook-logs/`。
+
+---
+
 ## [3.0.0] - 2026-11-09
 
 ### Summary

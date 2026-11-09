@@ -771,51 +771,50 @@ class TestWhereFilesUnchangedForUnmarked:
 
 
 class TestWhereFilesRealTicketSample:
-    """acceptance 第 5 條：既有 825 張票無需任何票面變更即適用預設
-    ——以真實既有票樣本驗證（非構造 dict）。
+    """acceptance 第 5 條：無標記票無需票面變更即適用預設。
+
+    使用自帶 fixture（不讀宿主 repo 的 docs/work-logs，避免斷言依賴宿主票況）。
+    含標記與無標記兩種票互為對照（E1）。
     """
 
     @staticmethod
-    def _load_real_tickets(limit: int = 30) -> List[Dict[str, Any]]:
-        repo_root = Path(__file__).resolve().parents[5]
-        ticket_paths = sorted(
-            glob.glob(str(repo_root / "docs/work-logs/**/tickets/*.md"), recursive=True)
-        )
-        tickets: List[Dict[str, Any]] = []
-        for p in ticket_paths[:limit]:
-            text = Path(p).read_text(encoding="utf-8")
-            if not text.startswith("---"):
-                continue
-            end = text.find("\n---", 3)
-            if end == -1:
-                continue
-            frontmatter = yaml.safe_load(text[3:end])
-            if isinstance(frontmatter, dict):
-                tickets.append(frontmatter)
-        return tickets
+    def _unmarked_tickets() -> List[Dict[str, Any]]:
+        files = ["lib/foo.py", "test/foo_test.py", "docs/spec/bar.md"]
+        return [
+            _ticket_with_type(list(files), ticket_type="IMP"),
+            _ticket_with_type(list(files), ticket_type="ANA"),
+        ]
 
     def test_no_marker_where_files_output_unchanged(self):
-        tickets = self._load_real_tickets()
-        assert tickets, "應能載入至少一張既有票作樣本"
-
-        for ticket in tickets:
+        for ticket in self._unmarked_tickets():
             declared = file_conflict._raw_where_files(ticket)  # noqa: SLF001
-            # 既有票（本票落地當下）皆無標記，剝離後應與原始宣告逐字相同
             assert file_conflict.where_files(ticket) == declared
 
-    def test_type_derived_intent_matches_expected_direction(self):
-        tickets = self._load_real_tickets()
+    def test_marked_ticket_where_files_differs_from_raw(self):
+        """對照：有標記票剝離後與原始宣告不同。"""
+        ticket = _ticket_with_type(
+            ["lib/foo.py::read", "lib/bar.py"], ticket_type="IMP"
+        )
+        declared = file_conflict._raw_where_files(ticket)  # noqa: SLF001
+        assert file_conflict.where_files(ticket) == ["lib/foo.py", "lib/bar.py"]
+        assert file_conflict.where_files(ticket) != declared
 
-        for ticket in tickets:
-            declared = file_conflict.where_files(ticket)
-            if not declared:
-                continue
-            if ticket.get("type") == "ANA":
-                assert file_conflict.read_files(ticket) == declared
-                assert file_conflict.write_files(ticket) == []
-            else:
-                assert file_conflict.write_files(ticket) == declared
-                assert file_conflict.read_files(ticket) == []
+    def test_type_derived_intent_matches_expected_direction(self):
+        imp, ana = self._unmarked_tickets()
+        declared = file_conflict.where_files(ana)
+        assert file_conflict.read_files(ana) == declared
+        assert file_conflict.write_files(ana) == []
+        declared = file_conflict.where_files(imp)
+        assert file_conflict.write_files(imp) == declared
+        assert file_conflict.read_files(imp) == []
+
+    def test_marked_ticket_intent_overrides_type_default(self):
+        """對照：有標記票的 write/read 與型別預設方向不同。"""
+        imp = _ticket_with_type(
+            ["lib/foo.py::read", "lib/bar.py"], ticket_type="IMP"
+        )
+        assert file_conflict.read_files(imp) == ["lib/foo.py"]
+        assert file_conflict.write_files(imp) == ["lib/bar.py"]
 
 
 class TestIsDirectoryDeclaration:

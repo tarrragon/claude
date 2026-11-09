@@ -42,7 +42,7 @@ from lib import (  # noqa: E402
 )
 
 # 加入 lib 路徑以 import sync 排除 SOT manifest
-from lib.sync_exclude_manifest import GITIGNORE_EXPECTED  # noqa: E402
+from lib.sync_exclude_manifest import GITIGNORE_EXPECTED, NESTED_LOCAL_ONLY_NAMES  # noqa: E402
 
 EXIT_SUCCESS = 0
 
@@ -51,7 +51,14 @@ EXIT_SUCCESS = 0
 # （TASK_AVOIDANCE_FIX_MODE 曾只進本 hook REQUIRED 未進 manifest，即此漂移的實例）。
 # 格式：每個裸名加 `.claude/` 前綴，不加目錄尾斜線——check_missing_entries 以正規化
 # 裸名比對，`.claude/state` 與 `.claude/state/` 等價，且無斜線版為更寬鬆的合法規則。
-_MANIFEST_REQUIRED = frozenset(f".claude/{name}" for name in GITIGNORE_EXPECTED)
+# 巢狀名稱（NESTED_LOCAL_ONLY_NAMES）改用 `.claude/**/<名稱>`，才忽略得了 skills/<name>/ 底下的標記。
+def _required_entry(name: str) -> str:
+    if name in NESTED_LOCAL_ONLY_NAMES:
+        return f".claude/**/{name}"
+    return f".claude/{name}"
+
+
+_MANIFEST_REQUIRED = frozenset(_required_entry(name) for name in GITIGNORE_EXPECTED)
 
 # 非 .claude/ 範疇、不屬 sync manifest 的本機產物（專案根層測試覆蓋率報告）。
 # 不在 manifest 內故顯式補入，與 derive 來源分離標示。
@@ -126,8 +133,15 @@ def check_missing_entries(gitignore_entries: Set[str], logger) -> List[str]:
     normalized = {_normalize_ignore_token(e) for e in gitignore_entries}
     has_lock_wildcard = "*.lock" in gitignore_entries
     missing: List[str] = []
+    literal_entries = {e.lstrip("/") for e in gitignore_entries}
     for required in sorted(REQUIRED_GITIGNORE_ENTRIES):
         norm = _normalize_ignore_token(required)
+        if norm in NESTED_LOCAL_ONLY_NAMES:
+            # 巢狀名稱不可用正規化裸名比對（`.claude/<名稱>` 會被誤判為涵蓋）
+            if required in literal_entries or f"**/{norm}" in literal_entries:
+                continue
+            missing.append(required)
+            continue
         if norm in normalized:
             continue
         if norm.endswith(".lock") and has_lock_wildcard:

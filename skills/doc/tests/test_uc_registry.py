@@ -1,6 +1,7 @@
 """uc_registry 模組測試 — SSOT 解析、豁免判定、self-test、fingerprint。"""
 
 import json
+import os
 
 import pytest
 
@@ -146,6 +147,9 @@ class TestSelfTest:
         from doc_system.core.file_locator import FileLocator
 
         project_root = FileLocator.get_project_root()
+        spec_path = f"{project_root}/docs/app-use-cases.md"
+        if not os.path.exists(spec_path):
+            pytest.skip(f"宿主缺 {spec_path}（框架上游無此需求文件）")
         ok, message = uc_registry.self_test(project_root)
         assert ok is True, message
 
@@ -368,6 +372,9 @@ class TestGetUcSummary:
         from doc_system.core.file_locator import FileLocator
 
         project_root = FileLocator.get_project_root()
+        spec_path = f"{project_root}/docs/app-use-cases.md"
+        if not os.path.exists(spec_path):
+            pytest.skip(f"宿主缺 {spec_path}（框架上游無此需求文件）")
         summary = uc_registry.get_uc_summary("UC-01", project_root)
         assert summary is not None
         assert len(summary["main_flow"]) > 0

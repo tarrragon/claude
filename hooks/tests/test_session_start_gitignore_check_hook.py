@@ -190,15 +190,18 @@ def test_required_derived_from_manifest_sot():
     hook = load_hook_module()
     import sys
     sys.path.insert(0, str(HOOK_PATH.parent.parent / "lib"))
-    from sync_exclude_manifest import GITIGNORE_EXPECTED
+    from sync_exclude_manifest import GITIGNORE_EXPECTED, NESTED_LOCAL_ONLY_NAMES
 
-    # manifest 每個裸名都應以 `.claude/<name>` 形式出現在 REQUIRED
+    def entry(n):
+        return f".claude/**/{n}" if n in NESTED_LOCAL_ONLY_NAMES else f".claude/{n}"
+
+    # manifest 每個裸名都應以 `.claude/<name>`（巢狀名稱為 `.claude/**/<name>`）出現在 REQUIRED
     for name in GITIGNORE_EXPECTED:
-        assert f".claude/{name}" in hook.REQUIRED_GITIGNORE_ENTRIES, (
+        assert entry(name) in hook.REQUIRED_GITIGNORE_ENTRIES, (
             f"manifest 名稱 {name} 未被 derive 進 REQUIRED（雙 SOT 漂移）"
         )
     # 反向：REQUIRED 中 .claude/ 範疇者必源自 manifest（coverage/ 等非 .claude extra 除外）
-    manifest_derived = {f".claude/{n}" for n in GITIGNORE_EXPECTED}
+    manifest_derived = {entry(n) for n in GITIGNORE_EXPECTED}
     claude_scoped = {e for e in hook.REQUIRED_GITIGNORE_ENTRIES if e.startswith(".claude/")}
     assert claude_scoped == manifest_derived
 
@@ -297,3 +300,31 @@ def test_leading_slash_global_forms_cover(tmp_path):
         sub = tmp_path / f"s{i}"
         sub.mkdir()
         assert _lock_missing(hook, sub, line + "\n") == [], line
+
+
+# ---------------------------------------------------------------------------
+# .skill-sync-base：條目須實際忽略 skills/<name>/ 底下的標記
+# ---------------------------------------------------------------------------
+def test_skill_sync_base_required_entry_ignores_nested_marker(tmp_path):
+    hook = load_hook_module()
+    entries = [e for e in hook.REQUIRED_GITIGNORE_ENTRIES if e.endswith(".skill-sync-base")]
+    assert entries == [".claude/**/.skill-sync-base"]
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text("\n".join(entries) + "\n", encoding="utf-8")
+
+    def ignored(rel):
+        return subprocess.run(["git", "-C", str(tmp_path), "check-ignore", "-q", rel]).returncode == 0
+
+    assert ignored(".claude/skills/doc/.skill-sync-base")
+    assert not ignored(".claude/skills/doc/SKILL.md")
+
+
+def test_skill_sync_base_root_form_not_accepted_as_covering():
+    import logging
+    hook = load_hook_module()
+    log = logging.getLogger("t")
+    for bad in (".claude/.skill-sync-base", ".claude/skills/*/.skill-sync-base"):
+        assert ".claude/**/.skill-sync-base" in hook.check_missing_entries({bad}, log)
+    assert ".claude/**/.skill-sync-base" not in hook.check_missing_entries(
+        {".claude/**/.skill-sync-base"}, log
+    )
