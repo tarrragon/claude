@@ -33,24 +33,14 @@ from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.handoff_utils import (
     is_handoff_stale,
     is_ticket_completed,
-    is_ticket_missing,
-    resolve_target,
+    orphan_reason,
     scan_pending_handoffs,
 )
 
 
 def _orphan_reason(record_data: dict, ticket_id: str, root: Path) -> str:
-    """來源票與 target（若有）皆查無時回傳 stale 原因，否則回空字串。
-
-    migrate 改名或票被刪後，pending 檔指向不存在的票，
-    is_ticket_completed 對查無票回 False 使其永遠不被清理。查詢以主倉庫為準。
-    """
-    if not is_ticket_missing(ticket_id, root):
-        return ""
-    target_id = resolve_target(record_data)
-    if target_id and not is_ticket_missing(target_id, root):
-        return ""
-    return f"來源 ticket {ticket_id} 查無（無對應 ticket 檔案）"
+    """孤兒判準委派 handoff_utils.orphan_reason（與派發守衛的恢復模式判定共用）。查詢以主倉庫為準。"""
+    return orphan_reason(record_data, ticket_id, root)
 
 
 def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:

@@ -149,6 +149,8 @@ $ /worktree status
 
 前置驗證（Ticket completed、working tree 乾淨）通過後，**直接完成合併**，不再輸出 `git merge` 指令。
 
+票狀態取自 `ticket show <ticket-id> -r` 輸出的 frontmatter `status` 鍵（只認第 0 欄起首的鍵，what／why 等欄位內的 status 字樣不算）。讀不到狀態時不放行：查無票、ticket CLI 不存在／逾時／失敗、frontmatter 無 `status`，都以 `[阻擋] 無法讀取 Ticket <id> 的狀態：<原因>` 結束，exit 1。要在票完成前合併，改用 `--pre-acceptance <理由>`。
+
 | 步驟 | 行為 |
 |------|------|
 | 計算 | `git merge-tree --write-tree` 對「當下 main 與分支」做三方合併，只寫物件庫，不碰任何 index |
@@ -190,3 +192,4 @@ $ /worktree status
 | 舊名稱取用 | `worktree_manager` 以模組層 `__getattr__` 延遲轉出 cleanup 的函式（清單 `_CLEANUP_REEXPORTS`），`from worktree_manager import <名稱>` 仍可用；不以頂層匯入轉出，避免與 `cleanup_command` 互相匯入 |
 | 測試替換 | 要替換 cleanup 的函式，或 cleanup 函式查找的共用名稱，patch `cleanup_command`；patch `worktree_manager` 上的轉出名稱不影響 cleanup 行為。共用名稱同時被留在 `worktree_manager` 的函式查找時（例如 `get_worktree_list` 也被 `_validate_and_find_worktree` 使用），兩個模組都要 patch |
 | 測試注入點 | `WORKTREE_REMOVE_TIMEOUT_SECONDS` 只在 `cleanup_command`，不轉出 |
+| DerivedData 附帶清理 | `scripts/xcode_derived_data.py`：`remove_derived_data_for` 由 `_cleanup_execute` 在 worktree 移除後呼叫；注入點 `DERIVED_DATA_ROOT`、`PLATFORM`，替換這個模組本身的屬性。`tests/conftest.py` 的 autouse fixture 把 `DERIVED_DATA_ROOT` 指向 tmp，測試不會碰到真實的 `~/Library` |

@@ -25,7 +25,7 @@
 | SEARCH_WITH_SUFFIX_AND_SLUG_RE | version-tracking-consistency-guard-hook.py（TICKET_ID_REF_PATTERN） | 完整形，多層後綴＋選填 slug，無群組 |
 | SEARCH_BOUNDED_RE | command-entrance-gate-hook.py／reference-stability-rule8-guard-hook.py（VERSIONED_TICKET_PATTERN） | 完整形，無後綴，兩側 `\\b` 邊界，無群組（兩處定義原本字面即相同） |
 | MATCH_GROUPED_STR | file-ownership-guard-hook.py | 完整形，三個獨立群組（版本／wave／seq含後綴），原生字串（呼叫端用 `re.match`） |
-| FULL_ANCHORED_RE | version-tracking-consistency-guard-hook.py（CLOSED_BY_TICKET_ID_PATTERN） | 完整形，`^...$` 全字串錨定，三群組＋選填 slug 群組，與 ticket_system/constants.py 同構 |
+| FULL_ANCHORED_RE | version-tracking-consistency-guard-hook.py（CLOSED_BY_TICKET_ID_PATTERN；現由 close_resolution.py 使用） | 完整形，`^...$` 全字串錨定，三群組＋選填 slug 群組，與 ticket_system/constants.py 同構 |
 | BARE_START_BOUNDED_RE | phase4-decision-enforcement-hook.py | 裸形（無版本號），起始 `\\b` 邊界 |
 | BARE_BOTH_BOUNDED_RE | reference-stability-rule8-guard-hook.py（BARE_TICKET_PATTERN） | 裸形，兩側 `\\b` 邊界 |
 

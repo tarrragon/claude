@@ -119,7 +119,7 @@ acceptance-gate-hook 讀取 Ticket 的 `type` 和 `priority` 欄位，依下表�
 
 **觸發**：每次 `git commit` 成功後（PostToolUse/Bash Hook 偵測）
 
-> **Phase 1-3 自治 commit 不觸發**：Phase 1/2/3a 代理人自行 commit 時，因 subagent 禁止使用 AskUserQuestion，commit-handoff-hook 的 #11/#16 提醒自然跳過。這是預期行為——Phase 1-3 不需要 PM 介入 Handoff 決策。
+> **Phase 1-3 自治 commit 不觸發**：Phase 1/2/3a 代理人自行 commit 時，因 subagent 禁止使用 AskUserQuestion，post-git-commit-hook 的 #11/#16 提醒自然跳過。這是預期行為——Phase 1-3 不需要 PM 介入 Handoff 決策。
 
 **路由邏輯**（PM 必須先評估再選擇子場景）：
 
@@ -314,7 +314,7 @@ ticket handoff <id>
 
 ### #16 commit message 語義過濾（減少觸發）
 
-commit-handoff-hook 解析 commit message 前綴，依下表決定是否觸發 #16：
+post-git-commit-hook 解析 commit message 前綴，依下表決定是否觸發 #16：
 
 | commit message 前綴 | #16 行為 | 說明 |
 |--------------------|---------|------|

@@ -107,14 +107,14 @@ Ticket 標記完成
 | 建議追蹤 | 所有建議已處理（無 pending） | 要求補充 |
 | 品質標準 | 符合專案品質基線 | 建立 Ticket 修正 |
 | 文件記錄 | 工作日誌、Ticket 記錄完整 | 要求補充 |
-| 測試通過 | 相關測試 100% 通過 | 派發 incident-responder |
+| 測試通過 | 本票相關測試檔全綠（全套件由合併閘門確認） | 派發 incident-responder |
 | 無已知問題 | 無記錄的阻塞問題 | 處理阻塞或延後完成 |
 
 **驗收標準**：
 1. 所有驗收條件勾選完成
 2. 所有建議已處理（adopted/rejected/deferred，無 pending）
 3. 工作日誌有完整的執行記錄
-4. 相關測試 100% 通過
+4. 本票相關測試檔全綠（全套件由合併閘門確認）
 5. 代碼審查（如適用）通過
 6. 無遺留的已知問題
 7. 技術債務已記錄（如有）
@@ -169,7 +169,7 @@ Ticket 完成請求 → [派發] acceptance-auditor → 執行驗收檢查 → �
 - [ ] Ticket 狀態為 completed
 - [ ] 工作日誌記錄完整
 - [ ] 所有驗收條件都已滿足
-- [ ] 相關測試 100% 通過
+- [ ] 本票相關測試檔全綠（全套件由合併閘門確認）
 - [ ] 代碼質量符合要求
 - [ ] 無遺留的已知阻塞問題
 - [ ] 技術債務已正確記錄
@@ -197,6 +197,9 @@ Ticket 完成請求 → [派發] acceptance-auditor → 執行驗收檢查 → �
 - .claude/references/verification-hook-implementation.md - Hook 實作細節
 
 ---
+
+**Last Updated**: 2026-11-10
+**Version**: 1.0.1 - 驗收標準三處「相關測試 100% 通過」改為本票相關測試檔全綠、全套件由合併閘門確認（quality-baseline 規則 1；tarrragon/claude#104）
 
 **Last Updated**: 2026-03-11
 **Version**: 1.0.0 - 從 verification-framework.md 提取操作指引

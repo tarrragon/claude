@@ -389,7 +389,7 @@
 
 ## 場景 #11：Commit 後情境感知 Handoff
 
-**觸發條件**：每次 git commit 成功後（commit-handoff-hook 觸發）
+**觸發條件**：每次 git commit 成功後（post-git-commit-hook 觸發）
 
 **重要**：#16 必須在 #11 之前執行（Checkpoint 1.5 → Checkpoint 2）
 
@@ -591,7 +591,7 @@
 
 ## 場景 #16：錯誤學習經驗確認
 
-**觸發條件**：git commit 成功後（commit-handoff-hook 觸發）；docs:/chore:/style:/refactor:/test: 前綴 commit 自動跳過
+**觸發條件**：git commit 成功後（post-git-commit-hook 觸發）；docs:/chore:/style:/refactor:/test: 前綴 commit 自動跳過
 
 **執行順序**：#16 → #11（Checkpoint 1.5 → Checkpoint 2，不可跳過或顛倒）
 

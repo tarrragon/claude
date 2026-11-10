@@ -29,7 +29,8 @@ quality-baseline 規則 4）：
    status 仍為 active
 4. tag-todolist drift：最新 git tag 對應版本，在 todolist.yaml 中的
    status 非 completed
-5. closed 票延後承諾稽核：closed_by 缺失、非合法 Ticket ID，或
+5. closed 票延後承諾稽核：closed_by 缺失、不在其 close_reason 允許的值域
+   （lib/close_resolution.py），或
    close_reason_note 含延後語意（延後/移到/後續）卻無 ticket ID 引用
    （0.3.6-W1-006 稽核已知六張 0.3.0 歷史存量列豁免清單，技術債由
    0.3.6-W1-005 承接，避免重複噪音）
@@ -70,8 +71,8 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely, get_project_root, parse_ticket_frontmatter
+from lib.close_resolution import validate_closed_by
 from lib.ticket_id_pattern import (
-    FULL_ANCHORED_RE as CLOSED_BY_TICKET_ID_PATTERN,
     SEARCH_WITH_SUFFIX_AND_SLUG_RE as TICKET_ID_REF_PATTERN,
 )
 
@@ -85,12 +86,11 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 TAG_VERSION_PATTERN = re.compile(r"^v(\d+\.\d+\.\d+)$")
 COMPLETED_TICKET_STATUSES = {"completed", "closed"}
 
-# 漂移 5：closed 票延後承諾稽核用常數（SSOT：lib.ticket_id_pattern，
-# import 時已別名為本檔既有名稱；與 ticket_system/constants.py
-# TICKET_ID_PATTERN 同構，本 hook 不直接 import ticket_system，避免拉入
-# PyYAML 以外更大的 ticket_system 依賴鏈）。
+# 漂移 5：closed 票延後承諾稽核。closed_by 值域依 close_reason 限定，
+# 由 lib.close_resolution.validate_closed_by 判定（ticket close 與
+# set-closed-by 呼叫同一個函式，三端點值域一致）；本 hook 不直接 import
+# ticket_system，避免拉入 PyYAML 以外更大的 ticket_system 依賴鏈。
 DEFER_SEMANTIC_PATTERN = re.compile(r"延後|移到|後續")
-CLOSED_BY_NONE_TOKEN = "none"
 
 # 0.3.6-W1-006 全歷史稽核已知六張 0.3.0 存量票：延後語意但無 follow-up
 # ticket ID 引用，技術債由 0.3.6-W1-005 承接（非本 hook 職責），故豁免以
@@ -364,7 +364,7 @@ def scan_closed_tickets(project_root: Path, logger) -> list[dict]:
 
 
 def detect_closed_ticket_anomalies(closed_tickets: list[dict]) -> list[str]:
-    """偵測漂移 5：closed 票 closed_by 缺失/非合法 ID，或 note 含延後語意無 ticket ID 引用。
+    """偵測漂移 5：closed 票 closed_by 缺失/不在 close_reason 值域，或 note 含延後語意無 ticket ID 引用。
 
     已知六張 0.3.0 歷史存量（KNOWN_LEGACY_CLOSED_TICKET_IDS）列入豁免，
     避免每 session 重複噪音（0.3.6-W1-006 稽核結論）。
@@ -382,8 +382,9 @@ def detect_closed_ticket_anomalies(closed_tickets: list[dict]) -> list[str]:
             anomalies.append(f"{ticket_id}: closed_by 缺失")
             continue
 
-        if closed_by.lower() != CLOSED_BY_NONE_TOKEN and not CLOSED_BY_TICKET_ID_PATTERN.match(closed_by):
-            anomalies.append(f"{ticket_id}: closed_by 非合法 Ticket ID（{closed_by!r}）")
+        domain_error = validate_closed_by(frontmatter.get("close_reason"), closed_by)
+        if domain_error:
+            anomalies.append(f"{ticket_id}: {domain_error}")
             continue
 
         if DEFER_SEMANTIC_PATTERN.search(reason_note) and not TICKET_ID_REF_PATTERN.search(reason_note):

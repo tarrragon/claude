@@ -240,3 +240,223 @@ def test_warn_conflict_residue_silent_when_clean(tmp_path, capsys):
 
     assert residue == []
     assert "殘留" not in capsys.readouterr().out
+
+
+# ============================================================================
+# 衝突標記殘留掃描只涵蓋 pull 同步範圍（tarrragon/claude#88）
+# ============================================================================
+
+_MARKER_TEXT = "a\n<<<<<<< local\nLOCAL\n=======\nUPSTREAM\n>>>>>>> upstream\nc\n"
+
+# pull 不寫入的位置：local-only 目錄、local-only 檔名、pull 方向排除的根層目錄、
+# REMOTE_ONLY 名稱、root-anchored 的 logs/
+_OUT_OF_SCOPE_PATHS = (
+    "hook-logs/some-hook/run.log",
+    "handoff/pending/x.md",
+    "settings.local.json",
+    ".sync-conflicts/rules/conflict.md",
+    ".github/workflows/ci.yml",
+    "project-templates/FLUTTER.md",
+    "logs/session.log",
+    "skills/foo/__pycache__/mod.txt",
+)
+
+
+def _write(claude: Path, rel: str, text: str = _MARKER_TEXT) -> None:
+    target = claude / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+
+def test_scan_skips_out_of_scope_files_but_flags_in_scope(tmp_path):
+    """同一 fixture 內：範圍外檔案含標記不列出，範圍內檔案含標記列出（E2 正反對照）。"""
+    claude = tmp_path / ".claude"
+    for rel in _OUT_OF_SCOPE_PATHS:
+        _write(claude, rel)
+    _write(claude, "rules/conflict.md")
+    _write(claude, "skills/foo/state/kept.md")  # skill 內部同名 state/ 屬同步範圍
+
+    hits = pull.scan_conflict_marker_residue(claude)
+
+    assert hits == ["rules/conflict.md", "skills/foo/state/kept.md"]
+
+
+def test_scan_skips_symlinked_files(tmp_path):
+    claude = tmp_path / ".claude"
+    outside = tmp_path / "outside.md"
+    outside.write_text(_MARKER_TEXT, encoding="utf-8")
+    (claude / "rules").mkdir(parents=True)
+    (claude / "rules" / "link.md").symlink_to(outside)
+
+    assert pull.scan_conflict_marker_residue(claude) == []
+
+
+def test_check_residue_exit_zero_when_only_out_of_scope_hits(tmp_path, capsys):
+    """hook-logs 等非同步範圍檔案含標記字樣時，pull 收尾判定為成功。"""
+    claude = tmp_path / ".claude"
+    for rel in _OUT_OF_SCOPE_PATHS:
+        _write(claude, rel)
+    _write(claude, "rules/clean.md", "正常內容\n")
+
+    rc = pull.check_conflict_marker_residue(claude)
+
+    assert rc == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_check_residue_exit_one_lists_in_scope_hits(tmp_path, capsys):
+    claude = tmp_path / ".claude"
+    _write(claude, "hook-logs/run.log")
+    _write(claude, "hooks/broken-hook.py")
+
+    rc = pull.check_conflict_marker_residue(claude)
+
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "hooks/broken-hook.py" in err
+    assert "hook-logs" not in err
+
+
+def test_scan_function_importable_without_pull_module(tmp_path):
+    """掃描函式可由其他模組直接匯入，不需載入 pull 腳本或其執行狀態。"""
+    claude_root = Path(__file__).resolve().parent.parent.parent
+    code = (
+        "import sys; from pathlib import Path\n"
+        f"sys.path.insert(0, {str(claude_root)!r})\n"
+        "from lib.sync_conflict_residue import scan_conflict_marker_residue\n"
+        "print(scan_conflict_marker_residue(Path(sys.argv[1])))\n"
+    )
+    claude = tmp_path / ".claude"
+    _write(claude, "rules/conflict.md")
+    _write(claude, "hook-logs/run.log")
+
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(claude)],
+        capture_output=True, text=True, check=True,
+    )
+
+    assert result.stdout.strip() == "['rules/conflict.md']"
+    assert "sync_claude_pull" not in result.stderr
+
+
+# ============================================================================
+# 衝突輪後的 base 收斂：pending base 與 --resolve-done（tarrragon/claude#88）
+# ============================================================================
+
+import json  # noqa: E402
+
+
+def _state(claude: Path) -> dict:
+    return json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
+
+
+def _conflict_round(tmp_path: Path):
+    """建立上游 base→head 與本地同行修改，跑一輪 pull 產生衝突。"""
+    upstream = tmp_path / "upstream"
+    _init_repo(upstream)
+    (upstream / "rules").mkdir()
+    (upstream / "rules" / "conflict.md").write_text("a\nb\nc\n", encoding="utf-8")
+    base = _commit_all(upstream, "base")
+    (upstream / "rules" / "conflict.md").write_text("a\nUPSTREAM\nc\n", encoding="utf-8")
+    head = _commit_all(upstream, "head")
+
+    project_root = tmp_path / "proj"
+    claude = project_root / ".claude"
+    (claude / "rules").mkdir(parents=True)
+    (claude / "rules" / "conflict.md").write_text("a\nLOCAL\nc\n", encoding="utf-8")
+    (claude / ".sync-state.json").write_text(
+        json.dumps({"last_synced_base_sha": base}), encoding="utf-8"
+    )
+    pull._sync_with_backup(project_root, upstream)
+    return upstream, project_root, claude, base, head
+
+
+def _second_upstream_round(upstream: Path, project_root: Path) -> str:
+    """上游再前進一個與衝突檔無關的 commit，跑第二輪 pull。"""
+    (upstream / "rules" / "other.md").write_text("new\n", encoding="utf-8")
+    head2 = _commit_all(upstream, "head2")
+    pull._sync_with_backup(project_root, upstream)
+    return head2
+
+
+def test_conflict_round_records_pending_base_without_advancing(tmp_path):
+    _, _, claude, base, head = _conflict_round(tmp_path)
+
+    state = _state(claude)
+    assert "<<<<<<< " in (claude / "rules" / "conflict.md").read_text(encoding="utf-8")
+    assert state["last_synced_base_sha"] == base
+    assert state["pending_base_sha"] == head
+
+
+def test_resolve_done_refuses_while_markers_remain(tmp_path, capsys):
+    _, _, claude, base, head = _conflict_round(tmp_path)
+    capsys.readouterr()
+
+    rc = pull.resolve_done(claude)
+
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "rules/conflict.md" in err
+    assert _state(claude)["last_synced_base_sha"] == base
+    assert _state(claude)["pending_base_sha"] == head
+
+
+def test_resolve_done_promotes_pending_and_next_pull_does_not_rereport(tmp_path):
+    """解完衝突 → --resolve-done 推進 base → 下一輪以新 base 合併，已解衝突不重報。"""
+    upstream, project_root, claude, _, head = _conflict_round(tmp_path)
+    (claude / "rules" / "conflict.md").write_text("a\nRESOLVED\nc\n", encoding="utf-8")
+
+    assert pull.resolve_done(claude) == 0
+    assert _state(claude)["last_synced_base_sha"] == head
+    assert "pending_base_sha" not in _state(claude)
+
+    head2 = _second_upstream_round(upstream, project_root)
+
+    assert (claude / "rules" / "conflict.md").read_text(encoding="utf-8") == "a\nRESOLVED\nc\n"
+    assert _state(claude)["last_synced_base_sha"] == head2
+    assert "pending_base_sha" not in _state(claude)
+
+
+def test_without_resolve_done_next_pull_rereports_resolved_conflict(tmp_path):
+    """對照組：不執行 --resolve-done，下一輪仍以舊 base 合併，已解的衝突重新出現。"""
+    upstream, project_root, claude, base, _ = _conflict_round(tmp_path)
+    (claude / "rules" / "conflict.md").write_text("a\nRESOLVED\nc\n", encoding="utf-8")
+
+    _second_upstream_round(upstream, project_root)
+
+    assert "<<<<<<< " in (claude / "rules" / "conflict.md").read_text(encoding="utf-8")
+    assert _state(claude)["last_synced_base_sha"] == base
+
+
+def test_resolve_done_without_pending_is_noop(tmp_path):
+    claude = tmp_path / ".claude"
+    claude.mkdir()
+    (claude / ".sync-state.json").write_text(
+        json.dumps({"last_synced_base_sha": "abc"}), encoding="utf-8"
+    )
+
+    assert pull.resolve_done(claude) == 0
+    assert _state(claude) == {"last_synced_base_sha": "abc"}
+
+
+def test_warn_pending_base_hints_only_when_pending(tmp_path, capsys):
+    claude = tmp_path / ".claude"
+    claude.mkdir()
+    (claude / ".sync-state.json").write_text("{}", encoding="utf-8")
+    assert pull.warn_pending_base(claude) is None
+    assert "--resolve-done" not in capsys.readouterr().out
+
+    pull.write_pending_base_sha(claude, "f" * 40)
+    assert pull.warn_pending_base(claude) == "f" * 40
+    assert "--resolve-done" in capsys.readouterr().out
+
+
+def test_parse_args_rejects_resolve_done_with_audit_or_bump():
+    assert pull.parse_args(["--resolve-done"]).resolve_done is True
+    for extra in (["--audit"], ["--bump"]):
+        try:
+            pull.parse_args(["--resolve-done", *extra])
+        except SystemExit as exc:
+            assert exc.code == 2
+        else:
+            raise AssertionError(f"--resolve-done 與 {extra} 併用應被拒絕")

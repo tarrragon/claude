@@ -636,7 +636,7 @@ ANA complete 前置條件追加：若 Solution 章節含 IMP/DOC/ANA spawn 規�
 
 ### C1. close 合法理由（frontmatter 必填 close_reason）
 
-執行 `ticket track close <id>` 時，`close_reason` 必填，且必須為以下 6 枚舉之一：
+執行 `ticket track close <id>` 時，`close_reason` 必填，且必須為下表枚舉之一（權威：`ticket_system/constants.py` 的 `CLOSE_REASONS`）。`--resolved-by` 的值域依 reason 限定：`superseded_by`、`duplicate` 填 ticket ID；`transferred_to_issue` 填 issue 參照 `owner/repo#N`；其餘填 `none` 或 ticket ID（close、`set-closed-by` 與 session 啟動稽核共用 `.claude/lib/close_resolution.py`）：
 
 | close_reason | 語意 | 使用要求 |
 |-------------|------|---------|
@@ -646,6 +646,7 @@ ANA complete 前置條件追加：若 Solution 章節含 IMP/DOC/ANA spawn 規�
 | `not_executable_knowledge_captured` | 無法執行且知識已轉移至 error-pattern | 必須附 error-pattern 檔案路徑 |
 | `duplicate` | 與既有 ticket 重複 | 必須附重複 ticket ID |
 | `cancelled_by_user` | 用戶明示取消 | 必須在執行日誌附理由（一句即可） |
+| `transferred_to_issue` | 工作移交 framework issue 承接 | `--resolved-by` 填 issue 參照 `owner/repo#N`；配方見 `.claude/skills/framework-issue/references/ticket-intake.md`〈步驟五：ticket 處置〉 |
 
 **回溯 close（retrospective）**：既有 closed ticket 若無 close_reason，允許補填 `unknown`，但需標記 `retrospective: true` 供 audit 使用。
 

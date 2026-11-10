@@ -62,7 +62,14 @@ python3 .claude/skills/framework-issue/scripts/close_issue.py <issue-ref> \
   [--reason completed|"not planned"] [--comment "說明"]
 ```
 
-前置檢查 body 是否已有非空的 fix-versions 版本號註記；缺少時 exit 3，提示先 `sync-push` 取得框架版本號並以 `fix-version` 註記。**Why**：沒有版本號，其他 consumer 無從得知此 issue 對應框架的哪次同步；繞過閘門在網頁手動關閉，會讓查重 SOP 誤判此 issue 已有版本可追溯。
+兩種關閉的前置條件不同，追溯載體也不同：
+
+| 關閉原因 | 前置條件 | 追溯載體 | 不符時 |
+|---------|---------|---------|-------|
+| `completed`（或省略 `--reason`） | body 已有非空的 fix-versions 版本號註記 | 修復版本表（`fix-version` 寫入） | exit 3，提示先 `sync-push` 取得框架版本號並以 `fix-version` 註記 |
+| `"not planned"`（過時、非框架、重複等不修關閉） | `--comment` 寫明判定理由；本地 `.claude/VERSION` 可讀 | 關閉留言：判定理由 + 工具自動附上的「不修關閉，判定依據框架版本：<版本>」 | exit 3，提示補 `--comment` 或確認 VERSION 可讀 |
+
+**Why**：修復版本表回答「哪一版修好」，沒有版本號，其他 consumer 無從得知此 issue 對應框架的哪次同步；繞過閘門在網頁手動關閉，會讓查重 SOP 誤判此 issue 已有版本可追溯。不修關閉沒有「修好的版本」，若寫進修復版本表，讀者以表判斷修復版本時會誤讀；它要留下的是「依據哪一版的框架判定不修」，所以改記在關閉留言，版本由工具讀 `.claude/VERSION` 填入，不靠人工記得寫。
 
 ## Graceful Degradation
 
@@ -83,3 +90,5 @@ exit code：`0` 成功、`3` 降級、其餘 gh 原始錯誤碼經 `run_gh` 轉�
 | gh 未登入 | 任一命令 | stderr 提示 `gh auth login`，exit 3 |
 | 註記修復版本號 | `fix-version <ref> --summary "..."` | 版本號取自 `.claude/VERSION`，exit 0 |
 | 關閉但未註記版本號 | `close <ref>` | stderr 提示先執行 fix-version，exit 3 |
+| 不修關閉 | `close <ref> --reason "not planned" --comment "非框架問題"` | 不檢查修復版本表；關閉留言附判定依據的框架版本，exit 0 |
+| 不修關閉但未給理由 | `close <ref> --reason "not planned"` | stderr 提示補 `--comment`，exit 3 |

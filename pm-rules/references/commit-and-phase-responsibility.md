@@ -26,7 +26,7 @@
 | 禁止 push | push 權限保留給 PM，避免分支衝突 |
 | 禁止 amend | 每次 commit 獨立，不修改歷史 |
 
-**Hook 相容性**：commit-handoff-hook 在 subagent 中觸發時，因 subagent 禁止使用 AskUserQuestion，Handoff 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 決策。
+**Hook 相容性**：post-git-commit-hook 在 subagent 中觸發時，因 subagent 禁止使用 AskUserQuestion，Handoff 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 決策。
 
 ---
 

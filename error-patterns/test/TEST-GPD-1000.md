@@ -13,7 +13,7 @@ status: active
 - **分類**: 測試設計（test）
 - **風險等級**: 中（合併閘門會攔下，不會進入主幹；但盤點會漏，紅燈出現在看似無關的測試檔，排查要多一輪）
 - **來源版本**: 0.5.0
-- **相關 Pattern**: PC-BAL-061（驗收範圍只看 where.files，漏掉範圍外依賴同一行為的測試）
+- **相關 Pattern**: PC-BAL-061（驗收範圍只看 where.files，漏掉範圍外依賴同一行為的測試）；TEST-GPD-1008（App hidden 時 `framesEnabled` 為 false，`pumpAndSettle` 一次 pump 即返回）；TEST-LLM-001（等待真實 I/O 時沒有排程中的幀，`pumpAndSettle` 立即返回、畫面停在 loading）
 
 ---
 

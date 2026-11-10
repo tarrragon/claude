@@ -4,7 +4,7 @@ description: "Use this skill for managing git worktrees for Ticket-based develop
 argument-hint: "<subcommand> [args]"
 allowed-tools: Bash, Read, Write, Edit
 metadata:
-  version: 1.6.7
+  version: 1.7.0
 ---
 
 # Worktree Management SKILL
@@ -99,11 +99,11 @@ cc runtime 派發 `isolation: "worktree"` 的 subagent 時自動建立隔離 wor
 - `create`：建立 worktree，見 `references/subcommands.md`〈create — 建立 Worktree〉
 - `status`：查看 worktree 狀態，見 `references/subcommands.md`〈status — 查看 Worktree 狀態〉
 - `merge`：前置驗證後以隔離索引 CAS 直接完成合併（支援 `--branch <分支名>`、`--pre-acceptance <理由>`、`--message <合併訊息>`、`--ticket <票號>`；落後 base 僅提示）（不再輸出 `git merge` 指令）；含 `pre_merge_check` 合併前檢查掛點（簽名、時機、失敗語意、重試成本），見 `references/subcommands.md`〈merge — 以隔離索引 CAS 合併分支〉
-- `cleanup`：三閘門安全清理。無參數為掃描模式；`<ticket-id>` 或 `--branch <分支名>`（擇一，後者用於 `worktree-agent-<id>`）為精確模式；`--force` 略過 Level 2／3 警告，Level 1 未 commit 不可繞過；移除逾時上限 300 秒（`WORKTREE_REMOVE_TIMEOUT_SECONDS`），實際耗時寫入 `worktree-merge.log`；移除失敗時僅在「status 全為 tracked 刪除且 HEAD 為 main 祖先」兩條件皆成立才以 `remove --force` 收尾並 prune，否則非 0 並列出不成立項；worktree 被鎖時停手回報鎖原因與 pid 存活，`--unlock` 明示才解鎖；半刪 worktree（status 全為 tracked 刪除且 HEAD 為 main 祖先）重跑 cleanup 時 Level 1 放行並走收尾，有 untracked 或 modified 仍擋下；語意變更：`git branch -d` 失敗時 rc 由原本的 0 改為 1；實作在 `scripts/cleanup_command.py`，模組位置與測試替換規則見 `references/subcommands.md`〈cleanup — 模組位置〉
+- `cleanup`：三閘門安全清理。無參數為掃描模式；`<ticket-id>` 或 `--branch <分支名>`（擇一，後者用於 `worktree-agent-<id>`）為精確模式；`--force` 略過 Level 2／3 警告，Level 1 未 commit 不可繞過，git status 失敗（非零、逾時、找不到 git）時同樣擋下並印出原因；Level 2 在分支 tip 已在遠端 ref 上、或已併入本機 base 時通過，兩者皆否才警告；merge 前置的 working tree 檢查共用同一判定，status 失敗時同樣阻擋；移除逾時上限 300 秒（`WORKTREE_REMOVE_TIMEOUT_SECONDS`），實際耗時寫入 `worktree-merge.log`；移除失敗時僅在「status 全為 tracked 刪除且 HEAD 為 main 祖先」兩條件皆成立才以 `remove --force` 收尾並 prune，否則非 0 並列出不成立項；worktree 被鎖時停手回報鎖原因與 pid 存活，`--unlock` 明示才解鎖；例外是鎖的 pid 為呼叫者的祖先行程（派發方 session 自己持有），且分支已交回（有自己的提交並已併入 main），此時自動解鎖並印出判定；祖先持有但分支尚未交回時照舊停手，並註明代理人可能仍在執行；半刪 worktree（status 全為 tracked 刪除且 HEAD 為 main 祖先）重跑 cleanup 時 Level 1 放行並走收尾，有 untracked 或 modified 仍擋下；語意變更：`git branch -d` 失敗時 rc 由原本的 0 改為 1；worktree 移除後，macOS 上一併刪除 Xcode DerivedData 中 `info.plist` 的 `WorkspacePath` 位於該 worktree 內的目錄，並逐一印出路徑，其他 DerivedData 不動，刪除失敗只警告、不改 rc（`scripts/xcode_derived_data.py`）；實作在 `scripts/cleanup_command.py`，模組位置與測試替換規則見 `references/subcommands.md`〈cleanup — 模組位置〉
 
 ### 合併前全套件（merge 預設行為）
 
-`merge` 預設先取得 heavy 名額（改動不在全套件範圍內者不取），再於名額內執行 commit-tree、於合併 commit 的 detached worktree 快照內跑全套件、update-ref，update-ref 完成或中止後才釋放，檢查窗口不含排隊時間；快照內套件經 `run-with-timeout.py` 但以環境標記 `CLAUDE_SLOT_HELD_BY` 免重複取得名額；紅燈即不合併、列出失敗項、exit 1，快照無論成敗皆移除。實作在 `scripts/merge_gate.py`。
+`merge` 預設先取得 heavy 名額（改動不在全套件範圍內者不取），再於名額內執行 commit-tree、於合併 commit 的 detached worktree 快照內跑全套件、update-ref，update-ref 完成或中止後才釋放，檢查窗口不含排隊時間；快照內套件經 `run-with-timeout.py` 但以環境標記 `CLAUDE_SLOT_HELD_BY` 免重複取得名額；紅燈即不合併、列出失敗項、exit 1，快照無論成敗皆移除；移除用的 git 逾時或無法啟動時，寫 stderr 與 `worktree-merge.log`（`[合併閘門] WARNING：快照清理…`），閘門仍回報原本的結果，目錄最後仍在時另印「快照未移除：<路徑>」。實作在 `scripts/merge_gate.py`。
 
 | 改動範圍（相對當下 main） | 跑的套件 |
 |--------------------------|---------|
@@ -133,6 +133,7 @@ suites:
 - 宣告檔存在：宣告的套件**取代**上表第一列的 Flutter 對應（不疊加）；`.claude/` 下的對應固定保留、不可宣告。宣告的前綴與檔名同時視為「已對應」，不列入未對應路徑警告。套件順序為宣告順序，排在 hooks、scripts、skill 之前。
 - `summary`／`failure` 有填時優先使用；未填沿用 pytest／flutter 規則，再退回輸出尾段（失敗項）或「無摘要」。宣告命令的輸出格式由專案決定（如 bun：`summary: '^\s*\d+ (pass|fail)'`、`failure: '\(fail\)'`）。
 - `changed_files`（選填正規式）：套件只在「本次改動中有路徑落在 `prefixes`／`files` 內且符合此正規式」時入選；執行時閘門把這些路徑中仍存在於快照者附加到 `command` 尾端。符合檔全數已刪除時該套件免跑，輸出一行 `套件 <名>：免跑｜...`（狀態字樣為「免跑」，與「綠燈」區分）。未宣告者 argv 不變。例：`command: [fvm, dart, format, --output=none, --set-exit-if-changed]` 搭配 `changed_files: '\.dart$'`。
+- 宣告檔本身被改動：閘門比對合併基準與合併 commit 的宣告，`prefixes`、`files`、`command`、`artifacts`、`changed_files` 任一不同（含新增）的套件加選，並印一行 `宣告檔改動了命令或範圍，加選套件：...`；只改註解或 `summary`／`failure` 不加選。基準宣告無法解析時加選宣告內全部套件，並印 WARNING 寫明原因。宣告了 `changed_files` 的套件，本次若無符合的改動檔，仍依上一條免跑。
 - 宣告檔不存在：沿用內建 Flutter 對應，並印一行 `[合併前測試] INFO：未找到專案宣告 ...`。
 - 格式錯誤（YAML 無法解析、缺 `command`、`prefixes` 與 `files` 皆空、使用保留名、`artifacts` 缺 `generate`、`summary`／`failure`／`changed_files` 非字串或無法編譯為正規式）：閘門判紅（fail-closed），訊息指名檔案與欄位，不退回內建對應。
 

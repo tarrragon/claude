@@ -4,7 +4,9 @@ import argparse
 from unittest.mock import patch
 
 from doc_system.commands.test_map import execute, _scan_test_files, _load_traceability_tests
+from doc_system.core.constants import TEST_SCAN_DIRS, TEST_SCAN_DIRS_CONFIG_KEY
 from doc_system.core.file_locator import FileLocator
+from doc_system.core.tracking_schema import TRACEABILITY_SCHEMA
 
 
 def _setup_project(tmp_path, test_content=None, scan_dir="test"):
@@ -150,3 +152,104 @@ class TestLoadTraceabilityTests:
         )
 
         assert _load_traceability_tests(str(tmp_path)) == {}
+
+
+def _run_test_map(project_root, capsys, uc_id=None):
+    with patch.object(FileLocator, "get_project_root", return_value=project_root):
+        execute(argparse.Namespace(uc_id=uc_id))
+    return capsys.readouterr()
+
+
+def _uc_count(stdout, uc_id):
+    line = next(l for l in stdout.splitlines() if l.startswith(uc_id))
+    return int(line.split()[-1])
+
+
+def _write_traceability(tmp_path, extra=""):
+    (tmp_path / "docs" / "traceability.yaml").write_text(
+        'version: "1.0"\nlast_updated: "2026-11-09"\nmappings: []\n' + extra,
+        encoding="utf-8",
+    )
+
+
+class TestScanDirs:
+    """掃描目錄：預設含 tests/、可由 traceability.yaml 覆寫、零命中時警示。"""
+
+    def test_default_dirs_keep_flutter_layout_and_add_tests(self):
+        assert {"test", "integration_test", "tests"} <= set(TEST_SCAN_DIRS)
+
+    def test_config_key_is_allowed_by_traceability_schema(self):
+        assert TEST_SCAN_DIRS_CONFIG_KEY in TRACEABILITY_SCHEMA["top_level_keys"]
+
+    def test_tests_dir_scanned_by_default(self, tmp_path, capsys):
+        project_root = _setup_project(
+            tmp_path, {"test_import.py": "# UC-01 import"}, scan_dir="tests"
+        )
+
+        result = _run_test_map(project_root, capsys, "UC-01")
+
+        assert _uc_count(result.out, "UC-01") == 1
+        assert "WARNING" not in result.err
+
+    def test_configured_dirs_replace_defaults(self, tmp_path, capsys):
+        """同一批 fixture：未設定時掃到 test/，設定 [spec] 後只掃 spec/。"""
+        project_root = _setup_project(tmp_path, {"a_test.dart": "// UC-01"}, scan_dir="test")
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "b_test.js").write_text("// UC-01 UC-02")
+
+        without_config = _run_test_map(project_root, capsys).out
+        _write_traceability(tmp_path, "test_scan_dirs:\n  - spec\n")
+        with_config = _run_test_map(project_root, capsys).out
+
+        assert without_config != with_config
+        assert "test/unit/a_test.dart" in without_config
+        assert "b_test.js" not in without_config
+        assert "spec/b_test.js" in with_config
+        assert "a_test.dart" not in with_config
+        assert _uc_count(with_config, "UC-02") == 1
+
+    def test_zero_scan_hits_warns_with_scanned_dirs(self, tmp_path, capsys):
+        project_root = _setup_project(
+            tmp_path, {"unrelated.py": "# no uc here"}, scan_dir="tests"
+        )
+
+        result = _run_test_map(project_root, capsys)
+
+        assert "檔案掃描零命中" in result.err
+        assert "2 個 UC" in result.err
+        assert "test/（不存在）" in result.err
+        assert "integration_test/（不存在）" in result.err
+        assert "tests/（1 個測試檔）" in result.err
+
+    def test_no_warning_when_any_scan_hits(self, tmp_path, capsys):
+        project_root = _setup_project(tmp_path, {"t.dart": "// UC-01"})
+
+        result = _run_test_map(project_root, capsys)
+
+        assert _uc_count(result.out, "UC-02") == 0
+        assert "WARNING" not in result.err
+
+    def test_no_warning_when_all_ucs_backfilled(self, tmp_path, capsys):
+        """全數 UC 由 traceability.yaml 回填時沒有改走掃描，不算零命中。"""
+        project_root = _setup_project(tmp_path)
+        (tmp_path / "docs" / "traceability.yaml").write_text(
+            'version: "1.0"\nlast_updated: "2026-11-09"\nmappings:\n'
+            "  - {spec: SPEC-001, usecase: UC-01, title: A, tests: [x_test.py]}\n"
+            "  - {spec: SPEC-001, usecase: UC-02, title: B, tests: [y_test.py]}\n",
+            encoding="utf-8",
+        )
+
+        result = _run_test_map(project_root, capsys)
+
+        assert _uc_count(result.out, "UC-01") == 1
+        assert "WARNING" not in result.err
+
+    def test_invalid_config_warns_and_falls_back_to_defaults(self, tmp_path, capsys):
+        project_root = _setup_project(tmp_path, {"t.dart": "// UC-01"})
+        _write_traceability(tmp_path, "test_scan_dirs: spec\n")
+
+        result = _run_test_map(project_root, capsys, "UC-01")
+
+        assert "test_scan_dirs 須為非空的目錄字串清單" in result.err
+        assert _uc_count(result.out, "UC-01") == 1

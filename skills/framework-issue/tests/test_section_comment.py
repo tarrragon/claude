@@ -2359,3 +2359,194 @@ def test_todo_filters_by_consumer(capsys):
     rows = json.loads(capsys.readouterr().out)
     assert len(rows) == 1
     assert rows[0]["owner"] == "flutter-balance-77"
+
+
+# --- todo 多表格區段（3.1.0-W1-043）：fixture 為 tarrragon/claude#77、#89 區段原文 ---
+
+_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+def _fixture_body(issue_number: int) -> str:
+    return (_FIXTURES_DIR / f"todo_section_issue{issue_number}.md").read_text(encoding="utf-8")
+
+
+def _count_table_data_rows(body: str) -> int:
+    """獨立於受測解析器計算表格資料列數：`|` 起訖、非表頭、非分隔列。"""
+    count = 0
+    for line in body.splitlines():
+        s = line.strip()
+        if not (s.startswith("|") and s.endswith("|")):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if cells[0] == "來源票" or all(set(c) <= set("-:") and c for c in cells):
+            continue
+        count += 1
+    return count
+
+
+@pytest.mark.parametrize(
+    "issue_number, expected_rows, must_include",
+    [
+        (77, 25, ["0.2.1-W3-1166", "0.2.1-W3-1094"]),
+        (89, 5, ["`0.2.1-W3-1242`", "`0.2.1-W3-1094`"]),
+    ],
+)
+def test_todo_aggregates_every_table_in_multi_table_section(
+    capsys, issue_number, expected_rows, must_include
+):
+    body = _fixture_body(issue_number)
+    assert _count_table_data_rows(body) == expected_rows
+    with mock.patch.object(
+        section_comment.subprocess,
+        "run",
+        side_effect=_todo_side_effect({issue_number: [{"id": 1, "body": body}]}),
+    ):
+        rc = section_comment.main(["todo", "--issue", str(issue_number), "--json"])
+    assert rc == 0
+
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == expected_rows
+    sources = {row["來源票"] for row in rows}
+    for ticket in must_include:
+        assert ticket in sources
+
+
+def test_todo_rows_from_content_covers_every_table():
+    """寫入端的待辦登記同步與 todo 聚合讀到同一組列。"""
+    body = _fixture_body(77)
+    name = "待辦與來源（flutter-balance）"
+    _, _, content = body.partition("\n")
+    assert len(section_comment._todo_rows_from_content(name, content)) == 25
+
+
+def test_validate_todo_table_checks_rows_of_later_tables():
+    """第二張待辦表的列也受驗證：只驗首張時，非法狀態值會被放行。"""
+    content = (
+        "### 甲\n\n"
+        "| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+        "|--------|--------|----------------|--------|------|------|\n"
+        "| imp-1 | a | 1 | P2 | 本版 | 待裁票 |\n\n"
+        "### 乙\n\n"
+        "| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+        "|--------|--------|----------------|--------|------|------|\n"
+        "| imp-2 | b | 1 | P2 | 本版 | 自由文字 |\n"
+    )
+    with pytest.raises(ValueError, match="自由文字"):
+        section_comment.validate_todo_table("待辦與來源（x）", content)
+
+
+def test_todo_skips_only_the_non_todo_table_and_warns(capsys):
+    content = (
+        "## 待辦與來源（mixed）\n\n"
+        "| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+        "|--------|--------|----------------|--------|------|------|\n"
+        "| imp-1 | a | 1 | P2 | 本版 | 待裁票 |\n\n"
+        "| 項目 | 說明 |\n"
+        "|------|------|\n"
+        "| x | 輔助表格 |\n"
+    )
+    comments = [_todo_section_comment(1, "待辦與來源（mixed）", "flutter-balance-77", content)]
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_todo_side_effect({81: comments})
+    ):
+        rc = section_comment.main(["todo", "--issue", "81", "--json"])
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert [row["來源票"] for row in json.loads(captured.out)] == ["imp-1"]
+    assert "略過該表" in captured.err
+    assert "項目" in captured.err
+
+
+# --- 空內容拒絕與 dedup 涵蓋不完整的結束碼（3.1.0-W1-065，tarrragon/claude#95） ---
+
+_BLANK_CONTENTS = ["", "  \n\t\n"]
+
+
+def _write_and_run(tmp_path, command_args, content):
+    content_file = tmp_path / "content.md"
+    content_file.write_text(content, encoding="utf-8")
+    with mock.patch.object(
+        section_comment.subprocess,
+        "run",
+        return_value=_completed(
+            stdout=json.dumps({"id": 7, "html_url": "https://github.com/tarrragon/claude/issues/81#issuecomment-7"})
+        ),
+    ) as run:
+        rc = section_comment.main([*command_args, "--content-file", str(content_file)])
+    return rc, run
+
+
+@pytest.mark.parametrize("content", _BLANK_CONTENTS)
+def test_add_rejects_blank_content_without_posting(tmp_path, capsys, content):
+    rc, run = _write_and_run(
+        tmp_path, ["add", "81", "--owner", "test-session-1a2b3c4d", "--name", "方案評估"], content
+    )
+    assert rc == gh_common.EXIT_DEGRADED
+    assert run.call_count == 0
+    assert "為空或只有空白" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("content", _BLANK_CONTENTS)
+def test_observe_rejects_blank_content_without_posting(tmp_path, capsys, content):
+    rc, run = _write_and_run(
+        tmp_path, ["observe", "81", "--summary", "s", "--session", "a"], content
+    )
+    assert rc == gh_common.EXIT_DEGRADED
+    assert run.call_count == 0
+    assert "為空或只有空白" in capsys.readouterr().err
+
+
+def test_observe_non_blank_content_still_posts(tmp_path):
+    """對照：同一路徑換成非空內容即送出，證明拒絕只由內容是否空白決定。"""
+    rc, run = _write_and_run(
+        tmp_path, ["observe", "81", "--summary", "s", "--session", "a"], " 有內容 "
+    )
+    assert rc == 0
+    assert run.call_count == 1
+
+
+def _dedup_run_with_failing_token(failing_token):
+    def _run(args, **kwargs):
+        if args[:3] == ["gh", "search", "issues"]:
+            if args[-1] == failing_token:
+                return _completed(returncode=1, stderr="network error")
+            return _completed(stdout=json.dumps([]))
+        if args[:2] == ["gh", "api"] and "--paginate" in args:
+            return _completed(stdout=json.dumps([]))
+        raise AssertionError(f"未預期的 gh 呼叫：{args}")
+
+    return _run
+
+
+def test_dedup_with_skipped_token_exits_nonzero_and_lists_token_and_reason(capsys):
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_dedup_run_with_failing_token("壞詞")
+    ):
+        rc = section_comment.main(["dedup", "--keywords", "壞詞", "好詞"])
+
+    captured = capsys.readouterr()
+    lines = captured.out.rstrip("\n").splitlines()
+    assert rc == gh_common.EXIT_DEGRADED
+    assert any(line.startswith("略過的 token「壞詞」：") and "network error" in line for line in lines)
+    assert not any("「好詞」：" in line for line in lines)
+    assert lines[-1] == "查詢失敗略過的 token 數：1"
+    assert "查重涵蓋不完整" in captured.err
+
+
+def test_dedup_without_skipped_token_exits_zero():
+    """對照：同一組關鍵字全部查詢成功時回 0。"""
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_dedup_run_with_failing_token("不存在的詞")
+    ):
+        rc = section_comment.main(["dedup", "--keywords", "壞詞", "好詞"])
+    assert rc == 0
+
+
+def test_search_duplicates_keeps_count_interface_for_init():
+    """init 沿用的 search_duplicates 仍回傳計數（查重不阻擋 init）。"""
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_dedup_run_with_failing_token("壞詞")
+    ):
+        _, skipped = section_comment.search_duplicates(["壞詞"])
+    assert skipped == 1

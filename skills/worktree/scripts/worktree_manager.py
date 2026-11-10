@@ -28,8 +28,6 @@ try:
         DEFAULT_BASE_BRANCH,
         TICKET_QUERY_TIMEOUT,
         TICKET_COMPLETED_STATUS,
-        CLEANUP_OUTPUT_WIDTH,
-        BRANCH_FORCE_DELETE_FLAG,
         MACOS_XCCONFIG_TEMPLATES,
     )
     from .messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
@@ -52,8 +50,6 @@ except ImportError:
         DEFAULT_BASE_BRANCH,
         TICKET_QUERY_TIMEOUT,
         TICKET_COMPLETED_STATUS,
-        CLEANUP_OUTPUT_WIDTH,
-        BRANCH_FORCE_DELETE_FLAG,
         MACOS_XCCONFIG_TEMPLATES,
     )
     from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
@@ -114,6 +110,33 @@ def _resolve_project_root() -> Path:
         "或在 git 工作目錄中執行 worktree 命令。"
     )
 
+
+CALLER_CWD_ENV = "SKILL_CLI_CALLER_CWD"
+
+
+def restore_caller_cwd() -> None:
+    """還原呼叫者的 cwd，使相對路徑引數與專案根目錄以呼叫者所在目錄解析。
+
+    shim 以 `uv run --directory <skill_dir>` 啟動，行程 cwd 被改為 skill 目錄
+    （PWD 也被 uv 改寫，不可信）。shim 在切換前把呼叫者 cwd 放進
+    SKILL_CLI_CALLER_CWD，此處讀回；未設定（非 shim 啟動）時不動 cwd。
+    值無效（非絕對路徑或非目錄）時寫 stderr 警告並保持現有 cwd。
+    本函式在 ticket、worktree、doc 三個 skill 內嵌同一份，行為由測試鎖定一致。
+    """
+    caller = os.environ.pop(CALLER_CWD_ENV, None)  # 讀一次即移除，避免子行程繼承
+    if not caller:
+        return
+    if os.path.isabs(caller) and os.path.isdir(caller):
+        os.chdir(caller)
+        return
+    sys.stderr.write(
+        f"[Warning] {CALLER_CWD_ENV}={caller!r} 無效（需為存在的絕對目錄），"
+        f"改用目前目錄 {os.getcwd()}\n"
+    )
+
+
+# 須早於下方模組層的 _resolve_project_root()（以 os.getcwd() 求值）
+restore_caller_cwd()
 
 try:
     project_root = _resolve_project_root()
@@ -312,32 +335,34 @@ def get_worktree_ahead_behind(branch: str, base: str = DEFAULT_BASE_BRANCH) -> t
         return (0, 0)
 
 
+class WorkingTreeStatusUnavailable(Exception):
+    """git status 無法取得結果（非零結束、逾時、找不到 git、例外）；訊息即原因。"""
+
+
 def get_worktree_uncommitted_count(worktree_path: str) -> int:
     """
-    計算 worktree 中未 commit 的變更數
+    計算 worktree 中未 commit 的變更數；git status 失敗時拋例外，不以 0 代替
 
-    Args:
-        worktree_path: worktree 絕對路徑
+    閘門（merge 前置、cleanup Level 1）經 _check_working_tree_clean 使用，失敗即阻擋；
+    status 顯示改用 _uncommitted_count_for_display。
 
-    Returns:
-        int: 未 commit 變更的行數
-
-    Example:
-        count = get_worktree_uncommitted_count("/path/to/ccsession-0.1.1-W9-002.1")
+    Raises:
+        WorkingTreeStatusUnavailable: git status 失敗，訊息含原因
     """
     try:
-        success, output = run_git_command(
-            ["status", "--porcelain"],
-            cwd=worktree_path
-        )
-        if not success:
-            return 0
+        success, output = run_git_command(["status", "--porcelain"], cwd=worktree_path)
+    except Exception as e:  # run_git_command 自身已攔多數例外；此處防替換實作外洩
+        raise WorkingTreeStatusUnavailable(f"git status 執行例外：{e}") from e
+    if not success:
+        raise WorkingTreeStatusUnavailable(f"git status 失敗：{output.strip() or '無輸出'}")
+    return len([line for line in output.splitlines() if line.strip()])
 
-        lines = output.strip().split('\n') if output.strip() else []
-        return len([line for line in lines if line])
-    except Exception as e:
-        # H3 修復：加入 stderr 輸出符合 quality-baseline 規則 4 雙通道要求
-        # 原因：未 commit 計數失敗時仍降級返回 0 是合理的（保守行為，不影響流程）
+
+def _uncommitted_count_for_display(worktree_path: str) -> int:
+    """status 顯示用：失敗時寫 stderr 並顯示 0（只影響顯示，不作為任何放行依據）。"""
+    try:
+        return get_worktree_uncommitted_count(worktree_path)
+    except WorkingTreeStatusUnavailable as e:
         print(f"[Warning] Failed to count uncommitted changes in {worktree_path}: {e}", file=sys.stderr)
         return 0
 
@@ -866,7 +891,7 @@ def _build_worktree_display_info(wt: dict) -> dict:
     is_detached = wt.get("detached", False)
 
     # M3 修復：前置計算 uncommitted，消除三處重複呼叫
-    uncommitted = get_worktree_uncommitted_count(path)
+    uncommitted = _uncommitted_count_for_display(path)
 
     # H2 修復：改用 is_protected_branch() 函式，消除定義不同步
     is_main = is_protected_branch(branch) if not is_detached else False
@@ -1023,65 +1048,79 @@ def cmd_status(ticket_id: Optional[str] = None) -> int:
 # ===== merge 子命令相關函式 =====
 
 
-def _query_ticket_status(ticket_id: str) -> Optional[str]:
+class TicketStatusUnavailable(Exception):
+    """讀不到票的 status：查無票、ticket CLI 不可用／逾時／失敗、票檔無 frontmatter status。訊息即原因。"""
+
+
+_FRONTMATTER_STATUS = re.compile(r"^status:[ \t]*['\"]?([^'\"\s#]+)", re.MULTILINE)
+
+
+def _parse_frontmatter_status(text: str) -> Optional[str]:
+    """從原始票檔取 frontmatter 的頂層 status 鍵；只認第 0 欄起首的鍵，其他欄位值內的 status 字樣不算。"""
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    match = _FRONTMATTER_STATUS.search(text[3:end])
+    return match.group(1) if match else None
+
+
+def _error_line(output: str) -> str:
+    """CLI 失敗輸出中最能說明原因的一行：含 Error／錯誤者優先，否則取最後一行（前段常是 INFO）。"""
+    lines = [ln.strip() for ln in output.splitlines() if ln.strip()]
+    for ln in lines:
+        if "error" in ln.lower() or "錯誤" in ln:
+            return ln
+    return lines[-1] if lines else "無輸出"
+
+
+def _query_ticket_status(ticket_id: str) -> str:
     """
     查詢 Ticket 的 status 欄位
 
-    透過 subprocess 呼叫 ticket track query，解析 status 欄位回傳。
-    若 CLI 不可用或查詢失敗，回傳 None（呼叫端依 None 決定是否降級）。
+    以 `ticket show <id> -r` 取原始票檔，讀 frontmatter 的 status 鍵；不解析人讀輸出。
 
-    Args:
-        ticket_id: Ticket ID
-
-    Returns:
-        str | None: Ticket 狀態字串（如 "completed"），或 None 表示查詢失敗
+    Raises:
+        TicketStatusUnavailable: 讀不到狀態，訊息寫明原因（呼叫端據此阻擋，不放行）
     """
     try:
         result = subprocess.run(
-            ["ticket", "track", "query", ticket_id],
+            ["ticket", "show", ticket_id, "-r"],
             capture_output=True,
             text=True,
-            timeout=TICKET_QUERY_TIMEOUT
+            timeout=TICKET_QUERY_TIMEOUT,
+            cwd=str(get_project_root()),
         )
-        if result.returncode == 0:
-            # 簡單解析：從輸出中找 "status: completed" 之類的行
-            for line in result.stdout.split('\n'):
-                if 'status' in line.lower():
-                    # 嘗試提取狀態值
-                    parts = line.split(':')
-                    if len(parts) >= 2:
-                        return parts[1].strip()
-        return None
-    except subprocess.TimeoutExpired:
-        # H4 修復：補充 stderr 輸出，符合 quality-baseline.md 規則 4 雙通道要求
-        # 原因：TimeoutExpired 是非預期的事件，應警告用戶
-        print(f"[Warning] Ticket status query timed out after {TICKET_QUERY_TIMEOUT}s", file=sys.stderr)
-        return None
-    except FileNotFoundError:
-        # ticket CLI 不可用是正常降級場景（本地環境可能未安裝 ticket CLI）
-        # 不需要 stderr 警告，呼叫端依 None 返回值降級為警告
-        return None
+    except subprocess.TimeoutExpired as exc:
+        raise TicketStatusUnavailable(f"ticket CLI 查詢逾時（{TICKET_QUERY_TIMEOUT} 秒）") from exc
+    except FileNotFoundError as exc:
+        raise TicketStatusUnavailable("找不到 ticket CLI") from exc
+    if result.returncode != 0:
+        raise TicketStatusUnavailable(
+            f"ticket show 失敗（結束碼 {result.returncode}）：{_error_line(result.stderr + result.stdout)}")
+    status = _parse_frontmatter_status(result.stdout)
+    if status is None:
+        raise TicketStatusUnavailable("票檔 frontmatter 沒有 status 欄位")
+    return status
 
 
 def _merge_validate_ticket_status(ticket_id: str) -> tuple[bool, str]:
     """
     驗證 Ticket 狀態是否為 completed
 
-    透過 ticket track query 查詢狀態，若 CLI 不可用則降級為警告。
-
-    Args:
-        ticket_id: Ticket ID
+    讀不到狀態時不放行（fail-closed），訊息寫明原因；要在票未完成時合併，改用 --pre-acceptance。
 
     Returns:
-        tuple[bool, str]:
-            - bool: True 表示可繼續（狀態為 completed 或查詢失敗降級）
-            - str: 若 False，包含阻擋原因；若 True，可能含降級警告訊息
+        tuple[bool, str]: (可否繼續, 阻擋原因；可繼續時為空字串)
     """
-    status = _query_ticket_status(ticket_id)
-
-    if status is None:
-        # 查詢失敗，降級為警告
-        return True, MergeMessages.TICKET_STATUS_UNAVAILABLE
+    try:
+        status = _query_ticket_status(ticket_id)
+    except TicketStatusUnavailable as exc:
+        print(f"[合併前置] 無法讀取 {ticket_id} 狀態：{exc}", file=sys.stderr)
+        return False, MergeMessages.TICKET_STATUS_UNAVAILABLE.format(ticket_id=ticket_id, reason=exc)
+    if not status:  # 防禦：注入的查詢回空值時同樣不放行
+        return False, MergeMessages.TICKET_STATUS_UNAVAILABLE.format(ticket_id=ticket_id, reason="狀態為空")
 
     if status.lower() == TICKET_COMPLETED_STATUS:
         return True, ""
@@ -1212,12 +1251,19 @@ def _merge_validate_preconditions(
         print(msg)
         return False
 
-    # 檢查 working tree 乾淨
-    is_clean, uncommitted = _check_working_tree_clean(worktree_path)
+    return _merge_working_tree_ok(worktree_path)
+
+
+def _merge_working_tree_ok(worktree_path: str) -> bool:
+    """merge 前置的 working tree 檢查：乾淨回 True；有變更或 git status 失敗時印出原因並回 False。"""
+    try:
+        is_clean, uncommitted = _check_working_tree_clean(worktree_path)
+    except WorkingTreeStatusUnavailable as exc:
+        print(MergeMessages.WORKING_TREE_STATUS_UNAVAILABLE.format(reason=exc))
+        return False
     if not is_clean:
         print(MergeMessages.DIRTY_WORKING_TREE.format(count=uncommitted))
         return False
-
     return True
 
 
@@ -1252,20 +1298,15 @@ def _merge_resolve_target(
         if worktree is None:
             print(f"[阻擋] 找不到分支 {branch}")
             return None
-        if worktree.get("path"):
-            clean, count = _check_working_tree_clean(worktree["path"])
-            if not clean:
-                print(MergeMessages.DIRTY_WORKING_TREE.format(count=count))
-                return None
+        if worktree.get("path") and not _merge_working_tree_ok(worktree["path"]):
+            return None
         return worktree, branch, branch
 
     worktree = _validate_and_find_worktree(ticket_id)
     if worktree is None:
         return None
     if pre_acceptance_reason:
-        clean, count = _check_working_tree_clean(worktree["path"])
-        if not clean:
-            print(MergeMessages.DIRTY_WORKING_TREE.format(count=count))
+        if not _merge_working_tree_ok(worktree["path"]):
             return None
     elif not _merge_validate_preconditions(ticket_id, worktree["path"]):
         return None
@@ -1332,11 +1373,22 @@ def cmd_merge(
         else:
             pre_merge_check = MergeGate(get_project_root(), runner=gate_runner)
             max_retries = GATE_MAX_RETRIES
+    cleanup_args = cleanup_suggestion_args(ticket_id, branch)
     if isinstance(pre_merge_check, MergeGate):
-        return _merge_through_gate(pre_merge_check, branch_name, label, max_retries, merge_message)
+        return _merge_through_gate(pre_merge_check, branch_name, cleanup_args, max_retries, merge_message)
     outcome = merge_branch_cas(branch_name, repo=get_project_root(), pre_merge_check=pre_merge_check,
                                max_retries=max_retries, message=merge_message)
-    return _print_merge_outcome(outcome, label)
+    return _print_merge_outcome(outcome, cleanup_args)
+
+
+def cleanup_suggestion_args(ticket_id: Optional[str], branch: Optional[str]) -> str:
+    """合併成功後建議的 `/worktree cleanup` 參數：依合併方式給 cleanup 實際接受的形態。
+
+    以分支合併者印 `--branch <quoted>`（cleanup 的位置參數只收票號），以票號合併者印票號。
+    """
+    if branch:
+        return f"--branch {shlex.quote(branch)}"
+    return ticket_id or ""
 
 
 def _compose_merge_message(branch_name: str, message: Optional[str], ticket: Optional[str]) -> Optional[str]:
@@ -1349,7 +1401,7 @@ def _compose_merge_message(branch_name: str, message: Optional[str], ticket: Opt
 
 
 def _merge_through_gate(
-    gate: MergeGate, branch_name: str, label: str, max_retries: Optional[int],
+    gate: MergeGate, branch_name: str, cleanup_args: str, max_retries: Optional[int],
     message: Optional[str] = None,
 ) -> int:
     """經合併閘門合併，並在閘門開始與結束各記一行（stdout 與 worktree-merge.log）。
@@ -1384,10 +1436,10 @@ def _merge_through_gate(
         record("結束", outcome.commit_sha, GATE_WRITTEN)
     else:
         record("結束", base_head, gate_result_label(outcome.error))
-    return _print_merge_outcome(outcome, label)
+    return _print_merge_outcome(outcome, cleanup_args)
 
 
-def _print_merge_outcome(outcome: MergeOutcome, ticket_id: str) -> int:
+def _print_merge_outcome(outcome: MergeOutcome, cleanup_args: str) -> int:
     if not outcome.ok:
         print(MergeMessages.MERGE_FAILED.format(error=outcome.error))
         return 1
@@ -1398,7 +1450,7 @@ def _print_merge_outcome(outcome: MergeOutcome, ticket_id: str) -> int:
         print(MergeMessages.CAS_SKIPPED_FILE.format(path=path))
     for path in bad:
         print(MergeMessages.CAS_PLANE_MISMATCH.format(path=path))
-    print(MergeMessages.MERGE_SUCCESS.format(ticket_id=ticket_id))
+    print(MergeMessages.MERGE_SUCCESS.format(cleanup_args=cleanup_args))
     return 0
 
 
@@ -1451,6 +1503,9 @@ def _check_working_tree_clean(worktree_path: str) -> tuple[bool, int]:
         tuple[bool, int]:
             - bool: True 表示乾淨（無未 commit 變更），False 表示有變更
             - int: 未 commit 變更數量
+
+    Raises:
+        WorkingTreeStatusUnavailable: git status 失敗；呼叫端（閘門）須阻擋並印出原因
     """
     uncommitted = get_worktree_uncommitted_count(worktree_path)
     return (uncommitted == 0, uncommitted)
@@ -1465,6 +1520,8 @@ def _check_working_tree_clean(worktree_path: str) -> tuple[bool, int]:
 # WORKTREE_REMOVE_TIMEOUT_SECONDS 是測試注入點，只留在 cleanup_command，不轉出。
 
 _CLEANUP_REEXPORTS = frozenset({
+    "_ancestor_pids",
+    "_branch_delivered",
     "_cleanup_check_level1",
     "_cleanup_check_level2",
     "_cleanup_check_level2_and_3",
@@ -1485,6 +1542,8 @@ _CLEANUP_REEXPORTS = frozenset({
     "_is_branch_merged_to_base",
     "_is_branch_pushed",
     "_lock_holder_alive",
+    "_lock_pid",
+    "_parent_pid",
     "_parse_worktree_lock",
     "_recovery_unmet_conditions",
     "_timed_git_remove",

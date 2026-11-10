@@ -320,3 +320,39 @@ def test_variable_target_writes_stderr_and_passes_main(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "fail-open" in captured.err and "$t" in captured.err
     assert "deny" not in captured.out
+
+
+# ---- 間接形態提醒（additionalContext，不阻擋）----
+
+_FUNCTION_ARG_FORM = (
+    'run() { name=$1; shift; out=$("$@" -q 2>&1); }; '
+    "run hooks uv --directory .claude/hooks run pytest"
+)
+
+
+def test_function_arg_form_gets_additional_context_not_deny(monkeypatch, capsys):
+    """正向對照（E2）：觸發證據形態不再靜默放行——模型收到提醒，但不被阻擋。"""
+    import json
+
+    _run_main_with(monkeypatch, _FUNCTION_ARG_FORM)
+    assert pre_test_hook_module.main() == 0
+    output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert "pytest" in output["additionalContext"]
+    assert "run-with-timeout" in output["additionalContext"]
+    assert "permissionDecision" not in output
+
+
+def test_direct_full_suite_still_denied_not_hinted(monkeypatch, capsys):
+    """反向對照：直接下的全套件命令行為不變（deny），不改走提醒。"""
+    _run_main_with(monkeypatch, "uv --directory .claude/hooks run pytest")
+    assert pre_test_hook_module.main() == 0
+    out = capsys.readouterr().out
+    assert '"deny"' in out
+    assert "辨識不出測試呼叫" not in out
+
+
+def test_unrelated_function_call_stays_silent(monkeypatch, capsys):
+    """反向對照：不含 runner 字樣的函式呼叫不輸出任何內容。"""
+    _run_main_with(monkeypatch, 'run() { "$@"; }; run ls -la')
+    assert pre_test_hook_module.main() == 0
+    assert capsys.readouterr().out.strip() == ""

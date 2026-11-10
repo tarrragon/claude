@@ -539,6 +539,18 @@ def test_dispatch_non_hook_ticket_omits_four_item_reminder(dispatch_ticket, caps
     assert HOOK_TICKET_REMINDER.splitlines()[0].strip() not in out
 
 
+def test_hook_reminder_inventory_timing_matches_schema():
+    """盤點表時點對齊 ticket-body-schema〈防護類 ticket〉Action（3.1.0-W1-036）：
+    建票時列出、派發前確認存在；不再要求執行中才填寫。"""
+    inventory_line = next(
+        ln for ln in HOOK_TICKET_REMINDER.splitlines() if "產生路徑盤點表" in ln
+    )
+    assert "建票時" in inventory_line
+    assert "派發前確認存在" in inventory_line
+    assert "執行中填寫" not in inventory_line
+    assert "勿留到 complete 前" not in inventory_line
+
+
 # --- dispatch-validate 規則 4b 樣板偵測（0.1.0-W3-087） -----------------
 #
 # 規則 4 只數 acceptance 條數、不檢查內容是否為未填的建立端樣板，未給
@@ -782,6 +794,16 @@ def test_skeleton_includes_red_run_line_when_required():
 def test_skeleton_unchanged_when_red_run_not_required():
     assert RED_RUN_LINE not in _skeleton()
     assert _skeleton(require_red_run=True).replace(RED_RUN_LINE + "\n", "") == _skeleton()
+
+
+def test_red_run_line_inference_exit_is_conditional():
+    """推論出口須限於環境無法執行並要求寫明原因與命令；先實跑紅燈須寫成在修改產品碼之前的步驟。
+    舊條文「未實跑者須標為推論」無條件，代理人可先改產品碼再把紅燈標為推論而不違規。"""
+    assert "未實跑者須標為推論" not in RED_RUN_LINE
+    assert "環境無法執行" in RED_RUN_LINE
+    assert "原因" in RED_RUN_LINE and "命令" in RED_RUN_LINE
+    assert RED_RUN_LINE.index("實跑") < RED_RUN_LINE.index("再修改產品碼")
+    assert "\n" not in RED_RUN_LINE
 
 
 def test_dispatch_cli_wires_red_run_line_for_test_acceptance_imp(dispatch_ticket, capsys, monkeypatch):

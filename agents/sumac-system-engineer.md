@@ -1,7 +1,7 @@
 ---
 name: sumac-system-engineer
 description: 系統環境專家 (SE)。規劃及建置系統執行環境、SERVER 安裝及設定、專案跑不起來或無法編譯時的除錯、最佳化系統可靠度及效度。處理環境問題、編譯錯誤（依賴相關）、系統無法執行。
-tools: Read, Bash, Grep, Glob, LS
+tools: Read, Bash, Grep, Glob, LS, Edit
 color: brown
 model: sonnet[1m]
 effort: low
@@ -149,7 +149,7 @@ flutter pub get
 | 除錯步驟建議 | 編譯錯誤（依賴相關）、系統無法執行的排查與解決步驟 |
 | 系統最佳化建議 | 可靠度、效能相關的環境層面調整建議 |
 
-**路徑範圍**：環境/建置配置檔；不觸碰 `src/` / `lib/features/` 等業務邏輯程式碼。
+**路徑範圍**（Edit 可寫）：既有的環境／建置配置檔，如 `pubspec.yaml`、build 配置、環境變數檔。只修改既有檔，不新建檔案（tools 不含 Write）。自身派發票的章節一律經 ticket CLI 寫入，不以 Edit 改票檔。不觸碰 `src/`、`lib/` 業務邏輯程式碼與測試程式碼（禁止行為第 1、4 項維持不變）。
 
 ## 適用情境
 
@@ -321,6 +321,9 @@ flutter pub get
 - 升級機制正確使用
 
 ---
+
+**Last Updated**: 2026-11-10
+**Version**: 1.1.0 — tools 補 Edit：允許產出原本就列「環境配置檔案調整」，tools 卻沒有 Edit，派到要改配置的票，走到寫檔那一步才失敗。路徑範圍改寫為 Edit 可寫的既有環境／建置配置檔，不新建檔案（tools 不含 Write），票面經 ticket CLI 寫入；禁止行為第 1、4 項不變。
 
 **Last Updated**: 2026-03-02
 **Version**: 1.0.1

@@ -1,7 +1,7 @@
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Hook 排除清單 - 標記不需要在 settings.json 註冊的檔案",
-  "last_updated": "2026-10-01",
+  "last_updated": "2026-11-09",
   "exclude": [
     "eval_pyyaml.py",
     "dart-presence-detection-hook.py",
@@ -11,14 +11,17 @@
     "post-commit-fetch-hook.py",
     "dispatch-record-hook.py",
     "git-ref-transaction-content-guard.py",
+    "settings-json-syntax-precommit.py",
     "handoff_session_mgmt.py",
     "conftest.py",
-    "testpaths_coverage_warning.py"
+    "testpaths_coverage_warning.py",
+    "ana-ticket-metadata-validation-hook.py"
   ],
   "exclude_patterns": [
     "*-backup.py"
   ],
   "notes": {
+    "ana-ticket-metadata-validation-hook.py": "skills/ticket/hooks/ 下，已停用註冊：驗證邏輯已遷入 ticket_system/lib/ana_ticket_metadata_validator.py 由 ticket create 內部呼叫，恢復註冊會重複檢查；檔案保留供參考與既有測試（2026-11-09）",
     "conftest.py": "pytest conftest，非 hook",
     "testpaths_coverage_warning.py": "conftest 匯入的測試輔助模組，非 hook 進入點",
     "*-backup.py": "備份檔案模式",
@@ -30,6 +33,7 @@
     "post-commit-fetch-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
     "dispatch-record-hook.py": "派發記錄職責已遷移至 active-dispatch-tracker-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
     "git-ref-transaction-content-guard.py": "非 settings.json 直接註冊；由已註冊的 git-ref-transaction-guard-install-hook.py 安裝為原生 git reference-transaction hook shim（.git/hooks/reference-transaction）觸發，鏈路自洽非缺漏（2026-09-09 盤點）",
+    "settings-json-syntax-precommit.py": "非 settings.json 直接註冊；由已註冊的 git-ref-transaction-guard-install-hook.py 安裝為原生 git pre-commit hook shim（.git/hooks/pre-commit）觸發，鏈路自洽非缺漏（2026-11-09）",
     "handoff_session_mgmt.py": "非獨立 hook 進入點（無 __main__），為已註冊的 handoff-auto-resume-stop-hook.py 匯入的共用模組，因與該 hook 緊密耦合而置於 hooks/ 目錄（2026-09-09 盤點）"
   }
 }

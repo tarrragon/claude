@@ -78,6 +78,8 @@ ticket track complete <id>
 | Checkpoint 2 有 commit 路徑 | commit-handoff-hook（PostToolUse） | 已覆蓋 |
 | Checkpoint 2 無 commit 路徑 | post-ticket-complete-checkpoint-hook（補充） | 已覆蓋 |
 
+> 歷史註記：上表為 2026-03-10 確認時的 hook 名稱。`commit-handoff-hook` 其後併入 `post-git-commit-hook.py`（經 `hook-dispatch-registry.json` 的 `PostToolUse:Bash` 群組執行），原檔保留供回溯、未註冊。
+
 ## 相關錯誤模式
 
 - PC-004: 跳過分析直接修復（同為跳過必要流程步驟的模式）

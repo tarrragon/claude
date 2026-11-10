@@ -52,6 +52,15 @@ from lib.sync_exclude_manifest import (  # noqa: E402
     _is_skill_path,
     load_sync_skills_config,
 )
+# 衝突標記殘留掃描與 REMOTE_ONLY 由可重用模組提供（tarrragon/claude#88），
+# 與 SessionStart hook 共用同一範圍判準。
+from lib.sync_conflict_residue import (  # noqa: E402
+    REMOTE_ONLY,
+    SYNC_CONFLICTS_DIR,
+    detect_conflict_residue,
+    is_outside_pull_scope,
+    scan_conflict_marker_residue,
+)
 from lib.skill_version_diff import (  # noqa: E402
     SKILL_DRIFT_PREVIEW_LIMIT,
     extract_frontmatter_metadata_version,
@@ -60,6 +69,7 @@ from lib.skill_version_diff import (  # noqa: E402
     replace_frontmatter_metadata_version,
     report_skill_repo_drift,
 )
+from lib.executable_bits import restore_shebang_exec_bits  # noqa: E402
 
 # skill-sync 是零框架依賴的獨立 uv 套件，未安裝為本腳本的 import 路徑；以 sys.path
 # 取用其 public API（與 sync-claude-push.py 對稱）。report_skill_repo_drift 內部
@@ -90,8 +100,8 @@ HOOK_IMPORT_TEST_TIMEOUT_SECONDS = 120
 SYNC_STATE_FILENAME = ".sync-state.json"
 BASE_SHA_FIELD = "last_synced_base_sha"
 
-# 三方合併衝突暫存目錄（M3：local-only，不推送）。
-SYNC_CONFLICTS_DIR = ".sync-conflicts"
+# 三方合併衝突暫存目錄（M3：local-only，不推送）：SYNC_CONFLICTS_DIR 定義在
+# lib/sync_conflict_residue.py，頂部匯入。
 
 # 版本檔衝突自動採 upstream 的白名單（相對 .claude/ 的路徑，1.0.0-W1-084）。
 # 背景：push 腳本只 bump 遠端 repo 的 VERSION / CHANGELOG.md，本地副本永遠 stale，
@@ -107,8 +117,7 @@ MAX_CHANGED_FILES_DISPLAY = 3
 # 大檔案比對閾值（超過此大小只比 size，不做全量內容比對）
 _LARGE_FILE_THRESHOLD = 1_048_576  # 1MB
 
-# 遠端 repo 專有：存在於遠端但不需複製到本地
-REMOTE_ONLY = frozenset({".git", "project-templates"})
+# 遠端 repo 專有（REMOTE_ONLY）：定義在 lib/sync_conflict_residue.py，頂部匯入。
 
 # 本地專有：只存在於本地，同步時不刪除也不覆蓋
 #
@@ -127,85 +136,10 @@ SKIP_DURING_SYNC = REMOTE_ONLY | LOCAL_ONLY_PATTERNS
 # / 遇 broken symlink 拋例外。主同步本身已排除這些，備份須一致。
 BACKUP_IGNORE_PATTERNS = ("__pycache__", ".pytest_cache", ".venv")
 
-# 同步後強制還原 executable bit 的目錄名（convention-based safety net）
-# 上游 repo 的 mode 可能已損壞（push 端未保留 100755），
-# pull 後需對這些目錄下的 .py 強制 chmod +x 確保 Hook 可執行。
-# 注意：以「目錄名」遞迴比對，覆蓋頂層 .claude/hooks/ 與 W10-092 遷移後的
-# skills/<name>/hooks/（缺陷 G）。
-EXECUTABLE_HOOK_DIR_NAMES = ("hooks",)
-
-
-def iter_executable_hook_dirs(root: Path):
-    """遞迴 yield root 下所有名稱屬 EXECUTABLE_HOOK_DIR_NAMES 的目錄。
-
-    取代舊 `root / subdir` 單層查找，使 skills/<name>/hooks/ 也被涵蓋。
-    跳過 symlink 目錄避免循環。
-
-    參數:
-        root: 起始掃描根目錄（.claude 或其暫存樹）
-
-    產出:
-        Path: 每個符合名稱的目錄
-    """
-    if not root.is_dir():
-        return
-    for dirpath, dirnames, _filenames in os.walk(root):
-        # 跳過 symlink 指向的子目錄（os.walk 預設 followlinks=False，已安全）
-        for name in dirnames:
-            if name in EXECUTABLE_HOOK_DIR_NAMES:
-                yield Path(dirpath) / name
-
-
-# settings.json 中提取 hook command 內 .py 路徑的正則（容錯 shell 包裝）
-# 匹配 .claude/skills/.../xxx.py（不論前綴有 uv run / $CLAUDE_PROJECT_DIR 等）
-_SKILL_SCRIPT_RE = re.compile(r"\.claude/((?:skills|scripts)/[^\s'\"]+?\.py)")
-
-
-def collect_registered_skill_scripts(claude_dir: Path) -> set[Path]:
-    """從 settings.json 反查被註冊為 hook command 直接執行的 skill 根目錄 .py。
-
-    背景（W9-007）：exec-bit 還原以「目錄名 hooks」為邊界，未涵蓋位於 skill
-    根目錄（非 hooks/ 子目錄）但被 settings.json 註冊為執行的腳本，如
-    skills/continuous-learning/evaluate-session.py。這類腳本 sync 後失去
-    exec bit 會觸發 Permission denied。
-
-    擴充：涵蓋範圍含 scripts/（上游 543ce90 起將 scripts/install-skill-clis.py
-    註冊為 SessionStart hook 直呼，該路徑同樣不在 hooks/ 還原網內）。
-
-    採策略 C（settings.json 反查）而非純 shebang 偵測：command 是「被註冊為
-    執行」的權威來源，可精準命中且不會誤判未註冊的 shebang 腳本（如
-    skills/ticket/test_migration_dryrun.py）。
-
-    只解析 settings.json（settings.local.json 不 sync 故忽略）。command 可能含
-    shell 包裝（uv run、$CLAUDE_PROJECT_DIR 變數），以正則容錯提取 .py 路徑。
-    已落在 hooks/ 目錄者由 iter_executable_hook_dirs 涵蓋，此處只保留非 hooks/ 路徑
-    以避免重複。
-
-    參數:
-        claude_dir: .claude 目錄的絕對路徑
-
-    傳回:
-        set[Path]: 存在於 claude_dir 下、被註冊執行且非 hooks/ 路徑的 .py 絕對路徑
-    """
-    settings_path = claude_dir / "settings.json"
-    if not settings_path.is_file():
-        return set()
-    try:
-        text = settings_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        print_color(f"   警告: 無法讀取 settings.json: {exc}", "yellow")
-        return set()
-
-    scripts: set[Path] = set()
-    for match in _SKILL_SCRIPT_RE.finditer(text):
-        rel = match.group(1)  # skills/<name>/.../xxx.py
-        # hooks/ 目錄下的已由 iter_executable_hook_dirs 涵蓋，避免重複
-        if "/hooks/" in rel:
-            continue
-        candidate = claude_dir / rel
-        if candidate.is_file():
-            scripts.add(candidate)
-    return scripts
+# 同步後還原 executable bit 的判準（首行 shebang 即 +x，非 shebang 不動）在
+# lib/executable_bits.py，與 sync-claude-push.py 共用（tarrragon/claude#21）。
+# 舊判準以目錄名 hooks/ 加 settings.json 反查為邊界，hooks/ 外的 shebang 腳本
+# 在上游以 100644 追蹤時，pull 後失去執行權限。
 
 
 # extract_skill_versions / format_skill_version_diff / report_skill_repo_drift /
@@ -493,6 +427,96 @@ def write_base_sha(claude_dir: Path, base_sha: str) -> None:
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+# 衝突輪的待確認 base（tarrragon/claude#88）。衝突輪不推進 base，改把本輪上游
+# HEAD 記在這個欄位；操作者解完衝突後以 --resolve-done 確認無殘留標記，再升為
+# base。與 BASE_SHA_FIELD 語意不同（候選 vs 已確認），不屬 H1 禁止的雙欄位。
+PENDING_BASE_SHA_FIELD = "pending_base_sha"
+
+
+def _load_sync_state(claude_dir: Path) -> dict:
+    """讀取 .sync-state.json；無檔案或解析失敗回空 dict。"""
+    state_file = claude_dir / SYNC_STATE_FILENAME
+    if not state_file.exists():
+        return {}
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        # 狀態檔損毀視同無狀態（與 read_base_sha 一致，退回全量 overlay 路徑）
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_sync_state(claude_dir: Path, data: dict) -> None:
+    (claude_dir / SYNC_STATE_FILENAME).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def read_pending_base_sha(claude_dir: Path) -> str | None:
+    """讀取衝突輪記錄的待確認 base；無則 None。"""
+    sha = _load_sync_state(claude_dir).get(PENDING_BASE_SHA_FIELD)
+    return sha if isinstance(sha, str) and sha else None
+
+
+def write_pending_base_sha(claude_dir: Path, pending_sha: str | None) -> None:
+    """寫入（或以 None 清除）待確認 base，保留其他欄位。"""
+    data = _load_sync_state(claude_dir)
+    if pending_sha:
+        data[PENDING_BASE_SHA_FIELD] = pending_sha
+    else:
+        data.pop(PENDING_BASE_SHA_FIELD, None)
+    _save_sync_state(claude_dir, data)
+
+
+def resolve_done(claude_dir: Path) -> int:
+    """--resolve-done：確認衝突已解，把 pending base 升為 base。
+
+    先以 scan_conflict_marker_residue 掃同步範圍內的殘留標記：有殘留即拒絕
+    並在 stderr 列出檔名，base 與 pending 都不動；無殘留才推進 base 並清除
+    pending。不 clone、不寫其他檔案。
+
+    Why：衝突輪不推進 base 時，下一輪 pull 以舊 base 合併，已解的衝突會重報；
+    過去只能手改 .sync-state.json，沒有「是否真的解完」的防呆。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+
+    傳回:
+        int: 0 = 已推進或無待確認 base；1 = 有殘留標記，拒絕推進
+    """
+    pending = read_pending_base_sha(claude_dir)
+    if not pending:
+        print_color("沒有待確認的 pending base，無需 --resolve-done", "green")  # i18n-exempt
+        return 0
+    hits = scan_conflict_marker_residue(claude_dir)
+    if hits:
+        sys.stderr.write(
+            f"[sync-pull] 仍有 {len(hits)} 個同步範圍內的檔案殘留衝突標記，"
+            "拒絕推進 base；解完後再執行 --resolve-done:\n"  # i18n-exempt
+        )
+        for hit in hits:
+            sys.stderr.write(f"  - {hit}\n")
+        return 1
+    write_base_sha(claude_dir, pending)
+    write_pending_base_sha(claude_dir, None)
+    print_color(f"已將 pending base 升為 base SHA: {pending[:12]}", "green")  # i18n-exempt
+    return 0
+
+
+def warn_pending_base(claude_dir: Path) -> str | None:
+    """一般 pull 開始時，若有 pending base 則提示先執行 --resolve-done（不阻擋）。"""
+    pending = read_pending_base_sha(claude_dir)
+    if pending:
+        print_color(
+            f"提示: 上次 pull 有衝突，pending base {pending[:12]} 尚未確認。"  # i18n-exempt
+            "解完衝突後請先執行 sync-pull --resolve-done 推進 base，"  # i18n-exempt
+            "否則本次 pull 會以舊 base 合併，已解的衝突可能重報。",  # i18n-exempt
+            "yellow",
+        )
+    return pending
 
 
 # 版本 pin 欄位（與 .sync-state.json 其他欄位共存）。值為 "latest" 或 "vX.Y.Z"
@@ -1041,8 +1065,12 @@ def _should_skip_sync_item(item: Path, rel: Path) -> bool:
 
     傳回:
         bool: True 表應跳過（不遞迴、不處理）
+
+    判準委派 lib/sync_conflict_residue.is_outside_pull_scope，與衝突標記殘留
+    掃描共用同一定義（tarrragon/claude#88）。SKIP_DURING_SYNC 中的 LOCAL_ONLY
+    名稱已被 should_exclude 的逐段比對涵蓋，故委派後判定結果不變。
     """
-    return item.name in SKIP_DURING_SYNC or item.is_symlink() or should_exclude(rel)
+    return is_outside_pull_scope(item, rel)
 
 
 def _make_should_exclude_ignore(src_root: Path, base_prefix: Path):
@@ -1179,20 +1207,15 @@ def sync_directory(
 
 
 def restore_executable_bits(claude_dir: Path) -> int:
-    """對所有 hooks/ 目錄下的 .py 檔案強制加入 executable bit。
+    """對 claude_dir 下首行為 shebang 的檔案加入 executable bit（非 shebang 不動）。
 
-    背景：上游 tarrragon/claude.git 的 mode 已損壞（Python 檔案多為 100644），
-    shutil.copy2 雖保留來源 mode，但來源本身就錯。Hook 系統（Stop、SessionStart 等）
-    需要檔案有 +x 才能由 shell 直接執行，否則 Permission denied。
+    背景：上游 tarrragon/claude.git 的 mode 可能損壞（以 100644 追蹤），
+    shutil.copy2 雖保留來源 mode，但來源本身就錯。以 shell 直接執行的腳本
+    （hook、scripts/、skills/<name>/scripts/ 等）需要 +x，否則 Permission denied。
 
-    本函式作 convention-based safety net：遞迴掃描 claude_dir 下所有名為 hooks/ 的
-    目錄（頂層 .claude/hooks/ 與 W10-092 遷移後的 skills/<name>/hooks/，缺陷 G），
-    對其下所有 .py 無條件加 +x（u/g/o 均加），獨立於上游 mode 狀態。
-
-    .claude/scripts/ 不做目錄級全量處理（該目錄有 644/755 混合，如 sync 腳本本身）；
-    僅其中被 settings.json 註冊為 hook command 直呼者，由
-    collect_registered_skill_scripts 反查納入還原（settings.json 是「被註冊為執行」
-    的權威來源，精準命中不誤傷）。
+    本函式作 safety net，獨立於上游 mode 狀態。判準委派 lib/executable_bits：
+    首行為 shebang（`#!`）即加 +x（u/g/o 皆加），與 sync-claude-push.py 共用同一
+    函式（tarrragon/claude#21）。
 
     參數:
         claude_dir: .claude 目錄的絕對路徑
@@ -1200,21 +1223,7 @@ def restore_executable_bits(claude_dir: Path) -> int:
     傳回:
         int: 實際變更 mode 的檔案數（已是可執行者不計）
     """
-    count = 0
-    targets: set[Path] = set()
-    for target_dir in iter_executable_hook_dirs(claude_dir):
-        for py_file in target_dir.rglob("*.py"):
-            if py_file.is_file():
-                targets.add(py_file)
-    # W9-007：settings.json 註冊的 skill 根目錄執行檔（非 hooks/ 路徑）
-    targets |= collect_registered_skill_scripts(claude_dir)
-    for py_file in targets:
-        mode = py_file.stat().st_mode
-        new_mode = mode | 0o111
-        if new_mode != mode:
-            py_file.chmod(new_mode)
-            count += 1
-    return count
+    return restore_shebang_exec_bits(claude_dir)
 
 
 def collect_remote_files(src: Path, prefix: Path = Path()) -> set[Path]:
@@ -1573,41 +1582,8 @@ def _ensure_conflicts_dir(claude_dir: Path) -> Path:
     return conflicts_dir
 
 
-def detect_conflict_residue(
-    claude_dir: Path, before_time: float | None = None
-) -> list[str]:
-    """偵測 .sync-conflicts/ 中早於本次 pull 的既有殘留檔（1.0.0-W1-084）。
-
-    背景：前次 pull 的衝突副本若未處理即殘留，下次 pull 的新衝突會與舊殘留混雜，
-    無人能分辨哪些已處理。pull 開始時以 mtime 早於本次執行時間為判準列出殘留，
-    讓未處理衝突在新衝突寫入前可見。
-
-    參數:
-        claude_dir: .claude 目錄路徑
-        before_time: 本次 pull 起始時間戳（epoch 秒），預設取呼叫當下時間。
-                     mtime 早於此值者視為前次殘留。
-
-    傳回:
-        list[str]: 殘留檔相對 .sync-conflicts/ 的路徑清單（排除 .gitignore），已排序
-    """
-    conflicts_dir = claude_dir / SYNC_CONFLICTS_DIR
-    if not conflicts_dir.is_dir():
-        return []
-    if before_time is None:
-        before_time = time.time()
-    residue: list[str] = []
-    for item in sorted(conflicts_dir.rglob("*")):
-        if not item.is_file() or item.is_symlink() or item.name == ".gitignore":
-            continue
-        try:
-            mtime = item.stat().st_mtime
-        except OSError:
-            # 讀不到 mtime 視為殘留（寧可多警告，不靜默漏報）
-            residue.append(str(item.relative_to(conflicts_dir)))
-            continue
-        if mtime < before_time:
-            residue.append(str(item.relative_to(conflicts_dir)))
-    return residue
+# detect_conflict_residue（.sync-conflicts/ 既有殘留列舉）在
+# lib/sync_conflict_residue.py，本檔於頂部匯入；SessionStart 衝突殘留 hook 共用。
 
 
 def warn_conflict_residue(claude_dir: Path) -> list[str]:
@@ -1634,52 +1610,9 @@ def warn_conflict_residue(claude_dir: Path) -> list[str]:
     return residue
 
 
-# 三方合併衝突標記樣式（git merge-file 產出的行首標記，非 "=======" ——後者
-# 單獨出現時可能與 markdown 分隔線等合法內容混淆，"<<<<<<< " / ">>>>>>> "
-# 才是 git 保證附加標籤、不會巧合出現在正常內容行首的樣式）。與
-# commands/sync-pull.md「衝突標記歸零驗證」手動 grep 步驟使用同一樣式，
-# 確保自動掃描與人工複查步驟判準一致。
-_CONFLICT_MARKER_LINE_RE = re.compile(r"^(?:<<<<<<< |>>>>>>> )", re.MULTILINE)
-
-
-def scan_conflict_marker_residue(claude_dir: Path) -> list[str]:
-    """掃描 claude_dir 下（排除 .sync-conflicts/）是否有正式檔殘留三方合併
-    衝突標記（pull 收尾自動標記掃描）。
-
-    Why：既有 conflicts 清單只記錄「本次 apply_upstream_delta 已知」的衝突，
-    不保護後續人工手動合併（commands/sync-pull.md 選項「手動合併」）誤將
-    衝突標記本身寫回正式檔的情境。本函式直接對檔案系統終態逐字掃描，作為
-    對簿記正確性的獨立驗證，而非只信任 conflicts 清單本身沒有遺漏。
-
-    只掃描可解碼為 UTF-8 的文字檔（二進位/其他編碼視為不適用，略過並非
-    誤判為無標記——本掃描的目的是文字型框架檔，不含二進位資產）。標記樣式
-    要求出現在行首（`_CONFLICT_MARKER_LINE_RE`），避免命中原始碼中以字串
-    字面描述標記格式的散文（如本檔自身用於偵測/組裝標記的 Python 程式碼、
-    或文件中引用標記格式作說明的句子——皆非行首出現）。
-
-    參數:
-        claude_dir: .claude 目錄路徑
-
-    傳回:
-        list[str]: 命中檔案的相對路徑清單（相對 claude_dir，以 "/" 分隔），
-            已排序
-    """
-    hits: list[str] = []
-    if not claude_dir.is_dir():
-        return hits
-    for path in claude_dir.rglob("*"):
-        if not path.is_file() or path.is_symlink():
-            continue
-        rel = path.relative_to(claude_dir)
-        if rel.parts and rel.parts[0] == SYNC_CONFLICTS_DIR:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        if _CONFLICT_MARKER_LINE_RE.search(text):
-            hits.append(str(rel).replace("\\", "/"))
-    return sorted(hits)
+# pull 收尾的衝突標記殘留掃描（scan_conflict_marker_residue）在
+# lib/sync_conflict_residue.py，本檔於頂部匯入；SessionStart hook 重用同一判準
+# （tarrragon/claude#88：只掃 pull 同步範圍，非同步範圍檔案含標記字樣不計入）。
 
 
 def warn_upstream_deleted_residue(residue: list[str]) -> None:
@@ -2483,24 +2416,33 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     # 衝突只會更多（單向棘輪）。本次修復（衝突結果寫回工作區，含合併標記）
     # 使前提成立：本地檔已含 upstream 非衝突 hunk，人工解完標記後即與
     # upstream 一致，下次 pull 才真的收斂。
+    #
+    # base 收斂（tarrragon/claude#88）：衝突輪把本輪上游 HEAD 記為 pending base，
+    # 操作者解完衝突後以 --resolve-done 確認無殘留標記再升為 base，不需手改
+    # .sync-state.json。無衝突輪直接推進 base 並清除舊的 pending。
+    head_result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
+    upstream_head = head_result.stdout.strip() if head_result.returncode == 0 else ""
     if conflicts:
         print_color(  # i18n-exempt
-            f"   有 {len(conflicts)} 個未解衝突，暫不推進 base SHA"  # i18n-exempt
-            f"（請人工解決 {SYNC_CONFLICTS_DIR}/ 內衝突檔後重新 pull 以推進）",  # i18n-exempt
+            f"   有 {len(conflicts)} 個未解衝突，暫不推進 base SHA",  # i18n-exempt
             "yellow",
         )
-    else:
-        # 同步成功後寫入新的 base SHA（上游 HEAD）
-        head_result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
-        if head_result.returncode == 0:
-            new_base = head_result.stdout.strip()
-            write_base_sha(claude_dir, new_base)
-            print_color(f"   已記錄 base SHA: {new_base[:12]}", "green")  # i18n-exempt
+        if upstream_head:
+            write_pending_base_sha(claude_dir, upstream_head)
+            print_color(  # i18n-exempt
+                f"   已記錄 pending base: {upstream_head[:12]}；解完衝突後執行"  # i18n-exempt
+                " sync-pull --resolve-done 推進 base",  # i18n-exempt
+                "yellow",
+            )
+    elif upstream_head:
+        write_base_sha(claude_dir, upstream_head)
+        write_pending_base_sha(claude_dir, None)
+        print_color(f"   已記錄 base SHA: {upstream_head[:12]}", "green")  # i18n-exempt
 
     # 還原 hook 檔案的 executable bit（上游 mode 損壞的 safety net）
     restored = restore_executable_bits(claude_dir)
     if restored:
-        print_color(f"   已還原 {restored} 個 hook 檔案的執行權限", "green")
+        print_color(f"   已還原 {restored} 個 shebang 檔案的執行權限", "green")
 
     # 偵測套件版本變更
     print_color("檢查套件版本變更...")  # i18n-exempt
@@ -3477,7 +3419,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         metavar="版本",  # i18n-exempt
         help="更新 pinned_version 後重跑同步。無參數 bump 至 latest；帶版本（如 v1.2.0）pin 至該版",  # i18n-exempt
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--resolve-done",
+        action="store_true",
+        help="衝突解完後確認：無殘留標記才把 pending base 升為 base（不 clone、不同步）",  # i18n-exempt
+    )
+    args = parser.parse_args(argv)
+    if args.resolve_done and (args.audit or args.bump is not _BUMP_NOT_SET):
+        parser.error("--resolve-done 不可與 --audit 或 --bump 併用")  # i18n-exempt
+    return args
 
 
 def main() -> None:
@@ -3493,12 +3443,17 @@ def main() -> None:
         --audit         唯讀孤兒稽核（列本地有上游無之檔），不執行同步主流程。
         --bump [版本]   更新 .sync-state.json 的 pinned_version 後重跑同步。
                         無參數 = bump 至 latest；帶版本（如 v1.2.0）= pin 至該版。
+        --resolve-done  衝突解完後確認：同步範圍內無殘留標記才把 pending base
+                        升為 base；有殘留即拒絕（exit 1）並列出檔名。
 
     參數解析改用 argparse（0.2.1-W3-164）：--help 印用法後 exit 0、未知旗標
     exit 2，兩者皆在解析階段中止，不落入下方同步主流程（PC-V1-001 /
     IMP-BAL-002 同家族防護，詳見 parse_args docstring）。
     """
     args = parse_args(sys.argv[1:])
+
+    if args.resolve_done:
+        sys.exit(resolve_done(find_project_root() / ".claude"))
 
     if args.audit:
         run_audit()
@@ -3523,6 +3478,8 @@ def main() -> None:
 
     # 偵測前次 pull 的衝突殘留（在本次新衝突寫入前列出，避免新舊混雜）
     warn_conflict_residue(project_root / ".claude")
+    # 前次衝突輪留下未確認的 pending base 時提示先 --resolve-done（不阻擋）
+    warn_pending_base(project_root / ".claude")
 
     try:
         temp_dir, backup_dir = _clone_and_backup(project_root)
@@ -3543,20 +3500,36 @@ def main() -> None:
     if import_rc != 0:
         sys.exit(import_rc)
 
-    # post-sync 安全網：正式檔殘留未解三方合併標記直接判定 pull 失敗，不只
-    # 靠 apply_upstream_delta 的 conflicts 清單自我回報（該清單無法涵蓋人工
-    # 手動合併階段誤把標記寫回正式檔的情境）。命中即 stderr 顯著警告 +
-    # 非零退出，雙管齊下確保訊號不因只看 stdout 或只看退出碼而被忽略。
-    marker_hits = scan_conflict_marker_residue(project_root / ".claude")
-    if marker_hits:
-        sys.stderr.write(
-            f"[sync-pull] 偵測到 {len(marker_hits)} 個正式檔殘留未解三方合併"
-            "衝突標記，pull 判定失敗；請依 .claude/commands/sync-pull.md"
-            "「衝突解決決策表」逐一處理後再次確認:\n"
-        )
-        for hit in marker_hits:
-            sys.stderr.write(f"  - {hit}\n")
-        sys.exit(1)
+    marker_rc = check_conflict_marker_residue(project_root / ".claude")
+    if marker_rc != 0:
+        sys.exit(marker_rc)
+
+
+def check_conflict_marker_residue(claude_dir: Path) -> int:
+    """pull 收尾安全網：同步範圍內正式檔殘留未解三方合併標記即判定 pull 失敗。
+
+    不只靠 apply_upstream_delta 的 conflicts 清單自我回報（該清單無法涵蓋人工
+    手動合併階段誤把標記寫回正式檔的情境）。命中即 stderr 列出檔名並回傳 1，
+    stderr 與結束碼兩個管道同時給出訊號。掃描範圍限 pull 同步範圍，
+    hook-logs 等非同步範圍檔案不影響結束碼（tarrragon/claude#88）。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+
+    傳回:
+        int: 0 表示無殘留；1 表示有殘留（已寫 stderr）
+    """
+    marker_hits = scan_conflict_marker_residue(claude_dir)
+    if not marker_hits:
+        return 0
+    sys.stderr.write(
+        f"[sync-pull] 偵測到 {len(marker_hits)} 個正式檔殘留未解三方合併"
+        "衝突標記，pull 判定失敗；請依 .claude/commands/sync-pull.md"
+        "「衝突解決決策表」逐一處理後再次確認:\n"
+    )
+    for hit in marker_hits:
+        sys.stderr.write(f"  - {hit}\n")
+    return 1
 
 
 if __name__ == "__main__":

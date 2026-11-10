@@ -144,7 +144,7 @@ throw Exception('Book already exists');
 - [ ] ViewModel 無硬編碼使用者訊息
 - [ ] 錯誤使用預編譯 Exception
 - [ ] `dart analyze` 0 issues
-- [ ] 測試 100% 通過
+- [ ] 本票相關測試檔全綠（全套件由合併閘門確認）
 
 ---
 
@@ -214,6 +214,9 @@ try {
 - .claude/references/observability-rules.md - 通用可觀測性規則
 
 ---
+
+**Last Updated**: 2026-11-10
+**Version**: 1.1.1 - 檢查清單「測試 100% 通過」改為本票相關測試檔全綠、全套件由合併閘門確認（quality-baseline 規則 1；tarrragon/claude#104）
 
 **Last Updated**: 2026-03-27
 **Version**: 1.1.0 - 新增可觀測性要求章節

@@ -12,11 +12,14 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from doc_system.core.tracking_schema import GRAPH_NODE_TYPES, id_pattern_body
+
 # SSOT 檔案相對路徑（本專案適配，見 uc-numbering-convention.md 第 6 節跨專案表）
 USE_CASES_SPEC_RELATIVE_PATH = "docs/app-use-cases.md"
 
-# 合法 UC 標題行格式：## UC-XX: 標題
-UC_HEADING_RE = re.compile(r"^## (UC-\d{2}): (.+)$")
+# 合法 UC 標題行格式：## {UC ID}: 標題。UC ID 格式取自 tracking_schema 的 id_pattern。
+# 一律以具名群組取值：id 本體若含捕獲群組，位置編號會錯位。
+UC_HEADING_RE = re.compile(rf"^## (?P<uc_id>{id_pattern_body('UC')}): (?P<title>.+)$")
 
 # 主要成功場景區塊標題與步驟行格式（供 get_uc_summary 解析主流程摘要）
 MAIN_FLOW_HEADING = "### 主要成功場景"
@@ -34,8 +37,8 @@ SUB_SCENARIO_H4_RE = re.compile(r"^####\s+(\d+[A-Za-z]+)\.")
 # 主流程摘要最多保留步數（截斷策略：Context Bundle 注入避免過度膨脹）
 MAX_MAIN_FLOW_STEPS = 10
 
-# 合法 UC 編號格式（兩位數零填充）
-VALID_UC_FORMAT_RE = re.compile(r"^UC-\d{2}$")
+# 合法 UC 編號格式：取自 tracking_schema 的 id_pattern，本模組不寫死位數。
+VALID_UC_FORMAT_RE = re.compile(GRAPH_NODE_TYPES["UC"]["id_pattern"])
 
 # 掃描文字時抓取所有 UC- 開頭 token（含合法、格式違規與偽子樹）。
 # 大小寫不敏感（IGNORECASE）以涵蓋小寫 uc-01 等變體；並額外納入
@@ -129,8 +132,8 @@ def parse_ssot(project_root: str) -> dict[str, dict]:
         for lineno, line in enumerate(f, start=1):
             match = UC_HEADING_RE.match(line.rstrip("\n"))
             if match:
-                result[match.group(1)] = {
-                    "title": match.group(2).strip(),
+                result[match.group("uc_id")] = {
+                    "title": match.group("title").strip(),
                     "line": lineno,
                 }
     return result
@@ -408,7 +411,7 @@ def is_violation_token(token: str, valid: dict[str, str]) -> bool:
     normalized = normalize_token(token)
     if VALID_UC_FORMAT_RE.match(normalized):
         return normalized not in valid
-    # 格式不符（三位數、偽子樹如 UC-01.4.20 等）一律視為違規
+    # 格式不符 id_pattern（如單位數、偽子樹 UC-01.4.20 等）一律視為違規
     return True
 
 
@@ -416,7 +419,7 @@ def self_test(project_root: str) -> tuple[bool, str]:
     """驗證 SSOT 解析結果非空且全數符合合法格式，供啟動時或 CI 快速校驗。
 
     不比對精確數量（避免每次新增/移除 UC 用例都須同步改常數，製造
-    spec 同步負擔）；改驗證「至少一筆」且「每筆皆符合 UC-\\d{2} 格式」，
+    spec 同步負擔）；改驗證「至少一筆」且「每筆皆符合 UC 的 id_pattern」，
     格式異常（如 SSOT 標題行解析出非預期鍵值）才判定失敗。
     """
     valid = get_valid_uc_map(project_root)
@@ -450,7 +453,7 @@ def parse_ssot_with_content(project_root: str) -> dict[str, dict]:
     for idx, line in enumerate(all_lines):
         match = UC_HEADING_RE.match(line.rstrip("\n"))
         if match:
-            headings.append((idx, match.group(1), match.group(2).strip()))
+            headings.append((idx, match.group("uc_id"), match.group("title").strip()))
 
     result: dict[str, dict] = {}
     for i, (line_idx, uc_id, title) in enumerate(headings):

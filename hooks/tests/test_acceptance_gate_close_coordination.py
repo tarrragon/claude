@@ -63,6 +63,86 @@ def test_extract_close_ids(gate, logger):
     assert ids == ["0.6.0-W1-001"]
 
 
+def test_extract_close_ids_excludes_flag_values(gate, logger):
+    """--resolved-by／--reason-note／--version 的值不是關閉對象，只取位置參數。"""
+    ids = gate.extract_close_ticket_ids(
+        "ticket track close 0.6.0-W1-002 --resolved-by 0.6.0-W1-001 "
+        "--reason superseded_by --reason-note 0.6.0-W1-005 --version 0.6.0",
+        logger,
+    )
+    assert ids == ["0.6.0-W1-002"]
+
+
+def test_extract_close_ids_excludes_equals_form_flag_values(gate, logger):
+    ids = gate.extract_close_ticket_ids(
+        "ticket track close --resolved-by=0.6.0-W1-001 0.6.0-W1-002 --reason=duplicate",
+        logger,
+    )
+    assert ids == ["0.6.0-W1-002"]
+
+
+def test_extract_close_ids_chained_closes_keep_each_positional(gate, logger):
+    ids = gate.extract_close_ticket_ids(
+        "ticket track close 0.6.0-W1-002 --resolved-by 0.6.0-W1-001 --reason duplicate && "
+        "ticket track close 0.6.0-W1-003 --resolved-by none --reason goal_achieved; "
+        "ticket track close 0.6.0-W1-004 --resolved-by 0.6.0-W1-001 --reason duplicate",
+        logger,
+    )
+    assert ids == ["0.6.0-W1-002", "0.6.0-W1-003", "0.6.0-W1-004"]
+
+
+def test_handle_close_resolved_by_unpaired_coordination_allowed(
+    gate, logger, tmp_path, monkeypatch, capsys
+):
+    """本例：--resolved-by 指向有未配對待辦的協調票、關閉一般票時放行。"""
+    _write_ticket(tmp_path, "0.6.0-W1-001", True, UNPAIRED)
+    _write_ticket(tmp_path, "0.6.0-W1-002", False, "")
+    monkeypatch.setattr(gate, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(gate, "get_shared_state_root", lambda p: p)
+    rc = gate._handle_close_command(
+        "ticket track close 0.6.0-W1-002 --resolved-by 0.6.0-W1-001 --reason duplicate",
+        logger,
+    )
+    out = json.loads(capsys.readouterr().out)
+    assert rc == gate.EXIT_SUCCESS
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
+def test_handle_close_reason_note_ticket_id_allowed(
+    gate, logger, tmp_path, monkeypatch, capsys
+):
+    """--reason-note 的值恰為有未配對待辦的協調票號時不納入檢查。"""
+    _write_ticket(tmp_path, "0.6.0-W1-001", True, UNPAIRED)
+    _write_ticket(tmp_path, "0.6.0-W1-002", False, "")
+    monkeypatch.setattr(gate, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(gate, "get_shared_state_root", lambda p: p)
+    rc = gate._handle_close_command(
+        "ticket track close 0.6.0-W1-002 --resolved-by none --reason goal_achieved "
+        "--reason-note 0.6.0-W1-001",
+        logger,
+    )
+    out = json.loads(capsys.readouterr().out)
+    assert rc == gate.EXIT_SUCCESS
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
+def test_handle_close_positional_unpaired_coordination_still_blocked(
+    gate, logger, tmp_path, monkeypatch, capsys
+):
+    """正向對照：位置參數是有未配對待辦的協調票時，即使帶 --resolved-by 仍阻擋。"""
+    _write_ticket(tmp_path, "0.6.0-W1-001", True, UNPAIRED)
+    _write_ticket(tmp_path, "0.6.0-W1-002", False, "")
+    monkeypatch.setattr(gate, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(gate, "get_shared_state_root", lambda p: p)
+    rc = gate._handle_close_command(
+        "ticket track close 0.6.0-W1-001 --resolved-by 0.6.0-W1-002 --reason superseded_by",
+        logger,
+    )
+    out = json.loads(capsys.readouterr().out)
+    assert rc == gate.EXIT_BLOCK
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_extract_close_ids_ignores_complete_and_unparseable(gate, logger):
     assert gate.extract_close_ticket_ids("ticket track complete 0.6.0-W1-001", logger) == []
     assert gate.extract_close_ticket_ids('ticket track close "0.6.0-W1-001', logger) == []

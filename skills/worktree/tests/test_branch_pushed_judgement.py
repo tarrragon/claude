@@ -74,3 +74,27 @@ def test_checked_out_branch_with_unpushed_commit_is_not_pushed(repo):
 def test_missing_branch_is_not_pushed(repo):
     """E2(c)：分支不存在。"""
     assert _is_branch_pushed("feat/nope") is False
+
+
+# ---- Level 2：已併入本機 base 視為已保存（3.1.0-W1-050）----
+
+def test_level2_passes_when_merged_into_local_base_without_push(repo):
+    """單一主控方流程：分支併入本機 main 但 main 未推送，Level 2 通過並寫明理由。"""
+    from cleanup_command import _cleanup_check_level2
+    _git(repo, "checkout", "-b", "feat/m")
+    _commit(repo, "m")
+    _git(repo, "checkout", "main")
+    _git(repo, "merge", "--no-ff", "-m", "m", "feat/m")
+    assert _is_branch_pushed("feat/m") is False  # 前提：遠端沒有，舊判定會警告
+    passed, note = _cleanup_check_level2("feat/m")
+    assert passed and "已併入" in note
+
+
+def test_level2_warns_when_neither_pushed_nor_merged(repo):
+    """E2 正向對照：未推送也未併入的分支仍警告。"""
+    from cleanup_command import _cleanup_check_level2
+    _git(repo, "checkout", "-b", "feat/u")
+    _commit(repo, "u")
+    _git(repo, "checkout", "main")
+    passed, msg = _cleanup_check_level2("feat/u")
+    assert not passed and "feat/u" in msg

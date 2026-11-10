@@ -2,6 +2,12 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.2.0 — `references/git-index-worktree.md` 新增 GW-5：隔離派發 worktree 的鎖記錄派發方 session 的 pid，被讀成代理人的 pid（只看 pid 分不出代理人執行中或已交回），檢查方法改看分支 tip 與 reflog 建立點及是否已併入 main；SKILL.md 系統索引表該列補「worktree 鎖的 pid」
+**Last Updated**: 2026-11-10
+
+**Version**: 1.1.0 — 新增系統檔 `references/flutter-test-binding.md`（Flutter 測試 binding 的幀與時鐘），首條 FTB-1：on-device 測試等待真實 I/O 時 `pumpAndSettle` 立即返回，finder 找不到元件被讀成元件改名；來源 `TEST-LLM-001`。SKILL.md 系統索引表同步加列
+**Last Updated**: 2026-11-10
+
 **Version**: 1.0.3 — `references/dart-vm-service-log.md` 移除對專案層實機驗證 skill 的腳本路徑的引用，改為「專案的實機驗證配方（如有）」通用指涉，並以輸入參數描述取代具名命令；至此全目錄無專案層引用
 **Last Updated**: 2026-11-04
 

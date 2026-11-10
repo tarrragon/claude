@@ -2,7 +2,7 @@
 name: pre-fix-eval
 description: "修復前強制評估系統. Use for: (1) 測試失敗自動評估, (2) 編譯錯誤分類處理, (3) 強制 Ticket 開設流程"
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # 修復前強制評估 (Pre-Fix Evaluation)
@@ -96,7 +96,7 @@ Stage 6 的代理人分派**依據 `.claude/pm-rules/incident-response.md` 的�
 
 修復完成後驗證：
 
-- [ ] 測試 100% 通過（沒有新增失敗）
+- [ ] 本票相關測試檔全綠，沒有新增失敗（全套件由合併閘門確認）
 - [ ] 修改範圍最小化（只改必要部分）
 - [ ] 沒有引入新的問題
 - [ ] 與設計文件一致

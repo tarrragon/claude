@@ -47,3 +47,15 @@
 | 正向對照 | 在主 checkout 與 worktree 各查一次同一檔案的 `git log -1 --oneline -- <path>`，兩者差異即分支差異 |
 | 判讀標準 | 先確認 toplevel 與分支，再判讀內容差異 |
 | 來源 | `PC-166`（工作區觀測屬瞬時，持久結論須以 git 歷史交叉驗證） |
+
+## GW-5 隔離派發 worktree 的鎖 pid，被讀成代理人的 pid
+
+| 欄位 | 內容 |
+|------|------|
+| 症狀 | `git worktree list --porcelain` 顯示 `locked claude agent ... (pid N)`，pid N 存活 |
+| 常見誤判 | pid N 是代理人本身：pid 存活就代表代理人還在跑，pid 是自己的祖先就代表代理人已交回、可以解鎖 |
+| 實際機制 | Agent isolation 的代理人在派發方 session 的行程內執行，鎖記錄的是派發方 session 的 pid；代理人執行中與已交回，鎖的 pid 相同，只看 pid 無法區分兩者 |
+| 檢查方法 | 改看分支交回狀態：`git rev-parse refs/heads/<branch>` 與 `git reflog show --format=%H refs/heads/<branch> \| tail -1`（建立點）比對，再 `git merge-base --is-ancestor <branch> main` |
+| 正向對照 | 剛派發、尚無提交的分支：鎖 pid 同為派發方 session，tip 等於建立點，必須判為未交回 |
+| 判讀標準 | tip 不等於建立點且已併入 main → 已交回；其餘（含任何 git 失敗）→ 視為代理人可能仍在執行，不解鎖 |
+| 來源 | 實測：worktree skill `tests/test_worktree_cleanup.py` 的 `TestWorktreeLock`：祖先持有但未交回的兩個測試，在拿掉交回條件後轉紅 |

@@ -133,8 +133,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 | 適用 | 說明 |
 |------|------|
 | IMP / ANA ticket | 強制 |
-| DOC ticket | 沿用 `agent-self-check-template.md`「自檢無發現可省略子章節」的免填規則，但仍需執行掃描 |
-| 純機械任務（格式修正、路徑替換） | 可省略（同 Layer 1 自檢觸發指引既有豁免條件） |
+| DOC ticket | 子章節選填（complete 閘門不檢查 DOC，見 `agent-self-check-template.md`〈自檢結果寫入範本〉必填範圍），但仍需執行掃描 |
+| 純機械任務（格式修正、路徑替換） | 僅限 DOC 可省略子章節；IMP／ANA 不論任務性質，complete 閘門皆要求子章節 |
 
 > **與既有「Layer 1 自檢觸發指引」章節的差異**：該章節是通用的文字品質/禁用字/Schema 掃描指令；本項額外要求自檢結果**逐一對照 acceptance 編號**，讓 PM 與 acceptance-gate-hook 可直接核對「每項 acceptance 有無對應證據」，而非僅有一段籠統的自檢摘要。
 

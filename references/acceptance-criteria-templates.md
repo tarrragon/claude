@@ -319,7 +319,7 @@ acceptance:
 ### 流程驗收 (N 項)
 | # | 項目 | 來源 | 確認方法 | 狀態 |
 |---|------|------|---------|------|
-| 1 | 測試 100% 通過 | quality-baseline | 執行測試 | [ ] |
+| 1 | 本票相關測試檔全綠 | quality-baseline 規則 1 | 執行測試 | [ ] |
 | 2 | dart analyze 0 issues | quality-baseline | 狀態檢查 | [ ] |
 
 ### 文件驗收 (N 項)
@@ -340,6 +340,9 @@ acceptance:
 ```
 
 ---
+
+**Last Updated**: 2026-11-10
+**Version**: 1.1.1 - 完成前檢查表第 1 列「測試 100% 通過」改為「本票相關測試檔全綠」，來源欄指向 quality-baseline 規則 1（tarrragon/claude#104）
 
 **Last Updated**: 2026-10-15
 **Version**: 1.1.0 - 品質驗收「單元測試通過」改為相關測試檔通過、全套件由合併閘門驗證

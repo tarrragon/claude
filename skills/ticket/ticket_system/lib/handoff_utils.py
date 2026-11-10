@@ -403,6 +403,52 @@ def is_handoff_stale(
     return False, ""
 
 
+def orphan_reason(
+    record: dict,
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+) -> str:
+    """來源票與 target（若有）皆確定查無時回傳孤兒原因，否則回空字串。
+
+    migrate 改名或票被刪後，pending 檔指向不存在的票；is_handoff_stale 對查無票
+    回非 stale（is_ticket_completed 查無回 False），單靠它這類殘留永遠不被清理。
+    handoff GC 與派發守衛的恢復模式判定共用本函式。查無以 is_ticket_missing 判定：
+    查詢機制不可用或查詢失敗時不算查無。
+    """
+    if not is_ticket_missing(ticket_id, project_root):
+        return ""
+    target_id = resolve_target(record)
+    if target_id and not is_ticket_missing(target_id, project_root):
+        return ""
+    return f"來源 ticket {ticket_id} 查無（無對應 ticket 檔案）"
+
+
+def is_handoff_active(
+    record: dict,
+    project_root: Optional[Path] = None,
+) -> tuple[bool, str]:
+    """判斷 pending handoff 是否仍待恢復（未過期且非孤兒）。
+
+    派發守衛只對有效 handoff 指向的票放行；殘留檔（目標已完成、孤兒）不放行。
+    票狀態查詢模組（lib.hook_ticket）載不到時無法分辨有效與殘留，一律回 False，
+    讓守衛照常檢查，不因無法判斷而放行。
+
+    Returns:
+        tuple[bool, str]: (is_active, reason)；is_active=False 時 reason 說明原因。
+    """
+    if _find_ticket_file is None or _parse_ticket_frontmatter is None:
+        return False, "票狀態查詢模組 lib.hook_ticket 無法載入，無法判斷 handoff 是否有效"
+    is_stale, reason = is_handoff_stale(record, project_root)
+    if is_stale:
+        return False, reason
+    ticket_id = record.get("from_ticket") or record.get("ticket_id") or ""
+    if ticket_id:
+        orphan = orphan_reason(record, ticket_id, project_root)
+        if orphan:
+            return False, orphan
+    return True, ""
+
+
 def scan_pending_handoffs() -> List[ParsedHandoff]:
     """
     掃描 pending/ 目錄，解析所有 handoff 檔案。

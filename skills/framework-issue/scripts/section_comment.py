@@ -66,7 +66,8 @@ comment 集合的一致性比對。三項皆唯讀、不阻擋（exit 0），閾
 CLI 參數覆蓋。
 
 `init`／`add`／`update` 對區段名以「待辦與來源」開頭的區段（`ticket-intake.md`
-的「待辦與來源（<consumer>）」慣例）額外解析首張表格並驗證欄位與列舉值
+的「待辦與來源（<consumer>）」慣例）額外解析表格並驗證欄位與列舉值（首張
+須為待辦表，其後表頭合法的待辦表同樣驗證並由 `todo` 聚合）
 （`validate_todo_table`）：唯讀掃描曾實測 69 張 open issue 有 28 個此類
 區段、144 列可解析，但「狀態」欄自由文字超過 12 種、「階段」欄超過 8
 種，聚合後無法篩選——寫入端不驗證，讀取端就分不出類。欄位缺漏或列舉值
@@ -95,6 +96,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from gh_common import (
+    EXIT_DEGRADED,
     FRAMEWORK_REPO,
     emit_degraded,
     normalize_issue_ref,
@@ -641,35 +643,56 @@ def _split_table_row(line: str) -> List[str]:
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
-def parse_markdown_table(content: str) -> Optional[Tuple[List[str], List[List[str]]]]:
-    """從一段內容抽取首張 markdown 表格，回傳 `(表頭儲存格, 資料列清單)`；
-    找不到表格（少於表頭+至少一列的連續 `|` 起訖行）回傳 `None`。
+def parse_markdown_tables(content: str) -> List[Tuple[List[str], List[List[str]]]]:
+    """從一段內容抽取全部 markdown 表格，依出現順序回傳 `(表頭儲存格, 資料列清單)` 清單。
 
-    只掃描第一個連續的「以 `|` 起訖」行區塊——內容含多張表格時只取第一張，
-    與 `validate_todo_table`／`todo` 聚合的「首張表格」約定一致。分隔列
-    （表頭與資料列之間、儲存格僅含 `-`/`:` 者）存在則跳過，不存在也不視為
-    錯誤（容忍手寫、非標準 markdown 渲染器產生的表格）。
+    每個連續的「以 `|` 起訖」行區塊為一張表格，少於兩行（表頭+至少一列）的
+    區塊不算表格。待辦區段常以小標分成多張表（如「實作類」「分析類」），只取
+    首張會漏列（實例：tarrragon/claude#77 漏 11 列、#89 漏 2 列）。分隔列（表頭
+    與資料列之間、儲存格僅含 `-`/`:` 者）存在則跳過，不存在也不視為錯誤（容忍
+    手寫、非標準 markdown 渲染器產生的表格）。
     """
-    table_lines = []
-    started = False
+    blocks: List[List[str]] = []
+    current: List[str] = []
     for line in (content or "").splitlines():
         stripped = line.strip()
         if _TABLE_ROW_RE.match(stripped):
-            table_lines.append(stripped)
-            started = True
-        elif started:
-            break
-    if len(table_lines) < 2:
-        return None
+            current.append(stripped)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
 
-    header = _split_table_row(table_lines[0])
-    data_lines = table_lines[1:]
-    if data_lines and all(
-        _TABLE_SEPARATOR_CELL_RE.match(cell) for cell in _split_table_row(data_lines[0])
-    ):
-        data_lines = data_lines[1:]
-    rows = [_split_table_row(line) for line in data_lines]
-    return header, rows
+    tables = []
+    for table_lines in blocks:
+        if len(table_lines) < 2:
+            continue
+        header = _split_table_row(table_lines[0])
+        data_lines = table_lines[1:]
+        if data_lines and all(
+            _TABLE_SEPARATOR_CELL_RE.match(cell) for cell in _split_table_row(data_lines[0])
+        ):
+            data_lines = data_lines[1:]
+        tables.append((header, [_split_table_row(line) for line in data_lines]))
+    return tables
+
+
+def parse_markdown_table(content: str) -> Optional[Tuple[List[str], List[List[str]]]]:
+    """回傳首張 markdown 表格（見 `parse_markdown_tables`）；找不到表格回傳 `None`。"""
+    tables = parse_markdown_tables(content)
+    return tables[0] if tables else None
+
+
+def _split_todo_tables(content: str) -> Tuple[list, list]:
+    """把內容的全部表格分為 `(表頭合法的待辦表, 表頭不合法者的表頭清單)`。"""
+    valid, invalid_headers = [], []
+    for header, rows in parse_markdown_tables(content):
+        if header in TODO_VALID_HEADERS:
+            valid.append((header, rows))
+        else:
+            invalid_headers.append(header)
+    return valid, invalid_headers
 
 
 def validate_todo_table(name: str, content: str) -> None:
@@ -687,12 +710,21 @@ def validate_todo_table(name: str, content: str) -> None:
             f"區段「{name}」名稱以「{TODO_SECTION_NAME_PREFIX}」開頭，"
             f"但內容找不到可解析的表格；合法表頭：{TODO_VALID_HEADERS}"
         )
-    header, rows = parsed
+    header, _ = parsed
     if header not in TODO_VALID_HEADERS:
         raise ValueError(
             f"區段「{name}」表頭不符：{header}；合法表頭：{TODO_VALID_HEADERS}"
         )
 
+    # 首張表須為待辦表（既有約定）；其後表頭合法的待辦表同樣被 todo 聚合，
+    # 列內容一併驗證。表頭不合法的後續表格視為輔助表格，不驗證、不聚合。
+    valid_tables, _ = _split_todo_tables(content)
+    for table_header, rows in valid_tables:
+        _validate_todo_rows(name, table_header, rows)
+
+
+def _validate_todo_rows(name: str, header: List[str], rows: List[List[str]]) -> None:
+    """驗證單張待辦表的必要欄位與列舉值，不合法時拋 `ValueError`。"""
     for row in rows:
         row_map = dict(zip(header, row))
         for column in TODO_REQUIRED_COLUMNS:
@@ -722,11 +754,8 @@ def _todo_rows_from_content(name: str, content: str) -> List[dict]:
     """
     if not name.startswith(TODO_SECTION_NAME_PREFIX):
         return []
-    parsed = parse_markdown_table(content)
-    if parsed is None:
-        return []
-    header, rows = parsed
-    return [dict(zip(header, row)) for row in rows]
+    valid_tables, _ = _split_todo_tables(content)
+    return [dict(zip(header, row)) for header, rows in valid_tables for row in rows]
 
 
 def post_comment(issue_ref: str, body: str) -> dict:
@@ -905,8 +934,18 @@ def _split_keyword_tokens(keyword_group: str) -> list:
 
 
 def search_duplicates(keyword_groups: list) -> tuple:
-    """對每組關鍵字回傳命中 issue 清單，與略過的 token 查詢失敗總數（回傳
-    `(results, skipped_count)`）。每筆命中額外帶 `matched_tokens`（該 issue
+    """回傳 `(results, skipped_count)`；明細版見 `_search_duplicates_detailed`。
+
+    `init` 只需計數（查重不阻擋建立）；`dedup` 需列出略過 token 與原因並以
+    結束碼反映涵蓋不完整，改用明細版。
+    """
+    results, skipped_tokens = _search_duplicates_detailed(keyword_groups)
+    return results, len(skipped_tokens)
+
+
+def _search_duplicates_detailed(keyword_groups: list) -> tuple:
+    """對每組關鍵字回傳命中 issue 清單，與略過的 token 明細（回傳
+    `(results, [(token, reason), ...])`）。每筆命中額外帶 `matched_tokens`（該 issue
     命中的 token 清單）與 `hit_fields`（命中位置集合，見 `_hit_field_labels`），
     供 `render_dedup_report` 標示；清單依 `matched_tokens` 數量遞減排序（同
     數量再依 issue number 遞增），命中多個 token 的 issue 較可能是真實重複，
@@ -919,7 +958,7 @@ def search_duplicates(keyword_groups: list) -> tuple:
     的涵蓋缺口宣告）。
     """
     results = {}
-    skipped = 0
+    skipped: list = []
     comment_cache: dict = {}
     for group in keyword_groups:
         hits_by_number = {}
@@ -932,7 +971,7 @@ def search_duplicates(keyword_groups: list) -> tuple:
                     entry["tokens"].add(token)
                     entry["fields"] |= _hit_field_labels(token, issue, comment_cache)
             except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
-                skipped += 1
+                skipped.append((token, str(exc)))
                 sys.stderr.write(
                     f"[framework-issue][WARNING] 查重關鍵字「{token}」查詢失敗，略過：{exc}\n"
                 )
@@ -951,7 +990,9 @@ def search_duplicates(keyword_groups: list) -> tuple:
     return results, skipped
 
 
-def render_dedup_report(keyword_groups: list, results: dict, skipped: int = 0) -> str:
+def render_dedup_report(
+    keyword_groups: list, results: dict, skipped: int = 0, skipped_tokens: Optional[list] = None
+) -> str:
     """組合查重報告：回顯關鍵字集合、逐組列命中清單，提醒標註關係不自動判定。
 
     每筆命中列出「命中詞」與「命中位置」（見 `search_duplicates` 的
@@ -960,7 +1001,11 @@ def render_dedup_report(keyword_groups: list, results: dict, skipped: int = 0) -
 
     末行固定重述略過的 token 查詢失敗數（`tail -1` 即可見），使涵蓋範圍
     縮小成為報告本身可見的明確宣告，不只依賴 stderr 的單行警告。
+    `skipped_tokens`（`[(token, reason), ...]`）有給時於末行之前逐一列出，
+    且計數以其長度為準。
     """
+    if skipped_tokens is not None:
+        skipped = len(skipped_tokens)
     lines = [
         f"[framework-issue] 查重關鍵字集合（{len(keyword_groups)} 組）：{keyword_groups}",
         "",
@@ -986,15 +1031,34 @@ def render_dedup_report(keyword_groups: list, results: dict, skipped: int = 0) -
         "命中不等於重複：請對每張命中 issue 標註關係（重複／切分／引用），"
         "工具不自動判定，亦不阻擋後續建立。"
     )
+    for token, reason in skipped_tokens or []:
+        lines.append(f"略過的 token「{token}」：{reason}")
     lines.append(f"查詢失敗略過的 token 數：{skipped}")
     return "\n".join(lines) + "\n"
 
 
 def cmd_dedup(keywords: list) -> int:
-    """唯讀查重：不建立 issue，供 init 前人工核對或獨立驗證查詢涵蓋範圍。"""
-    results, skipped = search_duplicates(keywords)
-    sys.stdout.write(render_dedup_report(keywords, results, skipped))
+    """唯讀查重：不建立 issue，供 init 前人工核對或獨立驗證查詢涵蓋範圍。
+
+    有 token 查詢失敗而被略過時回 EXIT_DEGRADED：報告仍完整輸出，但結束碼
+    宣告查重涵蓋不完整，呼叫端不得把結果當作查重已完整（tarrragon/claude#95）。
+    """
+    results, skipped_tokens = _search_duplicates_detailed(keywords)
+    sys.stdout.write(render_dedup_report(keywords, results, skipped_tokens=skipped_tokens))
+    if skipped_tokens:
+        sys.stderr.write(
+            f"[framework-issue] 查重涵蓋不完整：{len(skipped_tokens)} 個 token 查詢失敗被略過"
+            f"（{'、'.join(token for token, _ in skipped_tokens)}），結果不可當作查重完整；"
+            f"排除失敗原因後重跑 dedup（exit {EXIT_DEGRADED}）\n"
+        )
+        return EXIT_DEGRADED
     return 0
+
+
+def _require_non_blank(content: str, content_file: str) -> None:
+    """內容為空或只有空白時拋 ValueError；add、observe 於送出前呼叫（tarrragon/claude#95）。"""
+    if not content.strip():
+        raise ValueError(f"內容檔 {content_file} 為空或只有空白，未送出")
 
 
 def cmd_init(
@@ -1120,6 +1184,7 @@ def cmd_add(issue_ref: str, owner: Optional[str], name: str, content_file: str) 
         issue_ref = normalize_issue_ref(issue_ref)
         owner = resolve_write_owner(owner)
         content = Path(content_file).read_text(encoding="utf-8")
+        _require_non_blank(content, content_file)
         validate_todo_table(name, content)
     except (ValueError, OSError) as exc:
         return emit_degraded(
@@ -1290,6 +1355,7 @@ def cmd_observe(issue_ref: str, summary: str, session: str, content_file: str) -
     try:
         issue_ref = normalize_issue_ref(issue_ref)
         content = Path(content_file).read_text(encoding="utf-8")
+        _require_non_blank(content, content_file)
     except (ValueError, OSError) as exc:
         return emit_degraded(
             f"observe 前置檢查失敗：{exc}",
@@ -1671,20 +1737,20 @@ def _collect_todo_rows(issue_number: int, comment_cache: Dict[int, list]) -> Lis
         if marker is None or not marker["name"].startswith(TODO_SECTION_NAME_PREFIX):
             continue
         _, _, content = (comment.get("body", "") or "").partition("\n")
-        parsed = parse_markdown_table(content)
-        if parsed is None or parsed[0] not in TODO_VALID_HEADERS:
-            found_header = parsed[0] if parsed else "(找不到表格)"
+        valid_tables, invalid_headers = _split_todo_tables(content)
+        if not valid_tables and not invalid_headers:
+            invalid_headers = ["(找不到表格)"]
+        for found_header in invalid_headers:
             sys.stderr.write(
                 f"[framework-issue][警告] issue #{issue_number} 區段"
-                f"「{marker['name']}」表頭不符，略過：{found_header}\n"
+                f"「{marker['name']}」表頭不符，略過該表：{found_header}\n"
             )
-            continue
-        header, table_rows = parsed
-        for raw_row in table_rows:
-            row = dict(zip(header, raw_row))
-            row["issue"] = issue_number
-            row["owner"] = marker["owner"]
-            rows.append(row)
+        for header, table_rows in valid_tables:
+            for raw_row in table_rows:
+                row = dict(zip(header, raw_row))
+                row["issue"] = issue_number
+                row["owner"] = marker["owner"]
+                rows.append(row)
     return rows
 
 
@@ -1862,10 +1928,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="區段建立者/維護者 session 識別；未給時自行推導，給值須與推導值相符（否則 exit 3）",
     )
     p_add.add_argument("--name", required=True, help="區段名稱")
-    p_add.add_argument("--content-file", required=True, help="區段內容檔（不含首行標記）")
+    p_add.add_argument(
+        "--content-file", required=True,
+        help="區段內容檔（不含首行標記）；內容為空或只有空白時拒絕、不送出（exit 3）",
+    )
 
     p_dedup = sub.add_parser(
-        "dedup", help="唯讀：以標題與 comment 內文查既有 issue，列命中清單不建立 issue"
+        "dedup",
+        help="唯讀：以標題與 comment 內文查既有 issue，列命中清單不建立 issue；"
+        "有 token 查詢失敗被略過時 exit 3（報告照常輸出並列出略過 token 與原因）",
     )
     p_dedup.add_argument(
         "--keywords", nargs="+", required=True,
@@ -1886,7 +1957,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_observe.add_argument("issue_ref", help="framework issue ref（如 tarrragon/claude#81 或純號 81）")
     p_observe.add_argument("--summary", required=True, help="觀測摘要（進入首行標記）")
     p_observe.add_argument("--session", required=True, help="本次觀測的 session 識別")
-    p_observe.add_argument("--content-file", required=True, help="觀測內容檔")
+    p_observe.add_argument(
+        "--content-file", required=True,
+        help="觀測內容檔；內容為空或只有空白時拒絕、不送出（exit 3）",
+    )
 
     p_show = sub.add_parser(
         "show", help="唯讀：以 body 區段索引為入口，輸出區分「區段」與「觀測流」"

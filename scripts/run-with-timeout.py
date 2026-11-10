@@ -32,8 +32,8 @@
 
 本機名額閘門（2026-10-14）：
 - 命令經 lib.test_command_parse.classify_argv_weight 判為 heavy（未指定具體測試檔的 flutter／dart test、
-  integration_test、flutter build、xcodebuild、未指定具體測試檔的 pytest；launcher 開頭而判不出 runner 者
-  保守視為 heavy）時，先以 flock 取得全機名額（SLOT_COUNT 個）才啟動命令；light 命令不排隊。
+  integration_test、flutter build、xcodebuild、未指定具體測試檔的 pytest；判不出 runner 者一律
+  保守視為 heavy，唯一例外為自行取得名額的 worktree merge，見 SELF_SLOTTED_COMMANDS）時，先以 flock 取得全機名額（SLOT_COUNT 個）才啟動命令；light 命令不排隊。
 - 逾時計時從取得名額、啟動命令之後才開始，排隊時間不計入。
 - 等待期間每 SLOT_NOTICE_INTERVAL_SECONDS 秒於 stderr 印出持有者的 pid、cwd、命令、開始時間與當下 load。
 - 名額由本程序持有的 flock 綁定其存活期間：正常結束、逾時、被 SIGKILL 皆由核心釋放，不依賴任何 hook；

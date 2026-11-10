@@ -82,8 +82,8 @@ body 缺 `fw-issue-schema` 標記時，`init` 在回填索引的同一次 PATCH 
 
 ```bash
 for t in <ana-1> <ana-2> <imp-1> <doc-1>; do
-  ticket track close "$t" --resolved-by none \
-    --reason not_executable_knowledge_captured \
+  ticket track close "$t" --resolved-by tarrragon/claude#53 \
+    --reason transferred_to_issue \
     --reason-note "分析 context 已遷至 tarrragon/claude#53（區段：當前結論）"
 done
 ```

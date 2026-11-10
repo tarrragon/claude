@@ -85,6 +85,10 @@ from lib.sync_exclude_manifest import (  # noqa: E402
     load_sync_skills_config,
     compute_content_hash as _compute_content_hash,
 )
+from lib.executable_bits import (  # noqa: E402
+    iter_shebang_files,
+    restore_shebang_exec_bits,
+)
 from lib.skill_version_diff import (  # noqa: E402
     SKILL_DRIFT_PREVIEW_LIMIT,
     extract_skill_versions,
@@ -110,31 +114,8 @@ BASE_SHA_FIELD = "last_synced_base_sha"
 # preserve-listed 的 APP 特化檔不被推上共享框架 repo（v1.48.6 誤推根因）。
 PRESERVE_FILENAME = "sync-preserve.yaml"
 
-# Push 前強制還原 executable bit 的目錄名（與 sync-claude-pull.py 對稱）
-# 確保推上去的 git index mode 為 100755，避免下游 pull 拿到 644。
-# 注意：以「目錄名」遞迴比對，覆蓋頂層 hooks/ 與 W10-092 遷移後的
-# skills/<name>/hooks/（缺陷 G）。
-EXECUTABLE_HOOK_DIR_NAMES = ("hooks",)
-
-
-def iter_executable_hook_dirs(root: Path):
-    """遞迴 yield root 下所有名稱屬 EXECUTABLE_HOOK_DIR_NAMES 的目錄。
-
-    取代舊 `root / subdir` 單層查找，使 skills/<name>/hooks/ 也被涵蓋。
-    os.walk 預設 followlinks=False，不跟隨 symlink，避免循環。
-
-    參數:
-        root: 起始掃描根目錄（temp_dir / staging 樹）
-
-    產出:
-        Path: 每個符合名稱的目錄
-    """
-    if not root.is_dir():
-        return
-    for dirpath, dirnames, _filenames in os.walk(root):
-        for name in dirnames:
-            if name in EXECUTABLE_HOOK_DIR_NAMES:
-                yield Path(dirpath) / name
+# Push 前還原 executable bit 的判準在 lib/executable_bits.py（首行 shebang 即 +x），
+# 與 sync-claude-pull.py 匯入同一函式（tarrragon/claude#21）。
 
 # commit 訊息中需要過濾的專案特定模式
 # 獨立 repo 是跨專案通用框架，commit 訊息禁止包含專案版本號/Wave/Ticket 編號
@@ -550,62 +531,15 @@ def copy_filtered_from_staging(
     return count
 
 
-# settings.json 中提取 hook command 內 .py 路徑的正則（容錯 shell 包裝）
-_SKILL_SCRIPT_RE = re.compile(r"\.claude/(skills/[^\s'\"]+?\.py)")
-
-
-def collect_registered_skill_scripts(root: Path) -> set[Path]:
-    """從 settings.json 反查被註冊為 hook command 直接執行的 skill 根目錄 .py。
-
-    與 sync-claude-pull.py::collect_registered_skill_scripts 對稱（W9-007）。
-
-    背景：exec-bit 還原以「目錄名 hooks」為邊界，未涵蓋位於 skill 根目錄（非
-    hooks/ 子目錄）但被 settings.json 註冊為執行的腳本，如
-    skills/continuous-learning/evaluate-session.py。push 端若不還原，推上去的
-    git index mode 會是 100644，下游 pull 拿到 644 → Permission denied。
-
-    採策略 C（settings.json 反查）：command 是「被註冊為執行」的權威來源，可精準
-    命中且不誤判未註冊的 shebang 腳本（如 skills/ticket/test_migration_dryrun.py）。
-
-    只解析 settings.json（settings.local.json 不 sync）。command 可能含 shell 包裝，
-    以正則容錯提取 .py 路徑。hooks/ 路徑由 iter_executable_hook_dirs 涵蓋，此處排除避重複。
-
-    參數:
-        root: 遠端 repo 的本地暫存根目錄（temp_dir），須含 settings.json
-
-    傳回:
-        set[Path]: 存在、被註冊執行且非 hooks/ 路徑的 .py 絕對路徑
-    """
-    settings_path = root / "settings.json"
-    if not settings_path.is_file():
-        return set()
-    try:
-        text = settings_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        print_color(f"   警告: 無法讀取 settings.json: {exc}", "yellow")
-        return set()
-
-    scripts: set[Path] = set()
-    for match in _SKILL_SCRIPT_RE.finditer(text):
-        rel = match.group(1)
-        if "/hooks/" in rel:
-            continue
-        candidate = root / rel
-        if candidate.is_file():
-            scripts.add(candidate)
-    return scripts
-
-
 def restore_executable_bits(root: Path) -> int:
-    """對所有 hooks/ 目錄下的 .py 檔案強制加入 filesystem executable bit。
+    """對 root 下首行為 shebang 的檔案加入 filesystem executable bit。
 
     呼叫時機：copy_filtered_from_staging 把 tracked 樹複製到 temp_dir 後、git add -A 前。
     在 POSIX 環境有效（macOS/Linux）；Windows NTFS 無 exec bit 概念，此操作無效果，
     但不會失敗或污染狀態。
 
-    遞迴覆蓋頂層 hooks/ 與 W10-092 遷移後的 skills/<name>/hooks/（缺陷 G）。
-
-    與 sync-claude-pull.py::restore_executable_bits 對稱（pull 端 safety net）。
+    判準委派 lib/executable_bits（首行 shebang 即 +x，非 shebang 不動），與
+    sync-claude-pull.py::restore_executable_bits 共用同一函式（tarrragon/claude#21）。
 
     跨平台治本方案見 git_update_index_chmod()（在 git add 後呼叫）。
 
@@ -615,32 +549,18 @@ def restore_executable_bits(root: Path) -> int:
     傳回:
         int: 實際變更 mode 的檔案數
     """
-    count = 0
-    targets: set[Path] = set()
-    for target_dir in iter_executable_hook_dirs(root):
-        for py_file in target_dir.rglob("*.py"):
-            if py_file.is_file():
-                targets.add(py_file)
-    # W9-007：settings.json 註冊的 skill 根目錄執行檔（非 hooks/ 路徑）
-    targets |= collect_registered_skill_scripts(root)
-    for py_file in targets:
-        mode = py_file.stat().st_mode
-        new_mode = mode | 0o111
-        if new_mode != mode:
-            py_file.chmod(new_mode)
-            count += 1
-    return count
+    return restore_shebang_exec_bits(root)
 
 
 def git_update_index_chmod(root: Path) -> int:
-    """對所有 hooks/ 目錄下的 .py 檔案的 git index mode 設為 100755。
+    """對 root 下首行為 shebang 的檔案，將 git index mode 設為 100755。
 
     Windows NTFS 無 executable bit 概念，filesystem chmod 對 git index 無作用；
     `git update-index --chmod=+x` 直接寫入 git index，不依賴 filesystem 語意，
     跨平台一致。這是 W16-004.3 的治本方案，覆蓋 restore_executable_bits 在
     Windows 上的盲點。
 
-    遞迴覆蓋頂層 hooks/ 與 W10-092 遷移後的 skills/<name>/hooks/（缺陷 G）。
+    對象判定與 restore_executable_bits 相同（lib/executable_bits.iter_shebang_files）。
     與 W1-029 git-archive push 流程相容：archive 解出的 tracked 樹保留目錄結構，
     本函式仍以 git update-index --chmod=+x 顯式校正 index mode。
 
@@ -656,15 +576,8 @@ def git_update_index_chmod(root: Path) -> int:
         int: 成功設定 mode 的檔案數
     """
     count = 0
-    targets: set[Path] = set()
-    for target_dir in iter_executable_hook_dirs(root):
-        for py_file in target_dir.rglob("*.py"):
-            if py_file.is_file():
-                targets.add(py_file)
-    # W9-007：settings.json 註冊的 skill 根目錄執行檔（非 hooks/ 路徑）
-    targets |= collect_registered_skill_scripts(root)
-    for py_file in targets:
-        rel = py_file.relative_to(root).as_posix()
+    for shebang_file in iter_shebang_files(root):
+        rel = shebang_file.relative_to(root).as_posix()
         result = run_git(
             ["update-index", "--chmod=+x", rel],
             cwd=str(root),
@@ -2680,7 +2593,7 @@ def main() -> None:
         # 7.6. 還原 hook 檔案 executable bit（防止 push 出損壞 mode 到遠端）
         restored = restore_executable_bits(temp_dir)
         if restored:
-            print_color(f"   已還原 {restored} 個 hook 檔案的執行權限（push 前 safety net）", "green")
+            print_color(f"   已還原 {restored} 個 shebang 檔案的執行權限（push 前 safety net）", "green")
 
         # 8-9. 發版檔：VERSION 與 CHANGELOG.md 逐位元取自本地 .claude/，腳本不產生條目
         copy_release_files(temp_dir, claude_dir)
@@ -2698,7 +2611,7 @@ def main() -> None:
         # 此處 git update-index --chmod=+x 不依賴 filesystem，跨平台一致
         index_fixed = git_update_index_chmod(temp_dir)
         if index_fixed:
-            print_color(f"   git index mode 設定 {index_fixed} 個 hook 檔案為 100755", "green")
+            print_color(f"   git index mode 設定 {index_fixed} 個 shebang 檔案為 100755", "green")
 
         # Check if there are actual changes
         diff_result = run_git(["diff", "--cached", "--quiet"], cwd=str(temp_dir), check=False)

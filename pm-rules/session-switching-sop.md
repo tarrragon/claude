@@ -287,7 +287,7 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 
 > **Why**：Claude Code v2.1.144 引入 `/resume` 對 background session 的支援（subagent 結束後 session 仍可被 resume 為前台 interactive session）。既有 handoff 機制設計時假設 session 為前台模式（subagent 結束即 session 終止），bg session resume 屬新增的 session 生命週期模式。雖然 W3-028 ANA 結論顯示**直接衝擊低**（handoff JSON 是 session-agnostic 檔案系統持久化），但 SOP 仍需顯式涵蓋此場景，避免 PM 在 resume bg session 後因預期行為落差而誤判 hook / scheduler 狀態。
 >
-> **Consequence**：SOP 未涵蓋此場景會讓 PM resume bg session 後遇到「自動 runqueue 提示未出現」「commit-handoff-hook 是否觸發不確定」等情境時無對應指引，被迫即時推理或誤以為機制故障，浪費 token 也容易跳過 handoff 流程。
+> **Consequence**：SOP 未涵蓋此場景會讓 PM resume bg session 後遇到「自動 runqueue 提示未出現」「post-git-commit-hook 是否觸發不確定」等情境時無對應指引，被迫即時推理或誤以為機制故障，浪費 token 也容易跳過 handoff 流程。
 >
 > **Action**：依下方對比表確認當前 session 類型，並依「行為差異說明」採取對應動作。
 
@@ -295,7 +295,7 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 
 | 機制 | 新 session（前台） | /resume 前台 session | /resume bg session |
 |------|-------------------|---------------------|-------------------|
-| commit-handoff-hook 觸發 | 是 | 是 | 是（resume 後變前台，subagent guard 自動解除） |
+| post-git-commit-hook 觸發 | 是 | 是 | 是（resume 後變前台，subagent guard 自動解除） |
 | SessionStart hook 觸發 | 是（source=startup） | 是（推論 source=resume，未實證但同 runtime） | 是（source=resume，繼承 bg UUID；W3-028.2 實證） |
 | Stop hook 觸發 | 是 | 是 | 是 |
 | handoff JSON 可讀 | 是 | 是 | 是（檔案系統層，session-agnostic） |
@@ -341,7 +341,7 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 | 1. 確認 session 類型 | 觀察 prompt 提示是否含 「resumed from background」標記 | 前台新 session 無此標記 |
 | 2. 重建全局視野 | 自動執行 `ticket track snapshot`（W3-028.2 實證：SessionStart 在 /resume 觸發 source=resume，hint hook 跑） | 與前台 session 一致；無需手動干預 |
 | 3. 查 runqueue 接手建議 | `session-start-scheduler-hint-hook` 自動觸發；hint 在 additionalContext 顯示 | 與前台 session 一致 |
-| 4. 後續執行流程（commit / handoff） | 與前台 session 一致（commit-handoff-hook 在 resume 後變前台後正常觸發） | 無差異 |
+| 4. 後續執行流程（commit / handoff） | 與前台 session 一致（post-git-commit-hook 在 resume 後變前台後正常觸發） | 無差異 |
 
 ### 禁止行為
 
@@ -350,7 +350,7 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 | 假設 `/resume` 對 running bg session 可用 | runtime 拒絕：須先 `claude stop <bg-id>`。若僅需查看狀態用 `claude attach <bg-id>` |
 | 假設 `claude attach` 與 `/resume` 等價 | 兩者 source 值不同（attach=clear / resume=resume）、session_id 處理不同（attach 新生 child / resume 繼承）。語義不同，依需求選擇 |
 | 假設 `/resume` 短 ID 可用 | 必須全 UUID。短 ID 一律 `Session not found` |
-| 假設 bg session resume 後 commit-handoff-hook 不觸發 | resume 後 session 變前台，subagent guard 自動解除，hook 正常運作 |
+| 假設 bg session resume 後 post-git-commit-hook 不觸發 | resume 後 session 變前台，subagent guard 自動解除，hook 正常運作 |
 | 把 bg session resume 視為「subagent 內」處理 | resume 後已非 subagent 環境；不可套用 subagent 內的 hook 跳過邏輯 |
 
 ### 豁免條款

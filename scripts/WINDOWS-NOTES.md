@@ -6,7 +6,7 @@
 
 **Consequence**：Windows 執行 sync-push 曾導致 v1.36.2 遠端 repo 一次新增 379 個 hook 相關 `.py` 檔案，mode 全為 `100644`（應為 `100755`）。所有 Mac 使用者 pull 下來後，`Stop hook` 和 `SessionStart hook` 執行時觸發 `Permission denied`，直到手動 `chmod +x` 才恢復。
 
-**Action**：Windows 使用者執行 sync-push 前，閱讀本文件並依照建議流程操作；若已推出錯誤 mode，本地 sync-pull 的 safety net 會自動修復 `hooks/**/*.py`。
+**Action**：Windows 使用者執行 sync-push 前，閱讀本文件並依照建議流程操作；若已推出錯誤 mode，本地 sync-pull 的 safety net 會自動修復首行為 shebang 的檔案。
 
 ---
 
@@ -47,8 +47,10 @@
 ### 建議 2：依賴 sync-claude-push.py 內建 safety net
 
 **Why**：最新版 `sync-claude-push.py` 包含兩層 safety net：
-1. `restore_executable_bits()` — push 前對 `temp_dir/hooks/**/*.py` 執行 filesystem chmod +x（macOS/Linux 有效）
-2. （規劃中）`git update-index --chmod=+x` — 顯式設定 git index mode（跨平台一致，治本方案）
+1. `restore_executable_bits()` — push 前對首行為 shebang（`#!`）的檔案執行 filesystem chmod +x（macOS/Linux 有效）
+2. `git_update_index_chmod()` — 對同一批 shebang 檔以 `git update-index --chmod=+x` 顯式設定 git index mode（跨平台一致，治本方案）
+
+兩者與 sync-pull 的還原共用同一判定函式（`.claude/lib/executable_bits.py`）；非 shebang 檔案的權限不動。
 
 **How to apply**：不需特別操作，執行 `python3 ./.claude/scripts/sync-claude-push.py "<訊息>"` 即可；safety net 會自動生效。
 
@@ -66,12 +68,12 @@ git ls-files --stage .claude/skills/ticket/hooks/acceptance-gate-hook.py
 python3 ./.claude/scripts/sync-claude-push.py "你的訊息"
 
 # 步驟 3：push 完成後，clone 遠端 repo 抽驗新檔 mode
-#         若 hooks/ 下新增 .py 是 100644，表示 safety net 未生效，需回報 issue
+#         若新增的 shebang 檔是 100644，表示 safety net 未生效，需回報 issue
 ```
 
 ### 建議 4：遇到 mode 損壞時的救援
 
-**Why**：sync-pull safety net 會自動 chmod +x `hooks/**/*.py`。若仍遇 Permission denied，表示 safety net 覆蓋範圍外（例如 `scripts/` 下或 skill 內 scripts）。
+**Why**：sync-pull safety net 會對 `.claude/` 同步範圍內首行為 shebang 的檔案自動 chmod +x。若仍遇 Permission denied，表示該檔案缺少 shebang，或位於同步排除範圍（如 `hook-logs/`、`.venv/`）。
 
 **How to apply**：
 
@@ -87,17 +89,17 @@ find .claude -name "*.py" -not -perm -u+x | head -10
 
 ## sync-pull safety net 說明
 
-`sync-claude-pull.py` 完成檔案同步後，會自動對 `.claude/hooks/**/*.py` 強制加入 executable bit。
+`sync-claude-pull.py` 完成檔案同步後，會對 `.claude/` 同步範圍內首行為 shebang（`#!`）的檔案自動加入 executable bit；判定函式在 `.claude/lib/executable_bits.py`，與 sync-push 共用。
 
 **覆蓋範圍**：
 
-| 目錄 | safety net 覆蓋 | 原因 |
+| 檔案 | safety net 覆蓋 | 原因 |
 |------|----------------|------|
-| `.claude/hooks/**/*.py` | **是** | 全部應為可執行（shell 直接呼叫） |
-| `.claude/scripts/*.py` | 否 | 有 `644` / `755` 混合（sync 腳本本身 `644` 由 `python3` 呼叫） |
-| `.claude/skills/*/scripts/*.py` | 否 | 未覆蓋，若遇問題需手動處理 |
+| 首行為 shebang 的檔案（不限目錄、不限副檔名） | **是** | shebang 是檔案自身宣告「要被直接執行」的來源 |
+| 非 shebang 檔案 | 否，權限不動 | 不宣告可執行，不應被提權 |
+| 同步排除範圍（`hook-logs/`、`.venv/`、`__pycache__/` 等） | 否 | 不屬同步範圍 |
 
-**為何不對所有 `.py` 做 chmod**：`.claude/scripts/sync-claude-pull.py` / `sync-claude-push.py` / `sync-claude-status.py` 本身是 `100644`（用 `python3 ./.claude/scripts/xxx.py` 呼叫），盲目 chmod +x 會偏離 git HEAD 記錄的正確 mode。
+**為何以 shebang 而非目錄名判定**：舊判準只涵蓋 `hooks/` 與 settings.json 註冊的腳本，`scripts/`、`skills/*/scripts/` 下的 shebang 腳本在上游以 `100644` 追蹤時，pull 後即失去執行權限（tarrragon/claude#21）。
 
 ---
 

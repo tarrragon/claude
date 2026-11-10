@@ -86,6 +86,78 @@
 | 新模組不與標準庫同名 | 例如不取名 `types.py`、`logging.py`；直接執行該目錄內的腳本時，同名檔會遮蔽標準庫模組，錯誤訊息與拆分無明顯關聯，很難追查 |
 | 拆分 portable skill 時，搬移來源記在 commit 訊息 | frontmatter 宣告 `metadata.portable: true` 的 skill，新模組的 docstring 不寫「自某檔搬移」的路徑與票號。本地守衛接受搬移豁免標記，推發佈庫時的可攜性檢查不接受：拆分當下提交得過，推送時才被擋，還得回頭再開一張票清理 |
 | 一次只做一種改變 | 純搬移的 commit 不同時改行為；行為修改放在後續 commit，閘門紅燈時才能分辨是哪一步造成的 |
+| 清理殘留匯入 | 見下方〈清理殘留匯入〉 |
+| 舊匯入路徑以 PEP 562 延遲轉出 | 見下方〈以 PEP 562 延遲轉出維持舊匯入路徑〉 |
+| 比對拆分前後的符號 | 見下方〈以多重集合比對拆分前後的符號〉 |
+
+#### 清理殘留匯入
+
+**做法**：函式搬走後，原模組裡只供這些函式使用的匯入（模組、常數、型別）會留下來，新模組也常整段複製原檔的匯入區。純搬移的 commit 提交前，對原模組與所有新模組跑未使用匯入檢查，刪掉殘留的匯入。刻意保留給呼叫端的轉出，寫成冗餘別名 `from pkg.rendering import render as render` 或列入 `__all__`，檢查工具會把它當成轉出而不報。
+
+**檢查方式**：
+
+```bash
+uvx ruff check --select F401 <原模組> <新模組1> <新模組2>
+```
+
+輸出為空才算清乾淨。被報出的名稱刪除前，先 grep 測試有沒有以字串 patch 它（`monkeypatch.setattr(<原模組>, "<名稱>", ...)`）：靜態檢查看不到這類用法，刪掉後該測試會改報 AttributeError。
+
+**Why**：殘留匯入不影響執行，測試全綠，只有靜態檢查看得到；而讀者會依匯入推斷模組的依賴，殘留的匯入讓原模組看起來仍依賴已搬走的職責。實例：某 worktree 管理模組拆分後，原檔仍匯入一個已無人使用的常數。
+
+#### 以 PEP 562 延遲轉出維持舊匯入路徑
+
+**做法**：過渡期要讓 `from <原模組> import <名稱>` 繼續可用，但原模組不想在載入時就匯入新模組（會形成循環匯入，或拖慢載入）時，用 PEP 562 的模組層 `__getattr__`：只有存取到已搬走的名稱時才匯入新模組並轉出。
+
+```python
+# 原模組 pkg/old.py
+import importlib
+
+_MOVED = {"render": "pkg.rendering", "run": "pkg.rendering"}
+
+
+def __getattr__(name):
+    if name in _MOVED:
+        return getattr(importlib.import_module(_MOVED[name]), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted([*globals(), *_MOVED])
+```
+
+`from pkg.old import render`、`pkg.old.run(...)` 照常可用；不在 `_MOVED` 的名稱仍報 ImportError／AttributeError。
+
+**檢查方式**：對 `_MOVED` 的每個名稱跑一次 `python3 -c "from <原模組> import <名稱>"`，全數成功；再以 `grep -rn "from <原模組> import\|<原模組>\.<名稱>"` 列出仍走舊路徑的呼叫端，作為過渡期結束時要改的清單。
+
+**邊界**：延遲轉出與一般 re-export 一樣保不住 patch。`hasattr(<原模組>, "render")` 會經 `__getattr__` 回傳 True，所以 `monkeypatch.setattr(<原模組>, "render", ...)` 不帶 `raising=False` 也會成功，但新模組內部呼叫的仍是新模組的 `render`，patch 沒有生效。由新模組內部呼叫的名稱，patch 新模組（見上表〈萃取模組〉列）。
+
+#### 以多重集合比對拆分前後的符號
+
+**做法**：純搬移應使「原檔拆分前的頂層符號」等於「原檔拆分後加所有新模組的頂層符號」，且每個名稱的出現次數相同。比對要用多重集合（保留重複的排序結果），不用集合：函式被複製到新模組卻沒從原檔刪掉時，名稱集合不變、只有次數由 1 變 2，集合比對看不出來。
+
+**檢查方式**：以下命令只計頂層的 `def`、`class` 與賦值，不計匯入，所以轉出用的匯入不影響結果。
+
+```bash
+cat > /tmp/split_symbols.py <<'EOF'
+import ast, sys
+for path in sys.argv[1:]:
+    src = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
+    for node in ast.parse(src).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            print(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    print(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            print(node.target.id)
+EOF
+git show <拆分前 commit>:<原檔> | python3 /tmp/split_symbols.py - | LC_ALL=C sort > /tmp/split_before.txt  # skill-residue-exempt: 上方 heredoc 建立的暫存腳本
+python3 /tmp/split_symbols.py <原檔> <新模組1> <新模組2> | LC_ALL=C sort > /tmp/split_after.txt  # skill-residue-exempt: 同上
+diff /tmp/split_before.txt /tmp/split_after.txt
+```
+
+diff 無輸出才算通過。預期內的差異只有過渡機制本身新增的名稱（例如 PEP 562 的 `__getattr__`、`__dir__`、`_MOVED`），逐項確認後記入拆分票的 Solution；其他任何一行 `<`（符號消失）或 `>`（符號多出或被複製）都要先查明再提交。本命令只看頂層，且不計元組解包賦值（`A, B = ...`）：拆分若把方法在類別之間搬動，或搬動的是解包賦值的常數，另需逐項比對。
 
 ---
 

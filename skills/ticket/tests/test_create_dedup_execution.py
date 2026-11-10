@@ -77,6 +77,33 @@ class TestRunDedup:
         assert out.partial is True
         assert "查重部分未完成" in capsys.readouterr().err
 
+    def test_partial_exit_with_report_keeps_hits(self, capsys):
+        """dedup 有 token 被略過時 exit 3、報告完整：照舊解析為 partial，不丟命中。"""
+        report = REPORT.replace("略過的 token 數：0", "略過的 token 數：1")
+        out = _REAL_RUN_DEDUP(["k"], runner=_fake_runner(report, returncode=3))
+        assert out.hits == [(102, "查重閘門缺口"), (105, "dedup 範本")]
+        assert out.partial is True and "1 個" in out.error
+        assert "查重部分未完成" in capsys.readouterr().err
+
+    def test_partial_exit_without_report_is_full_failure(self, capsys):
+        """對照：同為 exit 3 但 stdout 無報告末行（如前置檢查失敗），仍走全失敗。"""
+        out = _REAL_RUN_DEDUP(
+            ["k"], runner=_fake_runner("", returncode=3, stderr="無法執行：gh 未登入")
+        )
+        assert out.hits == [] and out.partial is False
+        assert "exit 3" in out.error and "gh 未登入" in out.error
+
+    def test_partial_exit_with_zero_skipped_still_partial(self):
+        """結束碼宣告涵蓋不完整而末行略過數為 0：不得當作完整查重。"""
+        out = _REAL_RUN_DEDUP(["k"], runner=_fake_runner(REPORT, returncode=3))
+        assert len(out.hits) == 2
+        assert out.partial is True and "exit 3" in out.error
+
+    def test_other_nonzero_exit_with_report_is_full_failure(self):
+        """非 3 的非 0 結束碼即使 stdout 有報告也不解析，維持全失敗。"""
+        out = _REAL_RUN_DEDUP(["k"], runner=_fake_runner(REPORT, returncode=1))
+        assert out.hits == [] and "exit 1" in out.error
+
     def test_failure_also_logged(self, caplog):
         exc = subprocess.TimeoutExpired(cmd="x", timeout=1)
         with caplog.at_level("WARNING"):

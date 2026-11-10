@@ -3,6 +3,12 @@
 import argparse
 import os
 import sys
+from pathlib import Path
+
+if not __package__:
+    # 以 python3 <path>/cli.py 直接執行時 sys.path[0] 是 doc_system/ 本身，
+    # 套件名 doc_system 不可匯入；補上 skill 根目錄，使下方絕對匯入成立。
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init, uc, validate, schema
 
@@ -199,15 +205,24 @@ CALLER_CWD_ENV = "SKILL_CLI_CALLER_CWD"
 
 
 def restore_caller_cwd() -> None:
-    """還原呼叫者的 cwd，使相對路徑引數以呼叫者所在目錄解析。
+    """還原呼叫者的 cwd，使相對路徑引數與專案根目錄以呼叫者所在目錄解析。
 
     shim 以 `uv run --directory <skill_dir>` 啟動，行程 cwd 被改為 skill 目錄
     （PWD 也被 uv 改寫，不可信）。shim 在切換前把呼叫者 cwd 放進
     SKILL_CLI_CALLER_CWD，此處讀回；未設定（非 shim 啟動）時不動 cwd。
+    值無效（非絕對路徑或非目錄）時寫 stderr 警告並保持現有 cwd。
+    本函式在 ticket、worktree、doc 三個 skill 內嵌同一份，行為由測試鎖定一致。
     """
-    caller = os.environ.get(CALLER_CWD_ENV)
-    if caller and os.path.isabs(caller) and os.path.isdir(caller):
+    caller = os.environ.pop(CALLER_CWD_ENV, None)  # 讀一次即移除，避免子行程繼承
+    if not caller:
+        return
+    if os.path.isabs(caller) and os.path.isdir(caller):
         os.chdir(caller)
+        return
+    sys.stderr.write(
+        f"[Warning] {CALLER_CWD_ENV}={caller!r} 無效（需為存在的絕對目錄），"
+        f"改用目前目錄 {os.getcwd()}\n"
+    )
 
 
 def main() -> None:
@@ -230,3 +245,7 @@ def main() -> None:
     except BrokenPipeError:
         # 輸出被截斷管線（如 | head）提前關閉，非程式錯誤，靜默結束
         sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

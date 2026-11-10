@@ -35,16 +35,21 @@ session 開始
 
 子 shell 執行完畢後，父 shell 的工作目錄保持不變。這是最通用的方法，適用任何指令。
 
-**方法 2：uv --directory 參數（適用 uv 指令）**
+**方法 2：uv 的 `--project` 與 `--directory`（適用 uv 指令，依用途選）**
 
-```bash
-# uv 支援 --directory 指定目錄，不改變 shell 工作目錄
-uv --directory .claude/skills/ticket run ticket track list
-```
+兩個旗標都不改變 shell 工作目錄，差別在子行程的 cwd：`--project` 只指定 uv 專案位置，子行程 cwd 仍是呼叫者所在目錄；`--directory` 把子行程 cwd 改為該目錄。選哪個，看命令的相對路徑要以誰為基準。
 
-uv 原生支援指定目錄參數，比子 shell 更精簡，但僅限 uv 指令。
+| 用途 | 寫法 | 理由 |
+|------|------|------|
+| skill CLI，或路徑引數相對於呼叫者的命令 | `uv run --project .claude/skills/ticket ticket track list` | 相對路徑與專案根目錄要以呼叫者解析；`--directory` 會把它們解析到 path 下，外觀同測試紅燈（tarrragon/claude#24） |
+| 跑該目錄自己的測試套件（收集範圍相對該目錄） | `uv --directory .claude/hooks run pytest -q` | pytest 從 cwd 開始收集；`--project` 不改 cwd，收集起點落在呼叫者目錄，找不到測試 |
 
-實測（uv 0.8.13）：`uv -d /tmp --version` 報 `error: unexpected argument '-d' found`，`uv --directory /tmp --version` 正常；uv 無 `-d` 短旗標，一律寫長旗標。
+**實測**（uv 0.8.13）：
+
+- cwd 差異（從 repo 根目錄）：`uv --directory .claude/skills/ticket run python -c "import os;print(os.getcwd())"` 印出 `<repo>/.claude/skills/ticket`；`uv run --project .claude/skills/ticket python -c ...` 印出 `<repo>`
+- 測試收集（從 repo 根目錄）：`uv run --project .claude/hooks pytest --collect-only -q` 得 `no tests collected`（exit 5）；`uv --directory .claude/hooks run pytest --collect-only -q` 得 `8094/8130 tests collected`
+- 相對路徑誤解析：`uv --directory .claude/scripts run python run-with-timeout.py 900 -- flutter test integration_test/x.dart` 使測試路徑被解析為 `.claude/scripts/integration_test/x.dart`，載入即失敗（tarrragon/claude#24 觀測區段）
+- `uv -d` 無短旗標（報 `unexpected argument '-d' found`），寫長旗標
 
 **方法 3：絕對路徑還原**
 
@@ -82,7 +87,7 @@ cd /deep/nested/dir && grep "x" file  # chpwd ls 可能大於 grep 結果
 |---------|---------|---------|
 | 需要在其他目錄執行 | `cd /path && command` | `(cd /path && command)` — 子 shell 不觸發父 shell 的 chpwd |
 | 讀取/編輯檔案 | `cd /path && cat file` | 使用 Read/Edit/Write 工具搭配絕對路徑 |
-| uv 指令 | `cd /path && uv run ...` | `uv --directory /path run ...` |
+| uv 指令 | `cd /path && uv run ...` | skill CLI／路徑相對呼叫者：`uv run --project /path ...`；跑該目錄測試套件：`uv --directory /path run pytest ...`（見方法 2） |
 
 **為什麼子 shell 不觸發 chpwd**：子 shell 是獨立 process，即使有 chpwd 設定，其輸出不會污染父 shell 的工具結果空間（透過 `()` 包裹的命令結束後，子 shell 整體退出，chpwd 的 ls 輸出通常會被 shell 直接丟棄或只影響子 shell 內部）。
 

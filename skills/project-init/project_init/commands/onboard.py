@@ -250,7 +250,9 @@ def _collect_core_file_items(
 def _collect_hook_completeness_items(hook_completeness) -> list[TodoItem]:
     """彙整 Hook 完整性相關待辦項目."""
     items = []
-    if not hook_completeness.completeness_ok:
+    if hook_completeness.failure_reason:
+        items.append(TodoItem(description="Hook 完整性無法驗證", hint=hook_completeness.failure_reason))
+    elif not hook_completeness.completeness_ok:
         unregistered_list = ", ".join(sorted(hook_completeness.unregistered_hooks)[:3])
         hint = f"未登記: {unregistered_list}{'...' if len(hook_completeness.unregistered_hooks) > 3 else ''} — 檢查是否需要在 settings.json 註冊或新增到 hook-exclude-list.json"
         items.append(TodoItem(description=f"有 {len(hook_completeness.unregistered_hooks)} 個未登記的 Hook", hint=hint))
@@ -464,7 +466,10 @@ def _print_hook_completeness_section(hook_completeness) -> None:
     print(f"  {OnboardMessages.HOOK_EXCLUDED_COUNT.format(count=hook_completeness.excluded_count)}")
     print()
 
-    if hook_completeness.completeness_ok:
+    if hook_completeness.failure_reason:
+        print(f"  {OnboardMessages.HOOK_COMPLETENESS_TODO}")
+        print(f"  {hook_completeness.failure_reason}")
+    elif hook_completeness.completeness_ok:
         print(f"  {OnboardMessages.HOOK_COMPLETENESS_OK}")
     else:
         print(f"  {OnboardMessages.HOOK_COMPLETENESS_TODO}")

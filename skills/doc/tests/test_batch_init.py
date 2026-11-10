@@ -135,3 +135,32 @@ class TestBatchInitExecute:
 
         output = capsys.readouterr().out
         assert "[SKIP] PROP-999" in output
+
+
+class TestBatchInitSharesAllocator:
+    """batch-init 與 doc create 呼叫同一個配號函式（3.1.0-W1-033）。"""
+
+    def test_uses_create_next_id_and_has_no_private_allocator(self):
+        from doc_system.commands import batch_init, create
+
+        assert batch_init._next_id is create._next_id
+        assert not hasattr(batch_init, "_next_spec_id")
+        assert not hasattr(batch_init, "_next_uc_id")
+
+    def test_three_digit_uc_corpus_continues_three_digits(self, tmp_path, capsys):
+        """舊實作對 UC 寫死兩位，既有 UC-005 時會配出 UC-06；共用配號後配 UC-006。"""
+        project_root, templates_dir = _setup_project(tmp_path)
+        (tmp_path / "docs" / "usecases" / "UC-005-seed.md").write_text("---\nid: UC-005\n---\n")
+        (tmp_path / "docs" / "spec" / "SPEC-012-seed.md").write_text("---\nid: SPEC-012\n---\n")
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(argparse.Namespace(proposals="PROP-001", domain=None))
+        capsys.readouterr()
+
+        uc_names = sorted(p.name for p in (tmp_path / "docs" / "usecases").iterdir())
+        spec_names = sorted(p.name for p in (tmp_path / "docs" / "spec").iterdir())
+        assert [n for n in uc_names if not n.startswith("UC-005")][0].startswith("UC-006-")
+        assert [n for n in spec_names if not n.startswith("SPEC-012")][0].startswith("SPEC-013-")

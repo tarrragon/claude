@@ -131,13 +131,16 @@ class TestCleanupLevel2:
     def test_cleanup_level2_warning_not_pushed_without_force(self, monkeypatch, capsys):
         """場景 11: cleanup — Level 2 警告，無 --force
 
-        未 push 時，應警告並拒絕，exit code 為 1。
+        未 push 也未併入本機 base 時，應警告並拒絕，exit code 為 1。
+        （3.1.0-W1-050 起已併入 base 視為已保存；本場景須明示未併入）
         """
         def mock_get_uncommitted(path):
             return 0
 
         def mock_is_pushed(branch):
             return False
+
+        monkeypatch.setattr("cleanup_command._is_branch_merged_to_base", lambda b, base="main": False)
 
         def mock_run_git(args, cwd=None, timeout=10):
             if "worktree" in args and "list" in args:
@@ -584,12 +587,87 @@ class TestWorktreeLock:
         assert not ok
         assert "已不存在" in msg
 
-    def test_unlock_flag_unlocks_then_removes(self, repo):
+    def test_unlock_flag_unlocks_then_removes(self, repo, capsys):
         self._lock(repo, os.getpid())
         ok, _ = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x", unlock=True)
         assert ok
         assert not repo["wt"].exists()
         assert _branches(repo["root"]) == ""
+        assert "已解鎖（--unlock）" in capsys.readouterr().out
+
+    def _deliver(self, repo):
+        """代理人交回：分支上有自己的提交，且已快轉併入 main。"""
+        (repo["wt"] / "delivered.txt").write_text("d")
+        _git(repo["wt"], "add", "delivered.txt")
+        _git(repo["wt"], "commit", "-m", "agent work")
+        _git(repo["root"], "merge", "--ff-only", "worktree-agent-x")
+
+    def test_lock_held_by_parent_session_is_unlocked(self, repo, capsys):
+        """派發方 session（呼叫者的祖先行程）持有的鎖、分支已交回：不需 --unlock，解鎖後完成並寫明。"""
+        parent = os.getppid()
+        self._deliver(repo)
+        self._lock(repo, parent)
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert ok, msg
+        assert not repo["wt"].exists() and _branches(repo["root"]) == ""
+        assert f"已解鎖：鎖的 pid {parent} 是呼叫者的祖先行程" in capsys.readouterr().out
+
+    def test_lock_held_by_grandparent_is_unlocked(self, repo):
+        grandparent = cleanup_command._parent_pid(os.getppid())
+        if grandparent is None or grandparent <= 1:
+            pytest.skip("測試環境的行程鏈不足兩層")
+        self._deliver(repo)
+        self._lock(repo, grandparent)
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert ok, msg
+
+    def test_parent_lock_on_undelivered_branch_still_stops(self, repo):
+        """正向對照：祖先持有但分支尚無自己的提交（代理人可能仍在執行），停手。
+
+        此分支等於 main，Level 3 會判為已合併；只看 pid 會刪掉執行中代理人的 worktree。
+        """
+        self._lock(repo, os.getppid())
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert not ok and "[停手]" in msg
+        assert "代理人可能仍在執行" in msg
+        assert repo["wt"].exists()
+
+    def test_parent_lock_on_unmerged_commits_still_stops(self, repo):
+        """祖先持有、分支有提交但未併入 main：停手。"""
+        (repo["wt"] / "wip.txt").write_text("w")
+        _git(repo["wt"], "add", "wip.txt")
+        _git(repo["wt"], "commit", "-m", "wip")
+        self._lock(repo, os.getppid())
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert not ok and "代理人可能仍在執行" in msg
+
+    def test_lock_held_by_other_live_process_still_stops(self, repo):
+        """正向對照：存活但不在祖先鏈上的行程持有的鎖，仍停手並說明持有者。"""
+        other = subprocess.Popen(["sleep", "30"])
+        try:
+            self._lock(repo, other.pid)
+            ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        finally:
+            other.kill()
+            other.wait()
+        assert not ok
+        assert f"pid {other.pid} 存活" in msg and "[停手]" in msg
+        assert repo["wt"].exists()
+
+    def test_ancestor_walk_failure_falls_back_to_stop(self, repo, monkeypatch):
+        """ps 查不到父行程時只認直接父行程；更上層的鎖當成他人持有，停手。"""
+        grandparent = cleanup_command._parent_pid(os.getppid())
+        if grandparent is None or grandparent <= 1:
+            pytest.skip("測試環境的行程鏈不足兩層")
+        monkeypatch.setattr(cleanup_command, "_parent_pid", lambda pid: None)
+        self._deliver(repo)
+        self._lock(repo, grandparent)
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert not ok and "[停手]" in msg
+
+    def test_pid_one_is_never_treated_as_own(self, monkeypatch):
+        monkeypatch.setattr(cleanup_command.os, "getppid", lambda: 1)
+        assert cleanup_command._ancestor_pids() == set()
 
 
 class TestFailurePathsReturnNonZero:
@@ -609,3 +687,132 @@ class TestFailurePathsReturnNonZero:
         assert repo["wt"].exists()
         assert cmd_cleanup(branch="worktree-agent-x", force=True, unlock=True) == 0
         assert not repo["wt"].exists()
+
+
+class TestLevel1StatusFailure:
+    """Level 1 在 git status 失敗時阻擋，通過訊息依實際檢查結果（3.1.0-W1-050）"""
+
+    WT = "/path/ccsession-0.1.1-W9-001"
+
+    def _setup(self, monkeypatch, status_result):
+        removed = []
+
+        def mock_run_git(args, cwd=None, timeout=10):
+            if args[:2] == ["status", "--porcelain"]:
+                return status_result
+            if "remove" in args or "-d" in args or "-D" in args:
+                removed.append(args)
+            return (True, "")
+
+        wts = lambda: [{"path": self.WT, "branch": "feat/0.1.1-W9-001"}]  # noqa: E731
+        for mod in ("worktree_manager", "cleanup_command"):
+            monkeypatch.setattr(f"{mod}.run_git_command", mock_run_git)
+            monkeypatch.setattr(f"{mod}.get_worktree_list", wts)
+        monkeypatch.setattr("cleanup_command._is_branch_pushed", lambda b: True)
+        monkeypatch.setattr("cleanup_command._is_branch_merged_to_base", lambda b, base="main": True)
+        return removed
+
+    def test_status_failure_blocks_even_with_force(self, monkeypatch, capsys):
+        """E2 正向對照：git status 失敗時 Level 1 擋下（--force 無效），不執行移除。"""
+        removed = self._setup(monkeypatch, (False, "fatal: not a git repository"))
+        assert cmd_cleanup("0.1.1-W9-001", force=True) == 1
+        out = capsys.readouterr().out
+        assert "not a git repository" in out and "無法確認" in out
+        assert "Level 1 檢查：通過" not in out and removed == []
+
+    def test_level1_helper_returns_reason_on_failure(self, monkeypatch):
+        self._setup(monkeypatch, (False, "Command timed out after 10s"))
+        passed, detail = _cleanup_check_level1(self.WT)
+        assert not passed and "timed out" in detail
+
+    def test_pass_message_only_when_zero_changes(self, monkeypatch, capsys):
+        self._setup(monkeypatch, (True, ""))
+        assert cmd_cleanup("0.1.1-W9-001") == 0
+        assert "Level 1 檢查：通過（無未 commit 變更）" in capsys.readouterr().out
+
+    def test_half_removed_worktree_pass_message_states_changes(self, monkeypatch, capsys):
+        """半刪 worktree 走收尾路徑時有變更，不得印「無未 commit 變更」。"""
+        self._setup(monkeypatch, (True, " D a.txt\n D b.txt"))
+        monkeypatch.setattr("cleanup_command._recovery_unmet_conditions", lambda p: [])
+        cmd_cleanup("0.1.1-W9-001")
+        out = capsys.readouterr().out
+        assert "無未 commit 變更" not in out and "2 個變更皆為已追蹤檔刪除" in out
+
+
+# ===== DerivedData：只刪 WorkspacePath 位於該 worktree 內的目錄 =====
+
+import plistlib
+
+import xcode_derived_data
+
+
+def _derived_entry(root, name, workspace=None, fmt=plistlib.FMT_XML):
+    """建立一個 DerivedData 子目錄；workspace 為 None 時不寫 info.plist（如 ModuleCache.noindex）。"""
+    entry = root / name
+    entry.mkdir(parents=True)
+    (entry / "Build").mkdir()
+    if workspace is not None:
+        with open(entry / "info.plist", "wb") as fh:
+            plistlib.dump({"WorkspacePath": str(workspace), "LastAccessedDate": "x"}, fh, fmt=fmt)
+    return entry
+
+
+@pytest.fixture
+def derived(repo, tmp_path, monkeypatch):
+    """DerivedData 根目錄含：指向 wt 的（XML 與 binary 各一）、指向前綴相同的 wt2、指向主 repo、無 info.plist。"""
+    root = tmp_path / "DerivedData"
+    monkeypatch.setattr(xcode_derived_data, "DERIVED_DATA_ROOT", root)
+    monkeypatch.setattr(xcode_derived_data, "PLATFORM", "darwin")
+    wt = repo["wt"]
+    return {
+        "root": root,
+        "hit_xml": _derived_entry(root, "Runner-aaa", wt / "ios" / "Runner.xcworkspace"),
+        "hit_bin": _derived_entry(root, "Runner-bbb", wt / "macos" / "Runner.xcodeproj", plistlib.FMT_BINARY),
+        "sibling": _derived_entry(root, "Runner-ccc", f"{wt}2/ios/Runner.xcworkspace"),
+        "main": _derived_entry(root, "Runner-ddd", repo["root"] / "ios" / "Runner.xcworkspace"),
+        "no_plist": _derived_entry(root, "ModuleCache.noindex"),
+    }
+
+
+class TestDerivedDataCleanup:
+    def test_cleanup_uses_the_patched_module(self):
+        assert cleanup_command.remove_derived_data_for is xcode_derived_data.remove_derived_data_for
+
+    def test_only_entries_inside_worktree_are_removed(self, repo, derived):
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert ok, msg
+        assert not derived["hit_xml"].exists() and not derived["hit_bin"].exists()
+        for kept in ("sibling", "main", "no_plist"):
+            assert derived[kept].exists(), kept
+        assert f"已移除 DerivedData：{derived['hit_xml']}" in msg
+        assert f"已移除 DerivedData：{derived['hit_bin']}" in msg
+
+    def test_symlinked_worktree_path_still_matches(self, repo, derived, tmp_path):
+        link = tmp_path / "wt-link"
+        link.symlink_to(repo["wt"])
+        assert [e.name for e in xcode_derived_data.find_derived_data_for(str(link))] == ["Runner-aaa", "Runner-bbb"]
+
+    def test_non_macos_leaves_derived_data(self, repo, derived, monkeypatch):
+        monkeypatch.setattr(xcode_derived_data, "PLATFORM", "linux")
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert ok, msg
+        assert derived["hit_xml"].exists() and derived["hit_bin"].exists()
+        assert msg == CleanupMessages.CLEANUP_SUCCESS.format(path=str(repo["wt"]), branch="worktree-agent-x")
+
+    def test_missing_root_leaves_message_unchanged(self, repo, tmp_path, monkeypatch):
+        monkeypatch.setattr(xcode_derived_data, "DERIVED_DATA_ROOT", tmp_path / "absent")
+        monkeypatch.setattr(xcode_derived_data, "PLATFORM", "darwin")
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert ok, msg
+        assert msg == CleanupMessages.CLEANUP_SUCCESS.format(path=str(repo["wt"]), branch="worktree-agent-x")
+
+    def test_removal_failure_is_reported_without_failing_cleanup(self, repo, derived, monkeypatch, capsys):
+        def deny(path):
+            raise PermissionError(13, "Permission denied", str(path))
+
+        monkeypatch.setattr(xcode_derived_data.shutil, "rmtree", deny)
+        ok, msg = cleanup_command._cleanup_execute(str(repo["wt"]), "worktree-agent-x")
+        assert ok, msg
+        assert f"DerivedData 未移除：{derived['hit_xml']}" in msg
+        assert "DerivedData 移除失敗" in capsys.readouterr().err
+        assert derived["hit_xml"].exists()

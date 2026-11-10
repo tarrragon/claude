@@ -15,6 +15,7 @@ from doc_system.core.file_locator import FileLocator
 from doc_system.core.tracking_schema import PROPOSALS_TRACKING_SCHEMA, TRACEABILITY_SCHEMA
 from doc_system.commands.create import (
     DOC_TYPE_CONFIG,
+    _next_id,
     _read_template,
     _replace_frontmatter_id,
     _replace_frontmatter_date,
@@ -30,6 +31,7 @@ assert _TOP_LEVEL_KEYS == {
     "data_contract_tests",
     "runtime_tests",
     "last_updated",
+    "test_scan_dirs",
 }
 _VERSION_KEY = "version"
 _MAPPINGS_KEY = "mappings"
@@ -67,41 +69,6 @@ def _get_proposal_info(tracking: dict, prop_id: str) -> dict | None:
         if isinstance(entry, dict) and entry.get("id") == prop_id:
             return entry
     return None
-
-
-def _next_spec_id(project_root: str) -> str:
-    spec_dir = Path(project_root) / "docs" / "spec"
-    if not spec_dir.exists():
-        return "SPEC-001"
-    existing = []
-    for f in spec_dir.rglob("*.md"):
-        content = f.read_text(encoding="utf-8")
-        for line in content.split("\n"):
-            if line.startswith("id:"):
-                sid = line.split(":", 1)[1].strip().strip('"')
-                if sid.startswith("SPEC-"):
-                    try:
-                        existing.append(int(sid.split("-")[1]))
-                    except (IndexError, ValueError):
-                        pass
-    next_num = max(existing, default=0) + 1
-    return f"SPEC-{next_num:03d}"
-
-
-def _next_uc_id(project_root: str) -> str:
-    uc_dir = Path(project_root) / "docs" / "usecases"
-    if not uc_dir.exists():
-        return "UC-01"
-    existing = []
-    for f in uc_dir.glob("*.md"):
-        name = f.stem
-        if name.startswith("UC-"):
-            try:
-                existing.append(int(name.split("-")[1]))
-            except (IndexError, ValueError):
-                pass
-    next_num = max(existing, default=0) + 1
-    return f"UC-{next_num:02d}"
 
 
 def _create_file(template_name: str, doc_id: str, title: str, target_dir: Path) -> Path:
@@ -182,7 +149,8 @@ def execute(args: argparse.Namespace) -> None:
         title = prop_info.get("title", prop_id)
 
         # 建 Spec 骨架
-        spec_id = _next_spec_id(project_root)
+        # 配號一律走 create._next_id（與 doc create／next-id 同一實作，不在本模組另寫位數）
+        spec_id = _next_id(project_root, "spec")
         spec_config = DOC_TYPE_CONFIG["spec"]
         spec_dir = Path(project_root) / spec_config["target_dir"]
         if domain:
@@ -191,7 +159,7 @@ def execute(args: argparse.Namespace) -> None:
         created_files.append(str(spec_file))
 
         # 建 UC 骨架
-        uc_id = _next_uc_id(project_root)
+        uc_id = _next_id(project_root, "usecase")
         uc_config = DOC_TYPE_CONFIG["usecase"]
         uc_dir = Path(project_root) / uc_config["target_dir"]
         uc_file = _create_file(uc_config["template"], uc_id, title, uc_dir)

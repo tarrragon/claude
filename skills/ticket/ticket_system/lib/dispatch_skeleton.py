@@ -149,15 +149,20 @@ STAGING_PHRASE_NONE = "Commit policy: none（本次派發不涉及 git commit）
 # 防護類 hook 票四項必含提醒（對應 acceptance-gate 之
 # hook_protection_acceptance_checker 四項必含：本 session 實地觸發確認 /
 # liveness 驗證方式 / 失敗語意 fail-open/fail-closed / 產生路徑盤點表寫入
-# how.strategy）。文字與該 checker 的關鍵詞判準保持語意一致，供代理人在
-# 執行中即填妥，避免代理人未填四項、complete 被 gate 擋下、PM 事後補料重演。
+# how.strategy）。文字與該 checker 的關鍵詞判準保持語意一致，前三項供代理人
+# 在執行中即填妥，避免代理人未填、complete 被 gate 擋下、PM 事後補料重演。
+# 盤點表的時點以 ticket-body-schema〈防護類 ticket〉Action 為正本：建票時先列
+# （先於 acceptance），派發前確認存在，執行中只在發現新路徑時補列。
 HOOK_TICKET_REMINDER = """本票觸及 hooks 目錄，acceptance 中 hook 模板各條的 <待填：…> 說明即為須填的證據；寫入 Test Results/Solution：hook-logs/ 日誌行（實地觸發、liveness，或貼 `ticket track hook-liveness` 輸出）、fail-open 或 fail-closed 並附「觸發條件：...」。
-產生路徑盤點表寫入 how.strategy，格式見 .claude/pm-rules/ticket-body-schema.md「防護類 ticket」節；執行中填寫，勿留到 complete 前。"""
+產生路徑盤點表於建票時寫入 how.strategy（先於 acceptance），派發前確認存在，執行中只在發現新路徑時補列；格式見 .claude/pm-rules/ticket-body-schema.md「防護類 ticket」節。"""
 
 
 # 含測試 acceptance 的 IMP 票加一行：修改產品碼前先實跑紅燈。
+# 推論出口限於環境無法執行並須寫明原因與命令；出口不設條件時，
+# 「先改產品碼、事後把紅燈標為推論」會成為不違規的路徑。
 RED_RUN_LINE = (
-    "修改產品碼前先實跑新增測試，於 Test Results 貼紅燈輸出摘要；未實跑者須標為推論。"
+    "先實跑新增測試並把紅燈輸出摘要貼入 Test Results，再修改產品碼；"
+    "只有環境無法執行（如缺裝置、缺外部服務）時可改標推論，須寫明無法執行的原因與所用命令，先改產品碼不屬此例外。"
 )
 _RED_RUN_ANCHOR = "遇阻立即停下回報，禁繞過 Hook。\n"
 

@@ -12,17 +12,18 @@
 
 ## 觸發時機
 
-在 `/version-release check`（Pre-flight 檢查）之前執行。具體觸發條件：
+在執行期的結束點、`/version-release check`（Pre-flight 檢查）之前執行。major、minor、patch 每個版本都執行。觸發條件以 `.claude/pm-rules/version-progression.md`〈兩期：規劃期與執行期〉與〈版本生命週期〉為正本：
 
 | 條件 | 說明 |
 |------|------|
-| 所有功能 Ticket 完成 | Wave 的功能開發全部 completed |
-| 準備進入發布流程 | PM 判斷版本功能已達標 |
-| 明確的版本里程碑 | 如 v0.x.0 的大版本更新 |
+| 版本契約必要的票已全部終態 | 帶 `scope_blocker` 的票全部 completed 或 closed。發版判準是契約阻擋而非 pending 池清空，不帶 `scope_blocker` 的未完成票不阻擋檢討 |
+| 其餘未完成票的去向已定 | 前移目標由 minor 完成後的分診指定；分診未指定者，以最近的開放後繼為預設，目標版本須已登記（〈版本生命週期〉〈minor 完成後的分診與去向〉前移列） |
+
+**Why**：版本在執行期已凍結，「功能是否達標」不再由 PM 臨場判斷，而由契約票的終態決定；以「所有 Ticket 完成」為條件，會讓不屬於契約的前移票擋住檢討與發版。**Consequence**：條件與發版判準不一致時，檢討不是遲遲不觸發，就是在契約未完成時提前進行。**Action**：以上兩項成立即執行本流程；minor 的檢討產出同時作為〈minor 完成後的分診〉的輸入。
 
 ---
 
-## 檢討流程（4 步驟）
+## 檢討流程（5 步驟）
 
 ### Step 1: 收集經驗素材
 
@@ -48,19 +49,33 @@
 - 發生 1 次但影響大（阻擋 > 1 小時）→ 建議寫入規範
 - 純一次性問題 → 記錄在 error-pattern 即可
 
-### Step 3: 產出改善 Ticket
+### Step 3: 多視角審查檢討結論
 
-對每個需要更新的項目建立 DOC 類型 Ticket：
+以 `/parallel-evaluation` 情境 F（結論審查）審查 Step 2 的分類與評估結果，審查三問聚焦：證據是否支撐「重複發生」的判定、是否漏列本版的經驗素材、目標文件的分類是否正確。
+
+**產出位置**：審查結論寫入版本工作日誌主檔 `docs/work-logs/v{major}/v{major.minor}/v{version}/v{version}-main.md` 的〈版本檢討〉段，連同 Step 2 的分類表。審查發現依 `.claude/rules/core/quality-baseline.md` 規則 5 建票。
+
+**Why**：檢討結論決定哪些經驗被固化為規則，單一視角容易把一次性事件判成重複、或漏掉跨票的同根問題。**Consequence**：未經審查的檢討結論直接寫進規範，錯誤的歸納會在後續版本以規則的形式被執行。**Action**：Step 4 只對審查後保留的項目建票。
+
+### Step 4: 產出改善 Ticket
+
+本版已在執行期，改善項不進本版（`.claude/pm-rules/version-progression.md`〈兩期〉），依〈版本生命週期〉的凍結分流決定目標版本後建票：
 
 ```bash
-ticket create --version {current} --wave {next_wave} \
+ticket create --version {目標版本} \
   --action "更新" --target "{具體規範文件名}" --type DOC
 ```
 
-### Step 4: 執行和驗證
+| 改善項性質 | 目標版本 |
+|-----------|---------|
+| 承諾未達成 | 下一個 patch |
+| 改善、技術債 | 下一個 minor 的候選池 |
+| 框架問題（consumer 專案） | canonical framework issue，不建本地票 |
 
-- 改善 Ticket 應在版本發布前完成（如果範圍小）
-- 或排入下一版本的第一個 Wave（如果範圍大）
+### Step 5: 執行和驗證
+
+- 改善 Ticket 在目標版本的規劃期裁決、執行期執行，不回頭修改本版
+- 唯一例外：檢討中發現讓本版跑不起來的問題，於本版建票並帶 `--scope-blocker <理由>`，處理完才進入 `/version-release check`
 
 ---
 
@@ -79,10 +94,10 @@ ticket create --version {current} --wave {next_wave} \
 ## 與現有流程的關係
 
 ```
-所有功能 Ticket 完成
+版本契約必要的票（scope_blocker）全部終態
     |
     v
-[Version Retrospective] ← 本文件定義的流程
+[Version Retrospective] ← 本文件定義的流程（含 parallel-evaluation）
     |
     v
 /version-release check（Pre-flight 檢查）
@@ -102,5 +117,6 @@ ticket create --version {current} --wave {next_wave} \
 
 ---
 
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-11-09
+**Version**: 1.1.0 - 觸發時機改以 version-progression〈兩期〉〈版本生命週期〉為正本：條件改為版本契約必要的票（scope_blocker）全部終態、其餘未完成票去向已定，取代「所有功能 Ticket 完成」；流程新增 Step 3 parallel-evaluation 情境 F 審查檢討結論，產出寫入版本工作日誌主檔〈版本檢討〉段；改善 Ticket 改依凍結分流建在目標版本，不在本版完成（讓本版跑不起來者除外）。
 **Version**: 1.0.0 - 初版

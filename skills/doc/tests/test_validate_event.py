@@ -328,3 +328,59 @@ class TestValidateEventCategoryDomain:
         finally:
             monkeypatch.undo()
             importlib.reload(validate)
+
+
+def _run_validate_filenames(tmp_path, capsys) -> tuple[int, str]:
+    import pytest
+
+    from doc_system.commands.validate import execute_filenames
+
+    with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+        with pytest.raises(SystemExit) as exc:
+            execute_filenames(argparse.Namespace())
+    return exc.value.code, capsys.readouterr().out
+
+
+class TestValidateFilenamesDomainSegmented:
+    """validate-filenames 對 domain-segmented 的 EVT 檔名（EVT-{DOMAIN}-NNN）依 id_pattern 判定。"""
+
+    def test_create_event_output_passes(self, tmp_path, capsys):
+        """配號往返：doc create event 建出的兩個檔案都通過檔名驗證。"""
+        from doc_system.commands import create
+
+        for _ in range(2):
+            args = argparse.Namespace(type="event", id=None, title="checkout", domain="library")
+            with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+                create.execute(args)
+        capsys.readouterr()
+        created = sorted(p.name for p in (tmp_path / "docs" / "events").rglob("EVT-*.md"))
+        assert [n[:15] for n in created] == ["EVT-LIBRARY-001", "EVT-LIBRARY-002"]
+
+        code, output = _run_validate_filenames(tmp_path, capsys)
+
+        assert code == 0, output
+
+    def test_malformed_event_filename_reported_without_cause(self, tmp_path, capsys):
+        _write_event(tmp_path / "docs" / "events" / "library", "EVT-1", "name: x", filename="EVT-1-x.md")
+
+        code, output = _run_validate_filenames(tmp_path, capsys)
+
+        assert code == 1
+        assert "檔名開頭不是合法 EVT ID" in output
+        assert "EVT-1-x.md" in output
+        assert "配號器" not in output
+
+    def test_frontmatter_mismatch_compares_full_segmented_id(self, tmp_path, capsys):
+        """檔名 ID 取整段 EVT-LIBRARY-001，與 frontmatter EVT-LIBRARY-002 比對出不一致。"""
+        _write_event(
+            tmp_path / "docs" / "events" / "library",
+            "EVT-LIBRARY-002",
+            "name: x",
+            filename="EVT-LIBRARY-001-x.md",
+        )
+
+        code, output = _run_validate_filenames(tmp_path, capsys)
+
+        assert code == 1
+        assert "frontmatter id 與檔名不一致" in output
+        assert "檔名=EVT-LIBRARY-001" in output

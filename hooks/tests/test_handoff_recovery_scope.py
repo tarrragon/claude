@@ -31,12 +31,27 @@ SRC_ID = "demo-src"
 TGT_ID = "demo-tgt"
 
 
-def _make_root(tmp_path: Path, records=None) -> Path:
+_DEFAULT_TICKETS = {SRC_ID: "pending", TGT_ID: "pending"}
+
+
+def _write_tickets(root: Path, tickets) -> None:
+    """以舊位置 .claude/tickets/<id>.md 建票，供 find_ticket_file 定位並讀 status。"""
+    tickets_dir = root / ".claude" / "tickets"
+    tickets_dir.mkdir(parents=True, exist_ok=True)
+    for ticket_id, status in tickets.items():
+        (tickets_dir / "{}.md".format(ticket_id)).write_text(
+            "---\nid: {}\nstatus: {}\n---\n".format(ticket_id, status), encoding="utf-8"
+        )
+
+
+def _make_root(tmp_path: Path, records=None, tickets=None) -> Path:
+    """建 pending handoff；未指定 tickets 時建來源與目標兩張 pending 票（有效 handoff）。"""
     if records:
         pending = tmp_path / ".claude" / "handoff" / "pending"
         pending.mkdir(parents=True)
         for name, rec in records.items():
             (pending / name).write_text(json.dumps(rec), encoding="utf-8")
+        _write_tickets(tmp_path, _DEFAULT_TICKETS if tickets is None else tickets)
     return tmp_path
 
 
@@ -222,3 +237,84 @@ class TestRecoveryAllowSignal:
         (pending / "bad.json").write_text("{nope", encoding="utf-8")
         assert emit_handoff_recovery_signal("Ticket: {}".format(TGT_ID), project_root=tmp_path) is False
         assert SIGNAL_TAG not in capsys.readouterr().err
+
+
+# --- 只有未過期且非孤兒的 handoff 算恢復模式 -------------------------------
+#
+# 殘留類型與預期（正向對照：prompt 引用殘留指向的票，守衛仍須照常檢查）：
+# | 殘留類型 | pending 內容 | 預期 |
+# | 目標已完成 | target 票 completed | 不放行 |
+# | 孤兒（migrate 後） | 來源、目標票皆查無 | 不放行 |
+# | 判準模組載不到 | 有效 handoff，但 handoff_utils 匯入失敗 | 不放行，stderr 警告 |
+
+TARGET_DONE = {SRC_ID: "completed", TGT_ID: "completed"}
+NO_TICKETS = {}
+
+
+class TestOnlyActiveHandoffCounts:
+    def test_e2_validation_completed_target_not_bypassed(self, tmp_path):
+        root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=TARGET_DONE)
+        assert _run_validation(root, "恢復任務 {}，沒有 Ticket 行".format(TGT_ID)) == 2
+
+    def test_e2_validation_orphan_not_bypassed(self, tmp_path):
+        root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=NO_TICKETS)
+        assert _run_validation(root, "恢復任務 {}，沒有 Ticket 行".format(TGT_ID)) == 2
+
+    def test_e2_readiness_completed_target_denied(self, tmp_path, monkeypatch, capsys):
+        root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=TARGET_DONE)
+        prompt = "Ticket: {}\n{}".format(TGT_ID, WRONG_AGENT_PROMPT)
+        out = _run_readiness(monkeypatch, capsys, root, prompt, WRONG_AGENT)
+        assert '"permissionDecision": "deny"' in out
+
+    def test_e2_readiness_orphan_denied(self, tmp_path, monkeypatch, capsys):
+        root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=NO_TICKETS)
+        prompt = "Ticket: {}\n{}".format(TGT_ID, WRONG_AGENT_PROMPT)
+        out = _run_readiness(monkeypatch, capsys, root, prompt, WRONG_AGENT)
+        assert '"permissionDecision": "deny"' in out
+
+    def test_set_function_excludes_inactive(self, tmp_path):
+        from lib.hook_io import get_handoff_recovery_ticket_ids
+        root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=TARGET_DONE)
+        assert get_handoff_recovery_ticket_ids(project_root=root) == set()
+        root2 = _make_root(tmp_path / "b", {"x.json": _stale_record()}, tickets=NO_TICKETS)
+        assert get_handoff_recovery_ticket_ids(project_root=root2) == set()
+
+    def test_source_missing_but_target_pending_still_active(self, tmp_path):
+        """孤兒判準與 handoff GC 相同：來源查無但目標仍在，handoff 仍有效。"""
+        from lib.hook_io import get_handoff_recovery_ticket_ids
+        root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets={TGT_ID: "pending"})
+        assert get_handoff_recovery_ticket_ids(project_root=root) == {SRC_ID, TGT_ID}
+
+    def test_loader_failure_fails_closed_with_warning(self, tmp_path, monkeypatch, capsys):
+        import lib.hook_io as hook_io
+        root = _make_root(tmp_path, {"x.json": _stale_record()})
+        assert hook_io.get_handoff_recovery_ticket_ids(project_root=root) == {SRC_ID, TGT_ID}
+        # sys.modules 項設為 None 使 import 拋 ImportError，模擬判準模組載不到
+        monkeypatch.setitem(sys.modules, "ticket_system.lib.handoff_utils", None)
+        assert hook_io.get_handoff_recovery_ticket_ids(project_root=root) == set()
+        assert "載入失敗" in capsys.readouterr().err
+
+
+class TestRecoveryModeFlag:
+    """is_handoff_recovery_mode：pending 目錄非空不再等於恢復模式。"""
+
+    def _flag(self, monkeypatch, root: Path) -> bool:
+        import lib.hook_io as hook_io
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+        monkeypatch.setattr(hook_io, "_handoff_recovery_cache", None)
+        monkeypatch.setattr(hook_io, "get_project_root", lambda: root)
+        return hook_io.is_handoff_recovery_mode()
+
+    def test_active_handoff_is_recovery_mode(self, tmp_path, monkeypatch):
+        root = _make_root(tmp_path, {"x.json": _stale_record()})
+        assert self._flag(monkeypatch, root) is True
+
+    def test_e2_only_residue_is_not_recovery_mode(self, tmp_path, monkeypatch):
+        root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=TARGET_DONE)
+        assert self._flag(monkeypatch, root) is False
+
+    def test_e2_broken_json_is_not_recovery_mode(self, tmp_path, monkeypatch):
+        pending = tmp_path / ".claude" / "handoff" / "pending"
+        pending.mkdir(parents=True)
+        (pending / "bad.json").write_text("{nope", encoding="utf-8")
+        assert self._flag(monkeypatch, tmp_path) is False

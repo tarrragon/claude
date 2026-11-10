@@ -2,6 +2,13 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.7.0（2026-11-10）— cleanup 與合併閘門的五項修正：
+- cleanup Level 1（tarrragon/claude#120、#118）：`git status` 失敗時改拋 `WorkingTreeStatusUnavailable`，Level 1 與 merge 前置檢查接住後阻擋並印原因（`--force` 對 Level 1 仍無效）；原本失敗時計數回 0 而放行。Level 2 認得已併入 base 的分支，不推遠端的流程不再恆警告。
+- 快照清理（tarrragon/claude#120）：`merge_gate._remove_snapshot` 在 worktree remove／prune 逾時或無法啟動時寫 stderr 與 `worktree-merge.log`，不再往外拋而蓋掉閘門結果；目錄仍在時另印「快照未移除」。新增 `scripts/xcode_derived_data.py`：worktree 移除後刪除 WorkspacePath 位於該 worktree 內的 Xcode DerivedData，非 macOS 或根目錄不存在時不動，刪除失敗只警告。
+- cleanup 遇鎖（tarrragon/claude#121）：鎖的 pid 是呼叫者的祖先行程，且分支已交回（tip 不等於 reflog 建立點並已併入 main）時，自動解鎖並印出判定；其他情況照舊停手。
+- 閘門失敗摘要（tarrragon/claude#122）：摘要以失敗項為準且不為空；比對加字邊界，`xfailed` 不再判為失敗。
+- CLI 入口讀回 shim 設定的 `SKILL_CLI_CALLER_CWD`（tarrragon/claude#24），讀後移除，無效值寫 stderr 警告，與 ticket 2.49.5 同一修正。
+
 **Version**: 1.6.7（2026-10-31）— cleanup 子命令（`cmd_cleanup`、`_cleanup_*`、Level 2／3 判定 `_is_branch_pushed`／`_is_branch_merged_to_base`、鎖處理、`_timed_git_remove`、`_recovery_unmet_conditions`、`WORKTREE_REMOVE_TIMEOUT_SECONDS`）移到 `scripts/cleanup_command.py`，行為不變；`worktree_manager.main()` 改呼叫 `cleanup_command.cmd_cleanup`，舊名稱經模組層 `__getattr__` 延遲轉出（`WORKTREE_REMOVE_TIMEOUT_SECONDS` 不轉出）。測試替換 cleanup 函式或其查找的名稱須 patch `cleanup_command`，見 `references/subcommands.md`〈cleanup — 模組位置〉。
 **Version**: 1.6.6（2026-10-19）— `_is_branch_pushed` 改問「分支 tip 是否在任一遠端 ref 上」（`git for-each-ref --contains --format=%(refname) refs/remotes`，只看結束碼與是否有輸出），不再比對 origin 同名分支；feat／agent 分支從不推送，原判定恆為未推送，使 cleanup Level 2 恆報警。含遠端沒有的 commit、worktree checkout 中、分支不存在三種情況仍判為未推送。
 **Version**: 1.6.5（2026-10-19）— `_is_branch_merged_to_base` 改用 `git merge-base --is-ancestor <branch> <base>` 判定，不再解析 `git branch --merged` 輸出；修正 worktree 已 checkout 的分支（輸出帶「+ 」前綴）恆判為未合併，使 cleanup Level 3 對已合併分支不再恆報警。未合併分支（含 worktree checkout 中者、分支不存在）仍判為未合併。

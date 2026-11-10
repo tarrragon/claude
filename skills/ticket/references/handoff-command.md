@@ -133,7 +133,7 @@ handoff JSON 同時保留兩個指向欄位：
 
 ## Session 結束時的使用方式
 
-commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion 確認下一步。用戶選擇「Handoff」後：
+post-git-commit-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion 確認下一步。用戶選擇「Handoff」後：
 
 0. **前置檢查（強制）**：先執行 `ticket handoff --gc --dry-run` 確認是否有已完成票的 stale pending handoff JSON（GC 清已完成票的殘留與來源票（及 target）皆查無的孤兒檔，不動待接手者的合法 pending）；若有，執行 `ticket handoff --gc --execute` 清理後再繼續
 1. **必須**執行 `/ticket handoff` 或 `/ticket handoff <ticket-id>`

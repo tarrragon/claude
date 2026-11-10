@@ -386,18 +386,18 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 | 8 | 執行方向確認 | 並行/序列、先後順序 | 決策樹第負一層 | prompt-submit-hook |
 | 9 | Handoff 方向選擇 | 多個兄弟/子任務可選 | ticket-lifecycle 完成階段 | - |
 | 10 | 開始/收尾確認 | 確認是否開始執行 | 決策樹第負一層 | - |
-| 11a | Commit 後 Context 刷新 Handoff（情境 A） | ticket 仍 in_progress；**前置：main 必須 clean**（見下方「#11 /clear 前置條件」） | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
-| 11b | Commit 後任務切換 Handoff（情境 B） | ticket completed + 同 Wave 有 pending；**前置：main 必須 clean** | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
+| 11a | Commit 後 Context 刷新 Handoff（情境 A） | ticket 仍 in_progress；**前置：main 必須 clean**（見下方「#11 /clear 前置條件」） | 決策樹第八層 Checkpoint 2 | post-git-commit-hook |
+| 11b | Commit 後任務切換 Handoff（情境 B） | ticket completed + 同 Wave 有 pending；**前置：main 必須 clean** | 決策樹第八層 Checkpoint 2 | post-git-commit-hook |
 | 12 | 流程省略確認 | 省略意圖偵測 | 決策樹第八層 | process-skip-guard-hook |
 | 13 | 後續任務路由確認 | Phase 3b 完成且豁免條件不符時、Phase 4b（豁免）/4c 完成、版本完成（C2）、incident 或分析完成後有多個後續路由可選（Phase 1/2/3a 全自動不觸發；Phase 3b 豁免條件符合時自動進入 4b 不觸發） | 決策樹第八層 | phase-completion-gate（擴充） |
 | 14 | parallel-evaluation 觸發確認 | 階段完成後 | 決策樹第八層 | phase-completion-gate（擴充） |
 | 15 | Bulk 變更前備份確認 | 批量修改前 | 決策樹第八層 | parallel-suggestion-hook（擴充） |
-| 16 | 錯誤學習經驗確認 | commit 完成後（#11a/#11b 之前）；docs:/chore:/style: 等 commit 自動跳過；選項簡化為二元確認 | 決策樹第八層 Checkpoint 1.5 | commit-handoff-hook（擴充） |
+| 16 | 錯誤學習經驗確認 | commit 完成後（#11a/#11b 之前）；docs:/chore:/style: 等 commit 自動跳過；選項簡化為二元確認 | 決策樹第八層 Checkpoint 1.5 | post-git-commit-hook |
 | 17 | 錯誤經驗改進追蹤 | ticket complete 時有新增 error-pattern | ticket-lifecycle 完成階段 | acceptance-gate-hook（擴充） |
 
 **Hook 覆蓋狀態**：14/18 場景有 Hook 自動提醒（14/18 = 78%）。其中 #13/#14 為條件式觸發（僅當 TDD Phase 完成且 worklog 更新時），未計入 14/18 計數，列於下方 Hook 提醒機制表僅供參考。
 
-**Phase 1-3 自治 commit 相容性**：場景 #11/#16 由 commit-handoff-hook 觸發，但 Phase 1-3 代理人自治 commit 時，因 subagent 禁止使用 AskUserQuestion，Hook 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 或錯誤學習決策。
+**Phase 1-3 自治 commit 相容性**：場景 #11/#16 由 post-git-commit-hook 觸發，但 Phase 1-3 代理人自治 commit 時，因 subagent 禁止使用 AskUserQuestion，Hook 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 或錯誤學習決策。
 
 ### 場景 #16 知識捕獲時分流（強制）
 
@@ -497,7 +497,7 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 | post-git-commit-hook | git commit 成功後，in_progress 票所在 Wave 的 pending=0 | #3 Wave 完成審查 |
 | prompt-submit-hook | 用戶提問含決策關鍵字 | #4 方案 + #5 優先級 + #6 拆分 + #8 執行方向 |
 | askuserquestion-reminder-hook | Task 派發含多個 Ticket ID | #7 派發方式 |
-| commit-handoff-hook | git commit 成功後 | #11 Commit Handoff + #16 錯誤學習 |
+| post-git-commit-hook | git commit 成功後 | #11 Commit Handoff + #16 錯誤學習 |
 | process-skip-guard-hook | 用戶輸入含省略關鍵字 | #12 流程省略 |
 | phase-completion-gate-hook | Phase 完成時 worklog 寫入後（條件式，未計入 12 計數） | #13 後續路由 + #14 parallel-evaluation |
 | acceptance-gate-hook | ticket track complete 命令 | #1 驗收方式 + #2 下一步 + #17 錯誤經驗改進 |
@@ -520,7 +520,8 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 ---
 
-**Last Updated**: 2026-08-10
+**Last Updated**: 2026-11-10
+**Version**: 3.17.1 — 場景 #11a、#11b、#16 的觸發欄、Phase 1-3 相容性段與 Hook 提醒機制表，觸發 hook 由 `commit-handoff-hook`（已併入、未註冊）改為實際發出提醒的 `post-git-commit-hook`（經 `hook-dispatch-registry.json` 的 `PostToolUse:Bash` 群組執行）
 **Version**: 3.17.0 — 規則 1 新增「列選項前提（副作用取捨）」子節：候選選項間存在副作用取捨（不同維度代價方向相反）時，列選項前須先跑 WRAP W 階段，三明示 + 案例佐證（案例敘事改描述性標籤，不引用專案層級 ticket ID，依規則 8 全禁原則）；「選項空間檢查」節識別特徵擴充涵蓋設計選型類（標題同步更名為「副作用取捨類」），與 wrap-decision SKILL.md「二元處置取捨」節（已同步擴充）保持一致；違規處理表對應項同步更名
 
 **Version**: 3.16.0 — 消除與 wrap-decision SKILL.md 的 substance 重複：「選項空間檢查」節刪去與 SKILL.md「二元處置取捨」節逐字重複的 Why/Consequence/實證段（含其中一處「規則 5.6」簡寫，隨段落一併移除），改為路由指向該節（substance 權威）；規則 6 附則判別表新增權威標註，指向 anti-paternalism.md 對稱判別表為權威來源；另一處「規則 5.6」簡寫改為含路徑的完整指稱

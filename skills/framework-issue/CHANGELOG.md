@@ -2,6 +2,18 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.9.0 — `escalation-flow.md`〈修復時點：派修或累積到清理線〉改為〈修復時點：版本分診〉：清理線移除，主控方的修復時點只用版本分診，路由至 version-progression〈兩期〉〈收斂〉與主控方的版本規劃文件；P0／P1 阻擋與用戶要求兩列保留為本版處理的例外，對齊〈兩期〉的 `--scope-blocker`。「拖慢專案」標記保留，同一 issue 達 2 則即為之後第一個版本規劃期的必審項（選入或寫明不選的理由）；原「版本收尾摘要」改為規劃期的輸入清單。〈兩條路徑〉A／B 列與〈角色〉Action 的派修用語同步，SKILL.md 路由表同步。來源：用戶裁定（2026-11-09）。
+  同版補記三項 CLI 變更（發生在 2.8.x 期間，當時未升版號）：
+  - `close --reason "not planned"` 不再要求修復版本表，改為 `--comment` 必填（判定理由），工具自動在關閉留言附上本地 `.claude/VERSION`；理由空白或讀不到 VERSION 時 exit 3，不關閉。`completed`（或省略 `--reason`）沿用修復版本表閘門。前置條件對照見 `fix-matrix-commands.md`〈close〉。
+  - `todo` 解析（tarrragon/claude#77、#89）：改讀區段內全部表頭合法的待辦表，表頭不合法的表單獨警告略過，不再整段丟棄；寫入端的待辦登記同步。
+  - `add`、`observe` 送出前拒絕空內容或只有空白的內容（exit 3）；`dedup` 有略過的查詢 token 時逐一列出並以 exit 3 宣告涵蓋不完整（tarrragon/claude#95）。`init` 依「查重不阻擋」原則不受影響。
+
+**Version**: 2.8.2 — `ticket-intake.md`〈派發 curator〉的「提交」段與 `framework-issue-curator.md` 改正：原本寫「`close` 不會 auto-commit，只由 Stop 兜底 hook 提交」，與現行 ticket CLI 相反。實測確認 `close` 與 `append-log` 一樣逐命令 auto-commit：每次只提交該票檔，共用 index 裡他人暫存的檔案留在原處。配方改為不另外提交，只有命令以結束碼 75 退出時才用 `ticket track commit` 或手動隔離索引 CAS 補提交。原本照文件多做一次手動 commit，會撞上 bare-commit 守衛或產生空 commit。不改 CLI 與 hook。
+
+**Version**: 2.8.1 — `ticket-intake.md`〈步驟五：ticket 處置〉的關票配方改用 `--reason transferred_to_issue --resolved-by tarrragon/claude#<N>`（ticket skill 2.49.0 新增的 reason，resolved_by 收 issue 參照），不再借用 `not_executable_knowledge_captured` 加 `none`；約束表改寫 resolved-by 列並補存量票列（舊配方關閉的票仍屬合法值）。`worked-example.md` 範例同步。不改 CLI 與 hook。
+
+**Version**: 2.8.0 — 框架問題處置依「主控方／consumer」角色分流。`escalation-flow.md` 新增〈角色：主控方與 consumer〉：專案 `CLAUDE.md` 宣告為框架主控方者為主控方，其餘使用本框架的專案皆為 consumer，同一時間只有一個主控方；主控方修改 `.claude/`、依版本規劃排入 patch 或 minor、發版時才 `sync-push` 並打 `v<版號>` tag，consumer 只回報（建 issue 或以 `observe` 附加既有 issue，附上 `.claude/VERSION`），不修改 `.claude/` 通用資產，以 `sync-pull` 取得已發版的 tag。理由：`sync-push` 只在主控方發版時執行，consumer 沒有把修改送上 canonical 的通道，本地修改會在下一次 `sync-pull` 被覆蓋且 canonical 無紀錄。〈兩條路徑〉改寫：路徑 A 涵蓋 consumer 的所有框架問題，路徑 B（當下接手）只限主控方，修復隨下一次發版推送後才走關閉協定；〈修復時點〉補適用角色段，派修判準只適用主控方，consumer 仍照規則標「拖慢專案」供主控方分診排序。環節清單前置「角色判定」。`SKILL.md` 工作流四階段改為實作與同步由主控方承擔、consumer 只走前兩階段，路由表兩列補角色判定入口。不改 CLI 與 hook。起因：用戶裁定本 repo 為框架主控方（2026-11-09）。
+
 **Version**: 2.7.0 — `escalation-flow.md` 新增〈修復時點：派修或累積到清理線〉。發現照常建票，建票不等於派修：只有三種情況派修——P0／P1 bug（PM 查證正在阻擋專案工作）、用戶要求、已排入清理線的固定範圍；其餘走路徑 A，觀測進 issue 後關閉本地票。清理線的觸發條件有兩種：同一 issue 第二次被標「拖慢專案」，或 minor 收尾時由用戶從 open issue 摘要中挑選。護欄三條：範圍固定、有推進專案工作的線在跑、修框架的線不超過兩條。不設數量門檻：修補會自我繁殖，數量門檻恆常成立。ANA 結論要求的後續工作若不派修，以觀測加關票落地，不以 `--force` 收尾。〈兩條路徑〉的路徑 A 改為「本地票一律關閉，issue 為唯一權威」，路徑 B 的適用情境改指向新節。`SKILL.md` 路由表同步。不改 CLI 與 hook。起因：用戶裁定（2026-10-20），經 WRAP 評估累積門檻。
 
 **Version**: 2.6.0 — 三組獨立測試對〈修法時點分離〉與引導層收斂出的缺口落地（不重新設計，形狀取自統整分析）：(1) 三問表第一列「消費端已觀測」拆為「執行條件已觀測」與「使用者群已觀測」兩列並補合成規則（原詞在條文自身案例中可讀成兩種互不相容的粒度，同一輸入得出相反判定），第二問「反例已試」加強為「若修法或其前提為錯就會產生不同輸出」，第三問加註「本問只管數字來源，鑑別力由第二問管」（不在第三問下加分母子問——該方向會使前提驗證遞迴、三問恆答否）；(2) 擴散面判準由未操作化的「限本 consumer 且可逆」改為 `should_exclude()` 機械事實 + 本 consumer 內機械訊號兩軸組合（全樹實測：規則／references／agents／methodologies／pm-rules／error-patterns 六目錄排除比例皆 0.000，單靠排除規則會使這些目錄的第一檔恆空）；(3) 第二檔處置改為「待辦與來源」表待裁列 + 「問題與方案」區段回填，不再要求發現票降為分析票（ANA 票 `where.files` 預設唯讀、提交路徑比實作票更差），並依 `comment-as-section-protocol.md` 新補的「重複，射程不重疊／重疊」判準決定 `add` 或 `observe`；(4) 條文第 86 行原以 issue ref（`#81`）作延後 trigger，改寫為明確結論「候選方案 B 現不採用」+ 條件式操作規範（日後採用須先建 ticket）。`ticket-intake.md`〈步驟三〉補修法閘門段（未過三問的修法不得原樣寫進「當前結論」）與 owner 識別行的填寫紀律（範例格式、漏填後果）；`comment-as-section-protocol.md`〈init 前查重：三種關係處置〉的「重複」格拆為射程重疊／不重疊兩列並補覆寫條款、修正指向 `ticket-intake.md` 的跨檔斷裂錨點；`SKILL.md` 路由表觸發條件擴充涵蓋收束時點；`framework-issue-curator.md` 收束允許產出補一句路由指向修法時點分離判準（原路由 0 命中）。不改 CLI 與 hook。

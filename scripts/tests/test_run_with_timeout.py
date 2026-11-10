@@ -11,6 +11,22 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "run-with-timeout.py"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_slot_dir(tmp_path, monkeypatch):
+    """每個測試使用自己的名額鎖目錄。
+
+    判不出 runner 的命令（本檔的替身 `python -c ...`）一律判 heavy；未隔離時會去取本機真實名額，
+    排在其他 session 的全套件之後，或在本套件自身持有名額時與自己互等。gate fixture 另設的目錄優先。
+    """
+    monkeypatch.setenv("CLAUDE_SLOT_LOCK_DIR", str(tmp_path / "slot-locks"))
+    # heavy 取得名額後會查孤兒；改用替身，不查詢本機真實程序、不多印 stderr
+    stub = tmp_path / "orphan-none.py"
+    stub.write_text("print('ORPHAN_SUMMARY matched=0 skipped=0 suspects=0 registered=0')")
+    monkeypatch.setenv("CLAUDE_ORPHAN_SCRIPT", str(stub))
+
+
 STAND_IN_LIFETIME = 30  # 替身程序存活上限（秒），保證測試即使失敗也會自行收尾
 
 # 替身：產生握住輸出管線的孫程序，把兩者 PID 寫入檔案後等待
@@ -620,10 +636,11 @@ def test_launcher_led_unknown_runner_is_treated_as_heavy(gate):
     assert b.wait(timeout=20) == 0
 
 
-def test_bare_unknown_command_is_light():
+def test_unknown_command_is_heavy_and_worktree_merge_is_light():
     mod = _load_module()
-    assert mod.slot_gate.is_heavy_command(["python3", "script.py"]) is False
+    assert mod.slot_gate.is_heavy_command(["python3", "script.py"]) is True
     assert mod.slot_gate.is_heavy_command(["env", "X=1", "./run.sh"]) is True
+    assert mod.slot_gate.is_heavy_command(["worktree", "merge", "3.1.0-W1-001"]) is False
     assert mod.slot_gate.is_heavy_command(["flutter", "test"]) is True
     assert mod.slot_gate.is_heavy_command(["flutter", "test", "test/a_test.dart"]) is False
 

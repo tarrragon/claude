@@ -10,6 +10,8 @@ WORKTREE_REMOVE_TIMEOUT_SECONDS 是測試注入點，只在本模組替換。
 import os
 import re
 import shlex
+import subprocess
+import sys
 import time
 from typing import Optional
 
@@ -17,8 +19,10 @@ try:
     from .constants import BRANCH_FORCE_DELETE_FLAG, CLEANUP_OUTPUT_WIDTH, DEFAULT_BASE_BRANCH
     from .messages import CleanupMessages
     from .merge_gate import emit_gate_line
+    from .xcode_derived_data import remove_derived_data_for
     from .worktree_manager import (
         _check_working_tree_clean, _extract_ticket_id_from_worktree, _validate_and_find_worktree,
+        WorkingTreeStatusUnavailable,
         get_project_root, get_worktree_list, is_protected_branch, is_valid_ticket_id, run_git_command,
     )
 except ImportError:
@@ -26,8 +30,10 @@ except ImportError:
     from constants import BRANCH_FORCE_DELETE_FLAG, CLEANUP_OUTPUT_WIDTH, DEFAULT_BASE_BRANCH
     from messages import CleanupMessages
     from merge_gate import emit_gate_line
+    from xcode_derived_data import remove_derived_data_for
     from worktree_manager import (
         _check_working_tree_clean, _extract_ticket_id_from_worktree, _validate_and_find_worktree,
+        WorkingTreeStatusUnavailable,
         get_project_root, get_worktree_list, is_protected_branch, is_valid_ticket_id, run_git_command,
     )
 
@@ -72,7 +78,7 @@ def _is_branch_pushed(branch: str) -> bool:
     return success and bool(output.strip())
 
 
-def _cleanup_check_level1(worktree_path: str) -> tuple[bool, int]:
+def _cleanup_check_level1(worktree_path: str) -> tuple[bool, "int | str"]:
     """
     Level 1 閘門：檢查未 commit 變更（永不可繞過）
 
@@ -80,11 +86,14 @@ def _cleanup_check_level1(worktree_path: str) -> tuple[bool, int]:
         worktree_path: worktree 絕對路徑
 
     Returns:
-        tuple[bool, int]:
-            - bool: True 表示通過（無未 commit 變更）
-            - int: 未 commit 變更數量
+        tuple[bool, int | str]:
+            - bool: True 表示通過
+            - int: 未 commit 變更數量；str: git status 失敗的原因（此時一律不通過）
     """
-    clean, count = _check_working_tree_clean(worktree_path)
+    try:
+        clean, count = _check_working_tree_clean(worktree_path)
+    except WorkingTreeStatusUnavailable as exc:  # 狀態不明不得視為乾淨：此閘門不可繞過
+        return False, str(exc)
     if clean:
         return True, count
     # 半刪 worktree（status 全為 tracked 刪除且 HEAD 為 main 祖先）改走收尾路徑，
@@ -94,12 +103,12 @@ def _cleanup_check_level1(worktree_path: str) -> tuple[bool, int]:
     return False, count
 
 
-def _cleanup_check_level2(branch: str) -> tuple[bool, str]:
+def _cleanup_check_level2(branch: str, base: str = DEFAULT_BASE_BRANCH) -> tuple[bool, str]:
     """
-    Level 2 閘門：檢查未 push 狀態（可被 --force 略過）
+    Level 2 閘門：檢查分支 commit 是否另有保存處（可被 --force 略過）
 
-    透過比較 branch 和 origin/branch 的 commit 差距判斷是否已 push。
-    若 origin 無對應分支（尚未 push 過），視為未 push。
+    分支 tip 已在任一遠端 ref 上，或已併入本機 base 時通過：單一主控方流程下分支不推遠端，
+    併入 base 後 commit 已由 base 保存，刪分支不會遺失。兩者皆否才警告。
 
     Args:
         rule8-exempt: relocation:自 .claude/skills/worktree/scripts/worktree_manager.py 逐字搬移
@@ -107,11 +116,13 @@ def _cleanup_check_level2(branch: str) -> tuple[bool, str]:
 
     Returns:
         tuple[bool, str]:
-            - bool: True 表示通過（已 push 或無 origin）
-            - str: 若 False，包含警告說明訊息
+            - bool: True 表示通過
+            - str: 通過時為通過理由（供輸出），不通過時為警告說明訊息
     """
     if _is_branch_pushed(branch):
-        return True, ""
+        return True, CleanupMessages.LEVEL2_PASS_PUSHED
+    if _is_branch_merged_to_base(branch, base):
+        return True, CleanupMessages.LEVEL2_PASS_MERGED.format(base=base)
 
     warning_msg = CleanupMessages.LEVEL2_WARNING.format(branch=branch)
     return False, warning_msg
@@ -160,12 +171,63 @@ def _parse_worktree_lock(porcelain: str, worktree_path: str) -> Optional[str]:
     return None
 
 
+def _lock_pid(reason: str) -> Optional[int]:
+    match = re.search(r"pid (\d+)", reason)
+    return int(match.group(1)) if match else None
+
+
+# 往上追溯的層數上限；正常行程鏈（終端 → shell → claude → shell → cleanup）遠低於此
+_ANCESTOR_MAX_DEPTH = 64
+_PS_TIMEOUT_SECONDS = 5
+
+
+def _parent_pid(pid: int) -> Optional[int]:
+    """以 ps 查 pid 的父行程；查不到或 ps 失敗回 None。"""
+    try:
+        proc = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True,
+                              text=True, timeout=_PS_TIMEOUT_SECONDS)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        sys.stderr.write(f"[WARNING] cleanup 查詢行程 {pid} 的父行程失敗：{exc}\n")
+        return None
+    text = proc.stdout.strip()
+    return int(text) if proc.returncode == 0 and text.isdigit() else None
+
+
+def _ancestor_pids() -> set:
+    """呼叫者的祖先行程（不含自身與 pid 1）。
+
+    追溯中斷時只回傳已取得的部分：漏判只會讓鎖被當成他人持有而停手，不會誤解他人的鎖。
+    """
+    ancestors = set()
+    pid = os.getppid()
+    for _ in range(_ANCESTOR_MAX_DEPTH):
+        if pid is None or pid <= 1 or pid in ancestors:
+            break
+        ancestors.add(pid)
+        pid = _parent_pid(pid)
+    return ancestors
+
+
+def _branch_delivered(branch: str, base: str = DEFAULT_BASE_BRANCH) -> bool:
+    """分支已交回：有自己的提交（tip 不等於 reflog 記錄的建立點），且已併入 base。
+
+    隔離派發的代理人與派發方 session 同一行程，鎖 pid 無法區分代理人是否仍在執行；
+    剛開工、尚無提交的分支會被 Level 3 判為已合併，只靠 pid 會刪掉執行中的 worktree。
+    reflog 缺失或任何 git 失敗回 False（不自動解鎖）。
+    """
+    ok, tip = run_git_command(["rev-parse", "--verify", f"refs/heads/{branch}"])
+    ok_log, log = run_git_command(["reflog", "show", "--format=%H", f"refs/heads/{branch}"])
+    if not (ok and ok_log) or not log.strip():
+        return False
+    created = log.strip().splitlines()[-1].strip()
+    return tip.strip() != created and _is_branch_merged_to_base(branch, base)
+
+
 def _lock_holder_alive(reason: str) -> str:
     """從鎖原因擷取 pid 並判斷存活；回傳訊息用字串。"""
-    match = re.search(r"pid (\d+)", reason)
-    if not match:
+    pid = _lock_pid(reason)
+    if pid is None:
         return "原因未含 pid，無法判斷存活"
-    pid = int(match.group(1))
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -175,19 +237,30 @@ def _lock_holder_alive(reason: str) -> str:
     return f"pid {pid} 存活"
 
 
-def _cleanup_handle_lock(worktree_path: str, unlock: bool) -> tuple[bool, str]:
-    """移除前處理 worktree 鎖。回傳 (可繼續, 停手說明)；鎖可能屬仍在使用的代理人，未明示 --unlock 不解鎖。"""
+def _cleanup_handle_lock(worktree_path: str, unlock: bool, branch: Optional[str] = None) -> tuple[bool, str]:
+    """移除前處理 worktree 鎖。回傳 (可繼續, 說明)；可繼續時說明為解鎖紀錄（未上鎖時為空字串）。
+
+    鎖可能屬仍在使用的代理人，未明示 --unlock 不解鎖。例外：鎖的 pid 是呼叫者的祖先行程
+    （派發方 session 自己），且分支已交回（_branch_delivered），此時解鎖並寫明。
+    """
     ok, porcelain = run_git_command(["worktree", "list", "--porcelain"])
     reason = _parse_worktree_lock(porcelain, worktree_path) if ok else None
     if reason is None:
         return True, ""
     holder = _lock_holder_alive(reason)
-    if not unlock:
+    pid = _lock_pid(reason)
+    ancestor = pid is not None and pid in _ancestor_pids()
+    own_lock = ancestor and branch is not None and _branch_delivered(branch)
+    if ancestor and not own_lock:
+        holder += CleanupMessages.LOCK_ANCESTOR_NOT_DELIVERED
+    if not unlock and not own_lock:
         return False, CleanupMessages.REMOVE_LOCKED.format(reason=reason or "（無原因）", holder=holder)
     ok, output = run_git_command(["worktree", "unlock", worktree_path])
     if not ok:
         return False, CleanupMessages.UNLOCK_FAILED.format(error=output)
-    return True, ""
+    if own_lock:
+        return True, CleanupMessages.UNLOCKED_OWN_LOCK.format(reason=reason, pid=pid)
+    return True, CleanupMessages.UNLOCKED_BY_FLAG.format(reason=reason or "（無原因）", holder=holder)
 
 
 def _timed_git_remove(worktree_path: str, extra_args: list[str]) -> tuple[bool, str]:
@@ -246,7 +319,7 @@ def _cleanup_execute(worktree_path: str, branch: str, unlock: bool = False) -> t
     執行 worktree 清理（移除 worktree 目錄和分支）
 
     依序執行：
-    1. 讀鎖：有鎖停手回報，--unlock 才解鎖
+    1. 讀鎖：有鎖停手回報，--unlock 或鎖 pid 為呼叫者祖先行程時解鎖，解鎖紀錄先印出
     2. git worktree remove <path>（逾時 WORKTREE_REMOVE_TIMEOUT_SECONDS）；
        失敗時若為可證明安全的半刪狀態則 --force 收尾並 prune
     3. git branch -d <branch>；失敗視為清理未完成（回傳 False，rc 非 0）
@@ -254,9 +327,11 @@ def _cleanup_execute(worktree_path: str, branch: str, unlock: bool = False) -> t
     Returns:
         tuple[bool, str]: (worktree 與分支均已清理, 結果說明)
     """
-    can_continue, lock_msg = _cleanup_handle_lock(worktree_path, unlock)
+    can_continue, lock_msg = _cleanup_handle_lock(worktree_path, unlock, branch)
     if not can_continue:
         return False, lock_msg
+    if lock_msg:
+        print(lock_msg)  # 解鎖紀錄：之後無論移除成敗都已解鎖，先印出
 
     success, output = _timed_git_remove(worktree_path, [])
     if not success:
@@ -264,15 +339,19 @@ def _cleanup_execute(worktree_path: str, branch: str, unlock: bool = False) -> t
         if not success:
             return False, output
 
+    # worktree 已移除：DerivedData 失去對應，與分支刪除成敗無關，先清
+    derived = remove_derived_data_for(worktree_path)
+    derived_suffix = "".join("\n" + line for line in derived)
+
     success, output = run_git_command(["branch", "-d", branch])
     if not success:
         return False, CleanupMessages.BRANCH_DELETE_FAILED.format(
             branch=branch,
             force_flag=BRANCH_FORCE_DELETE_FLAG
-        )
+        ) + derived_suffix
 
     success_msg = CleanupMessages.CLEANUP_SUCCESS.format(path=worktree_path, branch=branch)
-    return True, success_msg
+    return True, success_msg + derived_suffix
 
 
 def _cleanup_check_level2_and_3(branch: str, force: bool) -> tuple[bool, int]:
@@ -299,7 +378,7 @@ def _cleanup_check_level2_and_3(branch: str, force: bool) -> tuple[bool, int]:
         print()
         print("[警告] 使用 --force 略過此警告，繼續清理")
     else:
-        print(f"  Level 2 檢查：通過（已 push 到 origin）")
+        print(f"  Level 2 檢查：通過（{warning_msg}）")
 
     # Level 3: 未合併檢查
     passed, warning_msg = _cleanup_check_level3(branch)
@@ -375,10 +454,16 @@ def _cleanup_verify_all_gates(
     # Level 1: 未 commit 檢查（永不可繞過）
     passed, uncommitted_count = _cleanup_check_level1(path)
     if not passed:
-        print(CleanupMessages.LEVEL1_REJECTED.format(count=uncommitted_count))
+        if isinstance(uncommitted_count, str):
+            print(CleanupMessages.LEVEL1_STATUS_UNAVAILABLE.format(reason=uncommitted_count))
+        else:
+            print(CleanupMessages.LEVEL1_REJECTED.format(count=uncommitted_count))
         return 1
 
-    print(f"  Level 1 檢查：通過（無未 commit 變更）")
+    if uncommitted_count == 0:
+        print(f"  Level 1 檢查：通過（無未 commit 變更）")
+    else:  # 半刪 worktree：變更皆為已追蹤檔刪除，走收尾路徑
+        print(f"  Level 1 檢查：通過（{uncommitted_count} 個變更皆為已追蹤檔刪除，走半刪收尾路徑）")
 
     # M2 修復：拆分 Level 2/3 驗證邏輯
     passed, exit_code = _cleanup_check_level2_and_3(branch, force)
@@ -537,7 +622,8 @@ def _cleanup_print_scan_report(
     if unsafe:
         print(CleanupMessages.SCAN_UNSAFE)
         for ticket_id, uncommitted in unsafe:
-            print(f"  - {ticket_id}  [{uncommitted} 個未 commit 變更]")
+            detail = f"無法確認狀態：{uncommitted}" if isinstance(uncommitted, str) else f"{uncommitted} 個未 commit 變更"
+            print(f"  - {ticket_id}  [{detail}]")
             print("    請先 commit 後再清理。")
         print()
 

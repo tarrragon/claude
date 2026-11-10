@@ -38,7 +38,7 @@
 >
 > 派發位置由 `--isolation {worktree,none}` 指定：`worktree` 變體的收尾句為 `ticket track commit`（於 worktree 路徑，只提交產品檔；票面由主 repo CLI 寫入並自動提交，worktree 內的票面副本是舊版本，`ticket track commit --worktree` 遇到票面會拒絕）後止步並回報 PM，complete 由 PM 於合併後在主 checkout 執行（權威為 `CLOSING_BY_ISOLATION`；見下方〈worktree 派發收尾指引：complete 由 PM 於合併後執行〉）；未帶且 where.files 含非豁免路徑時 stderr 警告。`--kind review` 骨架首行固定為 `Dispatch-Mode: readonly`（`SKELETON_TEMPLATE_REVIEW`），第二行起為 `Ticket: {id}`。需落票約束時加 `--note "..."`（寫入票的「派發日誌」章節）；審查派發改 `--kind review`（輸出不含認領/收尾的審查骨架，改用審查標的/視角/裁決問題/回報格式四欄）。兩個變體的收尾句皆要求 Solution 含 `### 自檢結果與 Phase 4 評估`（acceptance-gate 依此檢查，缺則 complete 被擋）。指令輸出即可直接複製貼入 `Agent(...)` prompt。同步保護（`.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`）涵蓋兩個獨立維度，缺一不足：(1) 骨架常數是否仍命中 length-guard hook 的模板關鍵字（僅影響 Layer 2 軟提示）；(2) 骨架**實際組裝後的行數**（含 `--commit-policy agent` 短版指標句、觸及 hooks 目錄票的額外提醒）是否仍 <= PROMPT_LINE_LIMIT（Layer 1 硬上限，無豁免）——(2) 是骨架曾實際成長至 39-48 行、逐字貼入被 Layer 1 阻擋兩次後才補上的維度，任一維度漂移即測試失敗。
 
-> **紅燈實跑行由 CLI 條件式加入**：票 type 為 IMP 且 acceptance 含測試字樣或 E1／E2 時，骨架多一行「修改產品碼前先實跑新增測試，於 Test Results 貼紅燈輸出摘要；未實跑者須標為推論」（權威為 `dispatch_skeleton.py` 的 `RED_RUN_LINE` 與 `requires_red_run`），DOC／ANA 與無測試 acceptance 的 IMP 骨架不變；PM 不需再手寫此句。
+> **紅燈實跑行由 CLI 條件式加入**：票 type 為 IMP 且 acceptance 含測試字樣或 E1／E2 時，骨架多一行「先實跑新增測試並把紅燈輸出摘要貼入 Test Results，再修改產品碼；只有環境無法執行（如缺裝置、缺外部服務）時可改標推論，須寫明無法執行的原因與所用命令，先改產品碼不屬此例外」（權威為 `dispatch_skeleton.py` 的 `RED_RUN_LINE` 與 `requires_red_run`），DOC／ANA 與無測試 acceptance 的 IMP 骨架不變；PM 不需再手寫此句。
 
 > **閘門逐檔檢查由 CLI 條件式併入收尾句**：checkout 根有合併閘門宣告（`.claude/project-integration/merge-gate.yaml`）時，若 where.files 落在帶 `changed_files` 的套件範圍內，該套件命令與命中檔會插進收尾句的 commit 之前，寫成「提交前跑閘門逐檔檢查（結束碼須為 0）：…」。這類套件只檢查本次改動檔，代理人在本機就能重現。如果沒有轉成本機要求，紅燈要到合併閘門才會出現，多佔一輪閘門名額。插進既有句子而不新增行，因為最長骨架已達 PM 填寫空間的上限。沒有宣告或沒有命中時，骨架不變。權威為 `dispatch_skeleton.py` 的 `GATE_CHECK_CLAUSE` 與 `gate_check_commands`，細節見 ticket skill `references/track-command-dispatch.md`〈閘門逐檔檢查併入收尾句〉；PM 不需再手寫格式檢查句。
 
@@ -443,7 +443,8 @@ ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 
 ---
 
-**Last Updated**: 2026-10-31
+**Last Updated**: 2026-11-10
+**Version**: 1.51.0 — 〈紅燈實跑行由 CLI 條件式加入〉引述的骨架句同步 `RED_RUN_LINE` 新文字：先實跑紅燈再修改產品碼，推論出口限於環境無法執行並須寫明原因與命令。
 **Version**: 1.50.0 — 〈骨架（3 段）〉在紅燈實跑行說明後補「閘門逐檔檢查由 CLI 條件式併入收尾句」一段：合併閘門宣告中帶 `changed_files` 的套件，依 where.files 推出的命令插進收尾句的 commit 之前，權威為 `GATE_CHECK_CLAUSE`／`gate_check_commands`（CLI 行為變更的同 commit 文件同步）。
 **Version**: 1.49.0 — 骨架同步壓縮：模板去分隔空行、短版指標句改 3 行（示意區塊逐字對應 `STAGING_PHRASE_AGENT_PROMPT`）、hook 提醒壓為 2 行、worktree 骨架新增「改行為前以改動物字面 grep 所有測試目錄（範圍見 agent-dispatch-testing.md〈相關測試檔怎麼找〉），需改的測試檔不在 where.files 內即停手回報」一句，骨架不另列目錄清單（`WORKTREE_SIBLING_TEST_LINE`）；最長組合 34 行降為 22 行，參數化守衛涵蓋全部變體。
 **Version**: 1.48.0 — `agent-dispatch-testing.md`〈全套件由合併閘門執行，代理人只跑相關測試檔〉補〈相關測試檔怎麼找〉：以被改動物的字面（hook 檔名、模組名、參數的 dest 與旗標名、改動前的輸出字面）grep 所有測試目錄，命中幾個套件就各以該套件入口跑一次；寫明只憑目錄或檔名挑選會漏的兩類（同名檔分處兩套件、以被改參數作旁路的使用端）與間接執行的盲區。兩類各有一次合併閘門紅燈實例。

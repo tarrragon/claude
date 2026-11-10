@@ -22,8 +22,13 @@ class MergeMessages:
 
     DIRTY_WORKING_TREE = "[阻擋] Working tree 有 {count} 個未 commit 的變更。\n請先 commit 或 stash 後再執行 merge。"
 
+    WORKING_TREE_STATUS_UNAVAILABLE = "[阻擋] 無法確認 working tree 是否乾淨：{reason}\n排除原因後再執行 merge。"
+
     # ===== 警告/提示訊息（不阻擋，exit 0）=====
-    TICKET_STATUS_UNAVAILABLE = "[警告] 無法查詢 Ticket 狀態（ticket CLI 不可用）。\n跳過狀態驗證，請自行確認 Ticket 已完成。"
+    TICKET_STATUS_UNAVAILABLE = (
+        "[阻擋] 無法讀取 Ticket {ticket_id} 的狀態：{reason}\n"
+        "合併前須確認票已 completed。若要在票完成前合併，改用 --pre-acceptance <理由>。"
+    )
 
     NO_NEW_COMMITS = "[提示] 此分支沒有超前 {base} 的新 commit（ahead = 0）。\n可能此分支已合併，或尚未進行任何開發。"
 
@@ -42,7 +47,8 @@ class MergeMessages:
 
     MERGE_EXECUTING = "正在合併分支 {branch} 到 {base}..."
 
-    MERGE_SUCCESS = "合併成功。\n建議執行 /worktree cleanup {ticket_id} 清理 worktree。"
+    # cleanup_args 由 worktree_manager.cleanup_suggestion_args 依合併方式產生（票號或 --branch <分支>）
+    MERGE_SUCCESS = "合併成功。\n建議執行 /worktree cleanup {cleanup_args} 清理 worktree。"
 
     MERGE_FAILED = "[錯誤] 合併失敗：{error}"
 
@@ -113,8 +119,15 @@ class CleanupMessages:
     # ===== Level 1 拒絕訊息（永不可繞過）=====
     LEVEL1_REJECTED = "[拒絕] Working tree 有 {count} 個未 commit 的變更。\n此安全閘門無法繞過（--force 無效）。\n請先 commit 或 stash 後再清理。"
 
-    # ===== Level 2 警告訊息 =====
-    LEVEL2_WARNING = "[警告] 分支 {branch} 尚未 push 到 origin。\n若繼續清理，此分支的本地 commit 將無法恢復。\n使用 --force 略過此警告。"
+    LEVEL1_STATUS_UNAVAILABLE = (
+        "[拒絕] 無法確認 working tree 是否有未 commit 的變更：{reason}\n"
+        "此安全閘門無法繞過（--force 無效）。排除原因後再清理。"
+    )
+
+    # ===== Level 2 訊息 =====
+    LEVEL2_WARNING = "[警告] 分支 {branch} 尚未 push 到 origin，也未併入本機 base。\n若繼續清理，此分支的本地 commit 將無法恢復。\n使用 --force 略過此警告。"
+    LEVEL2_PASS_PUSHED = "已 push 到 origin"
+    LEVEL2_PASS_MERGED = "已併入本機 {base}"
 
     # ===== Level 3 警告訊息 =====
     LEVEL3_WARNING = "[警告] 分支 {branch} 尚未合併到 {base}。\n若繼續清理，未合併的 commit 將無法恢復。\n使用 --force 略過此警告。"
@@ -145,5 +158,11 @@ class CleanupMessages:
     REMOVE_LOCKED = "[停手] worktree 已被鎖定，未移除。\n  鎖原因：{reason}\n  持鎖者：{holder}\n鎖可能屬仍在使用的代理人；確認後以 --unlock 解鎖並移除。"
 
     UNLOCK_FAILED = "[錯誤] 解鎖 worktree 失敗：{error}"
+
+    UNLOCKED_OWN_LOCK = "  已解鎖：鎖的 pid {pid} 是呼叫者的祖先行程（派發方 session 自身持有），且分支已有提交併入 main（代理人已交回）\n  鎖原因：{reason}"
+
+    LOCK_ANCESTOR_NOT_DELIVERED = "（呼叫者的祖先行程，但分支尚無已併入 main 的提交，代理人可能仍在執行，不自動解鎖）"
+
+    UNLOCKED_BY_FLAG = "  已解鎖（--unlock）：\n  鎖原因：{reason}\n  持鎖者：{holder}"
 
     RECOVER_REFUSED = "[錯誤] 移除 worktree 失敗：{error}\n未自動收尾，以下條件不成立：\n{unmet}"

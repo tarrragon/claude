@@ -600,3 +600,69 @@ class TestCliArgparseEventWiring:
 
         output = capsys.readouterr().out
         assert "domain" in output.lower()
+
+
+def _seed(directory, ids, frontmatter_only=False):
+    """在目錄放既有文件；frontmatter_only 時以 slug 命名，ID 只寫在 frontmatter。"""
+    directory.mkdir(parents=True, exist_ok=True)
+    for doc_id in ids:
+        name = f"slug-{doc_id.lower()}.md" if frontmatter_only else f"{doc_id}-seed.md"
+        (directory / name).write_text(f"---\nid: {doc_id}\n---\n", encoding="utf-8")
+
+
+def _next(tmp_path, capsys, doc_type, domain=None):
+    args = argparse.Namespace(type=doc_type, domain=domain)
+    with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+        execute_next_id(args)
+    return capsys.readouterr().out.strip()
+
+
+class TestAllocationWidth:
+    """配號位數（3.1.0-W1-033）：沿用既有位數；無既有編號時取 tracking_schema 宣告位數。"""
+
+    def test_two_digit_corpus_continues_two_digits(self, tmp_path, capsys):
+        _seed(tmp_path / "docs" / "usecases", [f"UC-0{n}" for n in range(1, 7)])
+        assert _next(tmp_path, capsys, "usecase") == "UC-07"
+
+    def test_create_usecase_on_two_digit_corpus_writes_uc_07(self, tmp_path, capsys):
+        project_root = _setup_project(tmp_path)
+        _seed(tmp_path / "docs" / "usecases", [f"UC-0{n}" for n in range(1, 7)])
+        args = argparse.Namespace(type="usecase", id=None, title="seventh", domain=None)
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=tmp_path / "templates"),
+        ):
+            execute(args)
+        assert (tmp_path / "docs" / "usecases" / "UC-07-seventh.md").is_file()
+
+    def test_three_digit_corpus_continues_three_digits(self, tmp_path, capsys):
+        _seed(tmp_path / "docs" / "usecases", ["UC-004", "UC-005"])
+        _seed(tmp_path / "docs" / "proposals", ["PROP-012"])
+        assert _next(tmp_path, capsys, "usecase") == "UC-006"
+        assert _next(tmp_path, capsys, "proposal") == "PROP-013"
+
+    def test_width_follows_highest_number(self, tmp_path, capsys):
+        _seed(tmp_path / "docs" / "usecases", ["UC-01", "UC-099"])
+        assert _next(tmp_path, capsys, "usecase") == "UC-100"
+
+    def test_empty_corpus_uses_schema_declared_width(self, tmp_path, capsys):
+        assert _next(tmp_path, capsys, "usecase") == "UC-01"
+        assert _next(tmp_path, capsys, "proposal") == "PROP-001"
+        assert _next(tmp_path, capsys, "spec") == "SPEC-001"
+        assert _next(tmp_path, capsys, "event", "library") == "EVT-LIBRARY-001"
+
+    def test_empty_corpus_width_read_from_schema_not_hardcoded(self, tmp_path, capsys, monkeypatch):
+        """同一空語料：schema 宣告改為四位後配號隨之改變。"""
+        from doc_system.core import tracking_schema
+
+        before = _next(tmp_path, capsys, "usecase")
+        patched = dict(tracking_schema.GRAPH_NODE_TYPES["UC"], id_pattern=r"^UC-\d{4,}$")
+        monkeypatch.setitem(tracking_schema.GRAPH_NODE_TYPES, "UC", patched)
+        after = _next(tmp_path, capsys, "usecase")
+
+        assert (before, after) == ("UC-01", "UC-0001")
+
+    def test_frontmatter_only_ids_counted(self, tmp_path, capsys):
+        """以 slug 命名、ID 只在 frontmatter 的 SPEC 也計入（原 batch-init 配號的行為）。"""
+        _seed(tmp_path / "docs" / "spec" / "auth", ["SPEC-007"], frontmatter_only=True)
+        assert _next(tmp_path, capsys, "spec") == "SPEC-008"

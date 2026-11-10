@@ -11,7 +11,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 | 規則 | 核心要求 | 來源 |
 |------|---------|------|
-| 一：禁裸 cd | git 操作用 `git -C path <cmd>`（首選不觸發 chpwd）；非 git 用子 shell `(cd path && cmd)`；uv 用 `uv --directory path run ...`；污染後 `cd /project/root &&` 還原。裸 cd 觸發 chpwd ls 淹沒，是 confabulation 觸發鏈第 1 環 | IMP-008 / IMP-056 / PC-046 / PC-166 |
+| 一：禁裸 cd | git 操作用 `git -C path <cmd>`（首選不觸發 chpwd）；非 git 用子 shell `(cd path && cmd)`；uv 依用途分：skill CLI 與路徑引數相對呼叫者的命令用 `uv run --project path ...`（不改子行程 cwd），跑該目錄自己的測試套件用 `uv --directory path run pytest ...`（pytest 從 cwd 收集，`--project` 會收集到 0 個）；污染後 `cd /project/root &&` 還原。裸 cd 觸發 chpwd ls 淹沒，是 confabulation 觸發鏈第 1 環 | IMP-008 / IMP-056 / PC-046 / PC-166 |
 | 二：輸出機制辨識 | `run_in_background:true` → `TaskOutput(taskId)`；輸出含「Full output saved to」→ `Read(file_path)`；其餘直讀對話。預防大輸出：測試 `2>&1 \| tail -20`、一般 `\| head -100`、Grep `head_limit`、Read `offset`+`limit`。**輸出過濾方向**：`tail` 截斷、grep 白名單、`grep -v` 皆屬選擇性過濾，都更容易濾掉警告行——警告通常比正常輸出短且措辭不同，與輸出長度無關（實測：3 行輸出中 `tail -2`／`-3` 等常用值正好切掉第 1 行 `[Error]`；CLI 參數驗證錯誤如 argparse 的 error 前綴在頭、回吐內容在尾同屬此類）；不確定輸出結構時改用 `head` 或 `head`+`tail` 兩段皆取，grep 白名單須含 `WARNING\|Error\|Traceback` | IMP-009 |
 | 三：禁串接 git 寫入 | `git add && git commit` 允許（實務簡化，非「唯讀命令併發安全」保證）；commit/merge/rebase/push 之間禁串接。每個寫入操作獨立一個 Bash 呼叫。index.lock 競爭不限寫入串接——唯讀命令（status/diff-tree/log）refresh index stat cache 時也會短暫觸發，遇到預設短暫重試，非逕判串接違規 | IMP-046 / issue-34（30 次併發 add 命中 1 次） |
 | 四：CLI backtick 不用雙引號 | 雙引號內 backtick 被當 command substitution。改用 heredoc `cmd "$(cat <<'EOF'...EOF)"`、單引號包整參數、或 Edit 直改 ticket md。看到來源不明 `command not found` / `ModuleNotFoundError` 優先查 backtick | PC-079 |
@@ -34,7 +34,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 執行 Bash 命令前：
 
-- [ ] 命令含 `cd`？→ git 操作用 `git -C`；其餘用子 shell `()` 或 `uv --directory`（規則一）
+- [ ] 命令含 `cd`？→ git 操作用 `git -C`；其餘用子 shell `()`；uv 跑 skill CLI 用 `uv run --project`、跑該目錄測試套件用 `uv --directory`（規則一）
 - [ ] 多步驟序列？→ 第一步加絕對路徑 `cd /project/root &&`
 - [ ] 輸出可能很大？→ 提前加 `head` / `tail`（規則二）
 - [ ] **唯讀查驗**時輸出經 `tail`、grep 白名單或 `grep -v` 過濾？→ 警告行常比正常輸出短且措辭不同，與長度無關（`tail -2`/`-3` 可能切掉唯一的 `[Error]` 行），改用 `head` 或 `head`+`tail` 兩段皆取，grep 白名單須含 `WARNING\|Error\|Traceback`（規則二）
@@ -70,6 +70,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
+**Last Updated**: 2026-11-10 | **Version**: 3.15.0 — 規則一的 uv 寫法依用途分兩條：skill CLI 與路徑引數相對呼叫者的命令用 `uv run --project`（不改子行程 cwd；`--directory` 會讓相對路徑與專案根目錄以 path 解析，外觀同測試紅燈，tarrragon/claude#24）；跑該目錄自己的測試套件用 `uv --directory`（pytest 從 cwd 收集，`--project` 收集到 0 個）。統一檢查清單同步。實測見 details.md 規則一〈方法 2〉。
 **Last Updated**: 2026-10-14 | **Version**: 3.14.0 — 規則七把「進行中操作的裸 commit」擴及 cherry-pick、revert、rebase：存在 CHERRY_PICK_HEAD、REVERT_HEAD 或 rebase 衝突停下時守衛拒絕裸 commit，收尾改用對應的 `--continue`；`rebase -i` 的 edit 停下只提醒。統一檢查清單新增一列，相關文件的守衛描述同步。機制與實測見 details.md「進行中操作的裸 commit 收尾」。
 **Last Updated**: 2026-10-12 | **Version**: 3.13.0 — 規則七衝突合併收尾改為 `GIT_EDITOR=true git merge --continue`（對齊守衛：MERGE_HEAD 存在時拒絕裸 commit），新增兩段式合併禁令（共用 checkout 合併一步完成、不留跨呼叫 MERGE_HEAD）；統一檢查清單同步改列並新增一列；`Unable to write index` 處置路由 `PC-169`／`IMP-V1-005`，守衛具名 `bare-commit-guard-hook.py`。機制見 details.md。
 **Last Updated**: 2026-10-07 | **Version**: 3.12.1 — 規則一速查表與統一檢查清單的 uv 旗標由不存在的 `-d` 短旗標改為 `--directory`（uv 0.8.13 實測 `unexpected argument '-d' found`，詳 details.md 規則一）。

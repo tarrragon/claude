@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Manages framework issues on tarrragon/claude: dedup, create, comment-as-section init/update/observe/check, fix-matrix close, folding tickets into issues. Use for: framework issue, 框架 issue, canonical issue, ticket 收束, 跨 consumer 修復追蹤, curator 派發."
 metadata:
-  version: 2.8.0
+  version: 2.9.0
 ---
 
 # Framework Issue
@@ -41,12 +41,12 @@ metadata:
 
 | 命令 | 檔名 | 用途 |
 |------|------|------|
-| `dedup` | `section_comment.py` | 唯讀查重，含空白的關鍵字組拆單詞聯集查詢 |
+| `dedup` | `section_comment.py` | 唯讀查重，含空白的關鍵字組拆單詞聯集查詢；有 token 查詢失敗被略過時 exit 3，報告末行之前列出略過的 token 與原因，結果不可當作查重完整 |
 | `init` | `section_comment.py` | 查重後建全部區段 comment、與既有索引列合併回填一次 body 索引；**issue 已有區段時拒絕**（exit 3，`--force` 可覆蓋並合併） |
-| `add` | `section_comment.py` | 對已 init 過的 issue 追加單一區段，併入既有索引列 |
+| `add` | `section_comment.py` | 對已 init 過的 issue 追加單一區段，併入既有索引列；內容檔為空或只有空白時拒絕（exit 3，不送出） |
 | `update` | `section_comment.py` | 以 comment id 更新自己擁有的區段 |
 | `transfer-owner` | `section_comment.py` | PATCH 區段首行標記的 owner 欄，內容不變 |
-| `observe` | `section_comment.py` | 附加觀測 comment |
+| `observe` | `section_comment.py` | 附加觀測 comment；內容檔為空或只有空白時拒絕（exit 3，不送出） |
 | `show` | `section_comment.py` | 以 body 索引為入口，區分區段與觀測流 |
 | `check` | `section_comment.py` | 三項警訊：當前結論落後最新觀測（主）、comment 數、索引一致性 |
 | `todo` | `section_comment.py` | 唯讀，跨 open issue 聚合「待辦與來源*」表格列；預設本 consumer 擁有的 open issue，`--all`／`--issue N` 改範圍，`--status`／`--stage`／`--priority`／`--consumer`／`--json` 可用 |
@@ -83,7 +83,7 @@ exit code：`0` 成功、`3` 降級（gh 未安裝／未登入／Issues 停用�
 |--------|------|---------|
 | 要 init／add／update／transfer-owner／observe／show／check，或判定查重關係、解讀 check 警訊、查 owner 格式 | `references/comment-as-section-protocol.md` | 〈操作一覽〉〈CLI 語法〉〈區段與觀測標記格式〉〈init 前查重：三種關係處置〉〈check 的三項警訊〉〈增長語意與 close 語意〉〈已知限制〉 |
 | 要用 create／list／link／fix-status／fix-version／close | `references/fix-matrix-commands.md` | 〈create 與 list〉〈link〉〈fix-status〉〈fix-version〉〈close〉〈Graceful Degradation〉 |
-| ticket 執行中辨識到框架問題，判定本專案是主控方還是 consumer；決定接不接與怎麼關；主控方判斷該派修還是累積到清理線、清理線何時開；或發現當下要判斷能否直接寫定修法；或收束時要判斷某個修法能否寫進「當前結論」區段 | `references/escalation-flow.md` | 〈角色：主控方與 consumer〉〈介入判斷：框架問題 vs 專案問題〉〈兩條路徑〉〈修復時點：派修或累積到清理線〉〈修法時點分離：發現票何時能寫定修法〉〈Issue 關閉協定〉〈回報前查重 SOP〉 |
+| ticket 執行中辨識到框架問題，判定本專案是主控方還是 consumer；決定接不接與怎麼關；主控方判斷框架問題排入哪一版、拖慢標記怎麼在規劃期讀取；或發現當下要判斷能否直接寫定修法；或收束時要判斷某個修法能否寫進「當前結論」區段 | `references/escalation-flow.md` | 〈角色：主控方與 consumer〉〈介入判斷：框架問題 vs 專案問題〉〈兩條路徑〉〈修復時點：版本分診〉〈修法時點分離：發現票何時能寫定修法〉〈Issue 關閉協定〉〈回報前查重 SOP〉 |
 | 要把一群 ticket 收束成 issue，或派 curator 做這件事 | `references/ticket-intake.md` | 〈前提與分工〉〈步驟一：分群〉〈步驟二：查重與落點〉〈步驟三：時序改狀態〉〈步驟四：區段範本〉〈步驟五：ticket 處置〉〈步驟六：驗證與交接〉〈派發 curator〉 |
 | 想看一張 issue 從 dedup 到 check 的完整走查 | `references/worked-example.md` | 〈情境〉〈查重輸出與關係判定〉〈sections.json〉〈init 與索引〉〈ticket close〉〈check 與 owner 更新〉 |
 

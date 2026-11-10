@@ -25,10 +25,14 @@ REF_FIELDS = [
 # 標題顯示截斷閾值
 TITLE_MAX_DISPLAY_LEN = 27
 
-# test-map 掃描的測試目錄清單（相對 project_root）。
-# 本專案為 Flutter：test/ 為單元/widget 測試，integration_test/ 為裝置測試。
-# 若未來專案改用其他佈局，改此清單即可，不需改 test_map.py 邏輯。
-TEST_SCAN_DIRS = ["test", "integration_test"]
+# test-map 掃描的測試目錄預設清單（相對 project_root）。
+# test/、integration_test/ 為 Flutter 佈局；tests/ 為 Python 與 JS 慣例。
+# 專案可在 docs/traceability.yaml 以頂層鍵 TEST_SCAN_DIRS_CONFIG_KEY 覆寫，
+# 設定值整份取代本清單（不疊加）。
+TEST_SCAN_DIRS = ["test", "integration_test", "tests"]
+
+# docs/traceability.yaml 內覆寫掃描目錄的頂層鍵（值為相對 project_root 的目錄字串清單）。
+TEST_SCAN_DIRS_CONFIG_KEY = "test_scan_dirs"
 
 # test-map 檔案掃描辨識的測試檔副檔名（含 dart，涵蓋 Flutter 專案）。
 TEST_FILE_EXTENSIONS = (".dart", ".js", ".ts", ".py", ".test.js", ".spec.js")

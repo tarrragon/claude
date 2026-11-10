@@ -207,11 +207,23 @@ EOF
 
 **判斷自己是不是主控**：名稱是「主控」的 session 就是主控線（用戶裁定，2026-10-31）。以 `ListAgents` 第一行列出的本 session 自稱為準。
 
+**先核對 cwd**：`ListAgents` 列出本機所有專案的 session，每個採用本 skill 的專案都有一個叫「主控」的 session，所以清單中出現多個「主控」是常態。判斷其他「主控」屬於哪個專案之前，先讀 `~/.claude/sessions/<pid>.json` 的 `cwd`。cwd 在本專案的 checkout（主 checkout 或其 worktree）之下的，才是本專案的主控。屬於別的專案的主控，不列入本表判斷，不傳訊給它，也不對它提出任何建議（例如請用戶關閉）。
+
+```bash
+# 列出本機各 session 的 pid、名稱與 cwd（欄位實測於 2026-11-09，Claude Code 2.1.314 到 2.1.319）
+for f in ~/.claude/sessions/*.json; do python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("pid"), d.get("name"), d.get("cwd"))' "$f"; done
+```
+
 | 情況 | 做法 |
 |------|------|
-| 本 session 名為「主控」 | 本 session 就是主控，依下方步驟接續 |
-| 本 session 不叫「主控」，而 `ListAgents` 中有其他 session 叫「主控」 | 本 session 是一般的線，不執行主控接續 |
-| 沒有任何 session 叫「主控」 | 不要自行決定由誰擔任主控。列出目前的 session 和各自持有的線，請用戶指定其中一個 session 擔任主控，並請用戶在那個 session 輸入 `/rename 主控` |
+| 本 session 名為「主控」 | 本 session 就是本專案的主控，依下方步驟接續 |
+| 本 session 不叫「主控」，而本專案有其他 session 叫「主控」（依上方 cwd 核對） | 本 session 是一般的線，不執行主控接續 |
+| 本專案沒有任何 session 叫「主控」（別的專案的「主控」不算） | 不要自行決定由誰擔任主控。列出本專案目前的 session 和各自持有的線，請用戶指定其中一個 session 擔任主控，並請用戶在那個 session 輸入 `/rename 主控` |
+
+**已發生的誤判**（2026-11-09，同一台機器上兩個專案的主控）：
+
+- 一個專案的主控在 `ListAgents` 看到另一個「主控」，沒有核對 cwd，以為本專案有兩個主控，差點建議用戶關掉另一個專案的主控。
+- 同一個專案的一條線以名稱「主控」寄送結案回報，其中一則送到另一個專案的主控，對方可能據此行動。定址規則見 `session-naming.md`〈主控的定址〉。
 
 **步驟**：
 

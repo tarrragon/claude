@@ -2,7 +2,7 @@
 name: cognitive-load-assessment
 description: "認知負擔評估與審查工具。作為決策樹、代理人、Code Review 的基本參考標準。用於: (1) 任務複雜度評估, (2) 代理人升級判斷, (3) 任務拆分建議, (4) 程式碼品質審查與熱點識別"
 metadata:
-  version: 2.1.2
+  version: 2.1.3
 ---
 
 # 認知負擔評估與審查工具

@@ -25,6 +25,9 @@ _SCRIPT = (
 )
 _HIT_LINE = re.compile(r"^\s+- #(\d+) \[[^\]]*\] (.*)$")
 _SKIPPED_LINE = re.compile(r"查詢失敗略過的 token 數：(\d+)")
+# dedup 有 token 查詢失敗被略過時的結束碼（framework-issue 的 EXIT_DEGRADED）：
+# 報告照常完整輸出、命中仍有效，只是涵蓋不完整。依子程序契約寫值，不匯入對方符號。
+_DEDUP_PARTIAL_EXIT = 3
 
 
 @dataclass
@@ -55,16 +58,25 @@ def run_dedup(
     runner: Callable = subprocess.run,
     timeout: int = DEDUP_TIMEOUT_SECONDS,
 ) -> DedupOutcome:
-    """執行 dedup；離線、逾時、例外、非零退出皆轉為 error，不拋出。"""
+    """執行 dedup；離線、逾時、例外、非零退出皆轉為 error，不拋出。
+
+    例外：結束碼為 `_DEDUP_PARTIAL_EXIT` 且 stdout 含報告末行（略過數）時，
+    代表部分 token 查詢失敗但報告完整，照舊解析為 partial、保留命中清單。
+    """
     cmd = [sys.executable, str(_SCRIPT), "dedup", "--keywords", *keywords]
     try:
         proc = runner(cmd, capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.SubprocessError) as exc:
         return _failed(f"{type(exc).__name__}: {exc}")
-    if proc.returncode != 0:
+    stdout = proc.stdout or ""
+    partial_exit = proc.returncode == _DEDUP_PARTIAL_EXIT and _SKIPPED_LINE.search(stdout)
+    if proc.returncode != 0 and not partial_exit:
         tail = (proc.stderr or "").strip().splitlines()[-1:] or ["（無 stderr）"]
         return _failed(f"exit {proc.returncode}: {tail[0]}")
-    outcome = parse_dedup_report(proc.stdout or "")
+    outcome = parse_dedup_report(stdout)
+    if partial_exit and not outcome.error:
+        # 結束碼宣告涵蓋不完整而末行略過數為 0：兩訊號矛盾時以較保守者為準
+        outcome.error = f"dedup exit {proc.returncode}（涵蓋不完整）"
     if outcome.error:
         outcome.partial = True
         _warn(f"建票查重部分未完成（不阻擋建票）：{outcome.error}")

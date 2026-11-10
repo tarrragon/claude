@@ -58,6 +58,10 @@ PROPOSALS_TRACKING_SCHEMA = {
 # 建立、runtime_tests 需先盤點 integration_test/ 是否符合零結構替身定義），
 # 軸存在但結構錯誤才是違規。top_level_keys 是「允許的頂層鍵上限」，
 # top_level_required_keys 是「必要頂層鍵下限」。
+#
+# test_scan_dirs 不是追溯軸，是 test-map 檔案掃描的目錄設定（選填，值為相對
+# 專案根的目錄字串清單，整份取代 constants.TEST_SCAN_DIRS 預設）；放在本檔
+# 是因 test-map 本就讀本檔，鍵名常數為 constants.TEST_SCAN_DIRS_CONFIG_KEY。
 TRACEABILITY_SCHEMA = {
     "top_level_keys": {
         "version",
@@ -66,6 +70,7 @@ TRACEABILITY_SCHEMA = {
         "data_contract_tests",
         "runtime_tests",
         "last_updated",
+        "test_scan_dirs",
     },
     "top_level_required_keys": {"version", "last_updated"},
     "mappings_format": "list",
@@ -276,6 +281,16 @@ GRAPH_NODE_TYPES = {
 CARRIER_PATH_TYPES = frozenset(
     name for name, entry in GRAPH_NODE_TYPES.items() if "carrier_path_patterns" in entry
 )
+
+
+def id_pattern_body(node_type: str) -> str:
+    """回傳該型別 id_pattern 去掉首尾錨點的本體，供驗證端嵌入檔名、標題行等較大的正則。
+
+    驗證端一律由此取 ID 格式，不各自寫死位數或前綴（tarrragon/claude#98）。
+    本體可能含捕獲群組（如 SPEC 的雙形態），嵌入端以具名群組包住整段取值。
+    """
+    pattern = GRAPH_NODE_TYPES[node_type]["id_pattern"]
+    return pattern.removeprefix("^").removesuffix("$")
 
 # 完整性集合的共通語意（#99 第三項裁決，2026-09-24）：欄位必須存在；值
 # 可為 None（單值）或空清單 []（多值），代表「明確沒有」。此語意對應

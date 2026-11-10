@@ -24,6 +24,13 @@ from .hook_checker import (
 MINIMUM_UV_VERSION = "0.1.0"
 MINIMUM_RIPGREP_VERSION = "13.0.0"
 
+# settings.json 讀不到時的完整性判定原因（load_json_file 對「不存在」與
+# 「無法解析」皆回 None，兩者對 hook 載入的後果相同：全數不載入）
+MISSING_SETTINGS_REASON = (
+    ".claude/settings.json 不存在或無法解析為 JSON，Claude Code 不會載入任何 hook；"
+    "從框架模板還原或執行 sync-pull 後重新檢查"
+)
+
 
 @dataclass
 class ToolStatus:
@@ -67,6 +74,8 @@ class HookCompletenessResult:
     """被排除在檢查外的 Hook 檔案數量。"""
     completeness_ok: bool
     """是否所有 Hook 都已登記。"""
+    failure_reason: str = ""
+    """無法完成比對時的原因（如 settings.json 不存在）；可正常比對時為空字串。"""
 
 
 def verify_uv_available() -> ToolStatus:
@@ -217,13 +226,15 @@ def check_hook_completeness(project_root: Path) -> HookCompletenessResult:
     # 載入設定檔
     settings = load_json_file(settings_path)
     if settings is None:
-        # settings.json 不存在，無法驗證
+        # settings.json 不存在或無法解析：hook 全數不會載入，判定為不完整並說明原因。
+        # 過去回 True，缺 settings.json 的環境被報為通過（tarrragon/claude#53）。
         return HookCompletenessResult(
             all_hooks=set(),
             registered_hooks=set(),
             unregistered_hooks=set(),
             excluded_count=0,
-            completeness_ok=True,
+            completeness_ok=False,
+            failure_reason=MISSING_SETTINGS_REASON,
         )
 
     exclude_list = load_json_file(exclude_list_path)

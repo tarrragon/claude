@@ -2,7 +2,7 @@
 name: doc
 description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、建立、導航和管理。Use for: (1) 查詢提案、規格、用例文件, (2) 建立新提案/規格/用例（從模板）, (3) 跨文件導航（從 UC 找 spec/ticket）, (4) Domain 地圖查詢, (5) 追蹤索引管理, (6) UC 測試對應驗證, (7) 提案評估與審查, (8) 測試追溯矩陣查詢（UC↔測試覆蓋狀態）, (9) UC 編號治理（uc list 列合法 UC / uc verify 白名單驗證可掛 CI / uc trace 引用追溯 / uc context 派發 UC 定位）。Use when: user mentions PROP-, UC-, SPEC-, 功能, 需求, feature, issue, 提案, 用例, 規格, 需求文件, 需求追蹤, 測試覆蓋, 追溯, traceability, test-map, UC 編號, 編號驗證, uc verify, 偽 UC, 合法 UC 清單"
 metadata:
-  version: 1.25.1
+  version: 1.26.0
 ---
 
 # Doc SKILL
@@ -44,7 +44,7 @@ metadata:
 | `nav` | 跨文件導航 | `/doc nav UC-01` → 相關 spec/proposal/ticket |
 | `domain` | Domain 地圖 | `/doc domain {domain}`（省略 `{domain}` 動態列出當前專案所有 domain） |
 | `status` | 追蹤狀態 | `/doc status` |
-| `test-map` | UC 測試對應 | `/doc test-map UC-01` |
+| `test-map` | UC 測試對應：先取 `docs/traceability.yaml` 的 `mappings[].tests`，未回填的 UC 改掃測試目錄比對 UC ID。掃描目錄預設 `test/`、`integration_test/`、`tests/`，可在 `docs/traceability.yaml` 以頂層鍵 `test_scan_dirs`（目錄字串清單）整份取代；改走掃描的 UC 全數零命中時 stderr 警示並列出各目錄實況 | `/doc test-map UC-01` |
 | `batch-init` | 批量建置骨架 | `/doc batch-init --proposals PROP-007,PROP-008 --domain {domain}` |
 | `uc list` | 列出合法 UC 編號+標題（SSOT 動態解析） | `/doc uc list` |
 | `uc verify [path]` | 驗證路徑內 UC token 白名單合規（可掛 CI） | `/doc uc verify lib`（exit 0=pass / 1=violation；相對路徑以呼叫者 cwd 解析，不存在回 exit 2） |
@@ -120,7 +120,7 @@ doc domain <name>   # 帶 domain 名稱：列出該 domain 下的 spec 清單與
 
 ### 使用方式
 
-`doc create` 已接線的類型（proposal / spec / usecase / data-contract / event）具備下列能力，優先使用而非手動 `cp`：自動編號（掃描既有檔案分配下一個序號，`--id` 可覆寫）、frontmatter 日期自動替換（`created` / `updated` / `proposed_date`）、proposal 類型自動新增 `proposals-tracking.yaml` entry。`doc next-id <type>` 可唯讀查詢下一個可分配 ID，不建立檔案。
+`doc create` 已接線的類型（proposal / spec / usecase / data-contract / event）具備下列能力，優先使用而非手動 `cp`：自動編號（掃描既有檔名與 frontmatter `id` 分配下一個序號，位數沿用既有最大號；目錄尚無編號時取 `tracking_schema` 的 `id_pattern` 宣告位數，UC 兩位、其他三位；`--id` 可覆寫；`doc create`、`doc next-id`、`doc batch-init` 共用同一配號實作）、frontmatter 日期自動替換（`created` / `updated` / `proposed_date`）、proposal 類型自動新增 `proposals-tracking.yaml` entry。`doc next-id <type>` 可唯讀查詢下一個可分配 ID，不建立檔案。
 
 ```bash
 # 建立提案

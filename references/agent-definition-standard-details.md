@@ -200,7 +200,7 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 | 角色 | 動作 |
 |------|------|
 | 隔離代理人 | `set-acceptance` 勾選 → `append-log` 填 Solution（含 `### 自檢結果與 Phase 4 評估`）與 Test Results → `ticket track commit <id> -m "..." --worktree <路徑> -- <檔案>` → 回報 PM；**不執行 complete 與 finish** |
-| PM | 合併 worktree 分支並驗證測試後，於主 checkout 執行 complete；只執行 complete，不代填自檢 |
+| PM | 以 `/worktree merge <ticket-id> --pre-acceptance "<理由>"` 合併 worktree 分支（此時票尚未 completed，不帶旗標會被合併前置檢查擋下），驗證測試後於主 checkout 執行 complete；只執行 complete，不代填自檢 |
 
 **PM 收尾身份（用戶裁決，2026-10-14，採三候選之二）**：PM 先執行 `ticket track set-who <id> --current rosemary-project-manager`，再 `complete`。who.history 保留實作者與交接時間，Executing Agent 欄保留實作者，who.current 記錄收尾者，票面同時可查「誰實作」與「誰收尾」，成本只多一條命令。不採 `complete --as rosemary-project-manager` 而不改 who（票面無收尾紀錄，只留在遙測與 git），也不採改派非隔離代理人代為 complete（多一次派發，且收尾者實際未做事）。依據：實測三候選的身份紀錄、成本與 gate 相容性比較。
 

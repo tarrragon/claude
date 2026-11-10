@@ -343,16 +343,50 @@ class TestCheckHookCompleteness:
         assert "old-backup.py" not in result.all_hooks
 
     def test_settings_json_not_exists(self, tmp_path: Path) -> None:
-        """測試 settings.json 不存在時，應優雅地回傳成功（無法驗證）."""
+        """settings.json 不存在時 hook 全數不載入，判定為不完整並說明原因（tarrragon/claude#53）."""
         hooks_dir = tmp_path / ".claude" / "hooks"
         hooks_dir.mkdir(parents=True)
         self._create_hook_file(hooks_dir, "test-hook.py")
 
         result = check_hook_completeness(tmp_path)
 
-        # 當 settings.json 不存在時，無法驗證，應回傳 completeness_ok=True
-        assert result.completeness_ok
+        assert result.completeness_ok is False
+        assert "settings.json" in result.failure_reason
         assert len(result.all_hooks) == 0
+
+    def test_settings_json_unparseable(self, tmp_path: Path) -> None:
+        """settings.json 語法錯誤同樣判定為不完整（與不存在後果相同：hook 不載入）."""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (tmp_path / ".claude" / "settings.json").write_text('{"hooks": {},}', encoding="utf-8")
+
+        result = check_hook_completeness(tmp_path)
+
+        assert result.completeness_ok is False
+        assert result.failure_reason
+
+    def test_settings_json_present_has_no_failure_reason(self, tmp_path: Path) -> None:
+        """對照：settings.json 正常時 failure_reason 為空，判定照常比對。"""
+        self._create_settings_json(tmp_path, [])
+        (tmp_path / ".claude" / "hooks").mkdir(parents=True, exist_ok=True)
+
+        result = check_hook_completeness(tmp_path)
+
+        assert result.completeness_ok is True
+        assert result.failure_reason == ""
+
+    def test_onboard_reports_missing_settings_reason(self, tmp_path: Path, capsys) -> None:
+        """onboard 的輸出與待辦都帶出原因，而非「0 個未登記」。"""
+        from project_init.commands import onboard
+
+        (tmp_path / ".claude" / "hooks").mkdir(parents=True)
+        result = check_hook_completeness(tmp_path)
+
+        onboard._print_hook_completeness_section(result)
+        items = onboard._collect_hook_completeness_items(result)
+
+        assert "settings.json" in capsys.readouterr().out
+        assert len(items) == 1 and "settings.json" in items[0].hint
 
     def test_hooks_directory_not_exists(self, tmp_path: Path) -> None:
         """測試 Hook 目錄不存在時的處理."""

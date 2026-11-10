@@ -1921,8 +1921,8 @@ class BookDetailFacade implements IBookDetailFacade {
 步驟 1: 建立 feature branch
   └─ git checkout -b refactor/fix-shotgun-surgery
 
-步驟 2: 確保測試 100% 通過
-  └─ flutter test（重構前基準）
+步驟 2: 確保本票相關測試檔全綠
+  └─ flutter test <本票相關測試檔>（重構前基準；全套件由合併閘門確認）
 
 步驟 3: 執行重構
   └─ 每完成一個小步驟都執行測試
@@ -2036,7 +2036,7 @@ flutter test --coverage
 - [ ] 檢查是否有 Divergent Change（方法可分組）
 
 **測試執行檢查**
-- [ ] 所有測試 100% 通過
+- [ ] 本票相關測試檔全綠（全套件由合併閘門確認）
 - [ ] dart analyze 無錯誤和警告
 - [ ] 程式碼覆蓋率達到 100%
 
@@ -2068,7 +2068,7 @@ flutter test --coverage
 
 **重構完成檢查**
 - [ ] Code Smell 已修正
-- [ ] 所有測試通過
+- [ ] 本票相關測試檔全綠（全套件由合併閘門確認）
 - [ ] 工作日誌記錄重構決策
 
 ---

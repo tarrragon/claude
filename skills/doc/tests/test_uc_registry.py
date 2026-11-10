@@ -36,17 +36,45 @@ class TestParseSsot:
         result = uc_registry.parse_ssot(str(tmp_path))
         assert result == {}
 
-    def test_ignores_three_digit_or_non_standard_headings(self, tmp_path):
+    def test_ignores_headings_not_matching_id_pattern(self, tmp_path):
+        """標題行 ID 格式取自 id_pattern（^UC-\\d{2,}$）：單位數與非標準前綴不收，三位數收。"""
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir(parents=True)
         (docs_dir / "app-use-cases.md").write_text(
-            "## UC-001: 三位數不合法\n## UC-MP-01: 非標準前綴\n## UC-05: 合法\n",
+            "## UC-1: 單位數不合法\n## UC-MP-01: 非標準前綴\n## UC-05: 合法\n## UC-007: 三位數合法\n",
             encoding="utf-8",
         )
 
         result = uc_registry.parse_ssot(str(tmp_path))
 
-        assert set(result.keys()) == {"UC-05"}
+        assert set(result.keys()) == {"UC-05", "UC-007"}
+        assert result["UC-007"]["title"] == "三位數合法"
+
+
+class TestFormatFromSchema:
+    """UC 格式判定取自 tracking_schema 的 id_pattern，不在 uc_registry 寫死位數。"""
+
+    def test_valid_format_regex_is_schema_id_pattern(self):
+        from doc_system.core.tracking_schema import GRAPH_NODE_TYPES
+
+        assert uc_registry.VALID_UC_FORMAT_RE.pattern == GRAPH_NODE_TYPES["UC"]["id_pattern"]
+
+    def test_heading_regex_follows_patched_schema(self, monkeypatch):
+        """改 schema 的 id_pattern 後重新匯入，標題行判定隨之改變（證明沒有另存一份格式）。"""
+        import importlib
+
+        from doc_system.core import tracking_schema
+
+        patched = dict(tracking_schema.GRAPH_NODE_TYPES["UC"], id_pattern=r"^UC-\d{4}$")
+        monkeypatch.setitem(tracking_schema.GRAPH_NODE_TYPES, "UC", patched)
+        try:
+            reloaded = importlib.reload(uc_registry)
+            assert reloaded.UC_HEADING_RE.match("## UC-0001: x")
+            assert not reloaded.UC_HEADING_RE.match("## UC-01: x")
+            assert not reloaded.VALID_UC_FORMAT_RE.match("UC-01")
+        finally:
+            monkeypatch.undo()
+            importlib.reload(uc_registry)
 
 
 class TestGetValidUcMap:
@@ -103,8 +131,15 @@ class TestIsViolationToken:
     def test_defined_two_digit_uc_is_not_violation(self):
         assert uc_registry.is_violation_token("UC-01", {"UC-01": "x"}) is False
 
-    def test_three_digit_format_is_violation(self):
+    def test_undefined_three_digit_uc_is_violation(self):
         assert uc_registry.is_violation_token("UC-001", {"UC-01": "x"}) is True
+
+    def test_defined_three_digit_uc_is_not_violation(self):
+        """三位數符合 id_pattern，已在 SSOT 定義即合法（tarrragon/claude#98）。"""
+        assert uc_registry.is_violation_token("UC-007", {"UC-007": "x"}) is False
+
+    def test_single_digit_format_is_violation_even_if_listed(self):
+        assert uc_registry.is_violation_token("UC-7", {"UC-7": "x"}) is True
 
     def test_pseudo_subtree_is_violation(self):
         assert uc_registry.is_violation_token("UC-01.4.20", {"UC-01": "x"}) is True
@@ -797,3 +832,57 @@ class TestCheckFingerprints:
         _write_spec_with_content(tmp_path, [("UC-01", "新標題", "內容")])
         drifted, _, _ = uc_registry.check_fingerprints(str(tmp_path))
         assert drifted == ["UC-01"]
+
+
+def _create_usecase(project_root, capsys) -> str:
+    """以 doc create usecase（實際模板）建檔，回傳配出的 ID（讀自建出檔案的 frontmatter）。"""
+    import argparse
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from doc_system.commands import create
+    from doc_system.core.file_locator import FileLocator
+    from doc_system.core.frontmatter_parser import parse_frontmatter
+
+    usecases = Path(project_root) / "docs" / "usecases"
+    before = set(usecases.glob("*.md")) if usecases.is_dir() else set()
+    args = argparse.Namespace(type="usecase", id=None, title="roundtrip", domain=None)
+    with patch.object(FileLocator, "get_project_root", return_value=str(project_root)):
+        create.execute(args)
+    capsys.readouterr()
+    (created,) = set(usecases.glob("*.md")) - before
+    return str(parse_frontmatter(str(created))["id"])
+
+
+class TestUcAllocationRoundTrip:
+    """create 配出的 UC ID 必須通過驗證端（配號往返；建立端位數由 3.1.0-W1-033 處理）。"""
+
+    @pytest.mark.parametrize("existing", [[], ["UC-01", "UC-02"], ["UC-005"]])
+    def test_allocated_id_passes_validators(self, tmp_path, capsys, existing):
+        import argparse
+        from unittest.mock import patch
+
+        from doc_system.commands.validate import execute_filenames
+        from doc_system.core.file_locator import FileLocator
+
+        usecases = tmp_path / "docs" / "usecases"
+        usecases.mkdir(parents=True)
+        for uc_id in existing:
+            (usecases / f"{uc_id}-seed.md").write_text(
+                f"---\nid: {uc_id}\n---\n", encoding="utf-8"
+            )
+
+        allocated = _create_usecase(tmp_path, capsys)
+
+        # 格式：配出的 ID 符合 id_pattern
+        assert uc_registry.VALID_UC_FORMAT_RE.match(allocated), allocated
+        # SSOT：寫成標題行後被解析為合法 UC，引用不算違規
+        _write_spec(tmp_path, [(allocated, "roundtrip")])
+        valid = uc_registry.get_valid_uc_map(str(tmp_path))
+        assert allocated in valid
+        assert uc_registry.is_violation_token(allocated, valid) is False
+        # 檔名：validate-filenames 接受 create 建出的檔名
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(argparse.Namespace())
+        assert exc.value.code == 0, capsys.readouterr().out

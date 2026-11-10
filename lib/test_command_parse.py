@@ -24,9 +24,14 @@ git_command_parse.parse_command_statements 的切分（heredoc 剝離、換行�
 （`--prefix x`、`-w pkg`）與別名 `npm t`。解析成本低的形態一律修正，因為本機
 閘門以本模組辨識 heavy 工作，漏判等於繞過閘門。
 不支援（需二次解析或超出 runner 集合，閘門須另行處理）：`bash -c '...'`／
-`sh -c`／`python -c`（命令位於引號字串內）、`yarn`／`pnpm`／`npx` 的測試、
-`env A=1 -u X cmd`（賦值後才出現選項）、`--opt=val` 以外未列入帶值集合的
-自訂選項（帶值集合採列舉，未列入的帶值選項其值會被當成子命令而漏判）。
+`sh -c`／`python -c`（命令位於引號字串內）、shell 函式參數（`run() { "$@"; };
+run uv run pytest`，runner 只出現在參數位置）、變數展開為命令（`$CMD`、
+`"${arr[@]}"`）、`yarn`／`pnpm`／`npx` 的測試、`env A=1 -u X cmd`（賦值後才出現
+選項）、`--opt=val` 以外未列入帶值集合的自訂選項（帶值集合採列舉，未列入的帶值
+選項其值會被當成子命令而漏判）。其中 bash -c、函式參數、變數展開三種形態，若命令
+文字中看得到 runner 字樣，find_unrecognized_runner_mention 會回報，pre-test-hook
+以 additionalContext 提醒（不阻擋）；runner 字樣不在命令文字中者（腳本檔內呼叫、
+變數在別處定義）仍無法察覺。
 """
 
 import os
@@ -301,8 +306,18 @@ def _all_specific_test_files(args: List[str], with_value, base_dir: Optional[str
 # 查詢類旗標：只印說明、版本或列舉測試，不執行測試也不編譯，負載輕
 QUERY_FLAGS = frozenset({"--help", "-h", "-help", "--version", "-version", "--collect-only"})
 
+# 自行取得名額的命令（命令名, 子命令）：判不出 runner 一律 heavy 的唯一例外，判 light。
+# worktree merge 由 merge_gate.hold 無條件自行取得名額；run-with-timeout 啟動被包裝命令時以
+# slot_gate.child_env 去除持有標記，被包裝的 merge 認不出祖先已持有；SLOT_COUNT 為 1。
+# 外層若也判 heavy 先取得名額，內層 merge 會排在外層之後，兩者互等至外層逾時。
+SELF_SLOTTED_COMMANDS = frozenset({("worktree", "merge")})
 
-def _weight_of_stripped(tokens: List[str], launcher_led: bool, base_dir: Optional[str] = None) -> str:
+
+def _is_self_slotted(tokens: List[str]) -> bool:
+    return len(tokens) >= 2 and (Path(tokens[0]).name, tokens[1]) in SELF_SLOTTED_COMMANDS
+
+
+def _weight_of_stripped(tokens: List[str], base_dir: Optional[str] = None) -> str:
     if any(token in QUERY_FLAGS for token in tokens[1:]):
         return WEIGHT_LIGHT
     head = Path(tokens[0]).name
@@ -319,31 +334,37 @@ def _weight_of_stripped(tokens: List[str], launcher_led: bool, base_dir: Optiona
                 return WEIGHT_HEAVY
             return WEIGHT_LIGHT if _all_specific_test_files(
                 args, _FLUTTER_TEST_OPTIONS_WITH_VALUE, base_dir) else WEIGHT_HEAVY
+        # 已辨識的 runner、子命令不編譯也不跑測試（pub get、analyze 等）：light，不屬判不出 runner
+        return WEIGHT_LIGHT
     elif _classify_runner(tokens) == RUNNER_PYTEST:
         return WEIGHT_LIGHT if _all_specific_test_files(
             tokens[1:], _PYTEST_OPTIONS_WITH_VALUE, base_dir) else WEIGHT_HEAVY
     elif _classify_runner(tokens) == RUNNER_NPM:
         return WEIGHT_HEAVY
-    # 判不出 runner：launcher 開頭者依慣例是測試或編譯的包裝，保守視為 heavy（誤判只多排隊）
-    return WEIGHT_HEAVY if launcher_led else WEIGHT_LIGHT
+    if _is_self_slotted(tokens):
+        return WEIGHT_LIGHT
+    # 判不出 runner 一律 heavy（誤判只多排隊）：裸 python3、bash -c、env 前綴同判，
+    # 命令形態不改變結果，間接執行的全套件測試無法以改寫形態繞過名額
+    return WEIGHT_HEAVY
 
 
 def classify_argv_weight(tokens: List[str]) -> str:
-    """argv 清單（非 shell 字串）的負載分級：未指定具體測試檔的全套件測試與編譯為 heavy。
+    """argv 清單（非 shell 字串）的負載分級。
 
+    light：指定具體測試檔的測試、查詢類旗標、SELF_SLOTTED_COMMANDS、空命令；
+    其餘（全套件測試、編譯、判不出 runner 的命令）皆 heavy。
     供本機名額閘門使用；沿用 find_test_invocations 的前綴剝除，不重新拼接字串。
     """
     if not tokens:
         return WEIGHT_LIGHT
     stripped = _strip_launch_prefixes(list(tokens))
     if not stripped:
-        return WEIGHT_HEAVY  # 全是 launcher 而無命令，屬 launcher 開頭判不出 runner
-    return _weight_of_stripped(stripped, launcher_led=stripped != list(tokens),
-                               base_dir=_command_base_dir(list(tokens)))
+        return WEIGHT_HEAVY  # 全是 launcher 而無命令，判不出 runner
+    return _weight_of_stripped(stripped, base_dir=_command_base_dir(list(tokens)))
 
 
 def _is_known_heavy_candidate(tokens: List[str]) -> bool:
-    """剝除前綴後的命令是否屬已辨識的 runner／編譯器（排除「launcher 開頭判不出而保守視為 heavy」）。"""
+    """剝除前綴後的命令是否屬已辨識的 runner／編譯器（排除「判不出 runner 而保守視為 heavy」）。"""
     head = Path(tokens[0]).name
     if head in HEAVY_BUILD_EXECUTABLES or head in (RUNNER_FLUTTER, RUNNER_DART):
         return True
@@ -467,16 +488,40 @@ def find_unwrapped_heavy_with_redirects(command: str) -> Optional[List[Tuple[Tup
         # 變數目標在字面階段不可能解析成既存檔，故必須先於檔案檢查處理。
         if has_variable_test_target(stripped):
             continue
-        if _weight_of_stripped(stripped, launcher_led=False,
-                               base_dir=_command_base_dir(cmd_tokens)) == WEIGHT_HEAVY:
+        if _weight_of_stripped(stripped, base_dir=_command_base_dir(cmd_tokens)) == WEIGHT_HEAVY:
             found.append((tuple(cmd_tokens), " ".join(redirects)))
     return found
+
+
+# 命令文字中的 runner 字樣（不經敘述切分，直接比對原始字串）。用來發現「看得到 runner、
+# 卻辨識不出測試呼叫」的間接形態：shell 函式參數（f uv run pytest）、變數展開（$CMD）、
+# bash -c 字串內。唯讀命令（grep pytest 檔案）也會命中，所以只用於提醒，不用於阻擋。
+_RUNNER_MENTION_RE = re.compile(
+    r"(?<![\w.-])(?:py\.test|pytest)(?![\w-])"
+    r"|\b(?:flutter|dart)\s+test\b"
+    r"|\bnpm\s+(?:test|t|tst)\b"
+)
+
+
+def find_unrecognized_runner_mention(command: str) -> Optional[str]:
+    """命令文字含 runner 字樣、但 find_test_invocations 辨識不出任何測試呼叫時，回傳該字樣。
+
+    辨識結果為 []（可解析但無測試呼叫）或 None（無法解析）都算辨識不出；已辨識出至少
+    一個測試呼叫時回 None（直接形態已由封堵端與環境檢查處理）。命令不含 runner 字樣回 None。
+    """
+    match = _RUNNER_MENTION_RE.search(command or "")
+    if match is None:
+        return None
+    invocations = find_test_invocations(command)
+    if invocations:
+        return None
+    return match.group(0)
 
 
 def find_unwrapped_heavy(command: str) -> Optional[List[Tuple[str, ...]]]:
     """回傳命令中「已辨識為 heavy 且未經 run-with-timeout 包裝」的敘述（不含重導向）；無法解析回 None。
 
-    供封堵端（pre-test-hook）使用：只認已辨識的 runner／編譯器，launcher 開頭判不出者
+    供封堵端（pre-test-hook）使用：只認已辨識的 runner／編譯器，判不出 runner 者
     不算（閘門端保守視為 heavy 只多排隊，封堵端誤判則擋掉正當命令，代價較高）。
     """
     found = find_unwrapped_heavy_with_redirects(command)

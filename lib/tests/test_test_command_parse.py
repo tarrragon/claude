@@ -21,6 +21,7 @@ from lib.test_command_parse import (
     WEIGHT_LIGHT,
     classify_argv_weight,
     find_test_invocations,
+    find_unwrapped_heavy,
 )
 
 WRAPPER = "python3 .claude/scripts/run-with-timeout.py 300 --"
@@ -202,8 +203,6 @@ def test_argv_weight_heavy(argv):
     ["pytest", "-q", "tests/test_a.py", "-k", "x"],
     ["python3", "-m", "pytest", "tests/test_a.py"],
     ["uv", "run", "pytest", "tests/test_a.py"],
-    ["echo", "hi"],
-    ["python3", "script.py"],
     [],
 ])
 def test_argv_weight_light(argv):
@@ -216,10 +215,73 @@ def test_argv_weight_light(argv):
     ["nohup", "./all.sh"],
     ["timeout", "10", "./x.sh"],
     ["xargs", "./x.sh"],
+    ["echo", "hi"],
+    ["python3", "script.py"],
+    ["xcrun", "simctl", "list"],
 ])
-def test_argv_weight_launcher_led_unknown_runner_is_heavy(argv):
-    """判定退路：launcher 開頭而剝除後判不出 runner，保守視為 heavy。"""
+def test_argv_weight_unknown_runner_is_heavy(argv):
+    """判定退路：剝除前綴後判不出 runner，不論是否 launcher 開頭一律 heavy。"""
     assert classify_argv_weight(argv) == WEIGHT_HEAVY
+
+
+# 同一個間接執行的全套件測試，以三種命令形態下達
+_INDIRECT_FORMS = [
+    ["python3", "run_all.py"],
+    ["bash", "-c", "uv run pytest"],
+    ["env", "A=1", "python3", "run_all.py"],
+]
+
+
+@pytest.mark.parametrize("argv", _INDIRECT_FORMS)
+def test_argv_weight_command_form_does_not_change_unknown_runner_result(argv):
+    """裸 python3、bash -c、env 前綴同為 heavy：改寫命令形態不能把判不出的命令變成 light。"""
+    assert classify_argv_weight(argv) == WEIGHT_HEAVY
+
+
+@pytest.mark.parametrize("argv", [
+    ["worktree", "merge", "3.1.0-W1-001", "--pre-acceptance", "x"],
+    ["/Users/u/.local/bin/worktree", "merge", "3.1.0-W1-001"],
+    ["uv", "--directory", ".claude/skills/worktree", "run", "worktree", "merge", "3.1.0-W1-001"],
+    ["python3", ".claude/scripts/run-with-timeout.py", "2400", "--", "worktree", "merge", "3.1.0-W1-001"],
+])
+def test_argv_weight_self_slotted_worktree_merge_is_light(argv):
+    """worktree merge 自行取得名額，外層判 light 才不會與內層互等。"""
+    assert classify_argv_weight(argv) == WEIGHT_LIGHT
+
+
+@pytest.mark.parametrize("argv", [
+    ["worktree", "cleanup", "3.1.0-W1-001"],
+    ["worktree"],
+    ["merge", "worktree"],
+])
+def test_argv_weight_other_worktree_forms_stay_heavy(argv):
+    """例外只涵蓋 (worktree, merge) 這一組：其他子命令與順序對調仍走判不出 runner 的 heavy。"""
+    assert classify_argv_weight(argv) == WEIGHT_HEAVY
+
+
+def test_argv_weight_self_slotted_exception_contrast(monkeypatch):
+    """E2 對照：同一個 worktree merge 命令，清空例外集合後判 heavy，例外集合確實在起作用。"""
+    import lib.test_command_parse as parse
+    argv = ["worktree", "merge", "3.1.0-W1-001"]
+    assert classify_argv_weight(argv) == WEIGHT_LIGHT
+    monkeypatch.setattr(parse, "SELF_SLOTTED_COMMANDS", frozenset())
+    assert classify_argv_weight(argv) == WEIGHT_HEAVY
+
+
+def test_find_unwrapped_heavy_ignores_unknown_runner_commands():
+    """封堵端不受影響：判不出 runner 的命令仍不列為未包裝 heavy，不會被擋。"""
+    for command in ("python3 script.py", "echo hi", "env A=1 ./run.sh", "worktree merge 3.1.0-W1-001"):
+        assert find_unwrapped_heavy(command) == [], command
+
+
+@pytest.mark.parametrize("argv", [
+    ["flutter", "pub", "get"],
+    ["flutter", "analyze"],
+    ["dart", "format", "lib/"],
+])
+def test_argv_weight_recognized_runner_non_test_subcommand_stays_light(argv):
+    """flutter／dart 已辨識，子命令不編譯不跑測試：light，不落入判不出 runner 的 heavy。"""
+    assert classify_argv_weight(argv) == WEIGHT_LIGHT
 
 
 @pytest.mark.parametrize("argv", [
@@ -244,7 +306,6 @@ def test_argv_weight_heavy_bypass_forms(argv):
     ["pytest", "-k", "foo", "tests/test_a.py"],
     ["pytest", "-c", "cfg.ini", "tests/test_a.py::test_x"],
     ["flutter", "test", "--name", "foo", "test/a_test.dart"],
-    ["xcrun", "simctl", "list"],
 ])
 def test_argv_weight_light_after_option_values_removed(argv):
     assert classify_argv_weight(argv) == WEIGHT_LIGHT
@@ -415,3 +476,55 @@ def test_file_check_exception_falls_back_to_heavy(tmp_path, monkeypatch):
     assert classify_argv_weight(["pytest", str(root / "tests" / "a.py")]) == WEIGHT_HEAVY
     # 命名樣式命中者不經檔案檢查，維持 light
     assert classify_argv_weight(["pytest", "tests/test_a.py"]) == WEIGHT_LIGHT
+
+
+# ---- 間接形態：命令文字含 runner 字樣但辨識不出測試呼叫 ----
+
+# 觸發證據的命令形態：以 shell 函式包住多個套件逐一呼叫，runner 只在參數位置
+_FUNCTION_ARG_FORM = (
+    'run() { name=$1; shift; out=$("$@" -q 2>&1); echo "$name $?"; }; '
+    "run hooks uv --directory .claude/hooks run pytest; "
+    "run ticket uv --directory .claude/skills/ticket run pytest"
+)
+
+
+@pytest.mark.parametrize(
+    ("command", "mention"),
+    [
+        (_FUNCTION_ARG_FORM, "pytest"),
+        ('CMD="uv run pytest"; $CMD', "pytest"),
+        ("bash -c 'cd .claude/hooks && uv run pytest'", "pytest"),
+        ("run() { \"$@\"; }; run fvm flutter test", "flutter test"),
+    ],
+    ids=["function-arg", "variable", "bash-c", "function-flutter"],
+)
+def test_indirect_forms_are_reported(command, mention):
+    """正向對照（E2）：觸發證據形態與盤點表列出的間接形態，辨識為空時回報 runner 字樣。"""
+    from lib.test_command_parse import find_unrecognized_runner_mention
+
+    assert find_test_invocations(command) == []
+    assert find_unrecognized_runner_mention(command) == mention
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uv --directory .claude/hooks run pytest",          # 直接命令：已辨識，由封堵端處理
+        "uv run pytest tests/test_x.py",                    # 單一測試檔
+        "run() { \"$@\"; }; run ls -la",                    # 不含 runner 字樣的函式呼叫
+        "git status --porcelain",
+        "echo pytest-cov",                                  # 套件名不是 runner 字樣
+    ],
+)
+def test_direct_or_unrelated_commands_not_reported(command):
+    """反向對照：直接命令、單一測試檔、不含 runner 字樣的函式呼叫，行為與修改前相同（不回報）。"""
+    from lib.test_command_parse import find_unrecognized_runner_mention
+
+    assert find_unrecognized_runner_mention(command) is None
+
+
+def test_readonly_command_with_runner_word_is_reported():
+    """唯讀命令含 runner 字樣也會回報；這是只提醒、不阻擋的理由（以測試釘住此已知誤報）。"""
+    from lib.test_command_parse import find_unrecognized_runner_mention
+
+    assert find_unrecognized_runner_mention("grep -rn pytest .claude/hooks") == "pytest"

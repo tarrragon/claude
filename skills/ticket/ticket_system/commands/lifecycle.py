@@ -23,8 +23,8 @@ from ticket_system.lib.constants import (
     TERMINAL_STATUSES,
     CLOSE_REASONS,
     CLOSE_REASON_RETROSPECTIVE_UNKNOWN,
-    TICKET_ID_RE,
 )
+from ticket_system.lib.close_resolution_check import check_closed_by
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.identity_guard import PM_AGENT_NAME
 from ticket_system.lib.who_history import last_non_pm_executor, record_who_change
@@ -1179,15 +1179,16 @@ class TicketLifecycle:
         print(f"   狀態: {status_label}")
         return 0
 
-    # close reason 依 0.3.6-W1-006 正規化規則定案分為兩類：
-    # - 需指名後繼票（reason 語意為「已被取代 / 重複」，必須有具體對象）
-    # - 允許 none（reason 語意為「需求消失 / 用戶取消」，無後繼票可指名但需說明理由）
-    _CLOSE_REASONS_REQUIRE_TICKET_ID: frozenset = frozenset({"superseded_by", "duplicate"})
-    _CLOSE_REASONS_ALLOW_NONE: frozenset = frozenset(
+    # resolved_by 依 reason 限定的值域由 .claude/lib/close_resolution.py 定義
+    # （close、set-closed-by、version-tracking-consistency-guard-hook 共用）：
+    # - superseded_by / duplicate：Ticket ID（須存在）
+    # - transferred_to_issue：issue 參照 owner/repo#N
+    # - 其餘：none 或 Ticket ID（須存在）
+    # requirement_vanished / cancelled_by_user 無後繼票可指名，另要求 reason_note 必填。
+    _CLOSE_REASONS_REQUIRE_NOTE: frozenset = frozenset(
         {"requirement_vanished", "cancelled_by_user"}
     )
     _DEFER_SEMANTIC_PATTERN = re.compile(r"延後|移到|後續")
-    _NONE_TOKEN = "none"
 
     def _validate_close_resolution(
         self,
@@ -1198,14 +1199,13 @@ class TicketLifecycle:
         """
         驗證 close 的 resolved_by / reason_note 依 reason_code 分歧的合法性。
 
-        依 0.3.6-W1-006 正規化規則定案：
-        - superseded_by / duplicate：resolved_by 須為合法 Ticket ID 格式，且對應檔案存在
-        - requirement_vanished / cancelled_by_user：允許 resolved_by=none，但 reason_note 必填
         - 任一 reason 的 resolved_by 或 reason_note 含延後語意（延後/移到/後續）：一律 reject，
           引導改用 `ticket track migrate`（延後的唯一合法通道是保留 pending 移版本，close 不承載延後語意）
+        - resolved_by 值域：委派 check_closed_by（共用值域 + Ticket ID 指向的票須存在）
+        - requirement_vanished / cancelled_by_user：reason_note 必填
 
         Args:
-            resolved_by: 解決此問題的 Ticket ID 或 none
+            resolved_by: Ticket ID、none 或 issue 參照（owner/repo#N），依 reason_code 限定
             reason_code: close_reason 枚舉值
             reason_note: 關閉原因補充說明
 
@@ -1228,30 +1228,17 @@ class TicketLifecycle:
                 f"{guidance}"
             )
 
-        if reason_code in self._CLOSE_REASONS_REQUIRE_TICKET_ID:
-            match = TICKET_ID_RE.match(resolved_by or "")
-            if not match:
-                return (
-                    f"[Error] --reason {reason_code} 要求 --resolved-by 為合法 Ticket ID 格式\n"
-                    f"        收到：{resolved_by!r}\n"
-                    f"{guidance}"
-                )
-            resolved_version = match.group(1)
-            resolved_ticket = load_ticket(resolved_version, resolved_by)
-            if not resolved_ticket:
-                return (
-                    f"[Error] --reason {reason_code} 要求 --resolved-by 指向存在的 Ticket，"
-                    f"但找不到檔案：{resolved_by}\n"
-                    f"{guidance}"
-                )
-        elif reason_code in self._CLOSE_REASONS_ALLOW_NONE:
-            if not reason_note:
-                return (
-                    f"[Error] --reason {reason_code} 要求 --reason-note 必填"
-                    f"（--resolved-by 可為 '{self._NONE_TOKEN}'，但須說明理由）\n"
-                    f"        收到：resolved_by={resolved_by!r} reason_note={reason_note!r}\n"
-                    f"{guidance}"
-                )
+        domain_error = check_closed_by(reason_code, resolved_by, load_ticket)
+        if domain_error:
+            return f"{domain_error}\n{guidance}"
+
+        if reason_code in self._CLOSE_REASONS_REQUIRE_NOTE and not reason_note:
+            return (
+                f"[Error] --reason {reason_code} 要求 --reason-note 必填"
+                f"（--resolved-by 可為 'none'，但須說明理由）\n"
+                f"        收到：resolved_by={resolved_by!r} reason_note={reason_note!r}\n"
+                f"{guidance}"
+            )
 
         return None
 
@@ -1270,12 +1257,12 @@ class TicketLifecycle:
         - complete：自己做完（需 who + acceptance 全勾）
         - close：被其他 Ticket 解決（需 resolved_by）
 
-        W15-027 / PC-090：reason_code 必填且須為 CLOSE_REASONS 六種枚舉之一。
+        W15-027 / PC-090：reason_code 必填且須為 CLOSE_REASONS 枚舉之一。
         retrospective=True 時允許填 'unknown'（C4 回顧式 close 補填場景）。
 
         Args:
             ticket_id: 要關閉的 Ticket ID
-            resolved_by: 解決此問題的 Ticket ID
+            resolved_by: Ticket ID、none 或 issue 參照，值域依 reason_code 限定
             reason_code: close_reason 枚舉值（必填，PC-090 C1）
             reason_note: 關閉原因補充說明（選填）
             retrospective: 是否為回顧式 close 補填（允許 unknown）

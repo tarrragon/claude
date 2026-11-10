@@ -14,8 +14,12 @@ Ticket ID）。本命令補上這條缺口路徑，設計為方向 (b)：專用�
 `--field {closed_by,close_reason,closed_at}` 通用入口，而非逐一新增
 `set-close-reason` / `set-closed-at` 等子命令。
 
+值域與 close 相同，依該票的 close_reason 限定（權威：`.claude/lib/close_resolution.py`）：
+superseded_by／duplicate 收 Ticket ID；transferred_to_issue 收 issue 參照
+`owner/repo#N`；其餘收 `none` 或 Ticket ID。Ticket ID 須指向存在的票。
+
 格式：
-  ticket track set-closed-by <id> --value <ticket-id> [--version <v>]
+  ticket track set-closed-by <id> --value <ticket-id|none|owner/repo#N> [--version <v>]
 """
 
 if __name__ == "__main__":
@@ -28,7 +32,8 @@ import argparse
 import sys as _sys
 from pathlib import Path
 
-from ticket_system.constants import STATUS_CLOSED, TICKET_ID_RE
+from ticket_system.constants import STATUS_CLOSED
+from ticket_system.lib.close_resolution_check import check_closed_by
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.ticket_loader import get_ticket_path, load_ticket, save_ticket
 from ticket_system.lib.ticket_ops import (
@@ -37,37 +42,18 @@ from ticket_system.lib.ticket_ops import (
 )
 
 
-def _validate_new_closed_by(value: str) -> str:
-    """驗證 --value 為合法且存在的 Ticket ID。
-
-    Returns:
-        錯誤訊息字串；驗證通過回傳空字串。
-    """
-    match = TICKET_ID_RE.match(value or "")
-    if not match:
-        return f"[Error] --value 須為合法 Ticket ID 格式，收到：{value!r}"
-    resolved_version = match.group(1)
-    if not load_ticket(resolved_version, value):
-        return f"[Error] --value 指向的 Ticket 不存在：{value}"
-    return ""
-
-
 def execute_set_closed_by(args: argparse.Namespace, version: str) -> int:
     """
     修正 closed 票的 closed_by 欄位（closed 態欄位修正入口）。
 
     僅允許對 status=closed 的票操作（closed_by 只在 closed 狀態下有意義）。
-    新值須為合法且存在的 Ticket ID，禁止填入代理人名稱等非 ticket 引用。
+    新值須落在該票 close_reason 允許的值域內（與 close 同一個驗證函式），
+    禁止填入代理人名稱等非引用值。
     修正動作輸出既有值與新值，並走 auto-commit 使 git log 可追溯
     （與 set-acceptance 同保護等級）。
     """
     ticket_id = args.ticket_id
     new_value = args.value
-
-    error = _validate_new_closed_by(new_value)
-    if error:
-        print(error)
-        return 1
 
     lock_target = Path(get_ticket_path(version, ticket_id))
     with file_lock(lock_target):
@@ -81,6 +67,11 @@ def execute_set_closed_by(args: argparse.Namespace, version: str) -> int:
                 f"[Error] set-closed-by 僅適用 status=closed 的票，"
                 f"{ticket_id} 現況為 {status!r}"
             )
+            return 1
+
+        error = check_closed_by(ticket.get("close_reason"), new_value, load_ticket)
+        if error:
+            print(f"{error}（--value）")
             return 1
 
         old_value = ticket.get("closed_by", "")

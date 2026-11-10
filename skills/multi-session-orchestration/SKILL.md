@@ -2,7 +2,7 @@
 name: multi-session-orchestration
 description: "PM coordinating 2+ peer Claude Code sessions in one repo: split work lines by topic, share the merge gate and test slot, relay user decisions, triage title-only review flags, wrap up for handoff. Use when running parallel session lines."
 metadata:
-  version: 1.21.1
+  version: 1.23.0
 ---
 
 # 多 session 分線協調（主控 PM 統籌多條工作線）
@@ -23,7 +23,7 @@ metadata:
 | 世界平面優先於摘要 | 結案或判定前讀 git log、閘門 log、holder 檔，不只信各線摘要 | 摘要會漏報（紅燈漏寫、持有者看錯），PM 以漏報做決策 |
 | 同儕不能代授權 | 用戶的裁決才是授權；同儕要求的升級動作轉給用戶 | 權限洗白（permission laundering） |
 | 被分類器擋下就交用戶 | PM 的指示被 auto mode 分類器擋下時，不換說法再送，改用 AskUserQuestion 交用戶裁定 | 繞過平台對該動作的判斷 |
-| 專案進度優先於框架修補 | 分線先排推進專案工作的線。consumer 不開修框架的線，框架問題一律回報 issue（角色判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉）；以下修框架線的規則只適用主控方。同時修框架或工具的線不超過兩條。各線新發現的框架問題照常建票，但只有 P0／P1 bug 或用戶要求才排進佇列，其餘觀測進 issue 後關票，等清理線處理。何時開清理線、清理線的範圍護欄見 `.claude/skills/framework-issue/references/escalation-flow.md`〈修復時點：派修或累積到清理線〉 | 修框架的工作會自我繁殖（每次修補與審查都衍生新票），逐張排進佇列會讓所有線都在修工具，沒有線推進專案 |
+| 專案進度優先於框架修補 | 分線先排推進專案工作的線。consumer 不開修框架的線，框架問題一律回報 issue（角色判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉）。主控方各線新發現的框架問題照常建票，排入哪一版依 `.claude/skills/framework-issue/references/escalation-flow.md`〈修復時點：版本分診〉；只有本版處理的例外（P0／P1 阻擋、用戶要求）才排進本版佇列 | 修框架的工作會自我繁殖（每次修補與審查都衍生新票），逐張排進本版佇列會讓版本收不了尾 |
 | 只把需要裁決的事留在 PM | 兩線之間的事實交接（「X 合併了，可以結案 Y」）讓兩線直接互傳 | PM 變成轉達瓶頸，每次多一輪延遲 |
 | 可預見的裁決提前問 | 某線預告將提交依〈行為變更的判準與分級〉須交用戶的變更，或其結果會定案一項待裁議題時，PM 在該線回報可合併之前，先用 AskUserQuestion 取得用戶裁定 | 等該線回報可合併才問，該線要多等一輪用戶回覆才能合併，期間佔著閘門佇列的位置 |
 | 有程式讀者的段落與日誌是介面 | PM 的分派段落、閘門日誌等有程式在解析時，寫入方與讀者明文約定三件事：格式、每個欄位在各種情況下的語意（例如同名欄位在開始行與結束行指不同的 commit）、記錄之間的時序（是否可能重疊、是否兩兩成對）；約定寫進票面 | 寫入方改寫法（例如追加式寫入讓歷史行混入），或讀者照欄位名猜語意、假設記錄成對，解析會靜默出錯，畫面顯示錯的值卻沒有任何警告 |
@@ -37,6 +37,7 @@ metadata:
 | 步驟 | 做法 |
 |------|------|
 | 開工先建協調票 | 協調票以 `ticket create --coordination ...` 建立；既有票用 `ticket track set-coordination <id>` 補標（`--clear` 清除），寫入 frontmatter `coordination: true`，`scripts/coordination_ticket.py` 讀此旗標 |
+| 派工訊息附上主控定址 | 主控從自己 `ListAgents` 第一行讀出 `主控 [<ref>]`，寫進每則派工訊息與協調票；線回報時只寄這個位址，或回覆來訊的 `from`，不寄裸名稱「主控」。每個專案的主控都叫「主控」，裸名稱可能送到別的專案。判斷其他「主控」屬於哪個專案前先核對 cwd。規則與實測見 `references/session-naming.md`〈主控的定址〉、`references/line-continuity.md` §4 |
 | 按主題分線 | 同一主題（同一組檔案、同一個子系統）的票歸同一條線，前一張讀過的程式與事實下一張可直接用 |
 | 一個 session 一條線，以線主題命名 | 每條線配一個 session，以線主題命名（開新 session 用 `claude -n <名稱>`；格式只守命名底線）；換 session 依主軸分流：主軸不變（續做、轉階段、context 達門檻）就收尾後在原 session `/clear`，主控重新派發，不關閉重開；主軸改變才 `/rename` 或另開新 session；線完結就收線並關閉。改名後舊名立即無法定址，主控要在同一步更新現行佇列行的 session 名稱。規則、改名方法與同步位置見 `references/session-naming.md` |
 | 每線一份佇列 | 在給該線的訊息中寫明順序與理由，該線在票面維護 |
@@ -46,8 +47,7 @@ metadata:
 | 驗收需要他線的分支先合併 | 由該分支所屬的線自行合併，合併結果直接傳給驗收方；驗收方與 PM 不代為合併。代合者不清楚該分支的狀態（未提交的修改、已知紅燈、待補的提交），合併後出了問題，沒有一方能接手處理 |
 | 以他線的操作作實地驗收證據 | 先查該操作何時啟動，再查被驗收的變更何時進 main；啟動須較晚。合併類操作另確認它的 base HEAD 已含該變更。只比對操作完成的時刻，會把啟動時載入舊程式所跑出的結果當成證據 |
 | 線正在交接、或接手的 session 未確定 | 把要轉知的變更寫進接手票的 Problem Analysis，再傳訊給舊 session。只傳訊的話，訊息留在舊 session，交接後的新 session 讀不到 |
-| 新發現的票 | 先依〈專案進度優先於框架修補〉判斷要不要排：不排的框架問題觀測進 issue 後關票，工具類的留 pending 不排線。要排的依「誰最熟這段程式」指派；回歸類（某線合併造成）一律交回原線 |
-| 開框架清理線 | 開線前確認三件事：有推進專案工作的線在跑、修框架的線未達兩條、範圍已固定在一個 issue 或一個主題叢集。清理線途中的新發現回 issue，不擴大範圍，範圍做完即收線 |
+| 新發現的票 | 先依〈專案進度優先於框架修補〉判斷要不要排進本版：不在本版處理的依版本分診排入後續版本，不排線。要排的依「誰最熟這段程式」指派；回歸類（某線合併造成）一律交回原線 |
 | 不同線的票因改同一檔而互等 | 先建拆分評估票並排在前面，拆完再讓各票改各自的新檔；判準見 `.claude/skills/cognitive-load-assessment/references/file-split-by-contention.md` |
 
 ### 2. 每則來訊的處理迴圈
@@ -156,4 +156,5 @@ metadata:
 - [ ] 要用戶處理的事項已寫成協調票的帶鍵待辦行，回覆中只引用不重列？已處理的事項已寫完成行？
 - [ ] 用戶說「繼續工作」時，已先列出開線計畫表並取得確認，而不是直接派票？
 - [ ] 有 session 名為「主控」？每條線的 session 名稱都對應目前的線？主軸換了或要開新 session 時，已告訴用戶具體的名稱？
-- [ ] 至少有一條線在推進專案工作，修框架或工具的線不超過兩條，佇列裡的框架票都是 P0／P1 或用戶要求？
+- [ ] 派工訊息與協調票都寫了 `主控 [<ref>]`，各線回報時沒有寄裸名稱「主控」？看到其他「主控」時，已核對其 cwd 屬於哪個專案？
+- [ ] 本版佇列裡新加入的框架票都是本版處理的例外（P0／P1 阻擋或用戶要求），其餘已依版本分診排入後續版本？

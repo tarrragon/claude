@@ -126,16 +126,16 @@ close 宣告的是「這張票的知識已有更好的住址」，問題本身�
 
 ```bash
 ticket track close <ticket-id> \
-  --resolved-by none \
-  --reason not_executable_knowledge_captured \
+  --resolved-by tarrragon/claude#<N> \
+  --reason transferred_to_issue \
   --reason-note "分析 context 已遷至 tarrragon/claude#<N>（區段：當前結論）"
 ```
 
 | 約束 | 說明 |
 |------|------|
-| `--resolved-by` 只收 ticket ID 或 `none` | issue ref 不是合法值。本 reason 對 resolved-by 與 reason-note 皆不驗證（留空也過），本配方仍要求 note 必含 issue ref，否則 close 後無人能從票面找到知識住址；`version-tracking-consistency-guard-hook.py` 接受 `none` |
+| `--resolved-by` 填 issue 參照 `owner/repo#N` | `transferred_to_issue` 只收 issue 參照，填 `none` 或 ticket ID 會被拒。close、`set-closed-by` 與 `version-tracking-consistency-guard-hook.py` 共用同一個值域（`.claude/lib/close_resolution.py`），票面的 `closed_by` 即知識住址 |
 | reason-note 禁詞（本節為權威，他處只引用） | 「延後」「移到」「後續」三詞以子字串比對，命中即被拒。「後續」最易在自由填寫「（區段：…）」時寫出；升級流程的路徑名「延後接手」也不可抄進 note；寫「遷至」「已收進」 |
-| reason 語意 | `not_executable_knowledge_captured` 原註解指知識轉移至 error-pattern；本配方把落點延伸至 framework issue，以 reason-note 的 issue ref 區分 |
+| 存量票 | 先前以本配方舊版（`--resolved-by none --reason not_executable_knowledge_captured`）關閉的票仍屬合法值，不需改正；要補上 issue 住址時，`close_reason` 不變，`set-closed-by` 對該 reason 只收 `none` 或 ticket ID，issue ref 留在 reason-note |
 
 IMP 票被 close 後，執行內容住在「待辦與來源」；之後依階段性設計裁實作票時，以 `ticket track query <closed-id>` 取回原票的 acceptance 與 `where.files`，不重寫；新票 `--source-ticket` 指向收束時的派發票，`why` 引用 issue ref 與區段。
 
@@ -159,7 +159,7 @@ IMP 票被 close 後，執行內容住在「待辦與來源」；之後依階段
 落點：<既有 issue 編號 / 新開，關係判定結果>。
 步驟：讀票 → 依 references/ticket-intake.md〈步驟三：時序改狀態〉改寫 → sections.json 寫 scratchpad → init／add／observe（依〈步驟二：查重與落點〉；`init`／`add` 不再需要指定 owner，CLI 自行推導，見下方說明）→ 依〈步驟五：ticket 處置〉範圍規則 close → show/check → 來源票對照與關係判定皆以 append-log 寫回派發票 Solution。
 禁止：貼入時序敘事、對已有索引的 issue 再 init、close 範圍外或被依賴的票、更新他方 owner 的區段、寫專案內任何檔案、對 ticket md 裸 commit（`git commit` 讀共用 index，會把並行 session 暫存的檔案一併帶走，實測三個 curator 兩個命中）。
-提交：`append-log` 逐命令 auto-commit；`close` 不會——它只由 Stop 事件的兜底 hook 提交，而該 hook 在有背景代理人時跳過，且該 hook 只納入本 session 認領過的票，收束時 close 的票從未被認領，兩層都不涵蓋。範圍票全部 close 後由 curator 自行提交，優先用 `ticket track commit <本票 ID> -m "<訊息>" <票檔…>`（走隔離索引，檔案須為本票 `where.files` 子集）；該命令不適用時才退回手動隔離索引 CAS（`GIT_INDEX_FILE` 指臨時 index → `read-tree HEAD` → `add` 精確檔案 → `write-tree` → `commit-tree` → `diff --name-only` 自驗範圍 → `update-ref HEAD <new> <old>`，配方見 Bash 工具使用規則參考文件的〈規則七詳細〉）。兩者皆禁裸 commit。
+提交：`append-log` 與 `close` 都是逐命令 auto-commit。每次只提交該票檔，commit 訊息為 `chore(<票 ID>): close status`，共用 index 裡他人暫存的檔案不會被一併帶走。收束時不需要另外提交，也不要再手動 commit：重複提交會撞上 bare-commit 守衛，或產生空 commit。只有命令以結束碼 75 退出（auto-commit 最終失敗，輸出含 WARNING）時才補提交：優先用 `ticket track commit <本票 ID> -m "<訊息>" <票檔…>`（走隔離索引，檔案須為本票 `where.files` 的子集）；該命令不適用時，才退回手動隔離索引 CAS（`GIT_INDEX_FILE` 指臨時 index → `read-tree HEAD` → `add` 精確檔案 → `write-tree` → `commit-tree` → `diff --name-only` 自驗範圍 → `update-ref HEAD <new> <old>`，配方見 Bash 工具使用規則參考文件的〈規則七詳細〉）。兩者皆禁裸 commit。
 **手動 CAS 後對同一批檔執行 `git restore --staged -- <檔…>`**：`ticket track complete` 預設會把票檔 stage 進共用 index，CAS 提交不經共用 index，舊 entry 會留下成為「過期快照」，他人任一次裸 commit 都會把這批票回滾且 `git log` 外觀正常；三平面（index／HEAD／工作區）一致後才算收尾。
 `update-ref` 回 rc 128 有兩種語意——HEAD 被並行移動（CAS 預期失敗，重試即可）與 hook 阻擋（重試無用）。重試若連續全滅，先讀 stderr 再決定，不要繼續加重試次數。
 規範在執行期間可能被更新（本次收束中兩份規範各改了三次），收尾前重讀 `references/ticket-intake.md` 與代理人定義，以當下版本核對 acceptance。

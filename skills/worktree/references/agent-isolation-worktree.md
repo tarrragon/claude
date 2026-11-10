@@ -55,6 +55,7 @@ cc runtime 在 agent 結束或 process 異常死亡時**不會自動 remove** ag
 |---------------|----------|---------|
 | 正常結束（v2.1.157+） | 自動 unlock | 可直接 `git worktree remove` / `git worktree prune`，免 unlock 前置 |
 | process 異常死亡 | 可能殘留「殭屍 lock」（git 看 lock 不看 PID） | 仍需 `git worktree unlock` 前置（見下方〈手動清理指令〉路徑 2） |
+| 正常結束但未解鎖，鎖的 pid 是存活的父 session（tarrragon/claude#121） | 鎖仍在，持鎖者是派發方 session 自己 | `/worktree cleanup` 判定鎖 pid 是呼叫者的祖先行程，且分支已交回（有自己的提交並已併入 main），解鎖後繼續並在輸出寫明，不需 `--unlock`。分支尚未交回時停手：代理人與派發方同一行程，只看 pid 分不出代理人是否仍在執行。pid 屬其他存活行程時仍停手 |
 
 **Why**：v2.1.157 起 cc 在 agent 正常結束時主動 unlock worktree（release note：「Worktrees managed by Claude are now left unlocked when the agent finishes」），使 `git worktree remove`/`prune` 能直接清理；但異常死亡（process 被 kill / crash）來不及 unlock，仍會殘留 lock，故 unlock 前置步驟對該情境保留。
 

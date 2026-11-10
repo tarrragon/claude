@@ -623,6 +623,46 @@ Hook JSON output 新增 `terminalSequence` 欄位，讓 hook 在無 controlling 
 
 ---
 
+## git 原生 hook 的安裝與移除
+
+CC hook 守不住自身的載入來源：`settings.json` 語法錯誤時全部 hook 不載入，也不會有任何訊號。這類檢查改放在 git 原生 hook，由已註冊的 SessionStart hook `git-ref-transaction-guard-install-hook.py` 在每次 session 啟動時冪等安裝。`.git/` 不受版本控制，新 clone 或新 worktree 都要重裝。
+
+| git hook | 掛載的檢查 | 阻擋條件 | 判定以外的失敗 |
+|----------|-----------|---------|---------------|
+| `reference-transaction` | `git-ref-transaction-content-guard.py`（ref 寫入前的內容掃描） | guard 結束碼 87 | 放行並寫 stderr |
+| `pre-commit` | `settings-json-syntax-precommit.py`（staged 的 `.claude/settings.json` 能否以 JSON 載入） | 腳本結束碼 87（錯誤訊息含行列） | 放行並寫 stderr |
+
+**安裝位置**：`git rev-parse --git-common-dir` 下的 `hooks/`。所有 worktree 共用同一份，裝一次就涵蓋全部 worktree。
+
+**pre-commit 的安裝規則**：
+
+| 現況 | 安裝器行為 |
+|------|-----------|
+| 沒有 `pre-commit` | 寫入 shim |
+| 已是本 shim（含 `# settings-json-syntax-precommit shim`） | 內容相同略過，不同則更新 |
+| 使用者自訂的 `pre-commit` | 改名為 `pre-commit.local`，shim 檢查完 settings.json 後串接呼叫它，內容不變 |
+| 自訂 `pre-commit` 與 `pre-commit.local` 同時存在 | 無法串接，跳過安裝，寫 stderr 警告 |
+| `core.hooksPath` 有設定 | git 不讀 `.git/hooks`，跳過安裝，寫 stderr 警告；需要時在該目錄的 pre-commit 自行呼叫閘門腳本 |
+
+**涵蓋範圍**：pre-commit 只在 `git commit` 時執行，包括解完衝突後以 `git merge --continue` 完成的合併提交。下列路徑不觸發 pre-commit，不在涵蓋範圍內：無衝突自動完成的 `git merge`、`cherry-pick`、`commit-tree` 加 `update-ref`（如 worktree 合併閘門、隔離索引提交）、sync-pull 寫入的 settings.json、編輯後未 commit 就開新 session。
+
+**確認已安裝**：
+
+```bash
+head -3 "$(git rev-parse --git-common-dir)/hooks/pre-commit"   # 第 2 行應含 settings-json-syntax-precommit shim
+tail -3 .claude/hook-logs/settings-json-syntax-precommit/precommit.log   # 每次判定一行：allow / block
+```
+
+**移除**：
+
+1. 先從 `.claude/settings.json` 移除 `git-ref-transaction-guard-install-hook.py` 的 SessionStart 註冊。不先移除的話，下一次 session 啟動會重裝。
+2. 刪除 shim：`rm "$(git rev-parse --git-common-dir)/hooks/pre-commit"`
+3. 若安裝時有串接使用者自訂的 hook，把它還原：`mv "$(git rev-parse --git-common-dir)/hooks/pre-commit.local" "$(git rev-parse --git-common-dir)/hooks/pre-commit"`
+
+只想暫時略過單次 commit 時，用 `git commit --no-verify`。這會略過所有 pre-commit 檢查，包括串接的使用者 hook。
+
+---
+
 ## 可觀察性模式
 
 ### Bash 日誌記錄

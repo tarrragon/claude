@@ -69,7 +69,7 @@ Ticket 進入 Blocked 狀態時不應被動等待，應積極派發子 Ticket �
 
 ## 關閉條件檢查清單
 
-**強制條件（6 項，缺一不可）**：所有驗收條件打勾完成；Review 通過；相關測試 100% 通過；`dart analyze` 0 錯誤；工作日誌已更新；**所有子 Ticket 已 completed 或 closed**（父責任履行判準）。
+**強制條件（6 項，缺一不可）**：所有驗收條件打勾完成；Review 通過；本票相關測試檔全綠（全套件由合併閘門確認）；`dart analyze` 0 錯誤；工作日誌已更新；**所有子 Ticket 已 completed 或 closed**（父責任履行判準）。
 
 **建議條件（3 項）**：程式碼符合專案規範；無技術債務（TODO/FIXME）；文件同步更新。
 
@@ -139,6 +139,9 @@ Hook 通過只代表子 status 形式合規，不代表子 Ticket 實際完成�
 - `.claude/templates/ticket-log-template.md` - Ticket 工作日誌範本
 
 ---
+
+**Last Updated**: 2026-11-10
+**Version**: 2.0.1 — complete 強制條件的「相關測試 100% 通過」改為「本票相關測試檔全綠（全套件由合併閘門確認）」，對齊 quality-baseline 規則 1 的時點（tarrragon/claude#104）
 
 **Last Updated**: 2026-06-14
 **Version**: 2.0.0 — W8-019.3 整併瘦身：178→約 130 行。移除頂部孤兒 ticket 範本片段（line 1-23，無 H1 / 無開 code fence 的結構缺陷，範本權威路由 ticket-log-template.md）；新增 H1 + 30 秒核心；執行步驟改表格；CLI 命令路由 ticket skill。保留全部 15 引用者錨點：「核心原則：Ticket 引導優先於 Hook 防護」（PC-061）、「父 complete 前置條件」（atomic-ticket / ticket-lifecycle-details / pm-rules）、生命週期/狀態轉換（ticket-design-dispatch）、形式驗證 vs 實質驗收（W10-039.4）、SMART、經驗傳承

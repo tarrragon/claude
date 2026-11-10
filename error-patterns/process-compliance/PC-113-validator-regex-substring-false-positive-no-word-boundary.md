@@ -72,6 +72,30 @@ PM 實際 debug 路徑：
 
 PM 當下 fallback 是把字眼改為「task 待辦清單」繞開，再回頭建 W17-094 修 regex。
 
+### 案例 2：合併閘門摘要把 xfailed 判為失敗（2026-11-10）
+
+病因相同，對象不同：這次不是 placeholder 判定，而是測試摘要的失敗判定。合併閘門 `merge_gate.py` 的 `summarize_output` 改成收集全部摘要行，只要有一行失敗就取那一行。判定失敗用的正規式：
+
+```python
+re.compile(r"failed|error|Some tests failed", re.IGNORECASE)  # 修前
+re.compile(r"\b(?:failed|errors?)\b|Some tests failed", re.IGNORECASE)  # 修後
+```
+
+修前的 `failed` 會命中 pytest 的 `xfailed`。xfailed 是預期中的失敗，該次執行仍算綠燈。綠燈輸出的實測結果：
+
+| 輸入（rc=0） | 修前摘要 |
+|------|---------|
+| `10 passed, 1 xfailed` 在前、`3 passed` 在後 | `10 passed, 1 xfailed in 2s`（取錯行，不是最後一行） |
+| 兩行都含 `xfailed` | `3 passed, 1 xfailed in 1s（共 2 個失敗摘要行）` |
+
+紅綠判定看結束碼，不受這個誤判影響。受影響的是讀者看到的摘要文字：綠燈日誌上寫著「失敗摘要行」，會讓讀者去調查一個不存在的失敗。
+
+實作代理人新寫的 8 個測試都沒有抓到這個誤判。PM 覆核時另外餵了一個邊界輸入，才發現問題。這些測試只驗證「失敗行有被抓到」，沒有驗證「不是失敗的行不會被抓到」。
+
+修正補了兩條測試：
+- 摘要行含 xfailed 的綠燈，不判為失敗。
+- 對照組：`1 failed, 2 passed, 1 xfailed` 這一行仍判為失敗。用途是確認加了字邊界之後，真正的失敗沒有一起被放掉。
+
 ## 修復方式
 
 ### 直接修復
@@ -119,6 +143,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
 - 此 pattern 在自然 markdown / 一般文字內是否可能 substring 命中？
 - 是否有對應反例測試（substring 不誤判）？
 - IGNORECASE 是否擴大誤判風險？
+- 判定對象是測試輸出時，pytest 的 `xfailed`／`xpassed` 和以 `error` 開頭的長字（如 `errored`）是否會被誤中？反例測試是否附上對照組：同一行同時有真失敗和這類字詞時，仍判為失敗？
 
 ## 相關文件
 
@@ -128,5 +153,6 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
 
 ---
 
+**Last Updated**: 2026-11-10（補案例 2：合併閘門測試摘要的 xfailed 誤判；checklist 補測試輸出字詞一項）
 **Last Updated**: 2026-04-30
 **Source**: W17-007 ANA complete 期間 PM 實證踩到（commit 75ef9fd8 → W17-094 ticket → fix commit a47ffb14）

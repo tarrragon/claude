@@ -2,6 +2,13 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.26.0（2026-11-10）— 四項修正與一項新設定：
+- CLI 入口（tarrragon/claude#25）：`cli.py` 補 `if __name__ == "__main__"`，直接以路徑執行時把 skill 根目錄加進 `sys.path`；新增 `doc_system/__main__.py`，`python3 -m doc_system` 走同一個 `main`。測試 `tests/test_cli_entry.py` 以子行程執行三種入口。
+- test-map 掃描目錄（tarrragon/claude#31）：`TEST_SCAN_DIRS` 預設加入 `tests/`；`docs/traceability.yaml` 新增選填頂層鍵 `test_scan_dirs`，整份取代預設，值不合法時 stderr 警告並退回預設；改走檔案掃描的 UC 全數零命中時 stderr 警告，列出各掃描目錄的實況。
+- 配號位數（tarrragon/claude#98）：`create._next_id` 成為唯一配號實作，既有編號沿用最大號的位數（UC-06 之後配 UC-07）；目錄沒有編號時位數取自 `tracking_schema` 的 `id_pattern`（UC 兩位，PROP／SPEC／EVT 三位）。`batch_init` 刪除寫死位數的兩支配號函式，改呼叫 `create._next_id`。
+- 驗證端改讀 `id_pattern`（tarrragon/claude#98）：`tracking_schema` 新增 `id_pattern_body()`；`uc_registry` 的 UC 格式與 SSOT 標題行改由 `id_pattern` 組成，三位數 UC 可被解析；`validate-filenames` 以各型別的 `id_pattern` 判定檔名開頭，`EVT-{DOMAIN}-NNN` 不再被拒。
+- CLI 入口讀回 shim 設定的 `SKILL_CLI_CALLER_CWD`（tarrragon/claude#24），讀後移除，無效值寫 stderr 警告，與 ticket 2.49.5 同一修正。
+
 **Version**: 1.25.1（2026-11-09）— 讀宿主專案需求文件的 10 項測試（`test_uc_registry.py` 讀 `docs/app-use-cases.md` 的 2 項、`test_tracking_schema_conformance.py` 讀 `docs/proposals-tracking.yaml` 與 `docs/usecases/UC-*.md` 的 8 項），宿主缺檔時 skip 並寫明缺哪個檔；檔案存在時照常執行，斷言不變。原本在沒有這些文件的專案會 failed 或 setup error。產品碼不變。測試變更隨框架 v3.0.1 發佈；本版號在 v3.0.1 之後補升，tarrragon/claude 自下一版起一致。
 
 **Version**: 1.25.0（2026-11-03）— `GRAPH_EDGE_TYPES` 新增 `uc_ticket_refs`：UC 的 `ticket_refs` 欄位，指向 Ticket，class 為 `see-also`，layer 為 `established`。`tracking_schema.json` 匯出同步，`test_schema_export.py` 補新邊的匯出斷言，一致性測試的邊計數隨之調整。

@@ -53,7 +53,7 @@ __pycache__/
         hook_exclude = tmp_path / ".claude" / "config" / "hook-exclude-list.json"
         hook_exclude.write_text('{"exclude": []}')
 
-        settings_json = tmp_path / ".claude" / "config" / "settings.json"
+        settings_json = tmp_path / ".claude" / "settings.json"
         settings_json.write_text('{"hooks": {}}')
 
         # 建立 settings.local.json
@@ -217,7 +217,7 @@ __pycache__/
         hook_exclude = tmp_path / ".claude" / "config" / "hook-exclude-list.json"
         hook_exclude.write_text('{"exclude": []}')
 
-        settings_json = tmp_path / ".claude" / "config" / "settings.json"
+        settings_json = tmp_path / ".claude" / "settings.json"
         settings_json.write_text('{"hooks": {}}')
 
         (tmp_path / ".claude" / "settings.local.json").touch()

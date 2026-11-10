@@ -39,6 +39,19 @@ rm -f .git/index.lock && git add <files> && git commit -m "..."
 1. 建立 PreToolUse hook 在 `git commit` 前自動清理過期的 index.lock（超過 10 秒的 lock 視為殘留）
 2. 評估 Hook 中是否真的需要 git status 操作，能否用其他方式取代
 
+## 變體：多步驟 git 操作（rebase）中途撞鎖
+
+**單次 commit 撞鎖可直接重試；rebase、cherry-pick 這類逐 commit 套用的操作若在某一步撞鎖，會留下「該步改動已 staged、commit 未建立，但 sequencer 已記為完成」的中間狀態，此時不能靠重試收尾。**
+
+觀測（2026-11-09，worktree 內 `git rebase main`）：第 1 個 pick 成功，第 2 個 pick 建 commit 時 `Unable to create .../worktrees/<name>/index.lock`，鎖由同一 worktree 上另一行程的唯讀 `git rev-list` 短暫持有，隨即消失。之後：
+
+| 嘗試 | 結果 |
+|------|------|
+| `GIT_EDITOR=true git rebase --continue` | 拒絕：`you have staged changes`，要求先 `git commit` 或 `--amend` |
+| `git commit -C <原 commit>` | `bare-commit-guard-hook` 偵測到 `CHERRY_PICK_HEAD` 而阻擋 |
+
+**Why**：sequencer 在 commit 失敗前已把該 pick 寫入「已完成」清單，staged 內容與原 commit 等價，但 git 無法分辨這是「pick 未提交」還是「使用者額外 stage 的改動」，所以 `--continue` 拒絕；守衛同樣無法分辨，所以擋下 commit。**Consequence**：在這個狀態下嘗試各種收尾指令，容易把 staged 內容併進錯的 commit，或改寫歷史。**Action**：rebase 是自己發起的，就 `git rebase --abort` 回到 rebase 前的分支狀態（工作樹乾淨、無 `rebase-merge` 目錄）後重做；重做前可用 `git diff --cached | git patch-id --stable` 與原 commit 的 patch-id 比對，確認沒有遺失或混入改動。rebase 不是自己發起的，停手回報，不代為 abort。
+
 ## 發生次數
 
 多次（用戶回報至少 2-3 次）

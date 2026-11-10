@@ -4,6 +4,8 @@ title: "integration_test 的 App 進入 hidden 時 framesEnabled 為 false，pum
 severity: medium
 related:
  - PC-168
+ - TEST-GPD-1000
+ - TEST-LLM-001
 ---
 
 # TEST-GPD-1008: integration_test 的 App 進入 hidden 時 framesEnabled 為 false，pumpAndSettle 一次 pump 即返回使正向對照假綠，未受保護的 pump 則卡到案例逾時
@@ -50,6 +52,11 @@ test binding 在每個案例開始時 `resetInternalState`，把 `framesEnabled`
 
 - 寫依賴 `pumpAndSettle` 判定的正向對照（E2 型）時，同時寫一個「無幀可排」的對照：在 flutter_tester 下用 `binding.handleAppLifecycleStateChanged` 注入 inactive→hidden，斷言 helper 仍然失敗。只用正常 lifecycle 跑，測不出守衛在 hidden 時放行。
 - 判讀 integration flaky 時，在入口 `main()` 註冊 `WidgetsBindingObserver` 記錄 lifecycle 轉換與時間戳。每個案例開頭讀到的 `lifecycleState` 會被重設成 null，不能當成當下狀態，只能用轉換事件判讀。
+
+## 相關 Pattern
+
+- TEST-GPD-1000：無限動畫持續排幀，`pumpAndSettle` 逾時
+- TEST-LLM-001：幀可以排、也沒有動畫，但等待的是不受 fake 時鐘驅動的真實 I/O，`pumpAndSettle` 立即返回、畫面停在 loading
 
 ## 驗證方式（本次）
 

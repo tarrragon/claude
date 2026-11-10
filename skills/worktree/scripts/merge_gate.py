@@ -185,6 +185,39 @@ def load_declaration_at(repo: str, ref: str) -> Declaration:
     return parse_declaration(proc.stdout.decode("utf-8", "replace"))
 
 
+def load_base_declaration(repo: str, ref: str):
+    """合併基準的宣告，供宣告檔自身被改動時比對；無法讀取或解析時回傳該 DeclarationError。"""
+    try:
+        return load_declaration_at(repo, ref)
+    except DeclarationError as exc:
+        return exc
+
+
+# select_suites 未取得合併基準宣告時的標記：宣告檔有改動即加選宣告內全部套件
+BASE_UNKNOWN = object()
+# 決定「跑什麼、何時跑」的欄位；summary／failure 只影響報告字面，改它們不加選
+_EXECUTION_FIELDS = ("prefixes", "files", "command", "artifacts", "changed_files")
+
+
+def _execution_view(suite_decl: dict) -> tuple:
+    return tuple(getattr(v, "pattern", v) for v in (suite_decl[f] for f in _EXECUTION_FIELDS))
+
+
+def declaration_changed_suites(decl: dict, base) -> tuple:
+    """宣告檔被改動時須加選的宣告套件與無法比對的原因（可比對時原因為空字串）。
+
+    base：合併基準的宣告（None 表示基準無宣告檔，全部視為新增）、DeclarationError（基準宣告壞掉）、
+    或 BASE_UNKNOWN（呼叫端未提供）。後兩者無法比對，加選全部宣告套件。
+    """
+    if isinstance(base, DeclarationError):
+        return set(decl), f"合併基準的宣告無法解析，加選宣告內全部套件：{base}"
+    if base is BASE_UNKNOWN:
+        return set(decl), "未取得合併基準的宣告，加選宣告內全部套件"
+    base = base or {}
+    return {n for n, s in decl.items()
+            if n not in base or _execution_view(s) != _execution_view(base[n])}, ""
+
+
 def _in_declared_scope(path: str, decl: dict) -> bool:
     return any(path.startswith(s["prefixes"]) or path in s["files"] for s in decl.values())
 
@@ -339,6 +372,17 @@ def _warn_unmapped(paths: list, decl: Declaration = None) -> None:
           f"{', '.join(shown)}{more}")
 
 
+def _report_declaration_change(paths: list, decl: Declaration, base) -> None:
+    """宣告檔被改動時印出加選了哪些套件；無法比對時寫明原因。"""
+    if decl is None or DECLARATION_PATH not in paths:
+        return
+    added, reason = declaration_changed_suites(decl, base)
+    if reason:
+        print(f"[合併前測試] WARNING：{reason}：{', '.join(sorted(added))}")
+    elif added:
+        print(f"[合併前測試] 宣告檔改動了命令或範圍，加選套件：{', '.join(sorted(added))}")
+
+
 def _suite_scope_files(suite_decl: dict, paths: list) -> list:
     """落在套件範圍內的改動路徑；套件宣告 changed_files 時另須符合該正規式。"""
     pattern = suite_decl.get("changed_files")
@@ -347,10 +391,11 @@ def _suite_scope_files(suite_decl: dict, paths: list) -> list:
             and (pattern is None or pattern.search(p))]
 
 
-def select_suites(changed_paths: list, root: str) -> list:
+def select_suites(changed_paths: list, root: str, base_decl=BASE_UNKNOWN) -> list:
     """依改動路徑決定套件範圍（root 為合併 commit 的快照，供掃描 skill）。對應表見 SKILL.md。
 
     套件識別：flutter／hooks／scripts／skill:<名稱>。回傳順序固定，空清單表示免跑。
+    base_decl：合併基準的宣告（見 load_base_declaration）；宣告檔被改動時據此加選執行面有變的套件。
     """
     decl = load_declaration(root)
     paths = [p for p in changed_paths if not is_reuse_exempt(p)]
@@ -361,6 +406,8 @@ def select_suites(changed_paths: list, root: str) -> list:
             want.add(SUITE_FLUTTER)
     else:
         want.update(n for n, s in decl.items() if _suite_scope_files(s, paths))
+        if DECLARATION_PATH in paths:  # 宣告改了命令或範圍：新命令須在閘門內實跑
+            want.update(declaration_changed_suites(decl, base_decl)[0])
     for p in (p for p in paths if p.startswith(".claude/")):
         skill = _skill_name(p)
         if skill and _skill_has_tests(root, skill):
@@ -416,13 +463,38 @@ def changed_paths_between(repo: str, old: str, new: str) -> Optional[list]:
 
 
 def _remove_snapshot(repo: str, path: str) -> None:
-    """移除快照；git 移除失敗時退回直接刪目錄，最後 prune 清掉登記。"""
+    """移除快照；git 移除失敗時退回直接刪目錄，最後 prune 清掉登記。
+
+    本函式在 merge_snapshot 的 finally 內執行。git 逾時或無法啟動時只記錄、不往外拋：
+    finally 內穿出的例外會取代閘門本身的結果（綠燈、紅燈或原例外），使回報的原因錯誤。
+    """
+    _snapshot_git(["worktree", "remove", "--force", path], repo, "改以直接刪除目錄收尾")
+    if os.path.lexists(path):
+        shutil.rmtree(path, ignore_errors=True)
+    _snapshot_git(["worktree", "prune"], repo, "快照的 worktree 登記可能殘留，可手動執行 git worktree prune")
+    if os.path.lexists(path):
+        _snapshot_warning(repo, f"快照未移除：{path}（請手動刪除後執行 git worktree prune）")
+
+
+def _snapshot_git(args: list, repo: str, fallback: str) -> None:
+    """執行快照清理用的 git 命令；逾時或無法啟動時記錄後回傳，不影響閘門結果。"""
     try:
-        _git(["worktree", "remove", "--force", path], repo)
-    finally:
-        if os.path.lexists(path):
-            shutil.rmtree(path, ignore_errors=True)
-        _git(["worktree", "prune"], repo)
+        _git(args, repo)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        _snapshot_warning(repo, f"快照清理 git {' '.join(args[:2])} 失敗（{exc}）；{fallback}")
+
+
+def _snapshot_warning(repo: str, message: str) -> None:
+    """快照清理失敗寫 stderr 與 worktree-merge.log；日誌寫入失敗只再警告一次。"""
+    line = f"[合併閘門] WARNING：{message}"
+    sys.stderr.write(line + "\n")
+    try:
+        log = Path(repo) / _LOG_FILE
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {line}\n")
+    except OSError as exc:
+        sys.stderr.write(f"[WARNING] worktree-merge 日誌寫入失敗：{exc}\n")
 
 
 @contextmanager
@@ -489,7 +561,11 @@ def _failed_items(output: str, failure: Optional["re.Pattern"] = None) -> list:
     items = [ln.strip() for ln in lines if ln.startswith("FAILED ") or "[E]" in ln]
     items += [ln.rstrip() for ln in lines if ln.startswith("E  ")]
     if not items:
-        items = [ln for ln in lines[-_OUTPUT_TAIL_LINES:] if ln.strip()]
+        # 排除 run-with-timeout 的名額等待訊息（接在測試輸出之後，會被誤當成失敗資訊）
+        body = [ln for ln in lines if ln.strip() and not ln.startswith("run-with-timeout:")]
+        if not body:
+            return ["未能抽取失敗名稱：輸出為空"]
+        items = ["未能抽取失敗名稱，以下為輸出尾段"] + body[-_OUTPUT_TAIL_LINES:]
     return items[:_FAILED_ITEMS_MAX]
 
 
@@ -571,20 +647,34 @@ _SUMMARY_PATTERNS = (
 _LOG_FILE = ".claude/logs/worktree-merge.log"
 
 
-def summarize_output(output: str, summary: Optional["re.Pattern"] = None) -> str:
-    """從輸出尾端取最後一個測試摘要行（宣告的 summary 正規式優先）；取不到回傳「無摘要」。"""
-    lines = list(reversed(output.strip().splitlines()))
-    if summary is not None:
-        for line in lines:
-            m = summary.search(line)
-            if m:
-                return m.group(0).strip(" =")
-    for line in lines:
-        for pat in _SUMMARY_PATTERNS:
-            m = pat.search(line)
-            if m:
-                return m.group(0).strip(" =")
-    return "無摘要"
+_FAIL_WORDS = re.compile(r"\b(?:failed|errors?)\b|Some tests failed", re.IGNORECASE)
+
+
+def _summary_lines(lines: list, summary: Optional["re.Pattern"]) -> list:
+    """依序收集全部摘要行；宣告的 summary 正規式有命中時只用它。"""
+    groups = [[summary], list(_SUMMARY_PATTERNS)] if summary is not None else [list(_SUMMARY_PATTERNS)]
+    for group in groups:
+        found = [m.group(0).strip(" =") for ln in lines for p in group for m in [p.search(ln)] if m]
+        if found:
+            return found
+    return []
+
+
+def summarize_output(output: str, summary: Optional["re.Pattern"] = None, rc: Optional[int] = None) -> str:
+    """彙總全部測試摘要行，任一檔失敗即以失敗為準（多檔輸出不取最後一個通過行）；取不到回傳「無摘要」。
+
+    rc 非 0（且非逾時 124／名額逾時 125）而摘要只含通過行時附註結束碼。回傳維持單行、不含全形「｜」。
+    """
+    found = _summary_lines(output.strip().splitlines(), summary)
+    if not found:
+        return "無摘要"
+    failed = [s for s in found if _FAIL_WORDS.search(s)]
+    if failed:
+        note = f"（共 {len(failed)} 個失敗摘要行）" if len(failed) > 1 else ""
+        return failed[-1] + note
+    if rc not in (None, 0, 124, 125):
+        return f"{found[-1]}（結束碼 {rc}，摘要行未顯示失敗）"
+    return found[-1]
 
 
 # 名額預估：各套件取日誌中最近 N 筆綠燈耗時的中位數；無資料用預設值（依 2026-10-15 實測，保守取偏高）
@@ -711,7 +801,7 @@ def _run_suites(suites: list, snapshot: str, project_root: str, runner: SuiteRun
             _emit_result(log_root, _suite_result_line(suite, "中斷", "無摘要", time.monotonic() - start))
             raise
         _emit_result(log_root, _suite_result_line(
-            suite, _STATUS_BY_RC.get(rc, "紅燈"), summarize_output(out, summary_pat), time.monotonic() - start))
+            suite, _STATUS_BY_RC.get(rc, "紅燈"), summarize_output(out, summary_pat, rc), time.monotonic() - start))
         if rc != 0:
             detail = save_failure_output(log_root, tag, suite, rc, out) if rc not in (124, 125) else ""
             return _rc_reason(suite, rc, out, detail, failure_pat)
@@ -791,7 +881,7 @@ class MergeGate:
         if last is None:
             return None
         diff = changed_paths_between(self.repo, last, commit)
-        if diff is None or suite in select_suites(diff, snap):
+        if diff is None or suite in select_suites(diff, snap, load_base_declaration(self.repo, last)):
             return None
         return last
 
@@ -809,8 +899,10 @@ class MergeGate:
         if not needs_gate(paths, decl):
             print("[合併前測試] 改動不在任何全套件範圍內，免跑")
             return CheckResult(True)
+        base_decl = load_base_declaration(self.repo, expected_old)
+        _report_declaration_change(paths, decl, base_decl)
         with _sigterm_as_interrupt(), merge_snapshot(self.repo, commit) as snap:
-            suites = select_suites(paths, snap)
+            suites = select_suites(paths, snap, base_decl)
             todo = []
             for suite in suites:
                 last = self._reusable(suite, commit, snap)

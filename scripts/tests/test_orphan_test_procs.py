@@ -15,6 +15,16 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "orphan-test-procs.py"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_slot_dir(tmp_path, monkeypatch):
+    """每個測試使用自己的名額鎖目錄：本檔以真實 run-with-timeout 包裝替身 `python -c ...`，
+    判不出 runner 的命令一律判 heavy，未隔離時會去排本機真實名額。"""
+    monkeypatch.setenv("CLAUDE_SLOT_LOCK_DIR", str(tmp_path / "slot-locks"))
+    stub = tmp_path / "orphan-none.py"  # 包裝腳本取得名額後的孤兒查詢改用替身，不查詢本機真實程序
+    stub.write_text("print('ORPHAN_SUMMARY matched=0 skipped=0 suspects=0 registered=0')")
+    monkeypatch.setenv("CLAUDE_ORPHAN_SCRIPT", str(stub))
 LIFE = 30  # 替身存活上限（秒），保證測試失敗也會自行結束
 
 # 替身本體：寫出 PID 後睡眠；ignore_term=1 時忽略 TERM
@@ -403,13 +413,42 @@ def test_list_mode_wording_consistent_and_states_nothing_killed(env):
     assert "未終止任何程序" in res.stdout
 
 
-def test_negative_control_asserts_exit_code_and_output(env):
+def _run_isolated(env, monkeypatch, capsys, *args, foreign=()):
+    """在本程序內執行 main，程序清單只保留本測試建立的替身。
+
+    斷言全域計數（「符合 N 略過 N」）時使用：宿主機上其他專案的測試程序
+    （如他專案合併閘門的 flutter_tester，cwd 已刪除而被列為略過）不應影響
+    本測試的結果。foreign 可注入非替身的假程序，驗證過濾確實生效。
+    """
+    mod = _load()
+    real = mod.list_processes
+    own = set(env.pids)
+    monkeypatch.setattr(
+        mod, "list_processes",
+        lambda: [p for p in [*real(), *foreign] if p.pid in own],
+    )
+    rc = mod.main(["--root", str(env.root), *args])
+    return rc, capsys.readouterr().out
+
+
+def test_isolated_run_excludes_host_processes(env, monkeypatch, capsys):
+    """外來程序（父為 1 的 flutter_tester）不進入分類；替身照常被判定（正反對照）。"""
+    pid = env.orphan()
+    foreign = _load().Proc(_dead_pid(), 1, "S", "flutter_tester --foreign", "01:00")
+    rc, out = _run_isolated(env, monkeypatch, capsys, foreign=(foreign,))
+    assert rc == 0
+    assert f"符合 {pid}" in out
+    assert "--foreign" not in out
+    assert "符合 1 略過 0" in out
+
+
+def test_negative_control_asserts_exit_code_and_output(env, monkeypatch, capsys):
     pid = env.orphan(cwd=env.outside)
-    res = env.run("--kill")
+    rc, out = _run_isolated(env, monkeypatch, capsys, "--kill")
     assert _alive(pid)
-    assert res.returncode == 0
-    assert str(pid) not in res.stdout and "已終止" not in res.stdout
-    assert "符合 0 略過 0" in res.stdout
+    assert rc == 0
+    assert str(pid) not in out and "已終止" not in out
+    assert "符合 0 略過 0" in out
 
 
 # ---- KILL 後的存活判定、結果回報 ----
@@ -677,12 +716,12 @@ def test_kill_never_signals_suspect_tree_but_still_kills_matched(env):
     assert "疑似殘留 1" in res.stdout
 
 
-def test_list_mode_shows_suspect_tree_with_age(env):
+def test_list_mode_shows_suspect_tree_with_age(env, monkeypatch, capsys):
     root_pid, child_pid = _start_tree(env)
-    res = env.run()
-    assert res.returncode == 0
-    assert str(root_pid) in res.stdout and str(child_pid) in res.stdout
-    assert "存活" in res.stdout and "符合 0 略過 0 疑似殘留 1" in res.stdout
+    rc, out = _run_isolated(env, monkeypatch, capsys)
+    assert rc == 0
+    assert str(root_pid) in out and str(child_pid) in out
+    assert "存活" in out and "符合 0 略過 0 疑似殘留 1" in out
     assert _alive(root_pid) and _alive(child_pid)
 
 

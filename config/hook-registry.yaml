@@ -256,10 +256,6 @@ skill_hooks:
   ticket/agent-ticket-validation-hook.py:
     event: PreToolUse
     matcher: Task
-  ticket/ana-ticket-metadata-validation-hook.py:
-    event: PostToolUse
-    matcher: Write
-    timeout: 5000
   ticket/cli-error-feedback-hook.py:
     event: PostToolUse
     matcher: Bash

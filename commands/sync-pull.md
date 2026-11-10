@@ -124,13 +124,27 @@ git diff --stat -- .claude/
 
 ### 3. 衝突標記歸零驗證（自動）
 
-pull 收尾會自動掃描 `.claude/` 正式檔（排除 `.sync-conflicts/`）是否殘留未解衝突標記；命中時 stderr 輸出命中清單並以非零狀態碼結束，須依上表逐一處理後重新確認再繼續。若需自行複查，可執行與掃描邏輯同樣式的手動指令：
+pull 收尾會自動掃描 `.claude/` 同步範圍內的正式檔是否殘留未解衝突標記（`hook-logs/`、`.sync-conflicts/` 等 pull 不寫入的位置不掃）；命中時 stderr 輸出命中清單並以非零狀態碼結束，須依上表逐一處理後重新確認再繼續。若需自行複查，可執行與掃描邏輯同樣式的手動指令：
 
 ```bash
 grep -rn "^<<<<<<< \|^>>>>>>> " .claude/ --include="*.md" --include="*.py" --include="*.json" --include="*.yaml" | grep -v ".sync-conflicts/"
 ```
 
 預期輸出為空。任何命中代表手動合併時把衝突標記寫進了正式檔案，必須立即清除。
+
+**有衝突的那一輪，解完後執行 `--resolve-done` 推進 base**：
+
+```bash
+python3 ./.claude/scripts/sync-claude-pull.py --resolve-done
+```
+
+| 結果 | 意義 | 下一步 |
+|------|------|--------|
+| exit 0「已將 pending base 升為 base SHA」 | 同步範圍內無殘留標記，base 已推進到衝突輪的上游 HEAD | 繼續步驟 4 |
+| exit 1，stderr 列出檔名 | 仍有檔案殘留標記，base 與 pending base 都未變動 | 處理列出的檔案後重跑 |
+| exit 0「沒有待確認的 pending base」 | 上一輪 pull 沒有衝突，無需推進 | 繼續步驟 4 |
+
+**Why**：有衝突的那一輪 pull 不推進 `.sync-state.json` 的 base，而是把本輪上游 HEAD 記成 pending base。**Consequence**：不推進 base 時，下一輪 pull 仍以舊 base 做三方合併，已經解完的衝突會再被標記一次。**Action**：解完衝突就執行 `--resolve-done`，不要手改 `.sync-state.json`（手改不會檢查是否真的解完）。pending base 還沒確認時，下一次一般 pull 開頭會提示先執行 `--resolve-done`。
 
 ### 4. Commit 規範
 

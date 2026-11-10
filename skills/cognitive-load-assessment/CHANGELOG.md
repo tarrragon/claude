@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.1.3（2026-11-10）— `references/file-split-by-contention.md` §3.3 補拆分收尾三項（各附做法與檢查方式）：〈清理殘留匯入〉（`ruff --select F401`，刻意轉出寫成冗餘別名或列入 `__all__`）、〈以 PEP 562 延遲轉出維持舊匯入路徑〉（模組層 `__getattr__` 最小範例，與 re-export 同樣保不住 patch）、〈以多重集合比對拆分前後的符號〉（AST 列頂層符號、排序不去重後 diff，抓得到「複製而非搬移」）。
+
 **Version**: 2.1.2（2026-11-03）— `references/file-split-by-contention.md` 新增 §1.1〈計票樹前先看 commit 主旨〉：同一功能經多輪審查時，追修常另開新根票，計數前先依 commit 主旨把同一功能的票樹合併為一個主題，避免把「一個功能被反覆修」計成「多個主題搶改」。
 
 **Version**: 2.1.1（2026-10-19）— `references/file-split-by-contention.md` §3.3 新增一列：拆分 portable skill 時，新模組的 docstring 不寫搬移來源的路徑與票號，來源改記在 commit 訊息（本地守衛的搬移豁免標記，不被推發佈庫時的可攜性檢查接受）。

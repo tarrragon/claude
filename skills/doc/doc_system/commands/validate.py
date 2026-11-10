@@ -28,6 +28,8 @@ from doc_system.core.tracking_schema import (
     find_missing_path_patterns,
     find_path_pattern_problems,
     find_undeclared_domain_names,
+    GRAPH_NODE_TYPES,
+    id_pattern_body,
 )
 from doc_system.core.uc_registry import _extract_structured_flow_steps
 
@@ -678,15 +680,21 @@ def _fixed_name_exemptions() -> set[str]:
     return exemptions
 
 
+def _filename_id_regex(node_type: str) -> re.Pattern[str]:
+    """檔名開頭的 ID 判定正則：ID 本體取自 GRAPH_NODE_TYPES 的 id_pattern，其後須接 `-` 或結尾。"""
+    return re.compile(rf"^(?P<doc_id>{id_pattern_body(node_type)})(?:-|$)")
+
+
 def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str]]:
     """掃描各 doc type 目錄，回傳 (違規訊息清單, 已豁免檔案清單)。
 
-    配號器 `_next_id`（create.py）僅辨識以 `{PREFIX}-{數字}` 開頭的檔名，
-    不符此慣例的檔案對配號器隱形，會導致號碼重複配發（book W11-004）。
-    本檢查讓這類檔案顯性化：
-    - 檔名不符 `^{PREFIX}-\\d+` 前綴 -> 配號器盲區（框架約定固定命名文件除外）
-    - 檔名前綴 ID 與 frontmatter id 不一致 -> 潛在誤植
+    檔名須以該型別合法 ID 開頭（格式取自 tracking_schema 的 id_pattern，
+    含 EVT 這類分 domain 編號），否則配號掃描與 ID 查找都看不到該檔，
+    可能導致號碼重複配發（book W11-004）。本檢查讓這類檔案顯性化：
+    - 檔名開頭不是合法 ID -> 違規（框架約定固定命名文件除外）
+    - 檔名開頭的 ID 與 frontmatter id 不一致 -> 違規
 
+    違規訊息只寫判定結果與所用格式，不推測成因（tarrragon/claude#98）。
     豁免項不可靜默略過（本命令存在的理由正是防止靜默盲區），故以第二個
     回傳值顯性回報，由呼叫端以 INFO 級列出。
     """
@@ -699,7 +707,7 @@ def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str
         if not target_dir.exists():
             continue
 
-        pattern = re.compile(rf"^{prefix}-(\d+)", re.IGNORECASE)
+        pattern = _filename_id_regex(prefix)
         for item in sorted(target_dir.rglob("*.md")):
             if item.name.endswith("-template.md"):
                 continue
@@ -710,8 +718,8 @@ def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str
                     exempted.append(str(item))
                     continue
                 violations.append(
-                    f"檔名不符慣例（配號器盲區）: {item} "
-                    f"（應以 {prefix}-數字 開頭）"
+                    f"檔名開頭不是合法 {prefix} ID: {item} "
+                    f"（{prefix} 的 id_pattern：{GRAPH_NODE_TYPES[prefix]['id_pattern']}）"
                 )
                 continue
 
@@ -719,7 +727,7 @@ def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str
             if frontmatter is None:
                 continue
             frontmatter_id = frontmatter.get("id")
-            filename_id = f"{prefix}-{match.group(1)}"
+            filename_id = match.group("doc_id")
             if frontmatter_id and str(frontmatter_id) != filename_id:
                 violations.append(
                     f"frontmatter id 與檔名不一致: {item} "
@@ -740,7 +748,7 @@ def execute_filenames(args: argparse.Namespace) -> None:
             print(f"  - {item}")
 
     if not violations:
-        print("通過: 所有文件檔名符合配號器慣例")
+        print("通過: 所有文件檔名以合法 ID 開頭（格式取自 id_pattern）")
         sys.exit(0)
 
     print("驗證失敗: 發現檔名慣例違規")

@@ -104,7 +104,7 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 | 項目 | 要求 |
 |------|------|
 | 路徑前綴 | 必用 `$CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<file>.py` |
-| 執行權限 | `chmod +x` 必要（`hook-registration-coverage-check` 會自動修復） |
+| 執行權限 | `chmod +x` 必要，且首行須為 shebang：sync-pull／sync-push 依 shebang 自動還原 +x；`hook-registration-coverage-check` 只偵測不修復 |
 | Hook event 選擇 | 與框架 Hook 相同（PreToolUse / PostToolUse / SessionStart / Stop 等） |
 
 ### 3.4 掃描器行為

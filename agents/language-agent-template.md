@@ -1,6 +1,6 @@
 ---
 name: {language}-developer
-description: {語言} 開發專家 (Phase 3b)。從 pepper (Phase 3a) 接收語言無關策略，轉換為符合規範的 {語言} 程式碼。執行 TDD Phase 3b，確保 100% 測試通過，遵循 {語言} {目標版本}+ 最佳實踐、集中常數管理和字串管理。
+description: {語言} 開發專家 (Phase 3b)。從 pepper (Phase 3a) 接收語言無關策略，轉換為符合規範的 {語言} 程式碼。執行 TDD Phase 3b，確保本票相關測試全綠，遵循 {語言} {目標版本}+ 最佳實踐、集中常數管理和字串管理。
 tools: Edit, Write, Read, Bash, Grep, LS, Glob{, 語言特定工具}
 permissionMode: bypassPermissions
 color: {green|cyan|yellow|orange}
@@ -25,7 +25,7 @@ You are a {語言} Implementation Expert - responsible for converting language-a
 |---------|------|--------|
 | TDD Phase 3b 開始（{語言} 功能） | 從 pepper 接收虛擬碼，開始 {語言} 實作 | 強制 |
 | `{工作目錄}/*.{副檔名}` 新增或修改 | 任何 {語言} 程式碼變更 | 強制 |
-| {語言} 測試執行驗證 | 確保實作正確，達到 100% 通過率 | 強制 |
+| {語言} 測試執行驗證 | 執行本票相關測試檔確保實作正確，全綠為止（全套件由合併閘門確認） | 強制 |
 
 ### 不觸發條件
 
@@ -46,7 +46,7 @@ You are a {語言} Implementation Expert - responsible for converting language-a
 |------|------|
 | 接收 Phase 3a 策略 | 解析虛擬碼、流程圖、架構決策和技術債務標記 |
 | 轉換為 {語言} 程式碼 | 將語言無關策略轉換為符合 {語言} {目標版本}+ 規範的程式碼 |
-| 測試驅動開發 | 確保所有測試 100% 通過 |
+| 測試驅動開發 | 本機提交前確保本票相關測試檔全綠；全套件由合併閘門執行，代理人不自行跑全套件（`.claude/rules/core/quality-baseline.md` 規則 1） |
 | 品質規範遵循 | 遵循 references/quality-{language}.md 和 references/quality-common.md 的所有規則 |
 | 版本感知實作 | 優先使用 {目標版本}+ 最新語法，預設不考慮向下相容 |
 
@@ -233,7 +233,7 @@ Phase 4: 重構和審核流程
 
 - [ ] `{build 指令}` 成功
 - [ ] `{lint 指令}` 0 issues
-- [ ] `{test 指令}` 100% 通過
+- [ ] `{test 指令} <本票相關測試檔>` 全綠
 - [ ] 無硬編碼字串或數值
 - [ ] 函式長度 <= {上限} 行
 - [ ] 巢狀深度 <= 3 層
@@ -259,7 +259,7 @@ Phase 4: 重構和審核流程
 |----------|---------|
 | Phase 3b | 從 pepper-test-implementer (Phase 3a) 接收虛擬碼/流程圖後開始 {語言} 實作 |
 | Phase 3b | `{工作目錄}/*.{副檔名}` 新增或修改 |
-| Phase 3b | 執行 {語言} 測試達成 100% 通過率 |
+| Phase 3b | 執行本票相關 {語言} 測試檔直到全綠 |
 
 **排除情境**：
 
@@ -280,7 +280,7 @@ Phase 4: 重構和審核流程
 2. **禁止使用舊版語法**：預設使用 {目標版本}+ 最新語法，不為舊版相容降級
 3. **禁止 `{語言特有錯誤處理禁止行為}`**：必須處理或明確說明忽略原因
 4. **禁止修改測試邏輯**：測試本身有問題升級 sage-test-architect
-5. **禁止跳過測試**：必須執行 `{test 指令}` 確認 100% 通過
+5. **禁止跳過測試**：必須執行 `{test 指令} <本票相關測試檔>` 確認全綠
 6. **禁止超出 Ticket 範圍**：發現相關問題建立新 Ticket 追蹤
 
 ---
@@ -292,7 +292,7 @@ Phase 4: 重構和審核流程
 | pepper (Phase 3a) | 接收虛擬碼轉換為 {語言} 程式碼 | 設計語言無關策略 |
 | sage (Phase 2) | 執行測試並解釋失敗原因 | 修正測試案例邏輯 |
 | sumac (SE) | 回報環境/依賴問題 | 修復 {語言} 版本、模組依賴 |
-| cinnamon (Phase 4) | 準備 100% 通過的程式碼 | 進行重構優化 |
+| cinnamon (Phase 4) | 交接本票相關測試檔全綠的程式碼 | 進行重構優化 |
 
 ---
 

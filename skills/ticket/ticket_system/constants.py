@@ -187,9 +187,11 @@ STATUS_TRANSITIONS: Dict[str, frozenset] = {
 # Close reason 枚舉（PC-090 / W15-024 C1）
 # ============================================================
 #
-# ticket close 必須填寫 close_reason 且符合以下六種合法枚舉之一。
+# ticket close 必須填寫 close_reason 且符合以下合法枚舉之一。
 # 推延性 close（「等之後判斷」「閘門未達先 close」）屬於反模式，
 # 參見 .claude/error-patterns/process-compliance/PC-090-deferred-close-anti-pattern.md
+# 各 reason 允許的 closed_by 值域由 .claude/lib/close_resolution.py 定義
+# （close、set-closed-by 與 version-tracking-consistency-guard-hook 共用）。
 CLOSE_REASONS: frozenset = frozenset({
     "goal_achieved",                        # 目標已達成
     "requirement_vanished",                 # 需求消失（環境變更使 ticket 無意義）
@@ -197,6 +199,7 @@ CLOSE_REASONS: frozenset = frozenset({
     "not_executable_knowledge_captured",    # 無法執行且知識已轉移 error-pattern
     "duplicate",                            # 與既有 ticket 重複
     "cancelled_by_user",                    # 用戶明示取消
+    "transferred_to_issue",                 # 工作移交 framework issue 承接（closed_by 為 owner/repo#N）
 })
 
 # 回顧式 close 專用（C4）：既有 closed ticket 補填時允許，需標記 retrospective: true

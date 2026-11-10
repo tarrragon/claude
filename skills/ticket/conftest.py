@@ -20,6 +20,7 @@ W1-050 Phase 4 兩視角發現此重複（linux 判 DRY 違規，docstring 已�
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -121,6 +122,17 @@ def _isolate_project_root(tmp_path_factory, monkeypatch):
     (root / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
     monkeypatch.setenv("TICKET_SYSTEM_TEST_ISOLATION", "1")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_caller_cwd(monkeypatch):
+    """測試不得依賴環境中碰巧存在的 SKILL_CLI_CALLER_CWD，且 cwd 變更不外洩。
+
+    Why：直接呼叫 `ticket.main()` 的測試會觸發 restore_caller_cwd() 並 chdir；
+    先移除該變數並記下原 cwd，拆除時還原，避免汙染後續測試檔。
+    """
+    monkeypatch.delenv("SKILL_CLI_CALLER_CWD", raising=False)
+    monkeypatch.chdir(os.getcwd())
 
 
 @pytest.fixture(autouse=True)

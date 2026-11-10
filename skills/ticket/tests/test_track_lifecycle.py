@@ -1736,7 +1736,7 @@ class TestCloseReasonEnum:
         args = Mock()
         args.ticket_id = "0.18.0-W15-999"
         args.version = "0.18.0"
-        args.resolved_by = "0.18.0-W15-998"
+        args.resolved_by = overrides.get("resolved_by", "0.18.0-W15-998")
         args.reason = overrides.get("reason", "goal_achieved")
         args.reason_note = overrides.get("reason_note", "")
         args.retrospective = overrides.get("retrospective", False)
@@ -1750,23 +1750,27 @@ class TestCloseReasonEnum:
             "_path": "/test/path",
         }
 
-    def test_close_accepts_all_six_legal_reason_codes(self):
+    def test_close_accepts_all_legal_reason_codes(self):
         """
-        Given: 六種合法 close_reason 枚舉值
+        Given: 全部合法 close_reason 枚舉值，各配該 reason 值域內的 resolved_by
         When: 執行 close 操作
         Then: 每一種都應通過枚舉驗證並成功關閉
         """
         # requirement_vanished / cancelled_by_user 需 reason_note 必填（0.3.6-W1-006/007）
-        legal_codes_with_note = {
-            "goal_achieved": "",
-            "requirement_vanished": "需求已消失",
-            "superseded_by": "",
-            "not_executable_knowledge_captured": "",
-            "duplicate": "",
-            "cancelled_by_user": "用戶明示取消",
+        # transferred_to_issue 的 resolved_by 為 issue 參照（3.1.0-W1-057）
+        legal_codes = {
+            "goal_achieved": ("", "0.18.0-W15-998"),
+            "requirement_vanished": ("需求已消失", "0.18.0-W15-998"),
+            "superseded_by": ("", "0.18.0-W15-998"),
+            "not_executable_knowledge_captured": ("", "0.18.0-W15-998"),
+            "duplicate": ("", "0.18.0-W15-998"),
+            "cancelled_by_user": ("用戶明示取消", "0.18.0-W15-998"),
+            "transferred_to_issue": ("", "tarrragon/claude#60"),
         }
-        for code, note in legal_codes_with_note.items():
-            args = self._make_args(reason=code, reason_note=note)
+        from ticket_system.constants import CLOSE_REASONS
+        assert set(legal_codes) == set(CLOSE_REASONS)
+        for code, (note, resolved_by) in legal_codes.items():
+            args = self._make_args(reason=code, reason_note=note, resolved_by=resolved_by)
             with patch("ticket_system.commands.lifecycle.load_and_validate_ticket") as mock_load, \
                  patch("ticket_system.commands.lifecycle.save_ticket") as mock_save, \
                  patch("ticket_system.commands.lifecycle.resolve_ticket_path", return_value="/p"), \
@@ -1830,7 +1834,7 @@ class TestCloseReasonEnum:
         When: 執行 close 操作
         Then: 應通過驗證，並在 frontmatter 寫入 retrospective: true
         """
-        args = self._make_args(reason="unknown", retrospective=True)
+        args = self._make_args(reason="unknown", retrospective=True, resolved_by="none")
         with patch("ticket_system.commands.lifecycle.load_and_validate_ticket") as mock_load, \
              patch("ticket_system.commands.lifecycle.save_ticket") as mock_save, \
              patch("ticket_system.commands.lifecycle.resolve_ticket_path", return_value="/p"):
@@ -1872,7 +1876,7 @@ class TestCloseReasonEnum:
         When: 執行 close
         Then: frontmatter 不應寫入 retrospective
         """
-        args = self._make_args(reason="goal_achieved", retrospective=False)
+        args = self._make_args(reason="goal_achieved", retrospective=False, resolved_by="none")
         with patch("ticket_system.commands.lifecycle.load_and_validate_ticket") as mock_load, \
              patch("ticket_system.commands.lifecycle.save_ticket") as mock_save, \
              patch("ticket_system.commands.lifecycle.resolve_ticket_path", return_value="/p"):
@@ -1883,10 +1887,10 @@ class TestCloseReasonEnum:
             saved = mock_save.call_args[0][0]
             assert "retrospective" not in saved
 
-    def test_close_reason_constants_has_six_entries(self):
+    def test_close_reason_constants_match_expected_set(self):
         """
         Given: CLOSE_REASONS 常數
-        Then: 必為 PC-090 C1 六種枚舉
+        Then: 為 PC-090 C1 六種枚舉加上 transferred_to_issue（3.1.0-W1-057）
         """
         from ticket_system.constants import CLOSE_REASONS
         expected = {
@@ -1896,9 +1900,9 @@ class TestCloseReasonEnum:
             "not_executable_knowledge_captured",
             "duplicate",
             "cancelled_by_user",
+            "transferred_to_issue",
         }
         assert set(CLOSE_REASONS) == expected
-        assert len(CLOSE_REASONS) == 6
 
 
 # ============================================================================
@@ -2045,20 +2049,37 @@ class TestCloseResolvedByValidation:
             assert result == 1
             mock_save.assert_not_called()
 
-    def test_goal_achieved_unaffected_by_new_validation(self):
+    def test_goal_achieved_accepts_existing_ticket_id(self):
         """
-        Given: reason=goal_achieved（不在需 ID/none 驗證的分歧表內），resolved_by 為自由格式
+        Given: reason=goal_achieved，resolved_by 為存在的 Ticket ID
         When: 執行 close
-        Then: 不受新驗證分歧規則限制，仍可正常關閉（僅受延後語意檢查約束）
+        Then: 落在預設值域（none 或 Ticket ID）內，正常關閉
+        （3.1.0-W1-057 起預設值域也受驗證；值域外的值見 test_close_resolution_domain.py）
         """
         args = self._make_args(reason="goal_achieved", resolved_by="0.18.0-W15-998")
         with patch("ticket_system.commands.lifecycle.load_and_validate_ticket") as mock_load, \
              patch("ticket_system.commands.lifecycle.save_ticket") as mock_save, \
-             patch("ticket_system.commands.lifecycle.resolve_ticket_path", return_value="/p"):
+             patch("ticket_system.commands.lifecycle.resolve_ticket_path", return_value="/p"), \
+             patch("ticket_system.commands.lifecycle.load_ticket", return_value=self._mock_load_ticket()):
             mock_load.return_value = (self._mock_load_ticket(), None)
             result = execute_close(args, "0.18.0")
 
             assert result == 0
+
+    def test_goal_achieved_rejects_free_text(self):
+        """
+        Given: reason=goal_achieved，resolved_by 為代理人名稱（自由格式）
+        When: 執行 close
+        Then: 值域外，拒絕且不儲存（3.1.0-W1-057 正向對照）
+        """
+        args = self._make_args(reason="goal_achieved", resolved_by="thyme-python-developer")
+        with patch("ticket_system.commands.lifecycle.load_and_validate_ticket") as mock_load, \
+             patch("ticket_system.commands.lifecycle.save_ticket") as mock_save:
+            mock_load.return_value = (self._mock_load_ticket(), None)
+            result = execute_close(args, "0.18.0")
+
+            assert result == 1
+            mock_save.assert_not_called()
 
 
 # ============================================================================

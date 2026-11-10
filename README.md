@@ -189,7 +189,7 @@ grep -c '/Users/' .claude/settings.local.json
 │   ├── phase-completion-gate-hook.py  # 階段完成驗證
 │   ├── acceptance-gate-hook.py        # 驗收閘門
 │   ├── process-skip-guard-hook.py     # 流程省略防護
-│   ├── commit-handoff-hook.py         # Commit 後 Handoff
+│   ├── post-git-commit-hook.py        # Commit 後 Handoff
 │   └── ...                            # 其他 Hook
 │
 ├── agents/                            # 代理人定義（28 個）
@@ -401,7 +401,7 @@ grep -c '/Users/' .claude/settings.local.json
 | PreToolUse | `file-type-permission-hook.py` | 檔案編輯權限檢查 |
 | PreToolUse | `main-thread-edit-restriction-hook.py` | 主線程編輯限制 |
 | PostToolUse | `phase-completion-gate-hook.py` | 階段完成驗證 |
-| PostToolUse | `commit-handoff-hook.py` | Commit 後 Handoff 引導 |
+| PostToolUse | `post-git-commit-hook.py` | Commit 後 Handoff 引導 |
 
 > Hook 設計方法論：[methodologies/hook-system-methodology.md](./methodologies/hook-system-methodology.md)
 

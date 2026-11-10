@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.23.0（2026-11-10）— 清理線移除（用戶裁定，2026-11-09）：〈核心原則〉「專案進度優先於框架修補」刪除「同時修框架或工具的線不超過兩條」與清理線路由，主控方新發現的框架問題排入哪一版改依 `framework-issue` 的 escalation-flow〈修復時點：版本分診〉，只有本版處理的例外（P0／P1 阻擋、用戶要求）排進本版佇列。〈開線與分線〉刪除「開框架清理線」一列，「新發現的票」一列同步；檢查清單對應項改寫。
+
+**Version**: 1.22.0（2026-11-09）— 跨專案同名主控的定址：每個專案的主控都叫「主控」（程式以此字面判定），本機同時有多個「主控」是常態。`references/session-naming.md` 命名底線〈本機唯一〉把「主控」列為例外；新增〈主控的定址〉，規定傳訊給主控一律寫 `主控 [<ref>]`，ref 由主控寫進派工訊息與協調票，並附 2026-11-09 的實測（兩個 `nameSource` 為 `user` 的主控並存、`from` 形如 `uds:/tmp/cc-socks/<pid>.sock` 可作為 `to`）。line-board 恢復開工通知以裸名稱寄送的同型路徑，記為開啟送出前的前提。`references/line-continuity.md` §4〈判斷自己是不是主控〉加入先核對 `~/.claude/sessions/<pid>.json` 的 `cwd`，附查詢命令與兩則已發生的誤判。SKILL.md §1 新增「派工訊息附上主控定址」一列，檢查清單同步。
+
 **Version**: 1.21.0（2026-11-05）— 狀態列改為框架預設啟用（用戶要求）：`statusLine` 由各專案的 `settings.local.json`（sync 排除檔）移到框架 `.claude/settings.json`，隨 sync 進入每個 consumer。命令以 `CLAUDE_PROJECT_DIR`（缺席時讀 stdin 的 `workspace.project_dir`）定位腳本，不依賴啟動目錄，也不寫死本機路徑；腳本缺席、專案目錄解析不出或腳本失敗時，退回全域 `statusLine.command`。新增 `tests/test_statusline_settings.py`，直接以 `/bin/sh` 執行設定中的命令字串，含三個該退回的對照輸入。`references/session-naming.md` §6 改寫為預設啟用，並寫明以 `settings.local.json` 關閉或覆寫的方法。
 
 **Version**: 1.20.0（2026-11-03）— 換 session 依主軸分流（用戶裁定）：主軸不變（續做同一條線、轉階段、context 達門檻要交接）時，收尾後在原 session `/clear`，由主控重新派發，不關閉重開；主軸改變才 `/rename` 或另開 `claude -n`；線完結就收線並關閉 session。改動在 SKILL.md 核心原則表與 `references/session-naming.md` §1、§4，§4 末尾另寫明主控給用戶的指令要對應情況。

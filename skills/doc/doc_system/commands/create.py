@@ -9,7 +9,8 @@ from pathlib import Path
 import yaml
 
 from doc_system.core.file_locator import FileLocator
-from doc_system.core.tracking_schema import PROPOSALS_TRACKING_SCHEMA
+from doc_system.core.frontmatter_parser import parse_frontmatter
+from doc_system.core.tracking_schema import GRAPH_NODE_TYPES, PROPOSALS_TRACKING_SCHEMA
 
 
 # type 到模板檔名和目標子目錄的對應
@@ -52,8 +53,47 @@ DOC_TYPE_CONFIG = {
 VALID_PROPOSAL_STATUSES = ("draft", "discussing", "confirmed", "implemented", "withdrawn")
 
 
+# id_pattern 中序號段的位數量詞，如 `\d{3}`、`\d{2,}`、`[0-9]{3}`。
+_DIGIT_QUANTIFIER_RE = re.compile(r"(?:\\d|\[0-9\])\{(\d+)")
+
+
+def _declared_digit_width(node_type: str) -> int:
+    """取 tracking_schema 對該型別宣告的序號最少位數（id_pattern 最後一個數字量詞的下限）。"""
+    widths = _DIGIT_QUANTIFIER_RE.findall(GRAPH_NODE_TYPES[node_type]["id_pattern"])
+    if not widths:
+        raise ValueError(f"tracking_schema 的 {node_type} id_pattern 未宣告序號位數，無法配號")
+    return int(widths[-1])
+
+
+def _existing_numbers(target_dir: Path, prefix: str) -> list[str]:
+    """收集目錄內既有序號字串（保留前導零以取位數），來源為檔名開頭與 frontmatter id 兩者聯集。
+
+    只看檔名會漏掉以 slug 命名、ID 寫在 frontmatter 的檔（如 SPEC），只看
+    frontmatter 會漏掉 frontmatter 不可解析的檔；取聯集使兩種情況都不會配出重號。
+    """
+    if not target_dir.exists():
+        return []
+    stem_re = re.compile(rf"^{re.escape(prefix)}-(\d+)", re.IGNORECASE)
+    id_re = re.compile(rf"^{re.escape(prefix)}-(\d+)$", re.IGNORECASE)
+    numbers: list[str] = []
+    for item in target_dir.rglob("*.md"):
+        stem_match = stem_re.match(item.stem)
+        if stem_match:
+            numbers.append(stem_match.group(1))
+        frontmatter = parse_frontmatter(str(item))
+        fm_id = str((frontmatter or {}).get("id") or "")
+        id_match = id_re.match(fm_id.strip())
+        if id_match:
+            numbers.append(id_match.group(1))
+    return numbers
+
+
 def _next_id(project_root: Path, doc_type: str, domain: str | None = None) -> str:
-    """掃描現有文件分配下一個序號 ID。
+    """掃描現有文件分配下一個序號 ID；create、next-id、batch-init 共用此唯一配號實作。
+
+    位數規則：目錄已有編號時沿用最大號的位數（UC-06 之後配 UC-07，UC-005
+    之後配 UC-006）；沒有既有編號時取 tracking_schema id_pattern 宣告的位數
+    （UC 兩位、PROP／SPEC／EVT 三位），本函式不寫死位數。
 
     domain-scoped 型別（見 DOC_TYPE_CONFIG["domain_scoped_id"]，如 EVT）以
     `{prefix}-{DOMAIN}-{NNN}` 分桶編號，各 domain 序列互不干擾；一般型別
@@ -63,21 +103,21 @@ def _next_id(project_root: Path, doc_type: str, domain: str | None = None) -> st
     Acceptable for single-user CLI; existing ID check in execute() catches collision.
     """
     config = DOC_TYPE_CONFIG[doc_type]
-    prefix = config["id_prefix"]
+    node_type = config["id_prefix"]
+    prefix = node_type
     if config.get("domain_scoped_id") and domain:
         prefix = f"{prefix}-{domain.upper()}"
     target_dir = Path(project_root) / config["target_dir"]
 
-    max_num = 0
-    if target_dir.exists():
-        pattern = re.compile(rf"^{prefix}-(\d+)", re.IGNORECASE)
-        for item in target_dir.rglob("*.md"):
-            m = pattern.match(item.stem)
-            if m:
-                max_num = max(max_num, int(m.group(1)))
-
-    next_num = max_num + 1
-    return f"{prefix}-{next_num:03d}"
+    numbers = _existing_numbers(target_dir, prefix)
+    if numbers:
+        max_number = max(numbers, key=int)
+        width = len(max_number)
+        next_num = int(max_number) + 1
+    else:
+        width = _declared_digit_width(node_type)
+        next_num = 1
+    return f"{prefix}-{next_num:0{width}d}"
 
 
 def execute_next_id(args: argparse.Namespace) -> None:

@@ -1,3 +1,66 @@
+## [3.1.0] - 2026-11-10
+
+### Summary
+open framework issue 分診後的第一批修正。tarrragon/claude 的 96 個 open issue 逐一實查，關閉 22 個已修或不再成立者；本版修掉 25 個 issue 中修法已定、規模小的項目，主題是靜默失效與阻擋，涵蓋合併閘門與 cleanup 誤判、sync-pull 權限與衝突殘留、關票值域、framework-issue 與 doc CLI 漏檢查，以及版本兩期相關條文。
+
+### 對 consumer 的影響
+- **settings.json**：新增兩個 hook 註冊（SessionStart 的 `session-start-sync-conflict-residue-hook.py`、PreToolUse Agent 的 `named-agent-delivery-channel-hint-hook.py`），移除已停用的 `ana-ticket-metadata-validation-hook.py` 註冊。有本地修改 settings.json 的 consumer，sync-pull 後請對照。
+- **git pre-commit**：`git-ref-transaction-guard-install-hook.py` 會在 SessionStart 安裝 pre-commit shim，只在 `.claude/settings.json` 被 stage 時檢查 JSON 語法，錯誤即擋下 commit（tarrragon/claude#97）。既有的 pre-commit 改名為 `pre-commit.local` 並串接執行，不會被覆蓋；設定了 `core.hooksPath` 的 repo 會跳過安裝並警告。
+- **關票**：`ticket track close` 新增 reason `transferred_to_issue`（問題已移交 framework issue，`--resolved-by` 收 `tarrragon/claude#<N>`）；`closed_by` 的值域改依 reason 限定，四個寫入與驗證端點共用 `lib/close_resolution.py`（tarrragon/claude#60、#106）。以舊寫法自由填 `closed_by` 的腳本可能被拒。已關閉的存量票若 `closed_by` 寫的是 issue 參照、reason 卻不是 `transferred_to_issue`，SessionStart 的 version-tracking-consistency-guard 會在〈closed 票延後承諾稽核〉列出；要消除時，先 `ticket track restore <id> --reason "<理由>"`，再以 `--reason transferred_to_issue --resolved-by tarrragon/claude#<N>` 重新 close。
+- **framework-issue**：`add`、`observe` 拒絕空內容，`dedup` 有略過的查詢時回 exit 3；`close --reason "not planned"` 改為必填 `--comment`，不再要求修復版本表。
+- **doc**：自動配號沿用目錄內既有編號的位數，不再一律三位數（UC 預設兩位）；`docs/traceability.yaml` 可用 `test_scan_dirs` 設定 test-map 的掃描目錄。
+- **sync-pull**：衝突輪結束後以 `--resolve-done` 收斂 base；SessionStart 會列出未處理的 `.sync-conflicts/` 殘留與工作區的合併標記。
+- **移除**：`.claude/agent-collaboration.md`、`.claude/tdd-collaboration-flow.md` 兩個根層遺留檔，已無引用（tarrragon/claude#48）。sync-pull 不再把它們列為 consumer 缺漏。
+- **Bash 規則一**：uv 的推薦寫法依用途分兩條。skill CLI 與路徑相對呼叫者的命令用 `uv run --project <path>`；跑該目錄自己的測試套件用 `uv --directory <path> run pytest`（用 `--project` 會收集到 0 個）。
+
+### Fixed
+- 合併閘門與 worktree（tarrragon/claude#117、#118、#120、#121、#122；worktree 1.7.0）：
+  - 宣告檔改動時，加選命令或範圍有變的套件。
+  - `merge --branch` 成功後建議的 cleanup 命令改用 `--branch`。
+  - 合併前的 completed 檢查改讀 frontmatter，讀不到就阻擋，原本恆為放行。
+  - cleanup 的三項修正：Level 1 在 `git status` 失敗時阻擋；Level 2 認得已併入 base 的分支；遇到呼叫者自身 session 持有、且分支已交回的鎖時自動解鎖。
+  - 快照移除逾時不再蓋掉閘門結果；cleanup 會刪除對應的 Xcode DerivedData。
+  - 紅燈摘要以失敗項為準，不會是空的；`xfailed` 不判為失敗。
+- 本機測試名額閘門：判不出 runner 的命令一律當 heavy，命令裡有 runner 字樣卻辨識不出測試呼叫時提醒；以 shell 函式包住的測試命令不再繞過名額。
+- skill CLI 讀回 shim 傳入的呼叫者工作目錄（tarrragon/claude#24；ticket 2.49.5、doc 1.26.0、worktree 1.7.0），相對路徑不再以 skill 目錄解析。
+- sync-pull（tarrragon/claude#21、#88）：執行權限還原改以 shebang 判定，涵蓋 hooks 以外的腳本，pull 與 push 共用同一判定；衝突標記殘留掃描只涵蓋同步範圍。
+- 派發守衛的 handoff 恢復模式只算未過期、非孤兒的 handoff，殘留 handoff 不再讓兩支派發守衛整體放行（tarrragon/claude#45）。
+- close 守衛只取位置參數，`--resolved-by` 的票號不再被當成要關閉的票。
+- doc（tarrragon/claude#25、#31、#98；doc 1.26.0）：CLI 補 `__main__` 入口；test-map 掃描目錄含 `tests/`，零命中時警告；配號與驗證端改讀 `id_pattern`，`EVT-{DOMAIN}-NNN` 檔名不再被拒。
+- framework-issue `todo` 改讀區段內全部待辦表（tarrragon/claude#77、#89）。
+- project-init onboard 在 `settings.json` 缺席時判為不完整（tarrragon/claude#53；project-init 1.2.1）。
+- 條文與實作不一致的修正（tarrragon/claude#53、#73、#104、#125）：
+  - 派發骨架的紅燈條文，推論出口只限環境無法執行的情況。
+  - 自檢範本與 complete 閘門對齊。
+  - 代理人定義、方法論與 references 中不分時點的「測試 100% 通過」，改為 quality-baseline 規則 1 的兩個時點。
+  - saffron、sumac 代理人定義補齊寫檔工具。
+  - askuserquestion-rules 的觸發 hook 改為實際註冊的 hook。
+
+### Added
+- `named-agent-delivery-channel-hint-hook.py`：帶 name 的背景派發，prompt 裡缺交付通道句時提醒（tarrragon/claude#54）。
+- `session-start-sync-conflict-residue-hook.py`、`lib/sync_conflict_residue.py`：sync-pull 衝突殘留提示（tarrragon/claude#54）。
+- `settings-json-syntax-precommit.py`：commit 前的 settings.json 語法閘門（tarrragon/claude#97）。
+- `lib/close_resolution.py`、`lib/executable_bits.py`：關票值域與執行權限判定的共用實作。
+- error-pattern：ARCH-LLM-001、IMP-LLM-001、IMP-LLM-002、IMP-LLM-003、PC-LLM-002、PC-LLM-003、PC-LLM-004、PC-LLM-005、TEST-LLM-001、TEST-LLM-002。
+
+### Changed
+- 版本兩期相關條文（tarrragon/claude#114）：
+  - version-progression〈收斂〉補兩條：規則 5 的拆票邊界與超過比例時的處置；准入規則不限制修法深度。
+  - version-retrospective 的觸發時機對齊版本兩期。
+- framework-issue 2.9.0：主控方的修復時點只用版本分診，清理線移除；multi-session-orchestration 1.23.0 同步。
+- multi-session-orchestration：跨專案同名的主控改以 ref 定址，傳訊前先核對 cwd。
+- cognitive-load-assessment：file-split-by-contention §3.3 補拆分收尾步驟（tarrragon/claude#116）。
+- system-misjudgment：新增 worktree 鎖 pid 的誤判條目（tarrragon/claude#121）與 Flutter 測試 binding 參考（tarrragon/claude#126，對應 TEST-LLM-001）。
+- 產生路徑盤點表提示的填寫時點與 ticket-body-schema 對齊。
+
+### Known issues
+- 合併閘門的 CAS 重試預算沿用毫秒級操作的參數。多個 session 頻繁提交時，數分鐘的套件跑完後寫入 ref 會落空，重試 4 次後中止。main 一段時間沒有前進時重送即可成功（IMP-LLM-001）。
+- 閘門套件迴圈遇到第一個紅燈就停止，沒跑到的套件沒有標示。
+- 閘門快照內的 flutter_tester 可能成為孤兒行程，命令列殘留已刪除的快照路徑（tarrragon/claude#115）。等待閘門時，不要以行程名稱比對來判斷是否有人佔用（PC-LLM-005）。
+- error-pattern 改名（加 slug）的 Bash mv 會被 bash-write-boundary-guard 擋下，新 pattern 先保留不帶 slug 的檔名。
+
+---
+
 ## [3.0.2] - 2026-11-09
 
 ### Summary

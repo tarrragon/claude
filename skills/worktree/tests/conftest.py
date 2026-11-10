@@ -24,6 +24,25 @@ def _isolate_git_cwd(tmp_path, monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_derived_data(tmp_path, monkeypatch):
+    """cleanup 的 DerivedData 清理指向 tmp 下不存在的目錄，避免測試掃描或刪除真實的 ~/Library。
+
+    scripts 以頂層模組與 scripts 套件兩種名稱被匯入，兩個模組物件都要替換。
+    """
+    import importlib
+
+    scripts_dir = str(Path(__file__).resolve().parent.parent / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    for name in ("xcode_derived_data", "scripts.xcode_derived_data"):
+        try:
+            module = importlib.import_module(name)
+        except ImportError:
+            continue  # scripts 套件名稱不在 sys.path 時只有頂層名稱，略過即可
+        monkeypatch.setattr(module, "DERIVED_DATA_ROOT", tmp_path / "no-derived-data")
+
+
 # ===== 樣本資料 =====
 
 @pytest.fixture

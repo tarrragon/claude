@@ -56,6 +56,16 @@
 
 **解法方向**：與原案例的「移到 session-start」思路一致——移防到「不可繞過的執行點」，本案例對應 commit-time（`git commit` 前）內容掃描，與寫入手段（Edit/Write/Bash 皆可）解耦。落地追蹤：Bash 寫入路徑旁路缺口評估分析票（見版本 W3 系列）。
 
+## 後續實例（第三次觀測）：shell 函式間接呼叫繞過命令文字解析型守衛
+
+**症狀**：發版前以 shell 函式 `run() { name=$1; shift; out=$("$@" -q 2>&1); ... }` 包住多個套件逐一呼叫全套件測試，兩次執行都沒有被 `pre-test-hook` 攔下；同一 session 直接下 `uv --directory .claude/hooks run pytest` 則被擋下並要求經 `run-with-timeout` 包裝。hook 存活（同 session 有攔截紀錄），缺口在辨識。
+
+**根因**：守衛以命令文字判定「這是不是 heavy 測試」，`test_command_parse.find_test_invocations` 只看每個敘述去除啟動前綴後的開頭。runner 只出現在函式參數位置時，辨識結果為空（`[]`），與「不是測試命令」同形，於是靜默放行。可繞過因子是**命令形態**：同一個執行效果可以用直接命令、函式參數、變數展開（`$CMD`）、`bash -c` 字串達成，守衛只認得第一種。
+
+**判別基準延伸**：第三維——**命令形態型可繞過**。以文字解析判定的守衛，要盤點所有能產生同一效果的命令形態；辨識不出的形態不能與「確認不是」共用同一個結果值，至少要讓「看得到可疑字樣、但辨識不出」有別於「確定無關」。
+
+**解法方向**：命令文字含 runner 字樣、但辨識結果為空時，`pre-test-hook` 以 additionalContext 提醒模型改為直接下命令並包裝（`find_unrecognized_runner_mention`）。不阻擋：`grep pytest` 這類唯讀命令同樣含 runner 字樣。仍無法察覺的形態：runner 字樣不在命令文字中（腳本檔內呼叫、變數在別處定義）。
+
 ## 關聯
 
 - `.claude/rules/core/opinionated-default-design.md` — 主張 1「預設行為 > 文件規範」的復發實證

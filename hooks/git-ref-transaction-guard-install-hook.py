@@ -9,6 +9,10 @@ Git Ref Transaction Guard Install Hook - SessionStart Hook
 `.claude/hooks/git-ref-transaction-content-guard.py`（該檔 docstring含
 完整選型依據與已知邊界）。
 
+同一機制另安裝 `pre-commit` shim，掛載 settings.json 語法閘門
+`.claude/hooks/settings-json-syntax-precommit.py`；安裝與串接規則見下方
+「pre-commit：settings.json 語法閘門」區段。
+
 Hook Event: SessionStart
 
 為何需要安裝步驟（而非直接把內容掃描腳本放進 `.git/hooks/`）：
@@ -139,6 +143,135 @@ exit 0
 """
 
 
+def _write_executable(target: Path, body: str) -> None:
+    target.write_text(body, encoding="utf-8")
+    mode = target.stat().st_mode
+    target.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _install_reference_transaction(hooks_dir: Path, logger) -> None:
+    target = hooks_dir / HOOK_FILENAME
+    if target.exists():
+        existing = target.read_text(encoding="utf-8", errors="replace")
+        if SHIM_MARKER not in existing:
+            sys.stderr.write(
+                f"[git-ref-transaction-guard-install] 偵測到既有的 {target}"
+                "（非本機制所裝），跳過安裝以免覆蓋使用者自訂 hook。"
+                "commit-tree/update-ref/merge --continue 等路徑目前無內容掃描"
+                "保護，請手動整合本機制或改用其他掛載方式。\n"
+            )
+            logger.warning("既有 %s 非本機制所裝，跳過安裝", target)
+            return
+        if existing == _shim_body():
+            logger.debug("shim 已是最新版本，略過重寫：%s", target)
+            return
+
+    _write_executable(target, _shim_body())
+    logger.info("已安裝/更新 reference-transaction shim（version=%s）：%s", SHIM_VERSION, target)
+
+
+# ---------------------------------------------------------------------------
+# pre-commit：settings.json 語法閘門（tarrragon/claude#97）
+# ---------------------------------------------------------------------------
+# settings.json 語法錯誤會讓全部 CC hook 不載入且無訊號；CC hook 無法守住自身
+# 的載入來源，閘門放在 git pre-commit。安裝規則：
+# - 無 pre-commit -> 寫入 shim
+# - 已是本 shim -> 內容相同略過，不同則更新
+# - 使用者自訂的 pre-commit（不含 PRECOMMIT_MARKER）-> 改名為 pre-commit.local，
+#   由 shim 在檢查後串接呼叫，不覆蓋其內容；pre-commit.local 已存在時無法串接，
+#   跳過安裝並寫可見警告
+# - core.hooksPath 有設定時 git 不讀 .git/hooks，安裝無效，跳過並寫可見警告
+#   （hooksPath 常指向受版控的目錄，如 husky，不寫入以免汙染專案檔案）
+# 移除方式見 .claude/references/hook-architect-technical-reference.md
+# 〈git 原生 hook 的安裝與移除〉。
+PRECOMMIT_FILENAME = "pre-commit"
+PRECOMMIT_CHAINED_FILENAME = "pre-commit.local"
+PRECOMMIT_MARKER = "# settings-json-syntax-precommit shim"
+PRECOMMIT_SHIM_VERSION = 1
+# 須與 settings-json-syntax-precommit.py 的 EXIT_BLOCK 一致
+PRECOMMIT_BLOCK_EXIT_CODE = 87
+
+
+def _precommit_shim_body() -> str:
+    # 只在 settings.json 位於 staged 名單時才啟動 python；其他 commit 只多一次
+    # git diff --cached 的成本。判定阻擋（87）轉為 exit 1；其他非 0 結束碼
+    # （python 不存在 127、腳本未捕獲例外 1）放行但寫 stderr。
+    return f"""#!/bin/sh
+{PRECOMMIT_MARKER} -- 由 .claude/hooks/git-ref-transaction-guard-install-hook.py 產生，勿手動修改。
+# shim-version: {PRECOMMIT_SHIM_VERSION}
+root=$(git rev-parse --show-toplevel 2>/dev/null)
+target="$root/.claude/hooks/settings-json-syntax-precommit.py"
+if [ -n "$root" ] && [ -f "$target" ] && \\
+   git diff --cached --name-only --diff-filter=ACMR -- .claude/settings.json | grep -qx '.claude/settings.json'; then
+  python3 "$target"
+  rc=$?
+  if [ "$rc" -eq {PRECOMMIT_BLOCK_EXIT_CODE} ]; then
+    exit 1
+  fi
+  if [ "$rc" -ne 0 ]; then
+    echo "[pre-commit shim] settings.json 語法閘門啟動失敗（rc=${{rc}}），已放行本次 commit，語法檢查未生效" >&2
+  fi
+fi
+chained="$(dirname "$0")/{PRECOMMIT_CHAINED_FILENAME}"
+if [ -x "$chained" ]; then
+  exec "$chained" "$@"
+fi
+exit 0
+"""
+
+
+def _core_hooks_path(project_root: Path) -> Optional[str]:
+    try:
+        result = subprocess.run(
+            ["git", "config", "--get", "core.hooksPath"],
+            cwd=str(project_root), capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    value = result.stdout.strip()
+    return value if result.returncode == 0 and value else None
+
+
+def _install_precommit(hooks_dir: Path, project_root: Path, logger) -> None:
+    hooks_path = _core_hooks_path(project_root)
+    if hooks_path:
+        sys.stderr.write(
+            f"[settings-json-syntax-precommit-install] core.hooksPath 已設為 {hooks_path}，"
+            "git 不讀 .git/hooks，跳過安裝；settings.json 語法閘門未生效，"
+            "如需啟用請在該 hooks 目錄的 pre-commit 呼叫 "
+            ".claude/hooks/settings-json-syntax-precommit.py。\n"
+        )
+        logger.warning("core.hooksPath=%s，跳過 pre-commit 安裝", hooks_path)
+        return
+
+    target = hooks_dir / PRECOMMIT_FILENAME
+    body = _precommit_shim_body()
+    if target.exists():
+        existing = target.read_text(encoding="utf-8", errors="replace")
+        if PRECOMMIT_MARKER in existing:
+            if existing == body:
+                logger.debug("pre-commit shim 已是最新版本，略過重寫：%s", target)
+                return
+        else:
+            chained = hooks_dir / PRECOMMIT_CHAINED_FILENAME
+            if chained.exists():
+                sys.stderr.write(
+                    f"[settings-json-syntax-precommit-install] 既有 {target} 非本機制所裝，"
+                    f"且 {chained} 已存在，無法串接；跳過安裝，settings.json 語法閘門未生效。\n"
+                )
+                logger.warning("pre-commit 與 pre-commit.local 皆存在，跳過安裝")
+                return
+            target.rename(chained)
+            sys.stderr.write(
+                f"[settings-json-syntax-precommit-install] 既有的 pre-commit 已改名為 "
+                f"{chained.name}，由新 shim 在 settings.json 語法檢查後串接呼叫，內容未變更。\n"
+            )
+            logger.info("既有 pre-commit 改名為 %s 並串接", chained)
+
+    _write_executable(target, body)
+    logger.info("已安裝/更新 pre-commit shim（version=%s）：%s", PRECOMMIT_SHIM_VERSION, target)
+
+
 def main() -> int:
     logger = setup_hook_logging("git-ref-transaction-guard-install-hook")
     project_root = get_project_root()
@@ -156,26 +289,8 @@ def main() -> int:
         logger.warning("mkdir 失敗：%s", exc)
         return 0
 
-    target = hooks_dir / HOOK_FILENAME
-    if target.exists():
-        existing = target.read_text(encoding="utf-8", errors="replace")
-        if SHIM_MARKER not in existing:
-            sys.stderr.write(
-                f"[git-ref-transaction-guard-install] 偵測到既有的 {target}"
-                "（非本機制所裝），跳過安裝以免覆蓋使用者自訂 hook。"
-                "commit-tree/update-ref/merge --continue 等路徑目前無內容掃描"
-                "保護，請手動整合本機制或改用其他掛載方式。\n"
-            )
-            logger.warning("既有 %s 非本機制所裝，跳過安裝", target)
-            return 0
-        if existing == _shim_body():
-            logger.debug("shim 已是最新版本，略過重寫：%s", target)
-            return 0
-
-    target.write_text(_shim_body(), encoding="utf-8")
-    mode = target.stat().st_mode
-    target.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    logger.info("已安裝/更新 reference-transaction shim（version=%s）：%s", SHIM_VERSION, target)
+    _install_reference_transaction(hooks_dir, logger)
+    _install_precommit(hooks_dir, project_root, logger)
     return 0
 
 

@@ -201,7 +201,7 @@ commit 類型為文件/格式/維護類（docs/chore/style/revert/test/ci/build�
     # ========================================================================
     # [用途區分說明]：
     # WAVE_COMPLETION_REMINDER：主動觸發類型（commit 後自動檢測）
-    #   - 由 commit-handoff-hook 在 commit 成功後主動偵測 Wave 完成狀態
+    #   - 由 post-git-commit-hook 在 commit 成功後主動偵測 Wave 完成狀態
     #   - 包含 Step 1-2 詳細指引，強制執行 /parallel-evaluation 審查
     #   - 用途：確保當前 Wave 的品質檢查不被遺漏
     #   - 觸發時機：commit 完成後，若同 Wave 無 pending Ticket
@@ -212,7 +212,7 @@ commit 類型為文件/格式/維護類（docs/chore/style/revert/test/ci/build�
 ============================================================
 
 [用途說明]：
-此提醒為「主動強制」類型，在 commit 成功後由 commit-handoff-hook 自動觸發。
+此提醒為「主動強制」類型，在 commit 成功後由 post-git-commit-hook 自動觸發。
 包含 Step 1-2 詳細指引，確保當前 Wave 的品質檢查完整。
 
 偵測到當前 Wave 已完成（同 Wave 無 pending Ticket）。
@@ -440,7 +440,7 @@ ticket track complete 已成功。下一步強制流程：
   → 選項: 無需記錄 (Recommended) / 記錄錯誤學習 / 稍後記錄
   |
   v
-[Checkpoint 2] 由 commit-handoff-hook 自動觸發（無需手動執行）
+[Checkpoint 2] 由 post-git-commit-hook 自動觸發（無需手動執行）
 
 [路徑 B] 無未提交變更（無 commit）
   |
@@ -451,7 +451,7 @@ ticket track complete 已成功。下一步強制流程：
   → 選項: 無需記錄 (Recommended) / 記錄錯誤學習 / 稍後記錄
   |
   v
-[Checkpoint 2] 直接執行（commit-handoff-hook 不會自動觸發）
+[Checkpoint 2] 直接執行（post-git-commit-hook 不會自動觸發）
   → 執行: ticket track list --wave {n} --status pending in_progress
   → 有 pending/in_progress → 評估情境，執行對應流程
   → 無任何待處理 → AskUserQuestion #13（後續任務路由）

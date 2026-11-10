@@ -2,7 +2,7 @@
 name: methodology-writing
 description: "方法論撰寫指南。Use for: (1) 撰寫新方法論, (2) 改寫冗長的舊方法論, (3) 檢查方法論品質"
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # 方法論撰寫指南

@@ -765,7 +765,9 @@ def _register_lifecycle_commands(
     p_close = subparsers.add_parser("close", help="關閉 Ticket（已在其他 Ticket 一併解決）")
     p_close.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_close.add_argument("--resolved-by", required=True, dest="resolved_by",
-                         help="解決此問題的 Ticket ID")
+                         help="依 --reason 限定：superseded_by／duplicate 填 Ticket ID；"
+                              "transferred_to_issue 填 issue 參照 owner/repo#N；"
+                              "其餘填 none 或 Ticket ID")
     p_close.add_argument(
         "--reason",
         required=True,
@@ -790,7 +792,7 @@ def _register_lifecycle_commands(
     p_set_closed_by.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_set_closed_by.add_argument(
         "--value", required=True,
-        help="新的 closed_by 值，須為合法且存在的 Ticket ID",
+        help="新的 closed_by 值，值域與 close --resolved-by 相同，依該票 close_reason 限定",
     )
     p_set_closed_by.add_argument("--version", help=TrackMessages.ARG_VERSION)
 

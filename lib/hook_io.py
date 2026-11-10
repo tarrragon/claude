@@ -26,7 +26,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from lib.hook_base import get_project_root
 
@@ -455,8 +455,8 @@ def is_handoff_recovery_mode(
         bool: 是否處於 Handoff 恢復模式
 
     Handoff 恢復模式判斷：
-    - 檢查 .claude/handoff/pending 目錄是否存在
-    - 目錄內是否有任何 .json 檔案
+    - .claude/handoff/pending 內至少有一個有效 handoff（未過期、非孤兒，判準見
+      _scan_handoff_pending）。只有殘留檔、損壞檔或非 json 雜檔時不算恢復模式。
     """
     global _handoff_recovery_cache
 
@@ -466,19 +466,12 @@ def is_handoff_recovery_mode(
             logger.debug("使用快取的 Handoff 恢復模式結果: {}".format(_handoff_recovery_cache))
         return _handoff_recovery_cache
 
-    project_root = get_project_root()
-
-    handoff_pending_dir = project_root / ".claude" / "handoff" / "pending"
-
     try:
-        # 檢查目錄是否存在且包含 JSON 檔案
-        if handoff_pending_dir.exists() and handoff_pending_dir.is_dir():
-            # 使用 glob 檢查是否有任何 .json 檔案
-            if any(handoff_pending_dir.glob("*.json")):
-                if logger:
-                    logger.info("檢測到 Handoff 恢復模式")
-                _handoff_recovery_cache = True
-                return True
+        if _scan_handoff_pending(logger, get_project_root()):
+            if logger:
+                logger.info("檢測到 Handoff 恢復模式")
+            _handoff_recovery_cache = True
+            return True
 
         if logger:
             logger.debug("未檢測到 Handoff 恢復模式")
@@ -493,13 +486,45 @@ def is_handoff_recovery_mode(
         return False
 
 
+_TICKET_SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / "ticket"
+
+
+def _load_handoff_activity_check(
+    logger: Optional[logging.Logger] = None,
+) -> "Optional[Callable[[dict, Path], Tuple[bool, str]]]":
+    """延遲載入 ticket_system 的 is_handoff_active（有效 handoff 判準的唯一來源）。
+
+    載入失敗回 None，並寫 stderr 與日誌：呼叫端據此把所有 handoff 視為無效，
+    守衛照常檢查（fail-closed），不因無法判斷而放行。
+    """
+    try:
+        if str(_TICKET_SKILL_DIR) not in sys.path:
+            sys.path.insert(0, str(_TICKET_SKILL_DIR))
+        from ticket_system.lib.handoff_utils import is_handoff_active
+        return is_handoff_active
+    except Exception as e:
+        message = (
+            "[hook_io] handoff 有效性判準（ticket_system.lib.handoff_utils）載入失敗，"
+            "pending handoff 一律不算恢復模式、守衛照常檢查：{}: {}".format(type(e).__name__, e)
+        )
+        try:
+            sys.stderr.write(message + "\n")
+        except Exception:
+            pass  # stderr 不可寫：下方日誌仍保留訊號
+        if logger:
+            logger.warning(message)
+        return None
+
+
 def _scan_handoff_pending(
     logger: Optional[logging.Logger],
     project_root: Optional[Path],
 ) -> List[Tuple[str, Set[str]]]:
-    """掃描 pending handoff，回傳 [(檔名, 該檔指向的 ticket ID 集合)]（依檔名排序）
+    """掃描有效的 pending handoff，回傳 [(檔名, 該檔指向的 ticket ID 集合)]（依檔名排序）
 
-    損壞或無法讀取的檔案略過並記錄；目錄不存在回傳空列表。
+    只收有效 handoff（ticket_system is_handoff_active：未過期且非孤兒）；殘留檔
+    （目標已完成、來源與目標皆查無）不收，否則一個殘留檔就讓守衛對其指向的票放行。
+    損壞或無法讀取的檔案略過並記錄；目錄不存在回傳空列表。判準載入失敗時回空列表。
     """
     root = project_root if project_root is not None else get_project_root()
     pending_dir = root / ".claude" / "handoff" / "pending"
@@ -508,7 +533,15 @@ def _scan_handoff_pending(
     if not pending_dir.is_dir():
         return result
 
-    for handoff_file in sorted(pending_dir.glob("*.json")):
+    handoff_files = sorted(pending_dir.glob("*.json"))
+    if not handoff_files:
+        return result
+
+    is_active = _load_handoff_activity_check(logger)
+    if is_active is None:
+        return result
+
+    for handoff_file in handoff_files:
         try:
             with open(handoff_file, "r", encoding="utf-8") as f:
                 record = json.load(f)
@@ -517,6 +550,16 @@ def _scan_handoff_pending(
                 logger.info("讀取 handoff 檔案失敗，略過: {}: {}".format(handoff_file.name, e))
             continue
         if not isinstance(record, dict):
+            continue
+        try:
+            active, reason = is_active(record, root)
+        except Exception as e:
+            active, reason = False, "有效性判定失敗：{}: {}".format(type(e).__name__, e)
+            if logger:
+                logger.warning("handoff {} {}".format(handoff_file.name, reason))
+        if not active:
+            if logger:
+                logger.info("略過無效 handoff {}：{}".format(handoff_file.name, reason))
             continue
         ids: Set[str] = set()
         for key in ("ticket_id", "target_ticket_id"):

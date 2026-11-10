@@ -1091,8 +1091,36 @@ def _parse_and_validate_input(input_data: Dict[str, Any], logger) -> Optional[Tu
     return tool_name, command
 
 
+# `ticket track close` 的帶值旗標（對齊 track.py 的 close argparse 定義）。
+# 這些旗標的值不是要關閉的票：--resolved-by 必填且值常為票號，--reason-note
+# 可能恰為票號；把它們當成關閉對象，會讓「以協調票作 resolved-by 關閉一般票」
+# 被協調票的未配對待辦誤擋。
+_CLOSE_VALUE_FLAGS = frozenset({"--resolved-by", "--reason", "--reason-note", "--version"})
+
+
+def _close_positional_args(args: List[str]) -> List[str]:
+    """取 close 參數中的位置參數：略過帶值旗標及其值、`--x=v` 形式與其他旗標。"""
+    positionals: List[str] = []
+    skip_next = False
+    for token in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in _CLOSE_VALUE_FLAGS:
+            skip_next = True
+            continue
+        if token.startswith("-"):
+            continue
+        positionals.append(token)
+    return positionals
+
+
 def extract_close_ticket_ids(command: str, logger) -> List[str]:
-    """掃描 `ticket track close` 命令，回傳其後全部 Ticket ID（保序、去重）。
+    """掃描 `ticket track close` 命令，回傳要關閉的 Ticket ID（保序、去重）。
+
+    只取 close 的位置參數 ticket_id；`--resolved-by`、`--reason`、`--reason-note`、
+    `--version` 的值不納入（它們不是關閉對象）。同一命令串接多個 close 時，
+    各自的位置參數皆納入。
 
     失敗語意：命令無法解析（掃描回 None）時視為非 close 命令，回空清單（fail-open）。
     觸發條件：未閉合引號、管線或 here-string 餵 stdin shell、巢狀過深。
@@ -1104,7 +1132,7 @@ def extract_close_ticket_ids(command: str, logger) -> List[str]:
     return _dedupe([
         token
         for _verb, args in invocations
-        for token in args
+        for token in _close_positional_args(args)
         if re.fullmatch(TICKET_ID_PATTERN, token)
     ])
 

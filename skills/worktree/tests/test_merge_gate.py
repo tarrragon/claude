@@ -343,6 +343,47 @@ class TestSnapshot:
         assert not list((repo / mg.SNAPSHOT_DIR).glob(mg.SNAPSHOT_PREFIX + "*"))
 
 
+def _cleanup_git_times_out(monkeypatch):
+    """快照清理用的 git（worktree remove／prune）一律逾時；其餘 git 照常執行。"""
+    real_git = mg._git
+
+    def fake(args, repo):
+        if args[:2] in (["worktree", "remove"], ["worktree", "prune"]):
+            raise subprocess.TimeoutExpired(["git", *args], mg._GIT_TIMEOUT_SECONDS)
+        return real_git(args, repo)
+
+    monkeypatch.setattr(mg, "_git", fake)
+
+
+class TestSnapshotRemovalFailure:
+    """快照移除失敗發生在 merge_snapshot 的 finally 內，不得蓋掉閘門原本的結果。"""
+
+    @pytest.mark.parametrize("rc", [0, 1])
+    def test_cleanup_timeout_keeps_gate_result(self, repo, monkeypatch, capsys, rc):
+        _cleanup_git_times_out(monkeypatch)
+        gate = mg.MergeGate(str(repo), art(lambda argv, cwd: (rc, "1 failed" if rc else "ok")))
+        out = wm.merge_branch_cas("feat", repo=str(repo), pre_merge_check=gate)
+        assert out.ok == (rc == 0)
+        if rc:
+            assert mg._RED_MARKER in out.error and "TimeoutExpired" not in out.error
+        err = capsys.readouterr().err
+        assert "快照清理 git worktree remove 失敗" in err and "快照清理 git worktree prune 失敗" in err
+        log = (repo / mg._LOG_FILE).read_text(encoding="utf-8")
+        assert "快照清理 git worktree remove 失敗" in log
+        # remove 逾時後退回直接刪目錄，目錄已不在，不報「快照未移除」
+        assert "快照未移除" not in err
+
+    def test_snapshot_left_on_disk_is_reported(self, repo, monkeypatch, capsys):
+        _cleanup_git_times_out(monkeypatch)
+        monkeypatch.setattr(mg.shutil, "rmtree", lambda *a, **k: None)  # 直接刪目錄也失敗
+        gate = mg.MergeGate(str(repo), art(lambda argv, cwd: (0, "ok")))
+        out = wm.merge_branch_cas("feat", repo=str(repo), pre_merge_check=gate)
+        assert out.ok, out.error
+        left = list((repo / mg.SNAPSHOT_DIR).glob(mg.SNAPSHOT_PREFIX + "*"))
+        assert len(left) == 1
+        assert f"快照未移除：{left[0]}" in capsys.readouterr().err
+
+
 class TestArtifacts:
     def test_missing_artifact_generated_before_suite(self, repo):
         order = []
@@ -1310,6 +1351,87 @@ class TestDeclaredGate:
         assert ["fvm", "flutter", "test"] in calls
 
 
+# ---- 宣告檔自身被改動時的加選（3.1.0-W1-047）----
+
+TWO_DECL = """\
+# 兩個套件
+suites:
+  web:
+    prefixes: [web/]
+    command: [npm, test]
+  api:
+    prefixes: [api/]
+    command: [go, test]
+"""
+WEB_CMD_CHANGED = TWO_DECL.replace("[npm, test]", "[npm, run, test2]")
+API_PREFIX_CHANGED = TWO_DECL.replace("[api/]", "[api/, svc/]")
+# 只改註解與報告欄位：不影響跑什麼
+COSMETIC_CHANGED = TWO_DECL.replace("# 兩個套件", "# 改過的註解").replace(
+    "    command: [npm, test]\n", "    command: [npm, test]\n    summary: '^Ran'\n")
+
+
+class TestDeclarationChangeSelect:
+    def _select(self, skel, new_text, base):
+        declare(skel, new_text)
+        return mg.select_suites([DECL_REL], skel, base)
+
+    def test_command_change_selects_suite(self, skel):
+        """E2 正向對照：改了命令的套件被選中。"""
+        base = mg.parse_declaration(TWO_DECL)
+        assert self._select(skel, WEB_CMD_CHANGED, base) == ["web", mg.SUITE_HOOKS]
+
+    def test_prefixes_change_selects_suite(self, skel):
+        base = mg.parse_declaration(TWO_DECL)
+        assert self._select(skel, API_PREFIX_CHANGED, base) == ["api", mg.SUITE_HOOKS]
+
+    def test_cosmetic_change_selects_nothing_extra(self, skel):
+        base = mg.parse_declaration(TWO_DECL)
+        assert self._select(skel, COSMETIC_CHANGED, base) == [mg.SUITE_HOOKS]
+
+    def test_new_declaration_selects_all(self, skel):
+        assert self._select(skel, TWO_DECL, None) == ["web", "api", mg.SUITE_HOOKS]
+
+    def test_unparseable_or_unknown_base_selects_all(self, skel):
+        bad = mg.DeclarationError("壞掉")
+        assert self._select(skel, TWO_DECL, bad) == ["web", "api", mg.SUITE_HOOKS]
+        assert mg.select_suites([DECL_REL], skel) == ["web", "api", mg.SUITE_HOOKS]
+        assert mg.declaration_changed_suites(mg.parse_declaration(TWO_DECL), bad)[1]
+
+    def test_declaration_untouched_ignores_base(self, skel):
+        """E1 對照：宣告檔不在改動內時，基準不同也不加選。"""
+        declare(skel, WEB_CMD_CHANGED)
+        base = mg.parse_declaration(TWO_DECL)
+        assert mg.select_suites(["README.md"], skel, base) == []
+
+
+class TestDeclarationChangeGate:
+    def _gate(self, repo, base_text, new_text):
+        commit_file(repo, DECL_REL, base_text, "base decl")
+        old = git(repo, "rev-parse", "HEAD")
+        commit_file(repo, DECL_REL, new_text, "edit decl")
+        head = git(repo, "rev-parse", "HEAD")
+        calls = []
+        res = mg.MergeGate(str(repo), green_runner(calls))(head, "main", old, 1)
+        return res, [argv[argv.index("--") + 1:] for argv, _cwd in calls]
+
+    def test_changed_command_runs_in_gate(self, repo, capsys):
+        res, run = self._gate(repo, TWO_DECL, WEB_CMD_CHANGED)
+        assert res.passed
+        assert ["npm", "run", "test2"] in run and ["go", "test"] not in run
+        assert "加選套件：web" in capsys.readouterr().out
+
+    def test_cosmetic_change_runs_no_declared_suite(self, repo):
+        res, run = self._gate(repo, TWO_DECL, COSMETIC_CHANGED)
+        assert res.passed
+        assert ["npm", "test"] not in run and ["go", "test"] not in run
+
+    def test_unparseable_base_runs_all_with_reason(self, repo, capsys):
+        res, run = self._gate(repo, "suites: {\n", TWO_DECL)
+        assert res.passed
+        assert ["npm", "test"] in run and ["go", "test"] in run
+        assert "無法解析" in capsys.readouterr().out
+
+
 BUN_PASS = "bun test v1.2\n(pass) a > ok [1.00ms]\n\n 12 pass\n 0 fail\nRan 12 tests across 3 files. [90.00ms]\n"
 BUN_FAIL = ("bun test v1.2\n(pass) a > ok [1.00ms]\n(fail) a > broken [2.00ms]\n(pass) b > ok [1.00ms]\n"
             "\n 11 pass\n 1 fail\nRan 12 tests across 3 files. [90.00ms]\n")
@@ -1341,6 +1463,52 @@ class TestDeclaredPatterns:
     def test_declared_failure_no_match_falls_back(self):
         pat = mg.re.compile("NOPE")
         assert mg._failed_items("FAILED x::y\n", pat) == ["FAILED x::y"]
+
+    # --- 3.1.0-W1-053：多檔摘要以失敗為準；失敗項不得為空或只剩名額等待訊息 ---
+    _SLOT = "run-with-timeout: 取得名額，已等待 557.5 秒\n"
+    _MULTI = "00:10 +5 -1: Some tests failed.\n00:20 +9: All tests passed!\n"
+    _PYTEST = ("FAILED tests/test_a.py::test_x - assert 1 == 2\nE  assert 1 == 2\n"
+               "==== 1 failed, 1 passed in 0.1s ====\n")
+
+    def test_multi_file_failure_wins_over_last_pass(self):
+        out = mg.summarize_output(self._MULTI, rc=1)
+        assert "Some tests failed" in out and "All tests passed" not in out
+        assert "｜" not in out and "\n" not in out
+
+    def test_multiple_failures_note_count(self):
+        out = mg.summarize_output("a Some tests failed.\nb Some tests failed.\nc All tests passed!\n", rc=1)
+        assert "2" in out and "Some tests failed" in out
+
+    def test_rc_nonzero_with_only_pass_lines_notes_rc(self):
+        out = mg.summarize_output("00:20 +9: All tests passed!\n", rc=1)
+        assert "結束碼 1" in out and "未顯示失敗" in out and "｜" not in out
+
+    def test_xfailed_green_not_judged_failure(self):
+        out = mg.summarize_output("10 passed, 1 xfailed in 2s\n3 passed, 1 xfailed in 1s\n", rc=0)
+        assert out == "3 passed, 1 xfailed in 1s" and "失敗摘要行" not in out
+
+    def test_failed_with_xfailed_still_failure(self):
+        out = mg.summarize_output("1 failed, 2 passed, 1 xfailed in 2s\n3 passed in 1s\n", rc=1)
+        assert out == "1 failed, 2 passed, 1 xfailed in 2s"
+
+    def test_rc_zero_or_none_unchanged(self):
+        assert mg.summarize_output("00:20 +9: All tests passed!\n", rc=0) == "00:20 +9: All tests passed!"
+        assert mg.summarize_output("00:20 +9: All tests passed!\n") == "00:20 +9: All tests passed!"
+
+    def test_pytest_with_slot_message_keeps_node_id(self):
+        items = mg._failed_items(self._PYTEST + self._SLOT)
+        assert any("tests/test_a.py::test_x" in i for i in items)
+
+    def test_tail_only_slot_message_marks_not_extracted(self):
+        items = mg._failed_items("some noise\n" + self._SLOT)
+        assert items and "未能抽取失敗名稱" in items[0]
+        assert not any(i.startswith("run-with-timeout:") for i in items)
+
+    def test_slot_only_output_not_empty(self):
+        assert mg._failed_items(self._SLOT) == ["未能抽取失敗名稱：輸出為空"]
+
+    def test_empty_output_not_empty(self):
+        assert mg._failed_items("") == ["未能抽取失敗名稱：輸出為空"]
 
     @pytest.mark.parametrize("field", ["summary", "failure"])
     def test_uncompilable_regex_names_field(self, skel, field):

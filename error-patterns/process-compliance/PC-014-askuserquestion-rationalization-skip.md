@@ -41,7 +41,7 @@
 | 措施 | 狀態 | 說明 |
 |------|------|------|
 | 規則 4：無 Ticket 場景仍適用 | 已實施 | askuserquestion-rules.md v3.5.0 |
-| commit-handoff-hook 強化語氣 | 已實施 | 「不可跳過」+ 引用規則 4 |
+| commit-handoff-hook 強化語氣 | 已實施 | 「不可跳過」+ 引用規則 4（歷史名稱：該 hook 其後併入 `post-git-commit-hook.py`，原檔未註冊） |
 | 通用觸發原則 Hook 覆蓋 | 未實施 | 技術限制：無法偵測 Claude 純文字輸出中的問句 |
 
 ### 教訓

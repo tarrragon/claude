@@ -25,9 +25,17 @@
   liveness：deny 時 hook 日誌（.claude/hook-logs/pre-test-hook/）記一行 warning；
   實地確認以「裸 heavy 命令被 deny、包裝後同一命令放行」成對觸發。
 
+間接形態的提醒（不阻擋）:
+  命令文字含 runner 字樣（pytest、flutter／dart test、npm test），但辨識不出任何
+  測試呼叫時（shell 函式參數 `run uv run pytest`、變數展開 `$CMD`、`bash -c '...'`），
+  以 additionalContext 提醒模型改為直接下命令並經 run-with-timeout 包裝。
+  不阻擋：`grep pytest <檔>` 這類唯讀命令同樣含 runner 字樣。不用 stderr：
+  PreToolUse 的 exit 0 加 stderr 對模型不可見。日誌記一行 info。
+
 不涵蓋（已知破口，不在封堵範圍）:
-  - bash -c '...'／sh -c／python -c：命令在引號字串內，需二次解析
-  - 經 shell 腳本間接執行（腳本檔內含 flutter test）：命令在腳本檔內
+  - bash -c '...'／sh -c／python -c、shell 函式參數、變數展開：辨識不出測試呼叫，
+    不封堵；命令文字含 runner 字樣時只提醒（見上段）
+  - 經 shell 腳本間接執行（腳本檔內含 flutter test）：命令在腳本檔內，連提醒也無法觸發
   - yarn／pnpm／npx 的測試，以及 test_command_parse 未列入帶值集合的自訂選項
   - mcp__dart__run_tests 帶 paths 但 paths 指向整個目錄：視為明示範圍而放行
   - 測試目標含未展開 shell 變數（`t=tests/x.py` 後 `pytest $t`）：無法由字面判定，
@@ -124,6 +132,29 @@ def build_block_reason(tool_name: str, tool_input: dict):
     )
 
 
+def build_indirect_runner_hint(tool_input: dict, logger):
+    """命令含 runner 字樣卻辨識不出測試呼叫時，回傳給模型的提醒文字；否則 None。
+
+    判定失敗不影響放行：記錄後回 None。
+    """
+    try:
+        from lib.test_command_parse import find_unrecognized_runner_mention
+        mention = find_unrecognized_runner_mention(tool_input.get("command", ""))
+    except Exception as exc:  # 提醒用途，失敗只記錄
+        logger.error("間接 runner 偵測失敗: %s", exc)
+        return None
+    if mention is None:
+        return None
+    logger.info("命令含 runner 字樣 %r 但辨識不出測試呼叫，已提醒", mention)
+    return (
+        "[pre-test-hook] 命令中出現測試 runner 字樣「{m}」，但辨識不出測試呼叫"
+        "（可能經 shell 函式參數、變數展開或 bash -c 間接執行）。本機名額閘門"
+        "只認得直接下的命令：若這是全套件測試或編譯，請改為直接下命令並包進 "
+        "python3 {w} <秒> -- <原命令>，否則會繞過名額閘門；指定具體測試檔、"
+        "或只是唯讀命令（如 grep {m} 檔案）則可忽略本提醒。".format(m=mention, w=WRAPPER_PATH)
+    )
+
+
 def _note_variable_target_passthrough(tool_input: dict, logger) -> None:
     """測試目標含未展開 shell 變數而被 fail-open 放行時，stderr 與日誌各記一行。"""
     try:
@@ -209,6 +240,10 @@ def main():
         block_reason = None
     if block_reason is None and tool_name == "Bash":
         _note_variable_target_passthrough(tool_input, logger)
+        hint = build_indirect_runner_hint(tool_input, logger)
+        if hint:
+            emit_hook_output("PreToolUse", additional_context=hint, input_data=input_data)
+            return 0
     if block_reason:
         try:
             logger.warning("deny: %s", block_reason.splitlines()[0])

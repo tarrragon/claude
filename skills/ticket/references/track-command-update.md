@@ -207,13 +207,13 @@
 
 ### closed 票欄位修正 — `set-closed-by`
 
-`close` 對已 closed 票拒絕覆寫既有值；`set-closed-by <id> --value <ticket-id>` 補上 `closed_by` 填錯後的合法修正路徑，取代直接 Edit ticket md（該路徑被 `ticket-file-access-guard-hook` 阻擋）。
+`close` 對已 closed 票拒絕覆寫既有值；`set-closed-by <id> --value <值>` 補上 `closed_by` 填錯後的合法修正路徑，取代直接 Edit ticket md（該路徑被 `ticket-file-access-guard-hook` 阻擋）。
 
 ```bash
-ticket track set-closed-by <id> --value <ticket-id>
+ticket track set-closed-by <id> --value <ticket-id|none|owner/repo#N>
 ```
 
-僅適用 `status=closed` 的票；`--value` 須為合法且存在的 Ticket ID，格式錯誤或指向不存在的 Ticket 皆拒絕。修正動作輸出舊值與新值並走 auto-commit。
+僅適用 `status=closed` 的票；`--value` 的值域與 `close --resolved-by` 相同，依該票的 `close_reason` 限定：`superseded_by`、`duplicate` 收 Ticket ID；`transferred_to_issue` 收 issue 參照 `owner/repo#N`；其餘收 `none` 或 Ticket ID（權威：`.claude/lib/close_resolution.py`）。值不在值域內、或 Ticket ID 指向不存在的票皆拒絕。修正動作輸出舊值與新值並走 auto-commit。
 
 ### closed 票還原 — `restore`
 
@@ -417,7 +417,7 @@ dispatch-plan 的觸發條件、欄位定義與範本見 `.claude/references/age
 | creation_accepted           | 無（`accept-creation` 已移除）                  | 建票通過硬閘門後由 `create` 直接寫 `true`，認領不再檢查；2026-10-14 之前建立的票此欄位不具意義（多為 false），不回填 |
 | title                       | `set-title <id> <value>`                        | 清單顯示用短標籤，與 `what` 刻意分離；範圍變更時兩者需個別更新（見「UPDATE 操作補充」章節） |
 | priority                    | `set-priority <id> <value>`                     | value 限 `PRIORITY_LEVELS`（P0-P3）                  |
-| closed_by                   | `set-closed-by <id> --value <ticket-id>`        | 僅 `status=closed` 適用，修正 close 時填錯的值        |
+| closed_by                   | `set-closed-by <id> --value <值>`               | 僅 `status=closed` 適用，值域依 close_reason 限定     |
 | scope_blocker                | `set-scope-blocker <id> --reason <text>\|--clear` | 建票時可用 `--scope-blocker` 一併寫入；事後補標或清除用本命令，`--reason`/`--clear` 互斥，空理由視同未給 |
 | dispatch_reason             | 無 CLI 命令                                     | 依上方「其餘 frontmatter 欄位若無對應命令，不要手動編輯」處置：不可手動編輯，應建 ticket 回報補上命令 |
 

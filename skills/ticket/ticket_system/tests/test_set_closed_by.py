@@ -10,6 +10,8 @@ set-closed-by 子命令補上此缺口。
 3. 非法輸入：--value 指向不存在的 Ticket → 拒絕，不寫入
 4. 前置條件：非 closed 狀態的票 → 拒絕
 5. 冪等：新值與舊值相同 → 不產生變更、不 commit
+6. 值域依 close_reason 限定（3.1.0-W1-057）：預設 reason 收 none、
+   transferred_to_issue 只收 issue 參照、superseded_by 只收 Ticket ID
 """
 
 from __future__ import annotations
@@ -30,7 +32,11 @@ def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def _write_ticket_md(
-    path: Path, tid: str, status: str = "closed", closed_by: str = "some-agent"
+    path: Path,
+    tid: str,
+    status: str = "closed",
+    closed_by: str = "some-agent",
+    close_reason: str = "goal_achieved",
 ) -> None:
     fm_lines = [
         "---",
@@ -48,7 +54,7 @@ def _write_ticket_md(
         fm_lines += [
             "closed_at: '2026-01-01T00:00:00'",
             f"closed_by: {closed_by}",
-            "close_reason: goal_achieved",
+            f"close_reason: {close_reason}",
         ]
     fm_lines.append("---\n")
     fm = "\n".join(fm_lines)
@@ -81,7 +87,22 @@ def git_repo(tmp_path: Path) -> Path:
     open_id = "0.0.0-W0-102"
     _write_ticket_md(tickets_dir / f"{open_id}.md", open_id, status="in_progress")
 
-    for fname in (f"{target_id}.md", f"{resolver_id}.md", f"{open_id}.md"):
+    # 依 close_reason 限定值域的目標票（3.1.0-W1-057）
+    superseded_id = "0.0.0-W0-103"
+    _write_ticket_md(
+        tickets_dir / f"{superseded_id}.md", superseded_id,
+        closed_by="0.0.0-W0-101", close_reason="superseded_by",
+    )
+    transferred_id = "0.0.0-W0-104"
+    _write_ticket_md(
+        tickets_dir / f"{transferred_id}.md", transferred_id,
+        closed_by="none", close_reason="transferred_to_issue",
+    )
+
+    for fname in (
+        f"{target_id}.md", f"{resolver_id}.md", f"{open_id}.md",
+        f"{superseded_id}.md", f"{transferred_id}.md",
+    ):
         _run_git(repo, "add", f"tickets/{fname}")
     _run_git(repo, "commit", "-m", "create tickets (placeholder)")
     return repo
@@ -179,7 +200,7 @@ class TestSetClosedByInvalidInput:
         rc = _call("0.0.0-W0-100", "thyme-python-developer")
 
         assert rc == 1
-        assert "合法 Ticket ID 格式" in capsys.readouterr().out
+        assert "closed_by 須為" in capsys.readouterr().out
         assert _read_closed_by(patch_paths_to_repo, "0.0.0-W0-100") == "some-agent"
 
     def test_rejects_nonexistent_ticket_id(self, patch_paths_to_repo, capsys):
@@ -194,3 +215,42 @@ class TestSetClosedByInvalidInput:
 
         assert rc == 1
         assert "僅適用 status=closed" in capsys.readouterr().out
+
+
+class TestSetClosedByReasonDomain:
+    """值域依 close_reason 限定，與 close、hook 共用驗證函式（3.1.0-W1-057）。"""
+
+    def test_accepts_none_for_default_reason(self, patch_paths_to_repo):
+        rc = _call("0.0.0-W0-100", "none")
+
+        assert rc == 0
+        assert _read_closed_by(patch_paths_to_repo, "0.0.0-W0-100") == "none"
+
+    def test_rejects_issue_ref_for_default_reason(self, patch_paths_to_repo, capsys):
+        rc = _call("0.0.0-W0-100", "tarrragon/claude#60")
+
+        assert rc == 1
+        assert "closed_by 須為" in capsys.readouterr().out
+        assert _read_closed_by(patch_paths_to_repo, "0.0.0-W0-100") == "some-agent"
+
+    def test_accepts_issue_ref_for_transferred(self, patch_paths_to_repo):
+        rc = _call("0.0.0-W0-104", "tarrragon/claude#60")
+
+        assert rc == 0
+        assert _read_closed_by(patch_paths_to_repo, "0.0.0-W0-104") == "tarrragon/claude#60"
+
+    @pytest.mark.parametrize("value", ["none", "0.0.0-W0-101"])
+    def test_rejects_non_issue_ref_for_transferred(self, patch_paths_to_repo, capsys, value):
+        rc = _call("0.0.0-W0-104", value)
+
+        assert rc == 1
+        assert "issue 參照" in capsys.readouterr().out
+        assert _read_closed_by(patch_paths_to_repo, "0.0.0-W0-104") == "none"
+
+    @pytest.mark.parametrize("value", ["none", "tarrragon/claude#60"])
+    def test_rejects_non_ticket_id_for_superseded(self, patch_paths_to_repo, capsys, value):
+        rc = _call("0.0.0-W0-103", value)
+
+        assert rc == 1
+        assert "closed_by 須為 Ticket ID" in capsys.readouterr().out
+        assert _read_closed_by(patch_paths_to_repo, "0.0.0-W0-103") == "0.0.0-W0-101"
