@@ -1120,15 +1120,28 @@ _WORKTREE_PREFIX = ".claude/worktrees/"
 _PROJECT_DIR_VAR = re.compile(r"^\$\{?CLAUDE_PROJECT_DIR\}?(?=/|$)")
 
 
+def _slash(path: str) -> str:
+    """判定鏈一律以正斜線比對：Windows 上 os.path 回傳反斜線路徑，
+    不換算時 root + "/" 前綴與以 "/" 切分的範圍判定全數不命中，範圍內寫入會被放行（#132）。
+    磁碟機代號統一大寫，避免 c: 與 C: 被當成不同根。POSIX 上原樣回傳。"""
+    if os.path.sep == "/":
+        return path
+    path = path.replace(os.path.sep, "/")
+    if len(path) > 1 and path[1] == ":":
+        path = path[0].upper() + path[1:]
+    return path
+
+
 def _find_checkout_root(cwd: str) -> str:
-    """自 cwd 向上找含 .git（目錄或檔案）的目錄，即所在 checkout 根目錄；找不到回傳 cwd。"""
+    """自 cwd 向上找含 .git（目錄或檔案）的目錄，即所在 checkout 根目錄；找不到回傳 cwd。
+    回傳值已經 _slash 換算。"""
     cur = os.path.realpath(cwd)
     while True:
         if os.path.exists(os.path.join(cur, ".git")):
-            return cur
+            return _slash(cur)
         parent = os.path.dirname(cur)
         if parent == cur:
-            return os.path.realpath(cwd)
+            return _slash(os.path.realpath(cwd))
         cur = parent
 
 
@@ -1182,7 +1195,8 @@ def _resolve_candidate(raw: str, cd: str, cwd: str, root: str) -> Optional[str]:
     含其他無法靜態判定的成分（其他變數、命令替換、~user）回傳 None。"""
     if not raw:
         return None
-    raw = _PROJECT_DIR_VAR.sub(root, raw)
+    # 以函式作替換值：root 為 Windows 路徑（含反斜線）時，字串替換值會被 re 解析為跳脫序列而拋例外（#132）
+    raw = _PROJECT_DIR_VAR.sub(lambda _m: root, raw)
     if _HOME_PREFIX.match(raw):
         home = os.environ.get("HOME")
         if not home:
@@ -1191,7 +1205,7 @@ def _resolve_candidate(raw: str, cd: str, cwd: str, root: str) -> Optional[str]:
     raw = _PWD_PREFIX.sub(lambda _m: os.path.join(cwd, cd), raw, count=1)
     if raw[0] == "~" or "$" in raw or "`" in raw:
         return None
-    return os.path.realpath(os.path.join(cwd, cd, raw))
+    return _slash(os.path.realpath(os.path.join(cwd, cd, raw)))
 
 
 def _checkout_root_or_none(cwd: str) -> Optional[str]:
@@ -1241,6 +1255,7 @@ def _find_scope_violation(command: str, cwd: str, logger,
             if owner is None or not _same_repo(owner, roots[0]):
                 skip(raw, "out_of_scope")
                 continue
+            owner = _slash(owner)
             rel = abs_path[len(owner) + 1:] if abs_path != owner else ""
         rel = _strip_worktree_prefix(rel)
         if not _scope_hit(rel):

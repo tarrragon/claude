@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.3.0 — 新增系統檔 `references/python-os-path-platform.md`（Python os.path 的平台實作），首條 OSP-1：在 POSIX 主機上以反斜線字串模擬 Windows 路徑，`os.path` 仍是 posixpath，只驗證到字串層；檢查方法為以 `ntpath` 取代被測模組的 `os.path`；來源 `TEST-LLM-003`。SKILL.md 系統索引表同步加列
+**Last Updated**: 2026-11-11
+
 **Version**: 1.2.0 — `references/git-index-worktree.md` 新增 GW-5：隔離派發 worktree 的鎖記錄派發方 session 的 pid，被讀成代理人的 pid（只看 pid 分不出代理人執行中或已交回），檢查方法改看分支 tip 與 reflog 建立點及是否已併入 main；SKILL.md 系統索引表該列補「worktree 鎖的 pid」
 **Last Updated**: 2026-11-10
 

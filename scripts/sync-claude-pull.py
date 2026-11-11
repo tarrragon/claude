@@ -2211,14 +2211,52 @@ def backup_claude_dir(claude_dir: Path, dest: Path) -> None:
 
 
 class SyncAborted(Exception):
-    """全量 overlay 確認未獲同意（回答非 y、EOF 或中斷）；main 據此非 0 結束。"""
+    """全量 overlay 確認未獲同意；main 據此非 0 結束。
 
-    def __init__(self, backup_dir: Path) -> None:
+    reason：DECLINED（互動終端機回答非 y、EOF 或中斷）或 NON_INTERACTIVE
+    （stdin 非 tty 且未帶 --confirm-overlay，無從詢問）。
+    """
+
+    DECLINED = "declined"
+    NON_INTERACTIVE = "non_interactive"
+
+    def __init__(self, backup_dir: Path, reason: str = DECLINED) -> None:
         super().__init__("full overlay 確認未獲同意")
         self.backup_dir = backup_dir
+        self.reason = reason
 
 
-def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
+def _confirm_full_overlay(backup_dir: Path, confirm_overlay: bool) -> None:
+    """全量 overlay 套用前的確認（2026-11）。
+
+    確認來源依序：明示旗標 → 互動終端機 y/N。stdin 非 tty 且未帶旗標時無從
+    詢問，直接中止並指出旗標，不把 EOF 當成回答 N（/sync-pull command 以
+    AskUserQuestion 取得確認後帶旗標執行，腳本自己的 input() 在該環境必讀到 EOF）。
+
+    參數:
+        backup_dir: 備份目錄，中止時隨 SyncAborted 帶回 main
+        confirm_overlay: 是否已帶 --confirm-overlay
+
+    例外:
+        SyncAborted: 未獲確認（reason 為 NON_INTERACTIVE 或 DECLINED）
+    """
+    if confirm_overlay:
+        print_color("  已帶 --confirm-overlay，套用全量 overlay。", "green")  # i18n-exempt
+        return
+    if not sys.stdin.isatty():
+        raise SyncAborted(backup_dir, reason=SyncAborted.NON_INTERACTIVE)
+    try:
+        answer = input("  Apply full overlay? [y/N] ").strip().lower()  # i18n-exempt
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    if answer != "y":
+        print_color("  Aborted.", "yellow")  # i18n-exempt
+        raise SyncAborted(backup_dir)
+
+
+def _sync_with_backup(
+    project_root: Path, temp_dir: Path, confirm_overlay: bool = False
+) -> Path:
     """執行備份和同步操作。
 
     備份當前配置，然後同步遠端更新至本地。
@@ -2227,6 +2265,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     參數:
         project_root: 專案根目錄
         temp_dir: 臨時目錄（含遠端 repo 內容）
+        confirm_overlay: 全量 overlay 是否已由呼叫端明示確認（--confirm-overlay）
 
     傳回:
         backup_dir: 備份目錄路徑
@@ -2335,13 +2374,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
 
         # 0.3.4-W2-006: overlay 有本地變更時需確認才執行
         if will_overwrite or will_delete:
-            try:
-                answer = input("  Apply full overlay? [y/N] ").strip().lower()  # i18n-exempt
-            except (EOFError, KeyboardInterrupt):
-                answer = ""
-            if answer != "y":
-                print_color("  Aborted.", "yellow")  # i18n-exempt
-                raise SyncAborted(backup_dir)
+            _confirm_full_overlay(backup_dir, confirm_overlay)
 
         file_count = sync_directory(temp_dir, claude_dir, preserve, project_root=project_root, skills_config=skills_config)
         print_color(f"   已更新 {file_count} 個檔案", "green")
@@ -2537,7 +2570,9 @@ def _validate_environment(project_root: Path) -> None:
     check_uncommitted_changes(project_root)
 
 
-def _clone_and_backup(project_root: Path) -> tuple[Path, Path]:
+def _clone_and_backup(
+    project_root: Path, confirm_overlay: bool = False
+) -> tuple[Path, Path]:
     """克隆遠端 repo 並執行備份和同步。
 
     建立臨時目錄、克隆遠端 repo、執行備份和同步操作。
@@ -2545,6 +2580,7 @@ def _clone_and_backup(project_root: Path) -> tuple[Path, Path]:
 
     參數:
         project_root: 專案根目錄路徑
+        confirm_overlay: 全量 overlay 是否已明示確認（--confirm-overlay）
 
     傳回:
         tuple[Path, Path]: (臨時目錄路徑, 備份目錄路徑)
@@ -2555,7 +2591,7 @@ def _clone_and_backup(project_root: Path) -> tuple[Path, Path]:
     print_color("從獨立 repo 拉取更新...", "yellow")
     temp_dir = Path(tempfile.mkdtemp())
     clone_repo(temp_dir)
-    backup_dir = _sync_with_backup(project_root, temp_dir)
+    backup_dir = _sync_with_backup(project_root, temp_dir, confirm_overlay)
     return temp_dir, backup_dir
 
 
@@ -3432,6 +3468,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="衝突解完後確認：無殘留標記才把 pending base 升為 base（不 clone、不同步）",  # i18n-exempt
     )
+    parser.add_argument(
+        "--confirm-overlay",
+        action="store_true",
+        help="全量 overlay 已在呼叫端確認，套用時不再以 y/N 詢問（非互動環境必帶）",  # i18n-exempt
+    )
     args = parser.parse_args(argv)
     if args.resolve_done and (args.audit or args.bump is not _BUMP_NOT_SET):
         parser.error("--resolve-done 不可與 --audit 或 --bump 併用")  # i18n-exempt
@@ -3490,15 +3531,22 @@ def main() -> None:
     warn_pending_base(project_root / ".claude")
 
     try:
-        temp_dir, backup_dir = _clone_and_backup(project_root)
+        temp_dir, backup_dir = _clone_and_backup(
+            project_root, confirm_overlay=args.confirm_overlay
+        )
         _complete_sync(temp_dir, project_root, backup_dir)
     except subprocess.TimeoutExpired:
         print_color(f"git clone 超時（{GIT_CLONE_TIMEOUT_SECONDS} 秒），請檢查網路連線", "red")  # i18n-exempt
         sys.exit(1)
     except SyncAborted as aborted:
-        print_color("拉取已中止：全量 overlay 未獲確認（回答非 y，或 stdin 為 EOF）。", "red")  # i18n-exempt
-        print_color("未更新 .claude、未寫入基準點、未執行模板更新。", "red")  # i18n-exempt
-        print_color("處置：在可互動的終端機重跑並回答 y，或先建立基準點後再拉取。", "red")  # i18n-exempt
+        if aborted.reason == SyncAborted.NON_INTERACTIVE:
+            print_color("拉取已中止：全量 overlay 需要確認，但 stdin 不是互動終端機，無法詢問 y/N。", "red")  # i18n-exempt
+            print_color("未更新 .claude、未寫入基準點、未執行模板更新。", "red")  # i18n-exempt
+            print_color("處置：確認要套用時加上 --confirm-overlay 重跑；或在可互動的終端機重跑並回答 y。", "red")  # i18n-exempt
+        else:
+            print_color("拉取已中止：全量 overlay 未獲確認（回答非 y，或 stdin 為 EOF）。", "red")  # i18n-exempt
+            print_color("未更新 .claude、未寫入基準點、未執行模板更新。", "red")  # i18n-exempt
+            print_color("處置：在可互動的終端機重跑並回答 y，或先建立基準點後再拉取。", "red")  # i18n-exempt
         print_color(f"備份位置: {aborted.backup_dir}", "yellow")  # i18n-exempt
         sys.exit(1)
 

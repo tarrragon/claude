@@ -67,6 +67,8 @@ def test_full_overlay_deletion_uses_alert_not_routine_wording(
     (claude / "rules" / "stale.txt").write_text("stale\n", encoding="utf-8")
     # 不寫 .sync-state.json → 無 base SHA → 走全量 overlay（should_use_full_overlay）
 
+    # pytest 下 stdin 非 tty：明示模擬互動終端機，確認提示才會走 input()
+    monkeypatch.setattr(pull.sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr("builtins.input", lambda *_a, **_k: "y")
 
     pull._sync_with_backup(project_root, upstream)

@@ -129,7 +129,7 @@ rm -rf .claude/.github
    ```
 
    接著 `git add .gitignore .claude CLAUDE.md` 後 commit，訊息建議用 `chore(sync): install .claude <版號>`（版號取 `.claude/VERSION`）。換機器時判斷某個檔是不是框架裝進來的，會以這筆提交辨認（見〈在另一台機器接手〉第 4 步）。
-6. **建立同步基準點**：到自己的終端機執行 `python3 .claude/scripts/sync-claude-pull.py`，記錄同步基準點（`.claude/.sync-state.json`）。這次拉取沒有基準點，拉取中可能出現確認詢問；在 Claude Code 內執行時（包括 `/sync-pull`）腳本讀不到你的輸入，無法回答，所以在終端機執行；出現 `Apply full overlay? [y/N]` 時，照〈更新到新版本〉核對 dry-run 清單再回答。執行後以 `grep -q last_synced_base_sha .claude/.sync-state.json 2>/dev/null && echo Y || echo N` 確認。有了基準點，之後的更新才會做三方合併，保留你本地的修改；沒有基準點時，更新會以上游內容整份覆蓋 `.claude/`（本機設定與 `sync-preserve.yaml` 列出的檔案除外），本地修改會被蓋掉。剛安裝、尚未做任何本地修改時，最適合建立基準點。
+6. **建立同步基準點**：在 Claude Code 內執行 `/sync-pull`，或到自己的終端機執行 `python3 .claude/scripts/sync-claude-pull.py`，記錄同步基準點（`.claude/.sync-state.json`）。這次拉取沒有基準點，會走全量 overlay，拉取中可能出現確認：`/sync-pull` 先不帶旗標執行取得 dry-run 清單，把清單附在詢問裡，你同意後才帶 `--confirm-overlay` 重跑；終端機則在印出清單後詢問 `Apply full overlay? [y/N]`。兩條路都照〈更新到新版本〉核對 dry-run 清單再回答。執行後以 `grep -q last_synced_base_sha .claude/.sync-state.json 2>/dev/null && echo Y || echo N` 確認。有了基準點，之後的更新才會做三方合併，保留你本地的修改；沒有基準點時，更新會以上游內容整份覆蓋 `.claude/`（本機設定與 `sync-preserve.yaml` 列出的檔案除外），本地修改會被蓋掉。剛安裝、尚未做任何本地修改時，最適合建立基準點。
 7. **放回自訂的 command 與 agent**：有備份時，做三個動作：
    - 把自訂的 command、agent 放回 `.claude/commands/`、`.claude/agents/`，與框架同名時改名。
    - 把每個檔案相對於 `.claude/` 的路徑列進 `.claude/sync-preserve.yaml`：
@@ -189,17 +189,18 @@ rm -rf .claude/.github
 grep -q last_synced_base_sha .claude/.sync-state.json 2>/dev/null && echo Y || echo N   # Y 是有基準點，N 是沒有
 ```
 
-沒有基準點的情況（舊版安裝、另一台機器、新 clone）下，拉取會以上游內容整份覆蓋 `.claude/`：不在上游、也沒列進 `sync-preserve.yaml` 的本地檔案，未追蹤的被刪除，已追蹤的被移到 `.sync-conflicts/`。這種情況先備好 `sync-preserve.yaml`（做法見〈在另一台機器接手〉），再到自己的終端機直接執行腳本。腳本先印 dry-run 清單，再詢問 `Apply full overlay? [y/N]`。清單裡的 `- delete:`（未追蹤，會直接刪除）或 `-> conflict:`（已追蹤，會轉存到 `.sync-conflicts/`）出現自己建的檔時，回答 N，把該檔列進 `sync-preserve.yaml` 後重跑。回答 N 之後發生什麼，取決於你本地腳本的版本（拉取時執行的是目前 `.claude/` 裡的腳本，版本看 `.claude/VERSION`）：3.2.0 起中止且不改任何檔案；3.1.0 以前收尾照跑，可能刪除 `.claude/.github/` 而留下未提交的刪除，這時重跑會被拒，先執行 `git restore -- .claude/.github` 再重跑。沒有固定版本（`pinned_version`）而不想連帶升級時，用下面的 `--bump v<版號>` 先固定在目前的版本，版號取 `.claude/VERSION`；之後要升級再以不帶版號的 `--bump` 解除固定。
+沒有基準點的情況（舊版安裝、另一台機器、新 clone）下，拉取會以上游內容整份覆蓋 `.claude/`：不在上游、也沒列進 `sync-preserve.yaml` 的本地檔案，未追蹤的被刪除，已追蹤的被移到 `.sync-conflicts/`。這種情況先備好 `sync-preserve.yaml`（做法見〈在另一台機器接手〉），再執行 `/sync-pull` 或到自己的終端機直接執行腳本。腳本先印 dry-run 清單，再詢問 `Apply full overlay? [y/N]`；`/sync-pull` 則把清單附在 AskUserQuestion 裡詢問，回答方式相同。清單裡的 `- delete:`（未追蹤，會直接刪除）或 `-> conflict:`（已追蹤，會轉存到 `.sync-conflicts/`）出現自己建的檔時，回答 N，把該檔列進 `sync-preserve.yaml` 後重跑。回答 N 之後發生什麼，取決於你本地腳本的版本（拉取時執行的是目前 `.claude/` 裡的腳本，版本看 `.claude/VERSION`）：3.2.0 起中止且不改任何檔案；3.1.0 以前收尾照跑，可能刪除 `.claude/.github/` 而留下未提交的刪除，這時重跑會被拒，先執行 `git restore -- .claude/.github` 再重跑。沒有固定版本（`pinned_version`）而不想連帶升級時，用下面的 `--bump v<版號>` 先固定在目前的版本，版號取 `.claude/VERSION`；之後要升級再以不帶版號的 `--bump` 解除固定。
 
 ```bash
-/sync-pull                                                   # 在 Claude Code 內執行；沒有基準點時不要用，見下
-python3 .claude/scripts/sync-claude-pull.py                  # 在自己的終端機直接執行；沒有基準點時用這一行
+/sync-pull                                                   # 在 Claude Code 內執行；全量 overlay 時先附清單詢問再套用
+python3 .claude/scripts/sync-claude-pull.py                  # 在自己的終端機直接執行；全量 overlay 時印清單後詢問 y/N
 python3 .claude/scripts/sync-claude-pull.py --bump v<版號>   # 固定在某一版
 python3 .claude/scripts/sync-claude-pull.py --bump           # 解除固定，回到最新版
 ```
 
-- `/sync-pull` 在 Claude Code 內執行腳本，腳本讀不到你的輸入，無法回答確認詢問，等同回答 N。沒有基準點而有本地差異時，腳本中止拉取、不寫入基準點；其餘行為依本地腳本的版本（`.claude/VERSION`）而定：
-  - 3.2.0 起：以結束碼 1 結束，印出中止原因與處置，不印「成功拉取」，不跑收尾。
+- `/sync-pull` 在 Claude Code 內執行腳本，腳本讀不到你的輸入。沒有基準點而有本地差異時的行為依本地 `.claude/` 的版本（`.claude/VERSION`）而定：
+  - 3.2.1 起：`/sync-pull` 先不帶旗標執行，腳本印出 dry-run 清單後以結束碼 1 中止、不改任何檔案；清單附在 AskUserQuestion 裡詢問，你同意後才帶 `--confirm-overlay` 重跑套用。
+  - 3.2.0：確認詢問無法回答，等同回答 N。以結束碼 1 結束，印出中止原因與處置，不印「成功拉取」，不跑收尾、不寫入基準點。
   - 3.1.0 以前：仍印「成功拉取」、結束碼 0。收尾照跑，可能已刪除 `.claude/.github/`（見〈首次安裝〉），留下未提交的刪除。先 `git restore -- .claude/.github`（或提交），再到終端機重跑；工作區有未提交的刪除時，下一次更新會被拒絕。
 
 `tarrragon/claude` 只接受發版推送，每次推送對應一個 `v<版號>` tag。因此沒有固定版本時，拉到的就是最新發版的版本。固定了版本時（`.sync-state.json` 的 `pinned_version` 是某個版號，例如以〈在另一台機器接手〉第 4 步的做法建立基準點之後），拉取停在該版，輸出會印「版本 pin：<版號> → 對齊上游 <sha>（非最新 HEAD）」；要升級時以不帶版號的 `--bump` 解除固定。

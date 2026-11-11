@@ -2,7 +2,7 @@
 name: system-misjudgment
 description: "以系統為索引的 AI 誤判檢查庫：記錄除錯、實機驗證時對系統行為的常見錯誤判讀、實際機制與可執行檢查方法。Use when: 除錯、實機驗證、觀測不到事件或 log、懷疑系統行為、否定結果（零事件、沒有 log、分支還在）要當證據前、誤判後要記錄。"
 metadata:
-  version: 1.2.0
+  version: 1.3.0
 ---
 
 # system-misjudgment：依「正在面對的系統」查已知誤判與檢查方法
@@ -27,6 +27,7 @@ error-patterns 依類別分目錄，查不到同一系統上的陷阱。本 skil
 | 工具輸出與 AI 自身記錄 | `references/tool-output-and-records.md` | 輸出夾旁白、記憶中的 commit、工作區觀測當持久結論 |
 | Riverpod provider 接線 | `references/riverpod-provider-wiring.md` | 測試綠但啟動報 provider 錯誤 |
 | Flutter 測試 binding（幀與時鐘） | `references/flutter-test-binding.md` | integration_test finder 找不到元件、時紅時綠、畫面停在 loading、疑似元件改名 |
+| Python os.path 平台實作（posixpath／ntpath） | `references/python-os-path-platform.md` | 在 macOS／Linux 模擬 Windows 路徑、反斜線、磁碟機代號、Windows 上守衛放行 |
 
 ## 通則
 

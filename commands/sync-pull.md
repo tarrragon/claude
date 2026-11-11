@@ -20,33 +20,45 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
    - 檢查 `.claude` 是否有未提交的變更
    - 如有變更，詢問用戶是否先提交或暫存
 
-2. **覆蓋確認（強制使用 AskUserQuestion）**
-   - 在執行腳本前，必須使用 AskUserQuestion 工具詢問用戶確認
-   - 顯示即將被覆蓋的內容，讓用戶知情同意
+2. **先不帶旗標執行一次**
+   - 執行 `python3 ./.claude/scripts/sync-claude-pull.py`（不帶 `--confirm-overlay`），保留完整 stdout
+   - 依輸出分流：
+
+     | 輸出特徵 | 意義 | 下一步 |
+     |---------|------|--------|
+     | 結束碼 0，且有「成功拉取 .claude 更新」 | 三方合併，或全量 overlay 但沒有覆蓋或刪除；已跑完 | 跳到步驟 4，不詢問 |
+     | 結束碼 1，且 stdout 有一行以 `拉取已中止：全量 overlay 需要確認，但 stdin 不是互動終端機` 開頭 | 全量 overlay 等待確認；`.claude/` 未改動、未寫基準點 | 進入步驟 3 |
+     | 其他非 0 結束碼，或結束碼 1 但沒有上一列的那一行 | 其他原因中止（未提交變更、clone 失敗、衝突殘留等） | 依輸出處理，不進入步驟 3，不帶旗標重跑 |
+
+   - 只看結束碼 1 不夠：其他中止原因的結束碼也是 1。判斷依據是上表第二列的那一行，腳本只在「需要確認但無法詢問」時印出這句（輸出帶 ANSI 顏色碼，比對時以子字串比對）
+
+3. **附清單確認（強制使用 AskUserQuestion）**
+   - 從步驟 2 的 stdout 取出 `[dry-run]` 開頭的各段與其下的條目（`~` 將覆蓋、`-> conflict:` 轉存 `.sync-conflicts/`、`- delete:` 直接刪除、`x skip-resurrection:` 跳過復活），放進問題
+   - 每段最多列 50 條；段落標題的數字大於列出的條目數時，在問題中註明「另有 N 條未列出」
    - AskUserQuestion 問題格式：
      ```
-     question: "即將從 tarrragon/claude.git 拉取更新。以下內容將被覆蓋：
-     - .claude/ 目錄所有內容（包含 hooks、agents、methodologies、rules、project-templates 等）
-
-     根目錄 CLAUDE.md 不受影響。腳本會自動備份到 /tmp 臨時目錄。
-     確認繼續？"
+     question: "本次拉取走全量 overlay（沒有基準點，或基準點不可達），會以上游內容整份覆蓋 .claude/。
+     將覆蓋：<~ 條目>
+     將轉存 .sync-conflicts/：<-> conflict 條目>
+     將刪除：<- delete 條目>
+     根目錄 CLAUDE.md 與 sync-preserve.yaml 列出的檔案不受影響。腳本會自動備份到 /tmp 臨時目錄。
+     清單中有自己建的檔時，選取消，把該檔列進 .claude/sync-preserve.yaml 後重跑 /sync-pull。確認套用？"
 
      options:
-     - 確認拉取（腳本自動備份到 /tmp）
-     - 先建立穩定備份再拉取（備份到 .claude-backup-{date}）
+     - 確認套用（腳本自動備份到 /tmp）
+     - 先建立穩定備份再套用（備份到 .claude-backup-{date}）
      - 取消
      ```
-
-3. **根據用戶選擇執行**
-   - **確認拉取**：直接執行 `python3 ./.claude/scripts/sync-claude-pull.py`
-   - **先備份再拉取**：先執行以下備份指令，再執行拉取腳本
-     ```bash
-     BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
-     cp -r .claude "$BACKUP_DIR/"
-     echo "備份已建立：$BACKUP_DIR"
-     ```
-     然後執行：`python3 ./.claude/scripts/sync-claude-pull.py`
-   - **取消**：中止操作，不執行任何動作
+   - 根據用戶選擇執行：
+     - **確認套用**：執行 `python3 ./.claude/scripts/sync-claude-pull.py --confirm-overlay`
+     - **先建立穩定備份再套用**：先執行以下備份指令，再執行 `python3 ./.claude/scripts/sync-claude-pull.py --confirm-overlay`
+       ```bash
+       BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
+       cp -r .claude "$BACKUP_DIR/"
+       echo "備份已建立：$BACKUP_DIR"
+       ```
+     - **取消**：不再執行腳本。步驟 2 那次執行沒有改動 `.claude/`
+   - 帶旗標重跑會重新 clone，印出 dry-run 清單後直接套用。重跑印出的清單和用戶確認的清單不同時（上游在兩次執行之間有新提交），套用已經發生：把多出的條目和備份位置告知用戶
 
 4. **顯示備份位置**
    - 腳本會輸出備份目錄位置
@@ -236,7 +248,12 @@ cp -r /tmp/備份目錄/.claude .
 
 ## 注意事項
 
-- 全量 overlay（無基準點或基準點不可達）且預覽有覆蓋或刪除時，腳本以 `input()` 詢問 `Apply full overlay? [y/N]`；回答非 y 或 stdin 為 EOF（如 Claude Code Bash 工具內）即中止：印出中止原因、結束碼 1、不印「成功拉取」、不更新 `.claude/`、不寫基準點。處置：在可互動的終端機重跑並回答 y，或先建立基準點後再拉取
+- 全量 overlay（無基準點或基準點不可達）且預覽有覆蓋或刪除時需要確認，確認來源依序為：
+  - 帶 `--confirm-overlay`：不詢問，直接套用（本 command 只在步驟 3 用戶看過清單並同意後才帶）
+  - 未帶旗標、stdin 不是互動終端機（如 Claude Code Bash 工具內）：印出 dry-run 清單後不詢問，直接中止，訊息指出應加 `--confirm-overlay`（本 command 步驟 2 即利用這一點取得清單）
+  - 未帶旗標、在互動終端機：印出 dry-run 清單後以 `input()` 詢問 `Apply full overlay? [y/N]`，回答非 y 即中止
+
+  中止時一律印出中止原因、結束碼 1、不印「成功拉取」、不更新 `.claude/`、不寫基準點、不執行 hook 自動登記
 - 自動備份當前 .claude 配置到臨時目錄
 - 拉取會完全替換本地 .claude 檔案
 - 不會覆蓋根目錄 CLAUDE.md（專案特定配置）

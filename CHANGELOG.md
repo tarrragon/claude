@@ -1,3 +1,28 @@
+## [3.2.1] - 2026-11-11
+
+### Summary
+3.2.0 承諾未達成的修補：Windows 上兩支 PreToolUse hook 失效（tarrragon/claude#132），以及 `/sync-pull` 在非互動環境的首次拉取必定中止（tarrragon/claude#131 在 3.2.0 未修的一半）。
+
+### 對 consumer 的影響
+- **Windows 上的 bash-write-boundary-guard 與 branch-verify**：專案路徑含反斜線時，bash-write-boundary-guard 不再拋 `re.PatternError` 而擋下所有含寫入目標的 Bash 命令；判定鏈改以正斜線比對、磁碟機代號統一大寫，範圍內（`lib/`、`test/`、`integration_test/`、`.claude/`）的 Bash 寫入在 Windows 上照常被擋。branch-verify 在保護分支上對 `.claude/`、`docs/` 等路徑的豁免，在 Windows 上恢復成立。POSIX 上兩支 hook 的行為不變。曾在本地自行修補這兩支 hook 的 Windows consumer，拉取時以上游版本為準。
+- **`/sync-pull` 的全量 overlay 改為兩段式確認**：command 先不帶旗標執行腳本；需要確認時，腳本印出 dry-run 清單（將覆蓋、轉存、刪除）後以結束碼 1 中止，command 以 AskUserQuestion 附清單詢問，同意後帶 `--confirm-overlay` 重跑。三方合併路徑一次跑完，不詢問。
+- **`sync-claude-pull.py` 新增 `--confirm-overlay`**：stdin 不是互動終端機且未帶此旗標時，全量 overlay 不再呼叫 `input()`，直接以結束碼 1 中止，訊息以「拉取已中止：全量 overlay 需要確認，但 stdin 不是互動終端機」開頭並指出旗標。在 CI 或包裝腳本執行首次拉取時，核對清單後加 `--confirm-overlay` 重跑；以 3.2.0 中止訊息字面比對的呼叫端需改用新字面。互動終端機未帶旗標時，維持 `Apply full overlay? [y/N]`。
+
+### Fixed
+- `bash-write-boundary-guard-hook.py`：`_resolve_candidate` 以函式作 `re.sub` 的替換值；判定鏈的三個路徑來源（checkout 根、候選路徑、所屬 checkout）統一為正斜線，磁碟機代號改大寫（tarrragon/claude#132）。
+- `branch-verify-hook.py`：`is_exempt_path_on_protected_branch` 比對前統一路徑分隔符，磁碟機路徑折疊代號大小寫並視為絕對路徑（tarrragon/claude#132）。
+- `sync-claude-pull.py` 與 `/sync-pull`：全量 overlay 的確認可由 `--confirm-overlay` 傳給腳本，確認發生在用戶看到 dry-run 清單之後；`.claude/README.md` 對 `/sync-pull` 行為的描述同步改為兩段式（tarrragon/claude#131）。
+
+### Added
+- error-pattern `TEST-LLM-003`：在 POSIX 主機上以反斜線字串模擬 Windows 路徑，只驗證到字串層；要以 `ntpath` 取代被測模組的 `os.path`，才會重現 Windows 上的判定鏈。
+- system-misjudgment 1.3.0：新增系統檔 `references/python-os-path-platform.md`，系統索引表同步加列。
+
+### Known issues
+- `/sync-pull` 的兩段式確認：兩次執行之間上游若有新提交（發佈庫只在發版時推送），套用的清單可能多於確認時看到的；dry-run 清單每段只列 50 條，超過時註明未列出的數量。排入 3.3.0 評估。
+- 其他 hook 的 Windows 路徑同型寫法尚未修正：`path_permission` 與 `ticket-file-access-guard-hook.py` 未折疊磁碟機代號大小寫；`agent-dispatch-validation-hook.py` 以未正規化的路徑比對；branch-verify 的前綴比對沒有目錄邊界（POSIX 亦然，本版維持原行為）。排入 3.3.0 評估。
+
+---
+
 ## [3.2.0] - 2026-11-11
 
 ### Summary

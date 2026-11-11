@@ -182,6 +182,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | TEST-GPD-1010 | 語法層守衛以單一字面子字串偵測一個語法構造，只擋得住撰寫者想到的那一種寫法，最常見的不帶修飾寫法往往正好漏過 | 中 | 0.6.0 |
 | TEST-LLM-001 | integration_test 等待真實平台 I/O 時 pumpAndSettle 提前返回，畫面停在 loading，後續 finder 時紅時綠 | 中 | 3.1.0 |
 | TEST-LLM-002 | 測試呼叫會 chdir 的函式卻未以 monkeypatch.chdir 隔離，cwd 外洩到其他測試檔，各檔單獨跑全綠、全套件依收集順序紅燈 | 中 | 3.1.0 |
+| TEST-LLM-003 | 在 POSIX 主機上以反斜線字串模擬 Windows 路徑，驗證只涵蓋字串層，下游以 "/" 比對的判定在 Windows 上靜默放行 | 高 | 3.2.1 |
 
 ### 文件 (DOC)
 

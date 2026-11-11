@@ -121,6 +121,21 @@ class TestParseArgsBump:
         assert args.audit is True
 
 
+class TestParseArgsConfirmOverlay:
+    """3.2.1-W1-002：全量 overlay 明示確認旗標。"""
+
+    def test_default_false(self):
+        assert pull.parse_args([]).confirm_overlay is False
+
+    def test_flag_sets_true(self):
+        assert pull.parse_args(["--confirm-overlay"]).confirm_overlay is True
+
+    def test_help_lists_flag(self, capsys):
+        with pytest.raises(SystemExit):
+            pull.parse_args(["--help"])
+        assert "--confirm-overlay" in capsys.readouterr().out
+
+
 class TestParseArgsReturnType:
     def test_returns_namespace(self):
         assert isinstance(pull.parse_args([]), argparse.Namespace)
@@ -136,7 +151,7 @@ class TestMainDoesNotEnterSyncOnHelpOrUnknownFlag:
         """acceptance 1：--help 不應進入 clone（main 應在 parse_args 階段即中止）。"""
         called = {"clone": False}
 
-        def _fake_clone_backup(_root):
+        def _fake_clone_backup(_root, **_kw):
             called["clone"] = True
             raise AssertionError("--help 不應觸發同步主流程")
 
@@ -153,7 +168,7 @@ class TestMainDoesNotEnterSyncOnHelpOrUnknownFlag:
         """acceptance 2：未知旗標不應進入 clone。"""
         called = {"clone": False}
 
-        def _fake_clone_backup(_root):
+        def _fake_clone_backup(_root, **_kw):
             called["clone"] = True
             raise AssertionError("未知旗標不應觸發同步主流程")
 
@@ -176,7 +191,7 @@ class TestMainBumpRoutesCorrectly:
             recorded["claude_dir"] = claude_dir
             recorded["version"] = version
 
-        def _fake_clone_backup(_root):
+        def _fake_clone_backup(_root, **_kw):
             recorded["sync_entered"] = True
             raise pull.subprocess.TimeoutExpired(cmd="git", timeout=1)
 
@@ -200,7 +215,7 @@ class TestMainBumpRoutesCorrectly:
         def _fake_update_pinned(claude_dir, version):
             recorded["version"] = version
 
-        def _fake_clone_backup(_root):
+        def _fake_clone_backup(_root, **_kw):
             raise pull.subprocess.TimeoutExpired(cmd="git", timeout=1)
 
         monkeypatch.setattr(pull, "find_project_root", lambda: tmp_path)
@@ -224,7 +239,7 @@ class TestMainBumpRoutesCorrectly:
         def _fake_update_pinned(claude_dir, version):
             called["update"] = True
 
-        def _fake_clone_backup(_root):
+        def _fake_clone_backup(_root, **_kw):
             raise pull.subprocess.TimeoutExpired(cmd="git", timeout=1)
 
         monkeypatch.setattr(pull, "find_project_root", lambda: tmp_path)

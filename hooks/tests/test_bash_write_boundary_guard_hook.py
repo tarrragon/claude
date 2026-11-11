@@ -14,6 +14,7 @@ main-thread-edit-restriction-hook.py 僅註冊於 Edit/Write/MultiEdit，可被 
 
 import importlib.util
 import logging
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -1488,3 +1489,77 @@ class TestPythonArgvIdioms:
     def test_bool_index_outside_scope_allowed(self, checkout, logger):
         cmd = "python3 - x /tmp/a <<'EOF'\nimport sys\nopen(sys.argv[True], 'w').write('x')\nEOF"
         assert _scope(cmd, checkout, logger) is None
+
+
+# ---------- Windows 專案根（3.2.1-W1-001，#132） ----------
+
+class TestWindowsProjectRoot:
+    """專案根含反斜線時，CLAUDE_PROJECT_DIR 展開不得把根目錄當 re 替換樣板解析。"""
+
+    _WIN_ROOT = "D:\\side\\termchat"
+
+    def test_resolve_candidate_does_not_raise_on_backslash_root(self, tmp_path):
+        result = hook_module._resolve_candidate(
+            "$CLAUDE_PROJECT_DIR/lib/x.py", "", str(tmp_path), self._WIN_ROOT)
+        assert result is not None
+
+    def test_resolve_candidate_keeps_backslash_root_verbatim(self, tmp_path):
+        result = hook_module._resolve_candidate(
+            "${CLAUDE_PROJECT_DIR}/lib/x.py", "", str(tmp_path), self._WIN_ROOT)
+        assert result.endswith(self._WIN_ROOT + "/lib/x.py")
+
+    def test_resolve_candidate_posix_root_unchanged(self, tmp_path):
+        root = str(tmp_path / "proj")
+        result = hook_module._resolve_candidate(
+            "$CLAUDE_PROJECT_DIR/lib/x.py", "", str(tmp_path), root)
+        assert result == os.path.realpath(os.path.join(root, "lib/x.py"))
+
+
+class TestWindowsPathSemantics:
+    """以 ntpath 取代 guard 模組的 os.path，重現 Windows 上 realpath 回傳反斜線時的判定鏈。
+
+    修正前：範圍內寫入經 _relative_to_roots（以 root + "/" 比對）不命中，
+    落到 out_of_scope 而放行。修正後同一輸入須被擋下。
+    """
+
+    _ROOT = "C:\\proj"
+    _WT = "C:\\proj\\.claude\\worktrees\\t1"
+    _GIT_DIRS = {"C:\\proj\\.git", "C:\\proj\\.claude\\worktrees\\t1\\.git"}
+
+    @pytest.fixture
+    def win_os(self, monkeypatch):
+        import ntpath
+        import types
+
+        git_dirs = {p.lower() for p in self._GIT_DIRS}
+        fake_path = types.SimpleNamespace(**{
+            name: getattr(ntpath, name) for name in dir(ntpath) if not name.startswith("__")
+        })
+        fake_path.exists = lambda p: ntpath.normpath(p).lower() in git_dirs
+        fake_path.isdir = lambda p: False
+
+        class _OsProxy:
+            path = fake_path
+
+            def __getattr__(self, name):
+                return getattr(os, name)
+
+        monkeypatch.setattr(hook_module, "os", _OsProxy())
+
+    @pytest.mark.parametrize("cwd,cmd,expected", [
+        (_ROOT, "echo x > lib/a.py", "lib/a.py"),
+        (_ROOT, "echo x > .claude/hooks/a.py", ".claude/hooks/a.py"),
+        (_ROOT, "echo x > c:/proj/test/a_test.py", "test/a_test.py"),
+        (_WT, "echo x > lib/a.py", "lib/a.py"),
+    ])
+    def test_in_scope_write_blocked(self, win_os, logger, cwd, cmd, expected):
+        assert hook_module._find_scope_violation(cmd, cwd, logger) == expected
+
+    @pytest.mark.parametrize("cmd", [
+        "echo x > out.txt",
+        "echo x > docs/a.md",
+        "echo x > .claude/tool-results/a.txt",
+        "echo x > D:/other/lib/a.py",
+    ])
+    def test_out_of_scope_write_allowed(self, win_os, logger, cmd):
+        assert hook_module._find_scope_violation(cmd, self._ROOT, logger) is None

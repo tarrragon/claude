@@ -99,6 +99,24 @@ def _is_same_repo(target_repo: Optional[str], host_root: str) -> bool:
     return os.path.realpath(target_repo) == os.path.realpath(host_root)
 
 
+def _is_drive_path(path: str) -> bool:
+    """已統一為正斜線的 Windows 磁碟機絕對路徑（如 C:/...）。"""
+    return len(path) > 2 and path[0].isalpha() and path[1:3] == ":/"
+
+
+def _strip_root(path: str, root: str) -> "str | None":
+    """
+    path 位於 root 之下時回傳去掉 root 前綴與開頭斜線的相對路徑，否則回傳 None。
+
+    兩者須先統一為正斜線。磁碟機路徑的代號大小寫不定（Claude Code 與 git 回傳可能不同），
+    比對前折疊大小寫；POSIX 路徑維持逐字比對，前綴判定與原 startswith 語意相同。
+    """
+    fold = str.lower if _is_drive_path(path) else (lambda p: p)
+    if not fold(path).startswith(fold(root)):
+        return None
+    return path[len(root):].lstrip("/")
+
+
 def is_exempt_path_on_protected_branch(
     file_path: str,
     cwd: "str | None" = None,
@@ -125,11 +143,19 @@ def is_exempt_path_on_protected_branch(
         host_root = str(get_project_root(cwd=cwd))
     same_repo = _is_same_repo(target_repo, host_root)
 
+    # Windows：統一路徑分隔符，否則後續 startswith / lstrip("/") 前綴比對全數失效（#132）
+    file_path = file_path.replace("\\", "/")
+    host_root = host_root.replace("\\", "/")
+    if target_repo:
+        target_repo = target_repo.replace("\\", "/")
+    is_absolute = file_path.startswith("/") or _is_drive_path(file_path)
+
     if not same_repo:
         # 跨專案：使用通用豁免清單（不套用 .claude/、docs/ 等本專案約定）
         # 計算相對於目標 repo 的路徑
-        if target_repo and file_path.startswith(target_repo):
-            normalized = file_path[len(target_repo):].lstrip("/")
+        relative = _strip_root(file_path, target_repo) if target_repo else None
+        if relative is not None:
+            normalized = relative
         else:
             normalized = file_path.lstrip("/") if file_path.startswith("/") else file_path
         return normalized in GENERIC_EXEMPT_EXACT
@@ -150,14 +176,13 @@ def is_exempt_path_on_protected_branch(
         ".gitattributes",  # repo 層級檔案屬性（W10-054.1.1）
     ]
 
-    # 非專案檔案（不在 host_root 內）一律豁免（保留原行為）
-    if file_path.startswith("/") and not file_path.startswith(host_root):
+    relative = _strip_root(file_path, host_root)
+
+    # 非專案檔案（不在 host_root 內）一律豁免（保留原行為；Windows 磁碟機路徑同為絕對路徑）
+    if is_absolute and relative is None:
         return True
 
-    if file_path.startswith(host_root):
-        normalized = file_path[len(host_root):].lstrip("/")
-    else:
-        normalized = file_path.lstrip("/")
+    normalized = relative if relative is not None else file_path.lstrip("/")
 
     for prefix in exempt_prefixes:
         if normalized.startswith(prefix):
