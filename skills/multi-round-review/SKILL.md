@@ -4,7 +4,7 @@ description: "寫多篇章節後做多輪 agent reviewer audit 的標準流程�
 license: MIT
 metadata:
   portable: true
-  version: 2.34.0
+  version: 2.37.0
   category: writing-methodology
 ---
 
@@ -29,8 +29,8 @@ metadata:
 
 1. **每輪用不同 frame**（per [multi-pass frame 顆粒度盲點](references/principles/multi-pass-frame-granularity.md)，那裡分 design gap 與 execution gap）：同 reviewer / 同 frame 跑多輪 catch 高度相同。多輪價值在 frame 切換、不在重複加深。
 2. **跨輪 finding 互不重疊**：若新一輪 finding 跟上一輪重疊、代表 frame 沒換、再跑無增益。
-3. **停止訊號是 frame 涵蓋、不是 finding 遞減**（per [跨輪 review 停止訊號](references/principles/cross-round-stopping-signal.md)，那裡給七軸的清單）：多輪 review 通常 finding 不遞減、Round 3 可能比 Round 1 / 2 多。停止判讀看七軸有沒有都動過，程序在 `references/planning-and-stopping.md`〈Round N 規劃判讀〉；「想不出新 frame」量的是判斷者、不作必要條件。
-4. **至少三輪是硬底線**（per [多輪審查至少三輪](references/principles/minimum-three-rounds.md)，那裡有逐輪的實測數字）：Round 3 的 steelman / outbound frame 覆蓋 Round 1-2 結構性盲區（漏選項、反向引用、搜尋落點、知識卡缺口），歷次實測每輪都找出 10+ 項。Round 1-2 從「已寫的內容」裡找錯，Round 3 從「沒寫的東西」出發——這類問題在前兩輪的 frame 下結構性不可見。「要不要跑 Round 3」不是判讀問題、是執行紀律。停止判讀從 Round 3 結束後才開始。
+3. **停止訊號是 frame 涵蓋、不是 finding 遞減**（per [跨輪 review 停止訊號](references/principles/cross-round-stopping-signal.md)，那裡給七軸的清單）：多輪 review 通常 finding 不遞減、Round 3 可能比 Round 1 / 2 多。停止判讀看七軸有沒有都動過，程序在 `references/planning-and-stopping.md`〈Round N 規劃判讀〉；審查對象是文章時，同一節另有〈大綱稽核〉，規則類文件是〈設計稽核〉，觸發條件與檢查項目寫在那裡，它們排在七軸之前；「想不出新 frame」量的是判斷者、不作必要條件。
+4. **至少三輪是硬底線**（per [多輪審查至少三輪](references/principles/minimum-three-rounds.md)，那裡有逐輪的實測數字）：Round 3 的 steelman / outbound frame 覆蓋 Round 1-2 結構性盲區（漏選項、反向引用、搜尋落點、知識卡缺口），歷次實測每輪都找出 10+ 項。Round 1-2 從「已寫的內容」裡找錯，Round 3 從「沒寫的東西」出發——這類問題在前兩輪的 frame 下結構性不可見。「要不要跑 Round 3」不是判讀問題、是執行紀律。停止判讀從 Round 3 結束後才開始；唯一的例外是大綱稽核或設計稽核在同一批裡第二次成立時的停點（定義在 `references/planning-and-stopping.md`〈Round N 規劃判讀〉開頭）。
 5. **規模與來源是兩件事**（per [規模買不到異源視角](references/principles/review-scale-does-not-buy-independent-origin.md)，那裡有兩則實測與「犯規的是編輯動作」這個機制）：一個 session 派出的所有 reviewer 與探針構成單一來源——同一份稿、同一個人寫的 prompt、同一個 context 的框架。增加數量提高的是覆蓋的面，不是視角的來源數，而 register 與用詞搭配這一類的偵測依賴的正是來源。**最便宜的異源視角是併行的另一個執行者，交換的單位是掃描而不是評價。**
 
 ## 誰做哪一段
@@ -98,7 +98,7 @@ Round 1-3 是硬底線，但每一輪裡的 frame 不是全部都跑。主 sessi
 | -------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | 1-A 寫作規範 / 1-B 案例 / 1-C 跨章一致 | 一律跑                                                     | 無條件                                                                                                               |
 | 1-D Downstream-task                    | 讀者讀完有明確的下一個動作（提案、估時程、選型）時         | 看文章的收尾段有沒有指向一個外部動作；定位為教材時照〈派發之前先定這一批的定位〉的例外                               |
-| 1-E 斷言支撐                           | 素材來源是經驗談 / 訪談 / 口述的批次；或判斷標準密集       | 高風險批次此 frame 排第一輪，知識類型錯位的修法是重寫                                                                |
+| 1-E 斷言支撐                           | 素材來源是經驗談 / 訪談 / 口述 / 從外部引用或轉述的說法（論壇說法、問答、AI 回答）的批次；或判斷標準密集 | 高風險批次此 frame 排第一輪，知識類型錯位的修法是重寫                                                                |
 | 1-F 商業分析                           | 內容含財報判讀、產業比較、估值                             | 逐篇看有沒有財務數字或估值段                                                                                         |
 | 2-A Cadence                            | 一批三篇以上                                               | 單篇不適用（同骨化是跨篇現象）；規範指定的位置要另外普查段名，「這個重複是規範要求的」是加強掃描的訊號而不是豁免理由 |
 | 2-B 讀者旅程                           | 有跨篇路線                                                 | 單篇不適用                                                                                                           |
@@ -130,14 +130,14 @@ Round 1-3 是硬底線，但每一輪裡的 frame 不是全部都跑。主 sessi
 - **零 finding 分三格**：掃過有候選判合規／判斷標準對此對象結構上不適用／沒掃
 - **自評欄與比對欄分開**：自報「我掃了」與比對「掃到了什麼」是兩欄
 - **結案後的改判登記進下一輪輸入**，不回頭補進已結案的清單
-- **嚴重度按讀者學不學得會分級**：必修＝照做會學錯做錯、在這一段理解不了、要離頁或回頭翻才讀得懂、作者編排脈絡寫進正文（連到術語卡、定義住在卡上不算「離頁才讀得懂」：判定看離開那張卡之後本段的論證還走不走得下去）；可改＝拿得到也不會錯但多花力氣。**不寫「寧可少報」「措辭偏好不回報」**——這兩條讓審查者判斷的是有沒有缺資訊，而宣稱過寬、未教先用、隔段指稱都不缺資訊
+- **嚴重度按讀者學不學得會分級**：必修＝照做會學錯做錯、在這一段理解不了、要離頁或回頭翻才讀得懂、作者編排脈絡寫進正文（連到術語卡、定義寫在卡上不算「離頁才讀得懂」：判定看離開那張卡之後本段的論證還走不走得下去）；可改＝拿得到也不會錯但多花力氣。**不寫「寧可少報」「措辭偏好不回報」**——這兩條讓審查者判斷的是有沒有缺資訊，而宣稱過寬、未教先用、隔段指稱都不缺資訊
 - **每則 finding 指出修法要落在被審查對象的哪一個位置**，不寫成報告的附註或「另外值得一提」——旁註形式的意見與零意見在產物上同形，因為它的讀者得先決定去讀附註
 
 推導、實測數字與 prompt 模板在 `references/reviewer-prompt.md`。
 
 ## 標準流程：按輪讀對應的檔
 
-Round 1-3 是硬底線、直接跑不問；每一輪的 frame 定義、reviewer 指令與預期 finding 類型各住一份 reference。**派某一輪之前打開那一份不是載入預算的建議**——產出契約與各 frame 的表格形態都住在那裡，沒打開就派出去的 reviewer 等於沒跑過；各節標題以 frame 編號起頭（`## 1-E …`），拿編號進檔 grep 就到。
+Round 1-3 是硬底線、直接跑不問（例外見〈基本原則〉「至少三輪是硬底線」那一條的末句）；每一輪的 frame 定義、reviewer 指令與預期 finding 類型各寫在一份 reference。**派某一輪之前打開那一份不是載入預算的建議**——產出契約與各 frame 的表格形態都寫在那裡，沒打開就派出去的 reviewer 等於沒跑過；各節標題以 frame 編號起頭（`## 1-E …`），拿編號進檔 grep 就到。
 
 | 何時讀                                                                | 檔                                       | 涵蓋章節                                                                                                                |
 | --------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -145,7 +145,7 @@ Round 1-3 是硬底線、直接跑不問；每一輪的 frame 定義、reviewer 
 | 派 Round 2（cadence / 讀者旅程）的 reviewer 之前                      | `references/round-2-cadence.md`          | 2-A、2-B、2-B′、2-B″、2-B‴、2-C、2-D 各一節、〈預期 finding 類型〉                                                      |
 | 派 Round 2 的探針（理解 / 翻譯 / 術語 / 類型）之前——探針不是 reviewer | `references/round-2-probes.md`           | 2-B⁗、2-B⁵、2-B⁶、2-B⁷ 各一節、〈探針的派發契約〉、〈預期 finding 類型〉                                                |
 | 派 Round 3 之前；拆章 / 併章 / 大幅改寫之後                           | `references/round-3-self-application.md` | 3-A 到 3-I 各一節、〈預期 finding 類型〉、〈重組後遺症 frame（拆章 / 併章 / 大幅改寫之後專用）〉                        |
-| 規劃任何一輪之前對照〈反模式〉；Round 3 跑完、判定要不要 Round 4 時   | `references/planning-and-stopping.md`    | 〈Round N 規劃判讀〉、〈收尾清單〉、〈反模式〉                                                                          |
+| 規劃任何一輪之前對照〈反模式〉；每一輪整合完、派下一輪之前查〈大綱稽核〉（規則類文件是〈設計稽核〉）的觸發；Round 3 跑完、判定要不要 Round 4 時 | `references/planning-and-stopping.md`    | 〈Round N 規劃判讀〉（含〈大綱稽核〉〈設計稽核〉〈停止訊號〉）、〈收尾清單〉、〈反模式〉                                                                          |
 | 寫 reviewer 的 prompt 時                                              | `references/reviewer-prompt.md`          | 〈每個 frame 的產出契約〉、〈Reviewer prompt 結構〉                                                                     |
 | 拿到 finding 清單準備修時；修完要驗證時                               | `references/integrating-findings.md`     | 〈整合 finding 跟 fix 工作流〉、〈修法的反模式〉、〈register 違規的異源複核操作〉、〈判斷兩個維度該不該合併：隔離實驗〉 |
 

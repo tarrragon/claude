@@ -538,7 +538,8 @@ def main():
             logger.info(log_output)
 
         log_output = (
-            "\n建議: 確認這些 Hook 是否需要在 settings.json 中註冊；"
+            "\n建議: 這些 Hook 若屬框架，回報 framework issue 由主控方在上游補註冊；"
+            "若屬專案自有 hook，同樣回報 framework issue（框架目前無專案自有 hook 的註冊位置）；"
             "若已透過其他管道（installer 產生的原生 git hook shim、被其他"
             "已註冊 hook 匯入的共用模組等）執行，補一筆 hook-exclude-list.json"
             "「notes」說明，而非視為缺漏"
@@ -569,7 +570,7 @@ def main():
             log_output = f"  ... 還有 {len(unregistered_skill_hooks) - 15} 個"
             print(log_output)
             logger.info(log_output)
-        log_output = "\n建議: 檢查這些 Skill Hook 是否需要在 settings.json 中註冊（路徑形式: $CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<file>.py）"
+        log_output = "\n建議: 這些 Skill Hook 若屬框架，回報 framework issue 由主控方在上游補註冊（路徑形式: $CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<file>.py）；若屬專案自有 hook，同樣回報 framework issue"
         print(log_output)
         logger.info(log_output)
 
@@ -594,7 +595,7 @@ def main():
             print(line)
             logger.warning(line)
             sys.stderr.write(line + "\n")
-        advice = "建議: 移除殘留註冊或修正 command 路徑（hook relocate 後常見於 settings.local.json）"
+        advice = "建議: 執行 --fix 移除 settings.local.json 內 command 指向不存在檔的註冊（hook relocate 後常見）；settings.json 內的幽靈由 sync overlay 自癒，若持續出現回報 framework issue"
         print(advice)
         logger.warning(advice)
 
@@ -606,7 +607,7 @@ def main():
             line = f"  - {event_type}: {path}（來源: {', '.join(labels)}）"
             print(line)
             logger.warning(line)
-        advice = "建議: 同一 hook 僅在單一 settings 檔註冊，避免 auto-resume 類副作用重複觸發"
+        advice = "建議: 框架 hook 已在上游 settings.json 註冊者，從 settings.local.json 刪除重複那筆，避免 auto-resume 類副作用重複觸發；兩處皆屬框架檔的重複，回報 framework issue"
         print(advice)
         logger.warning(advice)
 
@@ -626,7 +627,7 @@ def main():
             print(line)
             logger.warning(line)
             sys.stderr.write(line + "\n")
-        advice = "建議: 從 settings.json 移除被合併版的註冊（保留檔案本身供回溯）"
+        advice = "建議: 被合併版的註冊在 settings.local.json 者直接從該檔刪除；在上游 settings.json 者回報 framework issue 由主控方移除（保留檔案本身供回溯）"
         print(advice)
         logger.warning(advice)
 
@@ -644,7 +645,9 @@ def main():
             print(line)
             logger.warning(line)
         advice = (
-            "建議: hook 註冊一律移至 settings.json；"
+            "建議: 框架 hook 上游已註冊者，從 settings.local.json 刪除這筆；"
+            "上游未註冊的框架 hook 或專案自有 hook，回報 framework issue"
+            "（見 sync-pull.md〈幽靈註冊處置〉）；"
             "settings.local.json 僅放 permissions / env / mcp / outputStyle"
         )
         print(advice)

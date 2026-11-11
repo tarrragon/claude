@@ -78,7 +78,23 @@ class TestPackageMessages:
         msg = PackageMessages.OUTDATED_SUMMARY_WARNING.format(count=3)
         assert "[WARNING]" in msg
         assert "3" in msg
-        assert "uv tool install . --force --reinstall" in msg
+        assert "install-skill-clis" in msg
+
+    def test_install_messages_point_to_shim_installer(self) -> None:
+        """未安裝/過期提示指向 install-skill-clis，不含 uv tool install（shim 化）."""
+        for text in (
+            PackageMessages.NOT_INSTALLED_ACTION,
+            PackageMessages.OUTDATED_ACTION,
+            PackageMessages.OUTDATED_SUMMARY_WARNING,
+        ):
+            assert "uv tool install" not in text
+            assert "install-skill-clis" in text
+
+    def test_old_uv_tool_string_would_fail_lock(self) -> None:
+        """E1 對照：舊字串必使鎖定斷言為紅（證明斷言有鑑別力）."""
+        old = "  → 需執行: uv tool install ."
+        assert "uv tool install" in old
+        assert "install-skill-clis" not in old
 
 
 class TestSetupMessages:

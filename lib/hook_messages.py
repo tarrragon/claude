@@ -125,8 +125,10 @@ Ticket 標題: {title}
 """
 
     # 子任務未完成錯誤訊息（acceptance-gate-hook.py）
-    # W17-120.2 / PC-091: ANA 落地統一用 children；ANA 父無 children 時改由
-    # ANA_MISSING_SPAWNED_TICKETS_WARNING 引導建 --parent children。
+    # W17-120.2 / PC-091: 落地票屬本版範圍用 children（`ticket create --parent`）；
+    # 依〈兩期〉排入後續版本者以 `--version <目標版本> --source-ticket` 建根票
+    # （ticket-lifecycle.md〈ANA Ticket 落地下游血緣選擇〉）。ANA 父無 children 時
+    # 改由 ANA_MISSING_SPAWNED_TICKETS_WARNING 引導。create 為頂層命令，非 `ticket track create`。
     CHILDREN_INCOMPLETE_ERROR = """[ERROR] Acceptance Gate: 子任務未全部完成
 
 Ticket: {ticket_id}
@@ -138,7 +140,9 @@ Ticket: {ticket_id}
 確需強制完成時：`ticket track complete {ticket_id} --force`（只旁路本項 children 檢查，
 其他阻擋照舊；旁路事件與命令全文寫入 .claude/hook-logs/acceptance-gate/ 稽核日誌，
 並在 additionalContext 列出被旁路的未完成 children）。
-（ANA 落地請用 `ticket track create --parent {ticket_id} ...` 建 children）"""
+（ANA 落地依落地票所屬版本：本版範圍用 `ticket create --parent {ticket_id} ...` 建 children；
+  依〈兩期〉排入後續版本用 `ticket create --version <目標版本> --source-ticket {ticket_id} ...` 建根票。
+  路線見 .claude/pm-rules/ticket-lifecycle.md〈ANA Ticket 落地下游血緣選擇〉）"""
 
     # 驗收記錄缺失警告訊息（acceptance-gate-hook.py）
     ACCEPTANCE_RECORD_MISSING_WARNING = """[WARNING] Acceptance Gate: 未找到驗收記錄
@@ -159,8 +163,9 @@ Ticket: {ticket_id} (type: {ticket_type})
 不需派發 acceptance-auditor（純文件編輯無程式碼測試需求）。"""
 
     # ANA Ticket 缺少後續 Ticket 警告訊息（acceptance-gate-hook.py）
-    # W17-120.2 / PC-091: ANA 落地統一用 children（`--parent <ANA-ID>`），
-    # spawned_tickets 對 ANA 為弱 metadata，本警告主路徑提示建 children。
+    # W17-120.2 / PC-091: 本版範圍落地用 children（`ticket create --parent <ANA-ID>`），
+    # 後續版本落地用 `--version <目標版本> --source-ticket <ANA-ID>`；
+    # 判定（步驟 2.5.2）已計入 spawned_tickets + children，本警告僅提示路線。
     ANA_MISSING_SPAWNED_TICKETS_WARNING = """[WARNING] Acceptance Gate: ANA Ticket 缺少後續 Ticket
 
 Ticket: {ticket_id}
@@ -170,8 +175,9 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
 
 請確認：
   1. 分析結論是否已轉化為可追蹤的 Ticket？
-  2. ANA 落地請用 `ticket track create --parent {ticket_id} ...` 建立 children
-     （PC-091 路線：ANA 落地統一用 children，不再用 spawned_tickets）。
+  2. ANA 落地依落地票所屬版本選路線（見 ticket-lifecycle.md〈ANA Ticket 落地下游血緣選擇〉）：
+     - 本版範圍：`ticket create --parent {ticket_id} ...` 建 children
+     - 依〈兩期〉排入後續版本：`ticket create --version <目標版本> --source-ticket {ticket_id} ...` 建根票
 
 如果分析結論確實不需要後續工作，請在 Ticket 內容中明確說明理由。"""
 

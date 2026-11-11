@@ -116,7 +116,7 @@
 /ticket track set-blocked-by <id> <id2> --add          # 追加（去重）
 /ticket track set-blocked-by <id> <id2> --remove       # 移除指定 blockedBy
 /ticket track set-blocked-by <id> "<id2> <id3>" --add  # 一次追加多個：value 是單一位置參數，須引號包成一個字串（否則 argparse 報 unrecognized arguments）
-# 覆寫與 --add 指向有非終態 children 的 ANA 時，stderr 印 [HINT] 說明 ANA 將保持開啟；只提示，exit code 不變（見 create-command.md〈指向 ANA 的耦合後果提示〉）
+# 覆寫與 --add 指向有非終態 children 的 ANA 時，stdout 印 [HINT] 說明 ANA 將保持開啟；只提示，exit code 不變（見 create-command.md〈指向 ANA 的耦合後果提示〉）
 
 # 設定相關關係（relatedTo 欄位）
 /ticket track set-related-to <id> <related-id>         # 覆寫（設定單一 relatedTo）
@@ -175,7 +175,7 @@
 | 規模與職責邊界判準 | 全部 | 警告 | ticket 規模（god ticket scale）與 `where.files` 涉及模組多樣性是否超閾值 | 依提示考慮拆票，或於 Solution 說明理由 |
 | 實驗器材殘留 | 有登記的實驗器材 | 阻擋 | 工作區無屬本票命名規範但未妥善處置的實驗器材 | `resolve-artifact` 收尾處置 |
 
-> 另有 sibling tickets 完成度、自訂 H2 章節兩項為純資訊性輸出（不需事先準備，供 PM 排程參考），不列入上表。`--yes-spawned`（ANA 有 spawned 非 terminal 時旁路 blocking confirmation，非互動環境必需）與 `--skip-body-check`（逃生閥：跳過 type-aware body schema 必填章節驗證，需於 Completion Info 附理由）兩旗標分別對應上表「ANA 後續票」與「Execution log 填寫」兩項的旁路路徑。
+> 另有 sibling tickets 完成度、自訂 H2 章節兩項為純資訊性輸出（不需事先準備，供 PM 排程參考），不列入上表。`--yes-spawned`（ANA 有同版本或無法判定版本的 spawned 非 terminal 時旁路 blocking confirmation，非互動環境必需；spawned 全部落地在後續版本時只印資訊，不需旗標）與 `--skip-body-check`（逃生閥：跳過 type-aware body schema 必填章節驗證，需於 Completion Info 附理由）兩旗標分別對應上表「ANA 後續票」與「Execution log 填寫」兩項的旁路路徑。
 
 > **worktree 分支已合併（不在上表，無 CLI 檢查）**：代理人在 linked worktree 內完成工作後 `complete`，票面轉 `completed`、metadata 進主倉庫，但該 worktree 分支是否已合併回主分支不受任何上表項目檢查——`stuck-anas`／`stale-list` 亦不看分支合併狀態。**Action**：worktree 場景下 complete 前，於 Completion Info 記錄分支名並人工確認已合併，避免票已收尾但程式碼變更停留在未合併分支形成靜默遺失。
 

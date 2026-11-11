@@ -51,7 +51,7 @@ Exit code 語意（與 dispatch-check / dispatch-validate 不共享）：
 
 - 0 = 全通過
 - 1 = 軟性警告（任一項超軟上限，或第四項一致性檢查命中矛盾，但未達強制拆分）
-- 2 = 硬性失敗（任一項超強制拆分閾值 / 第六項路徑涵蓋性未過 / IO 錯誤 / ticket 不存在）
+- 2 = 硬性失敗（任一項超強制拆分閾值 / 第六項路徑涵蓋性未過 / 第七項寫入宣告缺漏 / IO 錯誤 / ticket 不存在）
 
 **Exit code 與 dispatch-check / dispatch-validate 語意不共享**：呼叫端
 必須以命令名稱判別語意，禁止以 exit code 跨命令解讀。
@@ -71,6 +71,7 @@ from typing import Callable, List, Tuple
 
 from ticket_system.lib.dispatch_common import load_and_unpack
 from ticket_system.lib.field_validators import missing_where_paths
+from ticket_system.lib.file_conflict import write_files
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.section_locator import find_section
 
@@ -462,6 +463,41 @@ def check_acceptance_path_coverage(
     return "fail", uncovered, msg
 
 
+_UNDEFINED_WHERE_VALUES = frozenset({"", "待定義"})
+
+
+def check_where_write_declaration(ticket: dict, ticket_id: str) -> Tuple[str, str]:
+    """檢查 7：where.files 寫入宣告須在派發前齊備（強制）。
+
+    收尾的 `ticket track commit` 以 where.files 寫入集為範圍判準；宣告缺漏
+    要到代理人做完工作才被拒絕。本檢查把同一判準前移到派發前：
+      - ANA：type 預設唯讀，需至少一個 `::write` 標記的路徑
+      - IMP：where.files 為空，或全為「待定義」
+    其餘 type 不檢查。
+
+    Returns:
+        (status, msg) — status ∈ {"pass", "fail"}
+    """
+    ticket_type = ticket.get("type")
+    if ticket_type == "ANA":
+        if write_files(ticket):
+            return "pass", "ANA 票已有 ::write 宣告"
+        return "fail", (
+            "ANA 票 where.files 沒有 ::write 宣告（ANA 預設唯讀），"
+            "ticket track commit 會以「未宣告任何寫入路徑」拒絕提交。修法："
+            f"ticket track set-where {ticket_id} --files \"<既有路徑>,<寫入路徑>::write\""
+        )
+    if ticket_type == "IMP":
+        declared = [p for p in write_files(ticket) if p.strip() not in _UNDEFINED_WHERE_VALUES]
+        if declared:
+            return "pass", f"IMP 票已宣告 {len(declared)} 個寫入路徑"
+        return "fail", (
+            "IMP 票 where.files 為空或只有「待定義」，ticket track commit 會拒絕提交。"
+            f"修法：ticket track set-where {ticket_id} --files \"<路徑1>,<路徑2>\""
+        )
+    return "pass", f"type {ticket_type or '未設定'} 不檢查寫入宣告"
+
+
 # ---------------------------------------------------------------------------
 # CLI 入口
 # ---------------------------------------------------------------------------
@@ -514,8 +550,10 @@ def execute_dispatch_readiness(args: argparse.Namespace, version: str) -> int:
     print(_format_result("檢查 6 acceptance 提及路徑涵蓋性（強制）", r6_status, r6_msg))
     for item in r6_items:
         print(f"      - {item}")
+    r7_status, r7_msg = check_where_write_declaration(loaded.ticket or {}, ticket_id)
+    print(_format_result("檢查 7 where.files 寫入宣告（強制）", r7_status, r7_msg))
 
-    statuses = [r1_status, r2_status, r3_status, r4_status, r5_status, r6_status]
+    statuses = [r1_status, r2_status, r3_status, r4_status, r5_status, r6_status, r7_status]
     if "fail" in statuses:
         print("[FAIL] 至少一項超強制拆分閾值，建議拆 ticket 後重新派發")
         return 2

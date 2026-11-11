@@ -102,6 +102,9 @@ def _format_charset_violation(field_path: str, char: str, code: int, kind: str) 
 # 使用完整路徑作為 key，避免版本號正規化問題
 # 每次 CLI 執行時自動清空（process 結束即失效）
 _ticket_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+# 與 _ticket_cache 並列：記錄快取當下檔案的 (mtime_ns, size)。快取命中時比對，
+# 不符即視為他方已改寫票檔而重新讀取（避免 file_lock 內讀改寫沿用舊票面，覆蓋他方寫入）。
+_ticket_cache_stat: Dict[str, Any] = {}
 
 
 # ============================================================================
@@ -721,15 +724,18 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
     cache_key = str(ticket_path)
 
     # Guard Clause 1.5：檢查快取
-    if cache_key in _ticket_cache:
-        return _ticket_cache[cache_key]
-
     try:
         file_stat = ticket_path.stat()
     except FileNotFoundError:
+        _ticket_cache.pop(cache_key, None)
         return None
     except OSError:
         return None
+
+    stat_sig = (file_stat.st_mtime_ns, file_stat.st_size)
+    if cache_key in _ticket_cache and _ticket_cache_stat.get(cache_key) == stat_sig:
+        return _ticket_cache[cache_key]
+    _ticket_cache.pop(cache_key, None)
 
     # Guard Clause 1.7：磁碟快取命中（僅生產路徑，見模組層說明）——
     # (mtime, size) 與快取記錄相符時，直接沿用已解析結果，跳過檔案讀取與
@@ -751,6 +757,7 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
             frontmatter[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(frontmatter)
             frontmatter[CHARSET_SNAPSHOT_FIELD] = _flatten_text_fields(frontmatter)
             _ticket_cache[cache_key] = frontmatter
+            _ticket_cache_stat[cache_key] = stat_sig
             return frontmatter
 
     # 嘗試讀取檔案內容（Guard Clause 2：讀取失敗）
@@ -773,6 +780,7 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
                 "_yaml_error": e.message
             }
             _ticket_cache[cache_key] = result
+            _ticket_cache_stat[cache_key] = stat_sig
             return result
 
         # Guard Clause 3：frontmatter 為空（無 frontmatter）
@@ -801,6 +809,7 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
         frontmatter[CHARSET_SNAPSHOT_FIELD] = _flatten_text_fields(frontmatter)
         # 更新快取
         _ticket_cache[cache_key] = frontmatter
+        _ticket_cache_stat[cache_key] = stat_sig
         return frontmatter
     else:
         # YAML 格式：純 YAML 或 { ticket: {...} } 包裝格式
@@ -827,6 +836,7 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
 
             # 更新快取
             _ticket_cache[cache_key] = ticket_content
+            _ticket_cache_stat[cache_key] = stat_sig
             return ticket_content
         except yaml.YAMLError as e:
             # YAML 解析失敗時，返回包含錯誤訊息的字典（並快取）
@@ -837,6 +847,7 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
                 "_yaml_error": error_msg
             }
             _ticket_cache[cache_key] = result
+            _ticket_cache_stat[cache_key] = stat_sig
             return result
 
 

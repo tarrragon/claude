@@ -90,6 +90,7 @@ from ticket_system.lib.duplicate_detector import (
 from ticket_system.lib.create_reporter import print_create_checklist
 from ticket_system.lib.ana_coupling_hint import (
     hint_blocked_by_ana,
+    hint_frozen_version_ana_parent,
     hint_parent_is_ana,
 )
 
@@ -503,22 +504,81 @@ def _strip_checkbox(item: str) -> str:
     return re.sub(r"^\s*\[[ xX]\]\s*", "", item)
 
 
+_PATH_INVENTORY_FORMAT_HINT = (
+    "gate 接受的格式（ticket-body-schema.md「防護類 hook ticket 額外 acceptance」節）：\n"
+    "  - 表頭須含「產生路徑」欄與含「覆蓋」字樣的欄，表頭下一行緊接分隔列\n"
+    "  - 覆蓋欄每列只接受「是」或「否」，至少一列資料\n"
+    "  | 產生路徑 | 是否覆蓋 | 未覆蓋原因 |\n"
+    "  |---------|---------|-----------|\n"
+    "  | <路徑> | 是 | |\n"
+)
+
+
+def _has_table_missing_inventory_header(checker: Any, text: str) -> bool:
+    """有含「覆蓋」欄的表格，但表頭不含「產生路徑」（gate 判為 absent）。"""
+    lines = text.split("\n")
+    for i in range(len(lines) - 1):
+        stripped = lines[i].strip()
+        if not stripped.startswith("|"):
+            continue
+        if checker._INVENTORY_HEADER_MARKER in stripped:
+            continue
+        if checker._COVERAGE_HEADER_MARKER not in stripped:
+            continue
+        if checker._TABLE_SEPARATOR_ROW_RE.match(lines[i + 1].strip()):
+            return True
+    return False
+
+
+def describe_path_inventory_problem(checker: Any, how_strategy: str) -> Optional[str]:
+    """回傳 how.strategy 盤點表的格式問題警告；無問題（含無表）回傳 None。
+
+    判定沿用 gate 的 parse_path_inventory_table，使建票端與完成端接受範圍一致：
+      - failed：表格存在但覆蓋欄缺失、值非「是／否」或無資料列，
+        gate 會略過計數（fail-open），盤點結果不被記錄
+      - absent 且有含「覆蓋」欄的表格：表頭缺「產生路徑」，gate 判為無表並阻擋 complete
+    """
+    text = how_strategy or ""
+    status = checker.parse_path_inventory_table(text).status
+    if status == "failed":
+        reason = (
+            "盤點表存在但格式不符（缺「覆蓋」欄、覆蓋值非「是／否」或無資料列），"
+            "acceptance-gate 會略過本項計數"
+        )
+    elif status == "absent" and _has_table_missing_inventory_header(checker, text):
+        reason = (
+            "how.strategy 有含「覆蓋」欄的表格，但表頭缺「產生路徑」，"
+            "acceptance-gate 會判為無盤點表並阻擋 complete"
+        )
+    else:
+        return None
+    return f"[WARNING] 產生路徑盤點表：{reason}\n{_PATH_INVENTORY_FORMAT_HINT}"
+
+
 def apply_hook_acceptance_template(
     where_files: List[str],
     acceptance: Optional[List[str]],
     how_strategy: str = "",
+    ticket_type: Optional[str] = None,
 ) -> tuple:
     """where 觸及 hook 本體時，於 acceptance 追加缺少類別的模板。
 
     第四條（產生路徑盤點）的已具備判定與 gate 一致：how_strategy 內有盤點表
     （parse_path_inventory_table 非 absent/no_separator）即視為已具備。
 
+    ticket_type 給定且不在驗證端 ``APPLICABLE_TYPES`` 內時不帶入模板：驗證端
+    對這些票型不檢查，帶入的條目只能手動改寫為不適用。未給定（None）時
+    維持原行為，供只知道 where 的呼叫端使用。
+
     Returns:
-        (新 acceptance 清單, 是否觸及 hook 範圍)。未觸及或 checker 不可用時
-        原樣回傳 acceptance 與 False。已含對應類別的條目不重複追加。
+        (新 acceptance 清單, 是否觸及 hook 範圍)。未觸及、票型不適用或
+        checker 不可用時原樣回傳 acceptance 與 False。已含對應類別的條目
+        不重複追加。
     """
     checker = _load_hook_protection_checker()
     if checker is None:
+        return acceptance, False
+    if ticket_type is not None and ticket_type.strip().upper() not in checker.APPLICABLE_TYPES:
         return acceptance, False
     # 唯讀宣告（::read）不改動 hook，先濾掉再判範圍；剝離規則沿用 file_conflict
     write_paths = []
@@ -534,6 +594,10 @@ def apply_hook_acceptance_template(
     plain_text = "\n".join(_strip_checkbox(str(item)) for item in current)
     missing = set(checker._missing_categories(text))
     inventory = checker.parse_path_inventory_table(how_strategy or "")
+    problem = describe_path_inventory_problem(checker, how_strategy)
+    if problem:
+        # CLI 經 Bash 執行，stderr 與 stdout 同樣回到模型；用 stderr 與錯誤通道一致
+        sys.stderr.write(problem)
     if inventory.status in ("absent", "no_separator") and "產生路徑盤點" not in text:
         missing.add(_PATH_INVENTORY_LABEL)
     for label, template in _HOOK_ACCEPTANCE_TEMPLATES:
@@ -769,6 +833,7 @@ def _persist_and_report(
     new_acceptance, touches_hook = apply_hook_acceptance_template(
         config.get("where_files") or [], base_acceptance,
         str(config.get("how_strategy") or ""),
+        ticket_type=config["ticket_type"],
     )
     if touches_hook:
         config["acceptance"] = new_acceptance
@@ -810,9 +875,12 @@ def _persist_and_report(
         ticket_path=ticket_path,
     )
 
-    # 步驟 4.5：指向 ANA 的耦合後果提示（只寫 stderr，不影響 exit code）
+    # 步驟 4.5：指向 ANA 的耦合後果提示（寫 stdout，不影響 exit code）
     if args.parent:
         hint_parent_is_ana(version, args.parent, ticket_id)
+        hint_frozen_version_ana_parent(
+            version, args.parent, ticket_id, getattr(args, "scope_blocker", None)
+        )
     hint_blocked_by_ana(version, config.get("blocked_by") or [], ticket_id)
 
     # 步驟 5（W17-008.15 方案 D）：未帶 --parent 時提示 in_progress group
@@ -992,7 +1060,11 @@ def execute(args: argparse.Namespace) -> int:
                 component="create",
                 action="resolve_version",
                 errno="VERSION_NOT_DETECTED",
-                hint="無法自動偵測版本號，請使用 --version 明確指定（或確認 todolist.yaml 已設定 current_version）",
+                hint=(
+                    "無法自動偵測版本號。偵測規則：取 docs/todolist.yaml 的 versions 中"
+                    "第一個 status: active 的版本，取不到時改取 docs/work-logs/ 下的最高版本目錄。"
+                    "處置：以 --version 明確指定，或把目標版本在 todolist.yaml 標為 status: active"
+                ),
             )))
             return 1
 

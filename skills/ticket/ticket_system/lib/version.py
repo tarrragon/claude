@@ -20,7 +20,9 @@ def get_current_version() -> Optional[str]:
 
     優先級：
     1. 解析 todolist.yaml 的 versions 列表，找 status=active 的第一個
-    2. Fallback: 掃描 work-logs 目錄取最高版本號（向後相容）
+    2. todolist.yaml 頂層 current_version（專案自訂格式，僅為相容既有 consumer
+       保留；框架不引導新專案使用，錯誤提示也不提及）
+    3. Fallback: 掃描 work-logs 目錄取最高版本號（向後相容）
 
     Returns:
         Optional[str]: 版本字串（如 "v0.31.0"），若無版本目錄返回 None

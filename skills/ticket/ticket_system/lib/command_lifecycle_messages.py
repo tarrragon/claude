@@ -189,6 +189,13 @@ class LifecycleMessages:
         "（--yes-spawned flag 旁路）："
     )
 
+    # ANA spawned 落地在後續版本（PC-091 版本維度路線的正常狀態，只提供資訊）
+    SPAWNED_DEFERRED_HEADER = (
+        "[INFO] ANA Ticket {ticket_id} 有 {count} 個 spawned 落地在後續版本"
+        "（PC-091 版本維度路線的正常狀態，不需 --yes-spawned）："
+    )
+    SPAWNED_DEFERRED_ITEM = "  - {spawned_id}: {status}（版本 {spawned_version}）"
+
     # Cascade unblock 訊息（W11-002.3：父 complete 觸發子自動解鎖）
     CASCADE_UNBLOCKED_HEADER = "[Cascade] 以下子 Ticket 已自動解鎖（blocked → pending）："
     CASCADE_UNBLOCKED_ITEM = "   - {id}: {title}"

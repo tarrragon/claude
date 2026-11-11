@@ -1396,58 +1396,45 @@ def test_w10_108_block_message_references_decision_trigger_binding_rule():
 # W10-130 — Placeholder template 區塊內 PC-093-exempt 範例字串豁免
 # ============================================================================
 
-def test_w10_130_schema_placeholder_block_skips_example_exempt_marker():
-    """<!-- Schema[...]: ... --> placeholder 區塊內的 PC-093-exempt 範例字串
-    不應被解析為實際 marker（避免誤判 cat:reason 為 INVALID category-whitelist）。"""
+def test_w10_130_comment_placeholders_yield_no_markers():
+    """Schema 行與註解形態的佔位符（`<!-- 選填：… -->`）是純註解行，不蒐集 marker。"""
     lines = [
         "## Problem Analysis",
         "<!-- Schema[IMP/Problem Analysis]: 選填 -->",
         "",
-        "範例: <!-- PC-093-exempt: cat:reason -->",
-        "另一範例: <!-- PC-093-exempt: <category>:<reason> -->",
+        "<!-- 選填：問題如何發現？ -->",
         "",
         "---",
         "",
         "## Solution",
         "實際內容",
     ]
-    refs = collect_exempt_markers(lines)
-    # placeholder 區塊內的範例字串不應被收集為 marker
-    assert len(refs) == 0, (
-        "placeholder 區塊內的 PC-093-exempt 範例應被跳過，"
-        "但收到 {} markers: {}".format(len(refs), refs)
-    )
+    assert collect_exempt_markers(lines) == []
 
 
-def test_w10_130_schema_placeholder_block_terminates_at_next_h2():
-    """placeholder 區塊在下個 H2（## ）處結束；之後的 marker 仍應被解析。"""
+def test_schema_line_no_longer_opens_skip_block_for_markers():
+    """Schema 行之後的 marker 是實質內容，照常蒐集（不再整段圈成佔位區塊）。"""
     lines = [
         "<!-- Schema[IMP/Problem Analysis]: 選填 -->",
-        "<!-- PC-093-exempt: cat:reason -->",  # 範例（區塊內）— 跳過
-        "## Solution",
-        "<!-- PC-093-exempt: ticket-tracked:W10-130 hook 修復 -->",  # 區塊外 — 解析
+        "<!-- PC-093-exempt: ticket-tracked:W10-130 hook 修復 -->",
+        "範例: <!-- PC-093-exempt: cat:reason -->",
     ]
     refs = collect_exempt_markers(lines)
-    # 只剩第 4 行的真實 marker
-    assert len(refs) == 1
-    assert refs[0].line_no == 4
+    assert [r.line_no for r in refs] == [2, 3]
     assert refs[0].valid is True
+    assert refs[1].valid is False
 
 
-def test_w10_130_schema_placeholder_block_terminates_at_hr_separator():
-    """placeholder 區塊在 `---` 分隔符處結束；之後的 marker 仍應被解析。"""
+def test_multiline_comment_interior_yields_no_markers():
+    """多行 HTML 註解內部的 marker 字樣是說明文字，不蒐集。"""
     lines = [
-        "<!-- Schema[IMP/Problem Analysis]: 選填 -->",
-        "<!-- PC-093-exempt: cat:reason -->",  # 範例 — 跳過
-        "",
-        "---",
-        "",
-        "<!-- PC-093-exempt: ticket-tracked:W10-130 真實 marker -->",  # 解析
+        "<!-- 調查過程記錄（可選）：",
+        "範例 <!-- PC-093-exempt: cat:reason -->",
+        "-->",
+        "<!-- PC-093-exempt: ticket-tracked:W10-130 真實 marker -->",
     ]
     refs = collect_exempt_markers(lines)
-    assert len(refs) == 1
-    assert refs[0].line_no == 6
-    assert refs[0].valid is True
+    assert [r.line_no for r in refs] == [4]
 
 
 def test_w10_130_no_schema_placeholder_normal_marker_still_works():
@@ -1479,6 +1466,74 @@ def test_w10_130_schema_placeholder_also_skips_phrase_scanning():
     # placeholder 區塊內即使 Schema note 含「Phase 5 再決定」字樣也應跳過
     assert len(blocked) == 0
     assert len(warned) == 0
+
+
+# ============================================================================
+# Schema 行之後的實質內容照常掃描：只跳過純 HTML 註解行
+# ============================================================================
+
+_DEFERRAL = "是否保留快取之後再決定"
+
+
+def _blocked_and_warned(lines):
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    blocked, warned, _info, _exempted = partition_hits(hits, collect_exempt_markers(lines))
+    return blocked + warned
+
+
+def test_substantive_content_after_schema_line_is_scanned():
+    """正向對照（E2）：Schema 行之後的 Solution 實質內容含延後語句，必須命中。"""
+    lines = [
+        "## Solution",
+        "<!-- Schema[IMP/Solution]: 必填 -->",
+        "",
+        "### 方案",
+        "",
+        _DEFERRAL,
+        "",
+        "---",
+    ]
+    hit_lines = [h.line_no for h in _blocked_and_warned(lines)]
+    assert 6 in hit_lines
+
+
+def test_comment_only_placeholder_section_not_reported():
+    """對照（E1）：同一句只出現在註解佔位符內時不命中；改為可見文字即命中。"""
+    commented = [
+        "## Solution",
+        "<!-- Schema[IMP/Solution]: 必填 -->",
+        f"<!-- 必填：例如「{_DEFERRAL}」這類句子不要寫 -->",
+        "",
+        "---",
+    ]
+    visible = commented[:2] + [_DEFERRAL] + commented[3:]
+    assert _blocked_and_warned(commented) == []
+    assert [h.line_no for h in _blocked_and_warned(visible)] == [3]
+
+
+def test_multiline_comment_interior_not_scanned():
+    lines = [
+        "<!-- 說明：",
+        _DEFERRAL,
+        "-->",
+    ]
+    assert _blocked_and_warned(lines) == []
+
+
+def test_unclosed_comment_does_not_swallow_rest_of_file():
+    """未關閉的 `<!--` 只算該行，其後內容照常掃描（避免整檔靜默放行）。"""
+    lines = [
+        "<!-- 忘了關閉的註解",
+        "",
+        _DEFERRAL,
+    ]
+    assert [h.line_no for h in _blocked_and_warned(lines)] == [3]
+
+
+def test_text_with_trailing_comment_still_scanned():
+    """行內有註解但註解外仍有文字，該行照常掃描（不因含 `<!--` 而被跳過）。"""
+    lines = [f"{_DEFERRAL} <!-- 備註 -->"]
+    assert [h.line_no for h in _blocked_and_warned(lines)] == [1]
 
 
 # ============================================================================

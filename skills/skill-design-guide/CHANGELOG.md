@@ -12,6 +12,8 @@
 前三次的同型缺陷。**這一問是壓縮專用的**：既有的「同一件事寫了幾種形式」對展開有鑑別力，
 對壓縮沒有——壓縮的產物只有一種形式，它只是錯的。
 
+**Version**: 1.24.0 — `references/splitting-an-existing-skill.md` 的「住在」與「現住」換成實際的動詞，照寫作規範「住在一律換」的判定。
+
 **Version**: 1.23.2 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來
 
 **Version**: 1.23.1 — 兩處路徑形態修正。`references/patterns-and-troubleshooting.md` 的本庫實例把全路徑改成裸檔名 `decision-tree.md`——依據是同支 skill 的 `references/writing-the-body.md` 自己訂的規則（hook 與 script 的溯源引用給檔名即可，不必寫全路徑，因為裸檔名更耐搬移），該行先前違反了它。`writing-the-body.md` 那條規則本身用全路徑當反例，加 `broken-link-exempt` 標明它是刻意的反例。

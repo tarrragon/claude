@@ -11,4 +11,4 @@ Round 3 的 steelman / outbound frame 覆蓋 Round 1-2 結構性盲區：Round 1
 - Backend 5 章 + 1 report 卡：Round 3 找出全新類型的 finding（跨章影響、enumeration 不窮盡）
 - Dotfile 31 篇：Round 3 找出 14 項（macOS 原生 tiling 遺漏、yadm/mise 選項缺失、四個系列反向引用、stow/rice 知識卡缺口）
 
-「要不要跑 Round 3」不是判讀問題、是執行紀律。停止判讀從 Round 3 結束後才開始。
+「要不要跑 Round 3」不是判讀問題、是執行紀律。停止判讀從 Round 3 結束後才開始（大綱稽核或設計稽核在同一批裡第二次成立時的停點例外，見 `planning-and-stopping.md`〈Round N 規劃判讀〉開頭）。

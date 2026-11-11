@@ -546,7 +546,7 @@ build-炸-修循環。明顯划算。
 
 **判讀動作**：逐欄唸出標題問主詞是誰；或問讀者讀完這一欄會去改什麼。兩種軸都寫得出來的時候，設計決定那一種排在前面，做法差異是它的材料。
 
-**跨篇的零件要在某一處並排，而那一處是新的內容。** 幾種做法各自住在幾篇裡、篇與篇互相連結，不產生並排——讀者一次仍然只看得到一種，而取捨只有在並排的時候才存在。這一段屬於內容壓力的就地展開，不屬於換成連結那個出口。
+**跨篇的零件要在某一處並排，而那一處是新的內容。** 幾種做法各自寫在幾篇裡、篇與篇互相連結，不產生並排——讀者一次仍然只看得到一種，而取捨只有在並排的時候才存在。這一段屬於內容壓力的就地展開，不屬於換成連結那個出口。
 
 判定、三種形態與為什麼既有檢查全數放行，見 [comparison-axis-comes-from-the-readers-decision](principles/comparison-axis-comes-from-the-readers-decision.md)。
 
@@ -831,7 +831,6 @@ emoji 在容器窄時斷行：
 - [cross-expertise-scenario-not-analogy](principles/cross-expertise-scenario-not-analogy.md)：向非本領域的專業人士解釋時用情境遞進——給比喻在哪裡崩解，以及決策者熟悉的三個替代維度。支撐規則七。
 - [management-reportable-info-in-technical-content](principles/management-reportable-info-in-technical-content.md)：技術段落旁嵌入可彙報的成本量級、時程與進度指標——給三者各自的寫法粒度。支撐規則三。
 - [operational-how-needs-environment-specific-tooling](principles/operational-how-needs-environment-specific-tooling.md)：操作指引每一步至少帶一條工具路徑——給自測問題（讀者坐在電腦前，下一個動作是打開什麼軟體）。支撐規則二的操作段。
-
 
 ## 與核心原則的映射
 

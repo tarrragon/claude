@@ -2,7 +2,7 @@
 name: multi-session-orchestration
 description: "PM coordinating 2+ peer Claude Code sessions in one repo: split work lines by topic, share the merge gate and test slot, relay user decisions, triage title-only review flags, wrap up for handoff. Use when running parallel session lines."
 metadata:
-  version: 1.23.0
+  version: 1.24.0
 ---
 
 # 多 session 分線協調（主控 PM 統籌多條工作線）
@@ -97,7 +97,7 @@ metadata:
 
 例外發生後，主控在 `/clear` 或 `/compact` 後收到的第一則訊息，不論內容是什麼，都先完成自我接續，不等用戶提示接續點：
 
-1. 讀設定檔，找出協調票。
+1. 以 `scripts/coordination_ticket.py --json` 找出協調票：自動解析 active 版本中標記 `coordination: true` 且狀態為 in_progress 的票。結果為 `multiple` 或 `none` 時停手問用戶，不自行挑選。`.claude/project-integration/multi-session.json` 的 `coordinationTicket` 只作選用覆寫，不是必要的設定檔。
 2. 判讀每條線目前的狀態，分為：已收線、`/clear` 後繼續、`/compact` 後繼續、新 session 接手。
 3. 把判讀結果寫進協調票。
 4. 向用戶回報。

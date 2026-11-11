@@ -87,6 +87,50 @@ class TestQuery:
             assert result == 0
 
 
+class TestQuerySpawnedProgress:
+    """Spawned IMPs 進度跨版本讀取（3.2.0-W1-016）"""
+
+    SRC_VERSION = "0.4.2"
+    OTHER_VERSION = "0.4.3"
+    SRC_ID = "0.4.2-W1-001"
+    SAME_ID = "0.4.2-W1-002"
+    CROSS_ID = "0.4.3-W1-001"
+
+    def _write(self, version, ticket_id, spawned=()):
+        from ticket_system.lib.paths import get_tickets_dir
+
+        tickets_dir = get_tickets_dir(version)
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        lines = [f"id: {ticket_id}", "title: t", "type: IMP",
+                 "status: completed", f"version: {version}", "what: t",
+                 "spawned_tickets: [" + ", ".join(spawned) + "]"]
+        (tickets_dir / f"{ticket_id}.md").write_text(
+            "---\n" + "\n".join(lines) + "\n---\n\n# Execution Log\n",
+            encoding="utf-8",
+        )
+
+    def _query(self, capsys):
+        args = Mock()
+        args.ticket_id = self.SRC_ID
+        args.version = self.SRC_VERSION
+        assert execute_query(args, self.SRC_VERSION) == 0
+        return capsys.readouterr().out
+
+    def test_same_and_cross_version_spawned_both_resolved(self, capsys):
+        """E1 對照：跨版本票只存在於其 ID 所屬版本目錄；修正前會顯示 not_found。"""
+        self._write(self.SRC_VERSION, self.SAME_ID)
+        self._write(self.SRC_VERSION, self.SRC_ID, spawned=[self.SAME_ID])
+        same_only = self._query(capsys)
+        self._write(self.OTHER_VERSION, self.CROSS_ID)
+        self._write(self.SRC_VERSION, self.SRC_ID,
+                    spawned=[self.SAME_ID, self.CROSS_ID])
+        both = self._query(capsys)
+        assert "1/1 completed" in same_only
+        assert "2/2 completed" in both
+        assert "not_found" not in both
+        assert both != same_only
+
+
 class TestSummary:
     """摘要查詢測試"""
 

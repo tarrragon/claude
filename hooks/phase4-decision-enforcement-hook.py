@@ -99,12 +99,9 @@ EXEMPT_MARKER_STRIP = re.compile(r"<!--\s*PC-093-exempt[^>]*-->")
 # 行級豁免（trim 後以 `- [ref]` 或 `[ref]` 開頭）— 採方向 A：簡單精準。
 REF_LINE_PATTERN = re.compile(r"^\s*-?\s*\[ref\]")
 
-# W10-130: Schema placeholder template 區塊起點。
-# Ticket body schema 採 `<!-- Schema[<type>/<section>]: <note> -->` 標記。
-# 該區塊內的 `<!-- PC-093-exempt: cat:reason -->` 屬範例文字（template note 內
-# 示意 marker 格式），非實際豁免宣告。應整段跳過 phrase 掃描與 marker 蒐集。
-SCHEMA_PLACEHOLDER_START = re.compile(r"<!--\s*Schema\[[^\]]+\]\s*:")
-# 區塊邊界：下個 H2（## ）或 `---` 水平分隔符（trim 後完全相符）。
+# 自動產生區塊（Context Bundle）的邊界：下個 H2（## ）或 `---` 水平分隔符
+# （trim 後完全相符）。Schema 行不再圈出區塊，只跳過純註解行
+# （compute_comment_placeholder_lines）。
 SCHEMA_PLACEHOLDER_END_H2 = re.compile(r"^\s*##\s")
 SCHEMA_PLACEHOLDER_END_HR = re.compile(r"^\s*---\s*$")
 
@@ -396,29 +393,70 @@ def compute_frontmatter_lines(lines: List[str]) -> set:
     return set()
 
 
-def compute_schema_placeholder_lines(lines: List[str]) -> set:
-    """W10-130: 計算 Schema placeholder template 區塊的 1-based 行號集合。
-
-    起點：含 `<!-- Schema[<type>/<section>]: ... -->` 的行（含該行）。
-    終點：下個 H2（`## `）或 `---` 水平分隔符（不含該邊界行）。
-
-    回傳：所有屬於 placeholder 區塊的行號集合。phrase 掃描與 marker 蒐集均跳過。
-    """
-    placeholder_lines: set = set()
-    in_block = False
-    for idx, raw in enumerate(lines, start=1):
-        if in_block:
-            if SCHEMA_PLACEHOLDER_END_H2.match(raw) or SCHEMA_PLACEHOLDER_END_HR.match(raw):
-                in_block = False
-                # 邊界行不屬 placeholder
-                continue
-            placeholder_lines.add(idx)
-            # 同一行可能再次出現 Schema 標記（連續 placeholder），仍視為 in_block
+def _split_comment_and_text(raw: str, in_comment: bool) -> Tuple[str, bool]:
+    """移除一行中的 HTML 註解片段，回傳 (註解外文字, 行尾是否仍在註解內)。"""
+    visible: List[str] = []
+    pos = 0
+    while pos < len(raw):
+        if in_comment:
+            close = raw.find("-->", pos)
+            if close == -1:
+                return "".join(visible), True
+            pos = close + 3
+            in_comment = False
             continue
-        if SCHEMA_PLACEHOLDER_START.search(raw):
-            in_block = True
-            placeholder_lines.add(idx)
-    return placeholder_lines
+        start = raw.find("<!--", pos)
+        if start == -1:
+            visible.append(raw[pos:])
+            break
+        visible.append(raw[pos:start])
+        pos = start + 4
+        in_comment = True
+    return "".join(visible), in_comment
+
+
+def compute_comment_placeholder_lines(lines: List[str]) -> set:
+    """計算純 HTML 註解行的 1-based 行號集合（phrase 掃描與 marker 蒐集均跳過）。
+
+    跳過的是「剝掉所有註解片段後沒有剩下文字」的行：Schema 行、註解形態的佔位符
+    （`<!-- 必填：… -->`）、多行註解的內部行。註解外還有文字的行照常掃描，
+    Schema 行之後的實質內容也照常掃描。
+
+    例外：整行只有 PC-093-exempt marker 的行不列入——那是豁免宣告本身，須被蒐集。
+    掃描時 marker 會先被 EXEMPT_MARKER_STRIP 剝除，不列入也不會產生命中。
+
+    Why：舊版以 Schema 行為起點、一路圈到下一個 `## ` 或 `---` 整段跳過。模板
+    標記寫入後仍留在原處，章節填上實質內容後整段依舊被跳過，延後話術掃描在
+    這些章節完全失效。佔位符改為註解形態後，只需跳過註解行本身。
+    """
+    comment_lines: set = set()
+    in_comment = False
+    open_idx = 0  # 目前未關閉註解的開頭行號
+    for idx, raw in enumerate(lines, start=1):
+        started_in_comment = in_comment
+        touches_comment = in_comment or "<!--" in raw
+        visible, in_comment = _split_comment_and_text(raw, in_comment)
+        if in_comment and not started_in_comment:
+            open_idx = idx
+        if not touches_comment or visible.strip():
+            continue
+        if not started_in_comment and _is_exempt_declaration(raw):
+            continue
+        comment_lines.add(idx)
+    if in_comment:
+        # 到檔尾仍未關閉：只算開頭那一行，其後照常掃描。強制閘門寧可多掃，
+        # 也不讓一個漏掉的 `-->` 使整檔其餘內容靜默放行
+        comment_lines -= set(range(open_idx + 1, len(lines) + 1))
+    return comment_lines
+
+
+# 豁免宣告的開頭（不要求 cat:reason 完整；格式錯誤的宣告也須被蒐集以回報 format-error）
+_EXEMPT_DECLARATION_START = re.compile(r"^\s*<!--\s*PC-093-exempt\b")
+
+
+def _is_exempt_declaration(raw: str) -> bool:
+    """本行自己開頭的註解是 PC-093-exempt 宣告（含格式錯誤者）。"""
+    return bool(_EXEMPT_DECLARATION_START.match(raw))
 
 
 def compute_context_bundle_lines(lines: List[str]) -> set:
@@ -585,10 +623,10 @@ def scan_lines_for_phrases(
 
     - 掃前移除 EXEMPT_MARKER_STRIP 避 marker 內含 phrase 誤判。
     - 同行可多規則命中，不去重；豁免狀態由 F7 處理。
-    - W10-130: Schema placeholder template 區塊整段跳過。
+    - 純 HTML 註解行（Schema 行、註解形態佔位符、多行註解內部）跳過。
     """
     fenced_lines = compute_fenced_block_lines(lines)
-    placeholder_lines = compute_schema_placeholder_lines(lines)
+    placeholder_lines = compute_comment_placeholder_lines(lines)
     frontmatter_lines = compute_frontmatter_lines(lines)
     context_bundle_lines = compute_context_bundle_lines(lines)
     resolved_spawn_lines = compute_resolved_spawn_request_lines(lines)
@@ -607,7 +645,7 @@ def scan_lines_for_phrases(
         # W11-018: Fenced code block 範例語境豁免（行級 short-circuit，最先檢查）
         if idx in fenced_lines:
             continue
-        # W10-130: Schema placeholder template 區塊跳過（範例文字非實際內容）
+        # 純 HTML 註解行跳過（註解內容不是可見論述）
         if idx in placeholder_lines:
             continue
         # W10-127: Context Bundle 自動抽取的 [ref] 行豁免（行級 short-circuit）。
@@ -677,11 +715,11 @@ def validate_exempt_fields(marker: ExemptMarker) -> Tuple[bool, Optional[str]]:
 def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
     """掃全文蒐集 marker 位置 + 解析結果。
 
-    W10-130: Schema placeholder template 區塊內的 marker 屬範例文字（如
-    `<!-- PC-093-exempt: cat:reason -->`），整段跳過避免誤判為 INVALID。
+    純 HTML 註解行（Schema 行、註解形態佔位符、多行註解內部）裡的 marker 字樣屬
+    說明文字，不蒐集；整行只有 marker 的豁免宣告不在此列，照常蒐集。
     """
     fenced_lines = compute_fenced_block_lines(lines)
-    placeholder_lines = compute_schema_placeholder_lines(lines)
+    placeholder_lines = compute_comment_placeholder_lines(lines)
     frontmatter_lines = compute_frontmatter_lines(lines)
     context_bundle_lines = compute_context_bundle_lines(lines)
     resolved_spawn_lines = compute_resolved_spawn_request_lines(lines)

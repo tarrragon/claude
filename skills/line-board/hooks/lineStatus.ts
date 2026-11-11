@@ -42,11 +42,19 @@ export async function lineStatusText($: EngineInterface, readAt: string): Promis
   ])
 }
 
-/** 協調票不成立的說明（0 張、多張、CLI 失敗）；0 張的用語與看板 /board 共用。 */
+/**
+ * 0 張協調票時給主控的步驟：與 multi-session-orchestration line-continuity §3 一致，先問用戶開工作線或單一線，
+ * 不直接教建協調票（建票只在用戶選開工作線之後）。看板 /board 的補法用語不變，仍用 COORDINATION_HOWTO。
+ */
+export const LINE_STATUS_NONE_STEP =
+  '不自行判定單一線，先以 AskUserQuestion 問用戶開工作線或單一線（multi-session-orchestration references/line-continuity.md §3）；' +
+  `用戶選開工作線時才建協調票，${COORDINATION_HOWTO}`
+
+/** 協調票不成立的說明（0 張、多張、CLI 失敗）；0 張的成因用語與看板 /board 共用。 */
 function coordinationUnavailable(config: Exclude<ProjectConfigResult, { kind: 'ok' }>): string {
   switch (config.kind) {
     case 'none':
-      return `${COORDINATION_NONE}；${COORDINATION_HOWTO}`
+      return `${COORDINATION_NONE}；${LINE_STATUS_NONE_STEP}`
     case 'multiple':
       return `active 版本有多張標記 coordination: true 的進行中票，不自行擇一，請用戶裁定：${config.candidates.join('、')}`
     case 'error':

@@ -855,6 +855,62 @@ def _rewrite_handoff_pending(mapping: Dict[str, str]) -> List[Path]:
     return touched
 
 
+# migrate 只改寫票檔內的引用；以下路徑之外的追蹤檔若仍含舊號，於結束時列出
+_RESIDUE_EXCLUDE_PATHSPECS = (
+    ":(exclude,glob)docs/work-logs/**/tickets/**",
+    ":(exclude,glob).claude/migration-backups/**",
+)
+_RESIDUE_MAX_LINES_PER_ID = 20
+
+
+def _scan_residual_references(old_ids: List[str]) -> Dict[str, List[str]]:
+    """以 git grep 找票檔以外仍引用舊號的行，回傳 {舊號: ["路徑:行號: 內容", ...]}。
+
+    只列出、不改寫：殘留可能是不應改寫的歷史紀錄（CHANGELOG、決策記錄），
+    由使用者判斷。舊號後接數字或「.數字」（子票）不算命中。git 不可用或
+    非 repo 時回傳空結果並寫 stderr（不影響遷移本身）。
+    """
+    import subprocess
+
+    from ticket_system.lib.paths import get_project_root
+
+    result: Dict[str, List[str]] = {}
+    root = str(get_project_root())
+    for old_id in dict.fromkeys(i for i in old_ids if i):
+        cmd = ["git", "-C", root, "grep", "-n", "-I", "-F", "-e", old_id, "--", ".",
+               *_RESIDUE_EXCLUDE_PATHSPECS]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError) as e:
+            sys.stderr.write(f"[migrate] 舊號殘留掃描略過（git grep 失敗）：{e}\n")
+            return {}
+        if proc.returncode not in (0, 1):
+            sys.stderr.write(f"[migrate] 舊號殘留掃描略過：{proc.stderr.strip()}\n")
+            return {}
+        boundary = re.compile(re.escape(old_id) + r"(?![0-9]|\.[0-9])")
+        hits = [line for line in proc.stdout.splitlines() if boundary.search(line)]
+        if hits:
+            result[old_id] = hits
+    return result
+
+
+def _report_residual_references(old_ids: List[str]) -> None:
+    """列出票檔以外仍引用舊號的位置；無殘留時不輸出。"""
+    residue = _scan_residual_references(old_ids)
+    if not residue:
+        return
+    print()
+    print(format_warning(
+        "[migrate] 票檔以外仍引用舊號（migrate 不改寫這些檔案，請判斷是否需更新）："
+    ))
+    for old_id, hits in residue.items():
+        print(f"  {old_id}：{len(hits)} 處")
+        for hit in hits[:_RESIDUE_MAX_LINES_PER_ID]:
+            print(f"    {hit}")
+        if len(hits) > _RESIDUE_MAX_LINES_PER_ID:
+            print(f"    （其餘 {len(hits) - _RESIDUE_MAX_LINES_PER_ID} 處未列出）")
+
+
 def _flatten_records(records: List[_MigrationRecord]) -> List[_MigrationRecord]:
     """展開根票 record 帶的子樹成員，供併成單一提交。"""
     return [item for record in records for item in (record, *record.subtree)]
@@ -1125,9 +1181,20 @@ def _migrate_single_ticket(
     rc, record = _migrate_ticket_files(
         version, source_id, target_id, dry_run, backup, force_overwrite, reserved
     )
-    if rc == 0 and record and _commit_migrations([record]):
+    commit_failed = rc == 0 and record and _commit_migrations([record])
+    if rc == 0:
+        _report_residual_references(_old_ids_for_report(
+            [record] if record else [], [source_id] if dry_run and source_id != target_id else []
+        ))
+    if commit_failed:
         return EXIT_AUTO_COMMIT_FAILED
     return rc
+
+
+def _old_ids_for_report(records: List[_MigrationRecord], dry_run_ids: List[str]) -> List[str]:
+    """殘留掃描的舊號清單：正式執行取實際改號的 record，dry-run 取來源 ID。"""
+    ids = [r.old_id for r in _flatten_records(records) if r.old_id and r.old_id != r.new_id]
+    return ids + list(dry_run_ids)
 
 
 def _load_migration_config(config_file: str) -> Optional[List[Dict[str, str]]]:
@@ -1210,6 +1277,7 @@ def _batch_migrate(
     fail_count = 0
     skip_count = 0
     records: List[_MigrationRecord] = []
+    dry_run_ids: List[str] = []
 
     for migration in migrations:
         if not isinstance(migration, dict):
@@ -1234,6 +1302,8 @@ def _batch_migrate(
             success_count += 1
             if record:
                 records.append(record)
+            elif dry_run and source_id != target_id:
+                dry_run_ids.append(source_id)
         elif result == 2:
             skip_count += 1
         else:
@@ -1249,7 +1319,9 @@ def _batch_migrate(
     print(SEPARATOR_PRIMARY)
 
     # 整批只把成功項以單一 commit 提交；提交失敗的 75 優先於其餘結果
-    if _commit_migrations(records):
+    commit_failed = _commit_migrations(records)
+    _report_residual_references(_old_ids_for_report(records, dry_run_ids))
+    if commit_failed:
         return EXIT_AUTO_COMMIT_FAILED
     if fail_count > 0:
         return 1 if success_count > 0 else 2

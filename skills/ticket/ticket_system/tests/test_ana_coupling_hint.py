@@ -1,10 +1,11 @@
 """指向 ANA 時的耦合後果提示測試（0.4.0-W1-068.4）。
 
 覆蓋：
-1. create --parent <ANA>，且該 ANA 已被其他票 blockedBy：stderr 提示並列出受影響的票
+1. create --parent <ANA>，且該 ANA 已被其他票 blockedBy：stdout 提示並列出受影響的票
 2. create --blocked-by / track set-blocked-by 指向有非終態 children 的 ANA：同型提示
 3. E1 對照：非 ANA 父票、ANA 無 blockedBy 依賴者、ANA children 皆終態時不提示
-4. 每一案 exit code 不變（提示只寫 stderr，不阻擋）
+4. 凍結版本 ANA 父票、未帶 --scope-blocker：提示改用 --source-ticket（正反對照）
+5. 每一案 exit code 不變（提示只寫 stdout，不阻擋）
 """
 from __future__ import annotations
 
@@ -106,7 +107,7 @@ def repo(seeded_repo_root):
 def test_create_parent_ana_with_dependents_hints(repo):
     ana = _create(1, type="ANA", target="分析")
     dep = _create(2, blocked_by=[ana], target="等待者")
-    _, err, code = _run(create_cmd.execute, _make_args(seq=3, parent=ana, target="子票"))
+    err, _, code = _run(create_cmd.execute, _make_args(seq=3, parent=ana, target="子票"))
     assert code == 0
     assert HINT_KEY in err
     assert dep in err
@@ -115,7 +116,7 @@ def test_create_parent_ana_with_dependents_hints(repo):
 
 def test_create_parent_ana_without_dependents_no_hint(repo):
     ana = _create(1, type="ANA", target="分析")
-    _, err, code = _run(create_cmd.execute, _make_args(seq=2, parent=ana, target="子票"))
+    err, _, code = _run(create_cmd.execute, _make_args(seq=2, parent=ana, target="子票"))
     assert code == 0
     assert HINT_KEY not in err
 
@@ -123,7 +124,7 @@ def test_create_parent_ana_without_dependents_no_hint(repo):
 def test_create_parent_non_ana_with_dependents_no_hint(repo):
     parent = _create(1, type="IMP", target="實作父")
     _create(2, blocked_by=[parent], target="等待者")
-    _, err, code = _run(create_cmd.execute, _make_args(seq=3, parent=parent, target="子票"))
+    err, _, code = _run(create_cmd.execute, _make_args(seq=3, parent=parent, target="子票"))
     assert code == 0
     assert HINT_KEY not in err
 
@@ -132,7 +133,7 @@ def test_create_parent_ana_dependent_terminal_no_hint(repo):
     ana = _create(1, type="ANA", target="分析")
     dep = _create(2, blocked_by=[ana], target="等待者")
     _set_status(dep, "closed")
-    _, err, code = _run(create_cmd.execute, _make_args(seq=3, parent=ana, target="子票"))
+    err, _, code = _run(create_cmd.execute, _make_args(seq=3, parent=ana, target="子票"))
     assert code == 0
     assert HINT_KEY not in err
 
@@ -143,7 +144,7 @@ def test_create_parent_ana_dependent_terminal_no_hint(repo):
 def test_create_blocked_by_ana_with_open_children_hints(repo):
     ana = _create(1, type="ANA", target="分析")
     child = _create(2, parent=ana, target="子票")
-    _, err, code = _run(create_cmd.execute, _make_args(seq=3, blocked_by=[ana], target="等待者"))
+    err, _, code = _run(create_cmd.execute, _make_args(seq=3, blocked_by=[ana], target="等待者"))
     assert code == 0
     assert HINT_KEY in err
     assert child in err
@@ -153,7 +154,7 @@ def test_create_blocked_by_ana_children_all_terminal_no_hint(repo):
     ana = _create(1, type="ANA", target="分析")
     child = _create(2, parent=ana, target="子票")
     _set_status(child, "closed")
-    _, err, code = _run(create_cmd.execute, _make_args(seq=3, blocked_by=[ana], target="等待者"))
+    err, _, code = _run(create_cmd.execute, _make_args(seq=3, blocked_by=[ana], target="等待者"))
     assert code == 0
     assert HINT_KEY not in err
 
@@ -161,7 +162,7 @@ def test_create_blocked_by_ana_children_all_terminal_no_hint(repo):
 def test_create_blocked_by_non_ana_with_open_children_no_hint(repo):
     parent = _create(1, type="IMP", target="實作父")
     _create(2, parent=parent, target="子票")
-    _, err, code = _run(create_cmd.execute, _make_args(seq=3, blocked_by=[parent], target="等待者"))
+    err, _, code = _run(create_cmd.execute, _make_args(seq=3, blocked_by=[parent], target="等待者"))
     assert code == 0
     assert HINT_KEY not in err
 
@@ -178,7 +179,7 @@ def test_set_blocked_by_ana_with_open_children_hints(repo):
     ana = _create(1, type="ANA", target="分析")
     child = _create(2, parent=ana, target="子票")
     waiter = _create(3, target="等待者")
-    _, err, code = _set_blocked_by(waiter, ana)
+    err, _, code = _set_blocked_by(waiter, ana)
     assert code == 0
     assert HINT_KEY in err
     assert child in err
@@ -189,7 +190,7 @@ def test_set_blocked_by_ana_children_all_terminal_no_hint(repo):
     child = _create(2, parent=ana, target="子票")
     _set_status(child, "closed")
     waiter = _create(3, target="等待者")
-    _, err, code = _set_blocked_by(waiter, ana)
+    err, _, code = _set_blocked_by(waiter, ana)
     assert code == 0
     assert HINT_KEY not in err
 
@@ -198,7 +199,7 @@ def test_set_blocked_by_non_ana_no_hint(repo):
     parent = _create(1, type="IMP", target="實作父")
     _create(2, parent=parent, target="子票")
     waiter = _create(3, target="等待者")
-    _, err, code = _set_blocked_by(waiter, parent)
+    err, _, code = _set_blocked_by(waiter, parent)
     assert code == 0
     assert HINT_KEY not in err
 
@@ -207,9 +208,61 @@ def test_set_blocked_by_remove_mode_no_hint(repo):
     ana = _create(1, type="ANA", target="分析")
     _create(2, parent=ana, target="子票")
     waiter = _create(3, target="等待者", blocked_by=[ana])
-    _, err, code = _set_blocked_by(waiter, ana, )
+    err, _, code = _set_blocked_by(waiter, ana, )
     assert code == 0
     ns = argparse.Namespace(ticket_id=waiter, value=ana, add=False, remove=True)
-    _, err2, code2 = _run(track_relations.execute_set_blocked_by, ns, VERSION)
+    err2, _, code2 = _run(track_relations.execute_set_blocked_by, ns, VERSION)
     assert code2 == 0
     assert HINT_KEY not in err2
+
+
+# --- 凍結版本 ANA 父票：改用 --source-ticket 提示 -------------------------------
+
+FROZEN_KEY = "--source-ticket"
+
+
+@pytest.fixture
+def frozen(monkeypatch):
+    from ticket_system.lib import version as version_mod
+
+    """回傳啟用函式：根票須在凍結前建立（凍結閘門擋根票）。"""
+    def _activate():
+        monkeypatch.setattr(version_mod, "is_version_scope_frozen", lambda v: True)
+
+    return _activate
+
+
+def test_frozen_ana_parent_hints_source_ticket(repo, frozen):
+    ana = _create(1, type="ANA", target="分析")
+    frozen()
+    out, _, code = _run(create_cmd.execute, _make_args(seq=2, parent=ana, target="子票"))
+    assert code == 0
+    assert FROZEN_KEY in out
+    assert ana in out
+    assert len(list_tickets(VERSION)) == 2
+
+
+def test_frozen_ana_parent_with_scope_blocker_no_hint(repo, frozen):
+    ana = _create(1, type="ANA", target="分析")
+    frozen()
+    out, _, code = _run(
+        create_cmd.execute,
+        _make_args(seq=2, parent=ana, target="子票", scope_blocker="合法拆票"),
+    )
+    assert code == 0
+    assert FROZEN_KEY not in out
+
+
+def test_unfrozen_ana_parent_no_source_ticket_hint(repo):
+    ana = _create(1, type="ANA", target="分析")
+    out, _, code = _run(create_cmd.execute, _make_args(seq=2, parent=ana, target="子票"))
+    assert code == 0
+    assert FROZEN_KEY not in out
+
+
+def test_frozen_non_ana_parent_no_hint(repo, frozen):
+    parent = _create(1, type="IMP", target="實作父")
+    frozen()
+    out, _, code = _run(create_cmd.execute, _make_args(seq=2, parent=parent, target="子票"))
+    assert code == 0
+    assert FROZEN_KEY not in out

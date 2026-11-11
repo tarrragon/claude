@@ -1838,6 +1838,72 @@ def _print_spawned_list(non_terminal: List[Tuple[str, str]]) -> None:
         )
 
 
+def _version_tuple(version: Optional[str]) -> Optional[Tuple[int, ...]]:
+    """版本字串轉整數元組（3.10.0 > 3.9.0）；無法解析返回 None。"""
+    if not version:
+        return None
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError:
+        return None
+
+
+def _split_deferred_spawned(
+    non_terminal: List[Tuple[str, str]], ana_version: Optional[str]
+) -> Tuple[List[Tuple[str, str, str]], List[Tuple[str, str]]]:
+    """把非 terminal spawned 分成「後續版本」與「需確認」兩組。
+
+    後續版本：spawned 版本（由 ID 推得）數值上嚴格大於 ANA 版本。
+    其餘（同版本、較早版本、not_found、版本無法解析）保守歸入需確認組。
+
+    Returns:
+        (deferred[(id, status, version)], needs_confirm[(id, status)])
+    """
+    ana_tuple = _version_tuple(ana_version)
+    deferred: List[Tuple[str, str, str]] = []
+    needs_confirm: List[Tuple[str, str]] = []
+    for sid, status in non_terminal:
+        spawned_version = extract_version_from_ticket_id(sid)
+        spawned_tuple = _version_tuple(spawned_version)
+        is_later = (
+            status != "not_found"
+            and ana_tuple is not None
+            and spawned_tuple is not None
+            and spawned_tuple > ana_tuple
+        )
+        if is_later:
+            deferred.append((sid, status, spawned_version))
+        else:
+            needs_confirm.append((sid, status))
+    return deferred, needs_confirm
+
+
+def _print_deferred_spawned(
+    ticket_id: str, deferred: List[Tuple[str, str, str]]
+) -> None:
+    """印出落地在後續版本的 spawned 資訊段至 stderr。"""
+    if not deferred:
+        return
+    print(
+        format_msg(
+            LifecycleMessages.SPAWNED_DEFERRED_HEADER,
+            ticket_id=ticket_id,
+            count=len(deferred),
+        ),
+        file=sys.stderr,
+    )
+    for sid, status, spawned_version in deferred:
+        print(
+            format_msg(
+                LifecycleMessages.SPAWNED_DEFERRED_ITEM,
+                spawned_id=sid,
+                status=status,
+                spawned_version=spawned_version,
+            ),
+            file=sys.stderr,
+        )
+
+
 def _handle_ana_spawned_confirmation(
     ticket: Dict[str, Any], version: str, yes_spawned: bool
 ) -> Optional[int]:
@@ -1847,7 +1913,8 @@ def _handle_ana_spawned_confirmation(
       1. 非 ANA type → 跳過（返回 None）
       2. spawned_tickets 空 → 跳過
       3. 全 terminal → 跳過
-      4. 含非 terminal：
+      3.5. 非 terminal 全在後續版本 → 只印資訊，不要求確認（返回 None）
+      4. 含需確認的非 terminal（同版本／較早／not_found／版本無法解析）：
          - 互動環境（isatty）：顯示清單 + y/N prompt
            - y → 返回 None（繼續 complete）
            - 其他 → 返回 2（取消）
@@ -1876,6 +1943,14 @@ def _handle_ana_spawned_confirmation(
         return None
 
     ticket_id = ticket.get("id", "未知")
+    ana_version = (
+        ticket.get("version") or extract_version_from_ticket_id(ticket_id) or version
+    )
+    deferred, non_terminal = _split_deferred_spawned(non_terminal, ana_version)
+    _print_deferred_spawned(ticket_id, deferred)
+    if not non_terminal:
+        return None
+
     count = len(non_terminal)
     is_interactive = sys.stdin.isatty()
 

@@ -74,7 +74,12 @@ if str(_hooks_dir) not in sys.path:
 
 from acceptance_checkers.ticket_parser import extract_where_files_write_only
 
-_APPLICABLE_TYPES = {"IMP"}
+# 防護類 hook acceptance 的適用票型：驗證端（本模組）與建立端
+# （ticket create 的 apply_hook_acceptance_template）共用此常數。
+# 兩端各自定義時，建立端會對驗證端不檢查的票型（ANA／DOC）帶入模板，
+# 條目只能手動改寫為不適用。
+APPLICABLE_TYPES = frozenset({"IMP"})
+_APPLICABLE_TYPES = APPLICABLE_TYPES
 
 _TOP_LEVEL_HOOKS_PREFIX = PurePosixPath(".claude/hooks")
 

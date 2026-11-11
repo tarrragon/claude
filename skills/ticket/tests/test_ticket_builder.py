@@ -20,6 +20,7 @@ ticket_builder 模組的回歸測試
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
+import re
 import tempfile
 import pytest
 
@@ -703,37 +704,94 @@ class TestGetSchemaNote:
 
 
 class TestCreateTicketBodyTypeAwarePlaceholders:
-    """測試 type-aware placeholder 引導文字（W1-091）"""
+    """測試 type-aware placeholder 引導文字：以 HTML 註解呈現，不與內容同形"""
 
     def test_ana_body_has_type_specific_placeholders(self):
         """ANA body 的 Problem Analysis 子段含「必填」、Solution 含分析結論引導"""
         body = create_ticket_body("分析 X", "sage-test-architect", "ANA")
-        assert "（必填：問題發生的直接原因是什麼？影響範圍有多大？）" in body
-        assert "（必填：哪些檔案、模組或功能受影響？已驗證的事實 vs 仍未驗證的假設？）" in body
-        assert "（必填：分析結論、至少 2 個候選方案含利弊、Spawn 規劃表）" in body
-        assert "（選填：若有實驗輸出才填，無實驗可留 placeholder）" in body
+        assert "<!-- 必填：問題發生的直接原因是什麼？影響範圍有多大？ -->" in body
+        assert "<!-- 必填：哪些檔案、模組或功能受影響？已驗證的事實 vs 仍未驗證的假設？ -->" in body
+        assert "<!-- 必填：分析結論、至少 2 個候選方案含利弊、Spawn 規劃表 -->" in body
+        assert "<!-- 選填：若有實驗輸出才填，無實驗可留 placeholder -->" in body
 
     def test_imp_body_has_type_specific_placeholders(self):
         """IMP body 的 Problem Analysis 含「選填」、Test Results 含「必填」"""
         body = create_ticket_body("實作 Y", "thyme-python-developer", "IMP")
-        assert "（選填：問題如何發現？直接原因是什麼？）" in body
-        assert "（選填：哪些檔案、模組或功能受影響？）" in body
-        assert "（必填：測試執行指令、通過數/失敗數或 commit SHA）" in body
-        assert "（選填：修復方式概述、修改的檔案和驗證方式）" in body
+        assert "<!-- 選填：問題如何發現？直接原因是什麼？ -->" in body
+        assert "<!-- 選填：哪些檔案、模組或功能受影響？ -->" in body
+        assert "<!-- 必填：測試執行指令、通過數/失敗數或 commit SHA -->" in body
+        assert "<!-- 選填：修復方式概述、修改的檔案和驗證方式 -->" in body
 
     def test_doc_body_has_type_specific_placeholders(self):
         """DOC body 的 Solution 含「免填」、Completion Info 含變更摘要引導"""
         body = create_ticket_body("更新文件 Z", "rosemary-project-manager", "DOC")
-        assert "（免填：DOC 類型以 Completion Info 變更摘要取代）" in body
-        assert "（免填：DOC 類型無需測試）" in body
-        assert "（必填：變更摘要——哪些文件或章節更新、新增或刪除）" in body
+        assert "<!-- 免填：DOC 類型以 Completion Info 變更摘要取代 -->" in body
+        assert "<!-- 免填：DOC 類型無需測試 -->" in body
+        assert "<!-- 必填：變更摘要——哪些文件或章節更新、新增或刪除 -->" in body
 
     def test_unknown_type_body_has_generic_placeholders(self):
         """空 type 保留通用「待填寫」placeholder（向後相容）"""
         body = create_ticket_body("任務", "agent", "")
-        assert "（待填寫：問題發生的直接原因是什麼？）" in body
-        assert "（待填寫：哪些檔案、模組或功能受影響？）" in body
+        assert "<!-- 待填寫：問題發生的直接原因是什麼？ -->" in body
+        assert "<!-- 待填寫：哪些檔案、模組或功能受影響？ -->" in body
         assert "<!-- To be filled by executing agent -->" in body
+
+
+_VISIBLE_PLACEHOLDER = re.compile(r"^（(待填寫|必填|選填|免填)：", re.MULTILINE)
+_GUIDE_COMMENT = re.compile(r"^<!-- (待填寫|必填|選填|免填)：(.+) -->$", re.MULTILINE)
+_SCHEMA_LINE = re.compile(r"<!--\s*Schema\[[^\n]*-->")
+ALL_TYPES = ["ANA", "IMP", "DOC", "ADJ", ""]
+
+
+def _to_legacy_visible(body: str) -> str:
+    """把新形態的佔位註解轉回舊形態的可見佔位符（存量票的形態）。"""
+    return _GUIDE_COMMENT.sub(lambda m: f"（{m.group(1)}：{m.group(2)}）", body)
+
+
+class TestPlaceholdersAsHtmlComments:
+    """佔位符改為 HTML 註解後的四項驗收。"""
+
+    @pytest.mark.parametrize("ticket_type", ALL_TYPES)
+    def test_no_visible_placeholder_in_new_body(self, ticket_type):
+        body = create_ticket_body("任務", "agent", ticket_type)
+        assert not _VISIBLE_PLACEHOLDER.search(body)
+        assert _GUIDE_COMMENT.search(body)
+
+    @pytest.mark.parametrize("ticket_type", ALL_TYPES)
+    def test_guide_comments_not_matched_by_schema_pattern(self, ticket_type):
+        body = create_ticket_body("任務", "agent", ticket_type)
+        for match in _GUIDE_COMMENT.finditer(body):
+            assert not re.match(r"<!--\s*Schema\[", match.group(0))
+
+    @pytest.mark.parametrize("ticket_type", ALL_TYPES)
+    def test_schema_lines_identical_to_legacy_form(self, ticket_type):
+        """Schema 行與舊形態逐字相同（轉換只動佔位符行）。"""
+        body = create_ticket_body("任務", "agent", ticket_type)
+        legacy = _to_legacy_visible(body)
+        assert _SCHEMA_LINE.findall(body) == _SCHEMA_LINE.findall(legacy)
+
+    @pytest.mark.parametrize("ticket_type", ALL_TYPES)
+    @pytest.mark.parametrize("filled", [False, True])
+    def test_validator_verdict_same_as_legacy_form(self, ticket_type, filled):
+        """同一批 fixture：新形態與舊形態的 validator 判定相同（空殼與已填兩種）。"""
+        from ticket_system.lib.ticket_validator import (
+            _is_placeholder,
+            validate_execution_log_by_type,
+        )
+
+        body = create_ticket_body("任務", "agent", ticket_type)
+        if filled:
+            body = body.replace("## Solution", "## Solution\n\n實質方案內容", 1)
+            body = body.replace("## Test Results", "## Test Results\n\n12 passed", 1)
+        legacy = _to_legacy_visible(body)
+
+        assert validate_execution_log_by_type(ticket_type, body) == (
+            validate_execution_log_by_type(ticket_type, legacy)
+        )
+        for section in re.split(r"^## ", body, flags=re.MULTILINE)[1:]:
+            name = section.split("\n", 1)[0]
+            legacy_section = _to_legacy_visible(section)
+            assert _is_placeholder(section) == _is_placeholder(legacy_section), name
 
 
 class TestUpdateParentChildren:

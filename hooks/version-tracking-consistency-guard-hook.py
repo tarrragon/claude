@@ -118,6 +118,20 @@ SECTION_BOUNDARY_PATTERN = re.compile(r"^\S", re.MULTILINE)
 # （W9-003 教訓），故限縮為進行中/待辦版本。
 MAIN_WORKLOG_CHECK_STATUSES = frozenset({"active", "planned"})
 
+# 警告區塊的格式出處：讀者知道缺了什麼之後，還要知道照什麼格式補
+MAIN_WORKLOG_TEMPLATE = ".claude/skills/doc-flow/templates/worklog.md.template"
+TODOLIST_ENTRY_TEMPLATE = ".claude/skills/doc-flow/templates/todolist.yaml.template"
+
+
+def main_worklog_relpath(version: str) -> str | None:
+    """回傳版本主工作日誌相對專案根的分層路徑；版號非三段時回傳 None。"""
+    parts = version.split(".")
+    if len(parts) != 3:
+        return None
+    return (f"docs/work-logs/v{parts[0]}/v{parts[0]}.{parts[1]}/"
+            f"v{version}/v{version}-main.md")
+
+
 def load_todolist_via_yaml(todolist_path: Path, logger) -> dict | None:
     """以 PEP 723 宣告的 PyYAML 直接解析 todolist.yaml，驗證其可解析性。
 
@@ -322,16 +336,13 @@ def detect_missing_main_worklog(versions: dict[str, str], project_root: Path) ->
     for version, status in versions.items():
         if status not in MAIN_WORKLOG_CHECK_STATUSES:
             continue
-        parts = version.split(".")
-        if len(parts) != 3:
+        relpath = main_worklog_relpath(version)
+        if relpath is None:
             continue
-        major_dir = f"v{parts[0]}"
-        minor_dir = f"v{parts[0]}.{parts[1]}"
-        patch_dir = f"v{version}"
-        version_dir = project_root / "docs" / "work-logs" / major_dir / minor_dir / patch_dir
-        if not version_dir.is_dir():
+        main_worklog = project_root / relpath
+        if not main_worklog.parent.is_dir():
             continue
-        if not (version_dir / f"v{version}-main.md").exists():
+        if not main_worklog.exists():
             missing.append(version)
     return sorted(missing)
 
@@ -522,9 +533,10 @@ def build_warning_lines(
         )
 
     if missing_main_worklog:
+        paths = [main_worklog_relpath(v) or v for v in missing_main_worklog]
         lines.append(
-            "[缺 main worklog] 版本目錄存在但缺 v{version}-main.md（僅查 "
-            "active/planned，避免歷史存量噪音）: " + ", ".join(missing_main_worklog)
+            "[缺 main worklog] 版本目錄存在但缺主工作日誌（僅查 "
+            "active/planned，避免歷史存量噪音），應建於: " + ", ".join(paths)
         )
 
     return lines
@@ -543,6 +555,9 @@ def print_warnings(lines: list[str]) -> None:
         print(f"  - {line}")
     print()
     print("建議：校準 docs/todolist.yaml，或補建缺漏版本條目")
+    print(f"  todolist 條目格式：{TODOLIST_ENTRY_TEMPLATE}")
+    print(f"  主工作日誌格式：{MAIN_WORKLOG_TEMPLATE}"
+          "（建立步驟見 doc-flow SKILL〈worklog init 執行步驟〉）")
     print("背景：.claude/error-patterns/process-compliance/PC-MON-001-guard-on-bypassable-execution-point.md")
     print()
     print("=" * 60)

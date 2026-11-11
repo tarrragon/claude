@@ -2,7 +2,7 @@
 name: doc
 description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、建立、導航和管理。Use for: (1) 查詢提案、規格、用例文件, (2) 建立新提案/規格/用例（從模板）, (3) 跨文件導航（從 UC 找 spec/ticket）, (4) Domain 地圖查詢, (5) 追蹤索引管理, (6) UC 測試對應驗證, (7) 提案評估與審查, (8) 測試追溯矩陣查詢（UC↔測試覆蓋狀態）, (9) UC 編號治理（uc list 列合法 UC / uc verify 白名單驗證可掛 CI / uc trace 引用追溯 / uc context 派發 UC 定位）。Use when: user mentions PROP-, UC-, SPEC-, 功能, 需求, feature, issue, 提案, 用例, 規格, 需求文件, 需求追蹤, 測試覆蓋, 追溯, traceability, test-map, UC 編號, 編號驗證, uc verify, 偽 UC, 合法 UC 清單"
 metadata:
-  version: 1.26.0
+  version: 1.26.1
 ---
 
 # Doc SKILL
@@ -33,7 +33,7 @@ metadata:
 /doc <subcommand> [options]
 ```
 
-> **CLI 狀態**：已實作 Python CLI，使用 `doc <subcommand>` 執行。首次使用需安裝：`(cd .claude/skills/doc && uv tool install .)`
+> **CLI 狀態**：已實作 Python CLI，使用 `doc <subcommand>` 執行。shim 由 SessionStart 的 `python3 .claude/scripts/install-skill-clis.py` 安裝，無需手動 `uv tool install`
 
 ## 子命令
 
@@ -235,17 +235,16 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 
 ---
 
-## 修改 source 後必須重新安裝
+## 修改 source 後無需重新安裝（shim 化）
 
-> **重要**：本 skill 透過 `uv tool install` 安裝為獨立 CLI，source（本目錄）與 installed（`~/.local/share/uv/tools/<package>/`）是兩份獨立 Python package。修改 source 後若未 reinstall，CLI 仍使用 stale installed 版本，新增的函式會 AttributeError 或被 hasattr 包裝靜默吞掉（W11-037 根因）。
+> **重要**：本 skill 已改用 cwd-resolving shim，不走 `uv tool install`。shim 每次執行都 `uv run --directory .claude/skills/doc` 當前專案源碼，修改 source 後改動即時生效，無 stale installed 問題。
 
-**修復指令**：
+**檢查 / 安裝指令**（SessionStart 會自動執行安裝）：
 
 ```bash
-cd .claude/skills/<本 skill 目錄> && uv tool install . --force --reinstall
+python3 .claude/scripts/install-skill-clis.py          # 安裝 / 更新 shim
+python3 .claude/scripts/install-skill-clis.py --check  # 檢查是否已 shim 化（exit 0/1）
 ```
-
-**自動偵測**：每次 SessionStart 由 `uv-tool-staleness-check-hook` 比對 source vs installed SHA256，偵測 stale 時提示修復指令。對應 ticket-skill 本身另有 `ticket-reinstall-hook` 自動 reinstall。
 
 ---
 

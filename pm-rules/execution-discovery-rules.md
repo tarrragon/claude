@@ -55,7 +55,7 @@
 |------|------|---------|
 | 1. 識別 | 認知這是「不能立刻產出結論」的問題 | 若可立即決策則寫狀態 (a) 結論，跳過閉環；否則進入 step 2 |
 | 2. 建分析/規劃 ticket | 建 ANA（分析）或 DOC（規劃）ticket 承載問題 | `ticket create --type ANA --action "分析" --target "..."` 或 `--type DOC` |
-| 3. Solution 規劃驗證/實驗子任務 | 在 step 2 ticket 的 Solution 章節列出需建立的 IMP/DOC 子任務 | 每項需含：產出物、acceptance、預估成本；這些子任務屬結論要求的落地（step 5 結案的前置），用 `--parent` 建為 children（PC-091），不用 `--source-ticket`；後者僅用於結論未要求的獨立工作 |
+| 3. Solution 規劃驗證/實驗子任務 | 在 step 2 ticket 的 Solution 章節列出需建立的 IMP/DOC 子任務 | 每項需含：產出物、acceptance、預估成本；這些子任務屬結論要求的落地（step 5 結案的前置），屬本版範圍者用 `--parent` 建為 children（PC-091）；依〈兩期〉排入後續版本者在目標版本以 `--source-ticket` 建根票（`.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉）；結論未要求的獨立工作也用 `--source-ticket` |
 | 4. 執行驗證/實驗 | 完成 children 子任務（依 Solution 方案逐項執行） | 標準 TDD 流程；每個子任務獨立 commit |
 | 5. 釐清解決方案 + 結案 | 根據驗證結果，原 ANA/DOC ticket 寫明確結論並 complete | 結論為狀態 (a)：「採方案 X」「不採方案 Y 因為 Z」「需另建 follow-up 追蹤」 |
 
@@ -201,6 +201,7 @@ amendment_reason: '修正原因簡述'
 
 ---
 
-**Last Updated**: 2026-09-30
+**Last Updated**: 2026-11-11
+**Version**: 1.2.0 - step 3 加版本維度：屬本版範圍的落地用 `--parent`，依〈兩期〉排入後續版本者在目標版本以 `--source-ticket` 建根票，路由 ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉。
 **Version**: 1.1.0 - 5 step 閉環 step 3、4 對齊 PC-091：ANA 或 DOC 結案所依賴的驗證與實驗子任務，改用 `--parent` 建為 children；`--source-ticket` 只用於結論不依賴的獨立工作。此次修改與 quality-baseline 規則 5、ticket-body-schema、ticket-lifecycle〈防護性 ANA〉同批對齊。
 **Version**: 1.0.1 - 版本日期更新（二元化拆分後多視角審查修正）

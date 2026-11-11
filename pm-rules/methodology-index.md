@@ -52,7 +52,7 @@
 | ticket-lifecycle-management-methodology.md | Ticket 生命週期 |
 | ticket-design-dispatch-methodology.md | Ticket 設計與派發 |
 | tdd-ticket-integration-methodology.md | TDD 與 Ticket 整合 |
-| version-scope-convergence-methodology.md | 版本範圍收斂（五步程序：版本契約→範圍歸屬三問→依賴分批→溢出分流→凍結兩步；執行 runbook：收件側開工／發版側收尾兩入口、PM 驗收清單、常見失效；三層推進判準；patch 生命週期；發版判準；反模式） |
+| version-scope-convergence-methodology.md | 版本範圍收斂（五步程序：版本契約→範圍歸屬三問→依賴分批→溢出分流→凍結；執行 runbook：收件側開工／發版側收尾兩入口、PM 驗收清單、常見失效；三層推進判準；patch 生命週期；發版判準；反模式） |
 | .claude/skills/compositional-writing/references/writing-documents.md | 工作日誌撰寫 |
 | .claude/skills/version-release/references/monorepo-versioning-strategy.md | monorepo 單一版本 vs 子專案獨立版本取捨判準（交叉指標） |
 | suggestion-tracking-methodology.md | 建議追蹤 |

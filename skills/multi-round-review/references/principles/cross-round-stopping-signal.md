@@ -45,3 +45,4 @@
 ## 跟相鄰原則的關係
 
 - [thresholds-registered-before-dispatch](thresholds-registered-before-dispatch.md)：本卡管什麼時候可以停，那張卡管每一輪之內哪些要修。兩者都拒絕用當輪的感覺當判斷標準，而替代物不同——本卡是 frame 涵蓋，那裡是派發前寫死的門檻。
+- [review-nonconvergence-points-to-outline](review-nonconvergence-points-to-outline.md)：限定本卡的適用邊界。本卡的訊號回答「還有沒有沒看過的角度」，不問一篇討論了幾個主題、同一個機制在幾處展開；審查對象是文章、那張卡的結構事實成立時，先做大綱稽核（`planning-and-stopping.md`〈大綱稽核〉），下一輪的內容可能從新 frame 換成重組。

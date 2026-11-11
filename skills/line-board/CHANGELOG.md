@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 0.13.0（2026-11-11）— `line_status` 在沒有協調票時的補法改為先問用戶：先以 AskUserQuestion 問開工作線或單一線，用戶選開工作線後才建協調票；這套步驟與 multi-session-orchestration `references/line-continuity.md` §3〈協調票為 none 時〉一致。新常數 `LINE_STATUS_NONE_STEP` 定義在 `hooks/lineStatus.ts`。看板 /board 的成因用語與補法（`COORDINATION_NONE`、`COORDINATION_HOWTO`）不變。`tests/board.test.ts` 的 line_status none 案例 regex 改為要求先問用戶、再接補法的順序。
+
 **Version**: 0.12.6（2026-11-04）— 純註解改動，程式碼、數值與測試數不變。`tests/paneHarness.ts` 的 `PANE_TEST_TIMEOUT_MS` 註解補上逾時餘裕的失效條件：非首測單測耗時有 72–77% 是每個 test 的 plugin 冷啟動，冷啟動隨看板原始碼量成長（2026-11-04 量測，多引入約 215 KB 原始碼時多 77%）；原始碼量明顯成長時需依同樣方法重新量測餘裕。
 
 **Version**: 0.12.5（2026-11-04）— 純測試改動，看板畫面、`line_status` 輸出與產品碼不變。6 個 Pane 測試檔（`board*.test.ts`）的每個 test 改傳明確逾時 `{ timeoutMs: PANE_TEST_TIMEOUT_MS }`（15000 ms），取代 `claude plugin test` 預設的 5000 ms。起因：預設 5000 ms 是隱含的計時門檻，高負載時 Pane 測試誤紅（2026-11-04 加壓取樣，load1 約 119 時單測最大 5157 ms），屬機器負載類不可靠斷言。測試名稱與斷言不變。

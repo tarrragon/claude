@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.12.0（2026-11-11）— `check`／`finish` 新增警告：版本已凍結、tickets 目錄內沒有任何一張票帶非空 `scope_blocker`、且至少一張 pending 票時，輸出警告並指出凍結程序第二步 `ticket track set-scope-blocker <id> --reason <契約項>`。只警告，不改結束碼與流程。SKILL.md 的安裝段同步改述 shim 化後的做法（改原始碼即時生效，不需重新安裝）。
+
 **Version**: 2.11.0（2026-10-19）— PreToolUse 提醒類 hook 改走 `additionalContext`；version-release-guard 的警告路徑保留核准決策。
 
 **Version**: 2.10.5 - `finish` 前移對撞號的 dry-run 改為續行並在結尾列對照表：`ticket migrate --dry-run` 撞號現回 rc=0 與改號預覽（配套 ticket skill 2.44.41），`migrate_overflow_tickets` 不再把撞號預覽當失敗中止，後續 preflight 與文件更新步驟在 dry-run 下可見。每張票的 dry-run 呼叫經 `--reserve-id` 帶入前面各張的預覽目標，使連環撞號的預覽與正式執行一致；新增 `print_overflow_mapping`，finish 在殘留守衛前列出「來源 ID：原目標 -> 實際目標」對照表（取自 `[MIGRATE-MAP]` 標記行，未改號者原目標等於實際目標）。`tests/test_finish_migrate_collision.py` 的 dry-run 撞號案依新語意由 rc=1 失敗改為 rc=0 續行，新增保留目標傳遞與對照表測試。

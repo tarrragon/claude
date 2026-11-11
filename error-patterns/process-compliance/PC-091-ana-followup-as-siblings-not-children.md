@@ -13,6 +13,8 @@ related:
 # PC-091: ANA Ticket 落地下游用兄弟而非子任務（血緣斷裂）
 
 > **2026-05-03 升格**：W17-120 多視角審查共識——本規則為「ANA 落地下游關係選擇」**唯一權威**。PC-073 對 ANA 衍生 IMP 用 spawned 的指引已 deprecated，由本規則取代。權威語意彙總：`.claude/skills/ticket/references/field-semantics.md`。
+>
+> **2026-11-11 加版本維度**（用戶裁定 2026-11-09）：本檔「落地用 children」的射程限於**本版範圍**的落地。依〈兩期〉排入後續版本的落地，在目標版本以 `--source-ticket <ANA-ID>` 建根票（建好即可 complete ANA，目標版本未登記先登記）；放棄這類落地票時，關票理由寫明對 ANA 結論的處置並回寫來源 ANA。理由：子票必然落在父票的版本，執行期 ANA 的落地若用 children，只能落在已凍結的本版。本檔防的「血緣斷裂」由 `source_ticket`／`spawned_tickets` 雙向欄位承擔，不依賴 children。完整路線與 complete 時點以 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉為準。
 
 ## 問題描述
 

@@ -97,7 +97,10 @@ LOCAL_ONLY_PATTERNS = frozenset({
 
 # 寫在 skills/<name>/ 等巢狀位置的 local-only 名稱：gitignore 條目須用 `.claude/**/<名稱>`，
 # `.claude/<名稱>` 只比對 .claude/ 根層，忽略不了巢狀標記（git 對含中間斜線的條目錨定該目錄）。
-NESTED_LOCAL_ONLY_NAMES = frozenset({".skill-sync-base"})
+NESTED_LOCAL_ONLY_NAMES = frozenset({".skill-sync-base", "__pycache__"})
+
+# NESTED_LOCAL_ONLY_NAMES 中屬目錄的名稱：尾斜線形式（`__pycache__/`）同樣涵蓋各層同名目錄。
+NESTED_LOCAL_ONLY_DIR_NAMES = frozenset({"__pycache__"})
 
 
 def required_gitignore_entry(name: str) -> str:
@@ -112,7 +115,8 @@ def is_nested_name_covered(name: str, gitignore_lines: Iterable[str]) -> bool:
 
     判定依據為 git check-ignore 實測真值表：裸名、`**/<名稱>`、`/**/<名稱>`、
     `.claude/**/<名稱>`、`/.claude/**/<名稱>` 涵蓋；`/<名稱>`、`.claude/<名稱>`、
-    `.claude/skills/*/<名稱>`、尾斜線形式不涵蓋。不處理否定行的順序語意。
+    `.claude/skills/*/<名稱>`、尾斜線形式不涵蓋（目錄名稱如 __pycache__ 例外：
+    尾斜線形式 `<名稱>/`、`**/<名稱>/`、`.claude/**/<名稱>/` 涵蓋）。不處理否定行的順序語意。
     """
     covering = {
         name,
@@ -121,6 +125,8 @@ def is_nested_name_covered(name: str, gitignore_lines: Iterable[str]) -> bool:
         f".claude/**/{name}",
         f"/.claude/**/{name}",
     }
+    if name in NESTED_LOCAL_ONLY_DIR_NAMES:
+        covering |= {f"{n}/" for n in tuple(covering)}
     return any(line.strip() in covering for line in gitignore_lines)
 
 # 僅 .claude/ 根層的 local-only 目錄（W1-018.2）。

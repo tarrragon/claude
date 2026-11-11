@@ -378,6 +378,46 @@ def _shared_index_entries(paths: List[str], cwd: str) -> Optional[Dict[str, str]
     return entries
 
 
+def _ignored_untrack_paths(
+    paths: List[str],
+    shared_entries: Optional[Dict[str, str]],
+    head: str,
+    cwd: str,
+) -> List[str]:
+    """回傳「停止追蹤並補 .gitignore」的路徑：須在隔離 index 以刪除處理。
+
+    三條件同時成立才算：HEAD 有該路徑、共用 index 已無該路徑（git rm --cached
+    的結果）、工作區檔案仍在且被 ignore 規則涵蓋。此時 `git add` 會把仍在磁碟
+    上的檔案重新暫存，刪除靜默遺失。只滿足部分條件者（強制追蹤的 ignore 檔、
+    單純從磁碟刪除的檔）維持走 `git add`。共用 index 讀取失敗時回傳空清單，
+    行為與修正前相同。
+    """
+    if shared_entries is None:
+        return []
+    # 先以磁碟存在性過濾（無 git 呼叫），多數提交在此即短路
+    candidates = [
+        p for p in paths
+        if p not in shared_entries and os.path.isfile(os.path.join(cwd, p))
+    ]
+    if not candidates:
+        return []
+    ok, out, _err = _run_git_with_lock_retry(
+        ["git", "ls-tree", "-r", "--name-only", "-z", head, "--"] + candidates, cwd=cwd
+    )
+    in_head = set(out.split("\0")) if ok else set()
+    on_disk = [p for p in candidates if p in in_head]
+    if not on_disk:
+        return []
+    # --no-index：不受 index 狀態影響，只依 ignore 規則判定；-z 須搭配 --stdin。
+    # 無任何路徑命中時 exit 1、stdout 空，視同全部未被 ignore。
+    ok, out, _err = _run_git_with_lock_retry(
+        ["git", "check-ignore", "--no-index", "--stdin", "-z"],
+        cwd=cwd, input_text="\0".join(on_disk) + "\0",
+    )
+    ignored = set(out.split("\0")) if out else set()
+    return [p for p in on_disk if p in ignored]
+
+
 def _path_history_entries(path: str, cwd: str) -> set:
     """該路徑在 HEAD 可達歷史中最近 ``_OWN_HISTORY_LOOKBACK`` 次提交的 entry 集合。
 
@@ -837,11 +877,21 @@ def _commit_files_isolated_impl(
         if not ok:
             return {"status": "failed", "commit_sha": None, "error": err}
 
-        ok, _, err = _run_git_with_lock_retry(
-            ["git", "add", "--"] + deduped, cwd=cwd, env=env
-        )
-        if not ok:
-            return {"status": "failed", "commit_sha": None, "error": err}
+        untracked_removals = _ignored_untrack_paths(deduped, snapshot, old_head, cwd)
+        if untracked_removals:
+            ok, _, err = _run_git_with_lock_retry(
+                ["git", "rm", "--cached", "--quiet", "--"] + untracked_removals,
+                cwd=cwd, env=env,
+            )
+            if not ok:
+                return {"status": "failed", "commit_sha": None, "error": err}
+        to_add = [p for p in deduped if p not in untracked_removals]
+        if to_add:
+            ok, _, err = _run_git_with_lock_retry(
+                ["git", "add", "--"] + to_add, cwd=cwd, env=env
+            )
+            if not ok:
+                return {"status": "failed", "commit_sha": None, "error": err}
 
         for rel, text in appended.items():
             stage_err = _stage_appended_blob(

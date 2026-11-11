@@ -218,6 +218,66 @@ def _format_where_field(where_value) -> str:
     return where_value if where_value else DEFAULT_UNKNOWN_VALUE
 
 
+def _iter_all_ticket_frontmatters():
+    """依序產出全部版本目錄（扁平與三層）票檔的 (path, frontmatter)。"""
+    from ticket_system.lib.parser import parse_frontmatter
+    from ticket_system.lib.paths import get_ticket_state_root
+
+    work_logs_root = get_ticket_state_root() / "docs" / "work-logs"
+    dirs = set(work_logs_root.glob("v*/tickets")) | set(work_logs_root.glob("v*/v*/v*/tickets"))
+    for path in (f for d in sorted(dirs) for f in sorted(d.glob("*.md"))):
+        try:
+            frontmatter, _body = parse_frontmatter(path.read_text(encoding="utf-8"))
+        except Exception as e:  # 單一票檔損壞不中斷掃描，記 stderr
+            sys.stderr.write(f"[resolve] 略過無法解析的票檔 {path}：{e}\n")
+            continue
+        if frontmatter:
+            yield path, frontmatter
+
+
+def resolve_previous_id(old_id: str) -> List[Dict[str, Any]]:
+    """依 previous_ids 找出曾用 old_id 的現行票，回傳 [{id, status, path}]。
+
+    migrate 每次改號都把舊號追加到新票的 previous_ids，連續改號的票其清單含
+    全部舊號，掃描一次即可解析到最新號。old_id 本身仍是現行票時也一併回傳
+    （relation="current"）。
+    """
+    matches: List[Dict[str, Any]] = []
+    for path, fm in _iter_all_ticket_frontmatters():
+        ticket_id = str(fm.get("id", ""))
+        previous = fm.get("previous_ids") or []
+        if ticket_id == old_id:
+            relation = "current"
+        elif old_id in [str(p) for p in previous]:
+            relation = "previous"
+        else:
+            continue
+        matches.append({
+            "id": ticket_id,
+            "status": fm.get("status", DEFAULT_UNKNOWN_VALUE),
+            "path": str(path),
+            "relation": relation,
+        })
+    return matches
+
+
+def execute_resolve(args: argparse.Namespace, version: str) -> int:
+    """以舊票號查出現行票號（ticket track resolve <舊票號>）。"""
+    old_id = args.ticket_id
+    matches = resolve_previous_id(old_id)
+    if not matches:
+        print(f"[resolve] 找不到 {old_id}：沒有現行票使用此 ID，也沒有票的 previous_ids 記錄它")
+        print("  previous_ids 只記錄 migrate 加入該欄位之後的改號；更早的改號需以 git log --follow 追蹤")
+        return 1
+    for match in matches:
+        if match["relation"] == "current":
+            print(f"[resolve] {old_id} 仍是現行票號（status: {match['status']}）")
+        else:
+            print(f"[resolve] {old_id} → {match['id']}（status: {match['status']}）")
+        print(f"  {match['path']}")
+    return 0
+
+
 def execute_query(args: argparse.Namespace, version: str) -> int:
     """查詢單一 Ticket"""
     ticket, error = load_and_validate_ticket(version, args.ticket_id)
@@ -249,7 +309,7 @@ def execute_query(args: argparse.Namespace, version: str) -> int:
         completed_ids: List[str] = []
         incomplete_items: List[str] = []
         for sid in spawned:
-            sub = load_ticket(version, sid)
+            sub = _load_ticket_cross_version(sid, version)
             if not sub:
                 incomplete_items.append(f"{sid} (not_found)")
                 continue

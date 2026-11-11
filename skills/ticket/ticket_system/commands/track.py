@@ -64,6 +64,7 @@ from .lifecycle import (
 # 導入查詢操作模組
 from .track_query import (
     execute_query,
+    execute_resolve,
     execute_summary,
     execute_tree,
     execute_chain,
@@ -483,6 +484,8 @@ def _create_command_handlers() -> dict:
     return {
         "summary": execute_summary,
         "query": execute_query,
+        # 舊票號（migrate 改號前）解析為現行票號
+        "resolve": execute_resolve,
         # W1-056.8 嵌套深度查詢（協議 v2 D3）
         "depth": execute_depth,
         "claim": _execute_claim,
@@ -878,6 +881,14 @@ def _register_query_commands(
     p_query = subparsers.add_parser("query", help=TrackMessages.HELP_QUERY)
     p_query.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_query.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # resolve 操作：舊票號 → 現行票號（依 previous_ids）
+    p_resolve = subparsers.add_parser(
+        "resolve",
+        help="以舊票號查出現行票號（依各票 previous_ids；找不到時 exit 1）",
+    )
+    p_resolve.add_argument("ticket_id", help="舊票號（migrate 改號前的 ID）")
+    p_resolve.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # tree 操作
     p_tree = subparsers.add_parser("tree", help=TrackMessages.HELP_TREE)

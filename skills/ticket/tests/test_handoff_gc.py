@@ -379,6 +379,9 @@ class TestForceFlagW3_018_2:
         mock_completed.return_value = False
         for tid in ("0.1.0-W6-001", "0.1.0-W6-003", "0.1.0-W6-004"):
             _make_ticket(project_root, tid, "in_progress")
+        # target 票須存在：target 查無會被判為孤兒（本測試只驗證來源未完成不清）
+        for tid in ("0.1.0-W6-002", "0.1.0-W6-005"):
+            _make_ticket(project_root, tid, "pending")
         _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002", from_status="in_progress")
         _write_handoff(pending, "0.1.0-W6-003", "to-parent", from_status="in_progress")
         _write_handoff(pending, "0.1.0-W6-004", "to-child:0.1.0-W6-005", from_status="in_progress")
@@ -444,6 +447,34 @@ class TestOrphanSourceTicket:
         project_root, pending, archive = temp_gc_env
         _write_handoff(pending, "0.1.0-W9-001", "to-sibling:0.1.0-W9-002")
         assert len(_collect_stale_handoffs()) == 1
+
+    def test_existing_source_missing_target_is_stale(self, temp_gc_env):
+        """來源仍在、target 查無（被 migrate 或刪除）-> stale，原因指出 target"""
+        project_root, pending, archive = temp_gc_env
+        _make_ticket(project_root, "0.1.0-W9-001", "in_progress")
+        _write_handoff(pending, "0.1.0-W9-001", "to-sibling:0.1.0-W9-002")
+        result = _collect_stale_handoffs()
+        assert [r[1] for r in result] == ["0.1.0-W9-001"]
+        assert "目標 ticket 0.1.0-W9-002 查無" in result[0][2]
+
+    def test_existing_source_existing_target_not_stale(self, temp_gc_env):
+        """對照：同 fixture 補上 target 票 -> 不清"""
+        project_root, pending, archive = temp_gc_env
+        _make_ticket(project_root, "0.1.0-W9-001", "in_progress")
+        _make_ticket(project_root, "0.1.0-W9-002", "pending")
+        _write_handoff(pending, "0.1.0-W9-001", "to-sibling:0.1.0-W9-002")
+        assert _collect_stale_handoffs() == []
+
+    def test_missing_target_makes_handoff_inactive_for_dispatch_guard(self, temp_gc_env):
+        """派發守衛共用判準：target 查無的 handoff 不再視為有效"""
+        from ticket_system.lib.handoff_utils import is_handoff_active
+
+        project_root, pending, archive = temp_gc_env
+        _make_ticket(project_root, "0.1.0-W9-001", "in_progress")
+        record = {"ticket_id": "0.1.0-W9-001", "direction": "to-sibling:0.1.0-W9-002"}
+        active, reason = is_handoff_active(record, project_root)
+        assert active is False
+        assert "查無" in reason
 
     def test_lookup_exception_not_stale(self, temp_gc_env):
         """對照：查詢拋例外 -> 保守不判 stale"""

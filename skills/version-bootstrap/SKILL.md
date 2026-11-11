@@ -2,7 +2,7 @@
 name: version-bootstrap
 description: "版本規劃波 orchestrator：把版本提案展開成可執行的 ticket，中間不漏教學比對。依序走提案清單與依賴檢查、spec、domain map、資料契約、教學比對、UC、地基波（僅 UI 版本）、紅燈測試、匯總建票；每步有 checkpoint，PM 確認才前進。觸發詞：規劃波、版本啟動、bootstrap、提案展開、建票、地基波。Do NOT use for 決定票屬於哪一版（用 version-sequencing）或地基逐維度盤點（用 foundation-design）。"
 metadata:
-  version: 1.7.6
+  version: 1.7.7
   category: engineering-workflow
 ---
 
@@ -243,6 +243,8 @@ cp .claude/skills/doc/templates/data-contract-template.md docs/spec/{domain}/{na
 - domain map bundle 分層 → 按 domain / data / presentation 切分實作票，並依 domain map §5「對實作票切分指引」對齊各票的層歸屬與依賴方向底線
 
 **PM 工作**：確認 Wave 分配、並行安全（共用檔案需整合票，歸屬後其餘票不得直接修改，見 `.claude/pm-rules/task-splitting.md`〈拆分後檢查清單〉B 檔案所有權）。
+
+**票的關係**：建為本版根票，不用 `--parent` 掛在規劃票下（見 `references/step-rationale.md`〈規劃波票的關係〉）。
 
 **Checkpoint**：所有 ticket 建立完成，Wave 分配確認。
 

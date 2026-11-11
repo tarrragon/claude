@@ -104,7 +104,8 @@ from acceptance_checkers import (
 )
 # W17-120.2 / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
-# ANA 落地統一用 --parent <ANA-ID>，spawned_tickets 對 ANA 重定位為弱 metadata）。
+# 本版範圍落地用 --parent <ANA-ID>；排入後續版本者用 --version <目標版本>
+# --source-ticket <ANA-ID>；spawned_tickets 由步驟 2.5.2 計入）。
 # 既有 ana_spawned_checker.py 已 deprecated，僅保留 check_ana_has_spawned_tickets
 # 作為「無後續 ticket」的 missing 警告（不阻擋）。
 from acceptance_checkers.ticket_parser import get_ticket_start_time
@@ -245,10 +246,64 @@ RESPONSIBILITY_SCOPE_WARNING = (
 CHAINED_WRITE_INFO_NOTE = (
     "[INFO] 偵測到同一命令鏈於 complete 前包含 git merge / set-acceptance / "
     "append-log（0.4.1-W2-006）\n"
-    "本次 Hook 讀檔時機早於同鏈操作實際執行，acceptance / execution log 判定"
+    "本次 Hook 讀檔時機早於同鏈操作實際執行，acceptance、execution log、"
+    "Layer 1 自檢、Phase 4 審查證據（ANA 另含 multi_view_status）判定"
     "已略過以避免滯後誤報（清單項目標記為 [--]）；\n"
     "請以 `ticket track complete` 實際執行後的結果為準，不需額外二次查證。"
 )
+
+
+# 擋下時的評估時點說明：complete 之前串有寫入時，閘門讀到的是寫入前的票面，
+# 前段寫入也因整條命令被擋而未執行。只列缺項會讓執行者誤判為證據內容不合格。
+CHAINED_BLOCK_TIMING_NOTE = (
+    "[INFO] 評估時點：本命令在 complete 之前串有票面寫入（ticket track 寫入子命令"
+    "或 git merge）。閘門在整條命令執行前評估一次，讀到的是這些寫入執行前的票面；"
+    "命令被擋後，前段寫入也沒有執行。\n"
+    "下一步：先單獨執行前段的寫入命令，確認寫入成功後，再單獨執行 "
+    "ticket track complete。"
+)
+
+
+# 擋下說明用的寫入判定：比同鏈略過判定（_CHAINED_WRITE_TRIGGERS）寬，涵蓋所有
+# ticket track 寫入子命令。略過判定只管會改變 warning 項的寫入；擋下來源（如
+# how.strategy 盤點表）可由 set-how 等其他子命令改變，說明須一併涵蓋。
+_PRE_COMPLETE_WRITE_FOR_NOTE_RE = re.compile(
+    r"\bticket\s+track\s+(?:append-log|set-[a-z-]+|check-acceptance|add-[a-z-]+|resolve-[a-z-]+)\b"
+    r"|\bgit\s+merge\b"
+)
+
+
+def _has_write_before_complete(command: str) -> bool:
+    """complete 之前的同鏈片段是否含 ticket track 寫入子命令或 git merge。"""
+    statements = parse_command_statements(command)
+    if statements is None:
+        return False
+    for idx, tokens in enumerate(statements):
+        if is_complete_statement(tokens):
+            preceding = " ".join(" ".join(t) for t in statements[:idx])
+            return bool(_PRE_COMPLETE_WRITE_FOR_NOTE_RE.search(preceding))
+    return False
+
+
+def with_chained_block_note(
+    result: "AcceptanceCheckResult", command: str
+) -> "AcceptanceCheckResult":
+    """擋下且 complete 之前串有寫入時，於擋下訊息附加評估時點說明。
+
+    未擋下、或 complete 單獨執行時原樣回傳。偵測失敗時原樣回傳（只少一行
+    說明，擋下判定不變）。
+    """
+    if not result.should_block:
+        return result
+    try:
+        chained = _has_write_before_complete(command or "")
+    except Exception as exc:  # noqa: BLE001 — 說明行為輔助資訊，失敗不影響擋下
+        sys.stderr.write(f"[acceptance-gate] 同鏈偵測失敗，略過評估時點說明: {exc}\n")
+        return result
+    if not chained:
+        return result
+    message = f"{result.message}\n\n{CHAINED_BLOCK_TIMING_NOTE}" if result.message else CHAINED_BLOCK_TIMING_NOTE
+    return result._replace(message=message)
 
 
 # ============================================================================
@@ -569,8 +624,9 @@ def check_acceptance_status(
 
         # 步驟 2.5.1：[已退場 W17-120.2 / PC-091]
         # 原 ana_spawned_checker 阻擋邏輯已移除。ANA complete 的阻擋判斷統一由
-        # children_checker（步驟 1）負責——ANA 落地請用 `--parent <ANA-ID>` 建 children。
-        # spawned_tickets 對 ANA 為弱 metadata，不阻擋父 complete。
+        # children_checker（步驟 1）負責——落地票屬本版範圍用 `--parent <ANA-ID>` 建 children，
+        # 排入後續版本用 `--version <目標版本> --source-ticket <ANA-ID>` 建根票。
+        # spawned_tickets 本步驟不阻擋父 complete（一致性由步驟 2.5.2 判定）。
         spawned_non_terminal_warning: Optional[str] = None  # 保留欄位向後相容
 
         # 步驟 2.5.2：ANA Solution spawn 規劃 vs spawned+children 一致性檢查（W17-168）
@@ -712,6 +768,10 @@ def check_acceptance_status(
         phase4_warning = check_phase4_review_evidence(
             content, frontmatter.get("type", ""), logger
         )
+        # Phase 4 證據同樣讀 Solution：同鏈 append-log 補寫的段落本次讀不到，
+        # 比照步驟 6／8 抑制，checklist 改標 [--]（2026-11 同鏈誤報修正）
+        if chained_write_detected:
+            phase4_warning = None
 
         # 步驟 10：檢查規模判準（0.2.1-W3-052.1，C1 移植，warning 不阻擋）
         god_ticket_scale_violations = check_god_ticket_scale(frontmatter, logger)
@@ -827,8 +887,8 @@ def generate_hook_output(
         checklist_items.append("[WARNING] 4. execution log 未填寫")
 
     # 項目 5: ANA 後續 ticket（W17-120.2 / PC-091）
-    # 路線：ANA 落地統一用 children（`--parent <ANA-ID>`），spawned_tickets 對 ANA
-    # 為弱 metadata 不阻擋。本項僅檢查「ANA 是否缺後續 ticket」（warning 層）。
+    # 路線：本版範圍用 children（`--parent <ANA-ID>`），後續版本用
+    # `--version <目標版本> --source-ticket <ANA-ID>`；本步驟不阻擋。本項僅檢查「ANA 是否缺後續 ticket」（warning 層）。
     ticket_type_upper_for_checklist = (check_result.task_type or "").upper()
     if ticket_type_upper_for_checklist == "ANA":
         # 「未建立」訊息來自 GateMessages.ANA_MISSING_SPAWNED_TICKETS_WARNING
@@ -837,7 +897,7 @@ def generate_hook_output(
         )
         if followup_missing:
             checklist_items.append(
-                "[WARNING] 5. ANA 缺後續 ticket（請用 --parent 建 children）"
+                "[WARNING] 5. ANA 缺後續 ticket（本版範圍用 --parent，後續版本用 --version --source-ticket）"
             )
         else:
             checklist_items.append("[x] 5. ANA 已有後續 ticket")
@@ -866,7 +926,9 @@ def generate_hook_output(
 
     # 項目 8: Layer 1 自檢可觀測性（W17-064，僅對 IMP/ANA/DOC 顯示）
     if ticket_type_upper_for_checklist in ("IMP", "ANA", "DOC"):
-        if check_result.self_check_warning:
+        if check_result.chained_write_detected:
+            checklist_items.append("[--] 8. Layer 1 自檢（同命令鏈偵測，略過本次判定）")
+        elif check_result.self_check_warning:
             checklist_items.append(
                 "[WARNING] 8. Solution 缺 ### 自檢結果 子章節（Layer 1）"
             )
@@ -877,7 +939,9 @@ def generate_hook_output(
 
     # 項目 9: Phase 4 審查證據（W1-080.1，僅對 IMP 顯示）
     if ticket_type_upper_for_checklist == "IMP":
-        if check_result.phase4_review_warning:
+        if check_result.chained_write_detected:
+            checklist_items.append("[--] 9. Phase 4 審查證據（同命令鏈偵測，略過本次判定）")
+        elif check_result.phase4_review_warning:
             checklist_items.append(
                 "[WARNING] 9. Solution 缺 Phase 4 審查證據"
             )
@@ -1455,6 +1519,7 @@ def main() -> int:
             if candidate_result.should_block:
                 ticket_id, result = candidate, candidate_result
                 break
+        result = with_chained_block_note(result, command)
         logger.info(
             f"驗收結果: should_block={result.should_block}, "
             f"has_acceptance={result.has_acceptance}, "

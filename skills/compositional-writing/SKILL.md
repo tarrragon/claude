@@ -4,7 +4,7 @@ description: "Composes atomic, intent-revealing, grep-friendly writing (Zettelka
 license: MIT
 metadata:
   portable: true
-  version: 1.51.1
+  version: 1.56.0
   category: writing-methodology
 ---
 
@@ -36,7 +36,7 @@ metadata:
 
 論斷句、總結句、段標與過渡句另有兩格：
 
-- **名詞的所屬**：來源、輸出、結果、原因、代價、差別、位置、範圍、邊界、訊號、層、線、情形這類名詞，把「誰的、什麼的」寫在這一句或緊接的前一句；形容詞與動詞不直接當名詞用。
+- **名詞的所屬**：來源、輸出、結果、原因、代價、差別、位置、範圍、邊界、訊號、層、線、情形這類名詞，把「誰的、什麼的」寫在這一句或緊接的前一句；形容詞與動詞不直接當名詞用。知識卡的段標例外與它的條件在 [keyword-bank](references/keyword-bank.md)〈名詞缺所屬〉。
 - **動作者與時機**：主詞要做得了這個動作；順序是誰 → 在什麼時機 → 做了什麼 → 為什麼會觸發。指標、數字與清單當受詞或依據，不當主詞。
 
 組織全篇的框架詞（「X 回答的問題是」）把「回答」換成元件實際的動作、把「問題」換成它指的那一種（問句、故障、事項、主題或需求）。三種變體、實測與逐項判讀的全文在 [noun-without-its-owner-passes-the-slot-check](references/principles/noun-without-its-owner-passes-the-slot-check.md)〈每一句先填槽位再成句（生成端規格）全文〉。
@@ -96,7 +96,7 @@ metadata:
 | 設計 log / 錯誤訊息 / 結構化輸出                                         | `references/writing-logs.md`                                                |                                                                  |
 | 撰寫給 AI 的 prompt / Agent 派發 / Ticket Context Bundle                 | `references/writing-prompts.md`（`ai-communication-rules.md` 的詳細版庫）   |                                                                  |
 | 撰寫長篇技術文章（blog、post-mortem、架構決策、除錯復盤）                | `references/writing-articles.md`                                            |                                                                  |
-| 外部分析 / 經驗談轉成教學型分析文章                                      | `references/source-to-teaching-analysis.md`                                 |                                                                  |
+| 外部分析 / 經驗談（含使用者貼來的論壇說法、問答、AI 回答）轉成教學型分析文章 | `references/source-to-teaching-analysis.md`                                 |                                                                  |
 | 翻譯 / 轉譯、檢查譯名與超譯                                              | `references/translation-review.md`                                          |                                                                  |
 | 句子與用詞層的受控寫作：一事一名、一詞一義、情態詞只用可以／會／必須、句長門檻 | `asd-ste100` skill（正體中文讀它的 zh-TW pack：句子規則與詞庫）                 | 本 skill 不重寫這組規則；篇章結構仍由本 skill 負責               |
 | 管理多篇文章的結構（系列、MOC、跨篇引用、同一對象在兩個集合各有一頁）    | `references/managing-article-collections.md`                                |                                                                  |

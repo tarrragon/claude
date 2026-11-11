@@ -147,6 +147,10 @@ BACKUP_IGNORE_PATTERNS = ("__pycache__", ".pytest_cache", ".venv")
 # 頂部 import（0.2.1-W3-356：消除與 sync-claude-push.py 的逐字重複）。
 
 
+class PreserveParseError(ValueError):
+    """備用解析器無法可靠解析 sync-preserve.yaml（訊息含原因、位置、處置）。"""
+
+
 def load_preserve_list(claude_dir: Path) -> set[str]:
     """讀取 sync-preserve.yaml 中的本地特化檔案清單。
 
@@ -209,13 +213,9 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
     for line in content.splitlines():
         if "\t" in line:
             # tab 縮排是 YAML 語法錯誤，簡易解析器無法可靠處理
-            sys.stderr.write(
-                f"[sync-pull] preserve 清單含 tab 縮排，簡易解析器無法可靠解析，"
-                f"sync 中止以避免關閉全部 preserve 保護: {preserve_file}\n"
-            )
-            raise ValueError(
-                f"sync-preserve.yaml 含 tab 縮排，無法在無 PyYAML 環境下安全解析："
-                f"{preserve_file}"
+            raise PreserveParseError(
+                f"sync-preserve.yaml 含 tab 縮排，無 PyYAML 時無法可靠解析"
+                f"（位置：{preserve_file}）。處置：改用空白縮排，或安裝 PyYAML 後重跑。"
             )
         stripped = line.strip()
         if stripped.startswith("#") or not stripped:
@@ -223,15 +223,16 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
         if stripped == "preserve:":
             in_preserve = True
             continue
+        if stripped == "preserve: []":
+            # 合法 YAML、語意為空清單（有 PyYAML 時同樣解析為空）
+            in_preserve = False
+            continue
         if stripped.startswith("preserve:"):
-            # 'preserve: [...]' 等 inline flow 清單，簡易解析器無法處理
-            sys.stderr.write(
-                f"[sync-pull] preserve 清單使用 inline flow 格式，簡易解析器無法"
-                f"可靠解析，sync 中止以避免關閉全部 preserve 保護: {preserve_file}\n"
-            )
-            raise ValueError(
-                f"sync-preserve.yaml 使用 inline flow 清單，無法在無 PyYAML 環境下"
-                f"安全解析：{preserve_file}"
+            # 非空 inline flow 清單，簡易解析器無法處理
+            raise PreserveParseError(
+                f"sync-preserve.yaml 使用非空 inline flow 清單，無 PyYAML 時無法"
+                f"可靠解析（位置：{preserve_file}）。處置：改寫成區塊清單"
+                f"（preserve: 後每行 '- path'），或安裝 PyYAML 後重跑。"
             )
         if in_preserve and stripped.startswith("- "):
             paths.add(stripped[2:].strip())
@@ -2209,6 +2210,14 @@ def backup_claude_dir(claude_dir: Path, dest: Path) -> None:
     )
 
 
+class SyncAborted(Exception):
+    """全量 overlay 確認未獲同意（回答非 y、EOF 或中斷）；main 據此非 0 結束。"""
+
+    def __init__(self, backup_dir: Path) -> None:
+        super().__init__("full overlay 確認未獲同意")
+        self.backup_dir = backup_dir
+
+
 def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     """執行備份和同步操作。
 
@@ -2332,7 +2341,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
                 answer = ""
             if answer != "y":
                 print_color("  Aborted.", "yellow")  # i18n-exempt
-                return backup_dir
+                raise SyncAborted(backup_dir)
 
         file_count = sync_directory(temp_dir, claude_dir, preserve, project_root=project_root, skills_config=skills_config)
         print_color(f"   已更新 {file_count} 個檔案", "green")
@@ -2510,10 +2519,7 @@ def _finalize_sync(backup_dir: Path) -> None:
     print_color(f"如需還原，執行: cp -r {backup_dir}/.claude .")
     print()
     print_color("=== 新專案初始化提示 ===")
-    print_color("如果是新專案，請手動建立 CLAUDE.md:")
-    print_color("  1. cp .claude/templates/CLAUDE-template.md CLAUDE.md")
-    print_color("  2. 填入專案特定資訊")
-    print_color("  3. 驗證所有連結有效")
+    print_color("如果是新專案，依 .claude/README.md 〈首次安裝〉進行。")
 
 
 def _validate_environment(project_root: Path) -> None:
@@ -3202,7 +3208,9 @@ def verify_local_settings_no_hooks(project_root: Path) -> None:
     advice = (
         "   框架 hook 應只註冊於 settings.json（PC-148 單一註冊來源）；"  # i18n-exempt
         "settings.local.json 為 sync 排除檔，殘留註冊 relocate 後會成幽靈。"  # i18n-exempt
-        "修復：移至 settings.json，或執行 hook-registration-coverage-check.py --fix 清理幽靈。"  # i18n-exempt
+        "處置：幽靈註冊執行 hook-registration-coverage-check.py --fix 清理；"  # i18n-exempt
+        "框架 hook 上游已註冊者刪除 settings.local.json 的重複；"  # i18n-exempt
+        "上游未註冊或專案自有 hook 回報 framework issue（見 sync-pull.md〈幽靈註冊處置〉）。"  # i18n-exempt
     )
     print_color(advice, "yellow")
 
@@ -3487,6 +3495,12 @@ def main() -> None:
     except subprocess.TimeoutExpired:
         print_color(f"git clone 超時（{GIT_CLONE_TIMEOUT_SECONDS} 秒），請檢查網路連線", "red")  # i18n-exempt
         sys.exit(1)
+    except SyncAborted as aborted:
+        print_color("拉取已中止：全量 overlay 未獲確認（回答非 y，或 stdin 為 EOF）。", "red")  # i18n-exempt
+        print_color("未更新 .claude、未寫入基準點、未執行模板更新。", "red")  # i18n-exempt
+        print_color("處置：在可互動的終端機重跑並回答 y，或先建立基準點後再拉取。", "red")  # i18n-exempt
+        print_color(f"備份位置: {aborted.backup_dir}", "yellow")  # i18n-exempt
+        sys.exit(1)
 
     # post-sync: hook-registry.yaml -> settings.json auto-registration
     print_color("Hook 自動登記...")  # i18n-exempt
@@ -3533,4 +3547,9 @@ def check_conflict_marker_residue(claude_dir: Path) -> int:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PreserveParseError as preserve_error:
+        # fail-loud 但不印 traceback：可讀訊息 + 非 0 結束碼，避免關閉 preserve 保護
+        sys.stderr.write(f"[sync-pull] 中止：{preserve_error}\n")
+        sys.exit(1)

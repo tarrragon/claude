@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 2.11.0
+  version: 2.12.0
 ---
 
 # Version Release Skill
@@ -65,6 +65,8 @@ metadata:
 **Why**：`scope_blocker` 只在凍結後才會被賦值（凍結是「範圍不再開放新收件」
 的宣告，blocker 是「凍結範圍內尚未處理」的標記）；凍結前 blocker 恆為 0，
 「blocker 清空即可發布」的判準對未凍結版本沒有鑑別力，會恆判可發布。
+
+**凍結但零張 scope_blocker 的警告**：凍結關卡通過後，若該版 tickets 目錄內沒有任何一張票（任何狀態）帶非空 `scope_blocker`，且有至少一張 pending 票，`check`／`finish` 輸出警告並指出凍結程序第二步 `ticket track set-scope-blocker <id> --reason <契約項>`。只警告，不改結束碼與流程。**Why**：凍結漏做逐張標記時，pending 票會全部被列為前移，沒有輸出指出「凍結了卻沒有必要票」。以任何狀態計，是因為凍結時已標記、之後已完成的必要票也算有標記。
 
 ### 發版判準：blocker 阻擋、其餘前移
 
@@ -357,17 +359,16 @@ subprojects:
 
 ---
 
-## 修改 source 後必須重新安裝
+## 修改 source 後無需重新安裝（shim 化）
 
-> **重要**：本 skill 透過 `uv tool install` 安裝為獨立 CLI，source（本目錄）與 installed（`~/.local/share/uv/tools/<package>/`）是兩份獨立 Python package。修改 source 後若未 reinstall，CLI 仍使用 stale installed 版本，新增的函式會 AttributeError 或被 hasattr 包裝靜默吞掉（W11-037 根因）。
+> **重要**：本 skill 已改用 cwd-resolving shim，不走 `uv tool install`。shim 每次執行都 `uv run --directory .claude/skills/version-release` 當前專案源碼，修改 source 後改動即時生效，無 stale installed 問題。
 
-**修復指令**：
+**檢查 / 安裝指令**（SessionStart 會自動執行安裝）：
 
 ```bash
-cd .claude/skills/<本 skill 目錄> && uv tool install . --force --reinstall
+python3 .claude/scripts/install-skill-clis.py          # 安裝 / 更新 shim
+python3 .claude/scripts/install-skill-clis.py --check  # 檢查是否已 shim 化（exit 0/1）
 ```
-
-**自動偵測**：每次 SessionStart 由 `uv-tool-staleness-check-hook` 比對 source vs installed SHA256，偵測 stale 時提示修復指令。對應 ticket-skill 本身另有 `ticket-reinstall-hook` 自動 reinstall。
 
 ---
 

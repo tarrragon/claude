@@ -46,15 +46,9 @@ def main() -> int:
             return 0
 
         # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+        # 提醒類 hook 不代用戶作權限決定：略過路徑不輸出任何 JSON（不帶 permissionDecision）
         if is_subagent_environment(input_data):
             logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
-            output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow"
-                }
-            }
-            print(json.dumps(output, ensure_ascii=False, indent=2))
             return 0
 
         tool_name = input_data.get("tool_name", "")
@@ -62,13 +56,6 @@ def main() -> int:
         # 只處理 Task/Agent 工具（CC subagent 工具已由 Task 改名 Agent，見 1.5.0-W5-002 分析）
         if tool_name not in ("Agent", "Task"):
             logger.debug(f"非 Task/Agent 工具: {tool_name}，跳過")
-            output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow"
-                }
-            }
-            print(json.dumps(output, ensure_ascii=False, indent=2))
             return 0
 
         # 提取 Task prompt
@@ -81,43 +68,28 @@ def main() -> int:
 
         logger.info(f"在 Task prompt 中找到 {len(unique_ids)} 個 Ticket ID")
 
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow"
-            }
-        }
-
-        # 2+ 個 Ticket ID 時輸出提醒
+        # 2+ 個 Ticket ID 時輸出提醒（只帶 additionalContext，權限決定交回平台與用戶）
         if len(unique_ids) >= 2:
             logger.info(f"偵測到多任務派發: {unique_ids}")
-            output["hookSpecificOutput"]["additionalContext"] = (
-                AskUserQuestionMessages.DISPATCH_REMINDER
-            )
-
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "additionalContext": AskUserQuestionMessages.DISPATCH_REMINDER,
+                }
+            }
+            print(json.dumps(output, ensure_ascii=False, indent=2))
         return 0
 
     except json.JSONDecodeError:
-        logger.warning("JSON 解析錯誤，預設允許")
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow"
-            }
-        }
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        # 解析失敗不輸出 JSON：不提醒也不代為放行，exit 0 不阻擋
+        logger.warning("JSON 解析錯誤，略過提醒")
+        sys.stderr.write("[askuserquestion-reminder] JSON 解析錯誤，略過提醒\n")
         return 0
 
     except Exception as e:
+        # 異常不輸出 JSON：不代為放行，exit 0 不阻擋；stderr + 日誌雙通道（規則 4）
         logger.error(f"Hook 執行錯誤: {e}", exc_info=True)
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow"
-            }
-        }
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        sys.stderr.write(f"[askuserquestion-reminder] Hook 執行錯誤: {e}\n")
         return 0
 
 

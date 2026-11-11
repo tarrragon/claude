@@ -328,3 +328,26 @@ def test_skill_sync_base_root_form_not_accepted_as_covering():
     assert ".claude/**/.skill-sync-base" not in hook.check_missing_entries(
         {".claude/**/.skill-sync-base"}, log
     )
+
+
+# __pycache__：只有根層條目須報缺漏（W1-176）
+def test_pycache_required_entry_is_nested_form():
+    hook = load_hook_module()
+    entries = [e for e in hook.REQUIRED_GITIGNORE_ENTRIES if e.endswith("__pycache__")]
+    assert entries == [".claude/**/__pycache__"]
+
+
+def test_pycache_root_only_entry_reported_missing():
+    import logging
+    hook = load_hook_module()
+    log = logging.getLogger("t")
+    for bad in (".claude/__pycache__", ".claude/__pycache__/"):
+        assert ".claude/**/__pycache__" in hook.check_missing_entries({bad}, log)
+
+
+def test_pycache_nested_or_bare_entry_not_reported():
+    import logging
+    hook = load_hook_module()
+    log = logging.getLogger("t")
+    for good in (".claude/**/__pycache__", "__pycache__/", "__pycache__"):
+        assert ".claude/**/__pycache__" not in hook.check_missing_entries({good}, log)

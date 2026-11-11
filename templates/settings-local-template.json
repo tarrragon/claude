@@ -4,8 +4,7 @@
     "1. 複製此檔案為 .claude/settings.local.json",
     "2. 移除所有 _README, _INSTRUCTIONS, _COMMENT 開頭的 key",
     "3. 依 [FLUTTER] 和 [語言特定] 標記調整或移除不適用的項目",
-    "4. 將 {PROJECT_PATH} 替換為實際專案路徑",
-    "5. 驗證 JSON 格式: python3 -c \"import json; json.load(open('.claude/settings.local.json'))\""
+    "4. 驗證 JSON 格式: python3 -c \"import json; json.load(open('.claude/settings.local.json'))\""
   ],
 
   "permissions": {
@@ -42,9 +41,6 @@
       "Skill(ticket)",
       "Skill(tech-debt-capture)",
       "Skill(dart-test-async-guardian)",
-
-      "_COMMENT_SYNC: --- 同步腳本 ---",
-      "Bash(python3 ./.claude/scripts/sync-claude-push.py:*)",
 
       "_COMMENT_SEARCH: --- 搜尋工具 ---",
       "WebSearch",

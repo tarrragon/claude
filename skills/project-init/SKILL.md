@@ -4,7 +4,7 @@ description: "Use this skill whenever the user needs to check or set up developm
 argument-hint: "<subcommand>"
 allowed-tools: Bash(project-init *), Read, Write, Edit
 metadata:
-  version: 1.2.1
+  version: 1.2.2
 ---
 
 # Project Init Tool v1.0
@@ -20,8 +20,8 @@ metadata:
 ### 全局安裝（推薦）
 
 ```bash
-# 首次安裝
-(cd .claude/skills/project-init && uv tool install .)
+# 安裝 shim（SessionStart 會自動執行）
+python3 .claude/scripts/install-skill-clis.py
 
 # 之後在任何目錄執行
 project-init check
@@ -141,18 +141,12 @@ project-init setup — 環境設定
 ### 首次安裝
 
 ```bash
-cd .claude/skills/project-init
-uv tool install .
+python3 .claude/scripts/install-skill-clis.py
 ```
 
 ### 更新（程式碼修改後）
 
-```bash
-cd .claude/skills/project-init
-uv tool install . --force --reinstall
-```
-
-> **重要**：使用 `--force --reinstall` 旗標確保程式碼變更生效。更多資訊見 Project Memory 中的「uv tool 重新安裝」。
+不需重裝：shim 每次執行都以當前專案原始碼運行，修改即時生效。
 
 ### 驗證安裝
 
@@ -187,9 +181,8 @@ project-init setup
 ### 更新依賴或 Hook
 
 ```bash
-# 更新 project-init 工具
-cd .claude/skills/project-init
-uv tool install . --force --reinstall
+# project-init 為 shim，改原始碼即時生效；shim 損壞時重裝
+python3 .claude/scripts/install-skill-clis.py
 
 # 重新檢查環境
 project-init check
@@ -252,9 +245,8 @@ python3 .claude/skills/project-init/project_init/scripts/main.py
 # 檢查是否已安裝
 which project-init
 
-# 如未安裝，執行安裝
-cd .claude/skills/project-init
-uv tool install .
+# 如未安裝，執行 shim 安裝
+python3 .claude/scripts/install-skill-clis.py
 ```
 
 ### 環境檢查失敗
@@ -275,17 +267,16 @@ uv tool install .
 
 ---
 
-## 修改 source 後必須重新安裝
+## 修改 source 後無需重新安裝（shim 化）
 
-> **重要**：本 skill 透過 `uv tool install` 安裝為獨立 CLI，source（本目錄）與 installed（`~/.local/share/uv/tools/<package>/`）是兩份獨立 Python package。修改 source 後若未 reinstall，CLI 仍使用 stale installed 版本，新增的函式會 AttributeError 或被 hasattr 包裝靜默吞掉（W11-037 根因）。
+> **重要**：本 skill 已改用 cwd-resolving shim，不走 `uv tool install`。shim 每次執行都 `uv run --directory .claude/skills/project-init` 當前專案源碼，修改 source 後改動即時生效，無 stale installed 問題。
 
-**修復指令**：
+**檢查 / 安裝指令**（SessionStart 會自動執行安裝）：
 
 ```bash
-cd .claude/skills/<本 skill 目錄> && uv tool install . --force --reinstall
+python3 .claude/scripts/install-skill-clis.py          # 安裝 / 更新 shim
+python3 .claude/scripts/install-skill-clis.py --check  # 檢查是否已 shim 化（exit 0/1）
 ```
-
-**自動偵測**：每次 SessionStart 由 `uv-tool-staleness-check-hook` 比對 source vs installed SHA256，偵測 stale 時提示修復指令。對應 ticket-skill 本身另有 `ticket-reinstall-hook` 自動 reinstall。
 
 ---
 

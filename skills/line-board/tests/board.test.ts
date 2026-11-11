@@ -423,7 +423,11 @@ describe('專案設定', () => {
 
   {
     const cases: [{ projectConfig?: string; cliFailure?: CliFailure }, RegExp][] = [
-      [{ projectConfig: cliNone() }, /^line_status 無法判讀：active 版本沒有標記 `coordination: true` 的進行中票；補法：.*ticket create --coordination/],
+      // 先問用戶再補法（line-continuity §3）：舊版「；補法：」緊接成因，不符本 regex 的順序
+      [
+        { projectConfig: cliNone() },
+        /^line_status 無法判讀：active 版本沒有標記 `coordination: true` 的進行中票；不自行判定單一線，先以 AskUserQuestion 問用戶開工作線或單一線.*；用戶選開工作線時才建協調票，補法：.*ticket create --coordination/,
+      ],
       [
         { projectConfig: cliMultiple(['0.5.0-W1-349', '0.6.0-W1-099']) },
         /^line_status 無法判讀：active 版本有多張標記 coordination: true 的進行中票，不自行擇一，請用戶裁定：0\.5\.0-W1-349、0\.6\.0-W1-099/,

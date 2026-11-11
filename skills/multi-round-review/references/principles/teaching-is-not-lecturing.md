@@ -34,4 +34,4 @@
 
 ## 與相鄰原則的差別
 
-`write-for-readers-not-audiences`（住在 `compositional-writing`）管的是刻意的懸念手法；本卡管的是不自覺帶進來的教室姿態。`audience-is-professional-not-layperson`（同一支 skill）管的是宣導語氣（預設讀者無能）；本卡的省略主詞看起來是相反的問題（預設讀者已知脈絡），實際上根因是同一個教室預設的兩端。
+`write-for-readers-not-audiences`（屬於 `compositional-writing`）管的是刻意的懸念手法；本卡管的是不自覺帶進來的教室姿態。`audience-is-professional-not-layperson`（同一支 skill）管的是宣導語氣（預設讀者無能）；本卡的省略主詞看起來是相反的問題（預設讀者已知脈絡），實際上根因是同一個教室預設的兩端。

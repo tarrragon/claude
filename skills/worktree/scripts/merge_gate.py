@@ -68,6 +68,8 @@ SUITE_COMMANDS = {
 # 範圍判準：路徑前綴或精確檔名命中即需對應套件。見 SKILL.md〈合併前全套件〉
 FLUTTER_SCOPE_PREFIXES = ("lib/", "test/", "integration_test/", "macos/", "docs/", "assets/")
 FLUTTER_SCOPE_FILES = ("pubspec.yaml", "pubspec.lock", "l10n.yaml", "analysis_options.yaml")
+# 內建 Flutter 對應只在合併快照根目錄有此檔時生效（非 Flutter 專案不被 docs/、lib/ 等慣例目錄誤選）
+FLUTTER_MARKER_FILE = "pubspec.yaml"
 
 # 快照內執行前必須就緒的 gitignored 生成產物：套件 -> ((產物路徑, 生成命令), ...)
 REQUIRED_ARTIFACTS = {
@@ -343,27 +345,33 @@ def _imports_any(text: str, modules: set) -> bool:
     ) is not None
 
 
-def needs_gate(changed_paths: list, decl: Declaration = None) -> bool:
+def has_flutter_marker(repo: str, ref: str) -> bool:
+    """ref 根目錄是否有 pubspec.yaml（建立快照前判定內建 Flutter 對應是否生效）；git 失敗時保守視為有。"""
+    proc = _git(["ls-tree", "--name-only", ref, "--", FLUTTER_MARKER_FILE], repo)
+    return proc.returncode != 0 or bool(proc.stdout.strip())
+
+
+def needs_gate(changed_paths: list, decl: Declaration = None, flutter: bool = True) -> bool:
     """改動是否可能落在任何全套件範圍內（用於決定是否值得建立快照）。"""
-    return any(_in_any_suite_scope(p, decl) for p in changed_paths if not is_reuse_exempt(p))
+    return any(_in_any_suite_scope(p, decl, flutter) for p in changed_paths if not is_reuse_exempt(p))
 
 
-def _in_any_suite_scope(path: str, decl: Declaration = None) -> bool:
+def _in_any_suite_scope(path: str, decl: Declaration = None, flutter: bool = True) -> bool:
     """範圍判準唯一處：警告與 needs_gate 共用，宣告前綴與內建 Flutter 範圍都經此判定。"""
     if path.startswith(".claude/"):
         return True
     if decl is not None:
         return _in_declared_scope(path, decl)
-    return path.startswith(FLUTTER_SCOPE_PREFIXES) or path in FLUTTER_SCOPE_FILES
+    return flutter and (path.startswith(FLUTTER_SCOPE_PREFIXES) or path in FLUTTER_SCOPE_FILES)
 
 
-def unmapped_paths(changed_paths: list, decl: Declaration = None) -> list:
+def unmapped_paths(changed_paths: list, decl: Declaration = None, flutter: bool = True) -> list:
     """既非豁免、也不屬任何套件範圍的路徑（如自帶測試的子專案）：閘門不會替它們跑任何測試。"""
-    return [p for p in changed_paths if not is_reuse_exempt(p) and not _in_any_suite_scope(p, decl)]
+    return [p for p in changed_paths if not is_reuse_exempt(p) and not _in_any_suite_scope(p, decl, flutter)]
 
 
-def _warn_unmapped(paths: list, decl: Declaration = None) -> None:
-    unmapped = unmapped_paths(paths, decl)
+def _warn_unmapped(paths: list, decl: Declaration = None, flutter: bool = True) -> None:
+    unmapped = unmapped_paths(paths, decl, flutter)
     if not unmapped:
         return
     shown = unmapped[:UNMAPPED_SHOW_MAX]
@@ -402,7 +410,8 @@ def select_suites(changed_paths: list, root: str, base_decl=BASE_UNKNOWN) -> lis
     want = set()
     touched_skills = {n for n in (_skill_name(p) for p in paths) if n}
     if decl is None:
-        if any(p.startswith(FLUTTER_SCOPE_PREFIXES) or p in FLUTTER_SCOPE_FILES for p in paths):
+        if os.path.isfile(os.path.join(root, FLUTTER_MARKER_FILE)) and any(
+                p.startswith(FLUTTER_SCOPE_PREFIXES) or p in FLUTTER_SCOPE_FILES for p in paths):
             want.add(SUITE_FLUTTER)
     else:
         want.update(n for n, s in decl.items() if _suite_scope_files(s, paths))
@@ -832,7 +841,7 @@ class MergeGate:
             decl = load_declaration_at(self.repo, branch)
         except DeclarationError:
             return True  # 宣告壞掉：保守取名額，合併時的檢查會判紅
-        return paths is None or needs_gate(paths, decl)
+        return paths is None or needs_gate(paths, decl, has_flutter_marker(self.repo, branch))
 
     def _estimate_hold_seconds(self, branch: str, base: str) -> Optional[float]:
         """本次合併預計持有名額的秒數；套件範圍算不出來時回 None（交由 slot_gate 用命令預設值）。"""
@@ -895,8 +904,9 @@ class MergeGate:
         paths = changed_paths_between(self.repo, expected_old, commit)
         if paths is None:
             return CheckResult(False, "無法計算合併改動範圍")
-        _warn_unmapped(paths, decl)
-        if not needs_gate(paths, decl):
+        flutter = has_flutter_marker(self.repo, commit)
+        _warn_unmapped(paths, decl, flutter)
+        if not needs_gate(paths, decl, flutter):
             print("[合併前測試] 改動不在任何全套件範圍內，免跑")
             return CheckResult(True)
         base_decl = load_base_declaration(self.repo, expected_old)

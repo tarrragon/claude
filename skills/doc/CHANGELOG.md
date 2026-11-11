@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.26.1（2026-11-11）— 文件：SKILL.md 的安裝段改述 shim 化後的做法（`skill-sync`、`doc` 等 CLI 由 SessionStart 安裝為 cwd-resolving shim，改原始碼即時生效），移除 `uv tool install` 指示。CLI 行為不變。
+
 **Version**: 1.26.0（2026-11-10）— 四項修正與一項新設定：
 - CLI 入口（tarrragon/claude#25）：`cli.py` 補 `if __name__ == "__main__"`，直接以路徑執行時把 skill 根目錄加進 `sys.path`；新增 `doc_system/__main__.py`，`python3 -m doc_system` 走同一個 `main`。測試 `tests/test_cli_entry.py` 以子行程執行三種入口。
 - test-map 掃描目錄（tarrragon/claude#31）：`TEST_SCAN_DIRS` 預設加入 `tests/`；`docs/traceability.yaml` 新增選填頂層鍵 `test_scan_dirs`，整份取代預設，值不合法時 stderr 警告並退回預設；改走檔案掃描的 UC 全數零命中時 stderr 警告，列出各掃描目錄的實況。

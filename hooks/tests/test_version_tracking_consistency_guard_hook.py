@@ -441,3 +441,55 @@ class TestDetectMissingMainWorklog:
 
         result = guard_hook.detect_missing_main_worklog(versions, tmp_path)
         assert result == ["0.38.0"]
+
+
+MAIN_WORKLOG_PATH = "docs/work-logs/v0/v0.37/v0.37.0/v0.37.0-main.md"
+
+
+def _render_missing_main_warning(tmp_path, capsys, with_main: bool) -> str:
+    """以 v0.37.0 fixture 走偵測、組裝與輸出三步，回傳 stdout。"""
+    version_dir = tmp_path / "docs" / "work-logs" / "v0" / "v0.37" / "v0.37.0"
+    version_dir.mkdir(parents=True)
+    if with_main:
+        (version_dir / "v0.37.0-main.md").write_text("x", encoding="utf-8")
+    versions = {"0.37.0": "active"}
+    missing = guard_hook.detect_missing_main_worklog(versions, tmp_path)
+    lines = guard_hook.build_warning_lines(
+        [], [], [], None, versions, [], [], [], missing
+    )
+    if lines:
+        guard_hook.print_warnings(lines)
+    return capsys.readouterr().out
+
+
+def _assert_tells_where_and_format(out: str) -> None:
+    """讀者要能從警告得知補在哪裡、照什麼格式補。"""
+    assert MAIN_WORKLOG_PATH in out
+    assert guard_hook.MAIN_WORKLOG_TEMPLATE in out
+    assert guard_hook.TODOLIST_ENTRY_TEMPLATE in out
+
+
+class TestMissingMainWorklogWarningText:
+    """缺 main worklog 的警告列出完整分層路徑與格式出處（3.2.0-W1-142）"""
+
+    def test_missing_main_lists_full_path_and_format_sources(self, tmp_path, capsys):
+        out = _render_missing_main_warning(tmp_path, capsys, with_main=False)
+        _assert_tells_where_and_format(out)
+
+    def test_present_main_prints_no_path(self, tmp_path, capsys):
+        out = _render_missing_main_warning(tmp_path, capsys, with_main=True)
+        assert MAIN_WORKLOG_PATH not in out
+        assert "[缺 main worklog]" not in out
+
+    def test_assertion_rejects_legacy_warning_text(self):
+        """E2 正向對照：舊版只給檔名樣式與通用建議句，斷言必須判紅"""
+        legacy = (
+            "  - [缺 main worklog] 版本目錄存在但缺 v{version}-main.md（僅查 "
+            "active/planned，避免歷史存量噪音）: 0.37.0\n"
+            "建議：校準 docs/todolist.yaml，或補建缺漏版本條目\n"
+        )
+        with pytest.raises(AssertionError):
+            _assert_tells_where_and_format(legacy)
+
+    def test_relpath_rejects_non_three_part_version(self):
+        assert guard_hook.main_worklog_relpath("1.0") is None

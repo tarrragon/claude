@@ -386,3 +386,36 @@ __pycache__/
         assert hook_config_info.yaml_permission_info is not None
         # YAML 檔案應該可讀
         assert hook_config_info.yaml_permission_info.can_read
+
+
+class TestSettingsLocalHint:
+    """settings.local.json 待辦提示指向範本（E1 對照）."""
+
+    TEMPLATE = "settings-local-template.json"
+    TODO_DESC = "settings.local.json 不存在"
+
+    def _make_project(self, root: Path, with_local: bool) -> None:
+        (root / "pubspec.yaml").touch()
+        (root / ".claude").mkdir()
+        (root / ".claude" / "settings.json").write_text('{"hooks": {}}')
+        if with_local:
+            (root / ".claude" / "settings.local.json").touch()
+
+    def test_missing_local_hint_points_to_template(self, tmp_path: Path, capsys) -> None:
+        self._make_project(tmp_path, with_local=False)
+        result = run_onboard(tmp_path)
+        out = capsys.readouterr().out
+        hints = [i.hint for i in result.todo_items if i.description == self.TODO_DESC]
+        assert len(hints) == 1
+        assert self.TEMPLATE in hints[0]
+        assert "settings.json" not in hints[0].replace("settings.local.json", "")
+        section = out.split("[settings.local.json]")[1].split("\n[")[0]
+        assert self.TEMPLATE in section
+        assert "settings.json" not in section.replace("settings.local.json", "")
+
+    def test_existing_local_has_no_hint(self, tmp_path: Path, capsys) -> None:
+        self._make_project(tmp_path, with_local=True)
+        result = run_onboard(tmp_path)
+        out = capsys.readouterr().out
+        assert not [i for i in result.todo_items if i.description == self.TODO_DESC]
+        assert self.TEMPLATE not in out

@@ -30,6 +30,7 @@
 | `verify` | 單獨執行 AC 驗證，不變更狀態 | 〈UPDATE 操作補充：commit 副作用與欄位語意〉 |
 | `summary` | 快速摘要 | 〈READ 操作〉 |
 | `query` | 查詢單一 Ticket | 〈READ 操作〉 |
+| `resolve` | 以舊票號（migrate 改號前）查出現行票號，依各票 `previous_ids`；找不到時 exit 1 | --help |
 | `tree` | 顯示任務鏈樹狀結構 | 〈READ 操作〉 |
 | `list` | 列出 Tickets（支援狀態篩選） | 〈track list 子命令〉 |
 | `search` | 搜尋 Tickets（依 UC/Spec/Prop 引用或檔案路徑） | --help |

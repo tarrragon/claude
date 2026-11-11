@@ -114,6 +114,46 @@ def list_ticket_files_from_main(
     return None
 
 
+def list_ticket_files_from_remote_tracking(version: str) -> List[str]:
+    """列舉各 remote-tracking 主分支（refs/remotes/*/main、master）上的票檔。
+
+    跨 clone 撞號的補洞：另一個 clone 建票並推上 origin 後，本機 fetch 會更新
+    origin/main，但本地 main 尚未 merge，只看本地 main 會配到同號。fetch 之前
+    的撞號本機無從得知，處置見 .claude/README.md。
+
+    Returns:
+        各 ref 上票檔路徑的聯集（可能為空）。沒有 remote、非 git 環境或 git 失敗
+        時回傳空清單，取號行為與只看本地相同。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "for-each-ref", "--format=%(refname) %(symref)", "refs/remotes"],
+            cwd=str(get_ticket_state_root()),
+            capture_output=True,
+            text=True,
+            timeout=GIT_TOPLEVEL_TIMEOUT,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        sys.stderr.write(
+            f"[WARNING] list_ticket_files_from_remote_tracking: git for-each-ref "
+            f"失敗（{type(exc).__name__}），略過 remote-tracking 來源\n"
+        )
+        return []
+    if result.returncode != 0:
+        return []
+
+    files: set = set()
+    for line in result.stdout.splitlines():
+        refname, _, symref = line.partition(" ")
+        # refs/remotes/<remote>/HEAD 是指向主分支的符號 ref，略過以免重複
+        if symref.strip() or refname.rsplit("/", 1)[-1] not in _MAIN_REF_CANDIDATES:
+            continue
+        listed = list_ticket_files_from_main(version, ref_candidates=(refname,))
+        if listed:
+            files.update(listed)
+    return sorted(files)
+
+
 def _parse_worktree_root_paths(porcelain_output: str, exclude: Path) -> List[Path]:
     """從 `git worktree list --porcelain` 輸出解析出其他 worktree 的根目錄。
 
@@ -462,8 +502,10 @@ def get_next_seq(version: str, wave: int) -> int:
         3. list_ticket_files_from_main 取得 main ref 上的 ticket 檔（B3 方案）
         4. list_ticket_files_from_sibling_worktrees 取得同 repo 下其他
            worktree 本地已建立、尚未 merge 進 main 的 ticket 檔
-        5. 三來源取聯集後解析所有檔名，取得最大序號
-        6. 返回 max_seq + 1（無任何來源檔案時返回 1）
+        5. list_ticket_files_from_remote_tracking 取得 remote-tracking 主分支
+           （已 fetch、本地 main 尚未 merge）上的 ticket 檔
+        6. 各來源取聯集後解析所有檔名，取得最大序號
+        7. 返回 max_seq + 1（無任何來源檔案時返回 1）
 
     注意:
         - 只計算根任務序號（不包含子任務的點號部分）
@@ -505,9 +547,17 @@ def get_next_seq(version: str, wave: int) -> int:
             Path(p).stem for p in sibling_files if Path(p).name.endswith(".md")
         ]
 
+    # 來源 4：remote-tracking 主分支（補足跨 clone：他方已推上 origin、本機已
+    # fetch 但本地 main 尚未 merge 的票號；無 remote 時為空，行為不變）
+    remote_stems = [
+        Path(p).stem
+        for p in list_ticket_files_from_remote_tracking(version)
+        if Path(p).name.endswith(".md")
+    ]
+
     # 聯集解析最大根任務序號
     max_seq = 0
-    for stem in set(local_stems) | set(main_stems) | set(sibling_stems):
+    for stem in set(local_stems) | set(main_stems) | set(sibling_stems) | set(remote_stems):
         seq = _parse_root_seq(stem, wave)
         if seq is not None:
             max_seq = max(max_seq, seq)
@@ -880,6 +930,24 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
     }
 
 
+# 可見佔位符行：「（必填：…）」等四種前綴，整行即一個佔位符
+_VISIBLE_PLACEHOLDER_LINE = re.compile(r"^（(待填寫|必填|選填|免填)：(.+)）$", re.MULTILINE)
+
+
+def _as_guide_comment(text: str) -> str:
+    """把可見佔位符行轉為 HTML 註解 ``<!-- 必填：… -->``。
+
+    可見佔位符與作者內容同為字串，append-log 只在整章皆為佔位符時才替換，
+    章節另有查重紀錄或 Completion Info 欄位時佔位符會留在首屏。改為註解後
+    讀取端（皆先剝 HTML 註解再判空殼）判定不變，佔位符不再與內容同形。
+    註解以前綴詞（必填、選填等）開頭，不會被 ``<!--\\s*Schema\\[`` 比中，
+    Schema 標註不經本函式。
+    """
+    return _VISIBLE_PLACEHOLDER_LINE.sub(
+        lambda m: f"<!-- {m.group(1)}：{m.group(2)} -->", text
+    )
+
+
 def _ana_reproduction_section(ticket_type: str) -> str:
     """產生 ANA Ticket 專屬的「重現實驗結果」章節。
 
@@ -889,7 +957,7 @@ def _ana_reproduction_section(ticket_type: str) -> str:
     """
     if ticket_type != "ANA":
         return ""
-    return """
+    return _as_guide_comment("""
 ## 重現實驗結果
 
 ### 實驗方法
@@ -905,7 +973,7 @@ def _ana_reproduction_section(ticket_type: str) -> str:
 （必填：實驗結論——已驗證的事實 vs 仍未驗證的假設。僅在完成實驗後才允許列候選方案。）
 
 ---
-"""
+""")
 
 
 _SCHEMA_NOTES = {
@@ -1104,7 +1172,10 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
     sol_marker = _schema_marker(ticket_type, "Solution")
     tr_marker = _schema_marker(ticket_type, "Test Results")
     ci_marker = _schema_marker(ticket_type, "Completion Info")
-    ph = _TYPE_PLACEHOLDERS.get(ticket_type, _DEFAULT_PLACEHOLDERS)
+    ph = {
+        key: _as_guide_comment(value)
+        for key, value in _TYPE_PLACEHOLDERS.get(ticket_type, _DEFAULT_PLACEHOLDERS).items()
+    }
     return f"""# Execution Log
 
 ## Task Summary
@@ -1425,11 +1496,14 @@ def _split_body_by_h2(body: str) -> List[Tuple[Optional[str], str]]:
         List of (h2_title or None, segment_text)。第一段若無 H2 前綴，h2_title 為 None；
         segment_text 包含 H2 標題行本身（若有），以維持原始格式還原。
     """
+    from ticket_system.lib.section_locator import mask_fenced_lines
+
     h2_re = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
     segments: List[Tuple[Optional[str], str]] = []
     last_end = 0
     last_title: Optional[str] = None
-    for match in h2_re.finditer(body):
+    # code fence 內的 `## ` 不是章節：在等長遮罩副本上找標題，索引直接切原文
+    for match in h2_re.finditer(mask_fenced_lines(body)):
         if match.start() > last_end or last_title is not None:
             segments.append((last_title, body[last_end:match.start()]))
         last_end = match.start()

@@ -13,8 +13,10 @@
 ## 基本用法
 
 ```bash
-# 建立根任務（必須提供 decision-tree 三參數；--where-files 與 --acceptance 亦為必填，見下方「重要」段）
+# 建立根任務（必填項完整清單見下方「重要」段）
 /ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX" \
+  --who "parsley-flutter-developer" --when "Phase 3b 開始時" \
+  --why "需求依據" --how-strategy "TDD 循環" \
   --where-files "lib/path/to/file.dart" \
   --acceptance "驗收條件描述" \
   --decision-tree-entry "第五層:TDD" \
@@ -41,25 +43,43 @@
   --decision-tree-decision "Phase 完成後建立 Ticket" \
   --decision-tree-rationale "quality-baseline-rule"
 
-# 建立子任務（可省略 decision-tree 參數；--where-files 與 --acceptance 仍為必填）
+# 建立子任務（可省略 decision-tree 參數；其餘必填項不變）
 /ticket create --parent 1.0.0-W1-001 --action "更新" --target "XXX" \
+  --who "parsley-flutter-developer" --when "父票 Phase 3b 時" \
+  --why "需求依據" --how-strategy "實作策略" \
   --where-files "lib/path/to/file.dart" --acceptance "驗收條件描述"
 
 # 建立衍生任務（與 --parent 互斥，見下方「--parent vs --source-ticket 對比表」章節）
 /ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX" \
+  --who "parsley-flutter-developer" --when "來源票完成後" \
+  --why "需求依據" --how-strategy "實作策略" \
   --where-files "lib/path/to/file.dart" --acceptance "驗收條件描述" \
+  --decision-tree-entry "第三層半:執行中額外發現" \
+  --decision-tree-decision "建立衍生 Ticket" \
+  --decision-tree-rationale "quality-baseline-rule-5" \
   --source-ticket 0.18.0-W17-001 --type IMP
 
-# 建立 DOC 類型（可省略 decision-tree 參數；--where-files 與 --acceptance 仍為必填）
+# 建立 DOC 類型（可省略 decision-tree 參數與 --why；其餘必填項不變）
 /ticket create --version 0.31.0 --wave 1 --action "撰寫" --target "工作日誌" --type DOC \
+  --who "thyme-documentation-integrator" --when "版本收尾時" \
+  --how-strategy "彙整本版 worklog" \
   --where-files "docs/work-logs/v0.31.0/topic.md" --acceptance "驗收條件描述"
 ```
 
 > 版本目錄無獨立初始化子命令（`ticket --help` 無 `init`）：`create` 執行時以 `get_tickets_dir(version)` 自動 `mkdir(parents=True, exist_ok=True)`，版本目錄不存在時 `create` 直接建立。
 
-**重要**：建立時（含子任務、DOC 類型），`ticket_builder.py` 的 `validate_create_checklist` 要求至少一項 `--where-files`（或 `--where`）與至少一項 `--acceptance`，且 `--when` 不可留空（省略時預設為字面「待定義」，驗證即視為缺失）；`create` 命令層缺任一項即於持久化前 `exit 1` 阻擋（`CHECKLIST_VALIDATION_FAILED`），`--force` 可跳過此檢查（僅印 WARNING）。此外建立根任務時，必須提供 `--decision-tree-entry`、`--decision-tree-decision`、`--decision-tree-rationale` 三個參數。只在以下情況可省略 decision-tree 三參數：
-- 建立子任務（使用 `--parent` 參數）
-- Ticket 類型為 DOC（`--type DOC`）
+**重要**：`create` 於持久化前以 `ticket_builder.py` 的 `validate_create_checklist` 檢查下列必填項，缺任一項即 `exit 1` 阻擋（`CHECKLIST_VALIDATION_FAILED`），`--force` 可跳過此檢查（僅印 WARNING）：
+
+| 必填項 | 對應參數 | 判為缺失的值 | 豁免 |
+|--------|---------|-------------|------|
+| where.files | `--where-files`（或 `--where`），至少一項 | 未提供 | 無 |
+| acceptance | `--acceptance`，至少一項 | 未提供 | 無 |
+| decision_tree_path | `--decision-tree-entry`、`--decision-tree-decision`、`--decision-tree-rationale` 三者皆非空 | 任一為空 | 子任務（`--parent`）、DOC 類型 |
+| when | `--when` | 省略時的預設字面「待定義」 | 無 |
+| who | `--who` | 空值、`pending`、「待定義」 | 無 |
+| what | `--what`，省略時由 `--action` + `--target` 組成 | 空值 | 無 |
+| why | `--why` | 空值、「待定義」 | DOC 類型 |
+| how_strategy | `--how-strategy` | 空值、「待定義」 | 無 |
 
 **退出碼與 auto-commit 失敗**：`create` 落盤後會自動提交票檔。提交遇暫時性鎖競爭時退避重試（等待總和上限約 5 秒）；最終仍失敗時 stderr 輸出 `[WARNING]`（含失敗原因、鎖檔路徑、補救指令），票檔保留在 working tree、不回滾建票，並以專用退出碼 **75**（`EXIT_AUTO_COMMIT_FAILED`，`ticket_system/lib/git_utils.py`）結束，與建票失敗（1）區分。工具絕不自動刪除鎖檔：過期鎖須先確認沒有 git 行程在執行，再由人依鎖檔內容判斷後手動移除。目錄非 git repo 時僅 stderr 提示、退出碼維持 0。呼叫端判成敗讀 `$?`：75 代表「票已建、未入庫」，補救為手動提交該票檔。
 
@@ -158,17 +178,26 @@ ticket create ... --blocked-by "<id>.1,<id>.2"
 ### 範例
 
 ```bash
-# 根任務 — 必須提供 decision-tree 三參數
+# 根任務 — 必須提供 decision-tree 三參數（其餘必填項見〈基本用法〉「重要」段）
 ticket create --wave 2 --action "實作" --target "HTTP Handler" \
+  --who "fennel-go-developer" --when "Phase 4 開始時" \
+  --why "Phase 3b 發現重構需求" --how-strategy "抽出共用 handler" \
+  --where-files "internal/http/handler.go" --acceptance "驗收條件描述" \
   --decision-tree-entry "第五層:TDD" \
   --decision-tree-decision "Phase 3b 完成後建立重構 Ticket" \
   --decision-tree-rationale "quality-baseline-rule-5"
 
 # 子任務 — 可省略 decision-tree 參數
-ticket create --parent 1.0.0-W2-001 --action "實作" --target "事件融合層"
+ticket create --parent 1.0.0-W2-001 --action "實作" --target "事件融合層" \
+  --who "fennel-go-developer" --when "父票 Phase 3b 時" \
+  --why "需求依據" --how-strategy "實作策略" \
+  --where-files "internal/fusion/layer.go" --acceptance "驗收條件描述"
 
-# DOC 類型 — 可省略 decision-tree 參數
-ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC
+# DOC 類型 — 可省略 decision-tree 參數與 --why
+ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC \
+  --who "thyme-documentation-integrator" --when "版本收尾時" \
+  --how-strategy "彙整本版 worklog" \
+  --where-files "docs/work-logs/topic.md" --acceptance "驗收條件描述"
 ```
 
 ## 重複偵測（兩層防護）
@@ -286,10 +315,11 @@ ticket create --wave 3 --action "修復" --target "XXX" \
 
 ## 指向 ANA 的耦合後果提示
 
-ANA 掛著非終態 children 時不能 complete，被 blockedBy 的 ANA 不 complete，依賴它的票就一直等。建票當下命中下列兩種情況時，stderr 印一行 `[HINT] ANA 將保持開啟...`，**只提示、不阻擋、exit code 不變**：
+ANA 掛著非終態 children 時不能 complete，被 blockedBy 的 ANA 不 complete，依賴它的票就一直等。建票當下命中下列三種情況時，stdout 印一行 `[HINT] ...`（受眾含模型，stderr 對模型不可見），**只提示、不阻擋、exit code 不變**：
 
 | 情況 | 提示內容 |
 |------|---------|
+| `--parent <ANA>`，ANA 所在版本 `scope: frozen`，且未帶 `--scope-blocker` | 子票版本繼承父票、會落在凍結版本內；落地屬後續版本者改用 `--version <目標版本> --source-ticket <ANA-ID>`，屬本版範圍的拆票維持 `--parent` 並加 `--scope-blocker <理由>` |
 | `--parent <ANA>`，且該 ANA 已被其他非終態票 blockedBy | ANA 將保持開啟到本票終態；列出 N 張 blockedBy 本 ANA 的票 |
 | `--blocked-by <ANA>`，且該 ANA 有非終態 children | 列出 ANA 的非終態 children；本票等到它們全部終態後 ANA 才能 complete |
 
@@ -338,12 +368,14 @@ ANA 掛著非終態 children 時不能 complete，被 blockedBy 的 ANA 不 comp
 | 關係欄位 | `parent_id` + `<parent>.children[]` | `source_ticket` + `<source>.spawned_tickets[]` |
 | Complete 阻擋 | 父 Ticket 被未完成 children 阻擋（永遠） | 非 ANA source：不被 spawned 阻擋（獨立排程）；ANA source：仍阻擋——`lifecycle.py` 的 `_handle_ana_spawned_confirmation` 確認關卡與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`（W15-003）稽核 FAIL 皆為現行已定案設計（hook 層 `ana_spawned_checker` 已退場為 warn-only，但阻擋機制本身未隨之移除，詳見 `field-semantics.md`〈阻擋語意對照表〉現況分層說明） |
 | 序號規則 | 自動子序號（如 `W17-001.1`） | 獨立 Ticket ID（不繼承序號） |
-| 使用時機 | 功能拆分、ANA 結論要求的落地（PC-091 路線） | 執行中發現獨立 bug / 技術債（PC-073 殘存範圍） |
-| 典型場景 | ANA Solution 落地為 IMP/DOC（一律 children） | 執行 IMP/DOC 中發現 bug/技術債另開單獨追蹤 |
+| 版本歸屬 | 必然與父票同版本（子票 ID 含父票 ID） | 由 `--version` 決定，可建在後續版本 |
+| 使用時機 | 功能拆分、ANA 結論要求且屬本版範圍的落地（PC-091 路線） | ANA 結論要求、依〈兩期〉排入後續版本的落地（在目標版本建根票）；規劃波建的本版執行期票（可附規劃票血緣）；執行中發現獨立 bug / 技術債（PC-073 殘存範圍） |
+| 典型場景 | ANA Solution 落地為本版的 IMP/DOC | ANA 落地排入下一個 minor；執行 IMP/DOC 中發現 bug/技術債另開單獨追蹤 |
 | 決策樹參數 | 可省略（繼承自 parent） | 不可省略（root ticket 規則） |
 
-> **判別問題**：新 Ticket 是上游 ANA 結論「要求」的落地，還是執行中「衍生」的副產品？
-> - ANA 結論要求的落地 → `--parent <ANA-ID>`（PC-091 唯一路線）
+> **判別問題**：新 Ticket 是上游 ANA 結論「要求」的落地，還是執行中「衍生」的副產品？落地票屬於哪個版本？
+> - ANA 結論要求、屬本版範圍的落地 → `--parent <ANA-ID>`（PC-091）
+> - ANA 結論要求、依 `.claude/pm-rules/version-progression.md`〈兩期：規劃期與執行期〉排入後續版本的落地 → `--version <目標版本> --source-ticket <ANA-ID>`（目標版本未登記先登記）
 > - 執行中發現的獨立技術債 → `--source-ticket <CURRENT>`（PC-073 殘存範圍）
 >
 > 完整決策樹與用戶情境對照表：`.claude/skills/ticket/references/field-semantics.md`「欄位選擇決策樹」。

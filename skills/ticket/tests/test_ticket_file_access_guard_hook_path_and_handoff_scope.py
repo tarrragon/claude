@@ -13,6 +13,11 @@
 
 涵蓋四類情境：絕對路徑攔截、相對路徑攔截、handoff 模式下的預期行為（含限定
 範圍生效與失效兩面）、既有非 ticket 檔案放行情境不被破壞。
+
+後續變更：Read ticket 檔案改為一律放行並以 additionalContext 附查詢建議
+（讀檔不改資料，且 Edit body 前必須先 Read）。路徑辨識（破口一）仍用於
+Edit／Write 判定與查詢建議；handoff 範圍（破口二）不再影響 Read 判定。
+Write 與 Edit frontmatter 的阻擋行為不變，見 TestWriteAndFrontmatterEditUnchanged。
 """
 
 from __future__ import annotations
@@ -73,14 +78,16 @@ def module_and_root(tmp_path, monkeypatch):
 class TestAbsolutePathInterception:
     """破口一：絕對路徑形式的 ticket md 讀取必須被正確攔截。"""
 
-    def test_absolute_path_without_handoff_is_blocked(self, module_and_root):
+    def test_absolute_path_read_is_allowed_with_hint(self, module_and_root):
         module, project_root, logger = module_and_root
         abs_path = str(project_root / TICKET_RELPATH.format(id="0.2.1-W3-549"))
 
         is_allowed, reason = module.check_read_permission(abs_path, logger)
 
-        assert is_allowed is False
-        assert "禁止直接讀取 ticket 檔案" in reason
+        assert is_allowed is True
+        assert "ticket track full" in reason
+        hint = module.read_hint_for("Read", abs_path)
+        assert hint is not None and "ticket track full 0.2.1-W3-549" in hint
 
     def test_absolute_path_recognized_as_ticket_file(self, module_and_root):
         """normalize_path 必須將絕對路徑轉為專案相對路徑後才比對 pattern。"""
@@ -101,22 +108,19 @@ class TestAbsolutePathInterception:
 class TestRelativePathInterception:
     """既有相對路徑攔截行為維持不變（回歸基準線）。"""
 
-    def test_relative_path_without_handoff_is_blocked(self, module_and_root):
+    def test_relative_path_read_is_allowed(self, module_and_root):
         module, _project_root, logger = module_and_root
         rel_path = TICKET_RELPATH.format(id="0.2.1-W3-549")
 
-        is_allowed, reason = module.check_read_permission(rel_path, logger)
+        is_allowed, _reason = module.check_read_permission(rel_path, logger)
 
-        assert is_allowed is False
-        assert "禁止直接讀取 ticket 檔案" in reason
+        assert is_allowed is True
 
 
-class TestHandoffRecoveryModeScoped:
-    """破口二：handoff 恢復模式只放行該 handoff 實際指向的 ticket。"""
+class TestReadAllowedRegardlessOfHandoff:
+    """Read 一律放行：handoff 記錄的有無與內容不再影響 Read 判定。"""
 
-    def test_unrelated_ticket_still_blocked_despite_pending_handoff(self, tmp_path, monkeypatch):
-        """核心回歸案例：0.2.1-W3-500 的 handoff 存在時，讀取無關的
-        0.2.1-W3-549 仍必須被攔截（修復前為全域放行）。"""
+    def test_unrelated_ticket_read_allowed_despite_pending_handoff(self, tmp_path, monkeypatch):
         module = _load_hook_module()
         project_root = _make_project(
             tmp_path,
@@ -131,10 +135,9 @@ class TestHandoffRecoveryModeScoped:
         logger = module.setup_hook_logging("test")
         rel_path = TICKET_RELPATH.format(id="0.2.1-W3-549")
 
-        is_allowed, reason = module.check_read_permission(rel_path, logger)
+        is_allowed, _reason = module.check_read_permission(rel_path, logger)
 
-        assert is_allowed is False
-        assert "禁止直接讀取 ticket 檔案" in reason
+        assert is_allowed is True
 
     def test_source_ticket_id_allowed_via_relative_path(self, tmp_path, monkeypatch):
         module = _load_hook_module()
@@ -151,10 +154,9 @@ class TestHandoffRecoveryModeScoped:
         logger = module.setup_hook_logging("test")
         rel_path = TICKET_RELPATH.format(id="0.2.1-W3-500")
 
-        is_allowed, reason = module.check_read_permission(rel_path, logger)
+        is_allowed, _reason = module.check_read_permission(rel_path, logger)
 
         assert is_allowed is True
-        assert "Handoff 恢復模式允許" in reason
 
     def test_target_ticket_id_allowed_via_absolute_path(self, tmp_path, monkeypatch):
         """target_ticket_id 也屬合法恢復範圍，且與絕對路徑修復疊加驗證。"""
@@ -172,23 +174,20 @@ class TestHandoffRecoveryModeScoped:
         logger = module.setup_hook_logging("test")
         abs_path = str(project_root / TICKET_RELPATH.format(id="0.2.1-W3-520"))
 
-        is_allowed, reason = module.check_read_permission(abs_path, logger)
+        is_allowed, _reason = module.check_read_permission(abs_path, logger)
 
         assert is_allowed is True
-        assert "Handoff 恢復模式允許" in reason
 
-    def test_no_pending_handoff_directory_denies_all_ticket_reads(self, module_and_root):
-        """無任何 pending handoff 時（module_and_root fixture 未建立該目錄），
-        讀取 ticket 一律走一般攔截路徑。"""
+    def test_no_pending_handoff_directory_allows_ticket_reads(self, module_and_root):
         module, _project_root, logger = module_and_root
         rel_path = TICKET_RELPATH.format(id="0.2.1-W3-549")
 
         is_allowed, _reason = module.check_read_permission(rel_path, logger)
 
-        assert is_allowed is False
+        assert is_allowed is True
 
-    def test_malformed_handoff_json_does_not_crash_and_is_skipped(self, tmp_path, monkeypatch):
-        """損壞的 handoff json 只應被略過記錄警告，不應讓 hook 拋例外。"""
+    def test_malformed_handoff_json_does_not_crash(self, tmp_path, monkeypatch):
+        """損壞的 handoff json 不影響 Read 判定，也不讓 hook 拋例外。"""
         module = _load_hook_module()
         project_root = _make_project(tmp_path)
         pending_dir = project_root / ".claude" / "handoff" / "pending"
@@ -200,7 +199,64 @@ class TestHandoffRecoveryModeScoped:
 
         is_allowed, _reason = module.check_read_permission(rel_path, logger)
 
+        assert is_allowed is True
+
+
+class TestWriteAndFrontmatterEditUnchanged:
+    """Write 與 Edit frontmatter 的阻擋行為不變（E2 正向對照：該擋的仍擋）。"""
+
+    def test_write_ticket_file_blocked(self, module_and_root):
+        module, _project_root, logger = module_and_root
+        rel_path = TICKET_RELPATH.format(id="0.2.1-W3-549")
+
+        is_allowed, reason = module.check_write_permission(rel_path, logger)
+
         assert is_allowed is False
+        assert "禁止直接建立或覆寫 ticket 檔案" in reason
+
+    @pytest.mark.parametrize("old_string", ["status: pending", "priority: P2", "who:"])
+    def test_frontmatter_edit_blocked(self, module_and_root, old_string):
+        module, _project_root, logger = module_and_root
+        rel_path = TICKET_RELPATH.format(id="0.2.1-W3-549")
+
+        is_allowed, reason = module.check_edit_permission(rel_path, old_string, logger)
+
+        assert is_allowed is False
+        assert "禁止直接編輯 ticket frontmatter 欄位" in reason
+
+    def test_read_then_edit_solution_section_allowed(self, module_and_root):
+        """先 Read 再 Edit Solution 章節可完成（兩步皆放行）。"""
+        module, _project_root, logger = module_and_root
+        rel_path = TICKET_RELPATH.format(id="0.2.1-W3-549")
+
+        read_ok, _ = module.check_read_permission(rel_path, logger)
+        edit_ok, _ = module.check_edit_permission(
+            rel_path, "## Solution\n\n舊的方案敘述", logger
+        )
+
+        assert read_ok is True
+        assert edit_ok is True
+
+    def test_no_read_hint_for_non_read_or_non_ticket(self, module_and_root):
+        module, _project_root, _logger = module_and_root
+        rel_path = TICKET_RELPATH.format(id="0.2.1-W3-549")
+
+        assert module.read_hint_for("Edit", rel_path) is None
+        assert module.read_hint_for("Read", "lib/main.dart") is None
+
+
+class TestAllowedBodySectionsMatchSchema:
+    """放行清單涵蓋現行 schema 的全部 body 章節（清單來源：CANONICAL_BODY_SECTIONS）。"""
+
+    def test_canonical_sections_all_allowed(self, module_and_root):
+        from ticket_system.constants import CANONICAL_BODY_SECTIONS
+
+        module, _project_root, _logger = module_and_root
+        expected = [f"## {name}" for name in CANONICAL_BODY_SECTIONS]
+
+        assert module.CANONICAL_BODY_SECTION_HEADINGS == expected
+        for heading in expected:
+            assert heading in module.ALLOWED_BODY_SECTIONS
 
 
 class TestExistingPassthroughUnaffected:

@@ -182,8 +182,7 @@
 
 **Why**：不寫這條界線，讀者看到兩份都在講「測試與規格的對應」會判定其一是另一的過期副本，進而把本目錄的欄位塞進追溯矩陣（該 schema 的頂層鍵若是封閉集合且有 conformance 測試把關，此舉會撞上強制層），或反過來認為本目錄應該只列追溯矩陣已有的項目而漏掉三類來源。
 
-
-本框架的追溯矩陣住在哪、schema 由誰定義、哪個 CLI 消費它，見 `references/project-integration/traceability-matrix.md`（該目錄不隨同步傳遞，由各專案自備）。<!-- portability-allow: 分層目錄由各專案自備，不隨 sync 傳遞 -->
+本框架的追溯矩陣放在哪裡、schema 由誰定義、哪個 CLI 消費它，見 `references/project-integration/traceability-matrix.md`（該目錄不隨同步傳遞，由各專案自備）。<!-- portability-allow: 分層目錄由各專案自備，不隨 sync 傳遞 -->
 
 ---
 

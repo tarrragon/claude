@@ -1,3 +1,67 @@
+## [3.2.0] - 2026-11-11
+
+### Summary
+sync-pull 的升級與首次安裝路徑、ticket 的版本維度，以及 consumer 文件對照實跑的修正。本版的主題有四個：sync-pull 首次安裝與中止時的結束碼、`.gitignore` 必要條目補上巢狀 `__pycache__`、ticket 落地與關票流程加上版本維度（後續版本落地票、凍結版本建子票）、ticket 範本的佔位符改為 HTML 註解。另有合併閘門、handoff 判定、README 與 sync-pull 說明對照實跑後的修正，以及 impeccable 的授權標示。
+
+### 對 consumer 的影響
+- **`.gitignore` 新增必要條目 `.claude/**/__pycache__`**：原本只忽略根層 `.claude/__pycache__`，巢狀目錄（skills、hooks 等）下的 `.pyc` 被 `git add .claude` 提交後，執行 Hook 與腳本會重寫它們，sync-pull 以「.claude 有未提交的變更」拒絕拉取。SessionStart 的 gitignore 檢查會列出缺少的條目，`.claude/README.md`〈首次安裝〉第 5 步的命令也會印出新條目，請補進 `.gitignore`。已提交過 `.pyc` 的專案，清除方式見 `.claude/README.md`〈更新到新版本〉的「拉取被拒，而未提交的變更只有 `.pyc`」：`git rm -r --cached --quiet -- '.claude/*__pycache__*'`、補 `.gitignore` 條目、提交一次。
+- **shim 化 skill 不再用 `uv tool install`**：doc、project-init、version-release、mermaid-ascii、skill-sync 的 SKILL.md 與 project-init 的提示訊息，原本的安裝與重裝指示改為說明 shim 由 SessionStart 的 `install-skill-clis.py` 安裝，改 source 即時生效，不需重新安裝。CLI 顯示 not installed 或 outdated 時，執行 `python3 .claude/scripts/install-skill-clis.py`。以 `uv tool install` 裝過這些 CLI 的環境不需處理。`install-skill-clis.py` 另支援 `--help`，未知引數會報錯並以結束碼 2 結束，不再直接安裝 shim。
+- **sync-pull 首次安裝**：`/sync-pull` 與腳本結尾的「新專案初始化」提示由多行改為一行，指向 `.claude/README.md`〈首次安裝〉，初始化步驟只留 README 一份。`sync-pull.md` 的決策表新增「轉 `.sync-conflicts` 的本地檔」一列，§5 清理 `.sync-conflicts` 前須先對照拉取輸出的清單與 `git status`，確認檔案已放回或確定不要才刪。
+- **`sync-preserve.yaml` 寫 `preserve: []`**：沒有安裝 PyYAML 時，備用解析器原本拒收空清單並以 traceback 中止。現在視為空清單；tab 縮排與非空的 inline 寫法仍會被拒，但改為 stderr 說明原因、位置與處置，結束碼 1，沒有 traceback。
+- **sync-pull 全量 overlay 確認中止**：在確認提示答 N 或 stdin 為 EOF 時，腳本以結束碼 1 結束，並印出未更新、未寫基準點與重跑處置，不再印「成功拉取」後以結束碼 0 結束。呼叫端若以結束碼判斷成敗（CI、包裝腳本），中止現在會被視為失敗。在可互動的終端機重跑，或先建立基準點。
+- **hook 註冊的處置改為回報 framework issue**：`sync-pull.md`〈Hook 完整性驗證〉與〈幽靈註冊處置〉不再要求 consumer 把 hook 補進或搬到 `settings.json`（該檔由上游提供，sync-pull 會覆寫）。依註冊對象分三列處置：框架 hook 上游已註冊，從 `settings.local.json` 刪除重複；框架 hook 上游未註冊，回報 framework issue，local 的註冊暫時保留；專案自有 hook，回報 framework issue 並說明框架尚未提供合法註冊位置。`hook-registration-coverage-check.py`、project-init 與 sync-pull 腳本輸出的建議句同步改為這三種處置，偵測與攔截條件不變。
+- **impeccable 的授權例外**：`.claude/skills/impeccable/` 採 Apache 2.0，其餘為 MIT。新增 `.claude/THIRD-PARTY-NOTICES.md` 列出第三方元件的授權（impeccable 為 Apache 2.0；asd-ste100 為 MIT，改寫自三個社群 skill），並隨 sync 出現在發佈庫根目錄。再發佈 `skills/impeccable/` 時須保留其 `LICENSE` 與 `NOTICE.md`。`LICENSE` 保持 MIT 標準全文，例外不寫進該檔。
+- **ticket 範本的佔位符改為 HTML 註解**：`ticket create` 產生的選填與必填章節，原本以可見文字寫「（選填：…）」，與作者寫的內容同形，漏填時殘留在票面（tarrragon/claude#33）。現在寫成 `<!-- 必填：… -->` 形態，渲染時不可見。存量票的可見舊形態不會被改寫，讀取端（驗證與執行日誌檢查）仍認舊形態。`append-log` 寫入時會逐行剝除舊形態的可見佔位符。
+- **`ticket track complete --yes-spawned`**：spawned 票的版本嚴格大於 ANA 版本時（落地在後續版本），complete 只印資訊，不要求確認；同版本、較早版本、查無票與版本無法解析者維持原本的確認。依「後續版本落地」流程建票的 ANA，不必再帶 `--yes-spawned`。
+- **從 3.1.0 以前升級的第一輪 sync-pull**：解完衝突後 `--resolve-done` 會回報沒有 pending base，這是預期行為。改跑一次一般 `sync-pull`；有衝突就解完再 `--resolve-done`，沒有衝突時 base 會直接推進。不要手改 `.sync-state.json`。從 3.0.x 升級到 3.2.0 同樣適用。
+
+### Fixed
+- ticket 版本維度：
+  - `ticket track query` 的 Spawned 進度改為跨版本讀取，後續版本的落地票不再顯示 not_found。
+  - `ticket create` 在凍結版本的 ANA 下建子票時提示子票會繼承父票版本，給出 `--version <目標版本> --source-ticket <ANA-ID>` 的可複製命令；提示改走 stdout，模型看得到。
+  - acceptance-gate 的 ANA 落地訊息改為依落地票版本給 `--parent` 或 `--version … --source-ticket`。
+  - 防護類 hook 的 acceptance 模板依票型套用，驗證端同步。
+  - `set-blocked-by` 寫入前偵測循環，成環時以 `BLOCKED_BY_CYCLE` 拒絕，環路含跨版本。
+- acceptance-gate：同命令鏈時 Phase 4 與自檢項不再誤報；擋下串接命令時，訊息說明評估時點與前段寫入未執行。
+- handoff 孤兒判定：有 target 時，目標查無即判為孤兒，來源仍在也一樣。
+- `ticket track commit` 可提交已被 ignore 的路徑被停止追蹤（刪除）。
+- 票面編輯：
+  - `ticket-file-access-guard-hook` 放行 Read ticket md，並以 additionalContext 給查詢建議；放行的章節清單補齊現行章節。
+  - `append-log --replace` 只覆寫人寫部分，保留 Context Bundle 自動區塊與 CLI 產生的子節。
+  - `find_section` 與 append-log 的 H2 降級認得 code fence，fence 內的 `## ` 範例不再被當成章節。
+- 建票端對 `how.strategy` 盤點表的判定與 complete 端一致：格式不符或表頭缺產生路徑時，建票即警告。
+- `where.files` 宣告檢查前移到派發前：ANA 缺 `::write`、IMP 漏宣告時，dispatch-readiness 擋下。
+- 合併閘門未宣告時，快照根目錄沒有 `pubspec.yaml` 就不選 Flutter 套件，非 Flutter 專案只改 `docs/` 不再執行 `fvm flutter test`（worktree SKILL 與 README 同步）。
+- `askuserquestion-reminder-hook` 對 Agent 呼叫不再輸出 `permissionDecision: allow`；stdin 非 JSON 或例外時 fail-open，不輸出，權限確認交回平台與用戶，錯誤同時寫 stderr 與 hook-logs。
+- `settings-local-template.json` 的 `_INSTRUCTIONS` 刪除要求替換 `{PROJECT_PATH}` 的指示（該佔位符不存在，hook 以 `$CLAUDE_PROJECT_DIR` 解析）。
+- project-init onboard 對 `settings.local.json` 的待辦提示改指向 `.claude/templates/settings-local-template.json`，不再要求依 `settings.json` 建立。
+- `ticket create` 在偵測不到版本時，提示改為偵測規則（`docs/todolist.yaml` 第一個 `status: active`，取不到改取 `docs/work-logs/` 最高版本）與兩種處置，不再要求設定 `current_version`。
+- version-tracking-consistency-guard 的建議句補主工作日誌的完整路徑與格式出處。
+- 文件與實跑不一致的修正：`create-command.md` 必填清單與範例補列 `--who`、`--why`、`--how-strategy`；multi-session-orchestration §6 自我接續的步驟與實際流程對齊；version-progression〈兩期〉的執行期建票描述與〈版本生命週期〉的凍結閘門不再衝突，〈收斂〉規則 2 補 patch 發版的來源與切換條件，「凍結兩步」補凍結時登記下一個 minor。
+
+### Added
+- `ticket track resolve <舊票號>`：依 `previous_ids` 解析回現行票號，涵蓋連續改號。
+- `ticket migrate` 結束時列出票檔以外路徑的舊號殘留，每個舊號最多列 20 行。
+- `ticket create` 建根票時的取號納入 `refs/remotes/*/main` 與 `master`，`.claude/README.md`〈Ticket 系統〉新增〈多個 clone 同時建票〉，說明撞號時的處置步驟（tarrragon/claude#110）。
+- `sync-claude-push.py --ref REF`：推送指定 ref 的內容（預設 HEAD，行為不變）；指定非 HEAD 時略過未提交檢查，skill 殘留檢查、版本與 base SHA 仍取目前 checkout，須在對應的維護 worktree 執行。
+- version-release 的 `check` 與 `finish` 在版本已凍結、卻沒有任何票帶 `scope_blocker` 時印警告，不改結束碼。
+- `.claude/THIRD-PARTY-NOTICES.md`。
+
+### Changed
+- ANA 落地的版本維度：PC-091 落地路線、規劃票結案時點與 parent／source-ticket 的語意、ANA 落地一律 `--parent` 的副本，全部加上版本維度（本版範圍用 `--parent`，後續版本落地用 `--version <目標版本> --source-ticket`）。
+
+### Known issues
+- consumer 專案自有的 hook 目前沒有不觸發警告也不被 sync-pull 覆寫的註冊位置：`settings.json` 由上游提供，`settings.local.json` 有 hook 註冊就會被 `hook-registration-coverage-check.py` 示警。暫時的處置是回報 framework issue，歸屬設計排入 3.3.0。
+- sync-pull 的備用解析器（沒有 PyYAML 時）只認字面的 `preserve: []`；`[ ]` 與帶行尾註解的空清單仍會以結束碼 1 中止，安裝 PyYAML 或改寫成字面 `preserve: []` 即可。
+- 合併閘門不執行非 pytest 的測試。skill 自帶 TypeScript 測試（例如 line-board）時，改動不會被閘門跑到，tsc 型別檢查也不在閘門內；合併前請在 worktree 自行執行，或在 `.claude/project-integration/merge-gate.yaml` 宣告該套件。
+- 全量 overlay 刪除自建 skill 目錄內唯一的未追蹤檔時，變空的目錄會被算進刪除清單，對帳訊息印「宣稱刪除 N 個，實際刪除 N+1 個，數量不符」。多出的一個是空目錄，不是超刪。
+- sync-pull 結尾的 hook import 煙霧測試在 macOS 上依賴系統沒有的 `timeout` 命令，每個 hook 都以 command not found 結束，卻仍印「hook import 煙霧測試全數通過」；在 macOS 上這一行不代表 hook 已測過。
+- `append-log --replace` 在人寫內容的 code fence 內出現 `### 查重紀錄` 這類 CLI 產生子節的標題時，會把該行起到章節尾的內容當成產生子節保留並搬到新內容之後，留下沒有開頭的 fence。
+- 子票取號仍只看本地工作樹與本地 main；兩個 clone 對同一父票建子票時，fetch 後仍可能配到同號，撞號處置見 README〈多個 clone 同時建票〉。
+- 部分 hook 訊息與 docstring 仍寫不存在的 `ticket track create` 命令（正確為頂層 `ticket create`）；SKILLS 範圍外仍有少數 `uv tool install` 的安裝指示（branch-worktree-guardian、ticket 的部分訊息、`uv-tool-staleness-check-hook.py`），照字面執行不會成功，shim 已取代。
+
+---
+
 ## [3.1.0] - 2026-11-10
 
 ### Summary

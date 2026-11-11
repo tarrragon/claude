@@ -1,8 +1,9 @@
 """指向 ANA 時的耦合後果提示。
 
 ANA 掛著非終態 children 時不能 complete；被 blockedBy 的 ANA 不 complete，
-依賴它的票就一直等。建票或設定依賴當下把這條後果說出來，只寫 stderr，
-不改 exit code（提示不是拒絕，避免與 PC-091 衝突）。
+依賴它的票就一直等。建票或設定依賴當下把這條後果說出來，寫 stdout
+（受眾含模型，stderr 對模型不可見），不改 exit code（提示不是拒絕，
+避免與 PC-091 衝突）。
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import sys
 from typing import Any, Dict, Iterable, List
 
 from ticket_system.constants import TERMINAL_STATUSES
+from ticket_system.lib import version as version_mod
 from ticket_system.lib.field_validators import resolve_reference_version
 from ticket_system.lib.ticket_loader import list_tickets, load_ticket
 
@@ -56,7 +58,7 @@ def _open_children(version: str, ana: Dict[str, Any], exclude_id: str) -> List[s
 
 
 def _emit(message: str) -> None:
-    sys.stderr.write(f"[HINT] {message}\n")
+    sys.stdout.write(f"[HINT] {message}\n")
 
 
 def hint_parent_is_ana(version: str, parent_id: str, new_id: str) -> None:
@@ -88,3 +90,25 @@ def hint_blocked_by_ana(
             f"（{', '.join(children)}），本票 {waiter_id} 會等到它們全部終態"
             f"後 ANA 才能 complete"
         )
+
+
+def hint_frozen_version_ana_parent(
+    version: str, parent_id: str, new_id: str, scope_blocker: str | None
+) -> None:
+    """--parent 指向 ANA、父票版本 scope 已凍結、未帶 --scope-blocker 時提示。
+
+    不阻擋：凍結版本內的合法拆票同樣用 --parent。子票版本繼承父票版本，
+    ANA 結論要求的落地若屬後續版本，應改用 --version + --source-ticket。
+    """
+    if scope_blocker or not _load_ana(version, parent_id):
+        return
+    parent_version = resolve_reference_version(version, parent_id)
+    if not version_mod.is_version_scope_frozen(parent_version):
+        return
+    _emit(
+        f"ANA {parent_id} 所在版本 {parent_version} 已 scope: frozen，--parent "
+        f"建的子票 {new_id} 版本繼承父票，會落在凍結版本內。若本票是依〈兩期〉"
+        f"排入後續版本的落地，請改用：ticket create --version <目標版本> "
+        f"--source-ticket {parent_id}（目標版本未登記先登記）；屬本版範圍的"
+        f"拆票維持 --parent 並加 --scope-blocker <理由>"
+    )

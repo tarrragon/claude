@@ -47,8 +47,9 @@ If blocked, report Exit Status without touching sibling scope.
 Ticket: {id}
 
 {agent-name}: Update the group/coordinator ticket only.
-Use the dispatch-plan table to track children (功能拆分 / ANA 落地，PC-091 路線)
-and spawned tickets (執行中發現獨立技術債，PC-073 殘存範圍).
+Use the dispatch-plan table to track children (功能拆分 / 本版範圍的 ANA 落地，PC-091 路線)
+and spawned tickets (排入後續版本的 ANA 落地、執行中發現獨立技術債).
+ANA 落地的版本維度見 .claude/pm-rules/ticket-lifecycle.md〈ANA Ticket 落地下游血緣選擇〉
 血緣 vs 衍生語意參考 .claude/skills/ticket/references/field-semantics.md
 Do not implement child scope or batch-dispatch agents.
 Record blockers, deps, and next runnable ticket IDs.

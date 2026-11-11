@@ -7,8 +7,9 @@
 r"""
 Ticket File Access Guard Hook - PreToolUse Hook
 
-功能: 阻止直接 Read/Edit/Write ticket 檔案，引導使用 /ticket 指令
-- 阻止 Read 整個 ticket 檔案 -> 引導使用 /ticket track query 或 full
+功能: 阻止直接 Edit frontmatter／Write ticket 檔案，引導使用 /ticket 指令
+- 放行 Read ticket 檔案，並以 additionalContext 提示查詢建議用 ticket track full
+  （讀檔不改資料；Edit body 前必須先 Read，阻擋 Read 會使 body 編輯實際做不到）
 - 阻止 Edit frontmatter 欄位 -> 引導使用 /ticket track set-* 或 claim/complete
 - 阻止 Write 建立/覆寫 ticket -> 引導使用 /ticket create
 - 允許 ticket-tracker.py / ticket-creator.py 內部呼叫
@@ -21,7 +22,7 @@ Ticket File Access Guard Hook - PreToolUse Hook
   ^docs/work-logs/.*/tickets/.*\.md$
 
 行為:
-  - Read ticket 檔案: 阻止，返回 exit code 2
+  - Read ticket 檔案: 允許並附查詢建議（additionalContext），返回 exit code 0
   - Edit frontmatter: 阻止，返回 exit code 2
   - Edit body 區段: 允許，返回 exit code 0
   - Write ticket 檔案: 阻止，返回 exit code 2（強制使用 /ticket create）
@@ -45,11 +46,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import (
     setup_hook_logging, run_hook_safely, get_project_root, save_check_log,
-    read_json_from_stdin, emit_hook_output, get_handoff_recovery_ticket_ids
+    read_json_from_stdin, emit_hook_output
 )
 
 from datetime import datetime
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Optional, Tuple
 
 # ============================================================================
 # 常數定義
@@ -65,11 +66,24 @@ TICKET_PATH_PATTERNS = [
     r"^docs/work-logs/.*/tickets/.*\.md$",
 ]
 
-# 允許 Edit 的 body 區段標題（不含 frontmatter）
-ALLOWED_BODY_SECTIONS = [
+# 現行 body 章節：與 ticket_system/constants.py 的 CANONICAL_BODY_SECTIONS
+# 逐項對應（本 hook 以 PEP 723 單檔執行，不 import ticket_system；一致性由
+# 測試比對該常數守住）。
+CANONICAL_BODY_SECTION_HEADINGS = [
+    "## Task Summary",
     "## Problem Analysis",
+    "## 重現實驗結果",
     "## Solution",
     "## Test Results",
+    "## Context Bundle",
+    "## NeedsContext",
+    "## Exit Status",
+    "## Spawn Requests",
+    "## Completion Info",
+]
+
+# 舊版模板與中文別名的章節標題，存量票仍可能使用
+LEGACY_BODY_SECTION_HEADINGS = [
     "## Execution Log",
     "## Notes",
     "## Phase",
@@ -80,6 +94,16 @@ ALLOWED_BODY_SECTIONS = [
     "## 備註",
     "## 階段",
 ]
+
+# 允許 Edit 的 body 區段標題（不含 frontmatter）
+ALLOWED_BODY_SECTIONS = CANONICAL_BODY_SECTION_HEADINGS + LEGACY_BODY_SECTION_HEADINGS
+
+# Read ticket 檔案時給模型的查詢建議（放行，不阻擋）
+READ_QUERY_HINT = (
+    "已放行讀取 ticket 檔案。查詢建議用 CLI："
+    "ticket track full {id}（完整內容）、ticket track query {id}（摘要）、"
+    "ticket track log {id}（執行日誌）。frontmatter 欄位以 ticket track set-* 修改。"
+)
 
 # Frontmatter 欄位模式
 FRONTMATTER_FIELD_PATTERN = r"^(id|title|type|status|version|priority|parent_id|children|blockedBy|who|what|when|where|why|how|assigned|started_at|completed_at|created|updated):"
@@ -190,30 +214,20 @@ def is_new_file_write(file_path: str) -> bool:
 # ============================================================================
 
 def check_read_permission(file_path: str, logger) -> Tuple[bool, str]:
-    """檢查 Read 操作權限"""
+    """檢查 Read 操作權限。
+
+    ticket 檔案一律放行：讀檔不改資料，cat／grep／ticket track full 皆可讀到
+    同樣內容；且 Edit body 區段前必須先 Read，阻擋 Read 會使設計上放行的
+    body 編輯實際做不到。查詢建議由 main 以 additionalContext 附上。
+    """
     if is_internal_call():
         return True, "內部呼叫允許"
 
     if not is_ticket_file(file_path):
         return True, "非 ticket 檔案，允許讀取"
 
-    ticket_id = extract_ticket_id_from_path(file_path)
-    recovery_ticket_ids = get_handoff_recovery_ticket_ids(
-        logger, project_root=get_project_root()
-    )
-    if ticket_id and ticket_id in recovery_ticket_ids:
-        logger.debug(f"Handoff 恢復模式（限定 {ticket_id}）: 允許讀取 {file_path}")
-        return True, f"Handoff 恢復模式允許（限定 {ticket_id}）"
-
-    reason = (
-        "禁止直接讀取 ticket 檔案。\n"
-        "請使用以下指令：\n"
-        "  - /ticket track query {id}  - 查詢 ticket 資訊\n"
-        "  - /ticket track full {id}   - 輸出完整 ticket 內容\n"
-        "  - /ticket track log {id}    - 輸出執行日誌"
-    )
-    logger.warning(f"阻止讀取 ticket 檔案: {file_path}")
-    return False, reason
+    logger.info(f"放行讀取 ticket 檔案（附查詢建議）: {file_path}")
+    return True, "ticket 檔案允許讀取（查詢建議用 ticket track full）"
 
 
 def check_edit_permission(file_path: str, old_string: str, logger) -> Tuple[bool, str]:
@@ -276,10 +290,25 @@ def check_write_permission(file_path: str, logger) -> Tuple[bool, str]:
 # Hook 輸出生成
 # ============================================================================
 
-def _emit_permission_output(is_allowed: bool, reason: str) -> None:
-    """生成並輸出 Hook 權限決策 JSON"""
+def _emit_permission_output(
+    is_allowed: bool, reason: str, additional_context: Optional[str] = None
+) -> None:
+    """生成並輸出 Hook 權限決策 JSON（additional_context 給模型看的提示）"""
     decision = "allow" if is_allowed else "deny"
-    emit_hook_output("PreToolUse", permission_decision=decision, permission_decision_reason=reason)
+    emit_hook_output(
+        "PreToolUse",
+        additional_context=additional_context,
+        permission_decision=decision,
+        permission_decision_reason=reason,
+    )
+
+
+def read_hint_for(tool_name: str, file_path: str) -> Optional[str]:
+    """Read ticket 檔案（非內部呼叫）時回傳查詢建議，其餘回傳 None。"""
+    if tool_name != "Read" or is_internal_call() or not is_ticket_file(file_path):
+        return None
+    ticket_id = extract_ticket_id_from_path(file_path)
+    return READ_QUERY_HINT.replace("{id}", ticket_id or "<id>")
 
 
 
@@ -330,7 +359,9 @@ def main() -> int:
         else:
             is_allowed, reason = True, "未知工具類型，預設允許"
 
-        _emit_permission_output(is_allowed, reason)
+        _emit_permission_output(
+            is_allowed, reason, additional_context=read_hint_for(tool_name, file_path)
+        )
 
         log_entry = f"""[{datetime.now().isoformat()}]
   Tool: {tool_name}

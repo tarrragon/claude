@@ -507,32 +507,23 @@ project-init check
 症狀：
 ```
 ticket (1.0.0) [MISSING]
-  → 需執行: uv tool install .
+  → 需執行: python3 .claude/scripts/install-skill-clis.py
 ```
 
-修復步驟：
+修復步驟（CLI 為 cwd-resolving shim，不使用 `uv tool install`）：
 
-1. 導航至套件目錄：
+1. 在專案根目錄安裝 shim：
 ```bash
-cd .claude/skills/ticket
+python3 .claude/scripts/install-skill-clis.py
 ```
 
-2. 執行安裝：
+2. 驗證安裝：
 ```bash
-uv tool install .
-```
-
-3. 驗證安裝：
-```bash
+python3 .claude/scripts/install-skill-clis.py --check
 ticket --version
 ```
 
-4. 如果仍然失敗，強制重新安裝：
-```bash
-uv tool uninstall ticket
-uv cache clean
-uv tool install . --reinstall
-```
+3. 如果仍然失敗，檢查 `~/.local/bin` 下是否殘留舊的 uv tool 執行檔（先 `uv tool list` 確認），移除後重跑步驟 1。
 
 ### PEP 723 執行失敗
 

@@ -229,7 +229,7 @@ def _collect_settings_items(settings_info) -> list[TodoItem]:
         items.append(
             TodoItem(
                 description="settings.local.json 不存在",
-                hint="根據 settings.json 建立並調整語言特定權限",
+                hint="從 .claude/templates/settings-local-template.json 複製並依檔內說明調整",
             )
         )
     return items

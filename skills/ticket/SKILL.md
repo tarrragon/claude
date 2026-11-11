@@ -4,7 +4,7 @@ description: 'Use whenever the user wants to create, track, query, or manage tic
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
-  version: 2.49.5
+  version: 2.50.0
 ---
 
 # Ticket System
@@ -130,6 +130,7 @@ set-who <id> --current <agent>`）——回報 PM 執行該指令重新指派，
 | `track` | 追蹤和更新 Ticket 狀態：READ 操作（summary/query/dashboard/list/runqueue/board/5W1H/validate 等）與 UPDATE 操作（claim/complete/release/set-*/append-log/dispatch 等）；`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` | `/ticket track summary` | `references/workflow-execute.md` | 〈執行流程決策樹〉〈更新操作決策樹〉〈批量操作決策樹〉〈完成判斷決策樹〉〈完成後同步提醒〉 |
 | `track` | 只需查詢決策路徑時讀本檔 | `ticket track query <id>` | `references/workflow-query.md` | 〈查詢流程決策樹〉 |
 | `track` | 需要 UPDATE/READ 完整旗標細節時讀本檔 | `ticket track claim <id>` / `ticket track complete <id> --as <agent>` / `ticket track complete <id> --no-stage` / `ticket track complete <id> --force` | `references/track-command.md` | 〈子命令總覽（全量對照 --help）〉〈READ 操作〉〈track runqueue 子命令（Scheduler）〉〈UPDATE 操作〉〈UPDATE 操作補充：commit 副作用與欄位語意〉〈track commit 子命令〉〈track set-exit-status 子命令〉〈Ticket 狀態與程式碼提交的 root 分離（worktree 場景）〉〈驗收條件操作詳解〉〈CLI 可修改欄位 vs 手動編輯欄位〉〈track deps / depth 子命令〉〈track parallel-check 子命令〉〈track board 子命令〉〈track audit 子命令〉〈track stale-list 子命令〉〈track stuck-anas 子命令〉〈track dashboard 子命令〉〈track list 子命令〉〈track dispatch 子命令〉〈track dispatch-validate 子命令〉〈track dispatch-readiness 子命令〉〈track dispatch-check 子命令〉〈track sessions 子命令〉〈track reclaim 子命令〉〈track activity 子命令〉〈track conflicts 子命令〉〈track onboard 子命令〉〈track hook-liveness 子命令〉〈track register-artifact / resolve-artifact / list-artifacts 子命令〉〈共用旗標語意（track 系列命令通用）〉〈空狀態字面規範（track 系列命令通用）〉<!-- rule8-exempt: relocation:自 references/track-command.md 逐字搬移 --> |
+| `track resolve` | 以舊票號（migrate 改號前）查出現行票號，依各票 `previous_ids`；找不到時 exit 1 | `ticket track resolve <舊票號>` | — | — |
 | `track dashboard` | PM 接手聚合視圖，見 track-command.md〈track dashboard 子命令〉 | `ticket track dashboard --top 5` | — | — |
 | `track list` | 預設 top 10 priority 排序，見 track-command.md〈track list 子命令〉 | `ticket track list --status pending --top 20` | — | — |
 | `track td-status` | TD 清單校準，見 track-command.md〈td-status — 校準 TD 清單（PC-094）〉 | `ticket track td-status <id>` | — | — |

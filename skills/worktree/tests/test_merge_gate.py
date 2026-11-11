@@ -48,6 +48,7 @@ def repo(tmp_path, monkeypatch):
     git(r, "init", "-b", "main")
     git(r, "config", "user.email", "t@example.com")
     git(r, "config", "user.name", "t")
+    commit_file(r, "pubspec.yaml", "name: app\n", "base pubspec")  # 內建 Flutter 對應須有此檔才生效
     commit_file(r, "lib/marker.txt", "clean\n", "base marker")
     commit_file(r, "lib/other.txt", "o\n", "base other")
     commit_file(r, TICKET_FILE, "t0\n", "base ticket")
@@ -183,6 +184,7 @@ def _touch(root, rel, text=""):
 def skel(tmp_path):
     """模擬合併快照：三種 skill 型態 + 無 tests 的 skill。"""
     r = tmp_path / "snap"
+    _touch(r, "pubspec.yaml", "name: app\n")
     for name, pyproject, imports_lib in (("withpy", True, True), ("nopy", False, True), ("lone", True, False)):
         _touch(r, f".claude/skills/{name}/tests/test_a.py")
         _touch(r, f".claude/skills/{name}/mod.py", "from lib import x\n" if imports_lib else "import os\n")
@@ -195,6 +197,23 @@ def skel(tmp_path):
 
 
 class TestScope:
+    def test_e1_builtin_flutter_needs_pubspec_in_snapshot(self, skel, tmp_path):
+        """E1 對照：同一批改動路徑，有／無 pubspec.yaml 的快照選出的套件不同。"""
+        paths = ["docs/roadmap.md", "lib/main.dart"]
+        bare = tmp_path / "bare"
+        _touch(bare, "README.md")
+        assert mg.select_suites(paths, skel) == [mg.SUITE_FLUTTER]
+        assert mg.select_suites(paths, str(bare)) == []
+        assert mg.needs_gate(paths) and not mg.needs_gate(paths, flutter=False)
+        assert mg.unmapped_paths(paths) == [] and mg.unmapped_paths(paths, flutter=False) == paths
+
+    def test_has_flutter_marker_reads_commit_tree(self, repo):
+        assert mg.has_flutter_marker(str(repo), "main")
+        git(repo, "checkout", "-b", "nopub")
+        git(repo, "rm", "pubspec.yaml")
+        git(repo, "commit", "-m", "rm pubspec")
+        assert not mg.has_flutter_marker(str(repo), "nopub")
+
     def test_flutter_scope(self, skel):
         assert mg.select_suites(["lib/main.dart"], skel) == [mg.SUITE_FLUTTER]
 

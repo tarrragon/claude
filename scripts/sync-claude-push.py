@@ -341,8 +341,13 @@ def ensure_committed(project_root: Path) -> bool:
     return len(entries) == 0
 
 
-def stage_tracked_tree(project_root: Path, staging_dir: Path) -> int:
-    """以 git archive HEAD -- .claude 取本地 git tracked 樹解到 staging_dir（C1）。
+def stage_tracked_tree(
+    project_root: Path, staging_dir: Path, ref: str = "HEAD"
+) -> int:
+    """以 git archive <ref> -- .claude 取本地 git tracked 樹解到 staging_dir（C1）。
+
+    ref 預設 HEAD（行為與歷史一致）；可指定分支、tag 或 commit，使 patch 能從
+    維護 worktree 或上一版發版 tag 推送，不受 main 上後繼改動影響。
 
     取代舊 copy_filtered 的磁碟 walk。git archive 只含 tracked 檔案，帶來兩個
     架構層保證：
@@ -360,13 +365,14 @@ def stage_tracked_tree(project_root: Path, staging_dir: Path) -> int:
     參數:
         project_root: 專案根目錄（含 .claude/ 與 .git/）
         staging_dir: 解壓目的地（呼叫端建立的暫存目錄）
+        ref: git tree-ish，預設 HEAD
 
     傳回:
         int: 解出的檔案數
     """
     staging_dir.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
-        ["git", "archive", "--format=tar", "HEAD", "--", ".claude"],
+        ["git", "archive", "--format=tar", ref, "--", ".claude"],
         cwd=str(project_root),
         capture_output=True,
         check=False,
@@ -2251,6 +2257,19 @@ def writeback_local_canonical_assignments(
     return written
 
 
+def resolve_ref_or_exit(project_root: Path, ref: str) -> None:
+    """確認 ref 可解析為 tree，否則在任何 clone / push 前中止。"""
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{tree}}"],
+        cwd=str(project_root),
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        print_color(f"--ref 無法解析為 git tree-ish: {ref}", "red")
+        sys.exit(1)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """以 argparse 解析命令列參數（0.32.0-W1-008，PC-V1-001 防護）。
 
@@ -2292,6 +2311,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="只生成 commit message，不 clone / push"
+    )
+    parser.add_argument(
+        "--ref",
+        default="HEAD",
+        metavar="REF",
+        help=(
+            "推送內容取自該 git ref（分支 / tag / commit）的 .claude/ 樹，"
+            "預設 HEAD。用於 patch：main 已含後繼改動時，傳上一版發版 tag "
+            "（例 --ref v3.1.0，通常在維護 worktree 內執行）。"
+            "指定 ref 時略過「工作區已 commit」檢查（推送內容不取自工作區）；"
+            "版本、base SHA 等仍以目前 checkout 為準，請在對應 worktree 執行"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -2369,8 +2400,14 @@ def main() -> None:
     # --porcelain 全狀態 + should_exclude 過濾：local-only / 憑證 untracked 檔
     # （如 .zhtw-mcp-skip）不再誤判為未提交變更而 abort（缺陷 T），但真正未 commit
     # 的 tracked 變更與非 local-only untracked 框架檔仍被攔截。
+    # --ref 指定非 HEAD 時：推送內容取自該 ref 的 git 物件，與工作區無關，
+    # 工作區未 commit 的變更不影響推送內容，故略過 commit-first（取捨見 --help）。
+    ref = args.ref
+    if ref != "HEAD":
+        resolve_ref_or_exit(project_root, ref)
+        print_color(f"指定 ref={ref}：推送內容取自該 ref，略過工作區 commit-first 檢查")
     print_color("檢查 .claude 資料夾狀態（commit-first）...")
-    if not ensure_committed(project_root):
+    if ref == "HEAD" and not ensure_committed(project_root):
         print_color(
             "警告: .claude 有未提交的變更（不會被推送，會從此次推送內容中缺席）",
             "red",
@@ -2497,10 +2534,10 @@ def main() -> None:
         # 7. 取 git tracked 樹（C1）→ staging → should_exclude 過濾後複製到遠端 temp_dir
         # git archive HEAD 只含 tracked 檔案：untracked / gitignored 機密檔不可能外洩，
         # git rm 的檔自然不在 archive（K：刪除傳播）。
-        print_color("取 .claude git tracked 樹（git archive HEAD）...")
+        print_color(f"取 .claude git tracked 樹（git archive {ref}）...")
         staging_dir = Path(tempfile.mkdtemp(prefix="claude-push-staging-"))
         try:
-            staged_count = stage_tracked_tree(project_root, staging_dir)
+            staged_count = stage_tracked_tree(project_root, staging_dir, ref)
             print_color(f"   git archive 取得 {staged_count} 個 tracked 檔案", "green")
             # C1 生產閘：在 push / tag 任何階段之前，於 staging 樹做框架 import
             # smoke test。紅燈時 sys.exit(1)，確保損壞框架不會被 push 或打 tag。

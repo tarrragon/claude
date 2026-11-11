@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.7.1（2026-11-11）— 合併閘門內建的 Flutter 對應（`fvm flutter test`）只在合併快照根目錄有 `pubspec.yaml` 時生效；沒有時，`lib/`、`docs/` 等慣例目錄的改動視為範圍外、只印 WARNING，非 Flutter 專案不再被誤選 Flutter 套件。專案宣告檔指定的套件不受影響。git 查詢失敗時保守視為有 `pubspec.yaml`。
+
 **Version**: 1.7.0（2026-11-10）— cleanup 與合併閘門的五項修正：
 - cleanup Level 1（tarrragon/claude#120、#118）：`git status` 失敗時改拋 `WorkingTreeStatusUnavailable`，Level 1 與 merge 前置檢查接住後阻擋並印原因（`--force` 對 Level 1 仍無效）；原本失敗時計數回 0 而放行。Level 2 認得已併入 base 的分支，不推遠端的流程不再恆警告。
 - 快照清理（tarrragon/claude#120）：`merge_gate._remove_snapshot` 在 worktree remove／prune 逾時或無法啟動時寫 stderr 與 `worktree-merge.log`，不再往外拋而蓋掉閘門結果；目錄仍在時另印「快照未移除」。新增 `scripts/xcode_derived_data.py`：worktree 移除後刪除 WorkspacePath 位於該 worktree 內的 Xcode DerivedData，非 macOS 或根目錄不存在時不動，刪除失敗只警告。

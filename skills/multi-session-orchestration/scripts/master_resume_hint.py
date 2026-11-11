@@ -137,9 +137,36 @@ def session_name(session_id: str) -> str | None:
     return by_id if by_id is not None else name_by_ancestor()
 
 
+def has_active_version(project_dir: Path) -> bool:
+    """todolist 是否有 status=active 的版本；讀不到 todolist 視為沒有（none 分支只用來分辨成因）。"""
+    try:
+        text = (project_dir / ct.TODOLIST_RELATIVE_PATH).read_text(encoding="utf-8")
+    except OSError:
+        # 讀不到時 resolver 已回 error，不會走到 none 分支；此處只做保守預設
+        return False
+    return bool(ct.active_version_worklogs(text))
+
+
 def coordination_ticket(project_dir: Path) -> dict:
-    """協調票解析結果（coordination_ticket.resolve_coordination_ticket 的回傳 dict）。"""
-    return ct.resolve_coordination_ticket(project_dir)
+    """協調票解析結果；kind 為 none 時另附 has_active_version 供提示分辨兩種成因。"""
+    resolved = ct.resolve_coordination_ticket(project_dir)
+    if resolved["kind"] == "none":
+        resolved["has_active_version"] = has_active_version(project_dir)
+    return resolved
+
+
+def none_step(has_active: bool) -> str:
+    """協調票為 none 時的第 2 步：先分辨成因，再問用戶開工作線或單一線，不自行判定。"""
+    cause = (
+        "active 版本裡沒有標記 coordination: true 的進行中票"
+        if has_active
+        else "todolist 沒有 active 版本（上一版已完成、下一版尚未轉 active）"
+    )
+    return (
+        f"2. 找不到協調票，成因：{cause}。不自行判定單一線，先以 AskUserQuestion 問用戶開工作線或單一線："
+        f"開工作線時{'' if has_active else '先把版本轉 active，再'}建協調票並列開線計畫表；"
+        f"單一線時把〈主控接續〉段與裁定寫進當前處理的票，下次接續先讀該票（{CONTINUITY_DOC} §3）"
+    )
 
 
 def ticket_step(resolved: dict) -> str:
@@ -152,7 +179,7 @@ def ticket_step(resolved: dict) -> str:
         listed = "、".join(c["ticket"] for c in resolved["candidates"])
         return f"2. 找到多張協調票（{listed}），無法自動判定：列出候選請用戶裁定哪一張，再繼續"
     if kind == "none":
-        return "2. 找不到進行中的協調票（active 版本無 coordination: true 且 in_progress 的票）：先請用戶確認協調票，再繼續"
+        return none_step(resolved.get("has_active_version", True))
     return f"2. 協調票解析失敗（{resolved['reason']}）：先請用戶確認協調票，再繼續"
 
 

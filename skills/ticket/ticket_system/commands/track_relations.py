@@ -45,6 +45,7 @@ from ticket_system.lib.ticket_loader import (
     save_ticket,
 )
 from ticket_system.lib.messages import (
+    ErrorEnvelope,
     ErrorMessages,
     InfoMessages,
     AgentProgressMessages,
@@ -172,6 +173,28 @@ def _execute_set_relation_field_remove(
     return [id_str for id_str in current_list if id_str not in referenced_ids]
 
 
+def _find_blocked_by_cycle(version: str, target_id: str, new_value: list[str]):
+    """以新的 blockedBy 值檢查是否成環，回傳環路清單或 None。
+
+    重用 CycleDetector.has_cycle（與 create 的 blockedBy 驗證同一演算法）。
+    依賴逐票載入：目標票用待寫入的 new_value，其餘票以自身 ID 的版本前綴
+    （resolve_reference_version）載入，跨版本的環因此不會在版本邊界斷開。
+    載入不到的票視為無依賴（存在性已由 Step 2 檢查）。
+    """
+    from ticket_system.lib.cycle_detector import CycleDetector
+
+    def get_dependencies(ticket_id: str) -> list[str]:
+        if ticket_id == target_id:
+            return list(new_value)
+        ticket = load_ticket(resolve_reference_version(version, ticket_id), ticket_id)
+        if not ticket:
+            return []
+        return _normalize_ticket_id_list(ticket.get("blockedBy", []))
+
+    has_cycle, cycle_path = CycleDetector.has_cycle(target_id, get_dependencies)
+    return cycle_path if has_cycle else None
+
+
 def _execute_set_relation_field(
     args: argparse.Namespace,
     version: str,
@@ -249,6 +272,21 @@ def _execute_set_relation_field(
             new_value = _execute_set_relation_field_add(current_list, referenced_ids)
         else:
             new_value = _execute_set_relation_field_replace(referenced_ids)
+
+        # Step 4.5：blockedBy 寫入前循環偵測（--remove 只會拆環，不檢查）
+        if field_name == "blockedBy" and not is_remove_mode:
+            cycle_path = _find_blocked_by_cycle(version, target_id, new_value)
+            if cycle_path:
+                print(format_error(ErrorEnvelope(
+                    component="set-blocked-by",
+                    action="validate_cycle",
+                    errno="BLOCKED_BY_CYCLE",
+                    hint=(
+                        f"設定依賴會產生循環：{' → '.join(cycle_path)}；"
+                        f"{target_id} 的 blockedBy 未修改"
+                    ),
+                )))
+                return 1
 
         # Step 5：更新 Ticket 並保存
         target_ticket[field_name] = new_value

@@ -85,6 +85,7 @@
 | 阻擋語意 | 父 ticket 被未完成 children 阻擋 complete |
 | Runqueue 影響 | 子 ticket 受 blockedBy 機制間接影響（本欄位本身不直接過濾） |
 | 序號規則 | 自動子序號（如 `W17-001.1`） |
+| 版本歸屬 | 必與父票同版本（子票 ID 含父票 ID）；要落在其他版本的工作改用 `source_ticket` |
 | CLI 寫入 | `--parent <PARENT-ID>` |
 | CLI 互斥 | 與 `--source-ticket` 互斥 |
 
@@ -197,7 +198,9 @@
 | 情境 | 應用欄位 | CLI 命令 | 判別問題 |
 |------|---------|---------|---------|
 | 拆分功能成 atomic sub-tasks（必同時交付完整功能） | `parent_id` / `children` | `--parent <PARENT-ID>` | 「上游必須等子任務完成才能 complete？」是 → children |
-| **ANA 結論的執行延伸（IMP/DOC 落地）** | **`parent_id` / `children`** | **`--parent <ANA-ID>`** | 「ANA 結論要求落地？」是 → children（PC-091 路線） |
+| **ANA 結論的執行延伸（IMP/DOC 落地），屬本版範圍** | **`parent_id` / `children`** | **`--parent <ANA-ID>`** | 「ANA 結論要求落地，且落地屬本版範圍？」是 → children（PC-091 路線） |
+| **ANA 結論的執行延伸，依 `.claude/pm-rules/version-progression.md`〈兩期：規劃期與執行期〉排入後續版本** | **`source_ticket` / `spawned_tickets`** | **`--version <目標版本> --source-ticket <ANA-ID>`** | 「落地要排進後續版本？」是 → 目標版本根票（子票必與父票同版本，無法落在後續版本） |
+| 規劃波建的本版執行期票 | `source_ticket`（選填）/ `spawned_tickets` | 本版根票，可附 `--source-ticket <規劃票>` | 版本契約的工作，不是 ANA 落地；必要票的 `scope_blocker` 由凍結程序回溯標記（`.claude/pm-rules/version-progression.md`〈版本生命週期〉「凍結程序」） |
 | 執行過程中發現獨立 bug / 技術債（與當前 ticket 無因果） | `source_ticket` / `spawned_tickets` | `--source-ticket <SOURCE-ID>` | 「上游 ticket 結論要求？」否，但發現於執行中 → spawned |
 | 兄弟單向時序依賴（規格→實作） | `blockedBy` | `set-blocked-by` 或建立時 `--blocked-by` | 「需要血緣？」否；「需要時序等待？」是 → blockedBy（須滿足串行 4 條件，定義見 `atomic-ticket-methodology.md`〈串行兄弟合法 4 條件〉，否則回歸 ARCH-017 重組） |
 | 同 wave 內彼此引用、無時序依賴 | `relatedTo` | `set-related-to` 或建立時 `--related-to` | 「需要等待？」否；「想記錄關聯？」是 → relatedTo |
@@ -214,7 +217,11 @@
 Q1: 上游 ticket 的結論「要求」此 ticket 落地嗎？
    （含 ANA 衍生 IMP / DOC、功能拆分子任務）
     |
-    +-- 是 → parent_id（--parent）
+    +-- 是，功能拆分子任務 → parent_id（--parent）
+    |
+    +-- 是，ANA 落地 → Q1a: 落地屬本版範圍嗎？
+    |        +-- 是 → parent_id（--parent）
+    |        +-- 否，依〈兩期〉排入後續版本 → 目標版本根票 + source_ticket（--version <目標版本> --source-ticket）
     |
     +-- 否 → Q2
          |
@@ -246,7 +253,8 @@ Q1: 上游 ticket 的結論「要求」此 ticket 落地嗎？
 
 | 反模式 | 為何錯誤 | 修正方向 |
 |-------|---------|---------|
-| ANA 衍生 IMP 用 `--source-ticket` 建為 spawned | 違反 PC-091（ANA 落地統一用 children） | 改用 `--parent <ANA-ID>` |
+| 本版範圍的 ANA 落地用 `--source-ticket` 建為 spawned | 違反 PC-091（本版範圍的落地用 children） | 改用 `--parent <ANA-ID>` |
+| 排入後續版本的 ANA 落地用 `--parent` | 子票必與父票同版本，落地被迫留在已凍結的本版，違反〈兩期〉 | 在目標版本以 `--source-ticket <ANA-ID>` 建根票 |
 | 兄弟 A 的 `relatedTo` 引用 B → 推論「B 應為 A 的父」 | `relatedTo` 是弱關聯，不應反推結構 | 結構決策獨立評估，不從 relatedTo 反推 |
 | 多個 spawned 但每個都阻擋 source（非 ANA） | `spawned_tickets` 對非 ANA 不阻擋（設計獨立排程） | 若需阻擋改用 children；若獨立排程 spawned 即可 |
 | 執行 IMP 時發現獨立 bug，建為 children | children 用於「必同時交付」，獨立 bug 應為 spawned | 改用 `--source-ticket <CURRENT-TICKET>` |

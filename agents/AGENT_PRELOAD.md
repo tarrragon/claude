@@ -34,15 +34,16 @@
 
 ### 2. Ticket 操作規範
 
-#### 2.1 讀取（必須用 CLI，禁止 Read 工具）
+#### 2.1 讀取（查詢建議用 CLI）
 
 ```bash
 ticket track query 0.17.3-W1-001    # 查詢特定 Ticket
+ticket track full 0.17.3-W1-001     # 完整內容
 ticket track list                     # 列表
 ticket track summary                  # 摘要
 ```
 
-禁止 `Read(docs/work-logs/.../tickets/xxx.md)`。CLI 會解析 frontmatter 和驗證格式。
+查詢建議用 CLI：CLI 會解析 frontmatter 並整理輸出。Read 工具讀 ticket md 會放行並附上同樣的建議；需要 Edit body 章節時先 Read 再 Edit。frontmatter 欄位一律以 `ticket track set-*` 修改。
 
 #### 2.2 進度更新（執行過程中必須更新）
 
@@ -122,7 +123,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 #### 2.6 執行中建票血緣回填
 
-執行中發現需建票時禁止裸 `ticket create` 只標 `--related-to`（`relatedTo` 不維護雙向血緣欄位，PM 需事後手動補齊）；必須帶 `--source-ticket <自身 ticket id>` 或改走 `add-spawn-request`（例外：ANA 結論要求的落地改用 `--parent`，PC-091）（PM `resolve-spawn-request` 時自動回填）。兩通道選用判準與欄位差異：`.claude/references/agent-dispatch-template.md`「建票血緣回填義務」節；欄位語意 SSOT：`.claude/skills/ticket/references/field-semantics.md`。
+執行中發現需建票時禁止裸 `ticket create` 只標 `--related-to`（`relatedTo` 不維護雙向血緣欄位，PM 需事後手動補齊）；必須帶 `--source-ticket <自身 ticket id>` 或改走 `add-spawn-request`（例外：ANA 結論要求、屬本版範圍的落地改用 `--parent`，PC-091；版本維度見 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉）（PM `resolve-spawn-request` 時自動回填）。兩通道選用判準與欄位差異：`.claude/references/agent-dispatch-template.md`「建票血緣回填義務」節；欄位語意 SSOT：`.claude/skills/ticket/references/field-semantics.md`。
 
 ---
 
@@ -486,7 +487,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
-**Last Updated**: 2026-10-14
+**Last Updated**: 2026-11-11
+**Version**: 1.25.0 - 建票血緣義務的 ANA 例外加版本維度：屬本版範圍的落地用 `--parent`，其餘路由 ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉。
 **Version**: 1.24.0 - 規則 2.4 新增「隔離派發的收尾界線」：worktree 隔離代理人收尾止於 worktree commit，complete 由 PM 於合併後在主 checkout 執行；2.3 表格與檢查清單同步；規則 6 的 append-log 替代做法改為直接執行 append-log（寫主 repo 票面），刪除以 Edit 改 worktree 票面副本的指示（用戶裁決，2026-10-14）
 **Last Updated**: 2026-09-08
 **Version**: 1.23.0 - 「worktree 隔離派發時必須 commit 產品碼進 worktree 分支」Action 改寫：預設 `ticket track commit --worktree <path>`（隔離索引），裸 `git add && git commit` 降為該命令失敗或不可用時的 fallback；與 `bash-tool-usage-rules.md` 規則七、ticket skill〈track commit 子命令〉措辭同步

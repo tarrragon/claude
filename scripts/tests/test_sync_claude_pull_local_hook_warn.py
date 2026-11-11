@@ -85,3 +85,16 @@ def test_no_warn_on_invalid_json(tmp_path, capsys):
     # 解析失敗應靜默跳過，不 raise
     pull.verify_local_settings_no_hooks(tmp_path)
     assert "含 hook" not in capsys.readouterr().err
+
+
+def test_advice_triages_instead_of_telling_consumer_to_edit_settings_json(
+    tmp_path, capsys
+):
+    """W1-135：修復建議不得叫 consumer 移至 settings.json，須含分流說法。"""
+    _write_local(tmp_path, {"hooks": _hooks_block()})
+    pull.verify_local_settings_no_hooks(tmp_path)
+    out = capsys.readouterr()
+    text = out.out + out.err
+    assert "移至 settings.json" not in text
+    assert "framework issue" in text
+    assert "--fix" in text

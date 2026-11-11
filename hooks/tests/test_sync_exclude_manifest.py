@@ -220,3 +220,34 @@ def test_required_entry_nested_uses_double_star():
 
 def test_required_entry_root_name_unchanged():
     assert required_gitignore_entry("hook-state") == ".claude/hook-state"
+
+
+# __pycache__：必要條目涵蓋各層（W1-176）
+def test_pycache_required_entry_is_nested_form():
+    assert required_gitignore_entry("__pycache__") == ".claude/**/__pycache__"
+
+
+@pytest.mark.parametrize("line,expected", [
+    (".claude/**/__pycache__", True),
+    ("__pycache__/", True),
+    ("**/__pycache__/", True),
+    (".claude/__pycache__", False),
+    (".claude/__pycache__/", False),
+])
+def test_pycache_nested_coverage_matches_git(tmp_path, line, expected):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    (repo / ".gitignore").write_text(line + "\n", encoding="utf-8")
+    probe = ".claude/lib/__pycache__/x.cpython-312.pyc"
+    git_ignored = subprocess.run(
+        ["git", "-C", str(repo), "check-ignore", "--no-index", probe],
+        capture_output=True,
+    ).returncode == 0
+    assert git_ignored is expected
+    assert is_nested_name_covered("__pycache__", [line]) is expected
+
+
+def test_should_exclude_pycache_unchanged():
+    assert should_exclude(Path("lib/__pycache__/x.pyc"))
+    assert should_exclude(Path("__pycache__"))

@@ -408,19 +408,25 @@ def orphan_reason(
     ticket_id: str,
     project_root: Optional[Path] = None,
 ) -> str:
-    """來源票與 target（若有）皆確定查無時回傳孤兒原因，否則回空字串。
+    """handoff 指向的工作已查無時回傳孤兒原因，否則回空字串。
 
+    孤兒兩種情形：
+      - 有 target：target 查無即孤兒（不論來源是否仍在）。target 才是該做的工作，
+        它被 migrate 改名或刪除後，恢復這個 handoff 只會導向不存在的票。
+      - 無 target：來源查無即孤兒。
     migrate 改名或票被刪後，pending 檔指向不存在的票；is_handoff_stale 對查無票
     回非 stale（is_ticket_completed 查無回 False），單靠它這類殘留永遠不被清理。
     handoff GC 與派發守衛的恢復模式判定共用本函式。查無以 is_ticket_missing 判定：
     查詢機制不可用或查詢失敗時不算查無。
     """
-    if not is_ticket_missing(ticket_id, project_root):
-        return ""
     target_id = resolve_target(record)
-    if target_id and not is_ticket_missing(target_id, project_root):
+    if target_id:
+        if is_ticket_missing(target_id, project_root):
+            return f"目標 ticket {target_id} 查無（無對應 ticket 檔案）"
         return ""
-    return f"來源 ticket {ticket_id} 查無（無對應 ticket 檔案）"
+    if is_ticket_missing(ticket_id, project_root):
+        return f"來源 ticket {ticket_id} 查無（無對應 ticket 檔案）"
+    return ""
 
 
 def is_handoff_active(

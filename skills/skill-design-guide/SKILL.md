@@ -2,7 +2,7 @@
 name: skill-design-guide
 description: "Anthropic skill spec plus this project's conventions: frontmatter, descriptions, loading budgets, and splitting an oversized skill. Use when creating a skill, editing SKILL.md, reviewing skill quality, or moving content into references/."
 metadata:
-  version: 1.23.2
+  version: 1.24.0
 ---
 
 # Skill Design Guide
@@ -45,7 +45,6 @@ metadata:
 
 **判斷標準只有一條：agent 照正文走得完嗎。** 走不完有兩種形態，修法相反——正文只給結論而把判斷條件外移，讀者選不了路，把條件搬回正文；正文塞進完整論證，讀者在該動手時還在讀理由，把論證外移只留主張句。
 
-
 ### Concise is Key — context 是公共資源
 
 **預設假設**：Claude 已經夠聰明。每段文字必須通過兩問才能保留。
@@ -58,7 +57,6 @@ metadata:
 **第一問問的是行為差異，不是知識空缺。** 「Claude 知不知道」與「Claude 預設會不會這樣做」是兩個獨立維度——**「知道但預設不會做」的內容要留**（量測指令即屬此類：Claude 會算 token，但不會主動去量）。把兩者當成一條線的兩端，這一格會被誤判成移除。
 
 **Action**：判不準時做刪除測試——把該段拿掉，在乾淨 session 對同一任務重跑，比對兩次產出。這一問可外部驗證，「Claude 知不知道」不能。
-
 
 ### Progressive Disclosure — 三層載入
 
@@ -141,7 +139,6 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 
 > **維護本表時**（讀者選路不需要這一段）：「涵蓋章節」欄的字串要與目標檔的 `##` 標題逐字相同且**雙向齊全**——每個名字都在目標檔存在（無死名），且目標檔的每個 `##` 都在這一欄出現（無孤兒節）。**兩個方向各驗一次**：只驗死名會漏掉無人指向的新節。
 
-
 ## 發布前檢查清單
 
 ### 結構
@@ -199,7 +196,6 @@ LC_ALL=C comm -13 <(grep -o 'references/[a-z-]*\.md' SKILL.md | LC_ALL=C sort -u
 - [ ] 主關鍵字觸發成功
 - [ ] 改述查詢仍觸發
 - [ ] 無關主題不觸發
-
 
 ---
 

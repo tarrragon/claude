@@ -40,6 +40,79 @@ def test_load_preserve_list_valid_parses(tmp_path: Path) -> None:
     }
 
 
+@pytest.fixture
+def no_pyyaml(monkeypatch: pytest.MonkeyPatch) -> None:
+    """停用 yaml 模組，強制走備用解析器。"""
+    monkeypatch.setattr(sync_mod, "yaml", None)
+
+
+def test_fallback_empty_inline_list_is_empty_set(
+    tmp_path: Path, no_pyyaml: None
+) -> None:
+    """無 PyYAML：preserve: [] 為空清單（修正前拋 ValueError）。"""
+    (tmp_path / "sync-preserve.yaml").write_text("preserve: []\n", encoding="utf-8")
+    assert sync_mod.load_preserve_list(tmp_path) == set()
+
+
+def test_fallback_block_list_unchanged(tmp_path: Path, no_pyyaml: None) -> None:
+    """無 PyYAML：區塊清單解析結果不變。"""
+    (tmp_path / "sync-preserve.yaml").write_text(
+        "preserve:\n  - settings.local.json\n  - VERSION\n", encoding="utf-8"
+    )
+    assert sync_mod.load_preserve_list(tmp_path) == {"settings.local.json", "VERSION"}
+
+
+@pytest.mark.parametrize(
+    "content, hint",
+    [
+        ("preserve: [a, b]\n", "inline flow"),
+        ("preserve:\n\t- a\n", "tab"),
+    ],
+)
+def test_fallback_unparseable_gives_actionable_error(
+    tmp_path: Path, no_pyyaml: None, content: str, hint: str
+) -> None:
+    """無法解析的格式：PreserveParseError，訊息含原因、位置、處置。"""
+    (tmp_path / "sync-preserve.yaml").write_text(content, encoding="utf-8")
+    with pytest.raises(sync_mod.PreserveParseError) as exc_info:
+        sync_mod.load_preserve_list(tmp_path)
+    message = str(exc_info.value)
+    assert hint in message
+    assert "sync-preserve.yaml" in message
+    assert "PyYAML" in message
+
+
+def test_entrypoint_prints_readable_error_without_traceback(
+    tmp_path: Path,
+) -> None:
+    """入口攔截 PreserveParseError：非 0 結束碼、無 traceback。"""
+    import subprocess
+
+    claude = tmp_path / ".claude"
+    claude.mkdir()
+    (claude / "sync-preserve.yaml").write_text("preserve:\n\t- a\n", encoding="utf-8")
+    # 阻擋 yaml、替換 clone_repo 為 no-op 後以 __main__ 執行 --audit
+    driver = (
+        "import sys, runpy, types, subprocess\n"
+        "sys.modules['yaml'] = None\n"
+        "sys.argv = ['sync-claude-pull.py', '--audit']\n"
+        "orig = subprocess.run\n"
+        "def fake(args, *a, **k):\n"
+        "    if isinstance(args, (list, tuple)) and 'clone' in args:\n"
+        "        return subprocess.CompletedProcess(args, 0, '', '')\n"
+        "    return orig(args, *a, **k)\n"
+        "subprocess.run = fake\n"
+        f"runpy.run_path({str(_SCRIPT)!r}, run_name='__main__')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", driver],
+        cwd=tmp_path, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert "tab" in result.stderr
+
+
 def test_load_preserve_list_malformed_yaml_fails_loud(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

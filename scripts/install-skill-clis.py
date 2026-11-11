@@ -22,12 +22,13 @@
 
 環境變數 SKILL_CLI_BIN_DIR 可覆寫安裝目錄（預設 ~/.local/bin）。
 """
+import argparse
 import importlib.util
 import os
 import stat
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 
 def _load_ownership_guard_skills() -> Tuple:
@@ -114,8 +115,27 @@ def install() -> int:
     return 0
 
 
-def main() -> int:
-    if "--check" in sys.argv[1:]:
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    """解析引數；--help 與未知引數由 argparse 在安裝前結束行程（exit 0／2）。
+
+    查用法的命令不得產生寫入副作用：舊版只比對 sys.argv 是否含 --check，
+    其餘引數（含 --help）一律落到 install()，改寫 bin_dir() 下全部 shim。
+    """
+    parser = argparse.ArgumentParser(
+        prog="install-skill-clis.py",
+        description="安裝 cwd-resolving CLI shim 到 SKILL_CLI_BIN_DIR（預設 ~/.local/bin）。",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="只檢查各 CLI 是否已是 shim，不寫入（exit 0／1）",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.check:
         return check()
     return install()
 

@@ -2,6 +2,16 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.50.0（2026-11-11）— 新增與行為變更，彙整自 2.49.5 發佈之後的改動：
+- 新子命令 `ticket track resolve`：以舊票號查出現行票號；`migrate` 結束時列出票檔以外的舊號殘留。
+- `ticket track dispatch-readiness` 新增檢查 7（where.files 寫入宣告）；建票時對盤點表格式問題輸出警告；版本偵測失敗的 hint 改述偵測規則，不再要求 `current_version`。
+- 版本維度：ANA 落地訊息、`track query` 的 Spawned 進度改跨版本讀取；`complete` 對後續版本落地的 spawned 只印資訊，不要求 `--yes-spawned`；凍結版本 ANA 建子票的提示改用 `--source-ticket`，ANA 耦合提示改走 stdout。
+- 守衛與寫入：`set-blocked-by` 寫入前做循環偵測；`append-log --replace` 保留自動產生的子節，寫入已有內容的章節時逐行剝除舊形態可見佔位符；章節定位、H2 降級與 dedupe 切段共用 code fence 判定；`ticket_builder` 佔位符改為 HTML 註解；隔離提交納入「停止追蹤並補 .gitignore」的刪除；`get_next_seq` 取號納入 remote-tracking 主分支。
+- acceptance-gate：同命令鏈 `append-log` 後 `complete` 不再誤報缺 Phase 4；擋下串接命令時說明評估時點；防護類 hook 的 acceptance 模板與驗證端同源；handoff 孤兒判準涵蓋來源仍在、目標查無。讀檔守衛放行 Read。
+- 文件：`references/create-command.md`、`field-semantics.md`、`track-command*.md` 同步。
+
+**Version**: 2.49.6（2026-11-11）— 文件：`references/create-command.md`〈--parent vs --source-ticket 對比表〉與 `references/field-semantics.md` 加版本維度。對比表新增「版本歸屬」列（子票必與父票同版本；`--source-ticket` 由 `--version` 決定），使用時機與判別問題分出「ANA 落地屬本版範圍 → `--parent`」與「依〈兩期〉排入後續版本 → `--version <目標版本> --source-ticket <ANA-ID>`」；field-semantics 的 parent_id 屬性表、用戶情境對照表、欄位選擇決策樹（Q1a）與反模式速查同步。規則正本為 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉。CLI 行為不變。
+
 **Version**: 2.49.5（2026-11-10）— CLI 入口讀回 shim 設定的 `SKILL_CLI_CALLER_CWD`，以呼叫者的工作目錄解析相對路徑與專案根目錄（tarrragon/claude#24）。`ticket_system/scripts/ticket.py` 在 import 時讀取並移除該環境變數（子行程不繼承），值為有效目錄時 chdir，無效值寫 stderr 警告並維持原 cwd。原本經 `uv --directory <skill>` 執行時 cwd 落在 skill 目錄，相對路徑解析到錯誤位置，外觀同測試紅燈。子命令與旗標語意不變。測試：`tests/test_caller_cwd_consistency.py`；skill 根目錄 `conftest.py` 新增 autouse fixture，移除該環境變數並還原 cwd，避免測試之間互相污染。同一修正也套用在 doc、worktree 的 CLI 入口。
 
 **Version**: 2.49.4（2026-11-10）— 派發守衛的 handoff 恢復模式只算有效 handoff（tarrragon/claude#45 殘留 handoff 讓派發守衛放行的部分）。`lib/handoff_utils.py` 新增 `is_handoff_active`（未過期且非孤兒）與 `orphan_reason`（由 `commands/handoff_gc.py` 的 `_orphan_reason` 移入，GC 改為委派，判準不變）。`.claude/lib/hook_io.py` 的 `_scan_handoff_pending` 延遲載入 `is_handoff_active`，只收有效 handoff，`get_handoff_recovery_ticket_ids`、`find_handoff_recovery_hits`、`prompt_references_handoff_ticket`、`is_handoff_recovery_mode` 一併只看有效 handoff。原本 pending 目錄裡目標已完成、或來源與目標都查無的殘留檔，只要 prompt 引用其指向的票，兩支派發守衛（`agent-ticket-validation-hook`、`task-dispatch-readiness-check`）與 `ticket-file-access-guard-hook` 就放行。行為變更方向：收緊；有效 handoff 的放行不變。判準模組載入失敗時 fail-closed（不算恢復模式、守衛照常檢查），寫 stderr 與日誌。子命令與旗標語意不變，無文件同步需求。測試：`.claude/hooks/tests/test_handoff_recovery_scope.py` 新增 `TestOnlyActiveHandoffCounts`、`TestRecoveryModeFlag`（目標已完成、孤兒、損壞檔各有守衛不放行的正向對照；來源查無但目標仍在者仍有效；判準載不到時不放行），既有 fixture 改為建出 pending 票。

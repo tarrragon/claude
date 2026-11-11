@@ -63,25 +63,68 @@ def test_task_tool_name_with_multiple_ticket_ids_still_triggers_reminder(monkeyp
 
 
 def test_unrelated_tool_name_skips_without_reminder(monkeypatch, capsys):
-    """非 Agent/Task 工具仍在守衛早退，不含提醒。"""
+    """非 Agent/Task 工具仍在守衛早退，不輸出任何 JSON（不提醒、不代為放行）。"""
     prompt = "處理 1.5.0-W5-001 與 1.5.0-W5-002 兩個 Ticket"
     exit_code = _run_hook(monkeypatch, "Bash", prompt)
     captured = capsys.readouterr()
-    output = json.loads(captured.out)
 
     assert exit_code == 0
-    assert "additionalContext" not in output["hookSpecificOutput"]
+    assert captured.out.strip() == ""
 
 
 def test_agent_tool_name_with_single_ticket_id_no_reminder(monkeypatch, capsys):
-    """tool_name="Agent" 但只有 1 個 Ticket ID，不輸出提醒。"""
+    """tool_name="Agent" 但只有 1 個 Ticket ID，不輸出任何 JSON。"""
     prompt = "處理 1.5.0-W5-001 這個 Ticket"
     exit_code = _run_hook(monkeypatch, "Agent", prompt)
     captured = capsys.readouterr()
-    output = json.loads(captured.out)
 
     assert exit_code == 0
-    assert "additionalContext" not in output["hookSpecificOutput"]
+    assert captured.out.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# 3.2.0-W1-029：提醒類 hook 不得輸出 permissionDecision（不代用戶作權限決定）
+# ---------------------------------------------------------------------------
+
+def _assert_no_permission_decision(stdout: str) -> None:
+    """stdout 為空或為不含 permissionDecision 的 JSON 才通過。"""
+    if not stdout.strip():
+        return
+    output = json.loads(stdout)
+    assert "permissionDecision" not in output.get("hookSpecificOutput", {})
+
+
+def test_reminder_path_has_no_permission_decision(monkeypatch, capsys):
+    """提醒路徑只帶 additionalContext，不帶 permissionDecision。"""
+    _run_hook(monkeypatch, "Agent", "處理 1.5.0-W5-001 與 1.5.0-W5-002")
+    _assert_no_permission_decision(capsys.readouterr().out)
+
+
+def test_subagent_path_has_no_permission_decision(monkeypatch, capsys):
+    """subagent 略過路徑不輸出 permissionDecision。"""
+    payload = {"agent_id": "a1", "tool_name": "Agent",
+               "tool_input": {"prompt": "處理 1.5.0-W5-001 與 1.5.0-W5-002"}}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert main() == 0
+    _assert_no_permission_decision(capsys.readouterr().out)
+
+
+def test_exception_path_has_no_permission_decision(monkeypatch, capsys):
+    """異常路徑不代為放行：不輸出 permissionDecision，exit 0 不阻擋。"""
+    def _boom(_logger):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(_hook, "read_json_from_stdin", _boom)
+    assert main() == 0
+    _assert_no_permission_decision(capsys.readouterr().out)
+
+
+def test_assertion_rejects_legacy_allow_output():
+    """正向對照（E2）：舊版輸出含 permissionDecision allow 時，斷言必須失敗。"""
+    import pytest
+    legacy = json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse", "permissionDecision": "allow"}})
+    with pytest.raises(AssertionError):
+        _assert_no_permission_decision(legacy)
 
 
 if __name__ == "__main__":

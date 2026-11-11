@@ -895,8 +895,19 @@ class TestGetCurrentVersionFromTodolist:
         獨立於待測函式的 YAML 解析結果作為 oracle，斷言待測函式回傳一致。
         """
         repo_root = Path(__file__).resolve().parents[3]
-        todolist_file = repo_root / "docs" / "todolist.yaml"
-        assert todolist_file.exists(), "本測試依賴真實 repo 的 docs/todolist.yaml 存在"
+        self._assert_todolist_active_consistent(repo_root)
+
+    @staticmethod
+    def _assert_todolist_active_consistent(root):
+        """依 active 數分三種情況斷言 root/docs/todolist.yaml
+
+        - 恰 1 個：函式回傳值等於該項 version（防格式漂移）
+        - 0 個：發版空窗（本版已改 completed、下一版仍 planned）為合法狀態；
+          生產端後備行為為回退解析頂層 current_version，無該欄位時回傳 None
+        - 2 個以上：失敗
+        """
+        todolist_file = root / "docs" / "todolist.yaml"
+        assert todolist_file.exists(), "本測試依賴 docs/todolist.yaml 存在"
 
         raw = yaml.safe_load(todolist_file.read_text(encoding="utf-8"))
         active_entries = [
@@ -904,12 +915,31 @@ class TestGetCurrentVersionFromTodolist:
             for v in raw.get("versions", [])
             if isinstance(v, dict) and str(v.get("status")) == "active"
         ]
-        assert len(active_entries) == 1, "預期恰有一個 active 版本，實際: {}".format(active_entries)
-        expected_version = str(active_entries[0]["version"])
+        assert len(active_entries) <= 1, "active 版本不得超過一個，實際: {}".format(active_entries)
 
-        version = get_current_version_from_todolist(repo_root)
+        version = get_current_version_from_todolist(root)
+        if active_entries:
+            assert version == str(active_entries[0]["version"])
+        else:
+            legacy = raw.get("current_version")
+            assert version == (str(legacy) if legacy is not None else None)
 
-        assert version == expected_version
+    @pytest.mark.parametrize(
+        "statuses, should_fail",
+        [(["completed", "planned"], False), (["active", "planned"], False), (["active", "active"], True)],
+    )
+    def test_active_count_branches_with_synthetic_todolist(self, project_root, statuses, should_fail):
+        """合成 todolist：0 / 1 active 通過，2 active 必紅（E2 正向對照）"""
+        lines = ["versions:\n"]
+        for i, status in enumerate(statuses):
+            lines.append("  - version: \"0.{}.0\"\n    status: {}\n".format(i + 1, status))
+        (project_root / "docs" / "todolist.yaml").write_text("".join(lines))
+
+        if should_fail:
+            with pytest.raises(AssertionError):
+                self._assert_todolist_active_consistent(project_root)
+        else:
+            self._assert_todolist_active_consistent(project_root)
 
 
 class TestScanTicketFilesByVersion:

@@ -4,7 +4,7 @@ description: "Use this skill for managing git worktrees for Ticket-based develop
 argument-hint: "<subcommand> [args]"
 allowed-tools: Bash, Read, Write, Edit
 metadata:
-  version: 1.7.0
+  version: 1.7.1
 ---
 
 # Worktree Management SKILL
@@ -107,7 +107,7 @@ cc runtime 派發 `isolation: "worktree"` 的 subagent 時自動建立隔離 wor
 
 | 改動範圍（相對當下 main） | 跑的套件 |
 |--------------------------|---------|
-| `lib/`、`test/`、`integration_test/`、`macos/`、`docs/`、`assets/`（票檔與版本日誌除外）、`pubspec.*` 等 | Flutter：`fvm flutter test` |
+| `lib/`、`test/`、`integration_test/`、`macos/`、`docs/`、`assets/`（票檔與版本日誌除外）、`pubspec.*` 等，且合併快照根目錄有 `pubspec.yaml`（無則這些路徑視為範圍外，只印 WARNING） | Flutter：`fvm flutter test` |
 | `.claude/skills/<名稱>/`（該 skill 帶 `tests/`） | `skill:<名稱>`：有 `pyproject.toml` 跑 `uv --directory .claude/skills/<名稱> run pytest`；無則借 hooks 環境 `uv --directory .claude/hooks run pytest -p no:cacheprovider ../skills/<名稱>/tests` |
 | `.claude/scripts/` | scripts pytest：`uv --directory .claude/scripts run pytest` |
 | `.claude/lib/` | hooks pytest（其 testpaths 已含 `../lib/tests`）＋ scripts pytest ＋ 所有「帶 `tests/` 且有 .py 匯入 `lib`」的 skill（掃描快照得出，不寫死清單） |
@@ -134,7 +134,7 @@ suites:
 - `summary`／`failure` 有填時優先使用；未填沿用 pytest／flutter 規則，再退回輸出尾段（失敗項）或「無摘要」。宣告命令的輸出格式由專案決定（如 bun：`summary: '^\s*\d+ (pass|fail)'`、`failure: '\(fail\)'`）。
 - `changed_files`（選填正規式）：套件只在「本次改動中有路徑落在 `prefixes`／`files` 內且符合此正規式」時入選；執行時閘門把這些路徑中仍存在於快照者附加到 `command` 尾端。符合檔全數已刪除時該套件免跑，輸出一行 `套件 <名>：免跑｜...`（狀態字樣為「免跑」，與「綠燈」區分）。未宣告者 argv 不變。例：`command: [fvm, dart, format, --output=none, --set-exit-if-changed]` 搭配 `changed_files: '\.dart$'`。
 - 宣告檔本身被改動：閘門比對合併基準與合併 commit 的宣告，`prefixes`、`files`、`command`、`artifacts`、`changed_files` 任一不同（含新增）的套件加選，並印一行 `宣告檔改動了命令或範圍，加選套件：...`；只改註解或 `summary`／`failure` 不加選。基準宣告無法解析時加選宣告內全部套件，並印 WARNING 寫明原因。宣告了 `changed_files` 的套件，本次若無符合的改動檔，仍依上一條免跑。
-- 宣告檔不存在：沿用內建 Flutter 對應，並印一行 `[合併前測試] INFO：未找到專案宣告 ...`。
+- 宣告檔不存在：沿用內建 Flutter 對應（僅合併快照根目錄有 `pubspec.yaml` 時生效），並印一行 `[合併前測試] INFO：未找到專案宣告 ...`。
 - 格式錯誤（YAML 無法解析、缺 `command`、`prefixes` 與 `files` 皆空、使用保留名、`artifacts` 缺 `generate`、`summary`／`failure`／`changed_files` 非字串或無法編譯為正規式）：閘門判紅（fail-closed），訊息指名檔案與欄位，不退回內建對應。
 
 skill 被 hooks 或 scripts 使用時加跑對應套件：改動涉及某 skill，且快照內 `.claude/hooks`、`.claude/scripts` 的 .py（1）行首 `from X`／`import X` 匯入該 skill 的頂層模組（skill 根與其 `scripts/` 下的 .py 模組名、帶 `__init__.py` 的套件名；`sys.path.insert` 之後的匯入同樣涵蓋），或（2）非測試檔含 `skills/<名稱>/` 路徑引用（讀 skill 檔案），就加跑 hooks／scripts 套件。未被使用的 skill 只跑自己的套件。通用模組名（如 `constants`）可能多報，只會多跑套件。

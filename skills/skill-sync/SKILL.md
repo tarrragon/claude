@@ -2,7 +2,7 @@
 name: skill-sync
 description: 'Sync Claude Code skills between local .claude/skills/ and a remote skills repository. Use for: pulling skills from remote, pushing local skills to remote, listing available remote skills.'
 metadata:
-  version: 1.25.3
+  version: 1.25.4
 ---
 
 # skill-sync
@@ -33,8 +33,10 @@ This is a procedure, not a gate: nothing in the tool enforces it, and no step he
 
 ## Installation
 
+The `skill-sync` command is a cwd-resolving shim installed by the SessionStart `install-skill-clis` step; editing source takes effect immediately, no reinstall needed.
+
 ```bash
-uv tool install --from .claude/skills/skill-sync skill-sync
+python3 .claude/scripts/install-skill-clis.py
 ```
 
 ## Commands

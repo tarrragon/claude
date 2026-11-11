@@ -1946,6 +1946,53 @@ def _detect_silent_placeholder(
                 break
 
 
+FROZEN_ZERO_BLOCKER_WARNING = (
+    "版本 v{version} 已凍結，但沒有任何一張票帶 scope_blocker；"
+    "{pending_count} 張 pending 票將全部被列為前移。"
+    "若其中有必要票，請依 version-progression〈版本生命週期〉凍結程序第二步，"
+    "逐張執行 ticket track set-scope-blocker <id> --reason <契約項>"
+)
+
+
+def detect_frozen_without_blockers(tickets_dir: Path, version: str) -> Optional[str]:
+    """已凍結版本零張票帶 scope_blocker（任何狀態）且有 pending 票時回傳警告，否則 None。"""
+    if not tickets_dir.exists():
+        return None
+    pending_count = 0
+    for ticket_file in sorted(tickets_dir.glob("*.md")):
+        if any(s in ticket_file.stem for s in TDD_ATTACHMENT_SUFFIXES):
+            continue
+        try:
+            content = ticket_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        frontmatter = parse_ticket_frontmatter(content)
+        if not frontmatter:
+            continue
+        blocker_match = re.search(r"^scope_blocker:\s*(.+)$", frontmatter, re.MULTILINE)
+        blocker = _strip_yaml_scalar_quotes(blocker_match.group(1)) if blocker_match else ""
+        if blocker and blocker.lower() not in ("null", "~"):
+            return None
+        if re.search(r"^status:\s*pending\s*$", frontmatter, re.MULTILINE):
+            pending_count += 1
+    if pending_count == 0:
+        return None
+    return FROZEN_ZERO_BLOCKER_WARNING.format(version=version, pending_count=pending_count)
+
+
+def warn_if_frozen_without_blockers(version: str) -> None:
+    """check／finish 在凍結關卡通過後呼叫；只印警告，不影響結束碼。"""
+    root = get_project_root()
+    config = load_version_release_config(root)
+    pattern = config.get(
+        "worklog_path_pattern", DEFAULT_VERSION_RELEASE_CONFIG["worklog_path_pattern"]
+    )
+    tickets_dir = resolve_worklog_dir(root, version, pattern) / "tickets"
+    message = detect_frozen_without_blockers(tickets_dir, version)
+    if message:
+        print_warning(message)
+
+
 def check_version_frozen(version: str) -> Tuple[bool, List[str]]:
     """檢查目標版本是否已於 todolist.yaml 標記 scope: frozen。
 
@@ -4335,6 +4382,7 @@ def main():
                 print_error("檢查失敗，請修正上述問題")
                 return 1
 
+            warn_if_frozen_without_blockers(version)
             ok, results = preflight_check(version)
 
             if ok:
@@ -4417,6 +4465,7 @@ def main():
                         print_error(error)
                     print_error("\n版本未凍結，發版收尾已中止")
                     return 1
+                warn_if_frozen_without_blockers(version)
 
             # finish：先對前移清單逐張 migrate，任一張失敗即中止（不留半搬狀態）
             overflow_mapping: List[tuple] = []

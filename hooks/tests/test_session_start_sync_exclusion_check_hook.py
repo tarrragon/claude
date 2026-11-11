@@ -142,12 +142,12 @@ def test_uses_git_utils_get_project_root():
 # ---------------------------------------------------------------------------
 # 8. 巢狀名稱（.skill-sync-base）的 drift 判定與建議文字
 # ---------------------------------------------------------------------------
-def _gitignore_with(hook, tmp_path, nested_line: str) -> Path:
-    """涵蓋其餘所有名稱，只讓巢狀名稱的寫法可變。"""
-    from lib.sync_exclude_manifest import NESTED_LOCAL_ONLY_NAMES
+def _gitignore_with(hook, tmp_path, nested_line: str, tested: str = ".skill-sync-base") -> Path:
+    """涵蓋其餘所有名稱，只讓受測巢狀名稱（tested）的寫法可變；其他巢狀名稱用標準條目。"""
+    from lib.sync_exclude_manifest import required_gitignore_entry
     lines = [
-        f".claude/{n}" for n in sorted(hook.GITIGNORE_EXPECTED)
-        if n not in NESTED_LOCAL_ONLY_NAMES
+        required_gitignore_entry(n) for n in sorted(hook.GITIGNORE_EXPECTED)
+        if n != tested
     ]
     lines.append(nested_line)
     return _make_gitignore(tmp_path, "\n".join(lines) + "\n")

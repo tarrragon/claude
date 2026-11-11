@@ -482,7 +482,7 @@ def test_detects_stale_on_modified_file(
 # 不再走 uv tool install，SKILL.md 已改為 shim 安裝說明，不再含此段落，
 # 從清單移除（staleness hook 執行期以 is_shimmed_cli 動態判斷，不受此文件斷言影響）。
 # ----------------------------------------------------------------------------
-def test_skill_md_files_contain_reinstall_warning():
+def test_skill_md_files_point_to_install_skill_clis():
     skills_dir = PROJECT_ROOT / ".claude" / "skills"
     skill_names = [
         "doc", "version-release", "mermaid-ascii", "project-init",
@@ -491,8 +491,11 @@ def test_skill_md_files_contain_reinstall_warning():
         md = skills_dir / name / "SKILL.md"
         assert md.exists(), f"{md} missing"
         text = md.read_text(encoding="utf-8")
-        assert "uv tool install . --force --reinstall" in text, (
-            f"{name}/SKILL.md 缺少 reinstall 警示區塊"
+        assert "install-skill-clis" in text, (
+            f"{name}/SKILL.md 未指向 install-skill-clis"
+        )
+        assert "uv tool install . --force --reinstall" not in text, (
+            f"{name}/SKILL.md 仍含 uv tool install 重裝指示"
         )
 
 

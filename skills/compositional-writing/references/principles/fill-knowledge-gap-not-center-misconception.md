@@ -39,16 +39,13 @@
 - **真實診斷區分**（保留）：「連線逾時 vs 連線被拒」「症狀層 vs 根因層」是真實存在的技術事實、教它們就是「補上讓讀者理解的正向知識」。以正向方式供給（這是什麼、怎麼判別、機制為何）、提到常見誤判只作對照不主導、即合規。
 - **把假想誤會當主題句起手**（改）：讀者本來不會有這個困惑、文章卻先植入再打掉。
 
-明示「反例：…」的對照跟「」內引用合規。
+明示「反例：…」的對照跟「」內引用合規。「」內引用的豁免指的是引號裡出現誤會的字面，不包括引用素材裡的說法、再判斷它在哪些條件下成立（那一種見 [rewritten-claim-kept-as-the-subject](rewritten-claim-kept-as-the-subject.md)）。素材的說法用「反例：」一行寫出原句與它對應的機制，准許的條件與寫法只在 `source-to-teaching-analysis.md`〈重建之後說法放在哪裡〉第 4 步，跟本卡的「反例：」對照一致。
 
 ---
 
 ## keyword bank + 判定
 
-```text
-澄清式框架：
-  最容易誤 / 容易誤判 / 常見的誤判 / 要點破 / 直覺帶偏 / 抵抗…的直覺 / 你以為 / 會困惑 / 值得記
-```
+澄清式框架的詞表以本 skill 的 `keyword-bank.md`〈澄清式框架〉那一條的 pattern 為準（代表詞：最容易誤、容易誤判、常見的誤判、要點破、你以為、會誤以為、會困惑），這裡不另抄一份。
 
 **命中是候選、不是判決**：grep 命中後要一個語意判定步驟——這處在「補正向知識」還是「提醒讀者會犯錯」。自問「拿掉這個誤會 framing、正確知識還在不在」：在 → 刪 framing；不在 → 這處根本沒給知識、要補的是機制不是警告。register 類同義變體多、無穩定關鍵詞、reader-simulation 語意 pass 是主、keyword bank 是輔。判定層的完整論述見 [multi-pass-review-frame-granularity](multi-pass-review-frame-granularity.md)。
 
@@ -59,3 +56,4 @@
 - [teaching-prose-neutral-register](teaching-prose-neutral-register.md)：兩卡相鄰但軸不同。該卡是 **stance** 軸（陳述概念 vs 對讀者說話）、把「別搞混」當祈使喊話的一例、修法是刪 stance。本卡是 **知識供給** 軸：核心是「『容易誤會』標示知識缺口、要補正向模型」、修法是刪 framing + 補 / 確認機制。同一個句子、兩個維度。
 - [multi-pass-review-frame-granularity](multi-pass-review-frame-granularity.md)：本卡的命中同屬該卡 keyword bank 機制的類別；「命中是候選不是判決」「register 類靠 reader-simulation 不靠 keyword」的判定層論述以該卡為主。
 - [teach-judgment-not-procedure](teach-judgment-not-procedure.md)：「這容易誤會」是壓縮結論的一種 —— 作者已走完「讀者需要 X 知識才不會誤解」的推導、只輸出最後一步的警告、丟掉了 X。本卡的修法（補回正向模型）正是還原推導路徑。
+- [rewritten-claim-kept-as-the-subject](rewritten-claim-kept-as-the-subject.md)：補本卡沒涵蓋的成因。本卡的誤會是作者想像出來的，判讀可以問「這是不是假想的誤會」；那張卡的說法實際寫在使用者貼來的素材裡，作者會把引用它當成忠於來源，這一問判不出來，要改問「這句說法是不是文章的主題」。修法相同：直接寫正向的機制。

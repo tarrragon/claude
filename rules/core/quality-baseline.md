@@ -65,7 +65,7 @@
 
 | 情境 | 必要動作 |
 |------|---------|
-| Solution 含 spawn 規劃表格 | complete 前建對應 ticket：ANA 結論要求的落地一律 `ticket create --parent <本票 ID>`（children，PC-091 唯一路線；後果與 `--force` 條件見 `ticket-lifecycle.md`〈防護性 ANA〉）；`--source-ticket <本票 ID>` 只用於分析中發現、但結論未要求的獨立工作 |
+| Solution 含 spawn 規劃表格 | complete 前建對應 ticket：ANA 結論要求的落地屬本版範圍用 `ticket create --parent <本票 ID>`（children，PC-091）；依〈兩期〉排入後續版本者在目標版本以 `--version <目標版本> --source-ticket <本票 ID>` 建根票。complete 時點、目標版本先登記、放棄時回寫本票見 `ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉；分析中發現、結論未要求的獨立工作同樣用 `--source-ticket` |
 | 成票與否 / 範疇 / 優先級需 PM 裁決 | 先 `ticket track add-spawn-request`，complete 前再 `resolve-spawn-request <本票 ID> SR-N --status processed --spawned-ticket <id>` 或 `--status dismissed --reason <理由>`；停在 pending 不算落地 |
 | 規劃項目經評估不需建 ticket | Solution **逐項**標註「無需建 ticket：[具體理由]」，一則宣告扣抵一項 |
 | 代理人工具清單不含 Bash（無法呼叫 ticket CLI） | 派發階段即不指派 ANA 型 ticket；已誤派者停手上報 NeedsContext 由 PM 改派，不以 `--force` 收尾 |
@@ -111,6 +111,7 @@
 - `.claude/skills/framework-issue/SKILL.md` - 規則 5 框架問題升級流程（介入判斷、兩條路徑、issue 關閉協議、回報前查重 SOP）
 
 ---
+**Last Updated**: 2026-11-11 | **Version**: 4.1.0 — 規則 5 ANA spawn 情境表第一列加版本維度：本版範圍的落地用 `--parent`，依〈兩期〉排入後續版本的落地在目標版本以 `--source-ticket` 建根票；complete 時點、先登記與放棄回寫路由 ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉。來源：用戶裁定（2026-11-09）。
 **Last Updated**: 2026-11-09 | **Version**: 4.0.0 — 版本兩期與驗收三項固定檢查：規則 2 補「Phase 4 的發現不退件」；規則 3 由「不可延後處理」改為規劃期當期修、執行期立即建票排後續維護版本（讓本版跑不起來者除外）；規則 5 補「建票不等於本版處理」，優先級對應限規劃期；底線總結表同步。主文路由 version-progression〈兩期〉與 verification-framework〈驗收三項固定檢查〉。來源：用戶裁定（2026-11-09）。
 **Last Updated**: 2026-10-15 | **Version**: 3.10.0 — 規則 1 禁令句拆為兩時點：本機提交前該票相關測試檔全綠、合併 main 前全套件全綠（合併閘門執行並讀結束碼），路由 worktree SKILL〈合併前全套件〉；不展開論證，細節在 verification-framework〈合併前全綠與實機驗證票〉。
 **Last Updated**: 2026-10-15 | **Version**: 3.9.0 — 規則 4 補「提醒類輸出須宣告受眾」一段：受眾含模型時走 additionalContext 或 exit 2，exit 0 加 stderr 對模型不可見（實測 2026-10）；可見性對照表放 hook-architect-technical-reference，案例見 IMP-GPD-004。

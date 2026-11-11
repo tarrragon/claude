@@ -64,14 +64,10 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
    - 建議重啟 Claude Code Session 驗證
 
 7. **Hook 完整性驗證（重要）**
-   - sync-pull 可能引入新的 hook 檔案，但尚未在 `settings.json` 中登記
-   - 建議執行以下指令確認未登記的 hook：
-     ```
-     提示用戶：「建議執行 project-init onboard 或在 SessionStart 時檢查 hook 完整性報告，
-     確認 .claude/hooks/ 下所有 hook 都已在 settings.json 登記，
-     若有未登記的 hook 請補充到 settings.json 或加入 exclude list」
-     ```
-   - 或等待下次 session 啟動，SessionStart hook `hook-registration-coverage-check.py` 會自動報告
+   - sync-pull 可能引入新的 hook 檔案。框架 hook 的註冊由上游 `settings.json` 提供，隨這次 pull 一併更新，consumer 不修改 `settings.json`
+   - 下次 session 啟動時，SessionStart hook `hook-registration-coverage-check.py` 會報告未註冊的 hook；也可以直接執行它
+   - 報告列出框架 hook 未註冊時，回報 framework issue（README〈回報框架問題〉），由主控方在上游補註冊或列入 exclude list；不在 consumer 端補進 `settings.json`
+   - 報告列出 `settings.local.json` 內的 hook 註冊時，依〈pull 後檢查清單〉〈6. 幽靈註冊處置〉的表格處理
 
 8. **Post-pull 框架定制引導**
    - 提示用戶執行 `project-init onboard` 完成框架定制：
@@ -113,6 +109,7 @@ git diff --stat -- .claude/
 | `VERSION` / `CHANGELOG.md`（版本檔） | 自動採 upstream，`.sync-conflicts/` 留對照副本 | 無需動作（本地版本檔必 stale，屬系統性衝突）；如對照副本顯示本地有應保留的內容，屬異常需人工檢視 |
 | `SKILL.md` 的 `metadata.version` 欄位（僅版號差異，無其他內容衝突） | 自動取本地/上游中較大版號並寫回，不留衝突標記 | 無需動作（skill 版號由 skill-sync 通道管轄，git pull 的 canonical 只是快照，兩側各自合法 bump 屬正常情境） |
 | 其他檔案（含 `SKILL.md` 內版號以外的真實內容衝突） | 衝突區塊以標記寫回工作區本檔，upstream 非重疊變更已套用；`.sync-conflicts/` 留對照副本 | 依下表三選項逐檔決策，處理完成前工作區該檔含 `<<<<<<<` 標記 |
+| 轉 `.sync-conflicts/` 的本地檔（拉取輸出「轉 .sync-conflicts」清單；全量 overlay 把 git 追蹤、上游沒有的本地檔移到此處，不是衝突） | 本地檔從原位移走，轉存於 `.sync-conflicts/` | 逐檔決定：專案自建要保留 → 放回原位；確認不要 → 留待步驟 5 清理 |
 
 非版本檔衝突的三選項：
 
@@ -154,7 +151,10 @@ python3 ./.claude/scripts/sync-claude-pull.py --resolve-done
 
 ### 5. 清理 .sync-conflicts/
 
-完成步驟 2 的所有衝突決策後清空暫存：
+完成步驟 2 的所有衝突決策，且轉存的本地檔都已處理後清空暫存。刪除前先核對：
+
+- 對照拉取輸出的「轉 .sync-conflicts」清單，每個檔已放回原位，或確認不要。
+- 以 `git status` 確認清單中的專案自建檔已回到原位（顯示為未變更，而非已刪除）。
 
 ```bash
 ls -la .claude/.sync-conflicts/ 2>/dev/null   # 先確認內容已處理完
@@ -180,7 +180,15 @@ rm -rf .claude/.sync-conflicts/
 ./.claude/hooks/hook-registration-coverage-check.py --fix   # 移除 command 指向不存在檔的註冊
 ```
 
-`--fix` 只作用於 `settings.local.json`，且只移除 command 指向不存在檔案的項目。指向的檔案仍存在的註冊不是幽靈，`--fix` 不會動它，這種要自己搬到 `settings.json`：框架 hook 的註冊來源只應有 `settings.json` 一處。`settings.json` 內的幽靈由 sync overlay 自癒，不在 `--fix` 範圍。
+`--fix` 只作用於 `settings.local.json`，且只移除 command 指向不存在檔案的項目。指向的檔案仍存在的註冊不是幽靈，`--fix` 不會動它，依註冊對象處理。`settings.json` 屬框架，consumer 不修改它（README〈設定檔分工〉）：
+
+| 註冊對象 | 判別 | 動作 |
+|---------|------|------|
+| 框架 hook，上游 `settings.json` 已註冊 | 同一個 command 也出現在 `settings.json` | 從 `settings.local.json` 刪除這筆重複註冊 |
+| 框架 hook，上游 `settings.json` 沒有註冊 | 檔案在框架的 `.claude/hooks/` 或 skill 的 `hooks/` 下，`settings.json` 找不到 | 回報 framework issue（README〈回報框架問題〉），由主控方在上游補註冊；`settings.local.json` 的這筆暫時保留，上游補上後依上一列刪除 |
+| 專案自有 hook | 檔案是專案自建的，不在上游框架內 | 回報 framework issue，寫明這支 hook 的事件與用途。`settings.json` 屬框架，`settings.local.json` 依單一註冊來源原則也不放 hook 註冊，框架目前沒有提供專案自有 hook 的合法註冊位置；在框架提供之前，這筆註冊暫時保留，coverage check 對它的警告會持續出現 |
+
+`settings.json` 內的幽靈由 sync overlay 自癒，不在 `--fix` 範圍。
 
 **當前 session 的註冊不回溯**：以上處理的都是磁碟上的設定檔。已啟動的 session 在啟動當下就把 hook 註冊讀進記憶體，pull 改了設定檔不會回頭改它。在 session 中途執行 pull 之後，該 session 剩餘時間內 hook 仍以舊路徑執行，直到重啟為止。
 
@@ -215,12 +223,7 @@ python3 ./.claude/scripts/sync-claude-pull.py --audit
 
 ## 新專案初始化
 
-如果是新專案，需要手動建立 CLAUDE.md：
-
-1. 複製 `.claude/templates/CLAUDE-template.md` 到根目錄
-2. 重命名為 `CLAUDE.md`
-3. 填入專案特定資訊（專案目標、技術選型、MCP 配置）
-4. 驗證所有連結有效
+如果是新專案，依 `.claude/README.md` 〈首次安裝〉進行；步驟只在該處維護，本檔不重列。
 
 ## 還原方式
 
@@ -233,6 +236,7 @@ cp -r /tmp/備份目錄/.claude .
 
 ## 注意事項
 
+- 全量 overlay（無基準點或基準點不可達）且預覽有覆蓋或刪除時，腳本以 `input()` 詢問 `Apply full overlay? [y/N]`；回答非 y 或 stdin 為 EOF（如 Claude Code Bash 工具內）即中止：印出中止原因、結束碼 1、不印「成功拉取」、不更新 `.claude/`、不寫基準點。處置：在可互動的終端機重跑並回答 y，或先建立基準點後再拉取
 - 自動備份當前 .claude 配置到臨時目錄
 - 拉取會完全替換本地 .claude 檔案
 - 不會覆蓋根目錄 CLAUDE.md（專案特定配置）

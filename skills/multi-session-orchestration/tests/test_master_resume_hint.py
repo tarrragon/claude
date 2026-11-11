@@ -119,8 +119,31 @@ def test_zero_tickets_still_hints_and_says_so(tmp_path):
     for ticket in (tmp_path / "project/docs/work-logs/v0.5.0/tickets").glob("*.md"):
         ticket.unlink()
     text = context_of(run(tmp_path, "clear"))
-    assert "找不到進行中的協調票" in text
+    assert "找不到協調票，成因：active 版本裡沒有標記 coordination: true 的進行中票" in text
+    assert "AskUserQuestion 問用戶開工作線或單一線" in text
+    assert "先把版本轉 active" not in text
     assert "mcp__line-board__line_status" in text
+
+
+def test_no_active_version_asks_user_and_says_cause(tmp_path):
+    """沒有 active 版本（上一版完成、下一版 planned）時，提示寫明成因並先問開線或單一線。"""
+    write_session(tmp_path / "home", "999", "主控", SESSION_ID)
+    write_config(tmp_path / "project")
+    todolist = tmp_path / "project" / "docs" / "todolist.yaml"
+    todolist.write_text(todolist.read_text(encoding="utf-8").replace('"active"', '"planned"'), encoding="utf-8")
+    text = context_of(run(tmp_path, "clear"))
+    assert "todolist 沒有 active 版本" in text
+    assert "AskUserQuestion 問用戶開工作線或單一線" in text
+    assert "先把版本轉 active" in text
+    assert "單一線時把〈主控接續〉段與裁定寫進當前處理的票" in text
+
+
+def test_none_step_does_not_tell_master_to_decide_alone(mod):
+    """E2 對照：舊版 none 文字（只說先請用戶確認協調票）不含開線／單一線的詢問。"""
+    legacy = "2. 找不到進行中的協調票（active 版本無 coordination: true 且 in_progress 的票）：先請用戶確認協調票，再繼續"
+    assert "開工作線或單一線" not in legacy
+    for has_active in (True, False):
+        assert "開工作線或單一線" in mod.none_step(has_active)
 
 
 def test_unresolvable_still_hints(tmp_path):

@@ -640,3 +640,43 @@ class TestExecuteDispatchReadiness:
         rc, out, _err = _run(ticket, tmp_path)
         assert rc == 0
         assert "全數通過" in out
+
+
+class TestWhereWriteDeclaration:
+    """檢查 7（3.2.0-W1-069）：where.files 寫入宣告派發前檢查。"""
+
+    @staticmethod
+    def _ticket(ticket_type, files):
+        return {
+            "type": ticket_type,
+            "_body": "## Context Bundle\n\n短內容\n",
+            "acceptance": ["a"],
+            "where": {"files": files},
+        }
+
+    def test_ana_without_write_marker_fails(self, tmp_path):
+        rc, out, _err = _run(self._ticket("ANA", ["docs/a.md"]), tmp_path)
+        assert rc == 2
+        assert "[FAIL] 檢查 7" in out
+        assert "::write" in out and "set-where" in out
+
+    def test_ana_with_write_marker_passes(self, tmp_path):
+        # 對照：同 fixture 加上 ::write 標記
+        rc, out, _err = _run(self._ticket("ANA", ["docs/a.md::write"]), tmp_path)
+        assert rc == 0
+        assert "[PASS] 檢查 7" in out
+
+    def test_imp_with_empty_where_fails(self, tmp_path):
+        rc, out, _err = _run(self._ticket("IMP", []), tmp_path)
+        assert rc == 2
+        assert "[FAIL] 檢查 7" in out and "set-where" in out
+
+    def test_imp_with_only_undefined_fails(self, tmp_path):
+        rc, out, _err = _run(self._ticket("IMP", ["待定義"]), tmp_path)
+        assert rc == 2
+        assert "[FAIL] 檢查 7" in out
+
+    def test_imp_with_declared_paths_passes(self, tmp_path):
+        rc, out, _err = _run(self._ticket("IMP", ["a.py"]), tmp_path)
+        assert rc == 0
+        assert "[PASS] 檢查 7" in out

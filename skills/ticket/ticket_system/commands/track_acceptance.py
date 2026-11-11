@@ -507,6 +507,99 @@ def _execute_batch_check_acceptance(
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
+# ticket create 寫入的 H3 子節（非人寫）。與 track_dispatch.CLI_MANAGED_H3_HEADINGS
+# 同語意，差別在產生者是 create 而非 dispatch；append-log --replace 一併保留。
+CREATE_GENERATED_H3_HEADINGS = ("查重紀錄",)
+
+
+def _split_generated_content(section_content: str) -> tuple:
+    """切出章節內 CLI 自動產生的內容與人寫 H3 標題。
+
+    回傳 ``(auto_block, managed_texts, human_titles)``：
+    - auto_block：Context Bundle 的 auto-extracted 區塊全文（marker 起至區塊終點），
+      邊界沿用 context_bundle_extractor 重抽時的同一判定；無則為空字串。
+    - managed_texts：派發日誌、Commit 規範、查重紀錄等子節全文，依原出現順序。
+    - human_titles：其餘（人寫）H3 標題，供覆寫前摘要。
+    """
+    from ticket_system.commands.track_dispatch import _find_h3_subsection, split_managed_h3
+    from ticket_system.lib.context_bundle_extractor import (
+        _AUTO_MARKER_ONLY_PATTERN,
+        _find_auto_block_end,
+    )
+
+    auto_block = ""
+    rest = section_content
+    marker = _AUTO_MARKER_ONLY_PATTERN.search(section_content)
+    if marker:
+        block_end = _find_auto_block_end(section_content, marker.end())
+        auto_block = section_content[marker.start():block_end]
+        rest = section_content[: marker.start()] + section_content[block_end:]
+
+    managed_texts, human_titles = split_managed_h3(rest)
+    found = []
+    for heading in CREATE_GENERATED_H3_HEADINGS:
+        sub = _find_h3_subsection(rest, heading)
+        if sub:
+            found.append((sub[0], sub[3].rstrip()))
+    generated_titles = {f"### {h}" for h in CREATE_GENERATED_H3_HEADINGS}
+    human_titles = [t for t in human_titles if t not in generated_titles]
+    return auto_block, managed_texts + [text for _, text in sorted(found)], human_titles
+
+
+def _preserved_labels(auto_block: str, managed_texts: list) -> list:
+    """保留項目的可讀標籤（覆寫前提示用）。"""
+    labels = ["Context Bundle 自動抽取區塊"] if auto_block else []
+    for text in managed_texts:
+        first = text.splitlines()[0] if text else ""
+        labels.append(first.lstrip("#").strip())
+    return labels
+
+
+def _html_comment_line_flags(lines: list[str]) -> list[bool]:
+    """標記每一行是否落在 HTML 註解內（含 `<!--` 開頭行與 `-->` 結尾行）。"""
+    flags = []
+    in_comment = False
+    for line in lines:
+        starts_here = "<!--" in line
+        flags.append(in_comment or starts_here)
+        if starts_here and "-->" not in line[line.index("<!--"):]:
+            in_comment = True
+        elif in_comment and "-->" in line:
+            in_comment = False
+    return flags
+
+
+def _strip_visible_placeholder_lines(section_text: str) -> str:
+    """刪除章節裡整行都是舊形態可見佔位符的行（「（待填寫：…）」等四種前綴）。
+
+    只動 fence 外、HTML 註解外的行：fence 內是範例，註解內是 Schema 行或模板說明。
+    判定沿用建票時改寫佔位符用的同一個 regex（ticket_builder），以及 section_locator
+    的 fence 判定，不另寫一份。刪掉一行後若前後都是空行，連帶吃掉後面那個空行，
+    避免留下連續三個換行。
+    """
+    from ticket_system.lib.section_locator import fenced_line_flags
+    from ticket_system.lib.ticket_builder import _VISIBLE_PLACEHOLDER_LINE
+
+    lines = section_text.split("\n")
+    protected = [
+        fenced or commented
+        for fenced, commented in zip(fenced_line_flags(lines), _html_comment_line_flags(lines))
+    ]
+    kept: list[str] = []
+    drop_next_blank = False
+    last_index = len(lines) - 1
+    for index, (line, is_protected) in enumerate(zip(lines, protected)):
+        if drop_next_blank:
+            drop_next_blank = False
+            if line == "" and index != last_index:
+                continue
+        if not is_protected and _VISIBLE_PLACEHOLDER_LINE.fullmatch(line):
+            drop_next_blank = bool(kept) and kept[-1] == ""
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def _replace_or_append_section_content(
     *,
     section_text: str,
@@ -536,8 +629,9 @@ def _replace_or_append_section_content(
     from ticket_system.lib.ticket_validator import _is_placeholder
 
     if not _is_placeholder(section_content):
-        # 已有實質內容，正常 append
-        return section_text + new_entry
+        # 已有實質內容（例如 create 寫入的查重紀錄）：逐行剝掉舊形態的可見佔位符後 append，
+        # 否則「（選填：…）」會永遠留在章節開頭
+        return _strip_visible_placeholder_lines(section_text) + new_entry
 
     # placeholder-only：保留 header + Schema HTML 註解，移除其他 placeholder 文字
     # section_text 結構：`## Header\n[content_with_placeholders]`
@@ -639,7 +733,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     """append-log 主邏輯（已位於 file_lock 內）。"""
     import sys as _sys
 
-    from ticket_system.lib.section_locator import find_section
+    from ticket_system.lib.section_locator import demote_h2_outside_fences, find_section
     from ticket_system.lib.ticket_builder import insert_missing_schema_section
 
     ticket = load_ticket(version, args.ticket_id)
@@ -704,15 +798,16 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         "Context Bundle", "NeedsContext", "Exit Status", "Completion Info",
     }
     if section in schema_sections_for_h2_check and content:
-        if re.search(r'(?m)^## ', content):
+        # W1-068（W1-038 方案 B）: 自動降級 H2 → H3 規範化（只匹配行首 H2，不影響 H3+）。
+        # code fence 內的 `## ` 是範例文字，與 find_section 共用同一個 fence 判定而保留原樣。
+        content, demoted = demote_h2_outside_fences(content)
+        if demoted:
             import sys as _sys
             _sys.stderr.write(
                 "[append-log] WARNING: 偵測到內容含 H2 標題；append-log 寫入應為既有章節的 "
                 "H3 子節，避免切斷 Schema 章節範圍（W17-072）。"
                 "已自動降級 H2 → H3（W1-068 方案 B：源頭阻斷）。\n"
             )
-            # W1-068（W1-038 方案 B）: 自動降級 H2 → H3 規範化（只匹配行首 H2，不影響 H3+）
-            content = re.sub(r'(?m)^## ', '### ', content)
 
     # 獲取 Ticket 內容（body 已於前置檢核載入）
     if not body:
@@ -751,16 +846,21 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         # 已寫入的實質內容，一律用本次內容整段覆寫，維持 header 不變、章節
         # 在 body 中的原位置不動。
         if getattr(args, "replace", False):
-            from ticket_system.commands.track_dispatch import split_managed_h3
-
             header_end = section_text.find("\n")
             header_line = section_text[: header_end + 1] if header_end != -1 else section_text
-            updated_section = header_line + new_entry.lstrip("\n") + "\n"
 
-            # CLI 管理的 H3 子節（派發日誌 / Commit 規範）接在新內容之後保留
-            managed_texts, human_titles = split_managed_h3(section_content)
+            # 只覆寫人寫部分：CLI 自動產生的內容（Context Bundle 抽取區塊、
+            # 派發日誌、Commit 規範、查重紀錄）一律保留
+            auto_block, managed_texts, human_titles = _split_generated_content(section_content)
+            updated_section = header_line
+            if auto_block:
+                updated_section += auto_block.rstrip() + "\n\n"
+            updated_section += new_entry.lstrip("\n") + "\n"
             if managed_texts:
                 updated_section += "\n" + "\n\n".join(managed_texts) + "\n"
+            preserved = _preserved_labels(auto_block, managed_texts)
+            if preserved:
+                print("[append-log] --replace 保留自動產生的子節：" + "、".join(preserved))
 
             # 覆寫為不可逆操作（ticket md 受 hook 保護無法手工還原），寫回前
             # 印出將被取代的內容摘要供呼叫端核對，作為防呆。有人寫 H3 時列標題。

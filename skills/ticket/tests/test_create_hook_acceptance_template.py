@@ -73,6 +73,40 @@ def test_create_not_touching_hook_unchanged():
     assert result == BASE
 
 
+# 建立端與驗證端的適用票型同源：同一批 fixture（觸及 hook 本體），
+# 依票型決定是否帶入模板，判定與驗證端常數一致。
+
+@pytest.mark.parametrize("ticket_type", ["ANA", "DOC", "ana"])
+def test_non_applicable_type_adds_no_template_e2(ticket_type):
+    result, touched = apply_hook_acceptance_template(
+        HOOK_FILES, list(BASE), ticket_type=ticket_type
+    )
+    assert touched is False
+    assert result == list(BASE)
+
+
+def test_imp_type_still_adds_template_e1():
+    result, touched = apply_hook_acceptance_template(
+        HOOK_FILES, list(BASE), ticket_type="IMP"
+    )
+    assert touched is True
+    assert result == BASE + TEMPLATES
+
+
+def test_applicable_types_come_from_checker_constant(monkeypatch):
+    checker = create_mod._load_hook_protection_checker()
+    assert checker.APPLICABLE_TYPES == frozenset({"IMP"})
+    assert checker._APPLICABLE_TYPES is checker.APPLICABLE_TYPES
+    # 改動驗證端常數即改變建立端判定：證明建立端未自帶清單
+    monkeypatch.setattr(checker, "APPLICABLE_TYPES", frozenset({"IMP", "ANA"}))
+    monkeypatch.setattr(create_mod, "_load_hook_protection_checker", lambda: checker)
+    result, touched = apply_hook_acceptance_template(
+        HOOK_FILES, list(BASE), ticket_type="ANA"
+    )
+    assert touched is True
+    assert result == BASE + TEMPLATES
+
+
 def test_existing_category_not_duplicated():
     existing = BASE + ["[ ] liveness 驗證：已確認"]
     result, _ = apply_hook_acceptance_template(HOOK_FILES, existing)

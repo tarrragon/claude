@@ -92,7 +92,7 @@ pending → claim → in_progress → complete → completed
 | 優先級為 P0 或 P1 | 是 |
 | where.files 跨兩個以上模組或架構層 | 是 |
 | 修改 `.claude/` 框架資產（rules／pm-rules／skills／hooks／lib） | 是 |
-| 由 ANA 結論落地的 IMP（`--parent` 指向 ANA） | 是 |
+| 由 ANA 結論落地的 IMP（`--parent` 或 `--source-ticket` 指向 ANA，見〈ANA Ticket 落地下游血緣選擇〉） | 是 |
 | 其他 | PM 判斷 |
 
 **Action**：建票後對照上表；命中任一列即並行派發下方兩位審核者，未通過依「判定標準」處理後再派發執行。
@@ -432,8 +432,8 @@ ANA Ticket 分為兩類，差異在於「分析結論是否需要後續實作才
 |------|-----------|-----------|
 | **定義** | 分析結論本身即為產出（文件/規則/error-pattern/方法論），無需後續實作驗證 | 分析結論需要後續 IMP/DOC 落地執行才算解決，建立 children 追蹤 |
 | **判別問題** | 分析報告寫完後，問題是否已被解決？ | 分析報告寫完後，仍有具體實作/修復需要執行？ |
-| **children 使用** | 不建 children（或無 children） | 必須建 children（`--parent <ANA-id>`） |
-| **complete 觸發時機** | 分析結論寫入文件/規則後即可 complete | 所有 children 全部 completed/closed 後才可 complete |
+| **children 使用** | 不建 children（或無 children） | 必須建落地票：本版範圍用 children（`--parent <ANA-id>`）；依〈兩期〉排入後續版本者在目標版本以 `--source-ticket <ANA-id>` 建根票（見〈ANA Ticket 落地下游血緣選擇〉） |
+| **complete 觸發時機** | 分析結論寫入文件/規則後即可 complete | 本版範圍的 children 全部 completed/closed；排入後續版本的落地票建立後即可 complete（步驟 2.5.2 以 `spawned_tickets` 計入落地數） |
 | **典型產出** | error-pattern 新增、方法論補強、規則釐清 | hook 實作修復、系統重構、多個 IMP 落地 |
 
 **判別準則**（建立 ANA 時自問）：
@@ -479,12 +479,13 @@ W10-072（ANA，防護性）
 | 研究性 | 有 children（全 completed/closed） | AC 全勾 + children 全完成 | 不阻擋 |
 | 防護性 | children 有 pending/in_progress | **禁止 complete** | **阻擋**（acceptance-gate-hook 父 complete 前置規則） |
 | 防護性 | children 全 completed/closed | AC 全勾 | 不阻擋 |
+| 防護性 | 落地全數排入後續版本（已在目標版本以 `--source-ticket` 建根票，本版無 children） | AC 全勾 + 落地票已建 | 不阻擋（步驟 2.5.2 的落地數計入 `spawned_tickets`） |
 
 **Why**：acceptance-gate-hook 對所有 type 一視同仁要求 children 進入 TERMINAL_STATUSES。研究性 ANA 因無 children 自然不受此規則影響；防護性 ANA 的阻擋是設計正確——分析結論若未落地即 complete，等同「只診斷不開藥」。
 
 **Consequence**：混淆兩類 ANA 會導致 PM 誤以為「完成分析報告就能 complete 防護性 ANA」，被 hook 阻擋時誤判為 hook bug（W10-072 Problem Analysis 初版即屬此誤解）。
 
-**Action**：建立 ANA ticket 時依判別問題自問並在 how.strategy 標注類型（「研究性」或「防護性」）；若為防護性，在 Solution 完成後立即建 children 再繼續。
+**Action**：建立 ANA ticket 時依判別問題自問並在 how.strategy 標注類型（「研究性」或「防護性」）；若為防護性，在 Solution 完成後立即依〈ANA Ticket 落地下游血緣選擇〉的版本維度建落地票再繼續。
 
 ### 防護性 ANA 與 blockedBy 下游的耦合，以及 `--force` 使用條件
 
@@ -511,26 +512,34 @@ W10-072（ANA，防護性）
 >
 > **2026-05-03 升格**：W17-120 多視角審查共識——本規則為 ANA 落地唯一指引。PC-073 對 ANA 衍生 IMP 用 spawned 的舊指引已 deprecated。權威語意彙總：`.claude/skills/ticket/references/field-semantics.md`。
 
-ANA Ticket 的下游 Ticket **必須以 children 表達**（用 `--parent <ANA-id>`），不可建立為兄弟，也不可用 spawned。
+ANA 結論要求的落地，不可建立為無血緣的兄弟票；血緣怎麼表達，由落地票所屬的版本決定。
 
-| 場景 | 血緣選擇 | 命令 |
-|------|---------|------|
-| **ANA 結論的執行延伸（IMP/DOC 落地）** | **children**（唯一選項，PC-091 路線） | `--parent <ANA-id>`（自動子序號） |
-| 執行 Ticket 過程中發現獨立 bug / 技術債（與當前 ticket 無因果） | spawned_tickets | `--source-ticket <CURRENT-ID>`（CLI 自動雙向追加） |
-| 完全獨立的新需求（非任何上游觸發） | sibling | 不指定 `--parent` / `--source-ticket` |
+| 場景 | 血緣選擇 | 命令 | ANA complete 時點 |
+|------|---------|------|------------------|
+| **ANA 結論的落地，屬本版範圍**（規劃期建立，或執行期讓本版跑不起來而帶 `--scope-blocker`） | **children**（PC-091 路線） | `--parent <ANA-id>`（自動子序號） | children 全部終態 |
+| **ANA 結論的落地，依〈兩期〉排入後續版本** | 目標版本的根票，以 `source_ticket` 保留血緣 | `--version <目標版本> --source-ticket <ANA-id>`；目標版本未登記先登記（`.claude/pm-rules/version-progression.md`〈版本登記規則〉），不得停在當前凍結版本 | 落地票建立後即可 complete（步驟 2.5.2 以 `spawned_tickets` 計入落地數） |
+| 規劃波建立的本版執行期票 | 不是 ANA 的落地，是版本契約的工作：本版根票，可附 `--source-ticket <規劃票>` 保留血緣 | 必要票的 `scope_blocker` 由 `.claude/pm-rules/version-progression.md`〈版本生命週期〉「凍結程序」回溯標記（理由寫對應契約項） | 規劃票於凍結時結案；必要票的完成由發版檢查（`scope_blocker`）保證 |
+| 執行 Ticket 過程中發現獨立 bug / 技術債（與當前 ticket 無因果，結論未要求） | spawned_tickets | `--source-ticket <CURRENT-ID>`（CLI 自動雙向追加）；版本依〈兩期〉決定 | 不影響來源票 |
+| 完全獨立的新需求（非任何上游觸發） | sibling | 不指定 `--parent` / `--source-ticket` | — |
+
+**後續版本落地票被放棄時回寫來源 ANA**：建在後續版本的落地票不帶 `scope_blocker`，可能在該版本規劃時依〈收斂：patch 線與 minor 推進〉規則 4 被放棄，此時來源 ANA 已 complete。關閉 `source_ticket` 指向 ANA 的落地票時，關票理由寫明對該 ANA 結論的處置（改由哪張票或哪個 issue 承接，或結論撤回），並以 `ticket track append-log <ANA-id> --section Solution` 回寫到來源 ANA。
 
 **判別問題**（PM 建立下游 Ticket 前自問）：
 
 > 這個 Ticket 的存在是因為「上游 Ticket 的結論要求」嗎？
-> - 是 → children
+> - 是，且屬本版範圍 → children
+> - 是，但依〈兩期〉排入後續版本 → 目標版本根票 + `--source-ticket <ANA-id>`
 > - 否，但發現於上游執行中 → spawned_tickets
 > - 否，獨立發現/規劃 → sibling
 
-**禁止行為**：
-- 把「執行獨立性」（可獨立執行）誤當「血緣獨立性」（與上游無關）→ 仍應為 children
-- 用 `spawned_tickets` 代替 `parent_id` 表達血緣（spawned 是衍生副產品語意，非直系後代）
+**Why**：children 同時承擔血緣、落地追蹤、完成閘門、版本歸屬四項職責。前兩項是 PC-091「防止只診斷不開藥」的防護所在；後兩項與〈兩期〉衝突——子票 ID 為 `<父票 ID>.N`，必然落在父票的版本，執行期 ANA 的落地若用 children，只能落在已凍結的本版，違反「新發現排進後續版本」。`--source-ticket` 會回寫來源票的 `spawned_tickets`，acceptance-gate 步驟 2.5.2 以 `spawned_tickets` 加 `children` 計算落地數，所以落地追蹤不依賴 children。**Consequence**：不分版本一律用 `--parent`，執行期 ANA 沒有合規的建票方式：要嘛違反〈兩期〉在凍結版本開衍生票，要嘛不建落地票、只診斷不開藥；後續版本的落地票被放棄而不回寫，來源 ANA 的結論會靜默失效。**Action**：建落地票前先判定它屬本版範圍還是後續版本，依上表選關係；放棄後續版本的落地票時，同一動作內回寫來源 ANA。
 
-> **CLI 對照**：`--parent` vs `--source-ticket` 的副作用、欄位寫入、阻擋規則完整對比表，見 `.claude/skills/ticket/references/create-command.md`「--parent vs --source-ticket 對比表」章節。建立執行中發現、結論未要求的獨立衍生 Ticket 時使用 `--source-ticket <SOURCE-ID>`（ANA 結論要求的落地改用 `--parent`，見 PC-091），CLI 會自動追加新 Ticket ID 至 source 的 `spawned_tickets`，無需人工編輯。
+**禁止行為**：
+- 把「執行獨立性」（可獨立執行）誤當「血緣獨立性」（與上游無關）→ 仍應以 children 或 `--source-ticket` 保留血緣
+- 對本版範圍的落地用 `spawned_tickets` 代替 `parent_id` 表達血緣（spawned 是衍生副產品語意，非直系後代）
+- 對排入後續版本的落地用 `--parent`，使落地票落在已凍結的本版
+
+> **CLI 對照**：`--parent` vs `--source-ticket` 的副作用、欄位寫入、阻擋規則完整對比表，見 `.claude/skills/ticket/references/create-command.md`「--parent vs --source-ticket 對比表」章節。`--source-ticket <SOURCE-ID>` 會自動追加新 Ticket ID 至 source 的 `spawned_tickets`，無需人工編輯。
 
 ---
 
@@ -720,7 +729,8 @@ how:
 
 ---
 
-**Last Updated**: 2026-10-14
+**Last Updated**: 2026-11-11
+**Version**: 6.7.0 — 〈ANA Ticket 落地下游血緣選擇〉加版本維度：本版範圍的落地用 `--parent`（children 全部終態才 complete）；依〈兩期〉排入後續版本的落地在目標版本以 `--source-ticket` 建根票（建好即可 complete，目標版本未登記先登記）；規劃波建的本版執行期票為本版根票，規劃票於凍結時結案；後續版本落地票被放棄時，關票理由寫明對來源 ANA 結論的處置並回寫來源 ANA。〈ANA 子分類〉兩表與 Action、〈建立後審核流程〉觸發條件同步。來源：用戶裁定（2026-11-09）。
 **Version**: 6.6.0 — 「建立後審核流程」：移除 creation_accepted 認領閘門（該閘門註冊於 UserPromptSubmit，從未檢查到真實 claim），建票通過硬閘門即寫 true；審核由「強制」改為依觸發條件必審（P0/P1、跨模組、框架資產、ANA 落地 IMP），其餘由 PM 判斷，並補 Why／Consequence／Action（用戶經 WRAP 裁決）。
 **Version**: 6.5.0 — 「Complete 後 cleanup checklist」的範圍說明改為「含本次被解鎖的票」：complete 的 auto-commit 併入本次 cascade 與反向 blockedBy 解鎖、且 save 成功的票檔（可跨版本），未被本次寫入的 children／siblings 仍不進入提交範圍；與 ticket skill 2.44.15 的行為變更同步。
 **Version**: 6.4.0 — 「ANA 子分類」節新增「防護性 ANA 與 blockedBy 下游的耦合，以及 --force 使用條件」子節（三明示）。
