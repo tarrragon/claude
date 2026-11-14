@@ -15,7 +15,7 @@ severity: high
 | 編號 | PC-SCLK-001 |
 | 類別 | process-compliance |
 | 風險等級 | 高 |
-| 首發時間 | 2026-07-29（1.4.0-W1-011 amend 改寫 1.4.0-W1-003 commit） |
+| 首發時間 | 2026-07-29（分析 agent 的 amend 改寫遷移 agent 的 commit） |
 | 姊妹模式 | PC-078（並行 session ticket 狀態誤判，讀取面）、PC-076（前 session 未 commit 遺留）、ARCH-015（worktree 隔離） |
 
 ---
@@ -33,19 +33,19 @@ severity: high
 
 ---
 
-## 實例（2026-07-29，1.4.0-W1-011 與 1.4.0-W1-003）
+## 實例（2026-07-29，分析 agent 與遷移 agent 並行）
 
 事件序列：
 
 | 時刻 | 執行體 | 動作 | HEAD |
 |------|-------|------|------|
-| T1 | W1-011 agent | `git commit` 自己的分析產出 | `835ccaa` |
-| T2 | W1-003 agent | `git commit` 自己的 tracking 遷移 | `939c9bd` |
-| T3 | W1-011 agent | `git commit --amend` 補 19 行自檢章節 | `939c9bd` 被改寫 |
+| T1 | 分析 agent | `git commit` 自己的分析產出 | `835ccaa` |
+| T2 | 遷移 agent | `git commit` 自己的 tracking 遷移 | `939c9bd` |
+| T3 | 分析 agent | `git commit --amend` 補 19 行自檢章節 | `939c9bd` 被改寫 |
 
-T3 的 `--amend` 作用於當下 HEAD，而 HEAD 已在 T2 被另一個 agent 推進。W1-011 的意圖是修改自己在 T1 的 commit，實際改寫了 W1-003 在 T2 的 commit，把 19 行折疊進去。
+T3 的 `--amend` 作用於當下 HEAD，而 HEAD 已在 T2 被另一個 agent 推進。分析 agent 的意圖是修改自己在 T1 的 commit，實際改寫了遷移 agent 在 T2 的 commit，把 19 行折疊進去。
 
-修復（由發現問題的 agent 自行完成）：`b8bdb09` 還原 W1-003 commit 為其原始 2 檔內容，`8f119e9` 將自己的 19 行獨立成 commit。事後驗證 `git diff 939c9bd b8bdb09` 僅剩 W1-003 自身的 `status: completed` 與 `completed_at` 兩處差異，核心產出（`proposals-tracking.yaml` 114 行變更）逐字一致，無資料遺失。
+修復（由發現問題的 agent 自行完成）：`b8bdb09` 還原遷移 agent 的 commit 為其原始 2 檔內容，`8f119e9` 將自己的 19 行獨立成 commit。事後驗證 `git diff 939c9bd b8bdb09` 僅剩遷移 agent 自身的 `status: completed` 與 `completed_at` 兩處差異，核心產出（`proposals-tracking.yaml` 114 行變更）逐字一致，無資料遺失。
 
 未推送（`origin/main` 停在事件前的舊 commit）是此次未擴大的關鍵——已推送則需協調 force-push 與他人 reset。
 
@@ -123,5 +123,5 @@ Hook 層可行性備註：判定「是否有其他 agent 並行」可查 `ticket
 
 ## 關聯 Ticket
 
-- `1.4.0-W1-011`（事件發生與自行修復的 ticket）
-- `1.4.0-W1-003`（commit 被改寫的受害方）
+- 分析 agent 所屬 ticket（事件發生與自行修復）
+- 遷移 agent 所屬 ticket（commit 被改寫的受害方）

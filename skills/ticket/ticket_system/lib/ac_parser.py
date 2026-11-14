@@ -1,6 +1,6 @@
 """AC 解析器：解析 Ticket frontmatter 的 acceptance list 為結構化 AC 物件。
 
-本模組為 PROP-010 Phase 1 MVP 基礎設施，供 W5-002 (claim 命令) 於派發前
+本模組為 PROP-010 Phase 1 MVP 基礎設施，供 claim 命令 於派發前
 對照 AC 實況，避免代理人重做已完成工作 (PC-055 ticket AC drift)。
 
 公開 API：
@@ -38,7 +38,7 @@ def parse_ac(ticket_id: str) -> list[AC]:
     """解析 Ticket frontmatter 的 acceptance list。
 
     Args:
-        ticket_id: Ticket ID（如 "0.18.0-W5-001"）。
+        ticket_id: Ticket ID（如 "<ticket-id>"）。
 
     Returns:
         依出現順序（index 從 0）的 AC 物件清單。

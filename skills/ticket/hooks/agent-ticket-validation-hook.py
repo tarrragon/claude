@@ -4,7 +4,7 @@
 # dependencies = ["pyyaml>=5.0", "filelock>=3.12"]
 # ///
 #
-# 依賴說明（W1-056.9 / PC-135 復發模式，0.2.1-W3-314 修復）：嵌套深度檢查複用
+# 依賴說明（PC-135 復發模式）：嵌套深度檢查複用
 # ticket_system.lib.depth.can_descend，其 import 鏈為
 # depth -> lib/__init__ -> ticket_loader -> parser -> file_lock -> filelock。
 # dependencies 顯式宣告 pyyaml 與 filelock，避免 uv ephemeral env 不拉
@@ -20,7 +20,7 @@ Agent Ticket Validation Hook
 - 從 prompt 中提取 Ticket ID 引用
 - 驗證 Ticket 是否存在
 - 驗證 Ticket 是否包含決策樹欄位
-- 嵌套深度檢查（W1-056.9 / 協議 v2 D3，裁決 E）：被引用 ticket depth 超過 MAX_TICKET_DEPTH
+- 嵌套深度檢查：被引用 ticket depth 超過 MAX_TICKET_DEPTH
   才禁止派發（複用 ticket_system.lib.depth.compute_depth）
 - 無效時拒絕派發
 - 支援豁免機制：特定代理人類型（如 Explore）可跳過 Ticket 與深度驗證
@@ -34,7 +34,7 @@ Matcher: Task
 
 使用方式:
     PreToolUse Hook 自動觸發，或手動測試:
-    echo '{"tool_input":{"prompt":"Ticket: 0.30.1-W2-003..."}}' | python3 agent-ticket-validation-hook.py
+    echo '{"tool_input":{"prompt":"Ticket: <ticket-id>..."}}' | python3 agent-ticket-validation-hook.py
 
 環境變數:
     HOOK_DEBUG: 啟用詳細日誌（true/false）
@@ -59,7 +59,7 @@ from lib import (
 )
 
 # ----------------------------------------------------------------------------
-# 嵌套深度檢查模組（W1-056.9 / 協議 v2 D3 強制層）
+# 嵌套深度檢查模組
 #
 # 複用 ticket_system.lib.depth 的 compute_depth（禁止平行實作，
 # ARCH-020）。MAX_TICKET_DEPTH 為深度上限 SSOT（constants.py）。
@@ -80,7 +80,7 @@ try:
     DEPTH_AVAILABLE = True
     _DEPTH_IMPORT_ERROR: Optional[str] = None
 except Exception as _depth_import_err:  # pragma: no cover - 環境缺套件時的 fail-open 分支
-    # PC-135 防護：silent fallback 改 noisy（0.2.1-W3-314）。任何 import 失敗
+    # PC-135 防護：silent fallback 改 noisy。任何 import 失敗
     # （ModuleNotFoundError / ImportError 等）都 fail-open，深度檢查停用但既有
     # 驗證不受影響；MAX_TICKET_DEPTH 強制層在此 runtime 從未生效，須讓 PM/開發者
     # 立即看見，不可靜默吞掉（quality-baseline 規則 4）。stderr 立即可見，
@@ -99,7 +99,7 @@ except Exception as _depth_import_err:  # pragma: no cover - 環境缺套件時�
 # 常數定義
 # ============================================================================
 
-# Ticket ID 引用格式（支援子任務 ID，如 0.31.0-W3-002.1.1）
+# Ticket ID 引用格式（支援子任務 ID，如 <ticket-id>）
 TICKET_ID_PATTERNS = [
     r"Ticket:\s*(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)",
     r"#Ticket-(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)",
@@ -117,9 +117,9 @@ TICKET_ID_PATTERNS = [
 # 升級路徑：
 # - 當白名單長度 > 10 或誤用率升高（非白名單 agent 被誤擋頻率上升）時，
 #   應升級為「讀 agent definition 的 tools 欄位自動分類」的動態機制。
-# - 來源：W17-046 ANA 方案 A（白名單擴充立即解除情報蒐集類 agent 派發阻礙）。
+# - 來源：ANA 方案 A（白名單擴充立即解除情報蒐集類 agent 派發阻礙）。
 #
-# 現況：7/10（0.2.1-W3-010 追加 2 個唯讀常駐審查委員，超過 10 時依上述升級路徑
+# 現況：7/10（已追加 2 個唯讀常駐審查委員，超過 10 時依上述升級路徑
 # 改為讀 agent definition tools 欄位自動分類）。
 TICKET_EXEMPT_AGENT_TYPES = [
     "Explore",                    # codebase 探索：蒐集資訊以建立 Ticket（既有）
@@ -127,8 +127,8 @@ TICKET_EXEMPT_AGENT_TYPES = [
     "general-purpose",            # 複雜問題多步驟研究（唯讀）
     "Plan",                       # 架構規劃、實作計畫（唯讀）
     "feature-dev:code-explorer",  # 既有功能深度分析（唯讀）
-    "basil-writing-critic",       # parallel-evaluation 常駐審查委員，tools 純唯讀（0.2.1-W3-010）
-    "linux",                      # parallel-evaluation 常駐審查委員，tools 純唯讀（0.2.1-W3-010）
+    "basil-writing-critic",       # parallel-evaluation 常駐審查委員，tools 純唯讀
+    "linux",                      # parallel-evaluation 常駐審查委員，tools 純唯讀
 ]
 
 # Exit Code
@@ -154,9 +154,9 @@ def extract_ticket_reference(prompt: str, logger) -> Optional[str]:
         str - Ticket ID，或 None 如未找到
 
     格式範例：
-    - Ticket: 0.30.1-W2-003
-    - #Ticket-0.30.1-W2-003
-    - [Ticket 0.30.1-W2-003]
+    - Ticket: <ticket-id>
+    - #Ticket-<ticket-id>
+    - [Ticket <ticket-id>]
     """
     if not prompt:
         logger.debug("prompt 為空")
@@ -368,7 +368,7 @@ def validate_task_dispatch(
     if not is_valid:
         return is_valid, error_msg, ticket_id
 
-    # 步驟 4: 嵌套深度檢查（協議 v2 D3 強制層，W1-056.9）
+    # 步驟 4: 嵌套深度檢查（協議 v2 D3 強制層）
     # ticket 有效後才檢查深度；豁免型 agent 已在步驟 1 提前 return，不會抵達此處。
     depth_ok, depth_err = check_depth_descend(ticket_id, logger, input_data)
     if not depth_ok:
@@ -402,13 +402,13 @@ def generate_hook_output(
         }
     }
 
+    # 驗證通過時不帶 permissionDecision：allow 會略過平台的權限提示，等於代用戶
+    # 核可；本 hook 只負責擋無效派發，通過時交回平台權限流程。
     if not is_valid:
         output["hookSpecificOutput"]["permissionDecision"] = "deny"
         output["hookSpecificOutput"]["permissionDecisionReason"] = (
             error_message or "派發任務驗證失敗"
         )
-    else:
-        output["hookSpecificOutput"]["permissionDecision"] = "allow"
 
     # 記錄檢查結果（包在 hookSpecificOutput 內，避免頂層出現未知欄位觸發 JSON validation failed，IMP-055）
     output["hookSpecificOutput"]["checkResult"] = {

@@ -1,6 +1,6 @@
 """Checkbox 前綴處理共用工具。
 
-統一 ac_parser 與 acceptance_auditor 的 checkbox 剝除邏輯（0.18.0-W11-001.5）。
+統一 ac_parser 與 acceptance_auditor 的 checkbox 剝除邏輯。
 避免雙寫風險：之前兩模組分別使用 `split("]", 1)` 與 `startswith + 切片` 兩種策略。
 
 公開 API：

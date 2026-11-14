@@ -37,6 +37,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from lib.hook_base import get_shared_state_root
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -202,7 +203,7 @@ def format_reminder_reason(tickets: list) -> str:
 def scan_tickets(logger) -> list:
     """掃描 context 敏感票；掃描失敗回傳空清單（已記錄日誌）。"""
     try:
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
         logger.debug(f"專案根目錄: {project_root}")
         return scan_context_sensitive_tickets(project_root, logger)
     except Exception as e:
@@ -218,7 +219,7 @@ STATE_MAX_AGE_SECONDS = 7 * 24 * 3600
 
 def get_state_dir() -> Path:
     """狀態檔目錄（測試以 monkeypatch 覆寫）。"""
-    return get_project_root() / ".claude" / "hook-state"
+    return get_shared_state_root(get_project_root()) / ".claude" / "hook-state"
 
 
 def state_file_for(session_id: str) -> Path:

@@ -1,5 +1,5 @@
 """
-God Ticket Scale Checker - Ticket 規模判準（0.2.1-W3-052.1 由 C1 移植）
+God Ticket Scale Checker - Ticket 規模判準（由 C1 移植）
 
 移植自 `.claude/lib/ticket_quality/detectors.py` 的 C1 God Ticket 檢測，僅保留
 「檔案數量」指標並改讀 frontmatter `where.files`（新執行點 acceptance-gate 落在

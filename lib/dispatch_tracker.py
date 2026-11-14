@@ -22,6 +22,10 @@ Active Dispatch Tracker 共用模組
 - prune_dispatches: 依呼叫端提供的判準清理條目（`_state_lock` 保護的
   read-modify-write 週期，供 track_dispatch_check.py `--prune` 等
   需要自訂清理判準的呼叫端使用，不需各自重新實作鎖與原子寫）
+- release_dispatch: PM 明示放棄恢復本 session 無票代理人時移除條目，並留下
+  釋放紀錄（state["released"]，保留 RELEASED_MAX_AGE_HOURS）
+- restore_released: SendMessage 送往已釋放的代理人時把條目放回
+  （active-dispatch-tracker-hook 的 PostToolUse(SendMessage) 路徑）
 - detect_orphan_branches: 偵測 orphan worktree 分支
 
 turn_ended_at 欄位：
@@ -902,10 +906,155 @@ def prune_dispatches(
     return kept, removed
 
 
+# release_dispatch 的結果代碼。只有 RELEASE_OK 會改動狀態檔，其餘都保留條目。
+RELEASE_OK = "released"
+RELEASE_NOT_FOUND = "not_found"
+RELEASE_OTHER_SESSION = "other_session"
+RELEASE_AMBIGUOUS = "ambiguous"
+RELEASE_HAS_TICKET = "has_ticket"
+RELEASE_ISOLATED = "isolated"
+RELEASE_IN_TURN = "in_turn"
+RELEASE_NO_SESSION = "no_session"
+
+# SendMessage 允許以 `name [ref]` 指定對象；比對前剝除後綴。
+_AGENT_REF_SUFFIX_RE = re.compile(r"\s+\[[^\[\]]*\]$")
+
+# 釋放紀錄的保留時數，與 TURN_ENDED_MAX_AGE_HOURS 相同：釋放前的條目最長
+# 也只會留這麼久，釋放紀錄不需要比它更久。
+RELEASED_MAX_AGE_HOURS = TURN_ENDED_MAX_AGE_HOURS
+
+
+def normalize_agent_key(key: str) -> str:
+    """去除前後空白與 `[ref]` 後綴（`probe [abc123]` → `probe`）。"""
+    return _AGENT_REF_SUFFIX_RE.sub("", (key or "").strip())
+
+
+def _matches_agent_key(entry: Dict, key: str) -> bool:
+    """以 agent_handle 或 agent_id 比對（key 為 SendMessage 的 to 或 CLI 參數）。"""
+    key = normalize_agent_key(key)
+    return bool(key) and key in (entry.get("agent_handle"), entry.get("agent_id"))
+
+
+def _prune_released(state: Dict, now: datetime) -> None:
+    """剪除逾 RELEASED_MAX_AGE_HOURS 或格式不合的釋放紀錄（就地修改，呼叫端須持鎖）。"""
+    kept = []
+    for r in state.get("released", []):
+        try:
+            released_at = datetime.fromisoformat(r["released_at"])
+            if released_at.tzinfo is None:
+                released_at = released_at.replace(tzinfo=timezone.utc)
+            if (now - released_at).total_seconds() / 3600 <= RELEASED_MAX_AGE_HOURS:
+                kept.append(r)
+        except (KeyError, ValueError, TypeError):
+            continue  # 損毀的釋放紀錄直接丟棄（輔助資料，不影響 dispatches）
+    if kept:
+        state["released"] = kept
+    else:
+        state.pop("released", None)
+
+
+def release_dispatch(
+    project_root: Path, key: str, session_id: str
+) -> Tuple[str, List[Dict]]:
+    """PM 明示放棄恢復某個本 session 代理人時，移除其派發條目並留下釋放紀錄。
+
+    SubagentStop 只代表回合結束，代理人之後仍可能被 SendMessage 恢復並寫檔，
+    所以不能自動移除條目；唯一可靠的移除訊號是 PM 明示放棄。釋放紀錄供
+    `restore_released` 在 PM 改變主意、再次 SendMessage 時把條目放回。
+
+    拒絕（不改動狀態檔）的情形：
+    - session_id 為空：無法確認歸屬。
+    - 比對不到條目，或比對到的條目都屬他 session。
+    - 本 session 比對到多筆：需改用 agent_id 指定。
+    - 條目為 isolation=worktree（branch_name == "worktree"）：
+      isolated-subagent-main-write-guard 依此映射判定隔離代理人身分。
+    - 條目有 ticket_id：該清除路徑是 `ticket track complete`。
+    - turn_ended_at 為空：代理人回合仍在進行，釋放會讓守衛立刻看不到它。
+      卡住不結束的回合由 cleanup_expired 的回合中 TTL（以 dispatched_at 起算）回收。
+
+    已知缺口：代理人因背景工作完成而恢復時不經 SendMessage，條目不會被
+    `restore_released` 放回。代理人仍有背景工作時不要釋放。
+
+    key 先經 `normalize_agent_key` 去除 `[ref]` 後綴。
+
+    Returns:
+        (結果代碼, 相關條目)。RELEASE_OK 時為被釋放的條目；拒絕時為造成拒絕的條目
+        （RELEASE_NOT_FOUND／RELEASE_NO_SESSION 為空清單）。
+    """
+    if not session_id:
+        return RELEASE_NO_SESSION, []
+    with _state_lock(project_root):
+        state = _read_state(project_root)
+        matches = [
+            d for d in state["dispatches"]
+            if isinstance(d, dict) and _matches_agent_key(d, key)
+        ]
+        if not matches:
+            return RELEASE_NOT_FOUND, []
+        own = [d for d in matches if d.get("session_id") == session_id]
+        if not own:
+            return RELEASE_OTHER_SESSION, matches
+        if len(own) > 1:
+            return RELEASE_AMBIGUOUS, own
+        entry = own[0]
+        if entry.get("branch_name") == "worktree":
+            return RELEASE_ISOLATED, own
+        if entry.get("ticket_id"):
+            return RELEASE_HAS_TICKET, own
+        if not entry.get("turn_ended_at"):
+            return RELEASE_IN_TURN, own
+
+        now = datetime.now(timezone.utc)
+        state["dispatches"].remove(entry)
+        _prune_released(state, now)
+        record = dict(entry)
+        record["released_at"] = now.isoformat()
+        state.setdefault("released", []).append(record)
+        _write_state(project_root, state)
+        return RELEASE_OK, [entry]
+
+
+def restore_released(
+    project_root: Path, target: str, session_id: str
+) -> Optional[Dict]:
+    """SendMessage 送往已釋放的代理人時，把條目放回 dispatches。
+
+    只比對本 session 的釋放紀錄（agent_handle 或 agent_id 等於 target）。
+    放回的條目 turn_ended_at 清空（恢復即開始新回合）；dispatched_at 重設為
+    現在，原值存於 first_dispatched_at——否則回合進行中的 1 小時 TTL 以舊的
+    dispatched_at 起算，下一次 cleanup_expired 就會刪掉剛放回的條目。
+
+    Returns:
+        放回的條目；沒有匹配的釋放紀錄時回傳 None，且不寫入狀態檔。
+    """
+    if not target or not session_id:
+        return None
+    with _state_lock(project_root):
+        state = _read_state(project_root)
+        now = datetime.now(timezone.utc)
+        for record in state.get("released", []):
+            if (
+                isinstance(record, dict)
+                and record.get("session_id") == session_id
+                and _matches_agent_key(record, target)
+            ):
+                state["released"].remove(record)
+                _prune_released(state, now)
+                entry = {k: v for k, v in record.items() if k != "released_at"}
+                entry.setdefault("first_dispatched_at", record.get("dispatched_at"))
+                entry["dispatched_at"] = now.isoformat()
+                entry["resumed_at"] = now.isoformat()
+                entry["turn_ended_at"] = None
+                state["dispatches"].append(entry)
+                _write_state(project_root, state)
+                return entry
+        return None
+
+
 def _parse_agent_worktree_branches(project_root: Path) -> List[str]:
     """從 git worktree list 解析 agent- 前綴的分支名稱。
 
-    改用 lib.git_utils.get_worktree_list（0.2.1-W3-290）；exclude_main 旗標
+    改用 lib.git_utils.get_worktree_list；exclude_main 旗標
     對本函式無意義（agent- 前綴過濾已隱含排除 main/master），故不傳
     exclude_main，僅以 branch 前綴判斷等價於原實作。
 

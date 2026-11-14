@@ -433,7 +433,7 @@ def detect_in_progress_groups(
     """偵測當前 wave 內 status=in_progress 且 children 非空的 group ticket。
 
     用於 ticket create 不帶 --parent 時的提示，協助 PM 判斷是否該掛在
-    既有 group 之下（W17-008.15 方案 D 第 3 項）。
+    既有 group 之下。
 
     Args:
         version: 版本號

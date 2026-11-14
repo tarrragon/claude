@@ -27,8 +27,8 @@ class TestClaimWrapMessagesConstants:
 
     def test_wrap_intro_mentions_ticket_source(self):
         assert hasattr(ClaimWrapMessages, "WRAP_SECTION_TITLE")
-        # 標題需引用來源 ticket（0.18.0-W10-027）
-        assert "0.18.0-W10-027" in ClaimWrapMessages.WRAP_SECTION_TITLE
+        # 運行時輸出字串不放溯源識別符（規則 8）：標題不得含專案層級 ticket ID
+        assert "0.18.0-W10-027" not in ClaimWrapMessages.WRAP_SECTION_TITLE
 
     def test_wrap_widen_question_exists(self):
         assert hasattr(ClaimWrapMessages, "WRAP_WIDEN")

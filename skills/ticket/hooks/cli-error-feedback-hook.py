@@ -16,7 +16,7 @@ CLI 錯誤回饋合併 Hook - PostToolUse Hook
   1. check_skill_cli_error — 優先處理 ticket/skill CLI 錯誤（更 specific）
   2. check_general_cli_failure — 處理一般 CLI 失敗（若 skill CLI 已處理則跳過）
 
-Envelope 偵測模式 (W17-008.5.5；補移植於 0.0.1-W1-005):
+Envelope 偵測模式:
 - 偵測 stdout/stderr 是否含 ErrorEnvelope 版本標記 `__error_envelope_v1__`
 - 命中表示 CLI 已輸出完整結構化錯誤訊息（format_error 雙路徑），hook 不需重複補充引導
 - Marker 來源: .claude/skills/ticket/ticket_system/lib/messages.py:ERROR_ENVELOPE_VERSION_MARKER
@@ -97,7 +97,7 @@ EXCLUDED_ERROR_PATTERNS = [
     r"invalid json",
 ]
 
-# ErrorEnvelope 版本標記（W17-008.5.5；移植自 skill-cli-error-feedback-hook.py，0.0.1-W1-005）
+# ErrorEnvelope 版本標記（移植自 skill-cli-error-feedback-hook.py）
 # 與 .claude/skills/ticket/ticket_system/lib/messages.py:ERROR_ENVELOPE_VERSION_MARKER 同步
 # 升級至 v2 時兩處須同改
 ENVELOPE_VERSION_MARKER = "__error_envelope_v1__"
@@ -177,7 +177,7 @@ def _find_skill_cli_token(command: str) -> Optional[str]:
     回傳該片段的首 token（已去除 `/` 前綴）；未命中回傳 None。
 
     供 `is_skill_cli_command`（是否命中）與 `extract_command_summary`
-    （取實際 CLI 命令而非整條複合命令的第一個 token，0.0.1-W1-010）共用，
+    （取實際 CLI 命令而非整條複合命令的第一個 token）共用，
     避免同一套片段掃描邏輯在兩處各自實作一次而漂移。
     """
     for segment in re.split(r'[|&;]+', command):
@@ -278,7 +278,7 @@ def extract_command_summary(command: str, output: str = "") -> Tuple[str, str]:
     觸發 ticket/skill CLI 呼叫的片段首 token；未命中時 fallback 為整條命令
     的第一個 token（維持既有單一命令行為）。
 
-    原缺陷（0.0.1-W1-010）：一律取整條命令的第一個 token，`cd <path>
+    原缺陷：一律取整條命令的第一個 token，`cd <path>
     2>/dev/null; ticket track set-where ...` 這類複合命令會誤取 `cd`，使
     後續 `{command_base} --help` 建議變成無意義的 `cd --help`（`cd` 是
     shell builtin，無 `--help`）。
@@ -365,7 +365,7 @@ def check_skill_cli_error(input_data: Dict[str, Any], logger) -> Optional[str]:
         logger.debug("skill-cli: 無錯誤資訊，跳過")
         return None
 
-    # 跳過 ErrorEnvelope 已輸出完整結構化訊息的情況（W17-008.5.5）
+    # 跳過 ErrorEnvelope 已輸出完整結構化訊息的情況
     if is_envelope_output(stderr, stdout):
         logger.debug("skill-cli: ErrorEnvelope 已輸出完整訊息，跳過補充: %s", command[:80])
         return None

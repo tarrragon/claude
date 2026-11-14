@@ -2,6 +2,14 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.26.1（2026-11-13）— `references/line-continuity.md` §4 送出紀錄檔的 skipped reason 補兩個值：`coordinator-not-found`（本專案 checkout 下沒有帶 sessionId 的存活主控）與 `coordinator-ambiguous`（不只一個主控），並註明收件主控以 sessionId 定址；`references/session-naming.md`〈主控的定址〉的「程式的同型路徑」改寫為現行做法。對應 line-board 0.15.0 恢復開工通知改以 sessionId 寄送；1.22.0 記為「開啟送出前的前提」的裸名稱定址問題由此解除。
+
+**Version**: 1.26.0（2026-11-13）— 佇列行解析收斂為單一 Python 模組：新增 `scripts/queue_line.py`（`parse_lanes`、`ended_form`、`is_current_lane`、`ticket_prefix_of` 等），`statusline_lane.py` 與 `.claude/hooks/coordination-queue-line-check-hook.py` 改用它，兩者不再各自持有佇列行 regex。狀態列的線號只顯示現行線：附說明的收線寫法（以（無）、（結束）或「無（」開頭）與拆不出票號的行（空白、只有分隔符、只有文字）不再照常顯示為現行線，與看板同一判定；前綴由協調票檔名推導，供 `W<波次>-<序號>` 寫法辨識。`line-board/tests/queue-line-cases.json` 的 expect 加 `ended` 欄並新增五筆案例，`tests/test_queue_line.py` 與 lanes.test.ts 讀同一份案例斷言分類相同。`references/session-naming.md` §〈狀態列〉同步。
+
+**Version**: 1.25.0（2026-11-12）— 版本空窗時的主控接續提醒發版後回饋檢查：`scripts/master_resume_hint.py` 的 none 提示在沒有 active 版本時，於問開線或單一線之前加一句，執行 `framework-issue` 的 `feedback.py` 列出上一版發版後的回饋，依 version-progression〈版本生命週期〉「發版後回饋檢查」分診，有承諾未達成的回報先發 patch，沒有才以 `version-release start --version <下一版>` 轉 active；有 active 版本時提示逐字不變。`references/line-continuity.md` §3〈協調票為 none 時〉步驟 1 同步。
+
+**Version**: 1.24.1（2026-11-12）— `scripts/master_resume_hint.py` 的第 3 步依協調票解析結果輸出：找不到協調票時，〈主控接續〉段的寫入位置跟著第 2 步問到的答案走（開工作線寫進新建的協調票，單一線寫進當前處理的票），不再無條件寫「在協調票追加」；有協調票時輸出逐字不變。與 `references/line-continuity.md` §4 步驟 1 既有條文一致，文件不需改。測試補 none 分支兩種成因的正向對照與有協調票的不變對照。
+
 **Version**: 1.24.0（2026-11-11）— 找不到協調票時先問用戶：`references/line-continuity.md` §3 新增〈協調票為 none 時〉，先分辨兩種成因（沒有 active 版本，或 active 版本沒有協調票），再以 AskUserQuestion 問開工作線或單一線，並寫明兩種裁定各自的記錄位置（開線寫協調票，單一線寫當前處理的票）；§4 步驟 1 同步。`scripts/master_resume_hint.py` 的 none 提示依成因輸出同一套步驟，測試涵蓋兩種成因。起因：主控在 compact 後沒有 active 版本，跳過詢問，自行判定單一線。
 
 **Version**: 1.23.1（2026-11-11）— §6 自我接續第 1 步改為以 `scripts/coordination_ticket.py --json` 自動解析協調票（`coordination: true` 且 in_progress），`multi-session.json` 的 `coordinationTicket` 降為選用覆寫；解析結果為 `multiple`／`none` 時停手問用戶。原文「讀設定檔，找出協調票」是 #124 修法未同步到本節的殘留。

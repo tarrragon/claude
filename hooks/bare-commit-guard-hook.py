@@ -16,7 +16,7 @@ Matcher: Bash
 Decision: DENY（exit 2，stderr 訊息）| WARN（exit 0，stderr 訊息）| allow（無輸出）
 
 ============================================================
-背景（0.2.1-W3-276 ANA 裁決，完整回測數據見 ticket Solution）
+背景（ANA 裁決，完整回測數據見該票 Solution）
 ============================================================
 path-limited commit 文字條款（parallel-dispatch / dispatch-template 逐字範例）
 四次失效後的機制層防線。8/1-8/4 570 筆 commit 回測：91 筆手動 commit 中
@@ -35,7 +35,7 @@ path-limited commit 文字條款（parallel-dispatch / dispatch-template 逐字�
    「修正」段取代，pathspec 不再無條件豁免，僅保留此段作歷史決策紀錄】
 
 ============================================================
-探針結論（0.2.1-W3-277 前提驗證）
+探針結論（前提驗證）
 ============================================================
 1. dispatch-active.json 時效性：本 session（0.2.1-W3 wave）並行派發下，
    dispatches 陣列在無活躍派發時穩定為 []，未觀察到超時清理（housekeeping
@@ -332,7 +332,8 @@ from lib.git_operation_state import (  # noqa: F401  re-export 原頂層名稱
     _resolve_detect_dirs,
     _resolve_detect_dirs_multi,
 )
-from lib.git_utils import get_project_root
+from lib.git_utils import get_action_root, get_project_root
+from lib.hook_base import get_shared_state_root
 
 from bare_commit_guard.messages import (  # noqa: F401  re-export 原頂層名稱
     _build_all_flag_deny_message,
@@ -446,7 +447,9 @@ def main() -> int:
         resolve_session_id(input_data),
         logger,
     )
-    dispatches = _with_live_declared_files(dispatches, project_root, logger)
+    # 票面 where.files 屬共用狀態：並行期 G 根可能落在 WT 舊票，改讀主倉庫現行版
+    state_root = get_shared_state_root(project_root)
+    dispatches = _with_live_declared_files(dispatches, state_root, logger)
     dispatch_count = len(dispatches)
 
     if invocations is None:
@@ -488,7 +491,14 @@ def main() -> int:
             logger.info("rebase edit 停下，WARN 後續行正常判定")
             print(_build_rebase_edit_warn_message(), file=sys.stderr)
             rebase_warned = True
-        rc = _judge_invocation(invocation, pending, dispatches, project_root, logger)
+        # staged 檔屬 AR：讀 payload.cwd 所屬 checkout，非 env 指向的主 repo。
+        # payload 無 cwd 時直接用 project_root，避免 stderr 噪音（此路徑本無 AR 資訊）。
+        action_root = (
+            get_action_root(input_data, project_root)
+            if input_data.get("cwd")
+            else project_root
+        )
+        rc = _judge_invocation(invocation, pending, dispatches, action_root, logger)
         if rc != 0:
             return rc
     return 0

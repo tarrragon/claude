@@ -57,13 +57,13 @@ Subagent 對「工具被拒」缺乏標準應對流程，預設行為是：
 
 `.claude/agents/AGENT_PRELOAD.md` 與各語言 agent 主文均未明示「程式碼 vs 文字檔的工具選擇規則」，subagent 啟動時只看到 serena 完整工具清單而無使用邊界。
 
-## 案例：W17-088 派發失敗
+## 案例：派發失敗
 
 **事件**：派發 `thyme-documentation-integrator`（permissionMode=acceptEdits）執行 Edit `.claude/agents/basil-writing-critic.md`（純 markdown 編輯）。
 
 **結果**：thyme 回報「Both Edit and mcp__serena__replace_content have been denied」並停止；PM 誤以為是 runtime / `.claude/` 路徑保護問題，發起多輪根因分析。
 
-**驗證實驗**（W17-088 後續）：
+**驗證實驗**（該案例後續）：
 
 | 實驗 | prompt 限定 | 標的 | 結果 |
 |------|-----------|------|------|

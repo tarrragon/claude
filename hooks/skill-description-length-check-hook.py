@@ -38,7 +38,7 @@ from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, get_project_root, get_code_root, read_json_from_stdin
 from lib.skill_case_guard import warn_skill_md_case_mismatch
 
 # description 長度閾值（字元數）
@@ -124,7 +124,7 @@ def parse_description_from_frontmatter(skill_md_path: Path) -> Tuple[bool, str]:
 
 def _run_session_scan(logger) -> int:
     """Hook 資訊性入口：掃描所有 Skill description 長度，純提醒不阻擋。"""
-    project_root = get_project_root()
+    project_root = get_code_root()
     skills_dir = project_root / ".claude" / "skills"
 
     if not skills_dir.exists():

@@ -63,7 +63,7 @@ Ticket ID 格式（含子任務序號 `{根ID}.{n}[.{n}...]`）與正則定義�
 
 ### 範例 chain 欄位
 
-**根任務**（`1.0.0-W3-002`）：
+**根任務**（`<root-id>`）：
 ```yaml
 chain:
   root: "1.0.0-W3-002"
@@ -72,7 +72,7 @@ chain:
   sequence: [2]
 ```
 
-**子任務**（`1.0.0-W3-002.1.1`）：
+**子任務**（`<root-id>.1.1`）：
 ```yaml
 chain:
   root: "1.0.0-W3-002"
@@ -268,7 +268,7 @@ Step 4 之後、`/ticket track complete` 前，hook 依序判定「是否有驗�
 | ANA | Solution spawn 規劃 N 項 vs `spawned_tickets`+`children` 實際數 S+C：N>0 且 S+C=0？ | 是 | 阻止（deny） |
 | ANA | `multi_view_status` 值是否合法（`reviewed`／`skipped`／`n_a`）？ | 否（值非法） | 阻止（deny），修正途徑 `ticket track fix-multi-view-status` |
 | 任一層級 | 實驗器材是否已妥善處置？ | 否（殘留） | 阻止（deny） |
-| 任一層級 | 驗收記錄是否存在（frontmatter `acceptance` 全勾選，或 fallback body 7 個關鍵字之一）？ | 否 | 警告（`permissionDecision: allow`）；`verify_acceptance_record`（`acceptance_checkers/acceptance_checker.py`）恆回 `should_block=False`，缺驗收記錄不阻擋 |
+| 任一層級 | 驗收記錄是否存在（frontmatter `acceptance` 全勾選；body 文字不計入，被審方可自行寫入）？ | 否 | 警告（`permissionDecision: allow`）；`verify_acceptance_record`（`acceptance_checkers/acceptance_checker.py`）恆回 `should_block=False`，缺驗收記錄不阻擋 |
 | ANA | 是否有後續 ticket（`spawned_tickets`／`children`）？ | 否 | 警告（allow） |
 
 > 「父 complete 需子全部 completed/closed」原則見 `.claude/methodologies/atomic-ticket-methodology.md` 任務鏈核心哲學 + `.claude/methodologies/ticket-lifecycle-management-methodology.md` 父 complete 前置條件。舊版「根任務／子任務分列」「所有子任務是否驗收」判準與程式碼不符（無對應檢查函式），已依 `acceptance-gate-hook.py`（`check_acceptance_status`）與 `acceptance_checkers/acceptance_checker.py`（`verify_acceptance_record`）實作改寫。

@@ -1,4 +1,4 @@
-"""Memory 目錄 layout 結構知識 SSOT（0.2.1-W3-196，Phase 4 第二輪修正）
+"""Memory 目錄 layout 結構知識 SSOT
 
 兩個 hook 各自實作了 memory 目錄的認定，已漂移出實質缺陷（slug 推錯、
 legacy 位置覆蓋不對稱（框架審查發現）：
@@ -30,7 +30,7 @@ legacy 位置覆蓋不對稱（框架審查發現）：
 - MEMORY_LAYOUTS：兩種 layout 的結構定義（唯讀 tuple）。消費端一律
   `for layout in MEMORY_LAYOUTS` 走訪，不得只 import 具名常數後自行重排
   一張表——後者會在新增第三種 layout 時造成兩個消費端覆蓋範圍不對稱
-  （0.2.1-W3-194 修過的同型缺陷）
+  （先前已修過的同型缺陷）
 - get_memory_dir_regex_fragments() -> List[str]：guard 判定式用，回傳兩種
   layout 推導出的 regex fragment（不含 home 前綴，未 anchor）
 - get_anchored_memory_dir_pattern(home) -> str：guard 判定式用，回傳已

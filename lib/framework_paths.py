@@ -1,9 +1,9 @@
-"""Framework path SSOT 共用模組（W17-127.1）
+"""Framework path SSOT 共用模組
 
 讀取 .claude/config/framework-paths.yaml，提供 framework 路徑分類函式給多個 hook 共用。
 
 設計目的：
-- linux 視角警示（W17-122 ANA）：layer-boundary-validator 與 agent-dispatch-validation
+- linux 視角警示（經 ANA 採納）：layer-boundary-validator 與 agent-dispatch-validation
   各自 inline framework 路徑判定（LAYER1_PATTERNS / _META_TASK_PATTERNS），存在 SSOT
   漂移風險。本模組將分類規則收斂至 framework-paths.yaml 單一來源。
 
@@ -17,7 +17,7 @@
 - get_framework_paths_broad() -> List[str]：broad framework 路徑前綴清單
 - get_layer1_paths() -> List[str]：Layer 1 路徑前綴清單
 
-消費端對照（W17-132 SSOT 邊界拆分）：
+消費端對照（SSOT 邊界拆分）：
 - PreToolUse framework-rule-edit-skill-trigger-hook → is_framework_path（strict）
 - lifecycle.py _has_framework_path（claim WRAP S 問） → is_framework_path_broad（broad）
 
@@ -85,7 +85,7 @@ def get_categories() -> List[str]:
 def get_framework_paths() -> List[str]:
     """回傳 strict framework 路徑前綴清單（規範性文字層；含 .claude/ 前綴）。
 
-    向後相容：W17-127.1 既有消費端讀此 API。strict = framework_paths_strict
+    向後相容：既有消費端讀此 API。strict = framework_paths_strict
     （yaml 內 framework_paths 為其別名）。
     """
     return list(_load_config().get("framework_paths_strict", []))
@@ -170,7 +170,7 @@ def is_framework_path_broad(path: str) -> bool:
               用於 PreToolUse framework-rule-edit-skill-trigger-hook
     - broad：strict + .claude/hooks/
              用於 lifecycle.py claim WRAP S 問（hook 內警告訊息屬規範性產物，
-             應提示讀 SKILL；W17-131 ANA 結論 / W17-132 落地）
+             應提示讀 SKILL）
 
     Args:
         path: 檔案路徑

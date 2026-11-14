@@ -28,13 +28,13 @@ v0.19.0 後續案例（2026-05-31 一次 session 收尾 3 個同模式 stale tic
 
 | Ticket | AC | 建立 → claim | pending 天數 | 實際達成者 | 達成 commit |
 |--------|----|--------------|------------|----------|------------|
-| W4-013 | test_scenario_3_section_not_found 通過 | 2026-05-25 → 2026-05-31 | 6 天 | W3-084 順帶修復（fake_ticket 補 status: in_progress） | bc710aa9 (2026-05-29) |
-| W4-014 | test_table_format_renders_status_column 通過 | 2026-05-25 → 2026-05-31 | 6 天 | W3-084 同 commit（_fake_stats spike 改 _today 動態化） | bc710aa9 (2026-05-29) |
-| W4-011 | operation-result.test.js 2 個 toBeLessThan 移除 + 連跑 2 次穩定 | 2026-05-22 → 2026-05-31 | 9 天 | W1-095 批次清理（UC Error 20 檔 26 行 timing assertion） | ad438102 |
+| 案例 A | test_scenario_3_section_not_found 通過 | 2026-05-25 → 2026-05-31 | 6 天 | 另一票順帶修復（fake_ticket 補 status: in_progress） | bc710aa9 (2026-05-29) |
+| 案例 B | test_table_format_renders_status_column 通過 | 2026-05-25 → 2026-05-31 | 6 天 | 同一 commit（_fake_stats spike 改 _today 動態化） | bc710aa9 (2026-05-29) |
+| 案例 C | operation-result.test.js 2 個 toBeLessThan 移除 + 連跑 2 次穩定 | 2026-05-22 → 2026-05-31 | 9 天 | 批次清理（UC Error 20 檔 26 行 timing assertion） | ad438102 |
 
 三 ticket 共通模式：
 1. pre-existing 失敗/違規被另一個 ticket（修同類問題的 ANA 子任務）順帶/批次修復
-2. 該另一 ticket 的 commit message 已明示順帶範圍（W3-084: 「error_channel + hook_health 兩 pre-existing 測試失敗」；W1-095: 「UC Error 20 檔 26 行 timing assertion 違規」）
+2. 該另一 ticket 的 commit message 已明示順帶範圍（案例 A、B：「error_channel + hook_health 兩 pre-existing 測試失敗」；案例 C：「UC Error 20 檔 26 行 timing assertion 違規」）
 3. 但 stale ticket 沒被 close，停留 pending 等待原派 agent 認領
 4. PM 接手時若不先 grep + git log 驗證，會派 agent 「重做已完成工作」
 

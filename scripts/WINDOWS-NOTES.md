@@ -137,7 +137,7 @@ find .claude/hooks -name "*.py" -exec chmod +x {} \;
 
 **背景**：`ticket` / `doc` / `worktree` 三個 CLI 由 `.claude/scripts/install-skill-clis.py` 安裝為 cwd-resolving shim（POSIX `#!/bin/sh`），內容為 `git rev-parse --show-toplevel` → `uv run --directory <skill> <cli>`（根治全域 namespace 碰撞，見 ARCH-APP-002 / framework issue #12）。
 
-**結論：Windows 上現有 shim 已可用，無需 `.cmd`/`.ps1` 變體。**（0.37.0-W7-004 ANA 結論）
+**結論：Windows 上現有 shim 已可用，無需 `.cmd`/`.ps1` 變體。**（ANA 結論）
 
 | Windows 環境 | shim 是否可用 | 說明 |
 |---|---|---|
@@ -155,7 +155,7 @@ find .claude/hooks -name "*.py" -exec chmod +x {} \;
   ```
 - 確認 `uv` 在 PATH 上（CC 不內建 uv，需自行安裝）。
 
-> **邊界**：若未來需支援「在 CC session 外、原生 PowerShell 終端」手動呼叫這三個 CLI，才需考慮 `.cmd`/`.ps1` 變體（W7-004 已設計但未實作；reopen 條件見該 ticket）。
+> **邊界**：若未來需支援「在 CC session 外、原生 PowerShell 終端」手動呼叫這三個 CLI，才需考慮 `.cmd`/`.ps1` 變體（已設計但未實作）。
 >
 > **來源**：CC 官方文件 https://code.claude.com/docs/en/setup.md（Windows Bash 工具 shell 選擇）。
 
@@ -167,11 +167,10 @@ find .claude/hooks -name "*.py" -exec chmod +x {} \;
 - `.claude/scripts/sync-claude-push.py` — 推送腳本（含 `restore_executable_bits`）
 - `.claude/scripts/sync-claude-pull.py` — 拉取腳本（含 `restore_executable_bits`）
 - `.claude/scripts/install-skill-clis.py` — CLI shim installer（ARCH-APP-002）
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W16-004.md` — 根因分析與修復追蹤
 
 ---
 
 **Last Updated**: 2026-06-25
-**Version**: 1.1.0 — 新增「CLI shim 的 Windows 相容性」章節（0.37.0-W7-004，framework #12/#13）
-**原始版本**: 1.0.0（2026-04-20）— 從 W16-004 根因分析提煉 Windows 使用者指南
-**Source**: v1.36.2 大規模 mode 損壞事件 + W16-004 Ticket 實證分析
+**Version**: 1.1.0 — 新增「CLI shim 的 Windows 相容性」章節（framework #12/#13）
+**原始版本**: 1.0.0（2026-04-20）— 從 mode 損壞事件的根因分析提煉 Windows 使用者指南
+**Source**: v1.36.2 大規模 mode 損壞事件的根因分析

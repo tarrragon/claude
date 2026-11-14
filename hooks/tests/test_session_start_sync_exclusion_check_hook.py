@@ -76,7 +76,10 @@ def test_drift_covered_by_three_forms(tmp_path):
     for name in sorted(hook.GITIGNORE_EXPECTED):
         # 交替使用 glob / 目錄 / 檔名三形式表達涵蓋
         idx = sorted(hook.GITIGNORE_EXPECTED).index(name)
-        if idx % 3 == 0:
+        # 巢狀名稱（寫在 skills/<name>/ 等深處）用 `.claude/<名稱>/` 涵蓋不到，
+        # 這是 is_nested_name_covered 刻意的判定；指派依排序位置輪流，集合增減會
+        # 讓巢狀名稱輪到目錄形式，故巢狀名稱輪到目錄形式時改用裸名形式。
+        if idx % 3 == 0 and name not in hook.NESTED_LOCAL_ONLY_NAMES:
             lines.append(f".claude/{name}/")     # 目錄形式
         elif idx % 3 == 1:
             lines.append(f"**/{name}")           # glob 形式

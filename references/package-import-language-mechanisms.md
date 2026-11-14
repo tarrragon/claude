@@ -298,4 +298,4 @@ fi
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 - 從 package-import-methodology.md 外移各語言實踐機制、跨語言範例、工具配置（W8-020.1 方法論瘦身校準）
+**Version**: 1.0.0 - 從 package-import-methodology.md 外移各語言實踐機制、跨語言範例、工具配置（方法論瘦身校準）

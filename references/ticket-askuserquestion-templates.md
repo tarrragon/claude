@@ -559,7 +559,7 @@
 
 ## 場景 #15：Bulk 變更前備份確認
 
-**觸發條件**：即將進行批量修改（parallel-suggestion-hook 觸發）
+**觸發條件**：即將進行批量修改（無 hook 提醒，由 PM 依決策樹第八層自行判斷）
 
 **AskUserQuestion 配置**：
 
@@ -669,5 +669,6 @@
 
 ---
 
-**Last Updated**: 2026-03-09
+**Last Updated**: 2026-11-12
+**Version**: 3.0.1 - 場景 #15 觸發條件更正：parallel-suggestion-hook 不輸出備份確認，改寫為無 hook 提醒
 **Version**: 3.0.0 - 修復場景編號系統：統一使用規則 #1-#17 編號，補充缺失場景 #4/#5/#7/#8/#10/#16/#17

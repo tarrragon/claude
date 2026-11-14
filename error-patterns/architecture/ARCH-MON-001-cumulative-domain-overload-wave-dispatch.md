@@ -4,7 +4,7 @@ title: 多 wave 票各加進同一中心檔，累積 domain 過載而無單票�
 type: architecture
 severity: medium
 status: active
-source: 0.2.0-W4-003 Phase 4 parallel-evaluation
+source: Phase 4 parallel-evaluation
 related:
   - ARCH-004
   - ARCH-009
@@ -15,7 +15,7 @@ related:
 
 ## 摘要
 
-把單一功能拆成多個 wave ticket，每票各自把功能加進**同一個中心檔**，會使該檔累積 domain 過載——沒有任何單一 ticket 觸發 cognitive-load 的「單檔 >2 domain」閾值（每票只加一個 domain），但累積結果超標。本案 Flutter SDK 拆 W2-003（離線）/W2-004（自動攔截）/W2-005（lifecycle）三票各加進 `monitor.dart`，結束時該檔達 556 行、5+ domain，直到 Phase 4 才被審查發現。
+把單一功能拆成多個 wave ticket，每票各自把功能加進**同一個中心檔**，會使該檔累積 domain 過載——沒有任何單一 ticket 觸發 cognitive-load 的「單檔 >2 domain」閾值（每票只加一個 domain），但累積結果超標。本案 Flutter SDK 拆為離線／自動攔截／lifecycle 三票，各加進 `monitor.dart`，結束時該檔達 556 行、5+ domain，直到 Phase 4 才被審查發現。
 
 ## 症狀
 
@@ -38,4 +38,4 @@ per-ticket 的認知負擔檢查只看單票增量，看不到跨票累積。wav
 
 ## 來源
 
-0.2.0-W4-003 Phase 4 三視角審查 → 拆分票 0.3.0-W1-005。專案 memory `cumulative-domain-overload-wave-dispatch` 升級（0.2.0-W4-005）。
+Phase 4 三視角審查 → 拆分票。專案 memory `cumulative-domain-overload-wave-dispatch` 升級為本 pattern。

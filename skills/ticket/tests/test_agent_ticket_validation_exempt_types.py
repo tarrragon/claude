@@ -65,7 +65,7 @@ class TestNewExemptAgentTypesAllow:
             module,
         )
         assert rc == 0
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
 
     def test_linux_without_ticket_id_allows(self):
         module = _load_hook_module()
@@ -74,7 +74,7 @@ class TestNewExemptAgentTypesAllow:
             module,
         )
         assert rc == 0
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
 
 
 class TestNonWhitelistedReadOnlyAgentStillDenies:

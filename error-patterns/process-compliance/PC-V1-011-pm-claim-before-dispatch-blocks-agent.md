@@ -4,7 +4,6 @@ title: PM claim 待派發 ticket 導致代理人認領失敗
 severity: low
 category: process-compliance
 first_seen: 2026-06-22
-source_ticket: 1.2.0-W2-007
 ---
 
 # PC-V1-011: PM claim 待派發 ticket 導致代理人認領失敗
@@ -23,7 +22,7 @@ PM claim ticket → PM append-log 寫 Context Bundle → PM 派發代理人 → 
 
 ## 為何不需要 claim
 
-`append-log --section "Problem Analysis"` 和 `--section "Context Bundle"` 對 pending 狀態已豁免 status precondition（W1-058 派發前章節例外）。PM 寫 Context Bundle 不需要先 claim。
+`append-log --section "Problem Analysis"` 和 `--section "Context Bundle"` 對 pending 狀態已豁免 status precondition（派發前章節例外）。PM 寫 Context Bundle 不需要先 claim。
 
 ## 正確流程 vs 反模式
 
@@ -46,6 +45,6 @@ PM 派發代理人執行的 ticket，禁止 PM 先 claim。PM 自行執行的 ti
 
 ## 相關
 
-- W1-058：append-log 派發前章節 pending 直寫豁免
+- append-log 派發前章節 pending 直寫豁免
 - PC-040：Context Bundle 必須寫入 ticket 非 prompt
 - pm-role.md：派發前流程

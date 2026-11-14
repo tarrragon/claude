@@ -20,11 +20,10 @@ handoff 是**任務鏈內的 context 移動機制**，不是通用的「下一�
 | 父 → 子 | `--to-child <id>` | 父分派責任給子 |
 | 兄弟 → 兄弟 | `--to-sibling <id>` | 同父下水平協調 |
 | 任務鏈繼續 | 無旗標 | 自動判斷方向（基於 source ticket） |
-| 絕對指向 | `--next <target-id>` | 顯式指向下 session 該做的 target ticket（W17-164 / L2-A） |
+| 絕對指向 | `--next <target-id>` | 顯式指向下 session 該做的 target ticket |
 
 ## 指向語意：source vs target
 
-> 來源：W17-164
 
 handoff JSON 同時保留兩個指向欄位：
 
@@ -62,13 +61,13 @@ handoff JSON 同時保留兩個指向欄位：
 /ticket handoff <ticket-id> --to-child <id>  # 切換到子任務
 /ticket handoff <ticket-id> --to-sibling <id>  # 切換到兄弟任務
 
-# 絕對指向：顯式指定下 session 該做的 target ticket（W17-164 / L2-A）
+# 絕對指向：顯式指定下 session 該做的 target ticket
 /ticket handoff --next <target-ticket-id> --from-ticket-id <source-id>
 
 # 查看狀態
 /ticket handoff --status
 
-# 從 worklog 批次補建 handoff（W17-083.2）
+# 從 worklog 批次補建 handoff
 /ticket handoff --from-worklog                    # 解析當前 active version worklog
 /ticket handoff --from-worklog --worklog-path P   # 指定 worklog 路徑
 /ticket handoff --from-worklog --dry-run          # 預演模式（只顯示將執行命令，不寫檔）
@@ -80,7 +79,6 @@ handoff JSON 同時保留兩個指向欄位：
 
 ### --from-worklog 子命令
 
-> 來源：W17-083.2
 
 修復「worklog 寫了 handoff 段但未執行 CLI」的雙軌不同步缺口。掃描 worklog 「下個 Session 接手 Context」段提取 ticket ID，逐項補建 `.claude/handoff/pending/<id>.json`。已存在的 ticket 自動 skip。
 
@@ -95,7 +93,6 @@ handoff JSON 同時保留兩個指向欄位：
 
 ### --next 子旗標
 
-> 來源：W17-164 / L2-A
 
 以**絕對指向**語意建立 handoff，直接寫入 `target_ticket_id` 頂層欄位，讓下 session 從「該做的 ticket」（target）讀取，不依賴 source + direction 間接推導。
 

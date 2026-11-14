@@ -29,11 +29,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely, get_project_root
 from lib.hook_messages import ValidationMessages
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 
 def get_latest_version() -> Optional[str]:
     """從 work-logs 目錄取得最新版本號（支援三層結構）"""
-    project_root = get_project_root()
+    project_root = get_shared_state_root(get_project_root())
     work_logs = project_root / "docs" / "work-logs"
 
     if not work_logs.exists():
@@ -66,7 +67,7 @@ def get_latest_version() -> Optional[str]:
 
 def check_worklog_exists(version: str) -> dict:
     """檢查 worklog 是否存在（支援三層結構）"""
-    project_root = get_project_root()
+    project_root = get_shared_state_root(get_project_root())
 
     # 解析版本號
     parts = version.split(".")
@@ -101,7 +102,7 @@ def check_worklog_exists(version: str) -> dict:
 
 def check_todolist() -> dict:
     """檢查 todolist.yaml 狀態"""
-    project_root = get_project_root()
+    project_root = get_shared_state_root(get_project_root())
     todolist = project_root / "docs" / "todolist.yaml"
 
     result = {
@@ -135,7 +136,7 @@ def check_todolist() -> dict:
 
 def check_error_patterns() -> dict:
     """檢查 error-patterns 狀態"""
-    project_root = get_project_root()
+    project_root = get_shared_state_root(get_project_root())
     error_patterns = project_root / "docs" / "error-patterns"
 
     result = {

@@ -20,10 +20,10 @@
 可觀察訊號：
 
 ```
-$ ticket track set-acceptance 0.19.0-W1-002.2 --check 1 --check 2
-[INFO] 0.19.0-W1-002.2 勾選 index [2]：變更 1 項
+$ ticket track set-acceptance <ticket-id> --check 1 --check 2
+[INFO] <ticket-id> 勾選 index [2]：變更 1 項
 
-$ grep -E "^- '?\[[ x]\]" docs/work-logs/.../0.19.0-W1-002.2.md | head -2
+$ grep -E "^- '?\[[ x]\]" docs/work-logs/.../<ticket-id>.md | head -2
 - '[ ] 在 1 個 clean Chrome profile 下...'    # index 1 未勾
 - '[x] 本 ticket Test Results 章節...'        # index 2 已勾
 ```
@@ -78,9 +78,9 @@ ticket track set-acceptance <id> --check 2
 
 ## 案例
 
-### Case 1: 2026-05-25 W1-002.2 收尾
+### Case 1: 2026-05-25 某子票收尾
 
-PM 執行 `ticket track set-acceptance 0.19.0-W1-002.2 --check 1 --check 2`，預期同時勾兩項。實際只勾選 index 2，PM 補執行 `--check 1` 才完成兩項勾選。
+PM 執行 `ticket track set-acceptance <ticket-id> --check 1 --check 2`，預期同時勾兩項。實際只勾選 index 2，PM 補執行 `--check 1` 才完成兩項勾選。
 
 ---
 

@@ -32,7 +32,7 @@ try:
         setup_hook_logging,
         read_json_from_stdin,
         run_hook_safely,
-        get_project_root,
+        get_hook_log_dir,
         emit_model_reminder,
     )
 except ImportError as e:
@@ -46,17 +46,17 @@ THROTTLE_SECONDS = THROTTLE_MINUTES * 60
 
 
 def _get_throttle_file() -> Path:
-    """節流檔路徑：由 get_project_root() 動態解析。
+    """節流檔路徑：由 get_hook_log_dir("") 於每次呼叫時動態解析。
 
     Why：舊實作於 import 時以 Path(__file__).parent.parent 固定路徑，恆指向
     repo 層級 .claude/hook-logs/，不受 CLAUDE_PROJECT_DIR 覆寫，導致以
     subprocess 執行 hook 的測試 prime production 節流檔，與 live session 的
-    PostToolUse hook 競態。改由 get_project_root()（worktree 感知 >
-    CLAUDE_PROJECT_DIR > git toplevel > cwd 搜尋）於每次呼叫時動態解析，
+    PostToolUse hook 競態。改由 get_hook_log_dir("")（底層為 get_project_root()：
+    worktree 感知 > CLAUDE_PROJECT_DIR > git toplevel > cwd 搜尋）解析，
     測試以 CLAUDE_PROJECT_DIR 指向 tmp_path 即可完全隔離（同型修法：
     language-guard-hook.py _get_sampling_counter_file()）。
     """
-    return get_project_root() / "hook-logs" / "install-guide-edit-reminder-throttle.json"
+    return get_hook_log_dir("") / "install-guide-edit-reminder-throttle.json"
 
 # 偵測安裝指南檔案的 regex
 # 命中：
@@ -84,7 +84,7 @@ MESSAGES = {
         "  (4) 驗證輸出建議附於 ticket Test Results 或 Solution\n"
         "\n"
         "參考：.claude/error-patterns/process-compliance/PC-159*.md\n"
-        "      docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W3-052.md\n"
+        "      docs/work-logs/v0/v0.19/v<版本>/tickets/<ticket-id>.md\n"
         "（{throttle_minutes} 分鐘內同檔案只提示一次）\n"
     ),
 }

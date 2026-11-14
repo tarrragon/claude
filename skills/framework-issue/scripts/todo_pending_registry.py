@@ -64,9 +64,16 @@ issue+owner 範圍執行寫入操作、觸發一次全量同步為止。這是�
 
 import json
 import os
-import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# 掛載 `.claude` 根目錄以 import lib（scripts -> framework-issue -> skills -> .claude）。
+_CLAUDE_ROOT = Path(__file__).resolve().parents[3]
+if str(_CLAUDE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_CLAUDE_ROOT))
+
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 SCHEMA_VERSION = 1
 REGISTRY_RELATIVE_PARTS = (".claude", "state", "framework-issue-todo-pending.json")
@@ -76,32 +83,13 @@ REGISTRY_RELATIVE_PARTS = (".claude", "state", "framework-issue-todo-pending.jso
 # 取向的零耦合），故獨立定義；兩者若未來分岔須同步維護，見上方 docstring。
 PENDING_STATUS_VALUE = "待裁票"
 
-_GIT_TOPLEVEL_TIMEOUT_SECONDS = 5
-
-
-def _project_root() -> Path:
-    """解析取向與 owned_issues_registry._project_root() 完全一致（同檔頭
-    zero-coupling 理由），不重複展開說明。"""
-    env_dir = os.getenv("CLAUDE_PROJECT_DIR")
-    if env_dir:
-        return Path(env_dir)
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TOPLEVEL_TIMEOUT_SECONDS,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip())
-    except (subprocess.TimeoutExpired, OSError):
-        pass
-    return Path.cwd()
-
 
 def registry_path(project_root: Optional[Path] = None) -> Path:
-    """回傳登記檔絕對路徑；project_root 未提供時自動解析。"""
-    root = project_root if project_root is not None else _project_root()
+    """回傳登記檔絕對路徑；傳入 project_root 時以其為根（呼叫端已決定根，
+    讀寫兩端各自傳入共用根），未傳入時才經 get_shared_state_root 解析
+    （linked worktree 內落在主倉庫）。不對傳入根再包一層，否則呼叫端或
+    測試傳入的暫存根在 linked worktree 內會被改寫到主倉庫。"""
+    root = project_root if project_root is not None else get_shared_state_root()
     for part in REGISTRY_RELATIVE_PARTS:
         root = root / part
     return root

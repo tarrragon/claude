@@ -429,4 +429,4 @@ UseCase (Layer 3) 直接引用 Widget (Layer 1)
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 - 從 problem-awareness-evaluation-methodology.md 外移（W8-020.3 方法論瘦身校準）：三大原則完整正反範例 + Hook 系統整合程式碼 + 實戰案例分析（案例 1 v0.12.9 事件系統 + 案例 2 Layer 引用錯誤），emoji 全數清理為純文字
+**Version**: 1.0.0 - 從 problem-awareness-evaluation-methodology.md 外移（方法論瘦身校準）：三大原則完整正反範例 + Hook 系統整合程式碼 + 實戰案例分析（案例 1 v0.12.9 事件系統 + 案例 2 Layer 引用錯誤），emoji 全數清理為純文字

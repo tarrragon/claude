@@ -1,11 +1,11 @@
 """Section locator helper — 統一 Markdown section 標題定位邏輯。
 
-抽取自 4 處重複（W17-117.1）：
+抽取自 4 處重複：
 - commands/track_acceptance.py（append-log 寫入點）
 - commands/track_query.py（--section 過濾分支）
 - lib/acceptance_auditor.py（必填章節驗證，雙層級 ##/###）
 
-容錯規則（W17-008.9 一致）：
+容錯規則（一致）：
 - MULTILINE 模式 + `\\s+` 容多空白 + `\\s*$` 容尾空白
 - `re.escape(name)` 避前綴誤匹配（"Section Name" 不應匹配 "SectionName Plus"）
 - 邊界判定使用 `\\n## `（同層級 H2）；多層級時 ### 子標題屬於父 section 內容

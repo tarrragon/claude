@@ -8,6 +8,12 @@ Bash Edit Guard 是一個 PreToolUse Hook，用於偵測 Bash 中的檔案編輯
 **版本**: v1.0
 **檔案**: `.claude/hooks/bash-edit-guard-hook.py`
 
+> **現行行為（以 hook 檔頭為準，本頁以下段落為初版記錄）**：寫入目標改由
+> `bash-write-boundary-guard-hook.py` 的共用抽取判定，涵蓋直譯器內嵌寫入、heredoc、
+> 重導向、`awk -i inplace`、`ed`／`ex`、`sed -i`、`perl -pi`。目標為 ticket md 時擋下，
+> 改用 `ticket track` 子命令或 Edit；`docs/**`、`CLAUDE.md`、`CHANGELOG.md` 只送警告；
+> 其餘路徑只對 `sed -i`／`perl -pi` 警告。對上述受管文件的修改一律用 Edit，不用 `sed -i`。
+
 ## 它做什麼?
 
 當您執行 Bash 命令進行檔案編輯（如 `sed -i`）時，Hook 會：

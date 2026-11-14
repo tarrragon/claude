@@ -25,31 +25,31 @@ related:
 
 **Consequence**：行為層與決策層分歧累積後，PM 在新 session 啟動時讀到的規則與 CLI 實際行為不一致，導致隱性錯誤——不會立刻報錯，但決策路由靜默偏差，只在驗收或事後 audit 時才被發現。
 
-**Action**：ticket skill src 每次行為性改動後，在同一 commit 或衍生 DOC ticket 中同步掃描並更新決策層文件（掃描指令：`grep -rln 'ticket track' .claude/pm-rules/`）。三層防護（PC-118 描述 + W17-115.2 規則 + W17-115.3 hook）組合使用，不依賴單一機制。
+**Action**：ticket skill src 每次行為性改動後，在同一 commit 或衍生 DOC ticket 中同步掃描並更新決策層文件（掃描指令：`grep -rln 'ticket track' .claude/pm-rules/`）。三層防護（PC-118 描述 + 規則層 + hook 層）組合使用，不依賴單一機制。
 
 ---
 
 ## 觸發案例
 
-### 案例 1：W17-113（禁用無 trigger 延後決策原則）
+### 案例 1：補入「禁用無 trigger 延後決策原則」
 
-**事件**（2026-05-03，0.18.0-W17）：
+**事件**（2026-05-03）：
 
-ticket skill 多次行為變更（runqueue 取代 next/schedule/resume-hint、append-log `--section` 必填、type-aware body schema 影響 complete 條件）後，PM 於 W17-113 才補強「禁用無 ticket trigger 延後決策」原則至 `decision-tree.md`。
+ticket skill 多次行為變更（runqueue 取代 next/schedule/resume-hint、append-log `--section` 必填、type-aware body schema 影響 complete 條件）後，PM 才補強「禁用無 ticket trigger 延後決策」原則至 `decision-tree.md`。
 
-此原則的必要性在 ticket skill 行為確立時即已存在，但決策層文件未跟上行為層演進。W17-113 是典型的**事後補償**：原則本應在相關 CLI 行為設計階段同步建立，而非在多個 Wave 後才補入。
+此原則的必要性在 ticket skill 行為確立時即已存在，但決策層文件未跟上行為層演進。該次補入是典型的**事後補償**：原則本應在相關 CLI 行為設計階段同步建立，而非在多個 Wave 後才補入。
 
-### 案例 2：W17-114（決策樹閉環流程）
+### 案例 2：補入決策樹閉環流程
 
-**事件**（2026-05-03，0.18.0-W17）：
+**事件**（2026-05-03）：
 
-`execution-discovery-rules.md`「遇到問題的閉環流程」（識別 → 建 ANA/DOC ticket → 規劃分析/驗證/實驗 → 執行 → 釐清結案）同樣是在 ticket skill CLI 行為趨於穩定後，才由 W17-114 補入決策樹。
+`execution-discovery-rules.md`「遇到問題的閉環流程」（識別 → 建 ANA/DOC ticket → 規劃分析/驗證/實驗 → 執行 → 釐清結案）同樣是在 ticket skill CLI 行為趨於穩定後，才補入決策樹。
 
 決策樹的「遇到問題時的合法 5 步」依賴 ticket CLI 子命令（`ticket track check-acceptance`、`ticket track complete` 等）的具體行為，但兩者的更新週期完全分離。
 
 ### 共同特徵
 
-兩案例均出現於 0.18.0-W17，由 W17-115 ANA 分析確認為同類事後補償模式。ticket skill 近 50 個 commit 中，重大行為變更（CLI 子命令介面、body schema、runqueue 邏輯）多次發生，但 `decision-tree.md` 同期 30 個 commit 中，事後補償性更新佔可見比例，決策樹對 `ticket track` / `/ticket` 引用僅 4 次（量化結果來源：W17-115 ANA 實驗）。
+兩案例均出現於同一版本週期，由 ANA 分析確認為同類事後補償模式。ticket skill 近 50 個 commit 中，重大行為變更（CLI 子命令介面、body schema、runqueue 邏輯）多次發生，但 `decision-tree.md` 同期 30 個 commit 中，事後補償性更新佔可見比例，決策樹對 `ticket track` / `/ticket` 引用僅 4 次（量化結果來源：該 ANA 實驗）。
 
 ---
 
@@ -72,13 +72,13 @@ ticket skill src 改動時，沒有強制機制要求同步掃描 `.claude/pm-ru
 
 ## 正確做法
 
-三層組合防護（W17-115 ANA 結論「採 A+B+C」）：
+三層組合防護（ANA 結論「採 A+B+C」）：
 
 | 層次 | 機制 | 觸發時機 |
 |------|------|---------|
 | **A. PC 描述層**（本文件） | 提供反模式依據，供 PM 回顧與平行評估引用 | PM 閱讀 PC 索引 / parallel-evaluation 強制對照 |
-| **B. 規則層**（W17-115.2） | `rules/core/` 或 `pm-rules/` 中增加「ticket skill 行為變更同步檢查」清單 | ticket skill src 每次 commit 前自律掃描 |
-| **C. hook 自動化層**（W17-115.3） | PostToolUse Bash hook：`git commit` 完成且 commit 含 `.claude/skills/ticket/ticket_system/**` 改動時，輸出提示（掃描清單 + 指令） | 每次 ticket skill src 被 commit 時自動觸發 |
+| **B. 規則層** | `rules/core/` 或 `pm-rules/` 中增加「ticket skill 行為變更同步檢查」清單 | ticket skill src 每次 commit 前自律掃描 |
+| **C. hook 自動化層** | PostToolUse Bash hook：`git commit` 完成且 commit 含 `.claude/skills/ticket/ticket_system/**` 改動時，輸出提示（掃描清單 + 指令） | 每次 ticket skill src 被 commit 時自動觸發 |
 
 ### 掃描清單（行為變更後須核對的決策層文件）
 
@@ -107,14 +107,14 @@ ticket skill src 改動時，沒有強制機制要求同步掃描 `.claude/pm-ru
 | 相關 | 關聯角度 |
 |------|---------|
 | PC-066 | 自律機制與壓力負相關——rule 層單獨使用的局限性，hook 需作兜底 |
-| PC-091 | ANA followup 必為 children——W17-115.1/2/3 均為 W17-115 ANA 的子任務（正確血緣示範） |
-| PC-093 | 無 trigger 延後決策——W17-113 / W17-114 的事後補償屬 PC-093 的延後決策變體 |
-| PC-099 | meta hook 自我引用誤報——W17-115.3 hook 設計必考量 meta 防護 |
+| PC-091 | ANA followup 必為 children——本案的規則層與 hook 層落地票均為該 ANA 的子任務（正確血緣示範） |
+| PC-093 | 無 trigger 延後決策——兩案例的事後補償屬 PC-093 的延後決策變體 |
+| PC-099 | meta hook 自我引用誤報——hook 層設計必考量 meta 防護 |
 | PC-110 | body-check false negative via schema separator——hook 偵測邏輯需防止誤判 |
-| `rules/core/decision-trigger-binding.md` | 決策必綁 ticket trigger；W17-113 / W17-114 補償即違反此規則的具體案例 |
+| `rules/core/decision-trigger-binding.md` | 決策必綁 ticket trigger；兩案例的補償即違反此規則的具體案例 |
 
 ---
 
 **Last Updated**: 2026-05-03
 **Version**: 1.0.0
-**Source**: W17-115 ANA（三路徑 ROI 評估）+ W17-113 / W17-114 事後補償案例 + PC-066 自律壓力負相關
+**Source**: ANA（三路徑 ROI 評估）+ 兩個事後補償案例 + PC-066 自律壓力負相關

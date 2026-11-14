@@ -51,6 +51,32 @@ class _FakeCompleted:
 # 全通過 → 回 0
 # ============================================================================
 
+def test_incomplete_check_warns_without_claiming_pass(tmp_path, monkeypatch, capsys):
+    """有 hook 無法判定（依賴環境不可用）時：回 0 不阻擋，但示警且不印「全數通過」（3.3.0-W1-051）。"""
+    _make_test_script(tmp_path)
+    stdout = (
+        "Total: 2 | Pass: 1 | Fail: 0 | Undetermined: 1\n"
+        f"{pull.HOOK_IMPORT_INCOMPLETE_MARKER} 1 hook(s) undetermined\n"
+        "  - .claude/hooks/yaml-hook.py: 找不到 uv\n"
+    )
+    monkeypatch.setattr(pull.subprocess, "run", lambda *a, **k: _FakeCompleted(0, stdout=stdout))
+    assert pull.verify_hook_imports(tmp_path) == 0
+    captured = capsys.readouterr()
+    assert "yaml-hook.py" in captured.err
+    assert "全數通過" not in captured.out + captured.err
+
+
+def test_all_pass_still_reports_pass(tmp_path, monkeypatch, capsys):
+    """對照：沒有無法判定項時照常印全數通過。"""
+    _make_test_script(tmp_path)
+    monkeypatch.setattr(
+        pull.subprocess, "run",
+        lambda *a, **k: _FakeCompleted(0, stdout="All hooks passed import check.\n"),
+    )
+    assert pull.verify_hook_imports(tmp_path) == 0
+    assert "全數通過" in capsys.readouterr().out
+
+
 def test_returns_zero_when_all_pass(tmp_path, monkeypatch):
     """import 煙霧測試全通過時 verify_hook_imports 回 0。"""
     _make_test_script(tmp_path)

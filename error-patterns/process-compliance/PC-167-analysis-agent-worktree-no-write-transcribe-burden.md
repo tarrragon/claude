@@ -3,7 +3,6 @@ id: PC-167
 title: 分析代理人 worktree 內無 commit ticket body，PM 接手須 transcribe
 category: process-compliance
 severity: medium
-source_case: 0.19.0-W4-015
 created: 2026-05-31
 ---
 
@@ -17,7 +16,7 @@ PM 接手後需手動 transcribe agent 結論到 main ticket 的 Problem Analysi
 
 ## 典型場景
 
-W4-015 觸發案例：
+觸發案例（saffron 分析票）：
 
 | 維度 | 觀察 |
 |------|------|
@@ -35,7 +34,7 @@ W4-015 觸發案例：
 |------|------|
 | L1 Agent 推論偏誤 | Agent 看到任一 acceptance 因權限受限無法獨立完成（如 #4 spawn 子任務）即 abort 後續所有 acceptance commit 工作，回報 PM「needs context / blocked」而非「partial_success」 |
 | L2 Prompt 指引缺失 | PM 派發 prompt 雖含「填 Problem Analysis / Analysis Result」但未明示「先 append-log + commit 完成部分，再回報剩餘需 PM 接手的部分」分階段策略 |
-| L3 Worktree state propagation | 即使 agent 在 worktree 內 append-log 成功修改 ticket file，無 git commit 步驟，main 端 merge 不到（與 W4-009 thyme 做 3 個 commit 對比明顯） |
+| L3 Worktree state propagation | 即使 agent 在 worktree 內 append-log 成功修改 ticket file，無 git commit 步驟，main 端 merge 不到（與下方對比案例 thyme 做 3 個 commit 對比明顯） |
 
 ## 觸發條件
 
@@ -78,13 +77,13 @@ saffron-system-analyst / bay-quality-auditor 等分析代理人的 agent definit
 
 ## 案例
 
-**0.19.0-W4-015**:
+**saffron 分析票**:
 - saffron 完成 Stage 1/2/3 分析，task-notification 含完整數據
 - worktree branch (af2b28312fdc55bbc) HEAD = PM pre-dispatch HEAD 472f4b5d
-- PM 接手 transcribe Problem Analysis (3 個表格 + 結論段) + Solution (Analysis Result + spawn 規劃) + spawn W4-019 IMP + check-acceptance --all + complete
+- PM 接手 transcribe Problem Analysis (3 個表格 + 結論段) + Solution (Analysis Result + spawn 規劃) + spawn IMP + check-acceptance --all + complete
 - transcribe cost ~5 tool calls，本可由 saffron 在 worktree 完成
 
-**對比 0.19.0-W4-009**:
+**對比 thyme 實作票**:
 - thyme-extension-engineer 完成 Stage 1/2 + check-acceptance + complete
 - worktree branch (a7718b0eaf89c2543) 含 3 commits（Stage 1 / Stage 2 / metadata sync）
 - PM 接手僅需 merge to main + spawn out-of-scope follow-ups
@@ -101,4 +100,4 @@ saffron-system-analyst / bay-quality-auditor 等分析代理人的 agent definit
 
 ---
 
-**Source**: 0.19.0-W4-015 saffron worktree no-write 觀察 + PM transcribe 接手案例
+**Source**: saffron worktree no-write 觀察 + PM transcribe 接手案例

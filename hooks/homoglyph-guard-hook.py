@@ -11,8 +11,8 @@
     供 PM / agent 看見並修正後重 commit。
 
 設計依據：
-    - PC-150（subagent 形似字 normalize 誤替換，W11-028 案例 33% 錯誤率）
-    - 0.18.0-W17-205 Solution（PC-150 防護方案 A）
+    - PC-150（subagent 形似字 normalize 誤替換，案例實測 33% 錯誤率）
+    - PC-150 防護方案 A
 
 混淆對清單（可擴充）：
     定義於 `HOMOGLYPH_PAIRS`，每組為 (誤改字, 候選正確字集合)。
@@ -54,7 +54,7 @@ EXIT_OK = 0
 EXIT_BLOCK = 2
 
 # 形似字混淆對：誤改字 → 同 hunk 內若見以下「正確候選字」即視為誤替換
-# 來源：PC-150 / W11-028（汙 U+6C59 / 污 U+6C61 / 汲 U+6C72）
+# 來源：PC-150（汙 U+6C59 / 污 U+6C61 / 汲 U+6C72）
 HOMOGLYPH_PAIRS: Dict[str, Set[str]] = {
     "汲": {"汙", "污"},  # 汲(U+6C72 汲取) 被誤用以替換 汙/污
 }
@@ -162,7 +162,7 @@ def _format_block_message(hits: List[Tuple[str, str, str, str]]) -> str:
         "  2. 修正後重新 git add 並 commit。",
         "  3. 如確為合法使用（例：汲取），請於 commit msg 加入 `[skip homoglyph]` 標記。",
         "",
-        "防護來源：.claude/error-patterns/process-compliance/PC-150-*.md / 0.18.0-W17-205",
+        "防護來源：.claude/error-patterns/process-compliance/PC-150-*.md",
     ]
     return "\n".join(lines)
 

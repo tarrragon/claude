@@ -434,3 +434,38 @@ def test_shared_judge_exception_does_not_suppress():
 
 def test_unparseable_command_is_not_suppressed():
     assert hook.is_handled_by_other_hooks("pytest 'unclosed") is False
+
+
+# ----------------------------------------------------------------------------
+# 遮蔽路徑（PostToolUse 的 stdout 行首 [Error]）上的「已由其他 hook 處理」判定
+# 上方的組合只走 PostToolUseFailure；遮蔽路徑另有 ticket／skill 前綴豁免，需各自鎖住。
+# ----------------------------------------------------------------------------
+
+_MASKED_ERROR_OUT = "[Error] boom\ndone\n"
+
+
+def test_masked_real_test_commands_are_suppressed():
+    """真測試命令已由測試類 hook 處理：遮蔽路徑同樣抑制。"""
+    for cmd in (
+        "pytest tests/a.py; echo done",
+        "flutter test test/a_test.dart; echo done",
+        "dart analyze lib; echo done",
+    ):
+        assert _general(cmd, _MASKED_ERROR_OUT) is None, cmd
+
+
+def test_masked_pip_install_pytest_is_not_suppressed():
+    """E2 對照：命令只是含 pytest 字樣，不是測試呼叫，照常提醒。"""
+    assert _general("pip install pytest; echo done", _MASKED_ERROR_OUT) == REMINDER
+
+
+def test_masked_ticket_and_skill_prefixes_keep_exemption():
+    """ticket／skill 屬 handled，但遮蔽路徑不套用排除（skill 分支只認參數類錯誤），照常提醒。"""
+    for cmd in (
+        "ticket track claim X; echo done",
+        "/ticket track claim X; echo done",
+        "skill run x; echo done",
+        "cd x && ticket track claim X; echo done",
+    ):
+        assert hook.is_handled_by_other_hooks(cmd) is True, cmd
+        assert _general(cmd, _MASKED_ERROR_OUT) == REMINDER, cmd

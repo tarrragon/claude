@@ -63,7 +63,7 @@ except ImportError:
         emit_gate_line, gate_line, gate_result_label,
     )
 
-# 動態定位專案根目錄（W1-118 修復：方案 D 雙策略 fallback）
+# 動態定位專案根目錄（雙策略 fallback）
 #
 # 背景：worktree skill 安裝為 uv tool 後，__file__ 位於 uv tool venv，
 #       原本的 `Path(__file__).parent * 5` 推導會指向 uv tool root 而非專案根目錄，
@@ -206,7 +206,7 @@ def is_valid_ticket_id(ticket_id: str) -> bool:
         bool: 格式合法返回 True，否則 False
 
     Example:
-        is_valid_ticket_id("0.1.1-W9-002.1")  # True
+        is_valid_ticket_id("<ticket-id>")  # True（合法格式）
         is_valid_ticket_id("my-feature")      # False
     """
     return bool(re.match(TICKET_ID_PATTERN, ticket_id))
@@ -225,7 +225,7 @@ def derive_branch_name(ticket_id: str) -> str:
         str: 分支名稱 (feat/{ticket_id})
 
     Example:
-        derive_branch_name("0.1.1-W9-002.1")  # "feat/0.1.1-W9-002.1"
+        derive_branch_name("<ticket-id>")  # "feat/<ticket-id>"
     """
     return f"feat/{ticket_id}"
 
@@ -241,8 +241,8 @@ def derive_worktree_path(ticket_id: str) -> str:
         str: worktree 絕對路徑
 
     Example:
-        derive_worktree_path("0.1.1-W9-002.1")
-        # "{worktree 父目錄}/ccsession-0.1.1-W9-002.1"
+        derive_worktree_path("<ticket-id>")
+        # "{worktree 父目錄}/ccsession-<ticket-id>"
     """
     project_root = get_project_root()
     project_name = os.path.basename(project_root)
@@ -269,13 +269,13 @@ def extract_ticket_id_from_branch(branch: str) -> Optional[str]:
     從分支名稱反推 Ticket ID
 
     Args:
-        branch: 分支名稱（如 "feat/0.1.1-W9-002.1"）
+        branch: 分支名稱（如 "feat/<ticket-id>"）
 
     Returns:
         str | None: Ticket ID，或 None 如果無法辨識
 
     Example:
-        extract_ticket_id_from_branch("feat/0.1.1-W9-002.1")  # "0.1.1-W9-002.1"
+        extract_ticket_id_from_branch("feat/<ticket-id>")  # "<ticket-id>"
         extract_ticket_id_from_branch("main")                  # None
     """
     if not branch.startswith(FEAT_PREFIX):
@@ -306,7 +306,7 @@ def get_worktree_ahead_behind(branch: str, base: str = DEFAULT_BASE_BRANCH) -> t
     計算分支相對於 base 的 ahead/behind commit 數
 
     Args:
-        branch: 分支名稱（短名稱，如 "feat/0.1.1-W9-002.1"）
+        branch: 分支名稱（短名稱，如 "feat/<ticket-id>"）
         base: 基礎分支，預設為 DEFAULT_BASE_BRANCH
 
     Returns:
@@ -315,7 +315,7 @@ def get_worktree_ahead_behind(branch: str, base: str = DEFAULT_BASE_BRANCH) -> t
             - behind: base 比 branch 多幾個 commit
 
     Example:
-        ahead, behind = get_worktree_ahead_behind("feat/0.1.1-W9-002.1", "main")
+        ahead, behind = get_worktree_ahead_behind("feat/<ticket-id>", "main")
         # 如果 branch 領先 3 commit，落後 0 commit：(3, 0)
     """
     try:
@@ -455,7 +455,7 @@ def _extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:
     從 Ticket ID 提取版本號
 
     Args:
-        ticket_id: Ticket ID（如 "0.16.2-W5-001.3"）
+        ticket_id: Ticket ID（如 "<ticket-id>"）
 
     Returns:
         str | None: 版本號（如 "0.16.2"），或 None
@@ -1143,7 +1143,7 @@ def _merge_build_output(
 
     Args:
         ticket_id: Ticket ID
-        branch_name: 分支名稱（如 "feat/0.1.1-W9-002"）
+        branch_name: 分支名稱（如 "feat/<ticket-id>"）
         ahead: 分支領先 main 的 commit 數
         behind: 分支落後 main 的 commit 數
         warnings: 需要顯示的警告訊息列表（可為空）
@@ -1586,7 +1586,7 @@ def main():
     )
     create_parser.add_argument(
         "ticket_id",
-        help="Ticket ID (例如：0.1.1-W9-002.1)"
+        help="Ticket ID (格式：<version>-W<wave>-<seq>)"
     )
     create_parser.add_argument(
         "--base",
@@ -1618,7 +1618,7 @@ def main():
     merge_parser.add_argument(
         "ticket_id",
         nargs="?",
-        help="Ticket ID (例如：0.1.1-W9-002)；與 --branch 擇一"
+        help="Ticket ID (格式：<version>-W<wave>-<seq>)；與 --branch 擇一"
     )
     merge_parser.add_argument(
         "--branch",

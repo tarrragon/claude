@@ -40,7 +40,7 @@ from lib.hook_io import (
     write_hook_output,
     create_simple_output,
 )
-from lib.git_utils import get_project_root
+from lib.git_utils import get_action_root, get_project_root
 from lib import setup_hook_logging, run_hook_safely, emit_hook_output
 
 
@@ -78,9 +78,10 @@ def is_via_version_release_script(logger: logging.Logger) -> bool:
     return result
 
 
-def check_pubspec_version(logger: logging.Logger) -> tuple:
-    """檢查 pubspec.yaml 版本是否符合 CHANGELOG 版本。"""
-    project_root = Path(get_project_root())
+def check_pubspec_version(logger: logging.Logger, payload: dict) -> tuple:
+    """檢查 pubspec.yaml 版本是否符合 CHANGELOG 版本（讀 payload.cwd 所屬 checkout）。"""
+    # payload 無 cwd 時直接用 get_project_root，避免 helper 的 stderr 噪音
+    project_root = Path(get_action_root(payload) if payload.get("cwd") else get_project_root())
     pubspec_path = project_root / "pubspec.yaml"
     changelog_path = project_root / "CHANGELOG.md"
 
@@ -172,7 +173,7 @@ def main() -> int:
         warnings.append(warning_msg)
 
     # 檢查 2: pubspec.yaml 版本一致性
-    version_ok, version_info = check_pubspec_version(logger)
+    version_ok, version_info = check_pubspec_version(logger, hook_input)
     if not version_ok:
         warnings.append(f"[Version Release Guard] 警告: {version_info}")
 

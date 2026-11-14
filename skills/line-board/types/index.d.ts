@@ -7,7 +7,14 @@ export type QueueToken =
   | { kind: 'text'; text: string }
 
 /** 一條線的現行佇列：線號、session 名稱（行內未寫時為 null）、線目標（協調票沒有目標行或已寫（無）清除時為 null）、票序。 */
-export type Lane = { lane: number; session: string | null; goal: string | null; tokens: QueueToken[] }
+export type Lane = {
+  lane: number
+  session: string | null
+  goal: string | null
+  tokens: QueueToken[]
+  /** 附說明的收線寫法（lanes.ts endedForm 為 with-note）時為 'with-note'，否則 null；hot reload 後舊 snapshot 沒有此欄（undefined），視同 null。 */
+  ended?: 'with-note' | null
+}
 
 /** 協調票一條線最後一行現行佇列行的原文：線號、session 名稱（行內未寫時為 null）、票序原文（含收線寫法，未過濾）。 */
 export type LaneLine = { lane: number; session: string | null; queue: string }

@@ -55,7 +55,7 @@ PM 無意識地**增加步驟換取每步心智簡潔**，違反 Occam's Razor �
 
 ### 白名單事實（技術層）
 
-- 主線程編輯白名單（W10-033）：`.claude/`、`docs/**`、`CLAUDE.md`、`CHANGELOG.md`、`.gitignore`
+- 主線程編輯白名單：`.claude/`、`docs/**`、`CLAUDE.md`、`CHANGELOG.md`、`.gitignore`
 - `/tmp/` 不在白名單 → main-thread-edit-restriction-hook 攔截
 
 ### Meta 問題（自我參照）
@@ -100,15 +100,15 @@ PC-079（Bash 規則四）禁止 backtick 被 command substitution。本 PC-087 
 
 ## 案例
 
-- 2026-04-18 (W15-001 session)：PM 準備 WRAP 分析結論寫入 W15-001 ticket，先 Write `/tmp/w15_001_solution.md` → hook 攔截 → 改用 heredoc 內嵌 append-log 成功。用戶質疑「為什麼寫 /tmp 而不寫 ticket？」暴露此繞路習慣。
-- 2026-04-18 (W15-005 session)：用戶再質疑 PC-087 原版根因「shell 習慣」流於表層，要求 PM 深度反思。PM 建 W15-005 ANA ticket 回顧，識別出 3 層根因（檔案感物化 → 認知負擔規避 → 主動認知策略）。本 PC-087 依 W15-005 結論重寫。
+- 2026-04-18 (首次事件 session)：PM 準備 WRAP 分析結論寫入該 ticket，先 Write `/tmp/w15_001_solution.md` → hook 攔截 → 改用 heredoc 內嵌 append-log 成功。用戶質疑「為什麼寫 /tmp 而不寫 ticket？」暴露此繞路習慣。
+- 2026-04-18 (深度反思 session)：用戶再質疑 PC-087 原版根因「shell 習慣」流於表層，要求 PM 深度反思。PM 建一張 ANA ticket 回顧，識別出 3 層根因（檔案感物化 → 認知負擔規避 → 主動認知策略）。本 PC-087 依該 ANA 結論重寫。
 
 ## 相關
 
 - `.claude/rules/core/bash-tool-usage-rules.md` 規則四（backtick）
 - `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`
-- W10-033：`.gitignore` 加入白名單的前例（白名單擴充需走 Ticket 流程）
-- 0.18.0-W15-005：PM 深度反思 ANA，真實根因 3 層分析來源
+- `.gitignore` 加入白名單的前例（白名單擴充需走 Ticket 流程）
+- 深度反思 ANA：真實根因 3 層分析來源
 
 ## 方法論教訓
 

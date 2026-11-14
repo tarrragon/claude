@@ -1,12 +1,12 @@
 """
-Responsibility Scope Checker - Ticket 職責邊界判準（0.2.1-W3-052.1 由 C3 移植）
+Responsibility Scope Checker - Ticket 職責邊界判準（由 C3 移植）
 
 移植自 `.claude/lib/ticket_quality/detectors.py` 的 C3 Ambiguous Responsibility
 檢測。原始四項判準（層級標示 / 職責描述清晰度 / 檔案範圍對齊層級 / 驗收條件對齊
 層級關鍵詞）全數依賴 `[Layer X]` / `Layer X:` 標示格式，該格式在現行 154+ 既有
 ticket 語料普及度 0（父票 Problem Analysis 盤點結論），無法直接沿用。
 
-重寫依據（實測，見 0.2.1-W3-052.1 Test Results）：
+重寫依據（實測結果）：
 1. **職責描述清晰度**（原 BR-C3.2，連接詞/收斂關鍵詞啟發式）：改讀 frontmatter
    `why` 欄位後實測 unclear 率 53%（184/347），改讀 `what` 欄位在
    connectors>=1 門檻下 false-positive 24%、connectors>=2 門檻下偵測率 0%。

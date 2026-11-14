@@ -63,9 +63,11 @@ sys.path.insert(0, _FRAMEWORK_HOOKS)
 try:
     from lib import (
         setup_hook_logging, run_hook_safely, read_json_from_stdin,
-        get_effort_level, emit_hook_output, get_project_root,
+        get_effort_level, emit_hook_output, get_project_root, get_code_root,
+        get_hook_log_dir,
     )
     from lib.hook_messages import QualityMessages, CoreMessages, format_message
+    from lib.hook_base import get_shared_state_root
     _LIB_AVAILABLE = True
 except ImportError:
     # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
@@ -79,9 +81,14 @@ except ImportError:
 # 為 cwd-relative，且只在 lib 缺席這個已知的低機率情境下觸發。
 if _LIB_AVAILABLE:
     PROJECT_ROOT = get_project_root()
+    CODE_ROOT = get_code_root()  # 框架設定與 parser（CR）
 else:
     PROJECT_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
-LOG_DIR = PROJECT_ROOT / ".claude/hook-logs"
+    CODE_ROOT = PROJECT_ROOT
+if _LIB_AVAILABLE:
+    LOG_DIR = get_hook_log_dir("")
+else:
+    LOG_DIR = PROJECT_ROOT / ".claude/hook-logs"
 REPORT_DIR = LOG_DIR / "comment-qa-reports"
 
 # 確保目錄存在
@@ -92,8 +99,8 @@ REPORT_DIR.mkdir(parents=True, exist_ok=True)
 # 未定義，且 main() 已整體降級，這裡再嘗試載入沒有意義）
 if _LIB_AVAILABLE:
     try:
-        sys.path.insert(0, str(PROJECT_ROOT / ".claude"))
-        sys.path.insert(0, str(PROJECT_ROOT / ".claude/hooks"))
+        sys.path.insert(0, str(CODE_ROOT / ".claude"))
+        sys.path.insert(0, str(CODE_ROOT / ".claude/hooks"))
         from lib.parsers.base import Language, ParserFactory, Function
         PARSER_AVAILABLE = True
     except ImportError as e:
@@ -166,7 +173,7 @@ def load_config(logger) -> dict:
     1. .claude/hooks/comment-qa-config.yaml（portability-allow: 此 skill 對消費端環境的選用性依賴，缺檔時優雅降級為預設配置）
     2. 預設配置（向後相容）
     """
-    config_path = PROJECT_ROOT / ".claude/hooks/comment-qa-config.yaml"
+    config_path = CODE_ROOT / ".claude/hooks/comment-qa-config.yaml"
 
     if config_path.exists():
         try:
@@ -421,9 +428,17 @@ def has_complete_comment(comment_lines: list[str]) -> bool:
     return has_requirement and has_traceability
 
 
+def _shared_state_root() -> Path:
+    """共用狀態根；lib 缺席時退回 PROJECT_ROOT。"""
+    if _LIB_AVAILABLE:
+        return get_shared_state_root(PROJECT_ROOT)
+    return PROJECT_ROOT
+
+
 def find_related_work_log() -> Optional[Path]:
     """查找當前相關的工作日誌"""
-    work_log_dir = PROJECT_ROOT / "docs/work-logs"
+    # 工作日誌為共用狀態（SR）：linked worktree 內讀主 checkout
+    work_log_dir = _shared_state_root() / "docs/work-logs"
 
     if not work_log_dir.exists():
         return None

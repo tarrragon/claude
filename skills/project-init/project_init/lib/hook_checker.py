@@ -113,7 +113,7 @@ def scan_skill_hooks(
 ) -> set[str]:
     """掃描 .claude/skills/<skill>/hooks/ 目錄找到所有 .py 檔案.
 
-    支援雙層 Hook 架構（W10-091）：除主 .claude/hooks/ 外，每個 skill 可在
+    支援雙層 Hook 架構：除主 .claude/hooks/ 外，每個 skill 可在
     自身 hooks/ 子目錄維護私有 Hook。本函式回傳相對於 skills_dir 的路徑形式
     （`<skill>/hooks/<file>.py`），以便與主 hook 集合於命名空間上區分。
 
@@ -192,7 +192,7 @@ def extract_registered_hooks(settings: dict) -> set[str]:
 def extract_registered_skill_hooks(settings: dict) -> set[str]:
     """從 settings.json 提取所有已登記的 .claude/skills/<skill>/hooks/ Hook 路徑.
 
-    支援雙層 Hook 架構（W10-091）。回傳相對 `.claude/skills/` 的路徑形式
+    支援雙層 Hook 架構。回傳相對 `.claude/skills/` 的路徑形式
     （`<skill>/hooks/<file>.py`），對齊 :func:`scan_skill_hooks` 的回傳格式。
 
     Args:

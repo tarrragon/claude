@@ -16,7 +16,7 @@ Hook 系統訊息常數模組 - 集中管理所有 Hook 的使用者訊息
   → from lib.ask_user_question_reminders import AskUserQuestionReminders
   backward-compatible alias 仍在此模組可用（見下方）
 
-MemoryTriageMessages（memory 分流指引，0.2.1-W3-196 Phase 4 第二輪修正）
+MemoryTriageMessages（memory 分流指引）
 定義於獨立模組 lib/memory_triage_messages.py，三個消費端（本模組不在其
 中）平行 import，非本模組職責，故不在此 re-export。
 """
@@ -96,6 +96,20 @@ class GateMessages:
 詳見: .claude/pm-rules/decision-tree.md
 詳見: .claude/pm-rules/skip-gate.md"""
 
+    # UserPromptSubmit 用的提醒版：exit 2 會丟棄整則 prompt，故放行並提醒，
+    # 缺欄的阻擋留給 claim／complete 等寫入點。
+    DECISION_TREE_MISSING_REMINDER = """提醒：Ticket {ticket_id} 缺少決策樹欄位（本則訊息已照常送出，未被阻擋）
+
+  Ticket 必須包含決策樹路徑或決策過程，確保決策可追蹤。
+
+建議操作:
+  1. 編輯 Ticket 檔案，添加決策樹資訊：
+     - 在 YAML frontmatter 中添加 decision_tree_path 欄位，或
+     - 在內容中添加「## 決策樹」區段
+  2. 使用 `/ticket track query {ticket_id}` 查看當前 Ticket
+
+詳見: .claude/pm-rules/decision-tree.md"""
+
     TICKET_STATUS_UNKNOWN_ERROR = """錯誤：Ticket {ticket_id} 狀態不明 ({status})
 
 為什麼阻止執行：
@@ -125,7 +139,7 @@ Ticket 標題: {title}
 """
 
     # 子任務未完成錯誤訊息（acceptance-gate-hook.py）
-    # W17-120.2 / PC-091: 落地票屬本版範圍用 children（`ticket create --parent`）；
+    # PC-091: 落地票屬本版範圍用 children（`ticket create --parent`）；
     # 依〈兩期〉排入後續版本者以 `--version <目標版本> --source-ticket` 建根票
     # （ticket-lifecycle.md〈ANA Ticket 落地下游血緣選擇〉）。ANA 父無 children 時
     # 改由 ANA_MISSING_SPAWNED_TICKETS_WARNING 引導。create 為頂層命令，非 `ticket track create`。
@@ -151,7 +165,7 @@ Ticket: {ticket_id} (type: {ticket_type})
 標題: {title}
 建議在 complete 前派發 acceptance-auditor 執行驗收。"""
 
-    # 純文件 IMP 驗收記錄缺失提示（W10-072.2）
+    # 純文件 IMP 驗收記錄缺失提示
     # where.files 至少 80% 屬純文件路徑時，改為手動驗收建議，不派 auditor
     ACCEPTANCE_RECORD_DOC_ONLY_HINT = """[WARNING] Acceptance Gate: 未找到驗收記錄（純文件 IMP）
 
@@ -163,7 +177,7 @@ Ticket: {ticket_id} (type: {ticket_type})
 不需派發 acceptance-auditor（純文件編輯無程式碼測試需求）。"""
 
     # ANA Ticket 缺少後續 Ticket 警告訊息（acceptance-gate-hook.py）
-    # W17-120.2 / PC-091: 本版範圍落地用 children（`ticket create --parent <ANA-ID>`），
+    # PC-091: 本版範圍落地用 children（`ticket create --parent <ANA-ID>`），
     # 後續版本落地用 `--version <目標版本> --source-ticket <ANA-ID>`；
     # 判定（步驟 2.5.2）已計入 spawned_tickets + children，本警告僅提示路線。
     ANA_MISSING_SPAWNED_TICKETS_WARNING = """[WARNING] Acceptance Gate: ANA Ticket 缺少後續 Ticket
@@ -181,7 +195,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
 
 如果分析結論確實不需要後續工作，請在 Ticket 內容中明確說明理由。"""
 
-    # ANA Ticket spawned tickets 含非 terminal 項目警告（W12-004 Phase 1）
+    # ANA Ticket spawned tickets 含非 terminal 項目警告
     # 防護性 ANA 之 spawned IMP 仍 pending/in_progress/blocked 時觸發
     ANA_SPAWNED_NON_TERMINAL_WARNING = """[WARNING] Acceptance Gate: ANA spawned tickets 含非 terminal 項目
 
@@ -197,7 +211,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
 
 註：本警告為 shallow 一層檢查，不 recurse 進 spawned 的子任務。"""
 
-    # W15-003: ANA spawned tickets 未完成錯誤（阻擋 complete）
+    # ANA spawned tickets 未完成錯誤（阻擋 complete）
     ANA_SPAWNED_INCOMPLETE_ERROR = """[ERROR] Acceptance Gate: ANA 的 spawned_tickets 未全部完成
 
 Ticket: {ticket_id}
@@ -234,11 +248,14 @@ ANA complete 要求所有衍生 IMP/ANA 先完成，以確保分析結論已落�
      - Python Hook: thyme-python-developer
   3. 代理人完成實作和測試後回傳結果
 
+已持有該 Ticket（自行實作的 session 或代理人）：
+  執行 worktree create <ticket-id>，在建立的 worktree 內修改，完成後走 worktree merge
+
 詳見: .claude/pm-rules/skip-gate.md"""
 
     # .claude/ 非白名單路徑（防止建立未預定義子目錄）
     #
-    # 0.2.1-W3-066：子目錄清單過去在此硬編碼，與建立端 path_permission.ALLOWED_PATTERNS
+    # 子目錄清單過去在此硬編碼，與建立端 path_permission.ALLOWED_PATTERNS
     # 各自維護會漂移（曾缺 scripts/analyses/templates/lib/output-styles/config 等項）。
     # 改為 build_edit_blocked_claude_invalid_path() 由呼叫端（path_permission.py）傳入
     # 從 ALLOWED_PATTERNS 動態推導的清單，結構上不可能再漂移。
@@ -272,12 +289,15 @@ ANA complete 要求所有衍生 IMP/ANA 先完成，以確保分析結論已落�
   - .claude/ 系統檔案 (plans/rules/methodologies/hooks/skills/agents/references/error-patterns/handoff/)
   - docs/** (含 work-logs/、tickets/、參考文件等)
   - CLAUDE.md / CHANGELOG.md
-  - .gitignore（repo 層級忽略清單，W10-033）
+  - .gitignore（repo 層級忽略清單）
 
 建議操作：
   1. 檢查目標檔案是否在允許路徑中
   2. 如果需要編輯其他檔案，請建立 Ticket 派發對應代理人
   3. 使用 /ticket create 建立任務
+
+已持有該 Ticket（自行實作的 session 或代理人）：
+  執行 worktree create <ticket-id>，在建立的 worktree 內修改，完成後走 worktree merge
 
 詳見: .claude/pm-rules/skip-gate.md"""
 
@@ -512,10 +532,9 @@ class QualityMessages:
 
 
 class ValidationMessages:
-    """驗證相關訊息 - 4 個驗證 hooks 使用
+    """驗證相關訊息
 
-    包含：worklog-format-check, doc-sync-check, mcp-run-tests-validator,
-    pre-test-hook
+    包含：worklog-format-check, doc-sync-check, pre-test-hook
     """
 
     # ========================================================================
@@ -569,46 +588,6 @@ class ValidationMessages:
     DOC_SYNC_SUGGESTIONS_HEADER = "[建議操作]:"
     DOC_SYNC_INIT_WORKLOG = "建議執行 /doc-flow worklog init 初始化版本日誌"
     DOC_SYNC_CHECK_TODOLIST = "建議檢查 docs/todolist.yaml 是否需要初始化"
-
-    # ========================================================================
-    # MCP Run Tests Validator Hook
-    # ========================================================================
-
-    MCP_TESTS_VALIDATION_PASSED = "mcp__dart__run_tests 使用規範檢查通過"
-
-    MCP_TESTS_ERROR_FULL_TEST_PATHS = (
-        "mcp__dart__run_tests：禁止全量測試 (無 paths)。"
-        "改用 `flutter test` 或 `./.claude/hooks/test-summary.sh`"
-    )
-
-    MCP_TESTS_ERROR_TOO_MANY_PATHS = (
-        "mcp__dart__run_tests：paths 超過上限。"
-        "大量測試改用 `./.claude/hooks/test-summary.sh`"
-    )
-
-    MCP_TESTS_ERROR_INVALID_PATHS = "mcp__dart__run_tests：提供的 paths 無效"
-
-    MCP_TESTS_VALIDATION_FAILED = "mcp__dart__run_tests 使用規範檢查失敗: {reason}"
-
-    # mcp-run-tests-validator.py 局部常數
-    MCP_TESTS_ERROR_TITLE = "[ERROR] MCP run_tests 使用規範違規"
-    MCP_TESTS_PROBLEM_HEADER = "問題描述:"
-    MCP_TESTS_PROBLEM_DESC = (
-        "mcp__dart__run_tests 在無 paths 參數時會執行全量測試，"
-        "導致卡住超過 20 分鐘。必須指定 paths 限制測試範圍。"
-    )
-    MCP_TESTS_VIOLATION_HEADER = "違規詳情:"
-    MCP_TESTS_CORRECT_HEADER = "[OK] 正確用法示例:"
-    MCP_TESTS_EXAMPLE_1 = "1. 指定單一測試目錄:"
-    MCP_TESTS_EXAMPLE_1_CODE = '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])'
-    MCP_TESTS_EXAMPLE_2 = "2. 指定多個測試目錄:"
-    MCP_TESTS_EXAMPLE_2_CODE = '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/", "test/unit/models/"]}])'
-    MCP_TESTS_EXAMPLE_3 = "3. 指定單一測試檔案:"
-    MCP_TESTS_EXAMPLE_3_CODE = '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/import/events_test.dart"]}])'
-    MCP_TESTS_RECOMMENDED_HEADER = "[推薦方案]"
-    MCP_TESTS_RECOMMENDED_1 = "  • 使用 ./.claude/hooks/test-summary.sh 執行全量測試"
-    MCP_TESTS_RECOMMENDED_2 = "  • 或使用 flutter test --reporter compact 直接執行"
-    MCP_TESTS_REFERENCE_HEADER = "[相關規範] FLUTTER.md 第 72-101 行"
 
     # ========================================================================
     # Pre-Test Hook
@@ -770,8 +749,8 @@ def format_message(template: str, **kwargs) -> str:
         KeyError: 若 kwargs 缺少 template 所需的參數
 
     Examples:
-        >>> format_message(GateMessages.TICKET_NOT_CLAIMED_ERROR, ticket_id="0.31.0-W4-001")
-        '錯誤：Ticket 0.31.0-W4-001 尚未認領\\n\\n為什麼阻止執行：...'
+        >>> format_message(GateMessages.TICKET_NOT_CLAIMED_ERROR, ticket_id="<ticket-id>")
+        '錯誤：Ticket <ticket-id> 尚未認領\\n\\n為什麼阻止執行：...'
     """
     return template.format(**kwargs)
 

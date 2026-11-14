@@ -197,4 +197,4 @@ void recordUserAccess(int id) {
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 — 從 cognitive-load-design-methodology.md 外移：五大來源完整程式碼範例 + SOLID 五原則認知負擔視角詳解（1.0.0-W8-020.8）
+**Version**: 1.0.0 — 從 cognitive-load-design-methodology.md 外移：五大來源完整程式碼範例 + SOLID 五原則認知負擔視角詳解

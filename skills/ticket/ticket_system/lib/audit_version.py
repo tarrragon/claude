@@ -2,9 +2,9 @@
 Ticket 版本審計模組
 
 提供版本歸屬、重複偵測等審計功能，確保 Ticket 版本號和檔案位置一致。
-由 W15-001 並行任務實作：
-  - W15-001.1: scan_all_tickets() + detect_mismatches()
-  - W15-001.2: detect_duplicates()
+由並行任務實作：
+  - scan_all_tickets() + detect_mismatches()
+  - detect_duplicates()
 
 另新增 detect_orphan_references()：偵測 source_ticket 與 spawned_tickets
 的單向孤兒引用（子票宣稱父票，但父票未回列該子票）。
@@ -17,7 +17,7 @@ from collections import defaultdict
 
 from .id_parser import extract_core_ticket_id, extract_id_components
 from .parser import parse_frontmatter
-from .paths import get_project_root
+from .paths import get_ticket_state_root
 
 
 @dataclass(frozen=True)
@@ -178,7 +178,7 @@ def _get_frontmatter_version(file_path: Path) -> Optional[str]:
 
     Examples:
         >>> from pathlib import Path
-        >>> version = _get_frontmatter_version(Path("/path/to/0.1.0-W1-001.md"))
+        >>> version = _get_frontmatter_version(Path("/path/to/<ticket-id>.md"))
         >>> version  # Returns "0.1.0" if present, None otherwise
     """
     if not file_path.exists():
@@ -214,7 +214,7 @@ def scan_all_tickets() -> List[TicketVersionInfo]:
     3. 使用 glob pattern 掃描所有 v*/tickets/*.md 檔案
     4. 對每個檔案：
        a. 從檔名提取核心 Ticket ID
-       b. 從 Ticket ID 提取版本號（如 "0.1.0-W1-001" → "0.1.0"）
+       b. 從 Ticket ID 提取版本號（如 "<ticket-id>" → "0.1.0"）
        c. 從目錄路徑提取版本號
        d. 從 frontmatter 讀取版本欄位
        e. 建立 TicketVersionInfo 物件
@@ -232,7 +232,7 @@ def scan_all_tickets() -> List[TicketVersionInfo]:
         >>> len(tickets) > 0
         True
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     work_logs_dir = root / WORK_LOGS_RELATIVE_PATH
 
     # Guard Clause：work-logs 目錄不存在
@@ -312,7 +312,7 @@ def detect_mismatches(tickets: List[TicketVersionInfo]) -> List[VersionMismatch]
     Examples:
         >>> info = TicketVersionInfo(
         ...     file_path="/test.md",
-        ...     ticket_id="0.1.0-W1-001",
+        ...     ticket_id="<ticket-id>",
         ...     id_version="0.1.0",
         ...     frontmatter_version="0.1.1",
         ...     directory_version="0.1.0"
@@ -381,16 +381,16 @@ def detect_duplicates(tickets: List[TicketVersionInfo]) -> List[DuplicateTicket]
 
     Examples:
         >>> # 掃描結果中有以下 Ticket：
-        >>> # docs/work-logs/v0.1.0/tickets/0.1.0-W1-001.md
-        >>> # docs/work-logs/v0.2.0/tickets/0.1.0-W1-001-phase1-design.md
-        >>> # 都對應核心 ID "0.1.0-W1-001"，出現在不同版本
+        >>> # docs/work-logs/v0.1.0/tickets/<ticket-id>.md
+        >>> # docs/work-logs/v0.2.0/tickets/<ticket-id>-phase1-design.md
+        >>> # 都對應核心 ID "<ticket-id>"，出現在不同版本
         >>>
         >>> results = detect_duplicates(tickets)
         >>> len(results)
         1
         >>> dup = results[0]
         >>> dup.ticket_id
-        '0.1.0-W1-001'
+        '<ticket-id>'
         >>> len(dup.locations)
         2
         >>> dup.recommended_version

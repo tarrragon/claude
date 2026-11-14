@@ -135,7 +135,7 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> Optiona
 
     Args:
         version: 版本號，例如 "0.31.1"
-        ticket_id: Ticket ID，例如 "0.31.1-W12-003"
+        ticket_id: Ticket ID，例如 "<ticket-id>"
         title: Ticket 標題
 
     Returns:
@@ -159,7 +159,7 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> Optiona
             # 移除 keepends 用於搜尋，保留原始行用於寫回
             search_lines = content.splitlines()
 
-            # 冪等性：若該 ticket 的完成行已存在則跳過，避免重複 append（W8-048）
+            # 冪等性：若該 ticket 的完成行已存在則跳過，避免重複 append
             if any(completion_marker in line for line in search_lines):
                 return None
 

@@ -4,7 +4,6 @@ title: 程式碼宣告了實際不存在的保證，且該落差不產生任何�
 category: code-quality
 severity: medium
 created: 2026-08-03
-source_ticket: 1.4.0-W2-006
 ---
 
 # CQ-SCLK-001: 宣告的保證與實際行為脫節，且無測試訊號
@@ -96,4 +95,4 @@ grep -rnE '\|\|\s*new [A-Z][A-Za-z]*\(\)' --include='*.ts' --include='*.js' .
 
 ---
 
-**Source**: 1.4.0-W2-006 Phase 4 多視角評估（linux 視角命中形態一與形態三，Redundancy 視角命中形態二，PM 實測複核三者皆成立）
+**Source**: 某次 Phase 4 多視角評估（linux 視角命中形態一與形態三，Redundancy 視角命中形態二，PM 實測複核三者皆成立）

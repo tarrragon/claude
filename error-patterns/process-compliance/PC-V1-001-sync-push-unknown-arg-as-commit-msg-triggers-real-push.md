@@ -49,4 +49,4 @@ related:
 
 ## 觸發案例
 
-2026-06-09（1.0.0-W1-019.5 → sync-push 收尾）：PM 為 preview sync-push 內容而跑 `--help`，觸發 v1.44.4 真實推送（commit 訊息 `--help`），隨後以正確訊息重推 v1.44.5 補正。內容正確、僅訊息瑕疵，屬 near-miss（quality-baseline 規則 6：流程瑕疵不回退，提煉教訓固化）。
+2026-06-09（sync-push 收尾）：PM 為 preview sync-push 內容而跑 `--help`，觸發 v1.44.4 真實推送（commit 訊息 `--help`），隨後以正確訊息重推 v1.44.5 補正。內容正確、僅訊息瑕疵，屬 near-miss（quality-baseline 規則 6：流程瑕疵不回退，提煉教訓固化）。

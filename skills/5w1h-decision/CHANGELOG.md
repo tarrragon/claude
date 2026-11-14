@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.3.3（2026-11-14）— `scripts/generate_token.py --save` 的 token 目錄改由框架 lib 的 `get_hook_log_dir("5w1h-tokens")` 解析，不再從腳本位置往上推算專案根。在 linked worktree 內執行時，token 檔與其他 hook 日誌一樣寫到主 checkout 的 hook-logs。`--save` 因此需要框架的 lib 套件；不帶 `--save` 的 token 產生不受影響。skill 指令內容不變。
+
 **Version**: 1.3.2 — 版本紀錄搬到同目錄的 `CHANGELOG.md`。skill 是 runtime 整份載入的檔案，而沒有任何規則要求任何人讀版本紀錄，留在 SKILL.md 等於每次叫用都付一次無效讀取。SKILL.md 末尾留一行指過去，版號的兩個住址改成「CHANGELOG.md 最上面那一條 + frontmatter 的 metadata.version」。skill 的指令內容一個字都沒改。
 
 **Version**: 1.3.1 — portable 修復：Related Files 的 Output Style 從 markdown 連結改為純路徑——目標檔在本專案就不存在、連結承諾了一個打不開的東西。同步補上 frontmatter 的 metadata.version（原本只有文末版本紀錄、兩個住址不一致）

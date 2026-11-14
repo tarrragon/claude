@@ -4,7 +4,7 @@
 
 本文件規範 `.claude/agents/*.md` 的主文（YAML frontmatter 之後）必須具備的結構，使 PM 派發前可查表確認職責邊界，並為 Hook 解析職責提供穩定錨點。
 
-> **背景**：W5-001 Phase 2 派發 sage 越界事件根因 A——agent 職責邊界模糊，外部派發者難以在 prompt 之外推論 agent 可做/不可做的範圍。標準化結構讓「可做」「不可做」「何時派發」三件事顯性化。
+> **背景**：某次 Phase 2 派發 sage 越界事件根因 A——agent 職責邊界模糊，外部派發者難以在 prompt 之外推論 agent 可做/不可做的範圍。標準化結構讓「可做」「不可做」「何時派發」三件事顯性化。
 
 ---
 
@@ -119,7 +119,7 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 | ANA | Problem Analysis / Analysis Result |
 | DOC | Solution（文件變更摘要） |
 
-> 具體章節清單以 type-aware body schema（W17-016.2）為權威來源。
+> 具體章節清單以 type-aware body schema 為權威來源。
 
 ### 填寫時機
 
@@ -142,9 +142,9 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 | 寫 `/tmp/*.md` 作 CLI 中介（PC-087） | heredoc 容量足夠，無需繞路 |
 | 寫自定義 H2（`## 實作摘要` / `## 驗證指令與結果` 等非 Schema 章節） | 自定義 H2 會切斷 Schema section 擷取範圍，與 PC-110 false negative 共振造成空殼 ticket 漏擋 |
 
-### 章節結構規則（W17-072）
+### 章節結構規則
 
-**Why**：PC-110 事件暴露 agent 寫自定義 H2（`## 實作摘要` / `## 驗證指令與結果`）繞過 Schema section，與 validator 漏判分隔符共振導致空殼 complete 放行。W17-071 已修 validator 側，本條款堵住源頭（agent 行為層）。
+**Why**：PC-110 事件暴露 agent 寫自定義 H2（`## 實作摘要` / `## 驗證指令與結果`）繞過 Schema section，與 validator 漏判分隔符共振導致空殼 complete 放行。validator 側已另行修正，本條款堵住源頭（agent 行為層）。
 
 **Consequence**：違反此條款會讓 ticket body 被切斷成多個 H2 章節，後人審查時難以定位 Schema 章節邊界，且各語言 CLI 工具（如 `ticket track validate`）的 section 擷取邏輯會失準。
 
@@ -163,7 +163,7 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 | 違規類型 | 偵測時機 | 行為 |
 |---------|---------|------|
 | 必填 Schema 章節缺失或佔位符未替換 | complete 前 | 阻擋 complete（`--force` / `--skip-body-check` 可豁免，使用會被追蹤） |
-| 自定義 H2 章節（W17-072） | complete 前 | 輸出 warning（不阻擋，提示 agent / PM 修正） |
+| 自定義 H2 章節 | complete 前 | 輸出 warning（不阻擋，提示 agent / PM 修正） |
 
 ### 不適用範圍
 
@@ -177,7 +177,7 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 
 ## 執行責任：Ticket 完成（收尾）
 
-實作類 agent 完成 commit 與 body 填寫後，必須自律執行 `ticket track check-acceptance --all <id>` 與 `ticket track complete <id>`。**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每個 ticket 需多 2-3 tool call 補做收尾（W17-020 / W17-016.3 實證）；agent 自律 + acceptance-gate-hook 安全網的組合成本最低。**Consequence**：缺收尾責任會讓 ticket 滯留 in_progress、PM 在 handoff 時才發現未 complete，違反代理人自律主責原則。**Action**：本章節內容必須直接寫入實作類 agent 自身定義檔（`.claude/agents/<name>.md`）的「收尾責任」段落——這是唯一已實測確認會送達該 agent 的路徑；AGENT_PRELOAD.md 規則 2.4 僅供代理人主動 Read 時參考，`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，不構成自動送達路徑（mint-format-specialist.md 的「收尾責任：自律 complete」段落為此模式的落地範例）。
+實作類 agent 完成 commit 與 body 填寫後，必須自律執行 `ticket track check-acceptance --all <id>` 與 `ticket track complete <id>`。**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每個 ticket 需多 2-3 tool call 補做收尾（實測）；agent 自律 + acceptance-gate-hook 安全網的組合成本最低。**Consequence**：缺收尾責任會讓 ticket 滯留 in_progress、PM 在 handoff 時才發現未 complete，違反代理人自律主責原則。**Action**：本章節內容必須直接寫入實作類 agent 自身定義檔（`.claude/agents/<name>.md`）的「收尾責任」段落——這是唯一已實測確認會送達該 agent 的路徑；AGENT_PRELOAD.md 規則 2.4 僅供代理人主動 Read 時參考，`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，不構成自動送達路徑（mint-format-specialist.md 的「收尾責任：自律 complete」段落為此模式的落地範例）。
 
 ### 收尾步驟（依序執行）
 
@@ -229,4 +229,4 @@ acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM
 **Last Updated**: 2026-10-14 | **Version**: 1.8.0 — 「執行責任：Ticket 完成」新增「隔離派發的收尾界線」小節：worktree 隔離代理人止於 worktree commit，complete 由 PM 於合併後在主 checkout 執行，PM 收尾身份採 set-who 後 complete；違規偵測表補隔離派發排除（用戶裁決，2026-10-14）。
 **Last Updated**: 2026-08-23 | **Version**: 1.7.0 — 跨 ticket 物件操作禁令新增「邊界：建立自身衍生票不在禁止範圍」小節（含三明示）：禁令對象限他人既有 ticket，`create --source-ticket` / `--parent` 不受限，撰寫禁令時須明寫此邊界。因「包括 close / set-status / 編輯他人 ticket md 等」以「等」結尾未劃邊界，`create` 與同列動詞字面相近而被讀成禁止建票，已發生代理人停手上報的實際誤讀。
 **Version**: 1.6.0 — 「執行責任：Ticket 完成」章節 Action 句改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，AGENT_PRELOAD.md 規則 2.4 非有效送達路徑，改要求直接寫入實作類 agent 自身定義檔主文（mint-format-specialist.md 為落地範例）
-**Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/agent-definition-standard.md` 外移至本檔（W7-004.2 auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.1–1.4 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033 + SA 跨 ticket close 事件（並行 claim race condition 暴露）。
+**Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/agent-definition-standard.md` 外移至本檔（auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.1–1.4 版見 git log。**Source**: 派發越界根因 A + PC-110 + SA 跨 ticket close 事件（並行 claim race condition 暴露）。

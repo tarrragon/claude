@@ -1,23 +1,23 @@
-"""error-pattern 來源前綴 ID 分配器（1.0.0-W1-019.3）。
+"""error-pattern 來源前綴 ID 分配器。
 
-實作 Model 1 來源前綴編號（W1-019 決策）的自動分配：
+實作 Model 1 來源前綴編號的自動分配：
 - identify_project_code：以 git toplevel basename 對應 registry `dir` → `code`，
   tooling 零 project-local 設定即可自我識別（registry 同時服務全域唯一 + 自我識別）。
 - allocate_pattern_id：掃 `error-patterns/<cat-dir>/<CAT>-<PROJ>-*.md` 取既有最大號 +1，
   flat 凍結 base（`<CAT>-NNN`）不參與遞增（前綴命名空間獨立）。非原子操作，僅
-  回傳預覽值（見下方 0.2.1-W3-167 章節）。
+  回傳預覽值（見下方「封閉兩面配號競爭」章節）。
 - allocate_and_reserve_pattern_id：原子版——持鎖後把「決定編號」與「建立佔位檔」
-  合併為單一操作，杜絕並行呼叫撞號（見下方 0.2.1-W3-167 章節）。
+  合併為單一操作，杜絕並行呼叫撞號（見下方「封閉兩面配號競爭」章節）。
 
-依賴邊界：複用 `.claude/lib/pattern_id.py` 的 `PATTERN_ID_RE`（W1-019.2 SSOT），
+依賴邊界：複用 `.claude/lib/pattern_id.py` 的 `PATTERN_ID_RE`（SSOT），
 不在 skill 內複製 regex 以免破壞剛收斂的單一權威。skill 獨立上架時的依賴打包
-（pattern_id + pyyaml）屬 W1-001（SKILL 獨立上架規範）範圍。
+（pattern_id + pyyaml）屬 SKILL 獨立上架規範範圍。
 
 規則來源：`.claude/methodologies/error-pattern-numbering-methodology.md`、
 專案代號 SSOT：`.claude/error-patterns/_project-registry.yaml`。
 
-0.2.1-W3-167（封閉兩面配號競爭）：
-    (1) allocator 與 ticket 預留編號的競爭——0.2.1-W3-165 實證：ticket 標題已
+封閉兩面配號競爭：
+    (1) allocator 與 ticket 預留編號的競爭——實證：ticket 標題已
         寫定未來要記錄的 pattern ID（如「記錄 IMP-BAL-005」），但對應檔案尚未
         建立，allocator 純掃檔案看不到這個「已預留」狀態，於是把同一號發給
         另一個真正在建檔的呼叫，兩者撞號。修法：`allocate_pattern_id` 與
@@ -25,10 +25,10 @@
         `docs/work-logs/**/tickets/*.md` 中精確符合 `<CAT>-<PROJ>-NNN`（本專案
         前綴）的文字引用，視為已佔用（`_max_num_in_ticket_references`）。曾比較
         三個方向：(a) 本方案；(b) 建票時即建立佔位檔（需改 ticket_system 建票
-        流程，超出本票宣告寫入集）；(c) 純規範「禁止預留」不修工具（無自動化
+        流程，超出該次修改的寫入範圍）；(c) 純規範「禁止預留」不修工具（無自動化
         防線，一違反即復發，且不滿足「模擬驗證不再撞號」的驗收要求）。選 (a)
-        並將實作收斂為精確前綴比對（非籠統關鍵字搜尋）——0.2.1-W3-167 對本專案
-        現有 7 筆全文候選比對只留 1 筆真前綴匹配（合法待建票 IMP-BAL-006），
+        並將實作收斂為精確前綴比對（非籠統關鍵字搜尋）——對本專案
+        當時 7 筆全文候選比對只留 1 筆真前綴匹配（合法待建票 IMP-BAL-006），
         其餘 6 筆為 flat 格式（`PC-048` 等）的框架歷史討論文字，精確前綴過濾
         天然排除，證實低誤判率。
     (2) 框架 repo issue 28（TOCTOU）——兩個並行 agent 同時讀取最大編號 +1 配到
@@ -56,7 +56,7 @@ try:
 except ImportError:  # pragma: no cover - 本機開發/CI 皆為 POSIX，缺口僅涵蓋跨平台移植
     fcntl = None
 
-# 複用 lib 的 SSOT regex（W1-019.2，E2 linux F3）解析既有 ID。
+# 複用 lib 的 SSOT regex 解析既有 ID。
 _claude_dir = Path(__file__).resolve().parents[3]  # .claude
 if str(_claude_dir) not in sys.path:
     sys.path.insert(0, str(_claude_dir))
@@ -122,7 +122,7 @@ def _default_tickets_root(claude_dir) -> Path:
 
 def _max_num_in_ticket_references(tickets_root: Path, cat: str, project_code: str) -> int:
     """掃 `tickets_root` 下所有 ticket md 檔的全文，取本專案精確前綴
-    `<CAT>-<PROJ>-NNN` 文字引用的最大號；無則 0（0.2.1-W3-167）。
+    `<CAT>-<PROJ>-NNN` 文字引用的最大號；無則 0。
 
     只比對精確前綴（`cat` + `-` + `project_code` + `-`），不比對 flat 格式或
     其他專案前綴——避免把框架歷史文件中討論其他專案/其他 ticket 的 ID 字面
@@ -160,7 +160,7 @@ def allocate_pattern_id(category_prefix, claude_dir, project_code, *, tickets_ro
 
     flat 凍結 base（`PC-099`）不參與遞增——只掃 `<CAT>-<PROJ>-` 前綴空間。
 
-    0.2.1-W3-167：預設額外掃描 `tickets_root`（預設 `{claude_dir 上層}/docs/
+    預設額外掃描 `tickets_root`（預設 `{claude_dir 上層}/docs/
     work-logs`）下 ticket md 文字中已預留但檔案未建立的本專案前綴編號，一併
     納入 max 計算（見模組 docstring）。傳 `tickets_root=False` 可完全停用此
     掃描，回到純檔案掃描行為。
@@ -194,14 +194,14 @@ def _warn_allocation_lock_degraded(reason: str) -> None:
     """鎖降級警告（quality-baseline 規則 4：失敗必須對用戶可見，走 stderr）。"""
     sys.stderr.write(
         f"[WARNING] allocator: {reason}；以無鎖模式配號。並行呼叫期間請改為序列"
-        f"執行以避免 ID 撞號（0.2.1-W3-167 / 框架 issue 28）\n"
+        f"執行以避免 ID 撞號（框架 issue 28）\n"
     )
 
 
 @contextlib.contextmanager
 def _allocation_lock(claude_dir):
     """error-patterns 目錄級 blocking 鎖，序列化「掃描既有編號 → 決定 → 建立
-    佔位檔」臨界區（0.2.1-W3-167，框架 issue 28 併入範圍）。
+    佔位檔」臨界區（框架 issue 28 併入範圍）。
 
     Why：兩個並行 agent 同時呼叫配號會各自讀到同一份既有檔案最大號，各自 +1
     配出同一 ID（2026-07-31 consumer 實證，未釀事故僅因後者恰在寫入前重讀）。
@@ -237,7 +237,7 @@ def allocate_and_reserve_pattern_id(
     category_prefix, claude_dir, project_code, *, tickets_root=None, reserved_by=None
 ) -> Path:
     """原子分配並立即保留：持鎖 → 掃描既有編號（含 ticket 文字引用）→ 建立
-    佔位檔，回傳佔位檔路徑（0.2.1-W3-167，框架 issue 28 併入範圍）。
+    佔位檔，回傳佔位檔路徑（框架 issue 28 併入範圍）。
 
     與 `allocate_pattern_id` 的差異：後者僅回傳字串預覽、不持鎖、不建檔，呼叫
     後到實際建檔前存在 TOCTOU 空窗；本函式在鎖保護下把「決定編號」與「佔用

@@ -6,8 +6,8 @@
 
 ## 症狀
 
-- 測試 import 不存在的函式造成 pytest collection error，全套件需 `--ignore` 排除某檔（W1-038：`test_monorepo_version_sync.py` import 已被 W4-002 移除的 `get_monorepo_version`）
-- 工具使用指南 / 速查表硬編碼某語言專屬 MCP 工具名，對目標專案類型不適用（W1-035：dart MCP `l*` 引用集中於 Flutter agent，對 Chrome Extension 專案無對應 server）
+- 測試 import 不存在的函式造成 pytest collection error，全套件需 `--ignore` 排除某檔（如 `test_monorepo_version_sync.py` import 已被移除的 `get_monorepo_version`）
+- 工具使用指南 / 速查表硬編碼某語言專屬 MCP 工具名，對目標專案類型不適用（如 dart MCP `l*` 引用集中於 Flutter agent，對 Chrome Extension 專案無對應 server）
 - hook / detector 內建來源框架預設（Flutter Bloc 的 `test/*.dart`、Layer 1-5），跨 sync 後對目標專案類型誤判
 - 同一 session 跨多個 ticket 重複遇到「Flutter 資產在非 Flutter 專案」的變體
 
@@ -24,9 +24,9 @@ framework 設計目標是跨專案重用，但「重用」只對 generic 類成�
 
 ## 案例：version-release 與 search-tools-guide 的 Flutter 殘留（2026-06-04）
 
-| 資產 | 來源專案類型 | 目標（本專案）狀態 | 處理（W1-035 / W1-038） |
+| 資產 | 來源專案類型 | 目標（本專案）狀態 | 處理 |
 |------|------------|------------------|----------------------|
-| `test_monorepo_version_sync.py` | Flutter monorepo（L2 `ui/pubspec.yaml`） | 無 pubspec；import 函式已 W4-002 移除 | 移除（替代 API `check_version_sync_dual` 已有覆蓋） |
+| `test_monorepo_version_sync.py` | Flutter monorepo（L2 `ui/pubspec.yaml`） | 無 pubspec；import 函式已被移除 | 移除（替代 API `check_version_sync_dual` 已有覆蓋） |
 | search-tools-guide 速查表 dart MCP 引用 | Flutter（dart MCP server） | 無 dart MCP server | 保留（project-type-generic 框架資產，對 Flutter 專案正確）+ 速查表版本無關化 |
 
 兩者方向不同的關鍵：dart MCP 引用本身是**正確的 Flutter 工具名**（保留供 Flutter 專案用），而 monorepo 測試 import 的函式**已被刪除**（死碼，移除）。判別準則見下方防護表。
@@ -57,4 +57,4 @@ framework 設計目標是跨專案重用，但「重用」只對 generic 類成�
 
 ## 案例文件來源
 
-W1-035（MCP 工具名漂移盤點 ANA）+ W1-037（search-tools-guide 版本無關化）+ W1-038（移除 Flutter monorepo 過時測試），2026-06-04，commits `7cc669d5` / `42464335` / `6c536002`。
+MCP 工具名漂移盤點 ANA + search-tools-guide 版本無關化 + 移除 Flutter monorepo 過時測試，2026-06-04，commits `7cc669d5` / `42464335` / `6c536002`。

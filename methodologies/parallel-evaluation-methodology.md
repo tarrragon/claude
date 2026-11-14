@@ -2,7 +2,7 @@
 
 本文件定義「並行多視角派發 → 彙整 → 決策」的原則層。涵蓋兩種用途：**品質掃描**（找出值得行動的問題，產出做/不做清單）與**理解型分析**（多角度交叉驗證根因，產出根因結論）。執行操作見 `.claude/skills/parallel-evaluation/SKILL.md`，報告完整模板見 `.claude/references/multi-perspective-report-templates.md`。
 
-> **合併說明（1.0.0-W8-020.7）**：本方法論吸收原 multi-perspective-analysis-methodology 的獨特核心（視角分工、衝突處理策略、分析任務並行差異、決策樹整合）。原檔已刪除，引用統一重導至本檔。差異在「報告格式」而非「派發機制」——機制相同，故合併。
+> **合併說明**：本方法論吸收原 multi-perspective-analysis-methodology 的獨特核心（視角分工、衝突處理策略、分析任務並行差異、決策樹整合）。原檔已刪除，引用統一重導至本檔。差異在「報告格式」而非「派發機制」——機制相同，故合併。
 
 ---
 
@@ -211,6 +211,6 @@
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 2.0.0 - 方案 A 合併（1.0.0-W8-020.7）：吸收原 multi-perspective-analysis-methodology 獨特核心（視角分工表、衝突處理策略、分析任務並行差異、決策樹整合），報告完整模板外移衛星檔 `.claude/references/multi-perspective-report-templates.md`，原檔刪除引用重導至本檔；新增「品質掃描 vs 理解型分析」雙用途說明
+**Version**: 2.0.0 - 方案 A 合併：吸收原 multi-perspective-analysis-methodology 獨特核心（視角分工表、衝突處理策略、分析任務並行差異、決策樹整合），報告完整模板外移衛星檔 `.claude/references/multi-perspective-report-templates.md`，原檔刪除引用重導至本檔；新增「品質掃描 vs 理解型分析」雙用途說明
 
 **Version**: 1.1.0 - 情境模組精簡 + Agent 提示模板提取

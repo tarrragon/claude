@@ -198,9 +198,16 @@ rm -rf .claude/.sync-conflicts/
 |---------|------|------|
 | 框架 hook，上游 `settings.json` 已註冊 | 同一個 command 也出現在 `settings.json` | 從 `settings.local.json` 刪除這筆重複註冊 |
 | 框架 hook，上游 `settings.json` 沒有註冊 | 檔案在框架的 `.claude/hooks/` 或 skill 的 `hooks/` 下，`settings.json` 找不到 | 回報 framework issue（README〈回報框架問題〉），由主控方在上游補註冊；`settings.local.json` 的這筆暫時保留，上游補上後依上一列刪除 |
-| 專案自有 hook | 檔案是專案自建的，不在上游框架內 | 回報 framework issue，寫明這支 hook 的事件與用途。`settings.json` 屬框架，`settings.local.json` 依單一註冊來源原則也不放 hook 註冊，框架目前沒有提供專案自有 hook 的合法註冊位置；在框架提供之前，這筆註冊暫時保留，coverage check 對它的警告會持續出現 |
+| 專案自有 hook | 檔案是專案自建的，不在上游框架內 | 寫進 `.claude/project-integration/hook-registry.yaml`（格式見 [references/project-hook-registry-format.md](../references/project-hook-registry-format.md)），不手寫進 `settings.local.json`。下一個 session 啟動時，框架依清冊重建 `settings.local.json` 的 hooks 區段；清冊內的條目，coverage check 與本命令都不再示警。清冊外但檔案存在的手寫條目會保留，每次 session 啟動時提示加入清冊 |
 
-`settings.json` 內的幽靈由 sync overlay 自癒，不在 `--fix` 範圍。
+`settings.json` 內的舊註冊不在 `--fix` 範圍，依來源分兩種：
+
+| 來源 | pull 時的處理 |
+|------|-------------|
+| 上游 `settings.json` 本身就有的註冊 | 三方合併套用上游的改名或刪除，自動消失；合併衝突時依〈2. 衝突解決決策表〉處理 |
+| hook 自動登記（依 `config/hook-registry.yaml`）寫進來的註冊 | 每次寫入都記在 `.claude/.sync-state.json`。之後 pull 時，若清冊已不列該腳本，或已改由 `hook-dispatch-registry.json`、`settings.json` 其他項目註冊，就收回並在 stdout 列出。沒有紀錄的項目不收回 |
+
+沒有紀錄、但與 `hook-dispatch-registry.json` 重複的項目，pull 收尾會警告，並列出 `settings.json` 的事件、matcher 與 command。這類項目常見於早期版本自動登記時還沒有紀錄。確認不是刻意保留後，從該區段的 hooks 陣列刪除這一筆；該 hook 仍由 hook-dispatcher 執行。
 
 **當前 session 的註冊不回溯**：以上處理的都是磁碟上的設定檔。已啟動的 session 在啟動當下就把 hook 註冊讀進記憶體，pull 改了設定檔不會回頭改它。在 session 中途執行 pull 之後，該 session 剩餘時間內 hook 仍以舊路徑執行，直到重啟為止。
 

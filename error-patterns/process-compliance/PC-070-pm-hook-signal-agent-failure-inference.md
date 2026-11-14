@@ -81,7 +81,7 @@ PC-050 安全範本要求「只讀 status 標籤」，但 TaskOutput 工具實�
 
 - 接受 body 污染一次（把 status 查出來即止）
 - 禁止因 body 內容做任何推論（PC-050 模式 D）
-- 未來可建 CLI 包裝腳本（`grep -o "<status>[^<]*</status>"`）降低污染（建議由 W10-059 ANA ticket 追蹤）
+- 未來可建 CLI 包裝腳本（`grep -o "<status>[^<]*</status>"`）降低污染（建議由後續分析票追蹤）
 
 ### 4. 生成 2+ 替代假設
 
@@ -121,7 +121,7 @@ PC-050 安全範本要求「只讀 status 標籤」，但 TaskOutput 工具實�
 - PC-050（模式 A-D）：代理人完成誤判家族
 - pm-rules/agent-failure-sop.md 失敗判斷前置步驟 Step 0.5
 - `.claude/references/pm-agent-observability.md`：四工具分工
-- W10-059（ANA）：Hook 完成訊號誤觸與 PM 間接訊號推論根因分析
+- 根因分析 ANA：Hook 完成訊號誤觸與 PM 間接訊號推論
 
 ---
 

@@ -34,7 +34,7 @@ class TrackQueryMessages:
     # execute_list 中的標題格式
     LIST_TITLE = "[List] {version} ({completed}/{total} 完成)"
 
-    # execute_list 中截斷顯示時的標題格式（0.38.0-W1-006：統計為全量，清單為截斷後）
+    # execute_list 中截斷顯示時的標題格式（統計為全量，清單為截斷後）
     LIST_TITLE_TRUNCATED = "[List] {version} ({completed}/{total} 完成, 顯示前 {shown})"
 
     # execute_summary 中找不到 Tickets 的標題
@@ -164,7 +164,7 @@ class TrackAcceptanceMessages:
     VALID_VALUES_PREFIX = "   有效值:"
 
     # execute_append_log 中缺失 Schema 章節自動建立的提示
-    # W1-025: 白名單合法但 body 缺失的 Schema 章節（如 IMP 模板未含 Context Bundle）
+    #白名單合法但 body 缺失的 Schema 章節（如 IMP 模板未含 Context Bundle）
     # 於 canonical 順序位置自動補建，消除「章節不存在 → 被迫繞道 Edit」的摩擦
     SECTION_AUTO_CREATED_FORMAT = "[OK] 章節 ## {section} 原不存在，已於 schema 順序位置自動建立"
 
@@ -475,8 +475,8 @@ class TrackMessages:
         "[ERROR] 缺少必填參數 agent（負責代理人）。\n"
         "用法: ticket track phase <ticket_id> <phase> <agent>\n"
         "範例:\n"
-        "  ticket track phase 0.2.0-W3-001 phase1 lavender-interface-designer\n"
-        "  ticket track phase 0.2.0-W3-001 phase3b parsley-flutter-developer\n"
+        "  ticket track phase <ticket-id> phase1 lavender-interface-designer\n"
+        "  ticket track phase <ticket-id> phase3b parsley-flutter-developer\n"
         "常用代理人:\n"
         "  Phase 0:  saffron-system-analyst\n"
         "  Phase 1:  lavender-interface-designer\n"
@@ -533,7 +533,7 @@ class MigrateMessages:
     ARG_RESERVE_ID = "dry-run 預覽時視為已被佔用的目標 ID（可重複；供 finish 跨程序避免預覽同一目標）"
     HELP_MIGRATE = "遷移 Ticket ID（支援單一和批量遷移）"
 
-    # Collision detection 訊息（W14-048）
+    # Collision detection 訊息
     # dry-run 階段警告：目標已存在會被覆寫
     WARN_MIGRATE_TARGET_EXISTS = (
         "[WARNING] 目標 Ticket 已存在，實際執行時將被覆寫:\n"
@@ -616,7 +616,7 @@ class BulkCreateMessages:
     # _print_batch_result 中的警告項目標籤
     WARNED_ITEMS_TITLE = "警告項目："
 
-    # _create_batch_tickets 中的 checklist 缺欄位警告格式（1.0.0-W1-027）
+    # _create_batch_tickets 中的 checklist 缺欄位警告格式
     CHECKLIST_WARNING_FORMAT = "缺必填欄位: {fields}"
 
 
@@ -653,7 +653,7 @@ class GenerateMessages:
     # _save_tickets 中的錯誤訊息（使用 BACKUP_FAILED，但這裡保留以供參考）
     # 注：實際使用來自 WarningMessages.BACKUP_FAILED
 
-    # _print_generation_summary 中的 checklist 缺欄位警告（1.0.0-W1-027，warning 級不阻擋）
+    # _print_generation_summary 中的 checklist 缺欄位警告（warning 級不阻擋）
     CHECKLIST_WARNING_TITLE = "[WARNING] 以下 Ticket 缺必填欄位（warning 級，未阻擋建立）："
     CHECKLIST_WARNING_ITEM = "   {id}: 缺 {fields}"
 
@@ -693,9 +693,9 @@ def format_msg(template: str, **kwargs) -> str:
 
 
 # ============================================================================
-# ClaimWrapMessages - 認領時簡化 WRAP 三問提示（Ticket 0.18.0-W10-028）
+# ClaimWrapMessages - 認領時簡化 WRAP 三問提示
 #
-# 來源：0.18.0-W10-027 ANA 分析結論。所有 ticket claim 時強制提示 PM 回答
+# 來源：ANA 分析結論。所有 ticket claim 時強制提示 PM 回答
 # 簡化 WRAP 三問（Widen / Attain distance / Prepare to be wrong），
 # 避免預設選項未經評估。ANA 類型額外提示完整 /wrap-decision 框架。
 # ============================================================================
@@ -705,7 +705,7 @@ class ClaimWrapMessages:
     """claim 命令附加的簡化 WRAP 三問提示訊息"""
 
     # 區段標題（含來源 ticket 標注）
-    WRAP_SECTION_TITLE = "簡化 WRAP 三問 — 認領品質 Checkpoint（[Ticket 0.18.0-W10-027]）"
+    WRAP_SECTION_TITLE = "簡化 WRAP 三問 — 認領品質 Checkpoint"
 
     # 引導文字
     WRAP_INTRO = (
@@ -730,7 +730,7 @@ class ClaimWrapMessages:
     # 適用範圍說明（以 {ticket_type} 格式化）
     WRAP_APPLIES_TO = "適用範圍：所有 ticket 強制；本 ticket 類型為 {ticket_type}。"
 
-    # S 問（SKILL trigger）—— framework 規則層 Edit 提示（[Ticket 0.18.0-W17-125]）
+    # S 問（SKILL trigger）—— framework 規則層 Edit 提示
     # 觸發條件：type=IMP 且 where.files 任一路徑命中 framework 路徑前綴
     WRAP_SKILL_TRIGGER = (
         "  S（SKILL trigger）—— framework 規則層 Edit 提示\n"

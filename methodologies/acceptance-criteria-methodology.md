@@ -49,7 +49,7 @@
 
 含 UI 的 IMP 完成前，acceptance 必含一條集中化驗收：本 ticket 引入的 user-facing 文字、顏色、魔術數字皆已集中（i18n key / theme token / 具名常數），無新增裸 `Color()` / 字面字串 / 字面尺寸。
 
-- **Why**：1.2.0-W1-015 根因——框架既有 hook（l10n-sync / style-guardian）對「應有設施缺席」失明，edit-time 強制依賴設施存在才生效。升為 per-feature acceptance gate，使每個功能在驗收時被強制檢查，不再依賴 greenfield 是否 bootstrap 設施。
+- **Why**：根因——框架既有 hook（l10n-sync / style-guardian）對「應有設施缺席」失明，edit-time 強制依賴設施存在才生效。升為 per-feature acceptance gate，使每個功能在驗收時被強制檢查，不再依賴 greenfield 是否 bootstrap 設施。
 - **Consequence**（不設此維度）：硬編碼在無 i18n/theme 的專案可暢行至 1.0（v1.0 實證：app 21 文字 / 19 數字 / 18 顏色全程未攔）。
 - **Action**：建含 UI 的 IMP 時，acceptance 加一條「集中化：本功能 user-facing 文字→i18n、顏色→token、魔術數字→常數，無新增裸值」，驗收以 grep 確認變更碼無裸 `Color()` / 字面字串。豁免：純後端 / CLI（如 Go server log）依語言慣例可標註豁免理由。
 
@@ -434,4 +434,4 @@ demand-in-deliverable 型的識別符須改為以下規則 8 允許的形態（�
 **Version**: 3.3.0 - 禁用規則表新增「禁止以攔截點替代威脅事件（防護類）」列；新增「防護類驗收條件：威脅事件測試」節，定位為「實質要求與驗證代理指標的分離撰寫」的具名特例並雙向交叉引用（威脅事件 vs 攔截點對應項目 vs 確認方法）；三列反模式對照表以 PC-BAL-035 步驟 1 為權威來源不存副本；Action 明示三步順序不可調換，盤點表須先於條件撰寫。來源：PC-BAL-035 落地與其後的三視角審查
 **Version**: 3.2.0 - 新增「交付物約束相容性」章節：框架資產交付物受規則 8 約束時 acceptance 的撰寫規範（demand-in-deliverable 禁止 vs context-reference 合法 + 規則 8 白名單替代錨點 + 判別問句）；預留「acceptance 引用驗證手段的存在性查證」並列位置；設計檢查清單補交付物約束相容性三項。來源：兩次實證（docstring 案例主動回報 vs error-pattern 案例靜默改寫）暴露結構性缺口
 **Version**: 3.1.0 - 新增「條件式驗收條件的設計判準」章節：checkbox 無 N/A 狀態的工具限制 + blockedBy 正確表達法 + 實質要求/驗證代理指標分離撰寫判別問句 + 與 acceptance 漂移反模式的邊界；與 `.claude/pm-rules/verification-framework.md`「驗收條件爭議裁決框架」雙向引用（裁決判準見該檔，本檔為撰寫階段預防）
-**Version**: 3.0.0 - 方法論瘦身校準（W8-020.2）：保留 30 秒核心（4V 原則 + 情境分類 + 確認方法矩陣 + 證據要求 + 格式欄位 + 禁用規則 + 業務意圖 + 方案矩陣 + 設計/撰寫檢查清單 + 模糊詞替換表）；標準格式三式、好/壞範例 6 組、各系統整合完整模板與轉換範例外移至 `.claude/references/acceptance-criteria-templates.md`，對應處加雙向 intent 路由；清理禁用規則章節殘留 emoji 符號。歷史 1.0–2.2 版 Change Log 見 git log。
+**Version**: 3.0.0 - 方法論瘦身校準：保留 30 秒核心（4V 原則 + 情境分類 + 確認方法矩陣 + 證據要求 + 格式欄位 + 禁用規則 + 業務意圖 + 方案矩陣 + 設計/撰寫檢查清單 + 模糊詞替換表）；標準格式三式、好/壞範例 6 組、各系統整合完整模板與轉換範例外移至 `.claude/references/acceptance-criteria-templates.md`，對應處加雙向 intent 路由；清理禁用規則章節殘留 emoji 符號。歷史 1.0–2.2 版 Change Log 見 git log。

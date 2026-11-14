@@ -97,22 +97,32 @@ def _read_registry_sessions(project_root: Path, logger) -> "tuple[Dict, bool]":
     return data.get("sessions", {}) or {}, True
 
 
-def _exclude_orphan_confirmed(
+def exclude_orphan_confirmed(
     dispatches: List[Dict], project_root: Path, self_session_id: str, logger
 ) -> List[Dict]:
-    """九修正：排除擁有者 session 已結束（orphan_confirmed）的派發條目。
+    """排除擁有者 session 已結束（orphan_confirmed）的派發條目。
 
-    背景代理人隨擁有者 session 程序結束，該 session 已 graceful release
-    後其條目不可能再有人寫檔。僅排除 orphan_confirmed；orphan_suspected、
-    unknown_owner、registry_unavailable、self、cross_session_alive 維持
-    佔用。registry 讀取失敗為 fail-closed（全數維持佔用）。
-    不改登記檔，只改本守衛的佔用判定。
+    僅排除 orphan_confirmed；orphan_suspected、unknown_owner、
+    registry_unavailable、self、cross_session_alive 維持佔用。registry
+    讀取失敗為 fail-closed（全數維持佔用）。不改登記檔，只改呼叫端的
+    佔用判定。回合結束（turn_ended_at）不構成排除依據：回合結束後代理人
+    仍可能經背景工作或 SendMessage 恢復而寫檔。
+
+    已知限制：/clear 也會讓 session 以 graceful release 結束，但其子代理
+    與背景命令仍在執行並寫檔（實測：背景命令在 /clear 後 3 分鐘仍寫入）。
+    orphan_confirmed 因此不保證「無人再寫檔」。只有誤判時方向為多提醒、
+    不放行寫入的呼叫端（process-skip 的提醒靜音判定）採用本函式；
+    會因排除而放行破壞性操作的守衛（workspace-wipe）不採用。bare-commit
+    守衛目前仍經 `_exclude_orphan_confirmed` 採用，存在同一暴露面。
     """
-    if not any(d.get("session_id") for d in dispatches):
+    if not any(isinstance(d, dict) and d.get("session_id") for d in dispatches):
         return dispatches
     sessions, available = _read_registry_sessions(project_root, logger)
     kept: List[Dict] = []
     for dispatch in dispatches:
+        if not isinstance(dispatch, dict):
+            kept.append(dispatch)  # 格式不明的條目保守計入佔用
+            continue
         ownership = classify_ownership(
             dispatch.get("session_id") or "", self_session_id, sessions, available
         )
@@ -124,6 +134,10 @@ def _exclude_orphan_confirmed(
             continue
         kept.append(dispatch)
     return kept
+
+
+# 既有呼叫端（bare-commit-guard-hook 的 re-export）沿用的私有名稱
+_exclude_orphan_confirmed = exclude_orphan_confirmed
 
 
 _GIT_DIR_ENV_NAMES = ("GIT_DIR=", "GIT_WORK_TREE=")

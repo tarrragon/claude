@@ -36,6 +36,8 @@ def post_module():
 def env(pre_module, post_module, monkeypatch, tmp_path):
     for module in (pre_module, post_module):
         monkeypatch.setattr(module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(post_module, "get_hook_log_dir",
+                        lambda name: tmp_path / ".claude" / "hook-logs" / name)
     return tmp_path
 
 
@@ -113,6 +115,8 @@ def test_e1_keyed_vs_keyless_under_interleave(
         root.mkdir()
         monkeypatch.setattr(pre_module, "get_project_root", lambda r=root: r)
         monkeypatch.setattr(post_module, "get_project_root", lambda r=root: r)
+        monkeypatch.setattr(post_module, "get_hook_log_dir",
+                            lambda name, r=root: r / ".claude" / "hook-logs" / name)
         _pre(pre_module, monkeypatch, **ids, tool_input={"command": "pytest a"})
         if ids:
             _backdate(root, "A", 60)
@@ -169,6 +173,13 @@ def test_keyless_post_uses_legacy_only_when_running(post_module, env, logger):
     _arm_legacy(env, "running")
     assert post_module.check_test_timeout({}, {}, logger) is not None
     assert len(_history(env)) == 1
+
+
+def test_history_seam_positive_control(post_module, env, logger):
+    """E2 正向對照：會寫 history 的路徑確實產生檔案，證明「不存在」斷言不是寫到別處。"""
+    _arm_legacy(env, "running")
+    assert post_module.check_test_timeout({}, {}, logger) is not None
+    assert (env / ".claude" / "hook-logs" / "test-duration-history.jsonl").exists()
 
 
 def _make_keyfile(root, key, age_seconds):

@@ -3,7 +3,6 @@ id: TEST-SCLK-001
 title: 快取化建置使「零警告 / 無 X」類驗收成為空訊號
 severity: high
 category: test
-source_ticket: 1.4.0-W3-007
 related:
  - TEST-BAL-001
  - PC-165
@@ -20,7 +19,7 @@ related:
 | 編號 | TEST-SCLK-001 |
 | 類別 | test |
 | 風險等級 | 高 |
-| 首發時間 | 2026-08-03（screen_clock 1.4.0-W3-007 Phase 4 獨立驗收時，acceptance-auditor 追查建置日誌發現） |
+| 首發時間 | 2026-08-03（screen_clock Phase 4 獨立驗收時，acceptance-auditor 追查建置日誌發現） |
 | 姊妹模式 | TEST-BAL-001（validator 抽取空集致假通過）、PC-165（測試綠燈不等於 runtime 正確） |
 
 ---
@@ -31,7 +30,7 @@ related:
 
 但該輪建置走增量模式，目標檔案因快取命中**完全沒有被重新編譯**。警告缺席反映的是「編譯器沒跑」，不是「跑了而沒有問題」。驗收條件在字面上成立，在語意上是空的。
 
-**本案具體樣態**（1.4.0-W3-007 Swift 重構驗收）：
+**本案具體樣態**（Swift 重構驗收）：
 
 - ticket acceptance 含「Swift 編譯警告須為零」。
 - 實作者與獨立驗收者各跑一次 `scripts/run-tests.sh`（內含 `xcodebuild test`），測試 179 + 57 全綠、輸出無新增警告，兩人皆判定通過。

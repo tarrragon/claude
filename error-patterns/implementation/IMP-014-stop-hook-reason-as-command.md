@@ -17,7 +17,7 @@ Claude Code 將 `reason` 文字注入為下一輪對話的 context/指令，Clau
 **症狀**：
 - 執行 `/ticket handoff` 後，Stop hook 被觸發
 - Claude 未等待用戶執行 `/clear`，直接自動執行 `/ticket resume {id}`
-- 用戶看到 `Stop hook error: /ticket resume 0.3.0-W1-001`
+- 用戶看到 `Stop hook error: /ticket resume <ticket-id>`
 
 **根因**：
 Claude Code Stop hook 的 `block` decision 中，`reason` 欄位不是給用戶看的文字，

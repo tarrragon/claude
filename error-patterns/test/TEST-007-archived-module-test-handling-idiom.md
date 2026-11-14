@@ -4,9 +4,6 @@ title: Archived 模組的測試檔處理 idiom（pytestmark.skip + try/except im
 category: test
 severity: low
 created: 2026-05-11
-related:
- - W17-190
- - W17-192
 ---
 
 # TEST-007: Archived 模組的測試檔處理 idiom
@@ -70,15 +67,15 @@ except ImportError:
 
 ## 案例
 
-### W17-190 / W17-192（2026-05-11）
+### archived 模組搬遷後的 collection error（2026-05-11）
 
-`agent_dispatch_analytics.py` 被搬到 `.claude/hooks/archived/`，但 `tests/test_analytics.py` 仍在原位置。W17-190 ANA Reality Test 發現 pytest collection 撞 `ModuleNotFoundError: No module named 'agent_dispatch_analytics'`，影響 `npm run test:hooks` 統計準確性。
+`agent_dispatch_analytics.py` 被搬到 `.claude/hooks/archived/`，但 `tests/test_analytics.py` 仍在原位置。ANA 的 Reality Test 發現 pytest collection 撞 `ModuleNotFoundError: No module named 'agent_dispatch_analytics'`，影響 `npm run test:hooks` 統計準確性。
 
-W17-192 採此 idiom 後：
+後續實作票採此 idiom 後：
 
 - 2167 tests collected（含 22 個 test_analytics 測試 skip）
 - 0 collection error
-- skip 訊息明示 ticket 引用：`W17-192`
+- skip 訊息明示 archived 原因與恢復條件
 - pre-existing test failures 不受影響
 
 ## 恢復路徑
@@ -94,8 +91,8 @@ W17-192 採此 idiom 後：
 ## 相關規則 / 文件
 
 - pytest 官方文件：[pytestmark](https://docs.pytest.org/en/stable/how-to/skipping.html#skip-all-test-functions-of-a-class-or-module)
-- W17-190 ANA：Reality Test 發現此 stale bug
-- W17-192 IMP：本 idiom 的首次落地案例
+- ANA：Reality Test 發現此 stale bug
+- IMP：本 idiom 的首次落地案例
 
 ## 預估影響
 

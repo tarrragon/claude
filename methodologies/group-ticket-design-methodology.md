@@ -74,10 +74,10 @@ Group ticket（新建，pending）
 | PC-100 | Children 必須立即補 Context Bundle |
 | PC-102 | ROI 表未逐項轉 ticket；Group 模式是轉化的建議結構 |
 
-> 首次實踐案例：W17-008（W17-004 介面基線清理，group + 11 children，混合 5 IMP / 3 DOC / 3 ANA）。
+> 首次實踐案例：某次介面基線清理（group + 11 children，混合 5 IMP / 3 DOC / 3 ANA）。
 
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 2.0.0 — W8-019.3 整併瘦身：156→約 95 行，CLI 建立步驟路由 ticket skill + field-semantics SSOT（原 line 50-75 命令塊去重），三選項地圖表 + 反模式 + 何時不用保留為 30 秒核心
-**Version**: 1.0.0 — 從 W17-008 group ticket 首次實踐提煉
+**Version**: 2.0.0 — 整併瘦身：156→約 95 行，CLI 建立步驟路由 ticket skill + field-semantics SSOT（原 line 50-75 命令塊去重），三選項地圖表 + 反模式 + 何時不用保留為 30 秒核心
+**Version**: 1.0.0 — 從 group ticket 首次實踐提煉

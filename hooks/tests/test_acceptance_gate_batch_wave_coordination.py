@@ -103,7 +103,7 @@ def test_wave_without_coordination_allowed(gate, logger, tmp_path, monkeypatch, 
         "Bash", "ticket track batch-complete --wave 1", logger
     )
     assert ids == []
-    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert capsys.readouterr().out == ""  # 放行不輸出 decision
 
 
 def test_wave_other_wave_or_status_not_expanded(gate, logger, tmp_path):

@@ -55,7 +55,8 @@ class TestHookLogsAnchoredToProjectRoot:
         self, monkeypatch, tmp_path
     ):
         monkeypatch.delenv(precondition_mod._HOOK_LOGS_DIR_ENV, raising=False)
-        monkeypatch.setattr(precondition_mod, "get_project_root", lambda: tmp_path)
+        # 目錄經 hook_logging 解析（conftest 已設 HOOK_TEST_ISOLATION=1，採 CLAUDE_PROJECT_DIR）
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
 
         resolved = precondition_mod._resolve_hook_logs_dir()
 
@@ -67,7 +68,7 @@ class TestHookLogsAnchoredToProjectRoot:
         """模擬透過已安裝的全域 shim（uv run --directory <skill_dir>）執行，
         cwd 落在 skill 自身目錄，仍應寫入專案根下的 canonical 位置。"""
         monkeypatch.delenv(precondition_mod._HOOK_LOGS_DIR_ENV, raising=False)
-        monkeypatch.setattr(precondition_mod, "get_project_root", lambda: tmp_path)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
 
         nested_cwd = tmp_path / ".claude" / "skills" / "ticket"
         nested_cwd.mkdir(parents=True)

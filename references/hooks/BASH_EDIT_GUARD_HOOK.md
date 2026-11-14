@@ -9,6 +9,13 @@
 - **建立日期**: 2026-01-15
 - **檔案路徑**: `.claude/hooks/bash-edit-guard-hook.py`
 
+> **現行行為（以 hook 檔頭為準，本文以下段落為初版記錄）**：寫入目標改由
+> `bash-write-boundary-guard-hook.py` 的共用抽取判定，涵蓋直譯器內嵌寫入、heredoc、
+> 重導向、`awk -i inplace`、`ed`／`ex`、`sed -i`、`perl -pi`。目標為 ticket md 時擋下，
+> 改用 `ticket track` 子命令或 Edit；`docs/**`、`CLAUDE.md`、`CHANGELOG.md` 只送警告；
+> 其餘路徑只對 `sed -i`／`perl -pi` 警告。下文「偵測模式」的五種樣式是初版設計，
+> 其中重導向類已在降噪時移除。
+
 ## 目的
 
 偵測 Bash 命令中的檔案編輯操作，並建議使用 Edit 工具替代，以獲得更好的權限控制和變更追蹤。
@@ -173,7 +180,7 @@ python3 -m py_compile .claude/hooks/bash-edit-guard-hook.py
 
 # 功能測試
 echo '{"tool_name":"Bash","tool_input":{"command":"sed -i \"s/old/new/g\" file.dart"}}' | \
-  python3 .claude/hooks/bash-edit-guard-hook.py
+  uv run --quiet .claude/hooks/bash-edit-guard-hook.py
 
 # 查看日誌
 tail -f .claude/hook-logs/bash-edit-guard/bash-edit-guard-*.log

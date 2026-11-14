@@ -1,9 +1,9 @@
 """Minimal gate-satisfying test for task-dispatch-readiness-check.py（0.2.1-W3-945）。
 
-背景：test_agent_dispatch_check.py 已對本檔（HOOK_NAME 內部值為
-"agent-dispatch-check"）的分派邏輯有大量覆蓋，但檔名不符
-hooks-test-gate-hook.py 的 `_candidate_tests` 慣例（依「檔案名」stem 推導，
-非內部 HOOK_NAME），故本檔補齊 gate 可辨識的最小測試骨架。
+背景：本 hook 的 HOOK_NAME 內部值為 "agent-dispatch-check"，與檔名不同；
+hooks-test-gate-hook.py 的 `_candidate_tests` 依「檔案名」stem 推導，故測試
+集中在本檔。分派對應比對移除後，原 test_agent_dispatch_check.py 一併移除，
+仍有效的 main() 判定測試移入本檔。
 
 測試覆蓋：
 | 測試 | 場景 | 驗證 |
@@ -81,3 +81,43 @@ def test_liveness_entry_written_via_run_hook_safely(hook_mod, monkeypatch, tmp_p
     assert len(lines) == 1
     entry = json.loads(lines[0])
     assert entry["hook"] == "agent-dispatch-check"
+
+
+# ============================================================================
+# main() 判定：空 prompt 擋下（正向對照）；分派對應比對已移除
+# 以下三項自原 test_agent_dispatch_check.py 移入（該檔測的分派比對已移除）
+# ============================================================================
+
+def _run_main_with(hook_mod, monkeypatch, tool_name: str, tool_input: dict) -> int:
+    payload = {"tool_name": tool_name, "tool_input": tool_input}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    with pytest.raises(SystemExit) as exc_info:
+        hook_mod.main()
+    return exc_info.value.code
+
+
+def test_main_accepts_agent_tool_name_reaches_prompt_check(hook_mod, monkeypatch, capsys):
+    """tool_name="Agent" 且缺少 prompt 應觸發 deny 輸出（正向對照）。"""
+    assert _run_main_with(hook_mod, monkeypatch, "Agent", {}) == 0
+    assert "缺少 prompt 參數" in capsys.readouterr().out
+
+
+def test_main_still_accepts_task_tool_name_reaches_prompt_check(hook_mod, monkeypatch, capsys):
+    assert _run_main_with(hook_mod, monkeypatch, "Task", {}) == 0
+    assert "缺少 prompt 參數" in capsys.readouterr().out
+
+
+def test_main_skips_unrelated_tool_name(hook_mod, monkeypatch, capsys):
+    assert _run_main_with(hook_mod, monkeypatch, "Bash", {}) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_dispatch_with_prompt_allowed_regardless_of_agent(hook_mod, monkeypatch, capsys):
+    """有 prompt 的派發一律放行：分派對應比對已移除，不依代理人與任務類型判定。"""
+    monkeypatch.setattr(hook_mod, "prompt_references_handoff_ticket", lambda *a, **k: False)
+    code = _run_main_with(
+        hook_mod, monkeypatch, "Agent",
+        {"prompt": "開發 Hook 腳本來檢查代理人分派", "subagent_type": "parsley-flutter-developer"},
+    )
+    assert code == 0
+    assert "deny" not in capsys.readouterr().out

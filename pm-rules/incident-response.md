@@ -71,7 +71,7 @@ Skip-gate 防護機制的核心流程。
 
 ## Reality Test 閘門（強制）
 
-> **來源**：PC-063 — W5-031 ANA Ticket 列 4 候選方案（A/B/C/D）皆基於未驗證假設，方案全部不匹配真正根因。PM 清 context 後 resume 時主動進行重現實驗，才發現方案需新增 F/H 才能根治。
+> **來源**：PC-063 — 某 ANA Ticket 列 4 候選方案（A/B/C/D）皆基於未驗證假設，方案全部不匹配真正根因。PM 清 context 後 resume 時主動進行重現實驗，才發現方案需新增 F/H 才能根治。
 
 **核心規則**：分析階段中，**禁止在未完成重現實驗前列候選方案**。Reality Test 是 ANA / incident-response / WRAP Widen 三類流程的共同前置閘門。
 
@@ -249,4 +249,4 @@ incident-responder 結論的根因若是「判讀者對某個系統的行為想�
 ---
 
 **Last Updated**: 2026-04-13
-**Version**: 3.8.0 - 新增 Reality Test 閘門章節（PC-063 防護 2/4，0.18.0-W5-034）
+**Version**: 3.8.0 - 新增 Reality Test 閘門章節（PC-063 防護 2/4）

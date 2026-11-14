@@ -3,7 +3,6 @@ id: PC-157
 title: chrome-devtools-mcp install_extension 拒絕非 workspace roots 內路徑（含 /tmp）
 category: process-compliance
 severity: low
-source_case: 0.19.0-W1-002.2
 created: 2026-05-25
 ---
 
@@ -14,7 +13,7 @@ created: 2026-05-25
 執行 `mcp__chrome-devtools__install_extension` 載入解壓後 unpacked extension 時，傳入 `/tmp/<dir>` 等慣常臨時目錄被拒絕，錯誤訊息：
 
 ```
-Error: Access denied: path /tmp/readmoo-ext-w1-002-2 is not within any of the
+Error: Access denied: path /tmp/readmoo-ext-example is not within any of the
 workspace roots [{"uri":"file:///Users/<user>/project/<proj>"},{"uri":"file:///var/folders/.../T","name":"temp"}].
 ```
 
@@ -33,7 +32,7 @@ workspace roots [{"uri":"file:///Users/<user>/project/<proj>"},{"uri":"file:///v
 | 場景 | 正確做法 |
 |------|---------|
 | 解壓 extension ZIP 給 mcp install | 用 `$TMPDIR/<dir>`（macOS = `/var/folders/.../T/`），或專案內路徑（如 `dist/extracted/`） |
-| 取得正確 TMPDIR 路徑 | Bash `echo "$TMPDIR"` 取得絕對路徑；mkdir 與後續操作用 absolute path（zsh 的 globbing 對相對路徑變數展開有時失敗）。**版本註記**：CC ≥ 2.1.163 此步驟可靠（`$TMPDIR` 解析回真實系統 temp = MCP workspace root `temp`）；CC 2.1.154–2.1.162 因 regression 將 `$TMPDIR` 覆寫為 `/tmp/claude-{uid}`（在 /tmp 下），此窗口期 `echo $TMPDIR` 返回的路徑會被 install_extension 拒，改以下列「讀錯誤訊息 workspace roots」為權威來源（2.1.163 #9 已修復 regression，0.19.1-W1-045 驗證） |
+| 取得正確 TMPDIR 路徑 | Bash `echo "$TMPDIR"` 取得絕對路徑；mkdir 與後續操作用 absolute path（zsh 的 globbing 對相對路徑變數展開有時失敗）。**版本註記**：CC ≥ 2.1.163 此步驟可靠（`$TMPDIR` 解析回真實系統 temp = MCP workspace root `temp`）；CC 2.1.154–2.1.162 因 regression 將 `$TMPDIR` 覆寫為 `/tmp/claude-{uid}`（在 /tmp 下），此窗口期 `echo $TMPDIR` 返回的路徑會被 install_extension 拒，改以下列「讀錯誤訊息 workspace roots」為權威來源（2.1.163 #9 已修復 regression，已實測驗證） |
 | 撞到 access denied 錯誤 | 第一步讀錯誤訊息的 `workspace roots [...]` 清單，從中挑路徑，不要重試 /tmp 變體（此法版本無關，最可靠） |
 
 ## 觸發條件
@@ -64,13 +63,13 @@ macOS 的 `$TMPDIR` 是 per-user sandboxed temp（`/var/folders/g?/.../T/`），
 
 ## 案例
 
-### Case 1: 2026-05-25 W1-002.2
+### Case 1: 2026-05-25 實機驗證
 
-PM 執行 W1-002.2 實機驗證，第一次嘗試：
+PM 執行 extension 實機驗證，第一次嘗試：
 
 ```bash
-unzip -q dist/readmoo-book-extractor-v0.18.0.zip -d /tmp/readmoo-ext-w1-002-2/
-mcp__chrome-devtools__install_extension(path: /tmp/readmoo-ext-w1-002-2)
+unzip -q dist/readmoo-book-extractor-v0.18.0.zip -d /tmp/readmoo-ext-example/
+mcp__chrome-devtools__install_extension(path: /tmp/readmoo-ext-example)
 → Error: Access denied: path /tmp/... is not within any of the workspace roots
 ```
 

@@ -21,7 +21,7 @@ from project_init.lib.onboard_checker import (
     detect_project_language,
     parse_hook_classification,
 )
-from project_init.lib.hook_verifier import check_hook_completeness
+from project_init.lib.hook_verifier import check_hook_registration_coverage
 
 
 class TestDetectProjectLanguage:
@@ -214,7 +214,7 @@ class TestCheckSettingsLocalJson:
 
 
 class TestCheckHookCompleteness:
-    """測試 Hook 完整性驗證."""
+    """測試 Hook 註冊涵蓋率驗證."""
 
     def _create_hook_file(self, hooks_dir: Path, filename: str) -> None:
         """建立 Hook 檔案."""
@@ -255,9 +255,9 @@ class TestCheckHookCompleteness:
         # 建立 settings.json 並登記這兩個 Hook
         self._create_settings_json(tmp_path, ["test-hook-1.py", "test-hook-2.py"])
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok
+        assert result.coverage_ok
         assert len(result.unregistered_hooks) == 0
         assert result.all_hooks == {"test-hook-1.py", "test-hook-2.py"}
 
@@ -271,9 +271,9 @@ class TestCheckHookCompleteness:
         # 只登記 registered.py
         self._create_settings_json(tmp_path, ["registered.py"])
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert not result.completeness_ok
+        assert not result.coverage_ok
         assert result.unregistered_hooks == {"unregistered.py"}
         assert "registered.py" in result.registered_hooks
 
@@ -287,9 +287,9 @@ class TestCheckHookCompleteness:
         # 只登記 test-hook.py
         self._create_settings_json(tmp_path, ["test-hook.py"])
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok
+        assert result.coverage_ok
         assert "old-backup.py" not in result.all_hooks
         assert result.excluded_count > 0
 
@@ -311,9 +311,9 @@ class TestCheckHookCompleteness:
         # 只登記 test-hook.py
         self._create_settings_json(tmp_path, ["test-hook.py"])
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok
+        assert result.coverage_ok
         assert "skip-me.py" not in result.all_hooks
         assert "test-hook.py" in result.all_hooks
 
@@ -335,9 +335,9 @@ class TestCheckHookCompleteness:
         # 只登記 test-hook.py
         self._create_settings_json(tmp_path, ["test-hook.py"])
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok
+        assert result.coverage_ok
         assert "test-hook.py" in result.all_hooks
         # old-backup.py 應該被排除掉
         assert "old-backup.py" not in result.all_hooks
@@ -348,9 +348,9 @@ class TestCheckHookCompleteness:
         hooks_dir.mkdir(parents=True)
         self._create_hook_file(hooks_dir, "test-hook.py")
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok is False
+        assert result.coverage_ok is False
         assert "settings.json" in result.failure_reason
         assert len(result.all_hooks) == 0
 
@@ -360,9 +360,9 @@ class TestCheckHookCompleteness:
         hooks_dir.mkdir(parents=True)
         (tmp_path / ".claude" / "settings.json").write_text('{"hooks": {},}', encoding="utf-8")
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok is False
+        assert result.coverage_ok is False
         assert result.failure_reason
 
     def test_settings_json_present_has_no_failure_reason(self, tmp_path: Path) -> None:
@@ -370,9 +370,9 @@ class TestCheckHookCompleteness:
         self._create_settings_json(tmp_path, [])
         (tmp_path / ".claude" / "hooks").mkdir(parents=True, exist_ok=True)
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok is True
+        assert result.coverage_ok is True
         assert result.failure_reason == ""
 
     def test_onboard_reports_missing_settings_reason(self, tmp_path: Path, capsys) -> None:
@@ -380,10 +380,10 @@ class TestCheckHookCompleteness:
         from project_init.commands import onboard
 
         (tmp_path / ".claude" / "hooks").mkdir(parents=True)
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        onboard._print_hook_completeness_section(result)
-        items = onboard._collect_hook_completeness_items(result)
+        onboard._print_hook_coverage_section(result)
+        items = onboard._collect_hook_coverage_items(result)
 
         assert "settings.json" in capsys.readouterr().out
         assert len(items) == 1 and "settings.json" in items[0].hint
@@ -392,9 +392,9 @@ class TestCheckHookCompleteness:
         """測試 Hook 目錄不存在時的處理."""
         self._create_settings_json(tmp_path, [])
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert result.completeness_ok
+        assert result.coverage_ok
         assert len(result.all_hooks) == 0
         assert len(result.registered_hooks) == 0
 
@@ -408,9 +408,9 @@ class TestCheckHookCompleteness:
         # 只登記 registered.py
         self._create_settings_json(tmp_path, ["registered.py"])
 
-        result = check_hook_completeness(tmp_path)
+        result = check_hook_registration_coverage(tmp_path)
 
-        assert not result.completeness_ok
+        assert not result.coverage_ok
         assert len(result.unregistered_hooks) == 3
         assert result.unregistered_hooks == {"hook1.py", "hook2.py", "hook3.py"}
 
@@ -930,3 +930,58 @@ class TestCheckTechStackSection:
             result = check_tech_stack_section(tmp_path)
 
             assert result.exists, f"Failed to detect: {keyword}"
+
+
+# 框架 .claude/lib/hook_registry.py（dispatch registry 唯一讀取點）；受檢專案的同一份檔
+_FRAMEWORK_HOOK_REGISTRY = (
+    Path(__file__).resolve().parents[3] / "lib" / "hook_registry.py"
+)
+
+
+class TestHookCompletenessWithDispatchRegistry:
+    """onboard 的 Hook 註冊涵蓋率與 coverage check 採同一份登記來源（settings.json + dispatch registry）。
+
+    背景：經 hook-dispatch-registry.json 由 dispatcher 執行的 hook 在 settings.json 出現 0 次，
+    onboard 原本只比對 settings.json，把它們列為未登記，與 SessionStart coverage check 結論相反。
+    """
+
+    def _project(self, tmp_path: Path, with_lib: bool = True) -> Path:
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        for name in ("in-settings.py", "in-dispatch.py", "nowhere.py"):
+            (hooks_dir / name).write_text("# hook\n", encoding="utf-8")
+        settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command",
+             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/in-settings.py"},
+        ]}]}}
+        (tmp_path / ".claude" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        (hooks_dir / "hook-dispatch-registry.json").write_text(json.dumps({"groups": {
+            "PreToolUse:Bash": {"hooks": [{"path": ".claude/hooks/in-dispatch.py"}]},
+        }}), encoding="utf-8")
+        if with_lib:
+            lib_dir = tmp_path / ".claude" / "lib"
+            lib_dir.mkdir()
+            (lib_dir / "hook_registry.py").write_text(
+                _FRAMEWORK_HOOK_REGISTRY.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+        return tmp_path
+
+    def test_dispatch_registry_member_counts_as_registered(self, tmp_path: Path) -> None:
+        result = check_hook_registration_coverage(self._project(tmp_path))
+
+        assert "in-dispatch.py" in result.registered_hooks
+        assert "in-dispatch.py" not in result.unregistered_hooks
+
+    def test_hook_registered_nowhere_still_reported(self, tmp_path: Path) -> None:
+        """對照：兩處都未登記的 hook 仍列為未登記（判定未退化為一律通過）。"""
+        result = check_hook_registration_coverage(self._project(tmp_path))
+
+        assert result.unregistered_hooks == {"nowhere.py"}
+        assert not result.coverage_ok
+
+    def test_missing_registry_module_falls_back_with_stderr(self, tmp_path: Path, capsys) -> None:
+        """受檢專案沒有 lib/hook_registry.py（舊版框架）：退回只看 settings.json，stderr 說明。"""
+        result = check_hook_registration_coverage(self._project(tmp_path, with_lib=False))
+
+        assert "in-dispatch.py" in result.unregistered_hooks
+        assert "hook_registry" in capsys.readouterr().err

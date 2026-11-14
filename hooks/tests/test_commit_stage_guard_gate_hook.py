@@ -377,6 +377,23 @@ class TestMainIntegration:
         assert "commit-stage-guard-gate" in result.stderr
         assert "reference-stability-rule8-guard" in result.stderr
 
+    def test_same_skill_dir_multi_files_single_warn_with_count(self, scratch_repo):
+        """3.3.0-W1-048：同一 skill 目錄多檔 staged 只出一則 skill-trigger 提醒並附檔數。"""
+        for i in range(3):
+            target = scratch_repo / ".claude" / "skills" / "demo-skill" / f"r{i}.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"內容 {i}\n", encoding="utf-8")
+        _run_git(["add", "."], cwd=scratch_repo)
+
+        result = self._run_hook(
+            {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}},
+            scratch_repo,
+        )
+
+        assert result.returncode == 0
+        assert result.stderr.count("[skill-trigger]") == 1, result.stderr
+        assert ".claude/skills/demo-skill/ 下 3 個檔案" in result.stderr
+
     def test_staged_clean_content_allows_commit(self, scratch_repo):
         target = scratch_repo / ".claude" / "references" / "clean.md"
         target.parent.mkdir(parents=True)
@@ -500,3 +517,166 @@ class TestScanModeE2:
         monkeypatch.chdir(scratch_repo)
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(scratch_repo))
         assert hook_module.main() == 0
+
+
+class TestCommitTargetRepo:
+    """commit 的目標 repo 取命令實際作用的目錄（-C 與子 shell cd），非 hook 行程 cwd。
+
+    內容守衛只套用在 session 所屬的同一 repo（主 checkout 與其 worktree）；
+    他 repo 維持修改前不擋的結果（用戶裁定 2026-11-13）。
+    """
+
+    def _make_repo(self, path: Path) -> Path:
+        path.mkdir()
+        _run_git(["init", "-q", "-b", "main"], cwd=path)
+        _run_git(["config", "user.email", "test@example.com"], cwd=path)
+        _run_git(["config", "user.name", "Test"], cwd=path)
+        (path / "README.md").write_text("x\n", encoding="utf-8")
+        _run_git(["add", "README.md"], cwd=path)
+        _run_git(["commit", "-q", "-m", "baseline"], cwd=path)
+        return path
+
+    def _run(self, session_repo: Path, command: str):
+        return TestMainIntegration()._run_hook(
+            {"tool_name": "Bash", "cwd": str(session_repo), "tool_input": {"command": command}},
+            session_repo,
+        )
+
+    @pytest.fixture
+    def same_repo_pair(self, tmp_path):
+        """session 主 checkout（分支 work，乾淨）與同 repo 的 linked worktree（有 staged 違規）。"""
+        session = self._make_repo(tmp_path / "session")
+        _run_git(["checkout", "-q", "-b", "work"], cwd=session)
+        wt = tmp_path / "wt"
+        _run_git(["worktree", "add", "-q", "-b", "feat-x", str(wt)], cwd=session)
+        TestScanModeE2()._stage_violation(wt)
+        return session, wt
+
+    @pytest.fixture
+    def other_repo(self, tmp_path):
+        """他 repo，在 main 上，有 staged 違規。"""
+        other = self._make_repo(tmp_path / "other")
+        TestScanModeE2()._stage_violation(other)
+        return other
+
+    def test_direct_commit_in_violating_checkout_denied(self, same_repo_pair):
+        """正向對照：在有違規的 checkout 直接 commit 應擋。"""
+        _, wt = same_repo_pair
+        assert self._run(wt, "git commit -m x").returncode == 2
+
+    def test_subshell_cd_to_same_repo_worktree_denied(self, same_repo_pair):
+        """修正誤放：session 乾淨、子 shell cd 到同 repo 有違規的 worktree，應擋。"""
+        session, wt = same_repo_pair
+        result = self._run(session, f"(cd {wt} && git commit -m x)")
+        assert result.returncode == 2
+        assert "reference-stability-rule8-guard" in result.stderr
+
+    def test_dash_c_to_same_repo_worktree_denied(self, same_repo_pair):
+        """修正誤放：-C 指向同 repo 有違規的 worktree，應擋（修改前只看 hook 行程 cwd）。"""
+        session, wt = same_repo_pair
+        assert self._run(session, f"git -C {wt} commit -m x").returncode == 2
+
+    def test_subshell_cd_to_clean_checkout_allowed(self, same_repo_pair):
+        """修正誤擋：session 有違規、子 shell cd 到同 repo 乾淨的主 checkout，應放。"""
+        session, wt = same_repo_pair
+        assert self._run(wt, f"(cd {session} && git commit -m x)").returncode == 0
+
+    def test_same_repo_worktree_on_protected_branch_denied(self, tmp_path):
+        """同 repo 的 worktree 在保護分支上 commit，仍會擋（branch-verify）。"""
+        session = self._make_repo(tmp_path / "session")
+        _run_git(["checkout", "-q", "-b", "work"], cwd=session)
+        wt = tmp_path / "wt-main"
+        _run_git(["worktree", "add", "-q", str(wt), "main"], cwd=session)
+        (wt / "notes.md").write_text("x\n", encoding="utf-8")
+        _run_git(["add", "notes.md"], cwd=wt)
+        assert self._run(session, f"git -C {wt} commit -m x").returncode == 2
+
+    def test_dash_c_to_other_repo_on_protected_branch_allowed(self, tmp_path):
+        """他 repo 在保護分支上、staged 內容會觸發 branch-verify：不擋，交由該 repo 自己管。"""
+        session = self._make_repo(tmp_path / "session")
+        other = self._make_repo(tmp_path / "other")
+        (other / "notes.md").write_text("x\n", encoding="utf-8")
+        _run_git(["add", "notes.md"], cwd=other)
+        assert self._run(other, "git commit -m x").returncode == 2  # 正向對照
+        assert self._run(session, f"git -C {other} commit -m x").returncode == 0
+
+    def test_subshell_cd_to_other_repo_allowed(self, tmp_path, other_repo):
+        """他 repo 有 staged 違規：子 shell cd 進去 commit 不擋。"""
+        session = self._make_repo(tmp_path / "session")
+        assert self._run(session, f"(cd {other_repo} && git commit -m x)").returncode == 0
+
+    def test_unresolvable_dir_denied(self, same_repo_pair):
+        """目錄無法靜態解析時擋下並要求字面路徑。"""
+        session, _ = same_repo_pair
+        result = self._run(session, 'cd "$TARGET" && git commit -m x')
+        assert result.returncode == 2
+        assert "無法靜態解析" in result.stderr
+
+    def test_non_git_dir_falls_back_to_process_cwd(self, same_repo_pair, tmp_path):
+        """cd 目標不是 git repo：沿用修改前的 hook 行程 cwd 判定。"""
+        session, wt = same_repo_pair
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        assert self._run(wt, f"(cd {plain} && git commit -m x)").returncode == 2
+        assert self._run(session, f"(cd {plain} && git commit -m x)").returncode == 0
+
+
+_EVT_PATH = "docs/events/EVT-DEMO-001-demo.md"
+_EVT_HEAD = "---\nid: EVT-DEMO-001\nname: demo\ncanonical_name: Demo\ncategory: domain_event\n"
+_EVT_OK = _EVT_HEAD + "producers: [a]\nconsumers: [b]\n---\n# demo\n"
+_EVT_NO_CONSUMER = _EVT_HEAD + "producers: [a]\n---\n# demo\n"
+
+
+class TestDocValidateGate:
+    """3.3.0-W1-018：觸及的 docs 節點跑 doc validate，只擋新增錯誤；他 repo 不跑。
+
+    repo 在非保護分支 work 上，避免 branch-verify 介入。
+    """
+
+    def _make_repo(self, path: Path) -> Path:
+        repo = TestCommitTargetRepo()._make_repo(path)
+        _run_git(["checkout", "-q", "-b", "work"], cwd=repo)
+        return repo
+
+    def _stage(self, repo: Path, text: str) -> None:
+        target = repo / _EVT_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+        _run_git(["add", _EVT_PATH], cwd=repo)
+
+    def _commit_baseline(self, repo: Path, text: str) -> None:
+        self._stage(repo, text)
+        _run_git(["commit", "-q", "--no-verify", "-m", "doc baseline"], cwd=repo)
+
+    def test_new_doc_error_denied(self, tmp_path):
+        repo = self._make_repo(tmp_path / "session")
+        self._stage(repo, _EVT_NO_CONSUMER)
+        result = TestCommitTargetRepo()._run(repo, "git commit -m x")
+        assert result.returncode == 2
+        assert "[doc-validate]" in result.stderr
+        assert "缺少 consumer" in result.stderr
+
+    def test_clean_doc_allowed(self, tmp_path):
+        repo = self._make_repo(tmp_path / "session")
+        self._stage(repo, _EVT_OK)
+        result = TestCommitTargetRepo()._run(repo, "git commit -m x")
+        assert result.returncode == 0, result.stderr
+        assert "[doc-validate]" not in result.stderr
+
+    def test_existing_doc_error_not_blocked(self, tmp_path):
+        """存量錯誤：HEAD 已缺 consumer，本次只改內文，不擋。"""
+        repo = self._make_repo(tmp_path / "session")
+        self._commit_baseline(repo, _EVT_NO_CONSUMER)
+        self._stage(repo, _EVT_NO_CONSUMER + "補一段說明。\n")
+        result = TestCommitTargetRepo()._run(repo, "git commit -m x")
+        assert result.returncode == 0, result.stderr
+
+    def test_other_repo_commit_skips_doc_validate(self, tmp_path):
+        """commit 到他 repo 不跑 doc validate（內容守衛只對 session 所屬 repo）。"""
+        session = self._make_repo(tmp_path / "session")
+        other = self._make_repo(tmp_path / "other")
+        self._stage(other, _EVT_NO_CONSUMER)
+        assert TestCommitTargetRepo()._run(other, "git commit -m x").returncode == 2  # 正向對照
+        result = TestCommitTargetRepo()._run(session, f"git -C {other} commit -m x")
+        assert result.returncode == 0
+        assert "[doc-validate]" not in result.stderr

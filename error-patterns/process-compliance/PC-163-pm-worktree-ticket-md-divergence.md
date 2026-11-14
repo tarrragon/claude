@@ -17,7 +17,7 @@ related:
 
 **現況**：本 PC 的核心前提——「ticket CLI 依 cwd 的 git working tree 決定操作對象」（見下方「Why」）——已於 2026-09-02 隨 `get_ticket_state_root()`（`.claude/skills/ticket/ticket_system/lib/paths.py`）新增而不再成立。該函式讓 `claim` / `append-log` / `complete` / `set-acceptance` 等 ticket 狀態操作（經 `get_tickets_dir()` -> `get_ticket_path()` 呼叫鏈，覆蓋 `lifecycle.py` 全部生命週期命令）在偵測到 linked worktree 場景時一律回推**主倉庫**根目錄，與呼叫端 cwd 無關；`complete()` 收尾的 ticket md auto-commit 同樣錨定主倉庫（`lifecycle.py` 對應段落）。PM（main repo cwd）與 agent（worktree cwd）執行 ticket CLI 時，兩者寫入的是同一份主倉庫檔案，不再各自持有一份會分裂的 working tree 副本。
 
-**為何在建立當下（2026-05-27）成立**：當時 ticket CLI 的路徑解析全域委派 `get_project_root()`（純 cwd-based git working tree 解析），ticket 狀態操作與程式碼提交共用同一套解析邏輯，未區分兩者。PM 與 agent 若處於不同 cwd（main repo vs worktree），ticket CLI 會分別作用於各自 working tree 內的 ticket md 副本，因而產生本 PC 下方「觸發案例」記載的分裂與人工 reconcile 需求——此為 W1-096 案例的真實情境，非誤判。
+**為何在建立當下（2026-05-27）成立**：當時 ticket CLI 的路徑解析全域委派 `get_project_root()`（純 cwd-based git working tree 解析），ticket 狀態操作與程式碼提交共用同一套解析邏輯，未區分兩者。PM 與 agent 若處於不同 cwd（main repo vs worktree），ticket CLI 會分別作用於各自 working tree 內的 ticket md 副本，因而產生本 PC 下方「觸發案例」記載的分裂與人工 reconcile 需求——此為該案例的真實情境，非誤判。
 
 **對下方內容的影響**：
 
@@ -44,15 +44,15 @@ related:
 
 ## 觸發案例
 
-### W1-096 案例（2026-05-27）
+### 某 bug 修復票的 worktree 分裂案例（2026-05-27）
 
 **時序**：
 
-1. PM `worktree create 0.19.0-W1-096` 建立 worktree（path: `book_overview_v1-0.19.0-W1-096`，branch: `feat/0.19.0-W1-096`），此時 worktree 的 ticket md 為原始 `status: pending` 狀態
-2. PM 在 **main repo cwd** 執行 `ticket track claim 0.19.0-W1-096` → main repo 的 ticket md 被更新（`status: in_progress` + `started_at` + `assigned: true`），但變更未 commit，且 worktree 的 ticket md 完全沒看到此更新
+1. PM `worktree create <ticket-id>` 建立 worktree（path: `book_overview_v1-<ticket-id>`，branch: `feat/<ticket-id>`），此時 worktree 的 ticket md 為原始 `status: pending` 狀態
+2. PM 在 **main repo cwd** 執行 `ticket track claim <ticket-id>` → main repo 的 ticket md 被更新（`status: in_progress` + `started_at` + `assigned: true`），但變更未 commit，且 worktree 的 ticket md 完全沒看到此更新
 3. PM 在 **main repo cwd** 執行 `ticket track append-log` 兩次（Problem Analysis 寫 WRAP 三問、Solution 寫派發執行指引）→ 兩個 PM 派發期 ephemeral context 寫入 main repo's working tree
 4. PM 派發 thyme-extension-engineer 到背景，**agent 在 worktree cwd 作業**
-5. Agent 修復 3 檔程式碼，commit 到 `feat/0.19.0-W1-096`，再修改 **worktree 的** ticket md 填寫 Problem Analysis / Solution / Test Results / Completion Info（基於原始 pending 狀態，沒看到 PM 的 WRAP / dispatch 指引）
+5. Agent 修復 3 檔程式碼，commit 到 `feat/<ticket-id>`，再修改 **worktree 的** ticket md 填寫 Problem Analysis / Solution / Test Results / Completion Info（基於原始 pending 狀態，沒看到 PM 的 WRAP / dispatch 指引）
 6. Agent 因 API 529 中斷，未 commit ticket md，未 complete
 7. PM 接手發現：
    - main repo 的 ticket md：`status: in_progress` + WRAP + dispatch 指引（uncommitted）
@@ -66,7 +66,7 @@ related:
 3. Commit worktree 的 ticket md
 4. `check-acceptance --all` + `complete`（從 worktree cwd 執行）
 5. 在 main repo `git checkout --` 捨棄 main repo 的 uncommitted 變更
-6. `git merge feat/0.19.0-W1-096` fast-forward
+6. `git merge feat/<ticket-id>` fast-forward
 7. `git worktree remove` + `git branch -d` 清理
 
 額外成本：6 個額外 Bash 操作 + 認知負擔（決定 ephemeral context 去留 + 確認沒誤覆寫 agent 產出）。
@@ -160,7 +160,7 @@ PostToolUse:Bash 偵測「`ticket track (claim|append-log|complete)` 在 main re
 |------|------|
 | 短任務未開 worktree | 不適用（直接在 main repo 操作） |
 | DOC ticket 純文件更新 | 可不開 worktree（直接 main repo commit），不觸發本 PC |
-| 多 agent 並行（W17-203.1 parallel-check） | 每個 ticket 都有獨立 worktree，本 PC 各自獨立適用 |
+| 多 agent 並行（parallel-check） | 每個 ticket 都有獨立 worktree，本 PC 各自獨立適用 |
 | Agent 完成 + complete 全程順利 | 不觸發本 PC（agent 自己處理 ticket md commit） |
 
 **邊界判定原則**：本 PC 觸發前提是「PM 與 agent 對同一 ticket md 並行作業於不同 working tree」。任一條件不成立即不適用——單一 cwd 操作（無 worktree 或全程同 cwd）、agent 自主完成全部 ticket md 變更（PM 無 append-log）、ticket md 變更全部在 agent commit 前 reconcile 完畢，均屬安全情境。多 agent 並行情境下，每對「PM cwd × agent worktree」獨立判定。
@@ -179,4 +179,4 @@ PostToolUse:Bash 偵測「`ticket track (claim|append-log|complete)` 在 main re
 **Last Updated**: 2026-09-03
 **Version**: 1.2.0 — status 改為 resolved，文首新增「狀態附記」：根本原因（ticket CLI 依 cwd 決定操作對象）已由 get_ticket_state_root() 統一回推主倉庫消除，Approach A/B 失效、Approach C 已達成（達成方式與原設想不同）、防護措施三層失效；各對應段落標題補歷史標記，內容保留不刪
 **Version**: 1.1.0 — Layer 2 by basil-writing-critic 審查補強：表格後橋接說明（根本原因 / 邊界與例外）+ 防護措施三層各補適用條件
-**Version**: 1.0.0 — 初始建立，源 W1-096 reconcile 案例
+**Version**: 1.0.0 — 初始建立，源 worktree 分裂 reconcile 案例

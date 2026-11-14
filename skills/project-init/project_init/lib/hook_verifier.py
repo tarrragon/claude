@@ -1,8 +1,10 @@
 """Hook 系統和工具可用性驗證模組.
 
-此模組驗證 UV、ripgrep 等工具的可用性，以及 Hook 系統的完整性。
+此模組驗證 UV、ripgrep 等工具的可用性、Hook 可否編譯，以及 Hook 的註冊涵蓋率。
 """
 
+import copy
+import importlib.util
 import py_compile
 import subprocess
 import sys
@@ -24,7 +26,7 @@ from .hook_checker import (
 MINIMUM_UV_VERSION = "0.1.0"
 MINIMUM_RIPGREP_VERSION = "13.0.0"
 
-# settings.json 讀不到時的完整性判定原因（load_json_file 對「不存在」與
+# settings.json 讀不到時的註冊涵蓋率判定原因（load_json_file 對「不存在」與
 # 「無法解析」皆回 None，兩者對 hook 載入的後果相同：全數不載入）
 MISSING_SETTINGS_REASON = (
     ".claude/settings.json 不存在或無法解析為 JSON，Claude Code 不會載入任何 hook；"
@@ -61,8 +63,12 @@ class HookSystemStatus:
 
 
 @dataclass
-class HookCompletenessResult:
-    """Hook 完整性檢查結果."""
+class HookRegistrationCoverageResult:
+    """Hook 註冊涵蓋率檢查結果.
+
+    只量每支 Hook 檔是否已登記（settings.json + hook-dispatch-registry），
+    不量觸發、事件、權限、依賴。
+    """
 
     all_hooks: set[str]
     """掃描到的所有 Hook 檔案（排除 exclude list）."""
@@ -72,7 +78,7 @@ class HookCompletenessResult:
     """未在 settings.json 中登記的 Hook 檔案。"""
     excluded_count: int
     """被排除在檢查外的 Hook 檔案數量。"""
-    completeness_ok: bool
+    coverage_ok: bool
     """是否所有 Hook 都已登記。"""
     failure_reason: str = ""
     """無法完成比對時的原因（如 settings.json 不存在）；可正常比對時為空字串。"""
@@ -207,17 +213,49 @@ def verify_hooks_system(project_root: Path) -> HookSystemStatus:
     )
 
 
-def check_hook_completeness(project_root: Path) -> HookCompletenessResult:
-    """檢查 Hook 完整性 — 驗證所有 .claude/hooks/*.py 都已在 settings.json 登記.
+HOOK_REGISTRY_MODULE_RELATIVE = Path(".claude") / "lib" / "hook_registry.py"
 
-    掃描 .claude/hooks/ 目錄，與 settings.json 比對已登記的 Hook，
-    回傳未登記的清單。
+
+def _merge_dispatch_registry(settings: dict, project_root: Path) -> dict:
+    """回傳併入 hook-dispatch-registry.json 成員後的 settings 副本。
+
+    登記來源與 SessionStart 的 hook-registration-coverage-check 相同：settings.json
+    加上由 hook-dispatcher 執行的 dispatch registry 成員。讀取點是受檢專案的
+    `.claude/lib/hook_registry.py`（僅依賴標準庫，可用檔案路徑載入），不在本套件
+    另寫一份 registry 格式解析。
+
+    模組不存在或載入失敗（舊版框架）時寫 stderr，退回只看 settings.json。
+    """
+    module_path = project_root / HOOK_REGISTRY_MODULE_RELATIVE
+    try:
+        spec = importlib.util.spec_from_file_location("_onboard_hook_registry", module_path)
+        if spec is None or spec.loader is None or not module_path.is_file():
+            raise FileNotFoundError(str(module_path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.merge_dispatch_registry(copy.deepcopy(settings), project_root)
+    except Exception as exc:  # 載入失敗不可中斷 onboard；stderr 說明退回行為
+        sys.stderr.write(
+            f"[project-init] 無法載入 {module_path}（{exc}）；"
+            "Hook 註冊涵蓋率只比對 settings.json，經 hook-dispatch-registry 執行的 hook 會被列為未登記\n"
+        )
+        return settings
+
+
+def check_hook_registration_coverage(project_root: Path) -> HookRegistrationCoverageResult:
+    """檢查 Hook 註冊涵蓋率 — 驗證所有 .claude/hooks/*.py 都已登記.
+
+    只量是否已登記，不量觸發、事件、權限、依賴；全數登記不代表 hook 會如預期執行。
+
+    掃描 .claude/hooks/ 目錄，與已登記的 Hook 比對，回傳未登記的清單。
+    已登記 = settings.json 的註冊 + hook-dispatch-registry.json 的成員
+    （與 hook-registration-coverage-check 同一份來源）。
 
     Args:
         project_root: 專案根目錄。
 
     Returns:
-        HookCompletenessResult: 完整性檢查結果。
+        HookRegistrationCoverageResult: 註冊涵蓋率檢查結果。
     """
     hooks_dir = project_root / ".claude" / "hooks"
     settings_path = project_root / ".claude" / "settings.json"
@@ -226,14 +264,14 @@ def check_hook_completeness(project_root: Path) -> HookCompletenessResult:
     # 載入設定檔
     settings = load_json_file(settings_path)
     if settings is None:
-        # settings.json 不存在或無法解析：hook 全數不會載入，判定為不完整並說明原因。
+        # settings.json 不存在或無法解析：hook 全數不會載入，判定為未涵蓋並說明原因。
         # 過去回 True，缺 settings.json 的環境被報為通過（tarrragon/claude#53）。
-        return HookCompletenessResult(
+        return HookRegistrationCoverageResult(
             all_hooks=set(),
             registered_hooks=set(),
             unregistered_hooks=set(),
             excluded_count=0,
-            completeness_ok=False,
+            coverage_ok=False,
             failure_reason=MISSING_SETTINGS_REASON,
         )
 
@@ -242,7 +280,9 @@ def check_hook_completeness(project_root: Path) -> HookCompletenessResult:
 
     # 掃描 Hook 目錄
     all_hooks = scan_hooks_directory(hooks_dir, exact_excludes, patterns)
-    registered_hooks = extract_registered_hooks(settings)
+    registered_hooks = extract_registered_hooks(
+        _merge_dispatch_registry(settings, project_root)
+    )
 
     # 計算未登記的 Hook
     unregistered_hooks = all_hooks - registered_hooks
@@ -254,12 +294,12 @@ def check_hook_completeness(project_root: Path) -> HookCompletenessResult:
         if should_exclude_file(f.name, exact_excludes, patterns)
     )
 
-    completeness_ok = len(unregistered_hooks) == 0
+    coverage_ok = len(unregistered_hooks) == 0
 
-    return HookCompletenessResult(
+    return HookRegistrationCoverageResult(
         all_hooks=all_hooks,
         registered_hooks=registered_hooks,
         unregistered_hooks=unregistered_hooks,
         excluded_count=excluded_count,
-        completeness_ok=completeness_ok,
+        coverage_ok=coverage_ok,
     )

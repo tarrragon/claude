@@ -6,8 +6,14 @@
 """
 uv tool Staleness Check Hook（SessionStart）
 
-掃描全部 uv tool install 安裝的 skill，比對 source vs installed 的
-.py 檔 SHA256 集合，提示 stale / missing 並給出修復指令。
+掃描 skill CLI 的安裝狀態：shim（cwd-resolving，ARCH-APP-002）視同已同步；
+仍以 uv tool 安裝的副本，比對 source vs installed 的 .py 檔 SHA256 集合，
+提示 stale / missing 並給出修復指令。
+
+存在必要（2026-11-13 評估）：SessionStart 安裝 shim 時，若 `~/.local/bin/<cli>`
+已是 uv tool 安裝（symlink）就保留原檔不覆寫，這類副本不隨原始碼更新，仍需本
+hook 偵測。修復指令一律引導改用 shim（先 uv tool uninstall，再執行
+install-skill-clis.py），不再建議重裝 uv tool 副本。
 
 支援兩種模組佈局：
   - 目錄模組（ticket / doc / mermaid-ascii / worktree / skill-sync /
@@ -17,18 +23,18 @@ uv tool Staleness Check Hook（SessionStart）
     （single_file=True）
 
 註：branch-worktree-guardian 為非 uv tool（無 CLI entry、不在 uv tool list），
-   已自 registry 移除，不再被 staleness 監控（1.0.0-W1-068）。
+   已自 registry 移除，不再被 staleness 監控。
 
 Hook Event: SessionStart
 Exit Code: 永遠 0（不阻塊 session 啟動；錯誤降級為 suppressOutput）
 
 設計理由（與 ticket-reinstall-hook 的差異）：
   - 本 hook 不自動 reinstall（7 skill 同時 reinstall 耗時、失敗風險高）
-  - 提供 [OUTDATED] / [MISSING] 提示與一鍵修復指令（uv tool install "<abs path>" --force --reinstall，免 cd、跨 shell 相容）
+  - 提供 [OUTDATED] / [MISSING] 提示與修復指令（絕對路徑，免 cd、跨 shell 相容）：
+    OUTDATED 為 `uv tool uninstall <package>` 後執行 install-skill-clis.py；
+    MISSING 為直接執行 install-skill-clis.py
   - ticket-reinstall-hook 保留為單 skill 自動修復，本 hook 為其他 6 skill 的提示層補充
     （並對 ticket 提供雙重保險）
-
-對應 W11-037.1 ticket。
 """
 
 from __future__ import annotations
@@ -51,6 +57,9 @@ from lib.uv_tool_utils import (
     is_shimmed_cli,
     STALENESS_EXCLUDE_DIRS,
 )
+
+
+INSTALL_SKILL_CLIS_SUBPATH = Path(".claude") / "scripts" / "install-skill-clis.py"
 
 
 @dataclass(frozen=True)
@@ -214,16 +223,18 @@ def format_results(results: List[SkillResult], project_root: Path) -> str:
     if len(synced) == len(SKILLS):
         return f"[UV Tool Staleness] 全部 {len(SKILLS)} 個 uv tool skill 已同步"
 
+    install_shim = f'python3 "{project_root / INSTALL_SKILL_CLIS_SUBPATH}"'
     lines: List[str] = []
     for r in outdated:
         lines.append(
             f"[UV Tool Staleness] {r.skill.package_name} [OUTDATED] → "
-            f'修復: uv tool install "{project_root / r.skill.source_subpath}" --force --reinstall'
+            # 兩步分開寫、不用 &&：PowerShell 5.1 無 && chain operator
+            f"改用 shim: 先 uv tool uninstall {r.skill.package_name}，再 {install_shim}"
         )
     for r in missing:
         lines.append(
             f"[UV Tool Staleness] {r.skill.package_name} [MISSING] → "
-            f'安裝: uv tool install "{project_root / r.skill.source_subpath}"'
+            f"安裝 shim: {install_shim}"
         )
     for r in errors:
         lines.append(
@@ -240,6 +251,8 @@ def main() -> int:
         project_root = get_project_root()
         results = [check_single_skill(skill, project_root, logger) for skill in SKILLS]
         message = format_results(results, project_root)
+        # 營運日誌記錄本次回報內容（additionalContext 不落檔，事後無從查證曾提示什麼）
+        logger.info("staleness 結果: %s", " | ".join(message.splitlines()))
 
         print(json.dumps({
             "hookSpecificOutput": {

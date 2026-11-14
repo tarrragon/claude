@@ -4,7 +4,7 @@ title: 症狀緩解累積偏誤——同一根因累積多個緩解機制而非�
 type: process-compliance
 severity: medium
 status: active
-source: 0.37.0-W7-003 retrospective ANA（saffron）
+source: retrospective ANA（saffron）
 related:
   - ARCH-007
   - ARCH-APP-002
@@ -39,4 +39,4 @@ related:
 
 ## 來源
 
-0.37.0-W7-003 retrospective ANA（root cause 1）。動機案例 ARCH-APP-002（全域 namespace 碰撞，3 緩解累積後才根治）。相關 ARCH-007（作用域不匹配，本案的技術根因可由其推論）。
+retrospective ANA（root cause 1）。動機案例 ARCH-APP-002（全域 namespace 碰撞，3 緩解累積後才根治）。相關 ARCH-007（作用域不匹配，本案的技術根因可由其推論）。

@@ -10,7 +10,15 @@
   "permissions": {
     "allow": [
       "Edit",
-      "Write"
+      "Write",
+      "Bash(ticket *)",
+      "Bash(worktree *)",
+      "Bash(doc *)",
+      "Bash(mermaid-ascii *)",
+      "Bash(project-init check *)",
+      "Bash(project-init --version)",
+      "Bash(skill-sync list *)",
+      "Bash(version-release check *)"
     ],
     "additionalDirectories": []
   },
@@ -49,10 +57,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/mcp-run-tests-validator.py"
-          },
-          {
-            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-pre.py"
           },
           {
@@ -62,7 +66,7 @@
         ]
       },
       {
-        "matcher": "mcp__serena__replace_content|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol|mcp__serena__safe_delete_symbol",
+        "matcher": "mcp__serena__replace_content|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol|mcp__serena__safe_delete_symbol|mcp__plugin_serena_serena__replace_content|mcp__plugin_serena_serena__replace_symbol_body|mcp__plugin_serena_serena__insert_after_symbol|mcp__plugin_serena_serena__insert_before_symbol|mcp__plugin_serena_serena__safe_delete_symbol",
         "hooks": [
           {
             "type": "command",
@@ -85,6 +89,10 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/isolated-subagent-main-write-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/analysis-before-edit-checkpoint-hook.py"
           },
           {
             "type": "command",
@@ -154,6 +162,10 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/isolated-subagent-main-write-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/analysis-before-edit-checkpoint-hook.py"
           },
           {
             "type": "command",
@@ -237,6 +249,14 @@
       {
         "matcher": "NotebookEdit",
         "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/main-thread-edit-restriction-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/branch-verify-hook.py"
+          },
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/isolated-subagent-main-write-guard-hook.py"
@@ -504,6 +524,11 @@
           },
           {
             "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/project-hook-registry-sync-hook.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-start-hook.py",
             "timeout": 30
           },
@@ -541,6 +566,16 @@
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dispatcher.py --group PostToolUseFailure:Bash",
             "timeout": 140
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__dart__run_tests",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/post-test-hook.py",
+            "timeout": 30
           }
         ]
       },
@@ -636,10 +671,6 @@
           },
           {
             "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
-          },
-          {
-            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/coordination-queue-line-check-hook.py",
             "timeout": 30
           }
@@ -718,10 +749,6 @@
           },
           {
             "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
-          },
-          {
-            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/coordination-queue-line-check-hook.py",
             "timeout": 30
           }
@@ -739,10 +766,6 @@
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
             "timeout": 40
-          },
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           },
           {
             "type": "command",
@@ -776,10 +799,25 @@
         ]
       },
       {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/active-dispatch-tracker-hook.py",
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-nonblocking-error-relay-hook.py",
             "timeout": 30
           }
         ]
@@ -814,6 +852,10 @@
           },
           {
             "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-stall-reminder-hook.py"
+          },
+          {
+            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/process-skip-guard-hook.py",
             "timeout": 30
           },
@@ -835,6 +877,11 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-heartbeat-hook.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-nonblocking-error-relay-hook.py",
             "timeout": 30
           }
         ]

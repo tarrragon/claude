@@ -7,24 +7,18 @@
 """
 File Type Permission Hook - PreToolUse Hook
 
-功能: 根據編輯的檔案類型決定是否需要人工確認
-- Ticket 和 Worklog 檔案需要人工確認
-- 程式碼檔案 (lib/, test/, integration_test/) 自動通過
-- 其他檔案依據預設行為
+功能: 依編輯的檔案類型記錄審計日誌（不做權限決策）
+- Ticket 和 Worklog 檔案：寫審計日誌
+- 其他檔案：只寫一般日誌
 
 觸發時機: 執行 Edit 工具時
 檔案路徑判斷:
   - Ticket 檔案: .claude/tickets/*
   - Worklog 檔案: docs/work-logs/*
-  需要人工確認，輸出提示訊息到 stderr
-
-  - 程式碼檔案: lib/*, test/*, integration_test/*
-  自動通過，靜默執行（無任何輸出）
 
 行為:
-  - Ticket/Worklog: 輸出提示訊息到 stderr，返回 exit code 0（允許執行）
-  - 程式碼檔案: 靜默通過，無任何輸出
-  - 其他檔案: 靜默通過
+  - 所有路徑 exit 0 且不輸出 permissionDecision；是否提示權限交回平台
+    權限流程與 settings 規則（hook 輸出 allow 會略過提示，等於代用戶核可）
 """
 
 import json
@@ -35,7 +29,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
-from lib.hook_messages import QualityMessages, format_message
 
 
 def get_file_category(file_path: str) -> str:
@@ -71,9 +64,9 @@ def get_file_category(file_path: str) -> str:
 
 def _log_permission_prompt(logger, file_path: str, category: str) -> None:
     """
-    記錄人工確認提示訊息到 debug log（W10-047.2 候選 1 降級）
+    記錄人工確認提示訊息到 debug log（低頻 Hook 降級：stderr 提示改為 debug log）
 
-    來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+    依據：Hook 觸發後 0% 產生 Action 的比例實測
     原行為：寫入 stderr 觸發 UI 顯示。降級後改 debug log，可在 hook-logs 追溯。
 
     Args:
@@ -117,20 +110,12 @@ def main() -> int:
 
         # 根據檔案類別決定行為
         if category in ("ticket", "worklog"):
-            # W10-047.2 候選 1 降級：原 stderr 提示改為 debug log
+            # 低頻 Hook 降級：原 stderr 提示改為 debug log
             # 仍輸出 allow 決策，保留審計鏈但不干擾 PM/agent UI
+            # 只記審計日誌，不輸出 permissionDecision：allow 會略過平台的權限
+            # 提示，等於代用戶核可；是否提示交回平台權限流程與 settings 規則
             logger.info("允許: %s 檔案 - %s", category.upper(), file_path)
             _log_permission_prompt(logger, file_path, category)
-
-            category_name = "Ticket" if category == "ticket" else "Worklog"
-            result = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "permissionDecisionReason": format_message(QualityMessages.FILE_EDIT_WARNING, category=category_name),
-                }
-            }
-            print(json.dumps(result, ensure_ascii=False))
             return 0
 
         # 程式碼檔案或其他檔案：靜默通過

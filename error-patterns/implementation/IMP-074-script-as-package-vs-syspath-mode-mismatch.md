@@ -30,7 +30,7 @@
 
 ---
 
-## W11-031 案例
+## worktree skill 雙模式 import 修復案例
 
 ### 時序
 
@@ -44,8 +44,8 @@
 
 ### 證據
 
-- W11-031 commit `6b1d235d`
-- 修復前 `uv run worktree create 0.18.0-W11-018 --dry-run` 拋 ModuleNotFoundError
+- 修復 commit `6b1d235d`
+- 修復前 `uv run worktree create <ticket-id> --dry-run` 拋 ModuleNotFoundError
 - 修復前 `pytest tests/` 81 passed → 雙訊號矛盾
 
 ---
@@ -99,7 +99,7 @@ except ImportError:
 ## 相關案例
 
 - 同類 path-structure mismatch 家族；與 PC-115（ARCH-015 worktree boundary）為不同 layer（PC-115 是 cc runtime 限制；本 pattern 是 skill 自身設計）
-- W11-031 commit `6b1d235d`
+- 修復 commit `6b1d235d`
 
 ---
 

@@ -9,7 +9,7 @@
 | 編號 | PC-096 |
 | 類別 | process-compliance |
 | 風險等級 | 中（影響 shell pipeline 自動化判讀，PM/Hook 無法區分「該重試」與「該停手」） |
-| 首發時間 | 2026-04-19（W10-017.1 Phase 1 多視角審查 thyme 視角揭露） |
+| 首發時間 | 2026-04-19（Phase 1 多視角審查 thyme 視角揭露） |
 | 姊妹模式 | PC-005（CLI 失敗歸因假設）、PC-015（error prompt 靜默繞過） |
 
 ---
@@ -27,7 +27,7 @@ CLI 命令的退出碼設計只用 `exit 0` / `exit 1` 兩值，導致以下兩�
 
 ## 實際案例
 
-### 案例 1（W10-017.1 handoff-ready 命令規格，2026-04-19）
+### 案例 1（handoff-ready 命令規格，2026-04-19）
 
 **任務**：設計 `ticket track handoff-ready` 命令輸出規格
 
@@ -117,7 +117,6 @@ CLI 命令的退出碼設計只用 `exit 0` / `exit 1` 兩值，導致以下兩�
 
 ## 相關文件
 
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W10-017.1.md` — 案例 1 來源（Phase 1 多視角審查 thyme 視角第 1 條發現）
 - `.claude/error-patterns/process-compliance/PC-005-cli-failure-assumption-attribution.md` — 姊妹模式（CLI 失敗歸因假設）
 - `.claude/error-patterns/process-compliance/PC-015-error-prompt-silent-bypass.md` — 姊妹模式（錯誤提示靜默繞過）
 
@@ -125,4 +124,4 @@ CLI 命令的退出碼設計只用 `exit 0` / `exit 1` 兩值，導致以下兩�
 
 **Last Updated**: 2026-04-19
 **Version**: 1.0.0
-**Source**: W10-017.1 Phase 1 多視角審查 thyme-python-developer 視角第 1 條結構性發現
+**Source**: Phase 1 多視角審查 thyme-python-developer 視角第 1 條結構性發現

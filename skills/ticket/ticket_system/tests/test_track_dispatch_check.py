@@ -644,3 +644,130 @@ class TestPruneConcurrency:
             "record_dispatch 於 --prune 執行期間寫入的記錄不應遺失；"
             f"實際: {descriptions}"
         )
+
+
+def _run_release(tmp_path: Path, monkeypatch, key: str, *, session_id="sess-me"):
+    """呼叫 dispatch-check --release <key>（使用真實 dispatch_tracker）。"""
+    monkeypatch.setattr(mod, "get_ticket_state_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "_resolve_session_id", lambda: session_id)
+    monkeypatch.setattr(mod, "_get_prune_logger", lambda: None)
+    tracker = mod._load_dispatch_tracker()
+    tracker.reset_cache()
+
+    args = argparse.Namespace(prune=False, release=key)
+    out_buf, err_buf = io.StringIO(), io.StringIO()
+    saved_out, saved_err = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = out_buf, err_buf
+    try:
+        rc = execute_dispatch_check(args)
+    finally:
+        sys.stdout, sys.stderr = saved_out, saved_err
+    return rc, out_buf.getvalue(), err_buf.getvalue()
+
+
+def _entry(handle, *, session_id="sess-me", ticket_id="", branch_name="",
+           turn_ended_at="2026-11-13T00:10:00+00:00"):
+    return {
+        "agent_description": f"desc-{handle}",
+        "agent_handle": handle,
+        "agent_id": f"id-{handle}",
+        "session_id": session_id,
+        "ticket_id": ticket_id,
+        "branch_name": branch_name,
+        "dispatched_at": "2026-11-13T00:00:00+00:00",
+        "turn_ended_at": turn_ended_at,
+    }
+
+
+def _remaining_handles(path: Path) -> list:
+    return [d["agent_handle"] for d in json.loads(path.read_text(encoding="utf-8"))["dispatches"]]
+
+
+class TestReleaseFlag:
+    """--release（3.3.0-W1-120.2）：只釋放本 session 的無票、非隔離條目。"""
+
+    def test_releases_own_entry(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(tmp_path, {"dispatches": [_entry("probe"), _entry("keep")]})
+        rc, out, err = _run_release(tmp_path, monkeypatch, "probe")
+        assert rc == 0
+        assert "[OK]" in out
+        assert "背景工作" in out  # 已知缺口提醒
+        assert "已釋放" in err
+        assert _remaining_handles(path) == ["keep"]
+
+    def test_in_turn_entry_refused(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(
+            tmp_path, {"dispatches": [_entry("busy", turn_ended_at=None)]}
+        )
+        rc, out, _ = _run_release(tmp_path, monkeypatch, "busy")
+        assert rc == 1
+        assert "回合仍在進行" in out
+        assert _remaining_handles(path) == ["busy"]
+
+    def test_release_with_ref_suffix(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(tmp_path, {"dispatches": [_entry("probe")]})
+        rc, _, _ = _run_release(tmp_path, monkeypatch, "probe [abc123]")
+        assert rc == 0
+        assert _remaining_handles(path) == []
+
+    def test_release_by_agent_id(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(tmp_path, {"dispatches": [_entry("probe")]})
+        rc, _, _ = _run_release(tmp_path, monkeypatch, "id-probe")
+        assert rc == 0
+        assert _remaining_handles(path) == []
+
+    def test_other_session_refused(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(
+            tmp_path, {"dispatches": [_entry("probe", session_id="sess-other")]}
+        )
+        rc, out, _ = _run_release(tmp_path, monkeypatch, "probe")
+        assert rc == 1
+        assert "其他 session" in out
+        assert _remaining_handles(path) == ["probe"]
+
+    def test_ticket_entry_refused_with_complete_hint(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(
+            tmp_path, {"dispatches": [_entry("probe", ticket_id="3.3.0-W1-001")]}
+        )
+        rc, out, _ = _run_release(tmp_path, monkeypatch, "probe")
+        assert rc == 1
+        assert "3.3.0-W1-001" in out
+        assert "ticket track complete" in out
+        assert _remaining_handles(path) == ["probe"]
+
+    def test_isolated_entry_refused(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(
+            tmp_path, {"dispatches": [_entry("iso", branch_name="worktree")]}
+        )
+        rc, out, _ = _run_release(tmp_path, monkeypatch, "iso")
+        assert rc == 1
+        assert "isolation=worktree" in out
+        assert _remaining_handles(path) == ["iso"]
+
+    def test_not_found(self, tmp_path, monkeypatch):
+        _write_dispatch_file(tmp_path, {"dispatches": [_entry("probe")]})
+        rc, out, _ = _run_release(tmp_path, monkeypatch, "nobody")
+        assert rc == 1
+        assert "找不到" in out
+
+    def test_no_session_id_refuses_without_touching_file(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(tmp_path, {"dispatches": [_entry("probe", session_id="")]})
+        rc, _, err = _run_release(tmp_path, monkeypatch, "probe", session_id=None)
+        assert rc == 2
+        assert "session_id" in err
+        assert _remaining_handles(path) == ["probe"]
+
+    def test_corrupt_file_refuses(self, tmp_path, monkeypatch):
+        path = _write_dispatch_file(tmp_path, "{broken")
+        rc, _, err = _run_release(tmp_path, monkeypatch, "probe")
+        assert rc == 2
+        assert "[FAIL]" in err
+        assert path.read_text(encoding="utf-8") == "{broken"
+
+    def test_without_release_flag_check_still_reports(self, tmp_path, monkeypatch):
+        """對照：不帶 --release 時同一檔案仍被判為有活躍派發，條目不變（E1）。"""
+        path = _write_dispatch_file(tmp_path, {"dispatches": [_entry("probe")]})
+        rc, out, _ = _run(tmp_path, monkeypatch)
+        assert rc == 1
+        assert "[WARN]" in out
+        assert _remaining_handles(path) == ["probe"]

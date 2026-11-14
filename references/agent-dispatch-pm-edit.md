@@ -58,7 +58,7 @@ Layer 2 不適用 by <理由>
 | 純結構重組（不改文字） | 可省略 Layer 2，標「Layer 2 不適用 by 結構重組」 | 預設可省略 |
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-### 三層協同（W17-122 ANA Solution 落地後生效）
+### 三層協同
 
 本流程是三層防護的 Layer C（紙本約束）。Layer A（hook 自動偵測）與 Layer B（claim 提示）為事前提醒，本 Layer 為事中規範與事後追蹤的紙本依據：
 

@@ -24,8 +24,8 @@ if __name__ == "__main__":
     print("正確使用方式：")
     print("  ticket track dispatch <ticket_id> --as <agent_name>")
     print()
-    print("如尚未安裝，請執行：")
-    print("  cd .claude/skills/ticket && uv tool install .")
+    print("如尚未安裝，請在專案根目錄執行：")
+    print("  python3 .claude/scripts/install-skill-clis.py")
     print()
     print("詳見 SKILL.md")
     print(SEPARATOR_PRIMARY)
@@ -71,25 +71,25 @@ from ticket_system.lib.ticket_ops import resolve_ticket_path
 # 本程式碼所在 checkout 的根（測試入口推導用；skill 目錄存在性以此判斷）。
 _CHECKOUT_ROOT = Path(__file__).resolve().parents[5]
 
-# 派發日誌章節名。掛在 Schema H2「Problem Analysis」下的 H3 子節（非獨立 H2，
-# 不受 SCHEMA_H2_SECTIONS canonical 順序與 body-schema-checker 必填檢查約束），
-# 只承載暫態內容（commit 歸屬、臨時能力調整等），依父票 Solution 判定不可進
-# Context Bundle。原為獨立 H2，觸發 acceptance-gate 對非 Schema H2 的固定
-# WARNING；改掛 Problem Analysis 下 H3 消除該噪音。
-DISPATCH_LOG_SECTION = "派發日誌"
+# 派發日誌與 Commit 規範皆掛在 Schema H2「Problem Analysis」下的 H3 子節（非獨立 H2，
+# 不受 SCHEMA_H2_SECTIONS canonical 順序與 body-schema-checker 必填檢查約束）：
+# - 派發日誌：只承載暫態內容（commit 歸屬、臨時能力調整等），依父票 Solution 判定
+#   不可進 Context Bundle。原為獨立 H2，觸發 acceptance-gate 對非 Schema H2 的固定
+#   WARNING；改掛 Problem Analysis 下 H3 消除該噪音。
+# - Commit 規範：**冪等覆寫**的固定內容（每次 dispatch 覆寫為 STAGING_PHRASE_AGENT
+#   最新文字，不逐次累加），供骨架瘦身後代理人透過 `ticket track full` 讀取完整
+#   staging 制式句——骨架本身只保留 STAGING_PHRASE_AGENT_PROMPT 短版指標句，避免
+#   骨架超出 agent-prompt-length-guard 的 30 行硬上限（PC-040）。
+# 標題常數與 CLI_MANAGED_H3_HEADINGS 的單一定義在 ticket_system.lib.managed_subsections
+# （不依賴 filelock，hooks 也從那裡匯入）；此處匯入以維持既有引用。
+from ticket_system.lib.managed_subsections import (  # noqa: E402
+    CLI_MANAGED_H3_HEADINGS,
+    COMMIT_SECTION_HEADING,
+    DISPATCH_LOG_SECTION,
+    find_h3_subsection as _find_h3_subsection,
+)
+
 PARENT_SCHEMA_SECTION = "Problem Analysis"
-
-# Commit 規範章節名（骨架瘦身落地）。同樣掛 Problem Analysis 下 H3 子節，但
-# 語意與「派發日誌」不同：本節是**冪等覆寫**的固定內容（每次 dispatch 覆寫
-# 為 STAGING_PHRASE_AGENT 最新文字，不逐次累加），供骨架瘦身後代理人透過
-# `ticket track full` 讀取完整精準 staging 制式句——骨架本身只保留
-# STAGING_PHRASE_AGENT_PROMPT 短版指標句（見下方常數），避免逐字複製 26 行
-# 全文導致骨架超出 agent-prompt-length-guard 的 30 行硬上限（PC-040）。
-COMMIT_SECTION_HEADING = "Commit 規範"
-
-# CLI 管理的 H3 子節標題（單一清單）。`append-log --replace` 取代 Problem Analysis
-# 時須保留這些子節（由 CLI 寫入的暫態內容，人寫的 H3 不在此列）。
-CLI_MANAGED_H3_HEADINGS = (DISPATCH_LOG_SECTION, COMMIT_SECTION_HEADING)
 
 # 骨架常數與純組裝邏輯已抽離至 ticket_system.lib.dispatch_skeleton（不
 # import filelock，供 CLI 與 hooks 測試套件共用同一份組裝路徑）。本模組
@@ -141,32 +141,6 @@ def _build_skeleton(args: argparse.Namespace, test_entries=(), gate_checks=()) -
         test_entries=test_entries,
         gate_checks=gate_checks,
     )
-
-
-def _find_h3_subsection(section_content: str, heading: str) -> Optional[tuple]:
-    """在 H2 section 內容中定位單一 H3 子節 `### {heading}`，回傳
-    `(start, content_start, end, text)`；未找到回傳 None。
-
-    與 `section_locator.find_section(..., levels=(3,))` 的差異：後者的邊界
-    只認下一個 H2（`\\n## `），刻意假設每個 H2 底下只有一個 H3 子節（見
-    section_locator.py docstring）。本模組的「## Problem Analysis」現同時
-    掛「### 派發日誌」與「### Commit 規範」兩個手足 H3——若沿用該假設，
-    查詢在前的子節會把在後的手足子節內容一併吃進自己的範圍（多手足並存
-    時的邊界溢出，實測會使後續 dispatch 的新增內容被吞沒不見）。本函式
-    改以下一個「## 」或「### 」（不分層級）為界，僅限本模組內部使用，
-    不修改 section_locator.py 共用邏輯（其他呼叫端可能依賴既有「一路吃到
-    底」語意，例如 acceptance_auditor 的必填章節驗證）。
-    """
-    header_match = re.search(rf"^###\s+{re.escape(heading)}\s*$", section_content, re.MULTILINE)
-    if not header_match:
-        return None
-    start = header_match.start()
-    content_start = header_match.end()
-    if content_start < len(section_content) and section_content[content_start] == "\n":
-        content_start += 1
-    boundary_match = re.search(r"\n#{2,3} ", section_content[content_start:])
-    end = content_start + boundary_match.start() if boundary_match else len(section_content)
-    return start, content_start, end, section_content[start:end]
 
 
 def split_managed_h3(section_content: str) -> tuple:
@@ -394,6 +368,23 @@ def _warn_missing_isolation(ticket: dict, args: argparse.Namespace) -> None:
     )
 
 
+DISPATCH_PUSH_HINT = (
+    "[提示] 派發日誌已提交到 local main。worktree 隔離以 origin/main 為基底，"
+    "派發前先執行 git push origin main，否則 worktree-commit-before-dispatch-hook "
+    "會以目標票未同步擋下派發。\n"
+)
+
+
+def _hint_push_after_dispatch_commit(log_committed: bool, args: argparse.Namespace) -> None:
+    """本次寫入派發日誌 commit 且以 worktree 隔離派發時，stderr 提示先推送。
+
+    走 stderr：stdout 是要整段貼入 prompt 的骨架，不能混入其他行。
+    未寫入 commit（dry-run、票面未變、提交失敗）或非 worktree 派發時不提示。
+    """
+    if log_committed and getattr(args, "isolation", None) == "worktree":
+        sys.stderr.write(DISPATCH_PUSH_HINT)
+
+
 def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     """派發即落票：--note 寫入派發日誌章節 + kind="normal" 且
     commit_policy="agent" 時冪等寫入/更新「### Commit 規範」固定章節（骨架
@@ -423,6 +414,7 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     dry_run = getattr(args, "dry_run", False)
     needs_commit_section = args.kind == "normal" and commit_policy == "agent"
     commit_failed = False
+    log_committed = False
 
     if dry_run:
         # --dry-run：僅唯讀確認票存在，避免對不存在的票輸出骨架造成誤
@@ -460,6 +452,7 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
                     "dispatch", str(save_path), args.ticket_id, "dispatch-log",
                     operation="dispatch",
                 )
+                log_committed = not commit_failed
 
     block_message = _directory_declaration_block_message(ticket, args.ticket_id, version)
     if block_message:
@@ -479,6 +472,7 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     if dry_run:
         skeleton = f"{DRY_RUN_WATERMARK}\n{skeleton}"
     print(skeleton)
+    _hint_push_after_dispatch_commit(log_committed, args)
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 

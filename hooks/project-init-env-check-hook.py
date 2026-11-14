@@ -15,7 +15,7 @@ Purpose:
     codegraph、Hook 系統、自製套件）。如果偵測到問題，輸出結構化
     的引導訊息供用戶參考。
 
-    MCP server sections（W6-001.2）：
+    MCP server sections：
         - codebase-memory-mcp：偵測 binary + version；索引由 MCP
           工具管理（CLI 不暴露 index_status）
         - codegraph (@astudioplus/codegraph-mcp 0.16.6+)：偵測

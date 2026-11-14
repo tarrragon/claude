@@ -16,7 +16,7 @@ from .ui_constants import VERSION_PREFIX, VERSION_PREFIX_LENGTH
 # git rev-parse 執行超時時限（秒）
 GIT_TOPLEVEL_TIMEOUT = 5
 
-# 0.2.1-W3-254：get_project_root() 程序內快取。CLI 每次呼叫為獨立 process，
+#get_project_root() 程序內快取。CLI 每次呼叫為獨立 process，
 # 快取生命週期即單次呼叫，解析結果在呼叫內為常數，語意安全（見
 # get_project_root docstring「快取語意」段）。測試需在每個 test 前呼叫
 # reset_project_root_cache() 清除，見 .claude/skills/ticket/conftest.py
@@ -63,7 +63,7 @@ def _linked_worktree_root() -> Path | None:
     判據（git-native）：linked worktree 的 `--git-dir`（worktree 私有 .git 目錄）
     與 `--git-common-dir`（主 repo 共享 .git）不同；主 repo 本身兩者相同。
     此判據精確區分「真的在 worktree 中」與「只是 cwd 在主 repo」，
-    避免誤把主 repo 當 worktree 而覆蓋 CLAUDE_PROJECT_DIR（W3-008 根因 1 修復，
+    避免誤把主 repo 當 worktree 而覆蓋 CLAUDE_PROJECT_DIR（根因 1 修復，
     且不破壞「CLAUDE_PROJECT_DIR 為主 repo 內測試 fixture」的既有契約）。
 
     Returns:
@@ -89,7 +89,7 @@ def _linked_worktree_root() -> Path | None:
 
     # git 可能一個回絕對路徑、另一個回相對路徑（取決於 cwd 在 repo 的深度），
     # 兩者可能指向同一目錄。必須 resolve 為真實絕對路徑再比較，否則
-    # 主 repo 子目錄會因字串不同被誤判為 linked worktree（W3-010 實證）。
+    # 主 repo 子目錄會因字串不同被誤判為 linked worktree（實證）。
     git_dir = Path(lines[0].strip()).resolve()
     git_common_dir = Path(lines[1].strip()).resolve()
     # 主 repo：git_dir == git_common_dir；linked worktree：兩者不同
@@ -101,12 +101,12 @@ def _linked_worktree_root() -> Path | None:
 
 def get_project_root() -> Path:
     """
-    取得專案根目錄（程序內快取，0.2.1-W3-254）
+    取得專案根目錄（程序內快取）
 
     快取語意：本函式的解析結果在單次 CLI 呼叫（一個 process 的生命週期）內
     恆為常數——cwd 不會在同一 process 執行期間變更，環境變數與 git 拓樸亦然。
     首次呼叫解析並存入 module-level cache，後續呼叫直接回傳快取值，省去
-    重複的 git subprocess 呼叫（0.2.1-W3-251 量測：264 張 ticket 的載入路徑
+    重複的 git subprocess 呼叫（量測：264 張 ticket 的載入路徑
     各呼叫一次、每次 2 個 git subprocess，合計 530 次佔總耗時 91.4%）。
 
     快取生命週期不可跨 process：不同 CLI 呼叫各自是獨立 process，無共享
@@ -130,8 +130,31 @@ def get_project_root() -> Path:
     return _project_root_cache
 
 
+# CLI 程式碼自身位置；獨立成模組變數供測試替換（推導 code checkout 用）。
+_CODE_FILE = Path(__file__)
+
+
+def get_cli_code_root() -> Path:
+    """取得 CLI 程式碼所在 checkout 的根目錄，供讀框架設定（registry、.claude/lib）。
+
+    取根順序：
+    1. 從本檔位置往上，第一個含 `.claude/lib` 的目錄（程式碼與設定同一 checkout，
+       cwd-resolving shim 在 env=MAIN、cwd=WT 時也取 WT）。
+    2. 找不到（uv tool 安裝的副本等無對應 checkout 的形態）：取 cwd 的 git 頂層。
+    3. 仍找不到：退回 get_project_root()。
+
+    限制：形態 2、3 下程式碼與設定可能分屬不同 checkout，無法保證一致。
+    與 claude_lib_loader.current_project_root 無關（後者是 registry project 欄位
+    比對鍵，維持純 git 頂層語意）。
+    """
+    for parent in _CODE_FILE.resolve().parents:
+        if (parent / ".claude" / "lib").is_dir():
+            return parent
+    return _git_toplevel() or get_project_root()
+
+
 def reset_project_root_cache() -> None:
-    """清除 get_project_root() 的程序內快取（測試專用，0.2.1-W3-254）。
+    """清除 get_project_root() 的程序內快取（測試專用）。
 
     生產路徑不需呼叫——CLI 每次呼叫是獨立 process，快取隨 process 結束
     自然失效。pytest 測試在同一 process 內執行大量 test case，且多數測試
@@ -151,10 +174,10 @@ def _resolve_project_root() -> Path:
     0. 測試隔離逃生艙（`TICKET_SYSTEM_TEST_ISOLATION=1` 時）：直接採用
        CLAUDE_PROJECT_DIR，略過 worktree 偵測。僅供測試 fixture 使用（見
        `.claude/skills/ticket/conftest.py` 的 `_isolate_project_root`），
-       生產路徑不設此旗標故不受影響（0.2.1-W3-223；PC-BAL-022）。
+       生產路徑不設此旗標故不受影響（PC-BAL-022）。
     1. worktree 感知：當前位於 git linked worktree（git worktree add 建立）時，
        優先用該 worktree 的根目錄。避免 worktree 內的 ticket CRUD / append-log /
-       auto-commit 因 CLAUDE_PROJECT_DIR 恆指向主 repo 而洩漏到主 repo（W3-008 根因 1）。
+       auto-commit 因 CLAUDE_PROJECT_DIR 恆指向主 repo 而洩漏到主 repo（根因 1）。
     2. CLAUDE_PROJECT_DIR 環境變數（非 worktree 場景，維持原行為）
     3. git rev-parse --show-toplevel（git-native，未設環境變數時）
     4. 向上搜尋 CLAUDE.md（通用框架標準入口，支援 Go/混合型專案）
@@ -167,7 +190,7 @@ def _resolve_project_root() -> Path:
     """
     # 0. 測試隔離逃生艙：僅供 conftest 的 autouse fixture 使用，避免 pytest
     #    本身在 git linked worktree 內執行時，第 1 步的 worktree 偵測蓋過
-    #    測試刻意注入的 CLAUDE_PROJECT_DIR 隔離（0.2.1-W3-223 修復）。
+    #    測試刻意注入的 CLAUDE_PROJECT_DIR 隔離（修復）。
     if os.environ.get("TICKET_SYSTEM_TEST_ISOLATION") == "1":
         isolated_dir = os.environ.get("CLAUDE_PROJECT_DIR")
         if isolated_dir:
@@ -232,12 +255,12 @@ def get_tickets_dir_under_root(root: Path, version: str) -> Path:
     versioned = f"{VERSION_PREFIX}{bare_version}"
 
     # 解析 major.minor 用於階層路徑。
-    # W14-052：新建 ticket 一律三層（避免未存在主版本建在 flat 造成殘留 +
+    #新建 ticket 一律三層（避免未存在主版本建在 flat 造成殘留 +
     #   與三層規則不一致）。
-    # W9-006.1 / issue #1 問題4：補既有 flat 結構（docs/work-logs/v{version}/
+    # issue #1 問題4：補既有 flat 結構（docs/work-logs/v{version}/
     #   tickets/）的「讀取」相容——hierarchical 存在用之；否則 flat 實際存在
     #   才回 flat（讀既有）；兩者皆不存在時 default hierarchical。新版本（flat
-    #   不存在）仍一律三層，W14-052 不變式不破。
+    #   不存在）仍一律三層，新建一律三層的不變式不破。
     parts = bare_version.split(".")
     if len(parts) >= 2:
         major = parts[0]
@@ -486,7 +509,7 @@ def get_ticket_path(version: str, ticket_id: str) -> Path:
         Path: Ticket 檔案路徑
 
     Examples:
-        >>> path = get_ticket_path("0.31.0", "0.31.0-W4-001")
+        >>> path = get_ticket_path("0.31.0", "<ticket-id>")
         >>> path.suffix
         '.md'
     """

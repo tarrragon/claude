@@ -42,6 +42,7 @@ from lib import (
     parse_ticket_frontmatter,
     scan_ticket_files_by_version,
 )
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 
 # ============================================================================
@@ -231,7 +232,7 @@ def get_incomplete_tickets(version_dir: Path, logger, project_root: Path = None)
             ticket_files = sorted(tickets_dir.glob("*.md"))
 
         for ticket_file in sorted(ticket_files) if project_root else ticket_files:
-            # Extract ticket ID from filename (e.g. "0.1.0-W1-001.md" -> "0.1.0-W1-001")
+            # Extract ticket ID from filename (e.g. "<version>-W<wave>-<seq>.md" -> "<version>-W<wave>-<seq>")
             ticket_id = ticket_file.stem
 
             frontmatter = parse_ticket_frontmatter(ticket_file, logger)
@@ -490,7 +491,7 @@ def main() -> int:
     logger = setup_hook_logging("version-consistency-guard-hook")
 
     # Find project root using hook_utils
-    project_root = get_project_root()
+    project_root = get_shared_state_root(get_project_root())
 
     # Check 0: worklog directories vs todolist.yaml registration
     # (runs independently of current_version)

@@ -309,6 +309,21 @@ describe('laneContextStatus：line_status 的用量段', () => {
     expect(status('L-a', { 'sid-a': usage })).toBe(`ctx 未量測（1 分前）｜phase compacted（compact，${hhmm(at)}）`)
   })
 
+  test('E2 正向對照（3.2.0 實測形狀）：phase compacted 與 compact 前用量同一毫秒寫入，不標［待 compact］，字尾標 compact 前', () => {
+    const at = NOW - 29 * 60_000
+    const usage = record({ tokens: 611_445, percent: 61, compactPercent: 61, measuredAt: at, phase: { kind: 'compacted', source: 'compact', at } })
+    const text = status('L-a', { 'sid-a': usage })
+    expect(text).toBe(`ctx compact 前 61%（29 分前）｜phase compacted（compact，${hhmm(at)}）`)
+    expect(text).not.toContain('［待 compact］')
+  })
+
+  test('E1 對照：同樣 61%、phase compacted，但量測晚於 compact 完成時照常標［待 compact］', () => {
+    const at = NOW - 29 * 60_000
+    const usage = record({ percent: 61, compactPercent: 61, measuredAt: at + 1, phase: { kind: 'compacted', source: 'compact', at } })
+    expect(status('L-a', { 'sid-a': usage })).toContain('ctx 61%（')
+    expect(status('L-a', { 'sid-a': usage })).toContain('［待 compact］')
+  })
+
   test('用量檔解析失敗：寫出原因，不與「無用量檔」同句', () => {
     const text = status('L-a', {}, { 'sid-a': 'JSON 無效（Unexpected end）' })
     expect(text).toBe('ctx 用量檔解析失敗：JSON 無效（Unexpected end）')

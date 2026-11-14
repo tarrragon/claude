@@ -56,6 +56,15 @@ def _non_shim_by_default(hook, monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _main_checkout_by_default(hook, monkeypatch):
+    """既有 mismatch 測試的 project_root 是虛構路徑，git 判定會失敗而落在
+    只提醒側；預設視為主 checkout，worktree 情境由 TestLinkedWorktreeSkip 覆寫。"""
+    monkeypatch.setattr(
+        hook, "reinstall_skip_reason", lambda root, logger=None: None
+    )
+
+
 # ---------------------------------------------------------------------------
 # 命令辨識（_extract_invoked_exes）
 # ---------------------------------------------------------------------------
@@ -315,3 +324,69 @@ class TestShimSkip:
             hook._guard_command("doc build && ticket complete x", project_root, logger)
             m_reinstall.assert_called_once()
             assert m_reinstall.call_args[0][0].cli_name == "doc"
+
+
+# ---------------------------------------------------------------------------
+# 只從主 checkout 重裝（3.3.0-W1-204.1.5.3）
+# ---------------------------------------------------------------------------
+
+
+class TestLinkedWorktreeSkip:
+    """mismatch 時，linked worktree 或判定失敗只提醒；主 checkout 照常重裝。"""
+
+    PROJECT_ROOT = Path("/Users/me/project/book_overview_v1")
+
+    def _run(self, hook, logger, monkeypatch, skip_reason):
+        hook._model_notes.clear()
+        monkeypatch.setattr(
+            hook, "reinstall_skip_reason", lambda root, logger=None: skip_reason
+        )
+        with patch.object(
+            hook, "_read_receipt_directory", return_value=None
+        ), patch.object(hook, "_reinstall", return_value=True) as m_reinstall:
+            hook._guard_command("ticket track list", self.PROJECT_ROOT, logger)
+        return m_reinstall
+
+    def test_linked_worktree_reminds_without_reinstall(
+        self, hook, logger, monkeypatch, capsys
+    ):
+        m_reinstall = self._run(
+            hook, logger, monkeypatch, "/wt 是 linked worktree（主 checkout 為 /main）"
+        )
+        m_reinstall.assert_not_called()
+        assert len(hook._model_notes) == 1
+        note = hook._model_notes[0]
+        assert "未自動重裝 ticket" in note
+        assert "linked worktree" in note
+        assert ".claude/skills/ticket" in note
+        assert "未自動重裝 ticket" in capsys.readouterr().err
+
+    def test_detection_failure_reminds_without_reinstall(
+        self, hook, logger, monkeypatch
+    ):
+        m_reinstall = self._run(
+            hook, logger, monkeypatch, "無法判定 /x 是否為主 checkout（git 執行失敗）"
+        )
+        m_reinstall.assert_not_called()
+        assert "無法判定" in hook._model_notes[0]
+
+    def test_main_checkout_still_reinstalls(self, hook, logger, monkeypatch):
+        # 正向對照：同一 mismatch 情境，主 checkout 仍重裝且不提醒
+        m_reinstall = self._run(hook, logger, monkeypatch, None)
+        m_reinstall.assert_called_once()
+        assert hook._model_notes == []
+
+    def test_match_does_not_query_worktree(self, hook, logger, monkeypatch):
+        # ownership 正確時不需要判定來源，也不提醒
+        called = []
+        monkeypatch.setattr(
+            hook, "reinstall_skip_reason",
+            lambda root, logger=None: called.append(root) or "x",
+        )
+        expected = (self.PROJECT_ROOT / ".claude/skills/ticket").resolve()
+        with patch.object(
+            hook, "_read_receipt_directory", return_value=str(expected)
+        ), patch.object(hook, "_reinstall") as m_reinstall:
+            hook._guard_command("ticket track list", self.PROJECT_ROOT, logger)
+        m_reinstall.assert_not_called()
+        assert called == []

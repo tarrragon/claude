@@ -2,7 +2,7 @@
 ticket track set-exit-status / set-completion-info 子命令
 
 Exit Status 和 Completion Info 章節有確定性 schema，過去由 agent 自由撰寫再靠
-hook 事後檢查格式，格式錯誤率中（1.5.0-W5-020 ANA 結論）。依制式化內容生成
+hook 事後檢查格式，格式錯誤率中（ANA 分析結論）。依制式化內容生成
 方法論（.claude/methodologies/structured-content-generation-methodology.md），
 本模組將格式結構收斂到 CLI：agent 只提供語意值，CLI 負責產生正確的
 Markdown / YAML 結構並寫入 ticket body。
@@ -23,7 +23,7 @@ from datetime import datetime
 
 from ticket_system.lib.messages import ErrorMessages, format_error
 
-# Exit Status 合法枚舉（W17-010 schema）
+# Exit Status 合法枚舉（Exit Status schema）
 VALID_EXIT_STATUSES = ("success", "needs_context", "blocked", "partial_success", "failed")
 # Completion Info review-status 合法枚舉
 VALID_REVIEW_STATUSES = ("pending", "reviewed", "n/a")
@@ -72,7 +72,7 @@ def _delegate_to_append_log(
 ) -> int:
     """組出 append-log 相容的 args 並委派給 execute_append_log。
 
-    W3-005: 帶 replace=True，使 execute_append_log 對本次寫入的固定 schema
+    帶 replace=True，使 execute_append_log 對本次寫入的固定 schema
     章節（Exit Status / Completion Info）採取「取代既有內容」而非「追加」
     語意——這兩個命令每次呼叫都代表該章節的最新狀態（非累積日誌），重複
     呼叫應冪等，不應在 body 留下多筆歷史區塊。

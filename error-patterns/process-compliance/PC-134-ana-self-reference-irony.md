@@ -4,7 +4,6 @@ title: ANA 自我指涉反諷（分析 X 反模式的 ANA 自身重蹈 X）
 category: process-compliance
 severity: high
 created: 2026-05-08
-source_ticket: 0.18.0-W17-167
 related_pc:
   - PC-066
   - PC-093
@@ -47,27 +46,27 @@ acceptance 條目「產出 spawned IMP/DOC 清單」對代理人語意是「在 
 
 **Consequence**：規則層 / 行為層防護不足以兜底，必須加入 hook 強制層；否則歷史 ANA 持續累積漏建。
 
-**Action**：以 hook 強制層攔截（W17-168），規則 / 行為層僅作自律訓練與認知降載。
+**Action**：以 hook 強制層攔截（ana_spawn_consistency_checker），規則 / 行為層僅作自律訓練與認知降載。
 
-**Root Cause 3：W17-168 hook 強制層在事件當下缺失**
+**Root Cause 3：hook 強制層在事件當下缺失**
 
-acceptance-gate-hook Step 2.5 對 ANA 僅 warn 不 block；Step 2.5.1 已退場（W17-120.2 / PC-091）。Solution spawn 規劃 vs spawned_tickets 一致性無任何強制檢查。
+acceptance-gate-hook Step 2.5 對 ANA 僅 warn 不 block；Step 2.5.1 已退場（PC-091）。Solution spawn 規劃 vs spawned_tickets 一致性無任何強制檢查。
 
-**Why**：W17-120.2 將 spawned_tickets 重定位為弱 metadata 後，未補上替代強制檢查（語意比對而非單純存在性）。
+**Why**：PC-091 將 spawned_tickets 重定位為弱 metadata 後，未補上替代強制檢查（語意比對而非單純存在性）。
 
-**Consequence**：在 W17-168 上線前，所有 ANA 漏建均無自動防護，依賴 PM 人工驗收。
+**Consequence**：在該 hook 上線前，所有 ANA 漏建均無自動防護，依賴 PM 人工驗收。
 
-**Action**：W17-168 IMP 落地 ana_spawn_consistency_checker.py，將 Solution 表格行數 vs frontmatter ticket 數比對納入 complete 阻擋條件。
+**Action**：以 IMP 落地 ana_spawn_consistency_checker.py，將 Solution 表格行數 vs frontmatter ticket 數比對納入 complete 阻擋條件。
 
 ## 案例
 
-**觸發案例（PC-134 命名動機）**：W17-162（2026-05-08）
+**觸發案例（PC-134 命名動機）**：某次 ANA（2026-05-08）
 
-ANA 結論「ANA spawn 規劃靜默遺忘」需固化防護。saffron-system-analyst 完成 W17-162 時 spawned_tickets 為空，PM 事後補建 4 張 ticket。
+ANA 結論「ANA spawn 規劃靜默遺忘」需固化防護。saffron-system-analyst 完成該 ANA 時 spawned_tickets 為空，PM 事後補建 4 張 ticket。
 
-**完美元反諷自證案例**：W17-167（2026-05-08）
+**完美元反諷自證案例**：分析 spawn 漏建缺口的 ANA（2026-05-08）
 
-W17-167 主題即為「分析 ANA complete 前未建 spawned tickets 即放行的流程缺口」。執行紀錄：
+該 ANA 主題即為「分析 ANA complete 前未建 spawned tickets 即放行的流程缺口」。執行紀錄：
 
 | 項目 | 狀態 |
 |------|------|
@@ -75,30 +74,30 @@ W17-167 主題即為「分析 ANA complete 前未建 spawned tickets 即放行�
 | frontmatter spawned_tickets | `[]`（complete 當下） |
 | Solution 規劃 spawn 數 | 3（IMP P1 + DOC P2 × 2） |
 | acceptance 勾選狀態 | 全 `[x]` 含「產出 spawned 清單」條目 |
-| 實際補建時機 | PM 驗收時察覺，於 complete 後補建 W17-168 / 169 / 170 |
+| 實際補建時機 | PM 驗收時察覺，於 complete 後補建 3 張 ticket（hook、規則、行為層各一） |
 
-W17-167 完美重現自身分析的反模式：(1) Solution 寫了 3 張 spawn 規劃表格；(2) 勾選了 acceptance；(3) complete 時 spawned_tickets=[]。即使代理人正在分析此問題仍會犯，證明這不是教育能解決的疏失。
+該 ANA 完美重現自身分析的反模式：(1) Solution 寫了 3 張 spawn 規劃表格；(2) 勾選了 acceptance；(3) complete 時 spawned_tickets=[]。即使代理人正在分析此問題仍會犯，證明這不是教育能解決的疏失。
 
 **歷史審計案例（saffron L1 審計）**：
 
-| Ticket ID | 症狀 |
-|-----------|------|
-| W11-003.6 | spawned=0, children=0, 3 項 IMP 表格已確認漏建 |
-| W17-041 | spawned=0, children=0, 10 處 spawn 規劃語句疑似漏建 |
-| W17-065 | spawned=0, children=0, 3 處 spawn 規劃語句疑似漏建 |
-| W17-008.12 | spawned=0, children=0, 5 處 spawn 規劃語句疑似漏建 |
+| 案例 | 症狀 |
+|------|------|
+| 歷史案例 A | spawned=0, children=0, 3 項 IMP 表格已確認漏建 |
+| 歷史案例 B | spawned=0, children=0, 10 處 spawn 規劃語句疑似漏建 |
+| 歷史案例 C | spawned=0, children=0, 3 處 spawn 規劃語句疑似漏建 |
+| 歷史案例 D | spawned=0, children=0, 5 處 spawn 規劃語句疑似漏建 |
 
-至少 6 個歷史案例（含 W17-162 / W17-167），問題明確為系統性而非個案。
+至少 6 個歷史案例（含上述觸發案例與自證案例），問題明確為系統性而非個案。
 
 ## 防護
 
-採三層防護組合（強制層 + 自律層 + 行為層），對應 W17-167 ANA Solution 規劃：
+採三層防護組合（強制層 + 自律層 + 行為層），對應該自證 ANA 的 Solution 規劃：
 
-| 層級 | Ticket | 機制 |
+| 層級 | 落地項 | 機制 |
 |------|--------|------|
-| L2 Hook 強制層 | W17-168 | acceptance-gate-hook 新增 ana_spawn_consistency_checker.py：解析 Solution 章節 spawn 規劃表格行（`| (IMP\|DOC\|ANA) |` + `P[0-3]`），與 frontmatter spawned_tickets + children 數量比對；N > 0 且 S+C == 0 時阻擋 complete；豁免條件為 Solution 含「無需建 ticket」顯性標記 |
-| L3 規則自律層 | W17-169 | quality-baseline 規則 5 延伸至「ANA Solution 內 spawn 規劃也是發現必須追蹤」；ticket-lifecycle.md ANA complete 條件補強；ticket-body-schema.md ANA Solution 章節新增「Spawn 落地確認」子節 |
-| L4 行為層 | W17-170 | PM 派發 ANA 完成驗收時 checklist 三明示問題（Solution 表格 vs spawned_tickets 一致性 / 數量比對 / 豁免標記） |
+| L2 Hook 強制層 | IMP（hook） | acceptance-gate-hook 新增 ana_spawn_consistency_checker.py：解析 Solution 章節 spawn 規劃表格行（`| (IMP\|DOC\|ANA) |` + `P[0-3]`），與 frontmatter spawned_tickets + children 數量比對；N > 0 且 S+C == 0 時阻擋 complete；豁免條件為 Solution 含「無需建 ticket」顯性標記 |
+| L3 規則自律層 | DOC（規則） | quality-baseline 規則 5 延伸至「ANA Solution 內 spawn 規劃也是發現必須追蹤」；ticket-lifecycle.md ANA complete 條件補強；ticket-body-schema.md ANA Solution 章節新增「Spawn 落地確認」子節 |
+| L4 行為層 | DOC（行為） | PM 派發 ANA 完成驗收時 checklist 三明示問題（Solution 表格 vs spawned_tickets 一致性 / 數量比對 / 豁免標記） |
 
 **三層互補**：
 
@@ -106,7 +105,7 @@ W17-167 完美重現自身分析的反模式：(1) Solution 寫了 3 張 spawn �
 - 規則是自律層，防 PM 遺漏（Hook 未涵蓋的 edge case）
 - 行為層是操作指引，降低 PM 認知負擔（驗收時不需重新推論）
 
-**閉環驗證**：W17-168 hook 上線後，W17-167 自身應從反例變正例——若以同 prompt 重新派發 saffron 執行 W17-167，hook 應在 complete 前阻擋，要求補建 spawned_tickets。此為 W17-168 RED 測試的最強樣本。
+**閉環驗證**：hook 上線後，該自證 ANA 自身應從反例變正例——若以同 prompt 重新派發 saffron 執行該 ANA，hook 應在 complete 前阻擋，要求補建 spawned_tickets。此為該 hook RED 測試的最強樣本。
 
 ## 同構連結
 
@@ -121,10 +120,10 @@ W17-167 完美重現自身分析的反模式：(1) Solution 寫了 3 張 spawn �
 
 依 quality-baseline.md 規則 6（失敗案例學習原則），本 PC 是失敗案例學習的具體應用：
 
-1. **不回退既成工作**：W17-167 已 complete 且 spawned 補建完成，不回退或重派
+1. **不回退既成工作**：該自證 ANA 已 complete 且 spawned 補建完成，不回退或重派
 2. **提煉教訓**：本 PC error-pattern 記錄元層級反諷現象與三層防護設計
-3. **建 Ticket 追蹤**：W17-168 / 169 / 170 / 171 已建並依優先序排入 Wave
-4. **固化為規則**：W17-169 將規則 5 延伸條款寫入 quality-baseline.md，使本案的教訓成為通用約束
+3. **建 Ticket 追蹤**：後續 ticket 已建並依優先序排入 Wave（hook、規則、行為層等 4 張）
+4. **固化為規則**：規則層 DOC 將規則 5 延伸條款寫入 quality-baseline.md，使本案的教訓成為通用約束
 
 ## 與既有 PC 的邊界
 
@@ -156,5 +155,5 @@ W17-167 完美重現自身分析的反模式：(1) Solution 寫了 3 張 spawn �
 
 **Last Updated**: 2026-09-10
 **Version**: 1.1.0 — 新增「變體：診斷已在讀者自己的 context 裡」：距離更短的形態（同一份文件、同一天、同一作者，且診斷已被新節引用），附三項與原案例互補的辨識訊號與一項撰寫當下可執行的自檢。原案例與防護三層不變。
-**Version**: 1.0.0 — 從 W17-167 元反諷案例（分析 X 反模式的 ANA 自身重蹈 X）提煉，記錄三層防護（W17-168 hook / W17-169 規則 / W17-170 行為）對應與規則 6 失敗案例學習落地
-**Source**: 0.18.0-W17-167（元反諷自證案例）+ W17-162（觸發案例）+ saffron L1 審計（W11-003.6 / W17-041 / W17-065 / W17-008.12）
+**Version**: 1.0.0 — 從元反諷案例（分析 X 反模式的 ANA 自身重蹈 X）提煉，記錄三層防護（hook / 規則 / 行為）對應與規則 6 失敗案例學習落地
+**Source**: 元反諷自證案例 + 觸發案例 + saffron L1 審計（4 個歷史案例）

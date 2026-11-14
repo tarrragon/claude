@@ -155,7 +155,7 @@
 
 ## ANA 驗證共用函式正確性的範圍要求（PC-136 強制）
 
-> **來源**：PC-136 — W17-179 ANA false negative 案例：ANA 驗證 stop hook L361 自身函式正確，誤判「整個問題已解決」，未追蹤 callees / 同名實作 / callers，導致 lib `handoff_utils.is_ticket_completed` 漏修，數週內從另一處重爆。
+> **來源**：PC-136 — 某次 ANA false negative 案例：ANA 驗證 stop hook L361 自身函式正確，誤判「整個問題已解決」，未追蹤 callees / 同名實作 / callers，導致 lib `handoff_utils.is_ticket_completed` 漏修，數週內從另一處重爆。
 >
 > **觸發時機**：ANA / 重啟調查驗證「函式 A 是否正確」時。
 
@@ -185,7 +185,7 @@ ANA 驗證函式正確性時，**範圍不可只到「直接被問的函式」�
 - 已追蹤的 callees 清單（至少一層）
 - 未驗證的 callers（抽樣或全量）說明
 
-> 完整錯誤模式、ARCH-020 三次重爆軌跡、W17-179 案例：.claude/error-patterns/process-compliance/PC-136-structural-fix-incomplete-caller-scan.md
+> 完整錯誤模式、ARCH-020 三次重爆軌跡與該 ANA 案例：.claude/error-patterns/process-compliance/PC-136-structural-fix-incomplete-caller-scan.md
 
 ---
 
@@ -211,4 +211,4 @@ ANA 驗證函式正確性時，**範圍不可只到「直接被問的函式」�
 **Version**: 1.1.0 — 新增「ANA 驗證共用函式正確性的範圍要求」章節（PC-136 落地）：強制追蹤 callees 至少一層 + 同名實作全查 + ANA false negative 防護表 + 結論章節記錄要求
 
 **Version**: 1.0.0
-**Source**: 來自 PC-005、PC-007 等操作失誤模式的提煉；1.1.0 來自 PC-136（W17-182 retrospective ANA）
+**Source**: 來自 PC-005、PC-007 等操作失誤模式的提煉；1.1.0 來自 PC-136（retrospective ANA）

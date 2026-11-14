@@ -31,6 +31,7 @@ from pathlib import Path
 # .claude/skills/strategic-compact/ -> .claude/（lib package 所在）
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import emit_model_reminder  # noqa: E402
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 
 # 環境變數覆寫僅供測試隔離，避免測試誤刪真實 /tmp 檔
@@ -43,7 +44,10 @@ STALE_SECONDS = 7 * 24 * 3600
 def _log(msg):
     """fail-open 路徑的日誌：寫 stderr 以外的 hook-logs 檔，不干擾使用者畫面。"""
     try:
-        log_dir = _project_dir() / ".claude" / "hook-logs" / "suggest-compact"
+        # 經 hook_logging 取目錄：linked worktree 內解析到主 repo（lib package 已於上方 import 路徑可達）
+        from lib.hook_logging import get_hook_log_dir
+
+        log_dir = get_hook_log_dir("suggest-compact")
         log_dir.mkdir(parents=True, exist_ok=True)
         with open(log_dir / "suggest-compact.log", "a", encoding="utf-8") as f:
             f.write(msg + "\n")
@@ -60,7 +64,8 @@ def _project_dir():
 
 def _counter_path(session_id):
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id)[:100]
-    return _project_dir() / ".claude" / "hook-state" / f"{COUNTER_PREFIX}{safe}"
+    root = get_shared_state_root(_project_dir())
+    return root / ".claude" / "hook-state" / f"{COUNTER_PREFIX}{safe}"
 
 
 def _cleanup_stale(state_dir, keep):

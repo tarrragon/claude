@@ -1615,3 +1615,51 @@ class TestChainedCommitsJudgedPerInvocation:
             dispatches=_P2_DISPATCHES, staged_files=["a.txt"],
             unstaged_files=["b.txt"],
         ) == 2
+
+
+class TestLiveScopeReadsSharedStateRoot:
+    """真實 linked worktree：宣告範圍讀主倉庫現行票，非 WT 舊票（204.1.2.8）。"""
+
+    @pytest.fixture
+    def real_wt(self, tmp_path, monkeypatch):
+        main_repo = tmp_path / "main"
+        main_repo.mkdir()
+        _real_git(main_repo, "init", "-q", "-b", "main")
+        (main_repo / "a.txt").write_text("a\n")
+        _real_git(main_repo, "add", "a.txt")
+        _real_git(main_repo, "commit", "-q", "-m", "base")
+        wt = tmp_path / "wt"
+        _real_git(main_repo, "worktree", "add", "-q", "-b", "wtbr", str(wt), "main")
+        _write_ticket(main_repo, _LIVE_TICKET_ID, ["x.py", "y.py"])
+        _write_ticket(wt, _LIVE_TICKET_ID, ["old.py"])
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(wt)
+        from lib import hook_base
+        hook_base._MAIN_REPO_ROOT_CACHE.clear()
+        return main_repo, wt
+
+    def _run(self, monkeypatch, wt, staged):
+        return _run_hook(
+            monkeypatch,
+            _COMMIT_CMD,
+            dispatches=[_dispatch(_LIVE_TICKET_ID, ["old.py"]), _dispatch("T-2", ["y.py"])],
+            staged_files=staged,
+            project_root=wt,
+        )
+
+    def test_reads_main_repo_ticket_not_wt_stale(self, monkeypatch, real_wt):
+        """主倉庫票宣告 x、y：staged {x,y} 落在該派發內放行（WT 舊票只宣告 old.py）。"""
+        _, wt = real_wt
+        assert self._run(monkeypatch, wt, ["x.py", "y.py"]) == 0
+
+    def test_undeclared_staged_still_denied(self, monkeypatch, real_wt):
+        """正向對照：z.py 不在任何宣告內，跨派發夾帶仍 DENY。"""
+        _, wt = real_wt
+        assert self._run(monkeypatch, wt, ["x.py", "y.py", "z.py"]) == 2
+
+    def test_e1_identity_state_root_reverts_to_old_behavior(self, monkeypatch, real_wt):
+        """E1 對照：state root 換成恆等函式，讀 WT 舊票，同輸入翻為 DENY。"""
+        _, wt = real_wt
+        monkeypatch.setattr(hook_module, "get_shared_state_root", lambda root=None: root, raising=False)
+        assert self._run(monkeypatch, wt, ["x.py", "y.py"]) == 2

@@ -413,7 +413,7 @@ grep -rn '"[A-Z]' server/ --include="*.go" | grep -v "_test.go" | grep -v "const
 
 ### 資源管理與狀態保護（即時監控場景）
 
-> **來源**：W5-002 — 70GB 記憶體洩漏；W6-002 — completed session 被新事件復活為 active。
+> **來源**：某次 70GB 記憶體洩漏事件；某次 completed session 被新事件復活為 active 的事件。
 
 本專案 Go 後端是長時間運行的即時監控服務，持續接收 file watcher 事件。實作時必須考慮資源生命週期。
 
@@ -558,6 +558,6 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 ---
 
 **Last Updated**: 2026-04-18
-**Version**: 1.1.0 - 新增 Ticket Frontmatter 格式引用（W14-029）
+**Version**: 1.1.0 - 新增 Ticket Frontmatter 格式引用
 **Specialization**: Phase 3b Go Backend Implementation
 **Go Version**: 1.21+

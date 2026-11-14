@@ -4,7 +4,6 @@ title: 驗收者沿用執行者的偵測 pattern——pattern 外缺陷零覆蓋
 severity: high
 category: process-compliance
 created: "2026-07-14"
-source_tickets: [0.38.1-W1-057, 0.38.1-W1-060, 0.38.1-W1-064, 0.38.1-W1-067]
 related_patterns: [PC-APP-010]
 ---
 

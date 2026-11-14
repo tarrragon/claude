@@ -24,25 +24,25 @@ def extract_core_ticket_id(raw_id: Optional[str]) -> Optional[str]:
     Args:
         raw_id: 原始 ID 字串，可能帶描述後綴
                 範例：
-                - "0.1.0-W11-004-phase1-design"（帶後綴）
-                - "0.1.0-W11-004"（標準格式）
+                - "<ticket-id>-phase1-design"（帶後綴）
+                - "<ticket-id>"（標準格式）
                 - "invalid"（無效格式）
 
     Returns:
         str: 核心 Ticket ID（不含後綴），如無法解析則返回 None
              範例：
-             - "0.1.0-W11-004-phase1-design" -> "0.1.0-W11-004"
-             - "0.1.0-W11-004" -> "0.1.0-W11-004"
+             - "<ticket-id>-phase1-design" -> "<ticket-id>"
+             - "<ticket-id>" -> "<ticket-id>"
              - "invalid" -> None
 
     Raises:
         None（不拋異常，有效的 raw_id 類型檢查）
 
     Examples:
-        >>> extract_core_ticket_id("0.1.0-W11-004-phase1-design")
-        '0.1.0-W11-004'
-        >>> extract_core_ticket_id("0.1.0-W11-004")
-        '0.1.0-W11-004'
+        >>> extract_core_ticket_id("<ticket-id>-phase1-design")
+        '<ticket-id>'
+        >>> extract_core_ticket_id("<ticket-id>")
+        '<ticket-id>'
         >>> extract_core_ticket_id("invalid")
         None
         >>> extract_core_ticket_id(None)
@@ -80,9 +80,9 @@ def has_description_suffix(raw_id: Optional[str]) -> bool:
               False: 無後綴或無法匹配
 
     Examples:
-        >>> has_description_suffix("0.1.0-W11-004-phase1-design")
+        >>> has_description_suffix("<ticket-id>-phase1-design")
         True
-        >>> has_description_suffix("0.1.0-W11-004")
+        >>> has_description_suffix("<ticket-id>")
         False
         >>> has_description_suffix("invalid")
         False
@@ -119,9 +119,9 @@ def extract_id_components(ticket_id: Optional[str]) -> Optional[Dict[str, Any]]:
         Dict: {version, wave, sequence} 或 None 如果格式無效或輸入為 None
 
     Examples:
-        >>> extract_id_components("0.31.0-W3-001")
+        >>> extract_id_components("<ticket-id>")
         {'version': '0.31.0', 'wave': 3, 'sequence': '001'}
-        >>> extract_id_components("0.31.0-W3-001.1.2")
+        >>> extract_id_components("<ticket-id>.1.2")
         {'version': '0.31.0', 'wave': 3, 'sequence': '001.1.2'}
         >>> extract_id_components("invalid")
         None
@@ -196,9 +196,9 @@ def calculate_chain_info(target_id: str) -> Dict[str, Any]:
     計算 Ticket 在任務鏈中的位置資訊，包括根 ID、父 ID、深度和序號列表。
 
     任務鏈結構：
-    - 根任務：序號深度為 0（如 0.1.0-W3-001）
-    - 子任務：序號深度 > 0（如 0.1.0-W3-001.1）
-    - 孫任務：序號深度 > 1（如 0.1.0-W3-001.1.1）
+    - 根任務：序號深度為 0（如 <ticket-id>）
+    - 子任務：序號深度 > 0（如 <ticket-id>.1）
+    - 孫任務：序號深度 > 1（如 <ticket-id>.1.1）
 
     Args:
         target_id: 目標 Ticket ID
@@ -211,9 +211,9 @@ def calculate_chain_info(target_id: str) -> Dict[str, Any]:
             - sequence: 序號整數列表
 
     Examples:
-        >>> info = calculate_chain_info("0.1.0-W3-001")
+        >>> info = calculate_chain_info("<ticket-id>")
         >>> info['root']
-        '0.1.0-W3-001'
+        '<ticket-id>'
         >>> info['parent']
         None
         >>> info['depth']
@@ -221,21 +221,21 @@ def calculate_chain_info(target_id: str) -> Dict[str, Any]:
         >>> info['sequence']
         [1]
 
-        >>> info = calculate_chain_info("0.1.0-W3-001.1")
+        >>> info = calculate_chain_info("<ticket-id>.1")
         >>> info['root']
-        '0.1.0-W3-001'
+        '<ticket-id>'
         >>> info['parent']
-        '0.1.0-W3-001'
+        '<ticket-id>'
         >>> info['depth']
         1
         >>> info['sequence']
         [1, 1]
 
-        >>> info = calculate_chain_info("0.1.0-W3-001.1.2")
+        >>> info = calculate_chain_info("<ticket-id>.1.2")
         >>> info['root']
-        '0.1.0-W3-001'
+        '<ticket-id>'
         >>> info['parent']
-        '0.1.0-W3-001.1'
+        '<ticket-id>.1'
         >>> info['depth']
         2
         >>> info['sequence']
@@ -245,7 +245,7 @@ def calculate_chain_info(target_id: str) -> Dict[str, Any]:
     if not components:
         return {}
 
-    # 使用原始字串 split 保留前導 0（Bug: 0.18.0-W10-037）
+    # 使用原始字串 split 保留前導 0（曾有的 Bug）
     # parse_sequence 會把序號轉為 int 導致前導 0 遺失，這裡改以字串形式組回 ID，
     # 同時仍輸出 int list 以維持 API 相容性。
     sequence_parts = components["sequence"].split(".")

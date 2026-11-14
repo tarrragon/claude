@@ -25,7 +25,7 @@
 
 ---
 
-## 唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）
+## 唯讀派發豁免 worktree 強制（框架 issue 36）
 
 > **用途**：PM 派發實作代理人執行**唯讀規劃/分析階段**（如 TDD Phase 3a 只讀不寫）時，若明確宣告唯讀，可豁免上方「適用範圍與強制規則」表列的 worktree 強制，不需為純唯讀工作先建立/切換 worktree。
 >
@@ -53,9 +53,9 @@ Dispatch-Mode: readonly
 | 外部 `.claude/`（非本專案）路徑 | 不受本豁免影響——外部 `.claude/` 路徑在判斷序列最前一律阻擋（runtime 必拒），先於本豁免判斷 |
 | 值非 `readonly`（如 `Dispatch-Mode: review`） | 三條件不符，不豁免 |
 | 非首行宣告（如夾在 prompt 中段） | 三條件不符，不豁免 |
-| Agent 工具 `dispatch_mode` 結構化參數 | **無效**——探針實測確認 CC runtime 組 PreToolUse hook payload 時剝離 Agent tool_input 的自訂欄位，唯一有效聲明方式是 prompt 首行文字（0.2.1-W3-269 Problem Analysis 附 hook log 證據） |
+| Agent 工具 `dispatch_mode` 結構化參數 | **無效**——探針實測確認 CC runtime 組 PreToolUse hook payload 時剝離 Agent tool_input 的自訂欄位，唯一有效聲明方式是 prompt 首行文字（該分析的 Problem Analysis 附 hook log 證據） |
 
-**與 review mode 的關係**：全文關鍵字豁免（原 W10-084，「審查/review/掃描/scan/評估/evaluate」）已移除，審查派發的唯一豁免路徑為本節首行宣告。理由：實作票收尾的標準用語「Phase 4 評估」必然命中子字串，實作派發因此被放行至共用主工作樹，守衛失效方向為放行；首行固定格式協議為結構化精確比對，未宣告即阻擋。以實作代理人擔任審查角色時，prompt 首行必須是 `Dispatch-Mode: readonly`。
+**與 review mode 的關係**：全文關鍵字豁免（原版本，「審查/review/掃描/scan/評估/evaluate」）已移除，審查派發的唯一豁免路徑為本節首行宣告。理由：實作票收尾的標準用語「Phase 4 評估」必然命中子字串，實作派發因此被放行至共用主工作樹，守衛失效方向為放行；首行固定格式協議為結構化精確比對，未宣告即阻擋。以實作代理人擔任審查角色時，prompt 首行必須是 `Dispatch-Mode: readonly`。
 
 **其餘兩道檢查無需另外處理**：`worktree-pre-dispatch-branch-drift-hook.py`（即本文件「Worktree 狀態檢查觸發點」表的 Guard B）與 `.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py` 皆以 `isolation == "worktree"` 為觸發前提；本豁免路徑不設定該欄位，兩者的跳過條件自然生效，不需額外設定。
 
@@ -98,11 +98,11 @@ Claude Code v2.1.143+ 提供 `worktree.bgIsolation` 設定，控制 background s
 | A | deny 綁定 subagent cwd（worktree cwd ≠ 主 repo cwd 時觸發） | **成立**（單一 subagent + bgIsolation: none + .claude/ Edit → success） |
 | B | deny 綁定 subagent 身份（任何 subagent 對 .claude/ Edit 均受限） | **否證** |
 
-**實驗範圍限制**：僅驗證單一 subagent。並行 3+ subagent 情境（PC-137 真正關注場景）由後續並行受控實驗驗證。 <!-- PC-093-exempt: history:0.19.0-W3-034.1 W3-034.4 為實驗驗證歷史錨點 -->
+**實驗範圍限制**：僅驗證單一 subagent。並行 3+ subagent 情境（PC-137 真正關注場景）由後續並行受控實驗驗證。
 
-**目前建議（v0.19.x）**：採策略 C（條件式採用），W3-034.4 並行受控實驗驗證落地。 <!-- PC-093-exempt: history:0.19.0-W3-034.4 為實驗驗證歷史錨點 -->
+**目前建議（v0.19.x）**：採策略 C（條件式採用），並行受控實驗驗證落地。
 
-**Why**：W3-034.4 並行受控實驗（bgIsolation: none + 並行 3 subagent + `.claude/` Edit）取得 3/3 success（PC-137 v1.1.0 落地）；單一 subagent 場景另由 W3-034.1 驗證 success。bgIsolation: none 模式下並行 `.claude/` Edit 已具備可控證據，不需繼續停留在策略 A 的全面 worktree 短期建議。
+**Why**：並行受控實驗（bgIsolation: none + 並行 3 subagent + `.claude/` Edit）取得 3/3 success（PC-137 v1.1.0 落地）；單一 subagent 場景另由單獨實驗驗證 success。bgIsolation: none 模式下並行 `.claude/` Edit 已具備可控證據，不需繼續停留在策略 A 的全面 worktree 短期建議。
 
 **Consequence**：未升級會讓 `.claude/` 並行修改場景持續受策略 A 的並行 ≤ 2 限制（PC-137 worktree 模式規則），無法利用 bgIsolation: none 已驗證的並行解鎖；同時與 PC-137 v1.1.0「bgIsolation: none 例外」章節脫節，造成讀者誤外推。
 
@@ -111,8 +111,8 @@ Claude Code v2.1.143+ 提供 `worktree.bgIsolation` 設定，控制 background s
 | 派發情境 | bgIsolation 設定 | 理由 |
 |---------|------------------|------|
 | 涉及 src/ / tests/ 並行 subagent | worktree（預設） | 保留 git index 隔離，避免 PC-092 風險；業界並行 AI agent 標準 |
-| 單一 subagent + `.claude/` Edit | none 可選 per-dispatch override | W3-034.1 驗證 success；ARCH-015 主 repo cwd 規則仍適用 |
-| 並行 3+ subagent + `.claude/` Edit | **none 必用**（worktree 模式並行 ≤ 2 禁止 3+） | W3-034.4 驗證 success；commit 由 PM 統一執行避免 PC-092 |
+| 單一 subagent + `.claude/` Edit | none 可選 per-dispatch override | 單獨實驗驗證 success；ARCH-015 主 repo cwd 規則仍適用 |
+| 並行 3+ subagent + `.claude/` Edit | **none 必用**（worktree 模式並行 ≤ 2 禁止 3+） | 並行受控實驗驗證 success；commit 由 PM 統一執行避免 PC-092 |
 | 跨 `.claude/` + src/ 混合修改 | 拆兩次派發（`.claude/` 用 none，src/ 用 worktree） | ARCH-015 + bgIsolation 衝突避免 |
 | 全面切換 bgIsolation: none | **暫不採用** | 並行 commit 與 5+ 並行未驗證；對 src/ 失去 worktree 隔離保護。當前正向路徑：採策略 C 條件式採用（per-dispatch override），待 5+ 並行需求或 PC-092 共享 index 驗證需求出現時，建 ANA ticket 對照實驗 |
 
@@ -182,7 +182,7 @@ Commit your changes on the worktree branch before reporting completion.
 - 若 ticket 是剛建立或剛更新，除 commit 外，prompt 必須附 ticket 絕對路徑，避免 IMP-066 的「worktree 看不到新 ticket」問題。
 - agent 回報完成後，不可只看主 repo `git status`；先查 `git worktree list` 和 `git log main..{branch}`。
 
-**實作 agent commit 紀律（強制，來源 1.2.0-W1-028 事故一）**：派發 worktree 實作 agent 的 prompt 必須明示「回報完成前，先 `git add <where.files> && git commit` 產品碼進 worktree 分支；ticket CLI 只 commit metadata，不代為 commit 產品碼」。PM 收到回報後用階段 2/3 的 `git log main..{branch}` + Guard A 驗證交付物確已 commit。完整論證（為何 ticket CLI 不 commit 產品碼、與 PC-024 push 禁令的邊界）見 `.claude/agents/AGENT_PRELOAD.md` 規則 6「worktree 隔離派發時必須 commit 產品碼進 worktree 分支」。
+**實作 agent commit 紀律（強制，來源：未提交碼遺失事故一）**：派發 worktree 實作 agent 的 prompt 必須明示「回報完成前，先 `git add <where.files> && git commit` 產品碼進 worktree 分支；ticket CLI 只 commit metadata，不代為 commit 產品碼」。PM 收到回報後用階段 2/3 的 `git log main..{branch}` + Guard A 驗證交付物確已 commit。完整論證（為何 ticket CLI 不 commit 產品碼、與 PC-024 push 禁令的邊界）見 `.claude/agents/AGENT_PRELOAD.md` 規則 6「worktree 隔離派發時必須 commit 產品碼進 worktree 分支」。
 
 ### `worktree.sparsePaths`
 
@@ -273,7 +273,7 @@ git branch -d {branch}
 
 > `worktree-commit-before-dispatch-hook.py` 對主 repo 髒污僅輸出 stderr 提醒（exit 0，不阻擋派發）；步驟 2/3 是 PM 端建議紀律，不再有 hook 端 DENY backstop。
 
-#### Guard B 前置：派發前確認主 repo 未漂移（來源 1.2.0-W1-028 事故二）
+#### Guard B 前置：派發前確認主 repo 未漂移（來源：主 repo 漂移事故二）
 
 > **Why**：cwd 污染後主 repo HEAD 可能漂移到 feat 分支（如 `feat/<ticket>-...`）。在漂移基底上派發 worktree，後續 `git -C <main> merge` 會落在誤切分支而非 main，`push` 顯示 up-to-date 但 `git log main` 查無交付物，工作落錯位置難以察覺。
 > **Consequence**：交付物 merge 進 feat 分支而非 main，PM 誤以為已完成，實際 main 無變更。
@@ -311,13 +311,13 @@ git -C <project-root> branch --show-current   # 必須回 main/master
 
 | 步驟 | 動作 | 原因 |
 |------|------|------|
-| 1 | **Guard A：用固定值驗證 ticket 交付物確在 main**（見下） | **強制**，防 1.2.0-W1-028 事故一資料遺失 |
+| 1 | **Guard A：用固定值驗證 ticket 交付物確在 main**（見下） | **強制**，防事故一資料遺失 |
 | 2 | 確認產出物已在 main 上且測試通過 | 清理前驗證 |
 | 3 | `git worktree remove .claude/worktrees/agent-{id} --force` | 移除 worktree |
 | 4 | `git branch -D worktree-agent-{id}` | 刪除對應分支 |
 | 5 | 確認 `git worktree list` 無殘留 | 驗證清理完成 |
 
-#### Guard A：remove 前必須驗證交付物已落地 main（PM 硬規則，來源 1.2.0-W1-028 事故一）
+#### Guard A：remove 前必須驗證交付物已落地 main（PM 硬規則，來源：事故一）
 
 > **Why**：實作 agent 在 worktree 建檔+測試通過但只 ticket CLI auto-commit metadata、未 git commit 產品碼時，PM merge 僅得 metadata（merge stat「1 file changed」是紅旗）。此時 `worktree remove --force` 會永久刪除未提交工作樹，`git fsck` 無 unreachable，產品碼無法復原。
 > **Consequence**：ticket 交付物（產品碼）永久遺失，需重做整個 ticket。
@@ -333,11 +333,11 @@ git ls-tree -r main --name-only | grep <file>   # 命中才代表已落地
 
 **自動防護**：`worktree-remove-deliverable-check-hook`（PreToolUse:Bash）偵測 `git worktree remove`，若該 worktree 分支有未 merge 進 main 的 commit（`git log main..<branch>` 觸及檔案）→ 阻擋（exit 2）。`--force` 不繞過此檢查（檢查在 hook 層，先於 git 執行）。
 
-#### Guard C：remove 前必須確認 target worktree working tree 已 clean（PM 硬規則，來源 0.2.1-W3-280，issue 46 症狀四）
+#### Guard C：remove 前必須確認 target worktree working tree 已 clean（PM 硬規則，來源：issue 46 症狀四）
 
-> **命名說明**：本節代號原為「Guard B」，因與 `worktree-pre-dispatch-branch-drift-hook`（本文件「Worktree 狀態檢查觸發點」表已分配的 Guard B，派發前主 repo 分支漂移檢查）撞號，於 0.2.1-W3-285 改名為 Guard C，避免同一字母指向兩個語意無關的 hook。
+> **命名說明**：本節代號原為「Guard B」，因與 `worktree-pre-dispatch-branch-drift-hook`（本文件「Worktree 狀態檢查觸發點」表已分配的 Guard B，派發前主 repo 分支漂移檢查）撞號，改名為 Guard C，避免同一字母指向兩個語意無關的 hook。
 
-> **Why**：merge 完成後 Guard A 即放行，但 worktree working tree 內未提交的修改（已追蹤或未追蹤）不在 commit 歷史中，`remove --force` 會使其永久遺失。這是 1.2.0-W1-028 事故一在「merge 已完成」路徑下的變體（issue 46 症狀四）。
+> **Why**：merge 完成後 Guard A 即放行，但 worktree working tree 內未提交的修改（已追蹤或未追蹤）不在 commit 歷史中，`remove --force` 會使其永久遺失。這是事故一在「merge 已完成」路徑下的變體（issue 46 症狀四）。
 > **Consequence**：代理人寫入但未 commit 的內容（或殘留的未追蹤檔案）在 remove 時被靜默丟棄，`git fsck` 無 unreachable 可查，遺失不可逆。
 > **Action**：`git worktree remove` 前，對每個目標 worktree 用固定值確認 working tree 已 clean：
 
@@ -445,7 +445,7 @@ git branch -d worktree-agent-{id}
 
 ### 邊界註記：claude agents dashboard 的自動 commit/push/PR（CC 2.1.198+）
 
-CC 2.1.198 起，**從 `claude agents` dashboard 啟動的背景 session** 在 worktree 完成程式碼工作後會自動 commit、push 並開 draft PR，不再停下詢問。**Why**：本框架派發模式為 PM session 內 Agent tool 派發，不經 dashboard，此行為不觸發；但若未來改用 dashboard 派發程式碼工作，draft PR 會未經 PM 驗收 gate 出現在 GitHub（外部化動作）。**Action**：改用 dashboard 派發前必先重新評估此項；絆腳索——GitHub 出現 PM 未發起的 draft PR 時立即重新評估（評估紀錄見 1.5.0-W5-001.4）。
+CC 2.1.198 起，**從 `claude agents` dashboard 啟動的背景 session** 在 worktree 完成程式碼工作後會自動 commit、push 並開 draft PR，不再停下詢問。**Why**：本框架派發模式為 PM session 內 Agent tool 派發，不經 dashboard，此行為不觸發；但若未來改用 dashboard 派發程式碼工作，draft PR 會未經 PM 驗收 gate 出現在 GitHub（外部化動作）。**Action**：改用 dashboard 派發前必先重新評估此項；絆腳索——GitHub 出現 PM 未發起的 draft PR 時立即重新評估。
 
 ---
 
@@ -561,12 +561,12 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 
 **Last Updated**: 2026-08-19
 **Version**: 2.8.0 - 因應 worktree-commit-before-dispatch-hook 主 repo 髒污判定由 DENY 降為 WARN：階段 1 步驟 2/3 措辭由「強制/確保無殘留」改為「建議」並標明防護歸屬已轉移至 workspace-wipe-guard-hook（危險動作端無條件 DENY）；移除階段 1「禁止：main 上有未提交變更時派發 worktree agent」全域阻塞句；「Shell 工作目錄保護」表對應行同步由「禁止」改「建議」
-**Version**: 2.7.0 - 修正 worktree-remove-deliverable-check-hook 的 BLOCK_MESSAGE_DIRTY 內部代號「Guard B」與本文件既有 Guard B（worktree-pre-dispatch-branch-drift-hook，派發前分支漂移）撞號：改名 Guard C 並於階段 3 新增獨立章節、同步觸發點表與清理後檢查清單；merge-reminder-hook 的 dirty 分支清理建議改為 commit 後 merge 再 remove 的導向，不再指向會被 Guard C 阻擋的 `remove --force`（0.2.1-W3-285，承接前一張同型問題殘留票）
-**Version**: 2.6.0 - 新增「唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）」節：TDD Phase 3a 等唯讀規劃/分析派發可用 prompt 首行 `Dispatch-Mode: readonly` 豁免 worktree 強制，含三條件 AND 判準、適用判準、反例表、與 review mode 的 OR 關係；「適用範圍與強制規則」表補豁免指引；派發 prompt 骨架速查另見 `agent-dispatch-template.md`（0.2.1-W3-270，接續 0.2.1-W3-269 落地）
-**Version**: 2.5.0 - 新增「多階段串接派發（Feat 分支累積器）」節：跨 agent TDD phase 接力（RED→GREEN 跨多個 worktree agent）時保 main 全程恆綠的機制，含 checkout-paths 取代 merge 的理由與 Guard A 銜接說明；階段 2「提取方式選擇」表補第四列 `git checkout <ref> -- <paths>`（0.2.1-W3-095，落地自 memory multi-phase-tdd-branch-flow.md）
+**Version**: 2.7.0 - 修正 worktree-remove-deliverable-check-hook 的 BLOCK_MESSAGE_DIRTY 內部代號「Guard B」與本文件既有 Guard B（worktree-pre-dispatch-branch-drift-hook，派發前分支漂移）撞號：改名 Guard C 並於階段 3 新增獨立章節、同步觸發點表與清理後檢查清單；merge-reminder-hook 的 dirty 分支清理建議改為 commit 後 merge 再 remove 的導向，不再指向會被 Guard C 阻擋的 `remove --force`（承接前一次同型問題殘留）
+**Version**: 2.6.0 - 新增「唯讀派發豁免 worktree 強制（框架 issue 36）」節：TDD Phase 3a 等唯讀規劃/分析派發可用 prompt 首行 `Dispatch-Mode: readonly` 豁免 worktree 強制，含三條件 AND 判準、適用判準、反例表、與 review mode 的 OR 關係；「適用範圍與強制規則」表補豁免指引；派發 prompt 骨架速查另見 `agent-dispatch-template.md`（接續落地）
+**Version**: 2.5.0 - 新增「多階段串接派發（Feat 分支累積器）」節：跨 agent TDD phase 接力（RED→GREEN 跨多個 worktree agent）時保 main 全程恆綠的機制，含 checkout-paths 取代 merge 的理由與 Guard A 銜接說明；階段 2「提取方式選擇」表補第四列 `git checkout <ref> -- <paths>`（落地自 memory multi-phase-tdd-branch-flow.md）
 
-**Version**: 2.4.0 - 落地 1.2.0-W1-028 兩守護：Guard A（階段 3 remove 前固定值驗證交付物在 main + remove-deliverable-check-hook 強制層 + 實作 agent commit 紀律）防未提交碼遺失；Guard B（階段 1 派發前主 repo 分支漂移檢查 + pre-dispatch-branch-drift-hook 強制層）防 cwd 污染致 merge 落錯處；觸發點表與派發前/清理後檢查清單同步補列
+**Version**: 2.4.0 - 落地兩守護：Guard A（階段 3 remove 前固定值驗證交付物在 main + remove-deliverable-check-hook 強制層 + 實作 agent commit 紀律）防未提交碼遺失；Guard B（階段 1 派發前主 repo 分支漂移檢查 + pre-dispatch-branch-drift-hook 強制層）防 cwd 污染致 merge 落錯處；觸發點表與派發前/清理後檢查清單同步補列
 
-**Version**: 2.3.0 - 「目前建議」章節升級為策略 C 條件式採用（W3-034.4 並行受控實驗 3/3 success 落地）；新增 Action 表分 5 場景對應 bgIsolation 設定 + 未驗證情境表 + 不採策略 B 理由
+**Version**: 2.3.0 - 「目前建議」章節升級為策略 C 條件式採用（並行受控實驗 3/3 success 落地）；新增 Action 表分 5 場景對應 bgIsolation 設定 + 未驗證情境表 + 不採策略 B 理由
 
 **Version**: 2.2.0 - 補充 CC worktree 入口、sparsePaths、Hook events 與 stale cleanup

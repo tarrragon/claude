@@ -4,7 +4,7 @@ description: "Use this skill for managing git worktrees for Ticket-based develop
 argument-hint: "<subcommand> [args]"
 allowed-tools: Bash, Read, Write, Edit
 metadata:
-  version: 1.7.1
+  version: 1.8.0
 ---
 
 # Worktree Management SKILL
@@ -36,7 +36,7 @@ cc runtime 派發 `isolation: "worktree"` 的 subagent 時自動建立隔離 wor
 
 ---
 
-## worktree 不含的狀態（0.2.1-W3-274，框架 issue 46）
+## worktree 不含的狀態（框架 issue 46）
 
 > **核心概念**：git worktree 是**版本控制層**的隔離機制，只複製 git 追蹤的內容（已 commit 或已 staged 的檔案）。任何 `.gitignore` 排除、或執行期才產生的狀態，都不會隨 worktree 建立而出現在新的工作目錄中。適用於本 SKILL 的人工 `/worktree create` 與 cc runtime 自動建立的 agent isolation worktree 兩者。
 
@@ -70,8 +70,8 @@ cc runtime 派發 `isolation: "worktree"` 的 subagent 時自動建立隔離 wor
 ```
 
 自動建立：
-- 分支：`feat/1.0.0-W9-002.1`
-- Worktree：`../ccsession-1.0.0-W9-002.1`
+- 分支：`feat/<ticket-id>`
+- Worktree：`../<project>-<ticket-id>`
 
 建立完成後輸出 `cd` 指令，一鍵切換工作環境。
 
@@ -105,9 +105,11 @@ cc runtime 派發 `isolation: "worktree"` 的 subagent 時自動建立隔離 wor
 
 `merge` 預設先取得 heavy 名額（改動不在全套件範圍內者不取），再於名額內執行 commit-tree、於合併 commit 的 detached worktree 快照內跑全套件、update-ref，update-ref 完成或中止後才釋放，檢查窗口不含排隊時間；快照內套件經 `run-with-timeout.py` 但以環境標記 `CLAUDE_SLOT_HELD_BY` 免重複取得名額；紅燈即不合併、列出失敗項、exit 1，快照無論成敗皆移除；移除用的 git 逾時或無法啟動時，寫 stderr 與 `worktree-merge.log`（`[合併閘門] WARNING：快照清理…`），閘門仍回報原本的結果，目錄最後仍在時另印「快照未移除：<路徑>」。實作在 `scripts/merge_gate.py`。
 
+`worktree merge` 不可再以 `run-with-timeout.py` 包裝。外層計時器從啟動就開始計，會把閘門內的排隊時間算進逾時，排得久就會被外層中止；merge 內部套件的逾時從取得名額後才起算。pre-test-hook 會擋下這種包裝，並附上不包裝的寫法。需要長時間等待時，改用背景執行並把輸出寫檔。
+
 | 改動範圍（相對當下 main） | 跑的套件 |
 |--------------------------|---------|
-| `lib/`、`test/`、`integration_test/`、`macos/`、`docs/`、`assets/`（票檔與版本日誌除外）、`pubspec.*` 等，且合併快照根目錄有 `pubspec.yaml`（無則這些路徑視為範圍外，只印 WARNING） | Flutter：`fvm flutter test` |
+| `lib/`、`test/`、`integration_test/`、`macos/`、`docs/`、`assets/`（票檔與版本日誌除外）、`pubspec.*` 等，且合併快照根目錄有 `pubspec.yaml`（無則這些路徑視為範圍外，只印 WARNING） | Flutter：`flutter test`（快照有 `.fvmrc` 或 `.fvm/fvm_config.json` 時為 `fvm flutter test`） |
 | `.claude/skills/<名稱>/`（該 skill 帶 `tests/`） | `skill:<名稱>`：有 `pyproject.toml` 跑 `uv --directory .claude/skills/<名稱> run pytest`；無則借 hooks 環境 `uv --directory .claude/hooks run pytest -p no:cacheprovider ../skills/<名稱>/tests` |
 | `.claude/scripts/` | scripts pytest：`uv --directory .claude/scripts run pytest` |
 | `.claude/lib/` | hooks pytest（其 testpaths 已含 `../lib/tests`）＋ scripts pytest ＋ 所有「帶 `tests/` 且有 .py 匯入 `lib`」的 skill（掃描快照得出，不寫死清單） |
@@ -141,7 +143,7 @@ skill 被 hooks 或 scripts 使用時加跑對應套件：改動涉及某 skill�
 
 多個套件依 flutter、hooks、scripts、skill（名稱排序）的固定順序執行，任一紅燈即停。
 
-- 快照內缺 `.dart_tool/package_config.json` 時先 `fvm flutter pub get`；失敗則明確指出缺哪個產物。
+- 快照內缺 `.dart_tool/package_config.json` 時先 `flutter pub get`（使用 FVM 的快照為 `fvm flutter pub get`，判定同上）；失敗則明確指出缺哪個產物。宣告檔中的 `command`、`generate` 由專案寫定，閘門不補 fvm 前綴。
 - CAS 重試：驗證狀態以套件為單位記錄。依「該套件上次驗過的 commit 到新 commit」的差異，套用上表的套件選擇規則：差異不觸及該套件就沿用其驗證結果，觸及就只重跑該套件；沒有驗證紀錄的套件（例如匯入掃描使套件集合變大）加跑。`RETRY_REUSE_EXEMPT_GLOBS`（`docs/work-logs/**/tickets/*.md`、`docs/work-logs/**/v*-main.md`、`docs/work-logs/topic-assignments.txt`）內的檔案仍不計入差異，語意不變。沿用的套件輸出 `[合併前測試] 套件 <名稱>：沿用｜沿用 <commit 前 12 碼> 的驗證結果｜耗時 0.0s`，重跑者為原本的綠燈／紅燈結果行；重試超過 `GATE_MAX_RETRIES`（預設 3）中止，ref 不變、分支保留。
 - 每個套件結束輸出一行結果（套件名、狀態、pytest `N passed` 或 flutter `All tests passed` 等摘要、耗時；紅燈、逾時、中斷也記錄），同時寫入 stdout 與 `.claude/logs/worktree-merge.log`。
 - 每次閘門開始與結束各記一行，預檢無衝突時中間多記一行 `[合併閘門] 預檢｜target <分支>｜分支 <來源分支>｜commit <base HEAD 前 12 碼>｜結果 無衝突`（有衝突則無此行，直接記結束行「預檢衝突」；前綴 `[合併閘門]`，與套件結果行 `[合併前測試]` 刻意不同，名額預估的中位數取樣只認後者）：`[合併閘門] 開始｜target <分支>｜分支 <來源分支>｜commit <base HEAD 前 12 碼>`、`[合併閘門] 結束｜target <分支>｜分支 <來源分支>｜commit <前 12 碼>｜結果 <寫入|拒絕|紅燈|逾時|中止|預檢衝突>`。結束行的 commit 在結果為「寫入」時是合併 commit，其餘仍是 base HEAD。「拒絕」涵蓋持有者超出自身預估過久而放棄等待，以及持有期間子程序的名額等待逾時（兩者同為結束碼 125，無法再分）；「逾時」為套件逾時；「預檢衝突」為進場排隊前以 `merge-tree` 試算當下 main 與分支即有文字衝突（不排隊、不占名額，結束碼 1；已合併、空合併、ref 解析失敗放行，由取得名額後的既有路徑判定）；「中止」為取得名額後的 CAS 衝突（含排隊期間 main 前進產生的新衝突）、重試上限、非預期例外或中斷。

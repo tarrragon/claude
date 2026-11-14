@@ -194,6 +194,35 @@ def test_get_uncommitted_count_does_not_rewrite_index(tmp_path):
     assert index.read_bytes() == before
 
 
+def _warning_for(tmp_path):
+    count = hook.get_uncommitted_count(str(tmp_path))
+    wt = hook.WorktreeInfo(path=str(tmp_path), branch="feat/x", is_main=False, uncommitted_count=count)
+    result = hook.CheckResult(
+        has_uncommitted_worktrees=True, has_unmerged_branches=False,
+        uncommitted_worktrees=[wt], unmerged_branches=[],
+    )
+    return count, hook.format_warning_output(result)
+
+
+def test_modified_only_worktree_is_not_called_untracked(tmp_path):
+    """只有已修改的追蹤檔（status 為 M）：計 1 筆，訊息不說未追蹤（修正前寫死「個未追蹤檔案」）。"""
+    _make_stat_dirty_repo(tmp_path)
+    (tmp_path / "f.txt").write_text("changed\n")
+    count, text = _warning_for(tmp_path)
+    assert count == 1
+    assert "未追蹤" not in text
+    assert "1 個未提交變更" in text
+
+
+def test_untracked_file_is_counted_as_uncommitted_change(tmp_path):
+    """對照：未追蹤檔同樣計入，用同一個詞。"""
+    _make_stat_dirty_repo(tmp_path)
+    (tmp_path / "new.txt").write_text("n\n")
+    count, text = _warning_for(tmp_path)
+    assert count == 1
+    assert "1 個未提交變更" in text
+
+
 class TestGetUnmergedBranchesPlumbing:
     """get_unmerged_branches 以 for-each-ref 取名，worktree checkout 分支不帶 '+ ' 前綴（0.5.0-W1-372）。"""
 

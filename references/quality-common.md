@@ -225,7 +225,7 @@
 
 ### 1.2.6 共用函式修復範圍防護（修共用 bug 時強制）
 
-> **來源**：PC-136 — 修復共用邏輯（predicate / utility / shared module）的 bug 時，只修「最近一次發現的 caller」，未掃所有 callers / 同名實作，導致同 bug 在數週至數月後從另一處重爆（ARCH-020 三次重爆軌跡 W17-165 → W17-176.2.1 → W17-181）。
+> **來源**：PC-136 — 修復共用邏輯（predicate / utility / shared module）的 bug 時，只修「最近一次發現的 caller」，未掃所有 callers / 同名實作，導致同 bug 在數週至數月後從另一處重爆（ARCH-020 三次重爆軌跡）。
 >
 > **觸發時機**：修復共用函式 / predicate / shared utility 的 bug 時（IMP 修共用 bug + ANA 驗證共用函式正確性，皆強制）。
 
@@ -273,7 +273,7 @@
 | 序列化 | toJSON / serialize / snapshot 是否包含此欄位？（如適用） |
 | 測試隔離 | 測試的 beforeEach/afterEach reset 是否覆蓋此欄位？ |
 
-**Why**：v0.3.0 實證——多 agent 並行在 JS SDK Monitor class 各自新增 `retryCount`/`flushing`/`lastHeartbeat` 欄位但都沒更新 `__reset()`，導致跨 test case 狀態洩漏（W1-003 根因分析）。
+**Why**：v0.3.0 實證——多 agent 並行在 JS SDK Monitor class 各自新增 `retryCount`/`flushing`/`lastHeartbeat` 欄位但都沒更新 `__reset()`，導致跨 test case 狀態洩漏（根因分析）。
 
 **推薦設計模式**：State Registry Pattern——將所有 private 欄位初始值集中宣告為常數（如 `INITIAL_STATE`），init 和 reset 都從此常數取值。新增欄位只改一處，init/reset 自動同步。
 
@@ -532,8 +532,8 @@
 ---
 
 **Last Updated**: 2026-07-05
-**Version**: 1.8.0 — 新增 §1.8「依賴引入紀律」（1.5.0-W5-009.2 落地，源自外部 CLAUDE.md 範例第 8 章）：加套件前四問（既有 / 標準庫 / 維護狀態 / 體積）+ 必附理由 + 三明示 + 交叉引用 PC-159（fresh shell 驗證）與 plugin-management（邊界）；§2 常數管理檢查清單同步補項
-**Version**: 1.7.0 — 新增 §1.7「最小變更紀律（Surgical Changes）」（1.5.0-W5-009.1 落地，源自外部 CLAUDE.md 範例第 4/10 章）：四條禁令（越界改動 / 無關 reformat / 越界死碼清理 / 風格偏好凌駕）+ 三明示 + 風格對齊要求 + 級聯範圍失控訊號；§2 結構檢查清單同步補項
+**Version**: 1.8.0 — 新增 §1.8「依賴引入紀律」（源自外部 CLAUDE.md 範例第 8 章）：加套件前四問（既有 / 標準庫 / 維護狀態 / 體積）+ 必附理由 + 三明示 + 交叉引用 PC-159（fresh shell 驗證）與 plugin-management（邊界）；§2 常數管理檢查清單同步補項
+**Version**: 1.7.0 — 新增 §1.7「最小變更紀律（Surgical Changes）」（源自外部 CLAUDE.md 範例第 4/10 章）：四條禁令（越界改動 / 無關 reformat / 越界死碼清理 / 風格偏好凌駕）+ 三明示 + 風格對齊要求 + 級聯範圍失控訊號；§2 結構檢查清單同步補項
 **Version**: 1.6.0 — 新增 §1.2.6「共用函式修復範圍防護」（PC-136 落地）：強制檢查清單（grep all callers + 同步修正所有同名實作）、心智模型對照、禁止行為；§2 結構檢查清單同步補項
 
-**Version**: 1.5.0 - 從 rules/core/ 完全外移至 references/（W10-076.1，保留 378 行完整內容）
+**Version**: 1.5.0 - 從 rules/core/ 完全外移至 references/（保留 378 行完整內容）

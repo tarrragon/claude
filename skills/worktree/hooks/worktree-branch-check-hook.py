@@ -105,6 +105,9 @@ TARGET_BRANCH_WARNING_CURRENT = "  當前分支: {current_branch}"
 TARGET_BRANCH_WARNING_EXPECTED = "  預期分支: main 或 master"
 TARGET_BRANCH_WARNING_SUGGESTION = "  建議執行: git checkout main"
 
+# 未提交變更 worktree 的計數單位（get_uncommitted_count 計 status --short 全部行）
+UNCOMMITTED_WORD = "個未提交變更"
+
 
 # ============================================================================
 # 資料結構
@@ -339,8 +342,8 @@ def format_warning_output(result: CheckResult) -> str:
         for wt in result.uncommitted_worktrees:
             # 提取 worktree 名稱（路徑最後一個部分）
             wt_name = Path(wt.path).name if wt.path else "unknown"
-            file_word = "個未追蹤檔案"
-            lines.append(f"  - {wt_name} [{wt.branch}]: {wt.uncommitted_count} {file_word}")
+            # 計數來自 status --short 的全部行（已修改、已暫存、未追蹤都算），不只未追蹤
+            lines.append(f"  - {wt_name} [{wt.branch}]: {wt.uncommitted_count} {UNCOMMITTED_WORD}")
         lines.append("")
 
     # 未合併分支

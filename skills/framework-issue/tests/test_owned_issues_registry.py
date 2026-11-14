@@ -8,7 +8,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -16,6 +15,16 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import owned_issues_registry as registry  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_state_root(monkeypatch):
+    """預設隔離：讓 registry_path 採用測試傳入的 tmp_path。
+
+    不隔離時，從 linked worktree 執行測試會把登記檔寫進主倉庫。需要驗證
+    共用狀態根的測試自行清除本變數。
+    """
+    monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
 
 
 # --- registry_path：路徑組成 ---
@@ -146,36 +155,65 @@ def test_record_owned_issue_swallows_oserror_without_raising(tmp_path, monkeypat
     registry.record_owned_issue(81, "flutter-balance-99", "t1", tmp_path)  # 不應拋例外
 
 
-# --- _project_root：解析優先序 ---
+# --- 共用狀態根：真實 linked worktree ---
 
 
-def test_project_root_prefers_claude_project_dir_env_var(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    with mock.patch.object(registry.subprocess, "run") as run:
-        result = registry._project_root()
-    assert result == tmp_path
-    run.assert_not_called()
+def _git(cwd, *args):
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+        cwd=cwd, check=True, capture_output=True, text=True,
+    )
 
 
-def test_project_root_falls_back_to_git_toplevel_when_env_absent(monkeypatch, tmp_path):
-    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
-    with mock.patch.object(
-        registry.subprocess,
-        "run",
-        return_value=subprocess.CompletedProcess(
-            args=["git"], returncode=0, stdout=str(tmp_path) + "\n", stderr=""
-        ),
-    ):
-        result = registry._project_root()
-    assert result == tmp_path
+@pytest.fixture
+def linked_worktree(tmp_path):
+    """建主 repo 與一個 linked worktree，回傳 (main_root, worktree_root)。"""
+    main = (tmp_path / "main").resolve()
+    worktree = (tmp_path / "wt").resolve()
+    main.mkdir()
+    _git(main, "init", "-q")
+    (main / "README.md").write_text("x", encoding="utf-8")
+    _git(main, "add", "README.md")
+    _git(main, "commit", "-q", "-m", "init")
+    _git(main, "worktree", "add", "-q", str(worktree), "-b", "wt")
+    return main, worktree
 
 
-def test_project_root_falls_back_to_cwd_when_git_fails(monkeypatch):
-    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
-    with mock.patch.object(
-        registry.subprocess,
-        "run",
-        return_value=subprocess.CompletedProcess(args=["git"], returncode=1, stdout="", stderr="not a git repo"),
-    ):
-        result = registry._project_root()
-    assert result == Path.cwd()
+def test_write_in_linked_worktree_is_readable_from_main_repo(linked_worktree, monkeypatch):
+    """正向對照：清除 HOOK_TEST_ISOLATION，在 linked worktree 內寫入，主 repo 讀得到。
+
+    呼叫端傳入的 project_root 是 worktree 自己的根（hook 與 section_comment 的
+    實際傳法），登記檔仍須落在主倉庫。
+    """
+    main, worktree = linked_worktree
+    monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+
+    monkeypatch.chdir(worktree)
+    registry.record_owned_issue(81, "llm-dev", "t1", worktree)
+    registry.record_owned_issue(82, "llm-dev", "t2")
+
+    assert (main / ".claude" / "state" / "framework-issue-owned.json").exists()
+    assert not (worktree / ".claude" / "state" / "framework-issue-owned.json").exists()
+
+    monkeypatch.chdir(main)
+    assert sorted(registry.owned_issue_numbers(main)) == [81, 82]
+
+
+def test_isolation_keeps_registry_in_given_root(linked_worktree, monkeypatch):
+    """對照組：HOOK_TEST_ISOLATION=1 時退回呼叫端傳入的根，證明上一則的主 repo
+    落點來自共用狀態根解析，而不是測試環境本來就寫到主 repo。"""
+    main, worktree = linked_worktree
+    monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
+    monkeypatch.chdir(worktree)
+    registry.record_owned_issue(81, "llm-dev", "t1", worktree)
+
+    assert (worktree / ".claude" / "state" / "framework-issue-owned.json").exists()
+    assert not (main / ".claude" / "state" / "framework-issue-owned.json").exists()
+
+
+def test_module_has_no_own_root_resolver():
+    """根目錄解析只走 get_shared_state_root，模組內不得再有自寫解析。"""
+    source = Path(registry.__file__).read_text(encoding="utf-8")
+    assert "get_shared_state_root" in source
+    for forbidden in ("CLAUDE_PROJECT_DIR", "--show-toplevel", "get_project_root", "def _project_root"):
+        assert forbidden not in source

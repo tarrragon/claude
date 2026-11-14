@@ -71,13 +71,13 @@
 
 ## TDD Phase 代理人職責清單
 
-PM 派發 Phase 代理人時可立即查表確認允許/禁止產出，防止職責越界（如 W5-001 Phase 2 sage 越界撰寫測試 .py 實作案例）。
+PM 派發 Phase 代理人時可立即查表確認允許/禁止產出，防止職責越界（如 Phase 2 sage 越界撰寫測試 .py 實作案例）。
 
 | Phase | 代理人 | 允許產出 | 禁止產出 |
 |-------|-------|---------|---------|
 | 0 | saffron | 系統審查報告 | 程式碼、測試 |
 | 1 | lavender | 功能設計文件 | 程式碼、測試檔 |
-| 2 | sage | 測試設計文件 | **測試 .py 實作**（W5-001 Phase 2 越界教訓）|
+| 2 | sage | 測試設計文件 | **測試 .py 實作**（Phase 2 越界教訓）|
 | 3a | pepper | 實作策略/虛擬碼 | 真實 .py 程式碼 |
 | 3b | {lang}-developer | 真實程式碼 + 測試 .py | 修改既有測試契約 |
 | 4 | cinnamon | 重構評估 + 重構執行 | 新功能開發 |
@@ -181,9 +181,9 @@ ANA 的覆蓋完整性聲明必須直接體現在後續 IMP 的 acceptance 設�
 | 「依賴 = N 處（驗證方法：全字元集掃描）」 | acceptance 含「執行相同掃描腳本確認 = 0 後」通過 |
 | 「覆蓋區段 U+XXXX-YYYY」 | acceptance 含「全字元集掃描確認無遺漏後」通過 |
 
-**禁止**：IMP acceptance 僅驗 build/lint 通過而不重新驗證 ANA 所聲明的範圍（W1-005.2 根因）。
+**禁止**：IMP acceptance 僅驗 build/lint 通過而不重新驗證 ANA 所聲明的範圍（根因）。
 
-> **觸發案例**：W1-005 ANA AC-4 二度誤判（單關鍵字 rg 替代全量掃描 + 手工區段列舉漏 FE0F）→ 兩個 patch ticket + 48+ 處隱性測試回歸（W1-007 ANA 教訓 1）
+> **觸發案例**：某 ANA AC-4 二度誤判（單關鍵字 rg 替代全量掃描 + 手工區段列舉漏 FE0F）→ 兩個 patch ticket + 48+ 處隱性測試回歸（教訓 1）
 >
 > **相關 Error Pattern**：本規範與 `.claude/error-patterns/process-compliance/PC-161-ana-grep-scope-misjudgment-collapses-precedent-argument.md` 互補。PC-161 聚焦「ANA 以 grep 結果支撐強論證但範圍有誤」；本規範聚焦「ANA 涉及 Unicode/字元集覆蓋判定的完整性聲明要求」。兩者同屬 ANA grep 驗證品質家族，防護不同面向。
 
@@ -305,7 +305,7 @@ ticket track td-status <ticket-id>
 | pending TD 實際已處理但未標記 | 先於 body 補標「已處理：[原因]」再派發 |
 | pending TD 確認無需處理 | 先於 body 補標「無需處理：[原因]」再派發 |
 
-> **Why**：Phase 3a/3b 演進中已修正的 TD 若未更新清單，多視角分析會在已完成項上消耗 token，降低 Phase 4 審查效能（PC-094 W10-017.8 案例教訓）。完整校準規則見 `.claude/pm-rules/tech-debt.md`「TD 清單即時校準（td-status）」章節。
+> **Why**：Phase 3a/3b 演進中已修正的 TD 若未更新清單，多視角分析會在已完成項上消耗 token，降低 Phase 4 審查效能（PC-094 案例教訓）。完整校準規則見 `.claude/pm-rules/tech-debt.md`「TD 清單即時校準（td-status）」章節。
 
 **Phase 4 豁免條件（可簡化為單步驟，直接 Phase 4b，跳過 4a/4c）**：
 
@@ -350,7 +350,7 @@ Phase 4a 多視角分析報告完成後，進入 Phase 4b 前，PM 必須執行 
 
 > **Context Bundle**：PM 在派發下一階段代理人前，必須將該代理人所需的前置資訊寫入 Ticket。詳見 `.claude/pm-rules/context-bundle-spec.md`。
 
-### Phase 2 條件式強制判斷（Phase 1.5 通過後，W1-004）
+### Phase 2 條件式強制判斷（Phase 1.5 通過後）
 
 Phase 1 完成後，依 source spec 有無和 FR 驗收標準規模決定 Phase 2 形態：
 
@@ -486,7 +486,7 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 **Last Updated**: 2026-10-15
 **Version**: 2.20.0 — Phase 3b 轉換條件改為本票相關測試檔全綠，全套件由合併閘門在合併 main 前執行
 **Version**: 2.19.0 — 相關文件補一行路由指向 `worktree-operations.md`「多階段串接派發」節（跨 agent phase 接力的 feat 分支累積器機制，屬 git 分支操作非 TDD phase 語意，不搬機制內容）
-**Version**: 2.18.0 — 新增「ANA 全量 grep/regex 範圍驗證完整性規範」獨立章節：三層強制要求（驗證方法涵蓋完整性聲明、覆蓋完整性聲明格式、AC 設計連動），觸發案例 W1-005 ANA AC-4 二度誤判（0.19.1-W1-039）
-**Version**: 2.17.0 — Phase 4 派發前新增「TD 清單校準（td-status）」預檢步驟（W10-083 / PC-094 落地，防止多視角浪費 token 在已完成 TD 項）
-**Version**: 2.16.0 - Phase 4 新增強制 Checkpoint：重構評估前執行 WRAP Phase 2 檢驗（W15-019，防止重構根因分析太表層）
+**Version**: 2.18.0 — 新增「ANA 全量 grep/regex 範圍驗證完整性規範」獨立章節：三層強制要求（驗證方法涵蓋完整性聲明、覆蓋完整性聲明格式、AC 設計連動），觸發案例為某 ANA AC-4 二度誤判
+**Version**: 2.17.0 — Phase 4 派發前新增「TD 清單校準（td-status）」預檢步驟（PC-094 落地，防止多視角浪費 token 在已完成 TD 項）
+**Version**: 2.16.0 - Phase 4 新增強制 Checkpoint：重構評估前執行 WRAP Phase 2 檢驗（防止重構根因分析太表層）
 **Version**: 2.15.0 - 新增 Phase 1.5 規格多視角審查（單一視角必然有盲點，規格完成後強制多視角審查）

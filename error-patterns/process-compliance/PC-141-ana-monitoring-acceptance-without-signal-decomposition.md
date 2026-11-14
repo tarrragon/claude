@@ -29,21 +29,21 @@
 
 ---
 
-## W10-096 案例
+## 後驗校準 ticket 案例
 
 ### 時序
 
-1. W10-030 結論：認知負擔三層攔截已足夠，建 W10-096 後驗校準作為「先驗證再決定是否擴展」（WRAP 選項 f）
-2. W10-096 acceptance 寫入：
+1. 原 ANA 結論：認知負擔三層攔截已足夠，建後驗校準 ticket 作為「先驗證再決定是否擴展」（WRAP 選項 f）
+2. 後驗校準 ticket 的 acceptance 寫入：
    - AC 2: 統計按類型 WRAP 深度與實際指數分級的偏差率
-   - AC 3: 若偏差率 > 30% 則建立重啟 W10-030 設計的 ticket
+   - AC 3: 若偏差率 > 30% 則建立重啟原 ANA 設計的 ticket
    - AC 4: 偏差率 <= 30% 則標註三層攔截足夠，結案
 3. 執行採樣 N=30，主指標 86.7%（> 30%），形式上觸發 AC 3
 4. 但偏差細分發現：
-   - Over-restricted (ANA 強制 full but idx 認為簡化) = 10/30 = 33.3% — by W10-028 design
+   - Over-restricted (ANA 強制 full but idx 認為簡化) = 10/30 = 33.3% — by design
    - Under-restricted (IMP/DOC 簡化但 idx 認為需 full) = **0/30 = 0%** — 真正失效訊號
 5. 結論衝突：strict 讀法觸發「重啟設計」，但實際資料顯示三層攔截在「不漏網」目標**完全有效**
-6. 化解：spawned W10-111 「重啟 W10-030 設計（含測量框架修正）」，把「修正 acceptance 測量框架」變成下游任務
+6. 化解：spawned 一張「重啟原設計（含測量框架修正）」ticket，把「修正 acceptance 測量框架」變成下游任務
 
 ### 根因推測
 
@@ -96,4 +96,4 @@ PC-063 / PC-067 / PC-054 聚焦 ANA **執行 / 收斂階段**的偏差；PC-141 
 
 **Last Updated**: 2026-05-12
 **Version**: 1.0.0
-**Source**: W10-096 後驗校準 ANA 完成時發現原 acceptance「偏差率 > 30% → 重啟設計」未區分設計性 (10/30 over-restricted by design) vs 失效性 (0/30 under-restricted) 偏差，主指標 86.7% 形式觸發重啟但實際資料顯示系統健康；化解為 spawned W10-111 修正測量框架
+**Source**: 後驗校準 ANA 完成時發現原 acceptance「偏差率 > 30% → 重啟設計」未區分設計性 (10/30 over-restricted by design) vs 失效性 (0/30 under-restricted) 偏差，主指標 86.7% 形式觸發重啟但實際資料顯示系統健康；化解為 spawned 一張修正測量框架的 ticket

@@ -185,7 +185,7 @@ Phase 2 測試設計前，必須讀取 `docs/domain-map.md`（或 `docs/spec/{do
 
 ### 拆分友善測試設計（Phase 3b 可拆分性，強制考量）
 
-> **來源**：0.2.0-W3-020 — 測試群組應設計為可獨立執行，支援 Phase 3b 按 SRP 功能職責拆分派發。
+> **來源**：測試群組應設計為可獨立執行，支援 Phase 3b 按 SRP 功能職責拆分派發。
 
 設計 GWT scenario group 時，**必須**同時考量 Phase 3b 的可拆分性：
 
@@ -400,11 +400,11 @@ Phase 1 (lavender-interface-designer) - 功能設計
 **Specialization**: TDD Test Design and Test Architecture
 **Updates**:
 
-- v1.6.0 (2026-06-14): 流程外移瘦身（1.0.0-W8-009.3.2）
+- v1.6.0 (2026-06-14): 流程外移瘦身
   - 「測試設計工作流程」步驟化內容（測試策略規劃 / 案例設計 / 環境設置 / 行為鏈推演 6 步驟 + 前置驗證表 + 正反範例 / 實作記錄）外移至 `.claude/skills/tdd/references/phase2/rules.md`，留 skill 路由表
   - 「TDD Phase 2 Handoff Standards」checklist 外移至同 skill「轉換條件」章節，留路由 + agent 職責補充
   - 三區塊邊界（允許產出 / 適用情境 / 禁止行為）與 AGENT_PRELOAD / agent-definition-standard 錨點未變動
-- v1.5.0 (2026-03-12): 補強行為鏈式推演執行步驟（0.1.0-W44-002）
+- v1.5.0 (2026-03-12): 補強行為鏈式推演執行步驟
   - 新增「行為鏈式推演階段」（第 4 步驟）至測試設計工作流程
   - 新增前置條件驗證強制規則和正反面範例
   - 補強 Handoff checklist：新增行為鏈推演完成驗證項目

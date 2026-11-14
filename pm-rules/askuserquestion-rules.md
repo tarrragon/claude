@@ -8,7 +8,7 @@
 
 ### 前置關卡：先判斷該不該問（維度 A）
 
-> 來源：CC v2.1.154 行為對齊 + W4-029.2 ANA。本關卡在「要問就用 AUQ」（維度 B）之前執行。
+> 來源：CC v2.1.154 行為對齊 + ANA。本關卡在「要問就用 AUQ」（維度 B）之前執行。
 
 進入下方維度 B 原則之前，先自問：**此決策我是否有足夠 context 自己決定？**
 
@@ -56,9 +56,9 @@
 
 ---
 
-## 具體觸發訊號（W17-174.1 共同特徵落地）
+## 具體觸發訊號（共同特徵落地）
 
-> **來源**：W17-174.1 L1 審計提煉本 session 5 違規共同特徵。本節將抽象觸發條件具體化為可自檢的表面 pattern，補強通用觸發原則。
+> **來源**：L1 審計提煉本 session 5 違規共同特徵。本節將抽象觸發條件具體化為可自檢的表面 pattern，補強通用觸發原則。
 
 | 訊號 | Pattern 描述 | 違規範例 | 處理 |
 |------|------------|---------|------|
@@ -71,7 +71,7 @@
 
 ### 不因 stakes 高低豁免（F3 訊號）
 
-**Why**：W17-174.1 F3 證實低 stakes 感知是 PM 主要違規藉口（「這只是快速確認，純文字比較方便」）。
+**Why**：L1 審計 F3 證實低 stakes 感知是 PM 主要違規藉口（「這只是快速確認，純文字比較方便」）。
 
 **Consequence**：低 stakes 豁免會讓 AUQ 規則的實際覆蓋率遠低於名義覆蓋率，且大量低 stakes 違規會訓練 PM 把列選項變成預設行為，連高 stakes 場景也跟著省略。
 
@@ -79,7 +79,7 @@
 
 ### 不因呈現形式豁免（F5 訊號）
 
-**Why**：W17-174.1 F5 證實 hook 偵測盲區在觸發條件層而非 pattern 解析層；表格 / 列表 / 隱性建議等多種呈現形式同樣需 AUQ。
+**Why**：L1 審計 F5 證實 hook 偵測盲區在觸發條件層而非 pattern 解析層；表格 / 列表 / 隱性建議等多種呈現形式同樣需 AUQ。
 
 **Consequence**：若以「我用的是表格不是列表」「我用的是隱性建議不是顯式選項」為由豁免，會在 hook 強制層擴充前持續累積違規。
 
@@ -87,7 +87,7 @@
 
 ### 自檢觸發點：代理人完成回報後（F1 訊號）
 
-**Why**：W17-174.1 F1 證實 5/5 違規均發生在「代理人完成回報後」的 PM 回覆，此為 PM 最高頻決策點。
+**Why**：L1 審計 F1 證實 5/5 違規均發生在「代理人完成回報後」的 PM 回覆，此為 PM 最高頻決策點。
 
 **Consequence**：若此場景系統性繞過 AUQ，AUQ 規則在 PM 最常用情境形同失效。
 
@@ -280,7 +280,7 @@ PM 遇到「驗證類子任務」（跑測試、靜態掃描、建置、打包�
 
 ### 規則 7：多子任務情境必須含「平行派發」選項
 
-> **來源**：W17-203（v0.18.0-W6 多子任務並行派發實證）。PM 在「下一步」場景列出多個 pending 子任務時，若僅列「逐一接手」選項而漏列「平行派發」會系統性低估並行容量，造成 session context 不必要消耗。
+> **來源**：某次多子任務並行派發實證。PM 在「下一步」場景列出多個 pending 子任務時，若僅列「逐一接手」選項而漏列「平行派發」會系統性低估並行容量，造成 session context 不必要消耗。
 
 **Why**：候選項裡同時出現 ≥ 2 個 pending 子任務（兄弟 / 同父或範圍互斥的同類）時，PM 預設大腦容易陷入「依序執行」思維；若選項中不主動列「平行派發 N 個」，用戶等於只能在「逐一接手」之間選，無法行使「同時推進」的決策權。
 
@@ -308,21 +308,21 @@ PM 遇到「驗證類子任務」（跑測試、靜態掃描、建置、打包�
 
 **範例（可平行 case）**：
 
-> Wave 6 剩 W6-012.6.1 (`src/overview/`) 與 W6-012.6.3 (`docs/spec/`) 兩個 pending，檔案範圍互斥。
+> Wave 6 剩 {ticket_id_a} (`src/overview/`) 與 {ticket_id_c} (`docs/spec/`) 兩個 pending，檔案範圍互斥。
 >
 > 選項應含：
-> - A) 平行派發 W6-012.6.1 + W6-012.6.3（檔案互斥）(Recommended)
-> - B) 接手 W6-012.6.1 獨立執行
-> - C) 接手 W6-012.6.3 獨立執行
+> - A) 平行派發 {ticket_id_a} + {ticket_id_c}（檔案互斥）(Recommended)
+> - B) 接手 {ticket_id_a} 獨立執行
+> - C) 接手 {ticket_id_c} 獨立執行
 > - D) /clear 結束 session
 
 **範例（不可平行 case）**：
 
-> Wave 6 剩 W6-012.6.1 與 W6-012.6.2 兩個 pending，但 .6.2 blockedBy .6.1（依序）。
+> Wave 6 剩 {ticket_id_a} 與 {ticket_id_b} 兩個 pending，但 .6.2 blockedBy .6.1（依序）。
 >
 > 選項應含：
-> - A) 接手 W6-012.6.1（.6.2 阻擋中）(Recommended)
-> - B) 無可平行派發（W6-012.6.2 依賴 .6.1 先完成）— 說明用，不執行
+> - A) 接手 {ticket_id_a}（.6.2 阻擋中）(Recommended)
+> - B) 無可平行派發（{ticket_id_b} 依賴 .6.1 先完成）— 說明用，不執行
 > - C) /clear 結束 session
 
 **反模式（禁止）**：
@@ -338,9 +338,9 @@ PM 遇到「驗證類子任務」（跑測試、靜態掃描、建置、打包�
 - 規則 5（驗證類自動派發）優先：若多子任務皆為驗證類，直接背景派發不需 AUQ
 - 規則 6（Recommended 設計）：平行派發若為合理路徑，可標 `(Recommended)`；若仍需 WRAP 評估，Recommended 留給 WRAP 選項
 - PC-137（≥ 3 並行 .claude/ Edit）：規則 7 必須在判斷流程中納入此限制
-- W17-203.1（CLI 強制層）：未來 `ticket track parallel-check <id>` 命令落地後，AUQ 設計可呼叫該 CLI 自動分組
+- 後續 CLI 強制層：未來 `ticket track parallel-check <id>` 命令落地後，AUQ 設計可呼叫該 CLI 自動分組
 
-> **與 W17-203.1 互補**：本規則是規則層自律（PM 設計 AUQ 選項時主動納入），W17-203.1 將提供 CLI 強制層（auq-option-pattern-detector-hook 偵測 + ticket CLI 衝突分組）。兩者形成「規則層提示 + CLI 層強制」雙層閉環。
+> **與後續 CLI 強制層互補**：本規則是規則層自律（PM 設計 AUQ 選項時主動納入），CLI 強制層將提供 CLI 強制層（auq-option-pattern-detector-hook 偵測 + ticket CLI 衝突分組）。兩者形成「規則層提示 + CLI 層強制」雙層閉環。
 
 ---
 
@@ -372,7 +372,7 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 ### 18 個強制使用場景（#11 細分為 #11a/#11b）
 
-> **象限對照**（A=降低摩擦 / B=保留現狀 / C=增加摩擦）為單一來源：`.claude/references/friction-management-decision-points.md` 的「AskUserQuestion 18 場景覆蓋對照」表。本表不再重複象限欄，避免雙寫同步風險（W5-008）。
+> **象限對照**（A=降低摩擦 / B=保留現狀 / C=增加摩擦）為單一來源：`.claude/references/friction-management-decision-points.md` 的「AskUserQuestion 18 場景覆蓋對照」表。本表不再重複象限欄，避免雙寫同步風險。
 
 | # | 場景 | 觸發條件 | 決策點 | Hook 提醒 |
 |---|------|---------|--------|-----------|
@@ -391,11 +391,11 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 | 12 | 流程省略確認 | 省略意圖偵測 | 決策樹第八層 | process-skip-guard-hook |
 | 13 | 後續任務路由確認 | Phase 3b 完成且豁免條件不符時、Phase 4b（豁免）/4c 完成、版本完成（C2）、incident 或分析完成後有多個後續路由可選（Phase 1/2/3a 全自動不觸發；Phase 3b 豁免條件符合時自動進入 4b 不觸發） | 決策樹第八層 | phase-completion-gate（擴充） |
 | 14 | parallel-evaluation 觸發確認 | 階段完成後 | 決策樹第八層 | phase-completion-gate（擴充） |
-| 15 | Bulk 變更前備份確認 | 批量修改前 | 決策樹第八層 | parallel-suggestion-hook（擴充） |
+| 15 | Bulk 變更前備份確認 | 批量修改前 | 決策樹第八層 | - |
 | 16 | 錯誤學習經驗確認 | commit 完成後（#11a/#11b 之前）；docs:/chore:/style: 等 commit 自動跳過；選項簡化為二元確認 | 決策樹第八層 Checkpoint 1.5 | post-git-commit-hook |
 | 17 | 錯誤經驗改進追蹤 | ticket complete 時有新增 error-pattern | ticket-lifecycle 完成階段 | acceptance-gate-hook（擴充） |
 
-**Hook 覆蓋狀態**：14/18 場景有 Hook 自動提醒（14/18 = 78%）。其中 #13/#14 為條件式觸發（僅當 TDD Phase 完成且 worklog 更新時），未計入 14/18 計數，列於下方 Hook 提醒機制表僅供參考。
+**Hook 覆蓋狀態**：13/18 場景有 Hook 自動提醒（13/18 = 72%）。其中 #13/#14 為條件式觸發（僅當 TDD Phase 完成且 worklog 更新時），未計入 13/18 計數，列於下方 Hook 提醒機制表僅供參考。#15 沒有 hook 提醒：parallel-suggestion-hook 只把「批量」當成繼續請求的關鍵字之一，不輸出備份確認。
 
 **Phase 1-3 自治 commit 相容性**：場景 #11/#16 由 post-git-commit-hook 觸發，但 Phase 1-3 代理人自治 commit 時，因 subagent 禁止使用 AskUserQuestion，Hook 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 或錯誤學習決策。
 
@@ -421,7 +421,7 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 ## #11 /clear 前置條件（強制）
 
-> **來源**：W10-014。session 結束前 main 未提交變更若隨 /clear 丟失 context，後人僅見檔案不知決策理由；強制將 #11 Handoff 選項的觸發前提綁到「main clean」上，避免 PM 為了快點 /clear 跳過 commit。
+> **來源**：一次 session 結束遺失事件。session 結束前 main 未提交變更若隨 /clear 丟失 context，後人僅見檔案不知決策理由；強制將 #11 Handoff 選項的觸發前提綁到「main clean」上，避免 PM 為了快點 /clear 跳過 commit。
 >
 > **Why**：#11 Handoff 是 /clear 進入路徑最近的上游節點；前置條件綁在這裡能在「呈現選項」階段就攔截 dirty main，無需等到 /clear 觸發後再補救。
 >
@@ -439,7 +439,7 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 ## 選項前提檢查（強制）
 
-> **來源**：W11-011（PM 在仍有 83 pending 時 AUQ 選項 3 提 `/version-release check`，description 附 disclaimer「顯然不時但可行」——前後矛盾等於自承假選項，違反 `.claude/references/power-asymmetry-rules.md` §5.6 機制 4：illusion of control）。
+> **來源**：一次實證（PM 在仍有 83 pending 時 AUQ 選項 3 提 `/version-release check`，description 附 disclaimer「顯然不時但可行」——前後矛盾等於自承假選項，違反 `.claude/references/power-asymmetry-rules.md` §5.6 機制 4：illusion of control）。
 
 產出 AUQ 選項前，必須對每個選項自問「此選項的觸發前提是否成立？」
 
@@ -493,7 +493,6 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 | Hook | 觸發時機 | 覆蓋場景 |
 |------|---------|---------|
-| parallel-suggestion-hook | 繼續請求且最近完成的任務鏈內有可並行的 pending Ticket | #15 批量備份 |
 | post-git-commit-hook | git commit 成功後，in_progress 票所在 Wave 的 pending=0 | #3 Wave 完成審查 |
 | prompt-submit-hook | 用戶提問含決策關鍵字 | #4 方案 + #5 優先級 + #6 拆分 + #8 執行方向 |
 | askuserquestion-reminder-hook | Task 派發含多個 Ticket ID | #7 派發方式 |
@@ -520,17 +519,18 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 ---
 
-**Last Updated**: 2026-11-10
+**Last Updated**: 2026-11-12
+**Version**: 3.17.2 — 場景 #15 的 Hook 提醒欄改為無，Hook 提醒機制表移除 parallel-suggestion-hook 一列：該 hook 只把「批量」當繼續請求關鍵字，不輸出備份確認；Hook 覆蓋狀態由 14/18 更正為 13/18
 **Version**: 3.17.1 — 場景 #11a、#11b、#16 的觸發欄、Phase 1-3 相容性段與 Hook 提醒機制表，觸發 hook 由 `commit-handoff-hook`（已併入、未註冊）改為實際發出提醒的 `post-git-commit-hook`（經 `hook-dispatch-registry.json` 的 `PostToolUse:Bash` 群組執行）
 **Version**: 3.17.0 — 規則 1 新增「列選項前提（副作用取捨）」子節：候選選項間存在副作用取捨（不同維度代價方向相反）時，列選項前須先跑 WRAP W 階段，三明示 + 案例佐證（案例敘事改描述性標籤，不引用專案層級 ticket ID，依規則 8 全禁原則）；「選項空間檢查」節識別特徵擴充涵蓋設計選型類（標題同步更名為「副作用取捨類」），與 wrap-decision SKILL.md「二元處置取捨」節（已同步擴充）保持一致；違規處理表對應項同步更名
 
 **Version**: 3.16.0 — 消除與 wrap-decision SKILL.md 的 substance 重複：「選項空間檢查」節刪去與 SKILL.md「二元處置取捨」節逐字重複的 Why/Consequence/實證段（含其中一處「規則 5.6」簡寫，隨段落一併移除），改為路由指向該節（substance 權威）；規則 6 附則判別表新增權威標註，指向 anti-paternalism.md 對稱判別表為權威來源；另一處「規則 5.6」簡寫改為含路徑的完整指稱
 
-**Version**: 3.15.0 — 場景 #16「雙通道記錄要求」改為「知識捕獲時分流」：移除 memory 作為強制寫入通道的規範，改用 `pm-quality-baseline.md` 規則 7 的三分流表（框架相關／專案相關／兩者皆非）與判別問句，逐字沿用維持三處一致（0.2.1-W3-089，承接 0.2.1-W3-083 用戶裁示）
+**Version**: 3.15.0 — 場景 #16「雙通道記錄要求」改為「知識捕獲時分流」：移除 memory 作為強制寫入通道的規範，改用 `pm-quality-baseline.md` 規則 7 的三分流表（框架相關／專案相關／兩者皆非）與判別問句，逐字沿用維持三處一致（承接用戶裁示）
 **Version**: 3.14.0 — 新增「規則 6 附則：與 anti-paternalism 的適用邊界」：判別依據為選項差異是否涉及使用者價值偏好，流程路由類（可標記）與價值取捨類（禁止標記，改文字揭露）分表對照；對稱條款同步加入 anti-paternalism.md
-**Version**: 3.13.0 — 新增「具體觸發訊號（W17-174.1 共同特徵落地）」章節：S1-S6 六訊號表 + stakes 不豁免（F3）+ 呈現形式不豁免（F5）+ 代理人完成回報後強制重跑觸發原則（F1）。三明示 Why/Consequence/Action，引用 W17-174.1 L1 審計輸出
-**Version**: 3.12.0 — 新增「#11 /clear 前置條件」章節 + 場景表 #11a/#11b 加註 main clean 前置（W10-014）：main 未提交變更強制先 commit 才能呈現 #11；worktree 有未提交僅提示不阻擋
-**Version**: 3.11.0 — 新增題型判別輔助章節 + PC-064 適用邊界子章節（Phase A / W14-025 / 019.4 方案 G）：決策題/釐清題/混合題三類判別表 + 釐清題不適用 PC-064 的邊界條款（兩處均含反濫用警告）
-**Version**: 3.10.0 — 規則 6 新增 Recommended 標籤分級（Phase A / W14-023 / 019.3 方案 G）：ANA/重大決策/Session 關鍵分歧情境下 `(Recommended)` 依證據強度分級為 `(Recommended by WRAP)`、`(Recommended by 多視角)` 或 `(My current guess)`
+**Version**: 3.13.0 — 新增「具體觸發訊號（共同特徵落地）」章節：S1-S6 六訊號表 + stakes 不豁免（F3）+ 呈現形式不豁免（F5）+ 代理人完成回報後強制重跑觸發原則（F1）。三明示 Why/Consequence/Action，引用 L1 審計輸出
+**Version**: 3.12.0 — 新增「#11 /clear 前置條件」章節 + 場景表 #11a/#11b 加註 main clean 前置：main 未提交變更強制先 commit 才能呈現 #11；worktree 有未提交僅提示不阻擋
+**Version**: 3.11.0 — 新增題型判別輔助章節 + PC-064 適用邊界子章節（Phase A / 方案 G）：決策題/釐清題/混合題三類判別表 + 釐清題不適用 PC-064 的邊界條款（兩處均含反濫用警告）
+**Version**: 3.10.0 — 規則 6 新增 Recommended 標籤分級（Phase A / 方案 G）：ANA/重大決策/Session 關鍵分歧情境下 `(Recommended)` 依證據強度分級為 `(Recommended by WRAP)`、`(Recommended by 多視角)` 或 `(My current guess)`
 **Version**: 3.9.0 — 新增規則 6：預設選項設計規則（PC-066 防護），重大決策/ANA/Session 路由的 Recommended 必須為 WRAP/多視角，禁止「跳過評估」
 **Purpose**: AskUserQuestion 規則唯一 Source of Truth

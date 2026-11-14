@@ -24,11 +24,13 @@ try:
         find_ticket_file,
     )
     from lib.ticket_id_pattern import extract_ticket_id_anchored
+    from lib.hook_base import get_shared_state_root
 except ImportError:
     # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
     # 缺件優雅降級，非可攜性違規）：本模組仍可匯入，由 hook 的 main() 依
     # _LIB_AVAILABLE 在偵測前直接放行；這些名稱此時不會被呼叫。
     get_project_root = None
+    get_shared_state_root = None
     parse_ticket_frontmatter = None
     find_ticket_file = None
     extract_ticket_id_anchored = None
@@ -371,7 +373,8 @@ class AnaClaimStrategy:
         if not ticket_id:
             return DetectResult(hit=False, signal_id=sd.id)
         # DI：優先用注入的 provider；無則從模組級 get_project_root 取（測試可 monkeypatch）
-        project_root = (
+        # 票面為共用狀態（SR）：linked worktree 內讀主 checkout；兩次讀票共用此根
+        project_root = get_shared_state_root(
             self._project_root_provider()
             if self._project_root_provider is not None
             else get_project_root()

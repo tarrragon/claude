@@ -78,4 +78,4 @@ flutter_balance 專案，用戶要求為尚未啟動的 v0.0.2 建立需求訪�
 
 ---
 
-Last Updated: 2026-07-20 | Source: flutter_balance 0.0.2-W1-001 越層建票與撤銷
+Last Updated: 2026-07-20 | Source: flutter_balance 越層建票與撤銷

@@ -21,7 +21,6 @@ SessionStart 事件觸發時，檢查專案 .gitignore 是否涵蓋 .claude/ run
 - 等效 broader pattern 接受（如 `logs/` 等效於 `.claude/logs/`）
 - 失敗降級為靜默（不阻塞 session 啟動）
 
-來源 Ticket：0.19.0-W3-077
 """
 
 import importlib.util
@@ -29,7 +28,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Any, Optional, Set, Tuple
 
 # 加入 hook_utils 路徑
 sys.path.insert(0, str(Path(__file__).parent))
@@ -39,41 +38,33 @@ from lib import (  # noqa: E402
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    get_code_root,
 )
 
 # 加入 lib 路徑以 import sync 排除 SOT manifest
 from lib.sync_exclude_manifest import (  # noqa: E402
-    GITIGNORE_EXPECTED,
     NESTED_LOCAL_ONLY_NAMES,
     is_nested_name_covered,
-    required_gitignore_entry,
+    required_gitignore_entries,
 )
 
 EXIT_SUCCESS = 0
 
-# .claude/ runtime state 必要 gitignore 名稱直接 derive 自 sync manifest 的
-# GITIGNORE_EXPECTED（SOT），消除「manifest vs 本 hook 各維護一份」的雙 SOT 漂移
-# （TASK_AVOIDANCE_FIX_MODE 曾只進本 hook REQUIRED 未進 manifest，即此漂移的實例）。
-# 格式：每個裸名加 `.claude/` 前綴，不加目錄尾斜線——check_missing_entries 以正規化
-# 裸名比對，`.claude/state` 與 `.claude/state/` 等價，且無斜線版為更寬鬆的合法規則。
-# 巢狀名稱（NESTED_LOCAL_ONLY_NAMES）的條目與涵蓋判定皆在 lib（required_gitignore_entry /
-# is_nested_name_covered），本 hook 不留副本。
-_MANIFEST_REQUIRED = frozenset(required_gitignore_entry(name) for name in GITIGNORE_EXPECTED)
-
-# 非 .claude/ 範疇、不屬 sync manifest 的本機產物（專案根層測試覆蓋率報告）。
-# 不在 manifest 內故顯式補入，與 derive 來源分離標示。
-_EXTRA_REQUIRED = frozenset({"coverage/"})
-
-REQUIRED_GITIGNORE_ENTRIES = _MANIFEST_REQUIRED | _EXTRA_REQUIRED
+# 必要條目由 lib 的 required_gitignore_entries() 產生（manifest 的 GITIGNORE_EXPECTED
+# 加上非 sync 範疇的 GITIGNORE_EXTRA_ENTRIES）。project-init onboard 讀同一個函式，
+# 兩邊不各留副本（TASK_AVOIDANCE_FIX_MODE 曾只進本 hook 未進 manifest，即副本漂移的實例）。
+# `.claude/<名稱>` 不加目錄尾斜線：check_missing_entries 以正規化裸名比對，
+# `.claude/state` 與 `.claude/state/` 等價。巢狀名稱的判定在 lib 的 is_nested_name_covered。
+REQUIRED_GITIGNORE_ENTRIES = required_gitignore_entries()
 
 # 偵測「應 ignore 但已被 git tracked」的純 runtime state（前綴/精確匹配 git ls-files）。
 #
-# [刻意不 derive 自 GITIGNORE_EXPECTED] manifest 的 sync 排除集是「禁止 git track」的
-# 超集：analyses/ migration-backups/ plans/ .version-release.yaml 雖排除 sync，卻在
-# 專案 repo 內正常 tracked（專案產物 / 歷史）。若由完整 GITIGNORE_EXPECTED derive，
-# 會把這些合法 tracked 檔誤報為「應 ignore 卻被 track」（實測 91 個 false positive）。
-# 故本清單為 manifest 的真子集，只列「既不 sync 也絕不該 track」的純 runtime state，
-# 與 REQUIRED_GITIGNORE_ENTRIES 是不同概念，刻意手動維護。
+# [刻意不 derive 自 GITIGNORE_EXPECTED] REQUIRED 問的是「.gitignore 有沒有寫」，本清單
+# 問的是「已被 track 會不會出事」，後者只限 runtime state：被 track 會讓工作區持續 dirty、
+# 阻擋 worktree fork（PC-019）。settings.local.json、sync-skills.yaml 等 local-only 設定
+# 檔雖在 GITIGNORE_EXPECTED，被 track 不致如此，故不列入。
+# 不同步但可 track 的 plans、analyses、migration-backups、.version-release.yaml 屬 manifest
+# 類型 E，已不在 GITIGNORE_EXPECTED，也不在本清單。本清單刻意手動維護。
 TRACKED_DETECTION_PATTERNS = [
     ".claude/pm-status.json",
     ".claude/dispatch-active.json",
@@ -319,7 +310,12 @@ def build_hook_output(
     tracked: List[str],
     gitignore_exists: bool,
 ) -> Dict[str, Any]:
-    """組裝 SessionStart hook JSON 輸出。"""
+    """組裝 SessionStart hook JSON 輸出。
+
+    受眾：模型與使用者。完整區塊走 additionalContext 給模型；systemMessage 給使用者，
+    列出缺項與已追蹤的檔案（additionalContext 使用者看不到，只寫在那裡等於使用者
+    照 onboard 補完 .gitignore 後仍不知道還缺什麼）。
+    """
     if gitignore_exists and not missing and not tracked:
         return {"suppressOutput": True}
     section = build_warning_section(missing, tracked, gitignore_exists)
@@ -328,12 +324,38 @@ def build_hook_output(
             "hookEventName": "SessionStart",
             "additionalContext": section + "\n",
         },
+        "systemMessage": build_user_message(missing, tracked, gitignore_exists),
         "suppressOutput": False,
     }
 
 
-def run_checks(project_root: Path, logger) -> Tuple[List[str], List[str], bool]:
-    """執行檢查並回傳 (missing, tracked, gitignore_exists)。"""
+def build_user_message(
+    missing: List[str],
+    tracked: List[str],
+    gitignore_exists: bool,
+) -> str:
+    """組裝給使用者看的摘要：缺哪些 .gitignore 條目、哪些檔案已被追蹤。"""
+    lines: List[str] = []
+    if not gitignore_exists:
+        lines.append("[gitignore-check] 專案根目錄沒有 .gitignore。")
+    if missing:
+        lines.append(f"[gitignore-check] .gitignore 缺 {len(missing)} 條必要規則，請追加：")
+        lines.extend(f"  {entry}" for entry in missing)
+    if tracked:
+        lines.append(f"[gitignore-check] {len(tracked)} 個本機狀態檔已被 git 追蹤，請 git rm --cached：")
+        lines.extend(f"  {path}" for path in tracked)
+    return "\n".join(lines)
+
+
+def run_checks(
+    project_root: Path, logger, code_root: Optional[Path] = None
+) -> Tuple[List[str], List[str], bool]:
+    """執行檢查並回傳 (missing, tracked, gitignore_exists)。
+
+    project_root：被檢查的 checkout（.gitignore、git ls-files）。
+    code_root：載入中的 .claude 所在根（ticket constants，CR）；None 時同 project_root。
+    """
+    code_root = code_root or project_root
     gitignore_path = project_root / ".gitignore"
     gitignore_exists = gitignore_path.exists() and gitignore_path.is_file()
     entries = parse_gitignore(gitignore_path, logger) if gitignore_exists else set()
@@ -343,9 +365,9 @@ def run_checks(project_root: Path, logger) -> Tuple[List[str], List[str], bool]:
         else sorted(REQUIRED_GITIGNORE_ENTRIES)
     )
     if gitignore_exists:
-        missing = missing + check_ticket_lock_entry(entries, project_root, logger)
+        missing = missing + check_ticket_lock_entry(entries, code_root, logger)
     else:
-        missing = missing + [f"{resolve_ticket_root_dir(project_root, logger)}/**/*.md.lock"]
+        missing = missing + [f"{resolve_ticket_root_dir(code_root, logger)}/**/*.md.lock"]
     tracked = check_tracked_runtime_state(project_root, logger)
     return missing, tracked, gitignore_exists
 
@@ -367,7 +389,9 @@ def main() -> int:
         print(json.dumps({"suppressOutput": True}, ensure_ascii=False))
         return EXIT_SUCCESS
 
-    missing, tracked, gitignore_exists = run_checks(project_root, logger)
+    missing, tracked, gitignore_exists = run_checks(
+        project_root, logger, code_root=get_code_root()
+    )
     output = build_hook_output(missing, tracked, gitignore_exists)
     print(json.dumps(output, ensure_ascii=False, indent=2))
     logger.info(

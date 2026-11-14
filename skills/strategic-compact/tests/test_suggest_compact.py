@@ -14,6 +14,9 @@ def run(proj, tmp_legacy, payload, threshold="3"):
         CLAUDE_PROJECT_DIR=str(proj),
         SUGGEST_COMPACT_LEGACY_TMP_DIR=str(tmp_legacy),
         COMPACT_THRESHOLD=threshold,
+        # 日誌目錄經 hook_logging 解析；pytest 在 linked worktree 內執行時會繞過 CLAUDE_PROJECT_DIR，
+        # 此旗標讓解析採 tmp 專案根
+        HOOK_TEST_ISOLATION="1",
     )
     return subprocess.run(
         [sys.executable, str(SCRIPT)],
@@ -55,6 +58,27 @@ def test_missing_session_id_does_not_count_and_logs(tmp_path):
     log = proj / ".claude" / "hook-logs" / "suggest-compact" / "suggest-compact.log"
     assert "session_id missing" in log.read_text()
     assert list(legacy.iterdir()) == []
+
+
+def test_log_lands_in_main_repo_when_run_in_linked_worktree(tmp_path):
+    """linked worktree 內（不設 HOOK_TEST_ISOLATION）日誌寫入主 repo，worktree 自己不建 hook-logs。"""
+    main, wt = tmp_path / "main", tmp_path / "wt"
+    main.mkdir()
+    git = ["git", "-C", str(main)]
+    subprocess.run([*git, "init", "-q", "-b", "main"], check=True)
+    subprocess.run([*git, "-c", "user.email=t@e.x", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+    subprocess.run([*git, "worktree", "add", "-q", str(wt), "-b", "wt-branch"], check=True)
+    env = {k: v for k, v in os.environ.items() if k not in ("HOOK_TEST_ISOLATION", "CLAUDE_PROJECT_DIR")}
+    env.update(CLAUDE_PROJECT_DIR=str(wt), SUGGEST_COMPACT_LEGACY_TMP_DIR=str(tmp_path / "t"))
+    (tmp_path / "t").mkdir()
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT)], input="{}", capture_output=True, text=True,
+        env=env, cwd=str(wt), timeout=30,
+    )
+    assert r.returncode == 0
+    log = main.resolve() / ".claude" / "hook-logs" / "suggest-compact" / "suggest-compact.log"
+    assert "session_id missing" in log.read_text()
+    assert not (wt / ".claude" / "hook-logs").exists()
 
 
 def test_session_id_sanitized(tmp_path):

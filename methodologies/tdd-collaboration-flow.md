@@ -1,6 +1,6 @@
 # TDD 協作開發流程
 
-> **本檔已瘦身（W8-018.1）**：完整 Phase 0-4 流程主體已外移至 `/tdd` skill（`.claude/skills/tdd/`），本檔僅保留核心摘要與路由。需要任何階段的完整操作指引時，直接讀對應的 skill references，不要在本檔尋找細節。
+> **本檔已瘦身**：完整 Phase 0-4 流程主體已外移至 `/tdd` skill（`.claude/skills/tdd/`），本檔僅保留核心摘要與路由。需要任何階段的完整操作指引時，直接讀對應的 skill references，不要在本檔尋找細節。
 
 TDD 不只是「測試先寫」，而是設計師導向的團隊協作流程：在實作前透過分階段角色分工想清楚需求、規格、測試與品質。
 
@@ -62,4 +62,4 @@ TDD 不只是「測試先寫」，而是設計師導向的團隊協作流程：�
 ---
 
 **Last Updated**: 2026-06-13
-**Version**: 3.0.0 — W8-018.1 整併瘦身：完整 Phase 0-4 流程主體外移至 `/tdd` skill references（distinct 內容「重構驅動的預期管理」整合進 phase4-refactor.md），原檔瘦身為 30 秒核心 + 路由；移除全檔 emoji；DEPRECATED 引用（memory-network-builder / john-carmack）改指向現行載體（continuous-learning skill / ginger-performance-tuner）。歷史 1841 行完整版見 git log。
+**Version**: 3.0.0 — 整併瘦身：完整 Phase 0-4 流程主體外移至 `/tdd` skill references（distinct 內容「重構驅動的預期管理」整合進 phase4-refactor.md），原檔瘦身為 30 秒核心 + 路由；移除全檔 emoji；DEPRECATED 引用（memory-network-builder / john-carmack）改指向現行載體（continuous-learning skill / ginger-performance-tuner）。歷史 1841 行完整版見 git log。

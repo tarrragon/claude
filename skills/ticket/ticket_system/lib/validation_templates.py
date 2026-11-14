@@ -1,4 +1,4 @@
-"""validation_templates — AC 驗證模板規則庫（W5-001 Phase 3b-A）。
+"""validation_templates — AC 驗證模板規則庫。
 
 提供 5 個初期模板（npm_test_pass / coverage_threshold / lint_pass /
 flaky_fixed / skipped_evaluated），依 §4 表格規格硬編碼為模組級有序 tuple。
@@ -8,7 +8,7 @@ flaky_fixed / skipped_evaluated），依 §4 表格規格硬編碼為模組級�
   無匹配回 ``None``。
 - ``list_templates()``: 回傳模組級不可變 tuple，外部無法修改規則庫。
 
-設計決策（來源 W5-001 Phase 1 §5 決策 3）：
+設計決策：
 - 規則庫硬編碼於 Python 模組級常數，不走 YAML 熱載入。
 - 所有資料類別使用 ``@dataclass(frozen=True)`` 保障不可變性。
 - ``patterns`` 字串全部小寫；匹配時輸入 ``ac_text.lower()`` 後做 ``in`` 比對。
@@ -29,7 +29,7 @@ from typing import Literal
 class Template:
     """驗證模板規格。
 
-    對應 W5-001 Phase 1 §2 與 §4 表格欄位。patterns 為小寫關鍵字片段，
+    對應設計階段的表格欄位。patterns 為小寫關鍵字片段，
     命中任一子字串即視為匹配。
     """
 

@@ -1,5 +1,5 @@
 """
-ticket track runqueue 命令（W17-011.1 / W17-009 scheduler 落地）
+ticket track runqueue 命令
 
 統一 scheduler CLI，合併原 next / schedule / resume-hint 三命令為單一 runqueue
 + --format 視圖切換。三視角審查（Evidence / Alternatives / linux）一致收斂結論。
@@ -15,7 +15,7 @@ ticket track runqueue 命令（W17-011.1 / W17-009 scheduler 落地）
 - --context=resume：與 .claude/handoff/pending/ 交集 ticket_id
 - --wave N：wave 範圍過濾
 
-設計約束（W17-011.1 ticket 關鍵約束）：
+設計約束：
 - 復用 ticket_system.lib.critical_path.CriticalPathAnalyzer
 - 復用 ticket_system.lib.cycle_detector.CycleDetector（經由 analyzer 間接使用）
 - 註冊於 track.py _create_command_handlers() 字典
@@ -74,7 +74,7 @@ FORMAT_CRITICAL_PATH = "critical-path"
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 _DEFAULT_PRIORITY_RANK = 99  # 未知 priority 排最後
 
-# Exit Status tags 顯示於 runqueue --context=resume（W17-031.1 / W17-010 schema）
+# Exit Status tags 顯示於 runqueue --context=resume
 # 規格：成功 / 缺欄位 → 不標籤（fail-open）；以下四類顯示為 tag
 ExitStatusTag = Literal[
     "needs_context", "blocked", "failed", "partial_success"
@@ -87,32 +87,32 @@ _TAGGED_EXIT_STATUSES: Set[str] = {
 # ---------------------------------------------------------------------------
 # 內部工具：ticket 過濾 / 排序 / handoff 掃描
 #
-# TODO(W10-119 trigger): 以下 helper 已有 2 個跨模組 consumer
+# TODO: 以下 helper 已有 2 個跨模組 consumer
 # （commands/resume.py 用 _priority_rank、commands/track_dashboard.py 用 5 個）。
-# 當第 3 個 cross-module consumer 出現時（rule of three），依 W10-119 結論
+# 當第 3 個 cross-module consumer 出現時（rule of three），依既有結論
 # 抽出至 lib/runqueue_helpers.py 共用模組。
 # ---------------------------------------------------------------------------
 
 def _priority_rank(ticket: Dict) -> int:
     """取得 priority 的排序鍵，未知值排最後。
 
-    W10-121 註：本函式為 int 變體（0..3/99）；track_query._normalize_priority
+    註：本函式為 int 變體（0..3/99）；track_query._normalize_priority
     為 str 變體（"P0".."P3"/"P9"）。兩者共享 priority schema 但介面分歧。
     若 trigger 觸發抽 lib/runqueue_helpers.py 時，順便將 _normalize_priority
-    納入 SSOT（見 W10-121 結論）。
+    納入 SSOT。
     """
     raw = (ticket.get("priority") or "").strip().upper()
     return _PRIORITY_ORDER.get(raw, _DEFAULT_PRIORITY_RANK)
 
 
 _TYPE_ORDER: Dict[str, int] = {"ANA": 0, "DOC": 1, "IMP": 2}
-_DEFAULT_TYPE_RANK = 1  # 未知 type fallback 為 DOC 等級（W5-005.17）
+_DEFAULT_TYPE_RANK = 1  # 未知 type fallback 為 DOC 等級
 
 
 def _type_rank(ticket: Dict) -> int:
     """取得 type 的排序鍵，ANA < DOC < IMP，未知 type fallback 為 DOC 等級。
 
-    W5-005.15 ANA 結論：現行排序缺 type 維度，同 priority 內 ANA 應排 IMP 前
+    ANA 結論：現行排序缺 type 維度，同 priority 內 ANA 應排 IMP 前
     （PM 可優先接手可並行的分析類 ticket）。
     """
     raw = (ticket.get("type") or "").strip().upper()
@@ -124,8 +124,8 @@ def _is_unblocked_pending(
 ) -> bool:
     """list 視圖規則：status=pending 且所有 blocker 皆已解除。
 
-    W1-020：blocker 已 completed/closed 但 blockedBy 欄位未清理時，字面
-    `len(blockedBy)==0` 會誤判為 blocked（W8-042 缺陷）。改用共用 predicate
+    blocker 已 completed/closed 但 blockedBy 欄位未清理時，字面
+    `len(blockedBy)==0` 會誤判為 blocked。改用共用 predicate
     `is_fully_unblocked`（scheduler 場景 include_closed_as_resolved=True）。
 
     ticket_map 為 None 時退回字面判定（向後相容無法提供全集的呼叫端）。
@@ -142,7 +142,7 @@ def _unresolved_blockers(
 ) -> List[str]:
     """回傳 ticket 尚未解除的 blocker ID 清單（AND 語義，與 is_fully_unblocked 同源）。
 
-    W3-142：list 視圖後綴原字面硬編 "blockedBy=[]"，對 stale in_progress
+    list 視圖後綴原字面硬編 "blockedBy=[]"，對 stale in_progress
     納入項（`_is_listable` 第二條件，未經 `is_fully_unblocked` 驗證）可能
     造假——其 blockedBy 或許仍未解除。改用本函式取代硬編字面，resolved
     判定與 `is_fully_unblocked(include_closed_as_resolved=True)` 同源
@@ -168,10 +168,10 @@ def _unresolved_blockers(
 
 
 def _is_listable(ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None) -> bool:
-    """W17-031.4: list 視圖納入條件 = unblocked pending OR stale in_progress。
+    """list 視圖納入條件 = unblocked pending OR stale in_progress。
 
     stale in_progress 加入 list 是為了讓 PM 在 runqueue 看見遺留 ticket
-    並人工介入（評估 agent 真停滯還是長任務）。W17-033 自律 + acceptance-gate-hook
+    並人工介入（評估 agent 真停滯還是長任務）。自律 + acceptance-gate-hook
     無法覆蓋 agent 中斷案例（agent 已不在）。
     """
     if _is_unblocked_pending(ticket, ticket_map):
@@ -230,11 +230,11 @@ def _empty_reason(
 def _get_pending_handoff_info() -> Dict[str, Dict]:
     """掃描 .claude/handoff/pending/*.json，回傳 ticket_id → handoff JSON 字典。
 
-    W17-031.1：擴充自原 _get_pending_handoff_ticket_ids；保留完整 handoff
-    資料以便讀取 exit_status（W17-010 schema）。獨立函式便於測試 monkeypatch；
+    擴充自原 _get_pending_handoff_ticket_ids；保留完整 handoff
+    資料以便讀取 exit_status。獨立函式便於測試 monkeypatch；
     不依賴 handoff_utils 完整解析流程，降低耦合。
 
-    0.2.1-W3-220 修復：同時以 `target_ticket_id`（W17-164 落地的絕對指向
+    修復：同時以 `target_ticket_id`（絕對指向
     欄位）登錄索引，使 target 票能查到自己的 handoff。以 source `ticket_id`
     為 key 的既有項目一律優先寫入且不被覆蓋，故所有既有以 source 為 key 的
     呼叫端行為不變；`target_ticket_id` 僅在該 key 尚未被佔用時補登錄。
@@ -279,7 +279,7 @@ def _get_pending_handoff_ticket_ids() -> Set[str]:
 
 
 def _get_exit_status_tag(handoff_info: Optional[Dict]) -> Optional[str]:
-    """從 handoff JSON 解析 exit_status tag（W17-031.1）。
+    """從 handoff JSON 解析 exit_status tag。
 
     Fail-open 設計：handoff 不存在 / 缺 exit_status 欄位 / 非 dict / status=success
     皆回傳 None（不顯示 tag）；僅四類 needs_context/blocked/failed/partial_success
@@ -302,17 +302,17 @@ def _get_exit_status_tag(handoff_info: Optional[Dict]) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# W17-031.3: Readiness 標註
+# Readiness 標註
 # ---------------------------------------------------------------------------
 
-# Readiness tags（W17-031.3 ticket md 判定規則表）
+# Readiness tags
 READINESS_READY = "READY"
 READINESS_NEEDS_CTX = "NEEDS-CTX"
 READINESS_BLOCKED = "BLOCKED"
 READINESS_FAILED = "FAILED"
 READINESS_NO_CB = "NO-CB"
 
-# W17-031.4: stale in_progress 標註（與 readiness tag 並列顯示）
+# stale in_progress 標註（與 readiness tag 並列顯示）
 STALE_TAG = "STALE"
 
 # multi-PM 協調層 Phase 3：registry 中 STALE session 持有的 in_progress 票
@@ -368,7 +368,7 @@ def _has_context_bundle(ticket: Dict) -> bool:
 def _compute_readiness(
     ticket: Dict, handoff_info: Optional[Dict[str, Dict]] = None
 ) -> str:
-    """計算 ticket 的 readiness tag（W17-031.3 判定規則表）。
+    """計算 ticket 的 readiness tag。
 
     規則順序：
     1. exit_status in {needs_context, blocked, failed} → 對應 tag
@@ -399,11 +399,11 @@ def _apply_context_resume(
 ) -> List[Dict]:
     """context=resume：與 handoff pending 交集。
 
-    W17-146 修復：解析 handoff JSON 的 direction 欄位取出真正的 target ticket id。
+    修復：解析 handoff JSON 的 direction 欄位取出真正的 target ticket id。
     任務鏈 direction（to-sibling/to-parent/to-child）含 target 時取 target；
     非任務鏈或無 target / 未知格式時 fallback 到 source ticket_id。
 
-    W6-022 修復：優先讀取 handoff JSON 頂層 `target_ticket_id` 欄位（W17-164
+    修復：優先讀取 handoff JSON 頂層 `target_ticket_id` 欄位（
     落地的絕對指向）。當 direction=context-refresh 但 handoff 已寫入
     target_ticket_id 時，原本 fallback 到 source ticket_id 會被
     `_is_listable` 過濾掉（source 多為 completed），導致 runqueue
@@ -487,13 +487,13 @@ def _render_list(
         priority = ticket.get("priority") or "P?"
         ticket_type = ticket.get("type") or "?"
         title = ticket.get("title") or ""
-        # W17-031.1: resume 模式且有 exit_status tag → 顯示 [<status>] 取代
+        # resume 模式且有 exit_status tag → 顯示 [<status>] 取代
         # blockedBy=[] runnable 標記，避免 scheduler 誤把待補料 ticket 當可接手
         tag = _get_exit_status_tag(handoff_info.get(tid)) if context == "resume" else None
         if tag:
             suffix = f"[{tag}]"
         else:
-            # W3-142: 改由實際未解除 blocker 集合推導，而非硬編字面
+            # 改由實際未解除 blocker 集合推導，而非硬編字面
             # "blockedBy=[]"。unblocked pending 分支必回傳空清單（維持
             # acceptance #2 向後相容）；stale in_progress 分支若仍有未解除
             # blocker 則如實顯示，避免 PM 誤判該票可推進。
@@ -503,10 +503,10 @@ def _render_list(
                 if unresolved
                 else "blockedBy=[]"
             )
-        # W17-031.3: readiness tag（READY / NEEDS-CTX / BLOCKED / FAILED / NO-CB）
+        # readiness tag（READY / NEEDS-CTX / BLOCKED / FAILED / NO-CB）
         # 不影響排序；資訊是 PM 派發前判斷可接手與否的可視訊號
         readiness = _compute_readiness(ticket, handoff_info)
-        # W17-031.4: stale in_progress tag（與 readiness 並列；可疊加）
+        # stale in_progress tag（與 readiness 並列；可疊加）
         # PM 看到 [STALE] → 人工介入評估（agent 真停滯 vs 長任務）
         stale_suffix = f" [{STALE_TAG}]" if is_stale_in_progress(ticket) else ""
         # multi-PM 協調層 Phase 3: registry STALE session 持票 tag（可與
@@ -703,8 +703,8 @@ def render_runqueue(args: argparse.Namespace, version: str) -> str:
     if groups:
         return _render_groups(scoped, empty_reason)
 
-    # W17-031.1: resume 模式下載入 handoff info 供 _render_list 標 exit_status tag
-    # W17-031.3: list 視圖一律載入 handoff info 供 readiness 計算（READY/NEEDS-CTX 等）
+    # resume 模式下載入 handoff info 供 _render_list 標 exit_status tag
+    # list 視圖一律載入 handoff info 供 readiness 計算（READY/NEEDS-CTX 等）
     handoff_info: Dict[str, Dict] = (
         _get_pending_handoff_info() if (context == "resume" or fmt == FORMAT_LIST) else {}
     )

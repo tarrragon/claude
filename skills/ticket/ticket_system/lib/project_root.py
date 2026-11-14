@@ -1,4 +1,4 @@
-"""專案根目錄解析工具（Ticket 0.18.0-W11-001.1.1）。
+"""專案根目錄解析工具。
 
 提供跨命令共用的 ``resolve_project_cwd`` helper，解析 Git 倉庫根目錄；
 當 Git 指令不可用（非 git 倉庫、git 未安裝、權限問題等）時，fallback

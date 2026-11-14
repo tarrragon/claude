@@ -247,7 +247,7 @@ def has_background_agents(input_data: dict, logger) -> bool:
 }
 ```
 
-**注意**：`command` 永遠是必填 string，**不能省略**。`args` 僅作為「執行檔的 argv」，不是 `command` 的替代品。本檔在 0.18.0-W14-031 / W14-040 之前曾錯誤示範「args 取代 command」並導致 settings.json schema 驗證失敗（`/doctor` 報 `command: Expected string, but received undefined`）；範例已更正為官方 schema。
+**注意**：`command` 永遠是必填 string，**不能省略**。`args` 僅作為「執行檔的 argv」，不是 `command` 的替代品。本檔先前曾錯誤示範「args 取代 command」並導致 settings.json schema 驗證失敗（`/doctor` 報 `command: Expected string, but received undefined`）；範例已更正為官方 schema。
 
 > **官方來源**：https://code.claude.com/docs/en/hooks（Command hook fields 章節）。修改本段前必須 WebFetch 官方文件驗證 schema，禁止靠 release notes 推測。
 
@@ -517,6 +517,51 @@ def main():
 input_data = json.load(sys.stdin)
 ```
 
+### Hook payload 欄位對照表
+
+hook 讀錯 payload 欄位時不會報錯：帶預設值的取值把缺失轉成空值，接著走「條件不滿足」分支，退出碼與日誌都正常。本表列出各事件 payload 可讀的欄位，依據只限官方文件與實機樣本，不從既有 hook 的寫法反推。`.claude/hooks/tests/test_hook_payload_field_inventory.py` 會逐支掃描已註冊 hook 從 payload、`tool_input`、`tool_response` 讀取的欄位，讀到本表以外的欄位時測試轉紅。
+
+**新增欄位列的條件**：要寫明來源。官方文件寫「官方 hooks 文件」；實機樣本要寫出擷取方式與日期。範圍 `common` 適用所有事件；`tool_input:<工具>`、`tool_response:<工具>` 依 hook 註冊的 matcher 套用，matcher 為 `*` 時套用全部工具。
+
+**讀取方式不在本表範圍**：本表只列 Claude Code 送進 hook 的欄位。hook 自己的狀態檔、設定檔不經過這張表。
+
+| 範圍 | 欄位 | 來源 |
+|------|------|------|
+| common | `session_id` `prompt_id` `transcript_path` `cwd` `scratchpad_dir` `permission_mode` `effort` `hook_event_name` `agent_id` `agent_type` | 官方 hooks 文件〈Common input fields〉 |
+| SessionStart | `source` `model` `session_title` `seconds_since_last_response` `context_tokens` `prompt_cache_likely_expired` `estimated_cache_write_usd` | 官方 hooks 文件〈SessionStart〉 |
+| UserPromptSubmit | `prompt` `session_title` | 官方 hooks 文件〈UserPromptSubmit〉 |
+| PreToolUse | `tool_name` `tool_input` `tool_use_id` `mcp_server` | 官方 hooks 文件〈PreToolUse〉 |
+| PermissionRequest | `tool_name` `tool_input` `permission_suggestions` `mcp_server` | 官方 hooks 文件〈PermissionRequest〉 |
+| PermissionDenied | `tool_name` `tool_input` `tool_use_id` `reason` `mcp_server` | 官方 hooks 文件〈PermissionDenied〉 |
+| PostToolUse | `tool_name` `tool_input` `tool_response` `tool_use_id` `duration_ms` `mcp_server` | 官方 hooks 文件〈PostToolUse〉 |
+| PostToolUseFailure | `tool_name` `tool_input` `tool_use_id` `error` `is_interrupt` `duration_ms` `mcp_server` | 官方 hooks 文件〈PostToolUseFailure〉 |
+| Stop | `stop_hook_active` `last_assistant_message` `background_tasks` `session_crons` | 官方 hooks 文件〈Stop〉 |
+| SubagentStop | `stop_hook_active` `last_assistant_message` `background_tasks` `session_crons` `agent_transcript_path` | 官方 hooks 文件〈SubagentStop〉 |
+| SubagentStart | `agent_id` `agent_type` | 官方 hooks 文件〈SubagentStart〉 |
+| Notification | `message` `title` `notification_type` | 官方 hooks 文件〈Notification〉 |
+| SessionEnd | `reason` | 官方 hooks 文件〈SessionEnd〉 |
+| PreCompact | `trigger` `custom_instructions` | 官方 hooks 文件〈PreCompact〉 |
+| PostCompact | `trigger` `compact_summary` | 官方 hooks 文件〈PostCompact〉 |
+| tool_input:Bash | `command` `description` `timeout` `run_in_background` | 官方 hooks 文件〈PreToolUse〉Bash |
+| tool_input:Write | `file_path` `content` | 官方 hooks 文件〈PreToolUse〉Write |
+| tool_input:Edit | `file_path` `old_string` `new_string` `replace_all` | 官方 hooks 文件〈PreToolUse〉Edit |
+| tool_input:Read | `file_path` `offset` `limit` | 官方 hooks 文件〈PreToolUse〉Read |
+| tool_input:Glob | `pattern` `path` | 官方 hooks 文件〈PreToolUse〉Glob |
+| tool_input:Grep | `pattern` `path` `glob` `output_mode` `-i` `multiline` | 官方 hooks 文件〈PreToolUse〉Grep |
+| tool_input:WebFetch | `url` `prompt` `offset` | 官方 hooks 文件〈PreToolUse〉WebFetch |
+| tool_input:WebSearch | `query` `allowed_domains` `blocked_domains` `mode` | 官方 hooks 文件〈PreToolUse〉WebSearch |
+| tool_input:Agent | `prompt` `description` `subagent_type` `model` | 官方 hooks 文件〈PreToolUse〉Agent |
+| tool_input:Agent | `name` `isolation` `run_in_background` | Agent 工具定義（模型可見的參數 schema，2026-11-13 擷取） |
+| tool_input:SendMessage | `to` | SendMessage 工具定義（模型可見的參數 schema，`to` 為必填，2026-11-13 擷取） |
+| tool_input:NotebookEdit | `notebook_path` `cell_id` `cell_type` `edit_mode` `new_source` | NotebookEdit 工具定義（模型可見的參數 schema，2026-11-13 擷取） |
+| tool_input:TodoWrite | `todos` | 實機樣本：tarrragon/claude#35 留言，TodoWrite payload 為 `tool_input.todos[]`，頂層沒有 content |
+| tool_input:AskUserQuestion | `questions` `answers` | 官方 hooks 文件〈PreToolUse〉AskUserQuestion |
+| tool_input:ExitPlanMode | `plan` `planFilePath` | 官方 hooks 文件〈PreToolUse〉ExitPlanMode |
+| tool_response:Bash | `stdout` `stderr` `interrupted` `isImage` `bashEditDiff` | 官方 hooks 文件〈PostToolUse〉 |
+| tool_response:Write | `filePath` `type` | 官方 hooks 文件〈PostToolUse〉 |
+| tool_response:Agent | `status` `agentId` `content` `resolvedModel` `modelsUsed` `totalTokens` `totalDurationMs` `totalToolUseCount` `usage` | 官方 hooks 文件〈PostToolUse〉 |
+| tool_response:ExitPlanMode | `plan` `filePath` | 官方 hooks 文件〈PostToolUse〉 |
+
 ### hookSpecificOutput 格式
 
 ```json
@@ -709,21 +754,21 @@ fi
 ```bash
 exit 0  # 成功（stdout JSON 作為 additionalContext）
 exit 2  # 阻止操作（Hook 要求 CLI 不執行該動作）
-# exit 1 — 避免使用：CLI 將 exit 1 視為 "hook error"，
-#           會吞掉 stdout 訊息並顯示錯誤標籤（IMP-049 已知 CLI bug）
+# exit 1 — 只表示「hook 本身失敗」：runtime 記為 non-blocking error，
+#           stderr 寫進 transcript、不送模型，stdout 不被採用（2026-11 實測）
 ```
 
-**Hook 錯誤處理原則**：
+**Hook 錯誤處理原則**（失敗層次與負責層的完整表見 `.claude/references/hook-system-operations.md`〈輸出規範（stderr 與 exit code）〉）：
 
 | 情境 | 正確做法 | 錯誤做法 |
 |------|---------|---------|
-| Hook 內部異常 | `run_hook_safely` 捕獲 + 記錄日誌檔 | `sys.exit(1)` |
-| ImportError | `sys.exit(0)` + stderr 報錯 | `sys.exit(1)` |
+| Hook 內部異常 | 拋出例外，由 `run_hook_safely` 寫日誌檔、stderr 摘要並回傳 exit 1 | 自行 `sys.exit(1)` 而不寫日誌 |
+| ImportError（import 期失敗） | 不攔截，讓進程以非 0 結束，由 runtime 記錄、框架讀取端轉告模型 | `except ImportError: sys.exit(0)`（runtime 判為成功，不留任何紀錄） |
 | 輸入解析失敗 | `return 0`（靜默跳過） | `sys.exit(1)` |
 | `__main__` CLI 工具 | `sys.exit(1)` 是正確的 | 不適用 |
 
 > **注意**：`__main__` 區塊是 CLI 測試入口，不經過 Hook 系統，exit 1 是正確的 CLI 語義。
-> Hook 執行路徑中應避免 `sys.exit(1)`，改用 `return 0` 或由 `run_hook_safely` 處理。
+> Hook 執行路徑中不以 `sys.exit(1)` 表達業務結果（提醒走 `additionalContext`，阻擋走 exit 2），exit 1 保留給 hook 本身失敗。
 
 ---
 
@@ -892,7 +937,7 @@ if __name__ == "__main__":
 
 | 項目 | 要求 | Why / Consequence |
 |------|------|------------------|
-| fail_closed 只用於不可逆守衛 | `run_hook_safely(..., fail_closed=True)` 僅限放行後無法復原的守衛（如破壞性操作、不可逆寫入）；其餘維持預設 `fail_closed=False` | fail_closed 讓 hook 自身 crash 也擋下操作；濫用會使任何 hook bug 變成全域卡死，用戶學會繞過守衛 |
+| fail_closed 只用於不可逆守衛 | `run_hook_safely(..., fail_closed=True)` 僅限放行後無法復原的守衛（如破壞性操作、不可逆寫入）；其餘維持預設 `fail_closed=False`。「能用 git 回復、只是移動成本高」不算不可逆。例外：放行的變更會落在多個 session 共用的主 checkout，寫錯分支的修改可能被其他 session 的提交吸入，回復要跨 session 追查，視同不可逆（例：保護分支上的直接編輯）。經 hook-dispatcher 分派、或對每個命令／每次寫檔都執行的 hook，新增或變更失敗語意時不整支宣告 fail_closed：先確認高風險情境成立（例如確定是 push 命令、確定是隔離代理人的檔案寫入），只在該分支內判定失敗時 exit 2；既有整支宣告者另行逐支評估 | fail_closed 讓 hook 自身 crash 也擋下操作；整支宣告時模組層故障會擋下全部命令或寫入，而不只高風險情境；濫用會使任何 hook bug 變成全域卡死，用戶學會繞過守衛。只看「搬移麻煩」就宣告不可逆，會讓 fail_closed 的範圍隨各守衛作者的主觀判斷擴大 |
 | 宣告 fail_closed 時同步 fallback 清單 | 經 `hook-dispatcher.py` 分派的 hook 新增或移除 `fail_closed=True` 時，同一個 commit 同步 `FALLBACK_FAIL_CLOSED_GUARDS` 對應群組，並在本機提交前執行 `tests/test_hook_dispatcher_fail_closed.py` | 該清單刻意不依賴 registry（registry 讀不到時才用），只能手動維護；漏同步由漂移測試擋下，但若只跑 hook 自己的測試檔，要到合併閘門跑全套件才發現，多耗一輪閘門 |
 | deny 輸出失敗由 `emit_hook_output` 兜底 | 輸出 deny 一律走 `lib` 的 `emit_hook_output`：deny 輸出失敗時寫 stderr 後 `SystemExit(2)`；allow 輸出失敗原樣 re-raise。無法改用它的守衛（直接 print、自組輸出）須自行兜底：包住輸出動作，失敗時寫 stderr 並 `sys.exit(2)` | 直接 `print(json.dumps(deny))` 輸出失敗時，例外被 fail-open 路徑吞掉，守衛無聲放行 |
 | 自帶 except-all 的守衛不得吞 SystemExit | `except Exception` 不攔 SystemExit，但 `except BaseException` / 裸 `except:` 會；必須攔時先 `except SystemExit: raise` | 吞掉兜底拋出的 SystemExit(2) 使兜底失效，回到放行 |
@@ -965,13 +1010,14 @@ if __name__ == "__main__":
 
 ---
 
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-11-12
+**Version**: 「deny 輸出失敗語意」的「fail_closed 只用於不可逆守衛」一列補判準邊界：能用 git 回復、只是移動成本高的不算不可逆；放行的變更落在多 session 共用主 checkout、可能被他 session 提交吸入而需跨 session 追查者，視同不可逆；經 dispatcher 分派或每次都執行的 hook 不整支宣告 fail_closed，改為確認高風險情境後只在該分支內判定失敗時阻擋（來源：具 DENY 能力 hook 的 fail-open 可逆性逐支盤點，主控裁定 2026-11-12）。
 **Version**: 新增「靜態解析命令的守衛：parser differential 的處置判準」章節：先確認守衛定位（防誤用層或對抗層），防誤用層對實際用過的繞過補偵測、僅刻意構造才觸發者記為殘留風險並以判定日誌稽核；配套要求判定日誌、擴大解析時模擬賦值生效條件、deny 訊息禁止換寫法重試、收緊前反查文件範例（來源：用戶裁定，2026-10-20）。
 **Version**: 「deny 輸出失敗語意」必載表補一列：經 hook-dispatcher 分派的 hook 增刪 `fail_closed=True` 時，同一 commit 同步 `FALLBACK_FAIL_CLOSED_GUARDS`，並於本機提交前執行 `tests/test_hook_dispatcher_fail_closed.py`（漏同步原本要到合併閘門才發現）；小節標題改為不寫死數量的「必載項目」。
 **Version**: 新增「deny 輸出失敗語意」章節：fail_closed 僅限不可逆守衛、deny 輸出失敗由 emit_hook_output 兜底（無法改用者自行 exit 2）、自帶 except-all 不得吞 SystemExit；新守衛檢查項「deny 輸出失敗測試」含 E1 對照與 E2 正向對照輸入要求。
 **Version**: 校正 Stop 8-block cap 段落的過期計數（Hook 改造附帶發現：文件記載 5 個 Stop hook，settings.json 實際已達 10 個）。以 settings.json 為準逐檔確認實際輸出後改寫：本專案註冊 10 個 Stop hook，其中僅 2 個（handoff-auto-resume-stop-hook、malformed-tool-call-detector-hook）具 block 能力，其餘 8 個皆不含 block 決策；最壞情況合計 2 blocks < 8，結論仍在安全範圍內。同步校正變更總覽表（14-23 行）與版本異動表（846-851 行）的對應計數，並調整 Action 段落區分「註冊總數」與「具 block 能力數」
-**Version**: 修正「effort 感知範例」（327-352 行）與同檔設計鐵則（369-391 行）矛盾：舊範例示範 `if effort == "low": return 0` 無條件短路，與鐵則「事實判斷型 hook 核心 block 邏輯永不依 effort 短路」相悖，為 W14-034/036/037 三批次 12 個 hook 複製此缺陷之散播源；改寫範例為 effort 僅控制 audit log 詳細度，並前置交叉引用指向鐵則章節。
-**Source**: basil-hook-architect.md v2.1.0 精簡外移；2026-05-14 同步 Claude Code v2.1.130-2.1.141 hook 系統能力（`args` exec 形式、`continueOnBlock`、`effort.level` payload、`$CLAUDE_EFFORT` / `$CLAUDE_CODE_SESSION_ID` env、`terminalSequence` 通知、MCP stdio `CLAUDE_PROJECT_DIR` 注入）；2026-05-21 同步 v2.1.142-2.1.145 新增能力（W3-026 + W3-031 ANA 結論落地）：
+**Version**: 修正「effort 感知範例」（327-352 行）與同檔設計鐵則（369-391 行）矛盾：舊範例示範 `if effort == "low": return 0` 無條件短路，與鐵則「事實判斷型 hook 核心 block 邏輯永不依 effort 短路」相悖，為三批次 12 個 hook 複製此缺陷之散播源；改寫範例為 effort 僅控制 audit log 詳細度，並前置交叉引用指向鐵則章節。
+**Source**: basil-hook-architect.md v2.1.0 精簡外移；2026-05-14 同步 Claude Code v2.1.130-2.1.141 hook 系統能力（`args` exec 形式、`continueOnBlock`、`effort.level` payload、`$CLAUDE_EFFORT` / `$CLAUDE_CODE_SESSION_ID` env、`terminalSequence` 通知、MCP stdio `CLAUDE_PROJECT_DIR` 注入）；2026-05-21 同步 v2.1.142-2.1.145 新增能力（ANA 結論落地）：
 
 | 版本範圍 | 新增章節 | 內容 |
 |---------|---------|------|

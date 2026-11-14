@@ -33,7 +33,8 @@ import sys
 from pathlib import Path
 
 SETTINGS_REL = ".claude/settings.json"
-LOG_REL = Path(".claude") / "hook-logs" / "settings-json-syntax-precommit" / "precommit.log"
+LOG_HOOK_NAME = "settings-json-syntax-precommit"
+LOG_FILENAME = "precommit.log"
 EXIT_ALLOW = 0
 # 判定阻擋的專用結束碼，pre-commit shim 只把它轉成 exit 1。python 未捕獲例外
 # 也是 1，若以 1 代表阻擋，腳本自身出錯會被誤當成語法錯誤而擋住所有 commit。
@@ -57,9 +58,22 @@ def find_syntax_error(text: str) -> str | None:
     return None
 
 
+def _log_path(repo_root: Path) -> Path:
+    """日誌檔路徑：優先經 hook_logging.get_hook_log_dir（linked worktree 內解析到主 repo）。
+
+    `.claude/lib` 不可達時（例如腳本被單獨複製）退回 repo_root 下的相對位置。
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    try:
+        from lib.hook_logging import get_hook_log_dir
+    except ImportError:
+        return repo_root / ".claude" / "hook-logs" / LOG_HOOK_NAME / LOG_FILENAME
+    return get_hook_log_dir(LOG_HOOK_NAME) / LOG_FILENAME
+
+
 def _log(repo_root: Path, message: str) -> None:
     try:
-        log_path = repo_root / LOG_REL
+        log_path = _log_path(repo_root)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with log_path.open("a", encoding="utf-8") as handle:

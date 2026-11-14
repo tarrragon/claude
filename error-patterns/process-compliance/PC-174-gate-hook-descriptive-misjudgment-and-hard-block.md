@@ -21,7 +21,7 @@
 
 **Consequence**：此缺陷不修，任何含開發關鍵字的完成態陳述都會被反覆假阻擋，迫使用戶離開當前意圖去補 Ticket；閘門從「確保可追蹤」退化為「阻斷正常溝通」，用戶對閘門的信任下降，極端情境下會以 `--no-verify` 類繞道規避，反而瓦解防護本身。
 
-## 案例：command-entrance-gate-hook 引導式改善（2026-06-04，W1-036）
+## 案例：command-entrance-gate-hook 引導式改善（2026-06-04）
 
 用戶請求合併已修復的分支，prompt「這個分支現在已經修復，可以合併」連續三次被 exit 2 阻擋。根因：「修復」命中 `ADJUSTMENT_KEYWORDS`，「已經」前綴未被辨識為完成態標記。用戶提案改引導式。落地：
 
@@ -42,11 +42,10 @@
 | 1 | 閘門辨識層對稱處理描述性前綴 + 後綴 | 過去式 / 完成態標記排除於命令意圖 |
 | 2 | 缺前置條件（無 Ticket）→ 引導式放行而非硬阻擋 | 提供 建立/認領/放行 出路，降低假阻擋摩擦 |
 | 3 | 阻擋僅保留給「前置條件存在但畸形」（如 Ticket 未認領 / 缺決策樹） | 真實品質問題才阻擋，判別用既有回傳值（`ticket_id is None`）推導 |
-| 4 | block vs guide 判別不改既有函式契約 | 將測試破壞面降到最小（W1-036 僅 2 個 main() 測試需語意對齊） |
+| 4 | block vs guide 判別不改既有函式契約 | 將測試破壞面降到最小（該次改動僅 2 個 main() 測試需語意對齊） |
 
 ## 相關
 
 - `.claude/hooks/command-entrance-gate-hook.py` v3.6.0（引導式落地）
 - `.claude/rules/core/ai-communication-rules.md` 規則 5（主體性保護：引導取代單純阻止）
-- W4-027（同 hook 的 L1 後綴判別 + L2 觸發限縮 + L3 relevance 閘門；本 PC 為 L1 的前綴對稱補強）
-- ticket: 0.19.1-W1-036
+- 同 hook 先前的修復（L1 後綴判別 + L2 觸發限縮 + L3 relevance 閘門；本 PC 為 L1 的前綴對稱補強）

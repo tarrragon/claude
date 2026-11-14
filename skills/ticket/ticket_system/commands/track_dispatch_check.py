@@ -1,4 +1,4 @@
-"""ticket track dispatch-check 命令（0.18.0-W10-017.2）。
+"""ticket track dispatch-check 命令。
 
 取代 PC-050 `cat .claude/dispatch-active.json` 片段，提供 CLI 化的活躍派發判定：
 - exit 0: 無活躍派發（檔案不存在 / dispatches=[]，視同已清空）
@@ -232,16 +232,109 @@ def _log_pruned_entries(removed_entries: List[Dict[str, Any]]) -> None:
             logger.info(message)
 
 
+def _resolve_session_id() -> Optional[str]:
+    """取得目前 session_id（薄封裝，供測試覆寫）；取不到回傳 None。"""
+    from ticket_system.lib.lease import resolve_current_session_id
+
+    return resolve_current_session_id()
+
+
+# --release 拒絕時的說明（結果代碼 → 訊息）。
+_RELEASE_REFUSAL_MESSAGES = {
+    "not_found": "找不到 agent_handle 或 agent_id 為 {key} 的派發條目",
+    "other_session": "{key} 的派發條目屬其他 session，只能釋放本 session 的條目",
+    "ambiguous": "本 session 有多筆條目符合 {key}，請改用 agent_id 指定",
+    "has_ticket": "{key} 的派發條目綁定票 {ticket}，請在該票完成時以 `ticket track complete` 清除",
+    "isolated": (
+        "{key} 為 isolation=worktree 派發，isolated-subagent-main-write-guard 依此條目"
+        "判定隔離代理人身分，不可釋放"
+    ),
+    "in_turn": (
+        "{key} 的回合仍在進行（turn_ended_at 為空），釋放會讓守衛立刻看不到它；"
+        "等回合結束後再釋放"
+    ),
+}
+
+# 背景工作完成而恢復的代理人不經 SendMessage，條目不會放回（已知缺口）。
+_RELEASE_BACKGROUND_WARNING = (
+    "代理人仍有背景工作時不要釋放：背景工作完成而恢復時不經 SendMessage，條目不會重新登記"
+)
+
+
+def _log_release(message: str) -> None:
+    """--release 結果寫 stderr 與 hook-logs（可觀測性規則 4）。"""
+    sys.stderr.write(message + "\n")
+    logger = _get_prune_logger()
+    if logger:
+        logger.info(message)
+
+
+def _execute_release(key: str, dispatch_file: Path) -> int:
+    """`--release <key>`：釋放本 session 的無票派發條目。
+
+    Returns:
+        0: 已釋放；1: 拒絕（條目保留）；2: 狀態檔讀取或格式錯誤、session_id 取不到。
+    """
+    if dispatch_file.exists():
+        try:
+            data = json.loads(dispatch_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            sys.stderr.write(f"[FAIL] dispatch-active.json 無法讀取，不釋放: {e}\n")
+            return 2
+        if not isinstance(data, dict) or not isinstance(data.get("dispatches"), list):
+            sys.stderr.write("[FAIL] dispatch-active.json 結構不符，不釋放\n")
+            return 2
+
+    session_id = _resolve_session_id()
+    if not session_id:
+        sys.stderr.write("[FAIL] 取不到目前 session_id，無法確認條目歸屬，不釋放\n")
+        return 2
+
+    dispatch_tracker = _load_dispatch_tracker()
+    if dispatch_tracker is None:
+        sys.stderr.write("[FAIL] dispatch_tracker 模組不可用，不釋放\n")
+        return 2
+
+    status, entries = dispatch_tracker.release_dispatch(
+        get_ticket_state_root(), key, session_id
+    )
+    if status == dispatch_tracker.RELEASE_OK:
+        entry = entries[0]
+        _log_release(
+            "[dispatch-check --release] 已釋放："
+            f"agent={entry.get('agent_description', '(unknown)')} "
+            f"agent_handle={entry.get('agent_handle') or '(empty)'} "
+            f"agent_id={entry.get('agent_id') or '(empty)'} session_id={session_id}"
+        )
+        print(
+            f"[OK] 已釋放 {key} 的派發條目；之後以 SendMessage 恢復該代理人時會重新登記"
+        )
+        print(f"[WARN] {_RELEASE_BACKGROUND_WARNING}")
+        return 0
+
+    ticket = entries[0].get("ticket_id", "") if entries else ""
+    template = _RELEASE_REFUSAL_MESSAGES.get(status, "釋放失敗（{key}）：" + status)
+    print(f"[REFUSED] {template.format(key=key, ticket=ticket)}")
+    return 1
+
+
 def execute_dispatch_check(args: argparse.Namespace) -> int:
     """執行 dispatch-check 命令。
 
     `--prune`：清理「[STALE] 且 session 不存在」的條目後再評估活躍派發。
+    `--release <key>`：釋放本 session 的無票派發條目（見 `_execute_release`），
+    不做活躍派發評估。
 
     Returns:
         0: 無活躍派發（含清理後歸零）；1: 有活躍派發；2: IO/格式錯誤。
+        `--release` 的結束碼見 `_execute_release`。
     """
 
     dispatch_file = get_ticket_state_root() / _DISPATCH_ACTIVE_RELPATH
+
+    release_key = getattr(args, "release", None)
+    if release_key:
+        return _execute_release(release_key, dispatch_file)
 
     if not dispatch_file.exists():
         print("[PASS] 無活躍派發，可繼續")
@@ -345,6 +438,18 @@ def register_dispatch_check(
         help=(
             "清理 [STALE] 且 session 不存在（比對 pm-registry）的條目，"
             "寫入 .claude/hook-logs/dispatch-check-prune/（3-F M-6）"
+        ),
+    )
+    p.add_argument(
+        "--release",
+        metavar="AGENT_HANDLE_OR_ID",
+        default=None,
+        help=(
+            "明示放棄恢復某個本 session 的無票代理人：移除其派發條目並留下釋放紀錄；"
+            "之後以 SendMessage 恢復該代理人時條目會重新登記。"
+            "有票號條目請用 complete；isolation=worktree 與回合進行中的條目拒絕。"
+            "代理人仍有背景工作時不要釋放：背景工作完成而恢復時不經 SendMessage，"
+            "條目不會重新登記"
         ),
     )
     return p

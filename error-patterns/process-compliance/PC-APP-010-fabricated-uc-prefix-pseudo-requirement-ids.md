@@ -4,7 +4,6 @@ title: code agent 杜撰 UC- 前綴偽需求 ID——TDD 實作註解未對照 s
 severity: medium
 category: process-compliance
 created: "2026-07-14"
-source_tickets: [0.38.1-W1-046, 0.38.1-W1-045]
 related_patterns: [PC-APP-009]
 ---
 
@@ -19,9 +18,9 @@ related_patterns: [PC-APP-009]
 - 多種編號方言並存：單位數（`UC-1`）、兩位數（`UC-01`）、三位數扁平（`UC-013`）、三位數階層（`UC-008.1.1`）——出自不同 agent 不同時期。
 - 語意碰撞：同一編號跨無關 domain（`UC-008` 同時標註 query builder / test repair / json classifier）；同一語意用不同編號（`UC-013` 與 spec `UC-02` 皆為「匯出」）。
 
-## 實證案例（0.38.1-W1-046，2026-07-14）
+## 實證案例（2026-07-14）
 
-W1-045 回填單一 spec（UC-001）時發現 code 引用它但 spec 缺失。延伸稽核 `lib/` 全量 UC 引用揭露系統性斷裂：
+回填單一 spec（UC-001）時發現 code 引用它但 spec 缺失。延伸稽核 `lib/` 全量 UC 引用揭露系統性斷裂：
 
 | 面向 | 數字 |
 |------|------|
@@ -61,4 +60,4 @@ grep -oE 'UC-[0-9]+' docs/app-use-cases.md | sort -u  # spec 定義
 ## 相關
 
 - PC-APP-009——規範描述多載體漂移（同屬追溯一致性家族）
-- 修復 tickets：0.38.1-W1-047（格式/改標決策 foundation）→ W1-048（偽 UC 改標）/ W1-049（spec 對齊）
+- 修復作業順序：先決定格式與改標方式（foundation），再分別進行偽 UC 改標與 spec 對齊

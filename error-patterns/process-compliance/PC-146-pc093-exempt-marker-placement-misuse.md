@@ -6,8 +6,6 @@ severity: low
 created: 2026-05-13
 related:
  - PC-093
- - W10-119
- - W10-123
 ---
 
 # PC-146: PC-093 exempt marker 位置誤用
@@ -24,7 +22,7 @@ PC-093 phase4-decision-enforcement-hook 撞牆後，PM 在 ticket body 加 `<!--
 
 | 條件 | 說明 |
 |------|------|
-| Ticket body 引用 W10-118 等含「Phase 5 再決定」字面的 source ticket | Context Bundle 自動抽取 source why，內含 hook 自身歷史案例 |
+| Ticket body 引用含「Phase 5 再決定」字面的 source ticket | Context Bundle 自動抽取 source why，內含 hook 自身歷史案例 |
 | PM 第一次加 exempt 標記 | 不熟悉 hook 對 marker 位置的 proximity 規則 |
 | 標記置於非命中行緊鄰處 | hook 仍判 BLOCK |
 
@@ -58,20 +56,20 @@ Hook 訊息 `[PC-093 Phase 4 強制決斷] 偵測到延後話術` 雖列出豁�
 |------|------|
 | 章節內單行命中 | marker 寫在命中行**上方**，無空行間隔（或同行行尾） |
 | 章節內多行命中 | 每個命中行各加一個 marker（hook 行級判定，每行獨立） |
-| Context Bundle 內 `- 0.18.0-W10-XXX why: ... Phase 5 再決定 ...` | marker 寫在該 list item 上一行 |
+| Context Bundle 內 `- <ticket-id> why: ... Phase 5 再決定 ...` | marker 寫在該 list item 上一行 |
 
 範例（正確）：
 ```markdown
 ### Rationale Chain
 
 <!-- PC-093-exempt: ticket-tracked:本段為 source ticket why 引用，非延後決策 -->
-- 0.18.0-W10-118 why: ...「Phase 5 再決定」...
+- <ticket-id> why: ...「Phase 5 再決定」...
 ```
 
 範例（錯誤）：
 ```markdown
 ### Rationale Chain
-- 0.18.0-W10-118 why: ...「Phase 5 再決定」...   ← 命中
+- <ticket-id> why: ...「Phase 5 再決定」...   ← 命中
 ... 中間其他章節 ...
 ### 豁免說明                                       ← marker 與命中行物理分離
 <!-- PC-093-exempt: ... -->
@@ -90,8 +88,8 @@ Hook 訊息 `[PC-093 Phase 4 強制決斷] 偵測到延後話術` 雖列出豁�
 
 ## 歷史案例
 
-- 2026-05-13 W10-119（首例 a）：PM 寫「### multi_view_status」H3 + bullet list 卻發現 hook 不認 + acceptance-gate-hook 報缺 multi_view_status；同 session 接續發現 exempt marker 也需注意位置
-- 2026-05-13 W10-123（首例 b）：PM 初次把 exempt marker 放在 ticket 末段「### Hook 引用豁免說明」獨立章節，與命中行物理分離，hook 仍 BLOCK；改放於命中行前 1 行後生效
+- 2026-05-13 某次 ticket 撰寫（首例 a）：PM 寫「### multi_view_status」H3 + bullet list 卻發現 hook 不認 + acceptance-gate-hook 報缺 multi_view_status；同 session 接續發現 exempt marker 也需注意位置
+- 2026-05-13 另一次 ticket 撰寫（首例 b）：PM 初次把 exempt marker 放在 ticket 末段「### Hook 引用豁免說明」獨立章節，與命中行物理分離，hook 仍 BLOCK；改放於命中行前 1 行後生效
 
 ## Action
 
@@ -104,4 +102,4 @@ Hook 訊息 `[PC-093 Phase 4 強制決斷] 偵測到延後話術` 雖列出豁�
 ---
 
 **Last Updated**: 2026-05-13
-**Version**: 1.0.0 - 初次記錄（W10-119 + W10-123 連續觸發 + Layer A/B/C 防護層設計）
+**Version**: 1.0.0 - 初次記錄（連續兩次觸發 + Layer A/B/C 防護層設計）

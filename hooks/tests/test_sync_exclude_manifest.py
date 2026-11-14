@@ -175,8 +175,13 @@ from lib.sync_exclude_manifest import (  # noqa: E402
 )
 
 _NESTED = ".skill-sync-base"
-# 探針取二層深：`.claude/skills/*/<名稱>` 只涵蓋一層，不算涵蓋巢狀名稱
-_PROBE_PATH = f".claude/skills/x/sub/{_NESTED}"
+# 涵蓋巢狀名稱 = .claude/ 根層、一層、二層三個探針全數被忽略。實際標記位於
+# skills/<name>/（一層）與根層；只取單一深層探針會把「只忽略深層」的寫法誤判為涵蓋。
+_PROBE_PATHS = (
+    f".claude/{_NESTED}",
+    f".claude/skills/x/{_NESTED}",
+    f".claude/skills/x/sub/{_NESTED}",
+)
 
 # (寫法樣板, 是否涵蓋巢狀名稱)；{n} 代入名稱
 _NESTED_TRUTH_TABLE = [
@@ -188,22 +193,29 @@ _NESTED_TRUTH_TABLE = [
     ("/.claude/**/{n}", True),
     (".claude/{n}", False),
     (".claude/skills/*/{n}", False),
+    (".claude/skills/*/*/{n}", False),
     ("{n}/", False),
     (".claude/**/{n}/", False),
 ]
 
 
-def _git_ignores_nested(tmp_path, line: str) -> bool:
-    """git 實測：該寫法是否讓 skills/x/ 底下的標記被忽略。"""
+def _git_ignored_probes(tmp_path, line: str) -> list[bool]:
+    """git 實測：該寫法下三個探針各自是否被忽略（依 _PROBE_PATHS 順序）。"""
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
     (repo / ".gitignore").write_text(line + "\n", encoding="utf-8")
-    result = subprocess.run(
-        ["git", "-C", str(repo), "check-ignore", "--no-index", _PROBE_PATH],
-        capture_output=True,
-    )
-    return result.returncode == 0
+    return [
+        subprocess.run(
+            ["git", "-C", str(repo), "check-ignore", "--no-index", "-q", probe],
+        ).returncode == 0
+        for probe in _PROBE_PATHS
+    ]
+
+
+def _git_ignores_nested(tmp_path, line: str) -> bool:
+    """oracle：三個探針全數被忽略才算涵蓋巢狀名稱。"""
+    return all(_git_ignored_probes(tmp_path, line))
 
 
 @pytest.mark.parametrize("template,expected", _NESTED_TRUTH_TABLE)
@@ -213,13 +225,26 @@ def test_nested_covered_matches_git_check_ignore(tmp_path, template, expected):
     assert is_nested_name_covered(_NESTED, [line]) is expected
 
 
+def test_oracle_rejects_deep_only_pattern(tmp_path):
+    """正向對照：只忽略二層的寫法，單一深層探針會判為涵蓋，三探針 oracle 與 lib 皆判不涵蓋。"""
+    line = f".claude/skills/*/*/{_NESTED}"
+    assert _git_ignored_probes(tmp_path, line) == [False, False, True]
+    second = tmp_path / "again"
+    second.mkdir()
+    assert _git_ignores_nested(second, line) is False
+    assert is_nested_name_covered(_NESTED, [line]) is False
+
+
 def test_required_entry_nested_uses_double_star():
     for name in NESTED_LOCAL_ONLY_NAMES:
         assert required_gitignore_entry(name) == f".claude/**/{name}"
 
 
-def test_required_entry_root_name_unchanged():
-    assert required_gitignore_entry("hook-state") == ".claude/hook-state"
+def test_required_entry_root_dirs_stay_root_form():
+    # 根層錨定的通用名只要求根層；名稱層級的 local-only 名稱一律為巢狀形式（3.3.0-W1-107）
+    for name in ("logs", "state", "worktrees"):
+        assert required_gitignore_entry(name) == f".claude/{name}"
+    assert required_gitignore_entry("hook-state") == ".claude/**/hook-state"
 
 
 # __pycache__：必要條目涵蓋各層（W1-176）

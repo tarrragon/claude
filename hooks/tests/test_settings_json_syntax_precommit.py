@@ -234,3 +234,21 @@ def test_skips_when_core_hooks_path_set(repo):
 
     assert "core.hooksPath" in result.stderr
     assert not (_hooks_dir(repo) / "pre-commit").exists()
+
+
+def test_log_lands_in_main_repo_when_cwd_is_linked_worktree(tmp_path, monkeypatch):
+    """linked worktree 內（不設 HOOK_TEST_ISOLATION）日誌寫入主 repo，worktree 自己不建 hook-logs。"""
+    main, wt = (tmp_path / "main").resolve(), tmp_path / "wt"
+    main.mkdir()
+    _git(main, "init", "-q", "-b", "main")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "i")
+    _git(main, "worktree", "add", "-q", str(wt), "-b", "wt-branch")
+    for name in ("HOOK_TEST_ISOLATION", "CLAUDE_PROJECT_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(wt)
+
+    gate._log(wt.resolve(), "worktree-probe")
+
+    log = main / ".claude" / "hook-logs" / "settings-json-syntax-precommit" / "precommit.log"
+    assert "worktree-probe" in log.read_text(encoding="utf-8")
+    assert not (wt / ".claude" / "hook-logs").exists()

@@ -51,22 +51,21 @@ uv run --directory .claude/hooks pytest tests/test_hook_utils.py
 uv run --directory .claude/hooks pytest tests/test_hook_utils.py -k "TestIsHandoffRecoveryModeCache"
 
 # 指定單一測項（node id）
-uv run --directory .claude/hooks pytest "tests/test_agent_dispatch_check.py::test_agent_to_task_map_shortcircuit"
+uv run --directory .claude/hooks pytest "tests/test_task_dispatch_readiness_check.py::test_main_skips_unrelated_tool_name"
 ```
 
 ---
 
 ## 4. 含 PEP 723 inline metadata 的測試檔
 
-以下三個檔案在檔頭宣告了 inline script metadata：
+以下檔案在檔頭宣告了 inline script metadata：
 
 ```text
-tests/test_agent_dispatch_check.py  -> pytest, pyyaml
 tests/test_frontmatter_parser.py    -> pytest>=7.0, pyyaml>=6.0
 tests/test_ticket_tracker.py        -> pytest
 ```
 
-這三者所需依賴（`pytest`、`pyyaml`）都是專案 dev group 的子集，因此**第 1 節的正式指令已完整涵蓋，不需另外處理**，node id 選取也照常運作。
+這些檔案所需依賴（`pytest`、`pyyaml`）都是專案 dev group 的子集，因此**第 1 節的正式指令已完整涵蓋，不需另外處理**，node id 選取也照常運作。
 
 若要單獨以 inline metadata 執行某一檔（例如驗證該檔頭宣告本身是否正確），才需要讓 uv 直接執行檔案：
 

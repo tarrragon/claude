@@ -134,7 +134,7 @@ pgrep 有命中時，逐一以 ps -o command= -p <pid> 確認命中的是測試�
 **pgrep -f 的比對陷阱（Why/Consequence）**：macOS 的 pgrep 預設只排除自身與祖先程序，不排除其他 shell；任何命令列含相同字串的 shell 都會被比對到。兩個各自寫成 `until ! pgrep -f "<樣式>"; do sleep 5; done` 的等待迴圈，命令列都含該樣式，會互相比對到對方而永遠不退出，即使實際的測試早已結束，實例中空等超過 15 小時，代理人已回報「等待背景工作」後長時間無下文。**Action**：命中後以 ps 確認程序身分再判定為殘留；等待程序結束一律綁定已知 PID，PID 不明時先取得 PID（啟動時以 `$!` 記錄），不以樣式比對代替。
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-## tests/ 修改派發 SOP（W1-051）
+## tests/ 修改派發 SOP
 
 > **已被取代**：本 SOP 在共用主工作樹以 `git checkout -b` 建 feat branch，違反 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉。涉及 tests/ 的實作派發改用 `isolation: "worktree"`，派發位置查該檔〈派發位置判準（強制）〉；本節保留為歷史記錄，不再作為派發選項。
 
@@ -184,7 +184,7 @@ git checkout -b feat/<ticket-id>-<short-desc>
 worktree CLI 目前有 bug（W1-118 偵測：誤報「基礎分支 main 不存在」），在 W1-118 修復前不可依賴。即便 W1-118 修復，git checkout -b 對於小型 ticket（< 1 day）仍是 lower-overhead 的選擇（無需切目錄、無需後續 worktree merge 步驟）。 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-### 實證（W1-081 session）
+### 實證
 
 PM 試圖直接 Edit tests/unit/scripts/build-version-check.test.js 被 branch-verify-hook 擋下，fallback 到 `git checkout -b feat/0.19.0-W1-081-worklogs-root-dynamic`，完成 Phase 2/3b/4 後 fast-forward merge 回 main，全流程無 friction（5 個 commit fast-forward 整合）。 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
 

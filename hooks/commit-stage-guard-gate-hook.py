@@ -104,12 +104,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
+from lib.checkout_identity import same_repo  # noqa: E402
 from lib.git_command_parse import find_git_invocations, contains_git_word  # noqa: E402
 from lib.git_utils import (  # noqa: E402
     get_project_root,
@@ -261,6 +262,45 @@ def _build_warn_message(warn_findings: List[Finding]) -> str:
     return _build_warn_message_body(warn_findings, header)
 
 
+def _resolve_commit_dir(inv, logger) -> Tuple[Optional[str], bool]:
+    """取 commit 實際作用的目錄。
+
+    Returns:
+        (目錄, 是否無法靜態解析)。目錄為 None 代表 hook 行程 cwd（修改前的行為）。
+        解析出的目錄不在 git repo 內時（git commit 本身也會失敗）沿用修改前的
+        hook 行程 cwd。
+    """
+    if inv.dir_unknown:
+        return None, True
+    target = inv.effective_dir
+    if target:
+        ok, _ = run_git_command(["rev-parse", "--git-dir"], cwd=target)
+        if not ok:
+            logger.info("effective_dir 不在 git repo 內，沿用 hook 行程 cwd：%s", target)
+            return None, False
+    return target, False
+
+
+def _session_toplevel(payload_cwd: Optional[str]) -> Optional[str]:
+    """session 所在 checkout 的 toplevel（payload cwd，缺省為 hook 行程 cwd）；失敗回傳 None。"""
+    ok, top = run_git_command(["rev-parse", "--show-toplevel"], cwd=payload_cwd)
+    return top if ok and top else None
+
+
+def _build_unknown_dir_message(inv) -> str:
+    """commit 目標目錄無法靜態解析時的 deny 訊息。"""
+    return "\n".join([
+        "[commit-stage-guard-gate] git commit 的目標目錄無法靜態解析",
+        "",
+        f"命令：{' '.join(inv.statement)}",
+        "",
+        "`cd` 或 `-C` 的目錄含變數、命令替換、`cd -` 等，hook 在命令執行前",
+        "看不出 commit 會作用在哪個 repo，也就無法掃描該 repo 的 staged 內容。",
+        "",
+        "請改用展開後的字面絕對路徑重新執行，例如：git -C /abs/path commit ...",
+    ])
+
+
 def main() -> int:
     logger = setup_hook_logging("commit-stage-guard-gate")
 
@@ -277,15 +317,37 @@ def main() -> int:
     if not contains_git_word(command):
         return EXIT_ALLOW
 
-    invocations = find_git_invocations(command, {"commit"}, scan=True)
+    invocations = find_git_invocations(
+        command, {"commit"}, base_dir=input_data.get("cwd") or None, scan=True
+    )
     if not invocations:
         logger.debug("命令不含 git commit 呼叫，或無法安全解析，放行")
         return EXIT_ALLOW
 
+    target_dir, dir_unknown = _resolve_commit_dir(invocations[0], logger)
+    if dir_unknown:
+        logger.warning("git commit 目標目錄無法靜態解析，阻擋：%s", command[:200])
+        sys.stderr.write(_build_unknown_dir_message(invocations[0]) + "\n")
+        return EXIT_BLOCK
+
     # 提交發生處的 toplevel 優先於 CLAUDE_PROJECT_DIR（後者在 worktree 情境可能
-    # 指向別的 checkout，staged 清單與分支判定都會取錯）。
-    ok, top = run_git_command(["rev-parse", "--show-toplevel"])
+    # 指向別的 checkout，staged 清單與分支判定都會取錯）。提交發生處取命令實際
+    # 作用的目錄（-C 與語句前的 cd），未指定時為 hook 行程 cwd。
+    ok, top = run_git_command(["rev-parse", "--show-toplevel"], cwd=target_dir)
     project_root = Path(top) if ok and top else get_project_root()
+    logger.info("commit 目標 toplevel：%s", project_root)
+
+    # 內容守衛只套用在 session 所屬的同一 repo（主 checkout 與其 worktree）。
+    # 其他 repo 由該 repo 自己的 session 與 hook 管，維持修改前不擋的結果
+    # （用戶裁定 2026-11-13：例如 teaching-sync 在 blog 的 main 上提交）。
+    # session 根無法解析時不略過，照常掃描（落在阻擋側）。
+    session_root = _session_toplevel(input_data.get("cwd") or None)
+    if target_dir is not None and session_root and not same_repo(str(project_root), session_root):
+        logger.info(
+            "commit 目標不是 session 所屬 repo，略過內容守衛並放行：target=%s session=%s",
+            project_root, session_root,
+        )
+        return EXIT_ALLOW
     staged_paths = _get_staged_file_list(project_root)
     if not staged_paths:
         logger.debug("無 staged 檔案，放行")

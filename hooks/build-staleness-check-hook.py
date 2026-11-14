@@ -8,7 +8,7 @@ Build Staleness Check - SessionStart Hook
 
 偵測 build/development/ 是否相對 src/ 過期，並提示 `npm run build:dev`。
 
-動機（W6-012.1）：build/development/ 停在 8 個月前但 src/ 持續更新，
+動機：build/development/ 停在 8 個月前但 src/ 持續更新，
 Chrome Extension 載入舊 build 導致 bug 看似源自 src 實為 stale build，
 浪費大量診斷時間。
 
@@ -23,6 +23,7 @@ Hook Event: SessionStart
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -139,9 +140,30 @@ def check_build_staleness(
     return ("fresh", "")
 
 
+def _read_payload() -> dict:
+    """讀取 SessionStart payload；無輸入或解析失敗回傳空 dict。"""
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return {}
+        data = json.loads(sys.stdin.read() or "{}")
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _resolve_action_root() -> Path:
+    """作用根：payload.cwd 所屬 checkout；缺 cwd 時沿用原解析（不呼叫 helper）。"""
+    project_root = _get_project_root()
+    payload = _read_payload()
+    if not payload.get("cwd"):
+        return project_root
+    from lib.git_utils import get_action_root
+    return get_action_root(payload, project_root)
+
+
 def main() -> int:
     logger = setup_hook_logging("build-staleness-check")
-    project_root = _get_project_root()
+    project_root = _resolve_action_root()
 
     status, message = check_build_staleness(project_root)
     logger.debug(f"status={status} root={project_root}")

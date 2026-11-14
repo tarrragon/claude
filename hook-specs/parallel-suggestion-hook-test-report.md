@@ -85,7 +85,7 @@ $ python3 .claude/hooks/parallel-suggestion-hook.py --version
 
 ### 2.3 YAML 解析測試
 
-#### 測試對象: 0.31.0-W4-010.4.1.md
+#### 測試對象: 某個三層子任務的 ticket 檔（`<version>-W<n>-<seq>.<a>.<b>.md`）
 
 ```yaml
 chain:
@@ -117,7 +117,7 @@ find_latest_completed_ticket_root(all_tickets)
 
 **查詢結果**:
 - 符合條件的 Ticket: 105 個（已完成且有有效 chain）
-- 查詢結果: 0.31.0-W4-001 (from 0.31.0-W4-001.1)
+- 查詢結果: 某根任務 (from 其第一個子任務)
 - 查詢耗時: ~100ms
 
 **狀態**: ✅ 通過

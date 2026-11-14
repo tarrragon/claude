@@ -10,7 +10,7 @@
 |---------|------|
 | Hook 行為與規則文件描述不一致 | acceptance-gate-hook 的阻擋邏輯與 ticket-lifecycle.md 描述衝突 |
 | 一份概念散落在多個文件且互相矛盾 | 五欄位語意散落於 SKILL.md / methodologies / error-patterns 且結論對立 |
-| 行為層存在「過渡狀態補丁」未對齊規則 | W15-003 升級 hook 阻擋邏輯但 create-command.md 文字未同步 |
+| 行為層存在「過渡狀態補丁」未對齊規則 | 某次 hook 阻擋邏輯升級但 create-command.md 文字未同步 |
 | 多視角審查發現規則 vs 實作分歧 | linux/saffron/basil 對 PM 的 ANA 結論補強指出「實作已選邊但規則未統一」 |
 
 ---
@@ -30,7 +30,7 @@ DOC ticket 落地時必須包含：
 
 1. **概念層 SSOT**：建立 `references/<concept>.md` 作為單一定義來源（六欄位語意 SSOT 示範）
 2. **規則層**：error-pattern / pm-rules / methodologies 修訂指向 SSOT，不重複定義
-3. **行為描述層**：CLI / Hook 文件 / SKILL 描述同步引用 SSOT，並標註「過渡狀態」段落（如「W15-003 升級為過渡狀態，IMP 收斂後將回到設計意圖」）
+3. **行為描述層**：CLI / Hook 文件 / SKILL 描述同步引用 SSOT，並標註「過渡狀態」段落（如「hook 阻擋升級為過渡狀態，IMP 收斂後將回到設計意圖」）
 
 ---
 
@@ -100,18 +100,18 @@ DOC ticket 落地時必須包含：
 
 ---
 
-## 案例：W17-120 五欄位語意收斂
+## 案例：五欄位語意收斂
 
 | Wave | Ticket | 類型 | 動作 |
 |------|--------|------|------|
-| 父 ANA | W17-120 | ANA | 多視角審查 + 決議 PC-091 路線 |
-| 17 | W17-120.1 | DOC | 建立 field-semantics.md SSOT + PC-073 deprecated + PC-091 升格 + 8 文件同步 |
-| 17 | W17-120.2 | IMP（blockedBy=.1） | acceptance-gate-hook ana_spawned_checker 退場 + 4 case 回歸測試 |
-| 17 | W17-120.3 | DOC（選配，已 close as duplicate） | relatedTo 純 metadata 定位（被 .1 順帶完成） |
+| 父 ANA | 父票 | ANA | 多視角審查 + 決議 PC-091 路線 |
+| 17 | 子票 .1 | DOC | 建立 field-semantics.md SSOT + PC-073 deprecated + PC-091 升格 + 8 文件同步 |
+| 17 | 子票 .2 | IMP（blockedBy=.1） | acceptance-gate-hook ana_spawned_checker 退場 + 4 case 回歸測試 |
+| 17 | 子票 .3 | DOC（選配，已 close as duplicate） | relatedTo 純 metadata 定位（被 .1 順帶完成） |
 
 實施結果：
 - 規則層（DOC）落地後，實作層（IMP）派發時 prompt 直接引用「PC-091 路線（規則已確立）」作為決策依據，實作代理人無需重複做設計決策
-- create-command.md:141 在 DOC 階段明示「W15-003 升級為過渡狀態，IMP-2 後將回到不阻擋」——IMP 收斂後自然兌現此承諾
+- create-command.md:141 在 DOC 階段明示「hook 阻擋升級為過渡狀態，IMP-2 後將回到不阻擋」——IMP 收斂後自然兌現此承諾
 - 4 case 回歸測試含「行為翻轉核心」case (d)，驗證 ANA 有 spawned 但無 children 不再阻擋
 
 ---
@@ -136,4 +136,4 @@ DOC ticket 落地時必須包含：
 ---
 
 **Last Updated**: 2026-05-03
-**Version**: 1.0.0 — 從 W17-120 任務鏈實證提煉（DOC blockedBy 為空 → IMP blockedBy=.1 雙階段順序驗證有效）。Source memory: `feedback_rule_before_hook_refactor_order.md`
+**Version**: 1.0.0 — 從一條任務鏈實證提煉（DOC blockedBy 為空 → IMP blockedBy=.1 雙階段順序驗證有效）。Source memory: `feedback_rule_before_hook_refactor_order.md`

@@ -118,9 +118,9 @@ git status --short                   # 列出未提交變更
 
 | 樣態 | 範例關鍵字 |
 |------|-----------|
-| 明確指定下個 ticket | 「下 session 優先建議：W17-079」、「接手 W17-080」 |
+| 明確指定下個 ticket | 「下 session 優先建議：{ticket_id}」、「接手 {ticket_id}」 |
 | 列出未完成 spawned 推進清單 | Spawned 推進清單章節含 pending/in_progress 項 |
-| 列出 in_progress 待續 ticket | 「本 session 結束時 W17-079 仍 in_progress」 |
+| 列出 in_progress 待續 ticket | 「本 session 結束時 {ticket_id} 仍 in_progress」 |
 
 任一樣態成立即觸發。
 
@@ -150,9 +150,9 @@ git status --short                   # 列出未提交變更
 
 ### 來源
 
-2026-04-24 session 事件：前 session commit `6d0a8fc2` 在 v0.18.0-main.md 寫「下 session 優先建議：W17-079」，但未執行 `ticket handoff`，本 session /ticket 裸命令 runqueue 回「無 resume 候選」，用戶被迫手動指定 W17-079。雙軌不同步為根因。
+2026-04-24 session 事件：前 session commit `6d0a8fc2` 在 v0.18.0-main.md 寫「下 session 優先建議：{ticket_id}」，但未執行 `ticket handoff`，本 session /ticket 裸命令 runqueue 回「無 resume 候選」，用戶被迫手動指定該 ticket。雙軌不同步為根因。
 
-### 自動化落地（W17-083）
+### 自動化落地
 
 紀律規則的自動防護由以下三層機制提供：
 
@@ -208,9 +208,9 @@ ticket track query <spawned-id>          # 單一 spawned 詳情（標題、prio
 
 | Source ANA | Spawned Ticket | Priority | 狀態 | 預期責任人 |
 |------------|----------------|----------|------|------------|
-| 0.18.0-W17-036 | 0.18.0-W17-039 | P1 | in_progress | rosemary（PM 前台） |
-| 0.18.0-W17-036 | 0.18.0-W17-040 | P1 | pending | rosemary（PM 前台） |
-| 0.18.0-W17-036 | 0.18.0-W17-041 | P2 | pending | basil-hook-architect |
+| {parent_id} | {child_id_1} | P1 | in_progress | rosemary（PM 前台） |
+| {parent_id} | {child_id_2} | P1 | pending | rosemary（PM 前台） |
+| {parent_id} | {child_id_3} | P2 | pending | basil-hook-architect |
 ```
 
 ### 來源
@@ -285,7 +285,7 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 
 ## /resume bg session 場景（v2.1.144+）
 
-> **Why**：Claude Code v2.1.144 引入 `/resume` 對 background session 的支援（subagent 結束後 session 仍可被 resume 為前台 interactive session）。既有 handoff 機制設計時假設 session 為前台模式（subagent 結束即 session 終止），bg session resume 屬新增的 session 生命週期模式。雖然 W3-028 ANA 結論顯示**直接衝擊低**（handoff JSON 是 session-agnostic 檔案系統持久化），但 SOP 仍需顯式涵蓋此場景，避免 PM 在 resume bg session 後因預期行為落差而誤判 hook / scheduler 狀態。
+> **Why**：Claude Code v2.1.144 引入 `/resume` 對 background session 的支援（subagent 結束後 session 仍可被 resume 為前台 interactive session）。既有 handoff 機制設計時假設 session 為前台模式（subagent 結束即 session 終止），bg session resume 屬新增的 session 生命週期模式。雖然 ANA 結論顯示**直接衝擊低**（handoff JSON 是 session-agnostic 檔案系統持久化），但 SOP 仍需顯式涵蓋此場景，避免 PM 在 resume bg session 後因預期行為落差而誤判 hook / scheduler 狀態。
 >
 > **Consequence**：SOP 未涵蓋此場景會讓 PM resume bg session 後遇到「自動 runqueue 提示未出現」「post-git-commit-hook 是否觸發不確定」等情境時無對應指引，被迫即時推理或誤以為機制故障，浪費 token 也容易跳過 handoff 流程。
 >
@@ -296,15 +296,15 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 | 機制 | 新 session（前台） | /resume 前台 session | /resume bg session |
 |------|-------------------|---------------------|-------------------|
 | post-git-commit-hook 觸發 | 是 | 是 | 是（resume 後變前台，subagent guard 自動解除） |
-| SessionStart hook 觸發 | 是（source=startup） | 是（推論 source=resume，未實證但同 runtime） | 是（source=resume，繼承 bg UUID；W3-028.2 實證） |
+| SessionStart hook 觸發 | 是（source=startup） | 是（推論 source=resume，未實證但同 runtime） | 是（source=resume，繼承 bg UUID；已實證） |
 | Stop hook 觸發 | 是 | 是 | 是 |
 | handoff JSON 可讀 | 是 | 是 | 是（檔案系統層，session-agnostic） |
 | ticket resume CLI 可用 | 是 | 是 | 是 |
-| 自動 runqueue 提示出現 | 是（透過 session-start-scheduler-hint-hook） | 是 | 是（W3-028.2 實證確認） |
+| 自動 runqueue 提示出現 | 是（透過 session-start-scheduler-hint-hook） | 是 | 是（已實證確認） |
 
 ### SessionStart event source 對照表（v2.1.150 實證）
 
-> **來源**：W3-028.2 實機驗證（2026-05-26）
+> **來源**：實機驗證（2026-05-26）
 
 | 進入路徑 | source 值 | session_id 行為 |
 |---------|----------|---------------|
@@ -339,7 +339,7 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 | 步驟 | 動作 | 與前台 session 差異 |
 |------|------|-------------------|
 | 1. 確認 session 類型 | 觀察 prompt 提示是否含 「resumed from background」標記 | 前台新 session 無此標記 |
-| 2. 重建全局視野 | 自動執行 `ticket track snapshot`（W3-028.2 實證：SessionStart 在 /resume 觸發 source=resume，hint hook 跑） | 與前台 session 一致；無需手動干預 |
+| 2. 重建全局視野 | 自動執行 `ticket track snapshot`（已實證：SessionStart 在 /resume 觸發 source=resume，hint hook 跑） | 與前台 session 一致；無需手動干預 |
 | 3. 查 runqueue 接手建議 | `session-start-scheduler-hint-hook` 自動觸發；hint 在 additionalContext 顯示 | 與前台 session 一致 |
 | 4. 後續執行流程（commit / handoff） | 與前台 session 一致（post-git-commit-hook 在 resume 後變前台後正常觸發） | 無差異 |
 
@@ -358,12 +358,12 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 | 情境 | 處理 |
 |------|------|
 | Claude Code 版本 < v2.1.144 | 本章節不適用（無 /resume bg session 功能） |
-| 未來 Claude Code 升級改變 source 值定義 | 重新執行 W3-028.2 diagnostic hook 實驗，更新本節 source 對照表 |
+| 未來 Claude Code 升級改變 source 值定義 | 重新執行 diagnostic hook 實驗，更新本節 source 對照表 |
 
 ### 來源
 
-- **W3-028 ANA**（`docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W3-028.md`）：bg session 與既有 handoff 機制互動矩陣表、風險點識別
-- **W3-028.2 已落地**（`docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W3-028.2.md`）：實機驗證 SessionStart event 在 /resume bg session 的觸發行為，本節 source 對照表與 attach vs resume 差異說明依此驗證結果建立
+- **bg session 互動矩陣 ANA**：bg session 與既有 handoff 機制互動矩陣表、風險點識別
+- **實機驗證已落地**：實機驗證 SessionStart event 在 /resume bg session 的觸發行為，本節 source 對照表與 attach vs resume 差異說明依此驗證結果建立
 - **Diagnostic hook**（`.claude/hooks/session-source-diagnostic-hook.py`）：保留作為長期觀察資產，未來版本升級重驗證可直接複用
 
 ---
@@ -381,9 +381,9 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 **Version**: 1.8.0 — 修正「查詢方式」的可執行 grep：`docs/work-logs/v{version}/v{version}-main.md` 代入版本號後在本專案巢狀 worklog 目錄（`v0/v0.2/v0.2.1/`）下無法解析（實測 `No such file or directory`），改為 `find -name` 先定位檔案再 `grep`，不依賴目錄層數；散文引用段（宣告載體與格式）維持 `v{version}` 記法不變，並補一段說明兩者處置差異的理由（2026-08-24 巢狀結構實測發現）
 **Version**: 1.7.0 — 新增「Session 起始：宣告 Focus Topic」小節（宣告時機/載體/格式/查詢方式），實例化既有「Context 隔離」主張，並使其可被 `parallel-dispatch.md`「主題聚焦維度」查詢鏈步驟 1 消費；「/clear 前的強制確認」表新增一列 + 新增「收尾主題審視（建議）」小節，收尾時以 `ticket track board --group-by topic` 核對本 session 觸碰票的主題並視需要用 `topic-backfill-assign` 改派
 **Version**: 1.6.0 — /clear 前強制確認新增「peer 關閉訊號清點」規則：確認表增列「跨 session 對話 peer 是否已清點並發關閉訊號」+ 新增子章節（Why/Consequence/Action + 三列動作表）+ 禁止行為增列一條；與 `parallel-dispatch.md`「跨 session 同儕來訊時的脈絡存續判讀」節互引
-**Version**: 1.5.0 — W3-028.2 實機驗證落地：新增「SessionStart event source 對照表」與「attach vs /resume 進入路徑差異」兩節；對比表「待驗證」標記更新為 v2.1.150 實證確定狀態（SessionStart 在 /resume bg 觸發 source=resume、繼承 bg UUID）；handoff 流程從「手動執行 snapshot/runqueue」更新為「依賴 SessionStart hook 自動觸發」；禁止行為新增三條（running bg /resume 拒絕、attach ≠ /resume、短 ID 無效）；豁免條款移除 W3-028.2 追蹤、新增版本升級重驗證 trigger
+**Version**: 1.5.0 — 實機驗證落地：新增「SessionStart event source 對照表」與「attach vs /resume 進入路徑差異」兩節；對比表「待驗證」標記更新為 v2.1.150 實證確定狀態（SessionStart 在 /resume bg 觸發 source=resume、繼承 bg UUID）；handoff 流程從「手動執行 snapshot/runqueue」更新為「依賴 SessionStart hook 自動觸發」；禁止行為新增三條（running bg /resume 拒絕、attach ≠ /resume、短 ID 無效）；豁免條款移除該追蹤項、新增版本升級重驗證 trigger
 **Version**: 1.4.0 — 新增「/resume bg session 場景（v2.1.144+）」章節：前台 vs bg session resume 行為對比表、bg session resume 後 handoff 流程、SessionStart 觸發行為待驗證標記。對齊 ANA 結論（bg session 直接衝擊低、handoff JSON session-agnostic、SessionStart 待實機驗證）
-**Version**: 1.3.0 — 「Worklog 交接與 CLI handoff 同步」章節新增「自動化落地」小節：紀律規則由 stop-worklog-handoff-sync-check-hook + handoff --from-worklog CLI + worklog_parser lib 三層自動防護（W17-083 全鏈完成）；含 ARCH-020 SOT-mirror 設計與 CI/batch 失效豁免說明
-**Version**: 1.2.0 — 新增「main vs worktree 差別對待」強制條款（W10-014）：main 未提交變更強制 commit 才能 /clear；worktree 僅提示不強制，避免干擾並行 terminal
+**Version**: 1.3.0 — 「Worklog 交接與 CLI handoff 同步」章節新增「自動化落地」小節：紀律規則由 stop-worklog-handoff-sync-check-hook + handoff --from-worklog CLI + worklog_parser lib 三層自動防護（全鏈完成）；含 ARCH-020 SOT-mirror 設計與 CI/batch 失效豁免說明
+**Version**: 1.2.0 — 新增「main vs worktree 差別對待」強制條款：main 未提交變更強制 commit 才能 /clear；worktree 僅提示不強制，避免干擾並行 terminal
 **Version**: 1.1.0 — 新增「Worklog 交接與 CLI handoff 同步（雙軌強制一致）」章節，修復 2026-04-24 session 事件根因（worklog 寫了 handoff 但未執行 CLI，scheduler 無候選）
-**Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（W10-076.2 拆分；原檔 v3.7.0 L109-L160）
+**Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（拆分；原檔 v3.7.0 L109-L160）

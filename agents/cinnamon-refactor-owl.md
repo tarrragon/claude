@@ -465,6 +465,6 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 **Version**: 「測試 100% 通過」改為 quality-baseline 規則 1 的時點寫法：本票相關測試檔全綠，全套件由合併閘門確認（tarrragon/claude#104）。
 
 **Last Updated**: 2026-06-14
-**Version**: 流程外移瘦身（W8-009.3.4）——Phase 4 重構方法論三階段流程、預期管理、測試穩定性檢查、英文重構分析指南外移至 `.claude/skills/tdd/references/phase4-refactor.md`；錯誤修復職責改路由 error-fix-refactor-methodology；保留產出物路徑規範與三區塊邊界。流程與人格解耦，cinnamon 為 Phase 4b 執行者。歷史版本見 git log。
+**Version**: 流程外移瘦身——Phase 4 重構方法論三階段流程、預期管理、測試穩定性檢查、英文重構分析指南外移至 `.claude/skills/tdd/references/phase4-refactor.md`；錯誤修復職責改路由 error-fix-refactor-methodology；保留產出物路徑規範與三區塊邊界。流程與人格解耦，cinnamon 為 Phase 4b 執行者。歷史版本見 git log。
 
 **完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。

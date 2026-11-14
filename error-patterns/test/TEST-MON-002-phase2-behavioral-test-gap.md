@@ -4,7 +4,7 @@ title: TDD Phase 2 紅燈設計漏 handler/lifecycle 行為測試；GREEN agent 
 type: test
 severity: medium
 status: active
-source: 0.2.0-W2-004/W2-005 GREEN agent confidence 回報
+source: GREEN agent confidence 回報
 related:
   - TEST-MON-001
   - PC-168
@@ -38,4 +38,4 @@ Phase 2 設計者傾向為「有明確輸入輸出」的 FR 寫測試（API 回�
 
 ## 來源
 
-0.2.0-W2-004（自動攔截）/W2-005（lifecycle）GREEN confidence 訊號 → 補建票 W2-012（10 test）/W2-006（4 test）。專案 memory `phase2-behavioral-test-gap` 升級（0.2.0-W4-005）。
+自動攔截與 lifecycle 兩張票的 GREEN confidence 訊號 → 補建兩張票（分別補 10 個與 4 個 test）。專案 memory `phase2-behavioral-test-gap` 升級。

@@ -169,4 +169,4 @@ P1 與 P3 commit 獨立，可分別 rollback 不互相干擾。
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 — 從 hook-downgrade-observation.md 外移（W8-020.6 hook 家族整併）：8 Hook 降級觀察期追蹤表、Rollback 觸發條件、快速恢復 SOP（場景 A/B/C）、歷史觀察期評估結果（Wave +1 + Extended）；機制定義與公式上移核心方法論，本檔保留追蹤數據與 SOP
+**Version**: 1.0.0 — 從 hook-downgrade-observation.md 外移（hook 家族整併）：8 Hook 降級觀察期追蹤表、Rollback 觸發條件、快速恢復 SOP（場景 A/B/C）、歷史觀察期評估結果（Wave +1 + Extended）；機制定義與公式上移核心方法論，本檔保留追蹤數據與 SOP

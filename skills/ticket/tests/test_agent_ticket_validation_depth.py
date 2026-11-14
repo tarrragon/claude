@@ -71,7 +71,7 @@ class TestDepthSuperLimitDeny:
             rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1"), module)
 
         assert rc == module.EXIT_SUCCESS
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
 
     def test_depth_above_limit_denies_dispatch(self):
         """E2：深度 4 的票（> MAX）改後仍 deny，訊息說明同一判準。"""
@@ -97,7 +97,7 @@ class TestDepthSuperLimitDeny:
             rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5"), module)
 
         assert rc == module.EXIT_SUCCESS
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
 
 
 class TestDepthFailOpenVisible:
@@ -112,7 +112,7 @@ class TestDepthFailOpenVisible:
             rc, parsed = _run_main(payload, module)
 
         assert rc == module.EXIT_SUCCESS
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
         assert "fail-open" in capsys.readouterr().err
 
     def test_depth_unavailable_warns_stderr(self, capsys):
@@ -136,7 +136,7 @@ class TestExemptAgentUnaffected:
                 module,
             )
         assert rc == module.EXIT_SUCCESS
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
         mock_cd.assert_not_called()
 
     def test_general_purpose_skips_depth_check(self):
@@ -147,7 +147,7 @@ class TestExemptAgentUnaffected:
                 module,
             )
         assert rc == module.EXIT_SUCCESS
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
         mock_cd.assert_not_called()
 
     def test_plan_skips_depth_check(self):
@@ -158,7 +158,7 @@ class TestExemptAgentUnaffected:
                 module,
             )
         assert rc == module.EXIT_SUCCESS
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
         mock_cd.assert_not_called()
 
 
@@ -171,7 +171,7 @@ class TestImportFailureFailOpen:
                 patch.object(module, "DEPTH_AVAILABLE", False):
             rc, parsed = _run_main(_payload("Ticket: 1.0.0-W1-056.5.1"), module)
         assert rc == module.EXIT_SUCCESS
-        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in parsed["hookSpecificOutput"]
 
 
 class TestExistingPathsUnchanged:

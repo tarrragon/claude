@@ -40,4 +40,4 @@ created: 2026-07-26
 ## 關聯
 
 - PC-165（測試綠燈不等於 Runtime 正確）：同家族，但機制不同——PC-165 是 mock 替代真實依賴 + 斷言不檢查訊息文字；本模式是建構路徑分歧 + 測資形狀窄於真實輸入
-- 實證：monitor 0.5.0-W4-002（2026-07-26），error fingerprint pipeline 斷在四處，`go test ./...` 262 PASS 全綠，runtime 驗證才暴露
+- 實證：monitor 專案（2026-07-26），error fingerprint pipeline 斷在四處，`go test ./...` 262 PASS 全綠，runtime 驗證才暴露

@@ -1,4 +1,4 @@
-"""Checkpoint view function 模組（W10-017.1 v2 新增，W10-017.1 Phase 3b 落地）。
+"""Checkpoint view function 模組（v2 新增）。
 
 本模組純 view function（無 I/O），輸入 CheckpointState + caller 路由參數，
 輸出人類可讀字串/結構。CLI 三命令（snapshot / handoff-ready / checkpoint-status）
@@ -29,7 +29,7 @@ from .checkpoint_state import (
 
 
 # CLI 三命令的合法 caller 集合（v2.2 Q1 規格鎖定）。
-# W10-017.11 AC 2：從 CheckpointCaller Literal 透過 get_args 派生，過濾掉 log
+# 從 CheckpointCaller Literal 透過 get_args 派生，過濾掉 log
 # fallback 值 "unknown"，避免雙源定義漂移。新增 CLI caller 時只需擴充 Literal。
 _VALID_CALLERS = tuple(c for c in get_args(CheckpointCaller) if c != "unknown")
 
@@ -66,7 +66,7 @@ def format_local_time(state: CheckpointState) -> str:
 # handoff_status_for（v2.1 §6.1 命名鎖定，v2.2 Q1 邊界）
 # TD-A 錨點：caller 為 Literal[...] (見 checkpoint_state.CheckpointCaller)，
 #   runtime 用 ValueError 守邊（v2.2 Q1），Phase 4 評估升級為 enum / dataclass tag。
-# W10-017.13 AC1：dict dispatch 取代 if-elif 字串比對，新增 caller 僅需擴充表。
+# dict dispatch 取代 if-elif 字串比對，新增 caller 僅需擴充表。
 # ---------------------------------------------------------------------------
 
 
@@ -115,7 +115,7 @@ def handoff_status_for(
       handoff-ready   | (True, "無 pending handoff (看其他阻擋)") | (True, "handoff 已建立: {id}")
       checkpoint-status | (True, "無 pending handoff") | (True, "handoff pending: {id}")
 
-    實作（W10-017.13 AC1）：改用 _HANDOFF_STATUS_ROUTES dict dispatch，
+    實作：改用 _HANDOFF_STATUS_ROUTES dict dispatch，
     避免原 if-elif 字串比對無法在新增 caller 時被型別檢查器提醒遺漏。
 
     Args:
@@ -142,7 +142,7 @@ def handoff_status_for(
 def get_suggested_commands(state: CheckpointState) -> List[str]:
     """回傳 state 對應的建議命令清單。
 
-    W10-017.12 AC3：改為委派 _resolve_rule，與 _derive_checkpoint 共用
+    改為委派 _resolve_rule，與 _derive_checkpoint 共用
     單次 PRIORITIES loop（原本此函式會做一次獨立掃描）。
 
     語意保持：依規則優先序命中第一條；PRIORITIES 全數未命中則落入 FALLBACK。
@@ -153,7 +153,7 @@ def get_suggested_commands(state: CheckpointState) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# compute_blockers（W10-017.12 AC1：從 commands/track_handoff_ready 上移）
+# compute_blockers（從 commands/track_handoff_ready 上移）
 # ---------------------------------------------------------------------------
 
 
@@ -161,7 +161,7 @@ def get_suggested_commands(state: CheckpointState) -> List[str]:
 class Blocker:
     """handoff-ready 阻擋項（純資料載體，view 由呼叫端渲染）。
 
-    W10-017.12 AC1：從 commands/track_handoff_ready._Blocker 上移 lib 層，
+    從 commands/track_handoff_ready._Blocker 上移 lib 層，
     使 commands 層僅決定 exit code 與 print，業務判定集中 lib。
 
     Attributes:
@@ -178,7 +178,7 @@ def compute_blockers(
 ) -> List[Blocker]:
     """計算 handoff-ready 阻擋項清單（v2.1 §1.6 真值表）。
 
-    W10-017.12 AC1：從 commands/track_handoff_ready._compute_blockers 上移至
+    從 commands/track_handoff_ready._compute_blockers 上移至
     lib 層，commands 層只消費結果決定 exit code 與 print。
 
     全域阻擋項（不過濾 ticket-id）：
@@ -271,7 +271,7 @@ def render_current_suggestion(state: CheckpointState) -> str:
 # ---------------------------------------------------------------------------
 # render_ready_check（v2.1 §1.4 + v2.3 Q6 三態標記）
 # AD-4 錨點：uncommitted_files=None 顯示 [?]（區分「資料源失敗」vs「真實未提交」）。
-# W10-017.13 AC2：改用結構化 CheckItem list，消除從 "[ ]" 字串反推「未通過」計數的
+# 改用結構化 CheckItem list，消除從 "[ ]" 字串反推「未通過」計數的
 #   magic string 依賴。
 # ---------------------------------------------------------------------------
 
@@ -297,7 +297,7 @@ _STATUS_TO_MARK: Dict[str, str] = {
 class CheckItem:
     """Ready Check 單一檢查項（結構化取代字串匹配）。
 
-    W10-017.13 AC2：取代原本「從 rendered line 反推 [ ] 計數」的 magic string
+    取代原本「從 rendered line 反推 [ ] 計數」的 magic string
     依賴。now 計數直接用 `sum(1 for ci in items if ci.status == "fail")`。
 
     Attributes:
@@ -390,7 +390,7 @@ def render_ready_check(state: CheckpointState, caller: str) -> str:
     snapshot 視角追加 footer（AD-1 錨點：snapshot exit 永遠 0）：
       Pipeline 阻擋判定請改用: ticket track handoff-ready
 
-    W10-017.13 AC2：未通過計數改用 CheckItem.status == "fail" 結構化統計，
+    未通過計數改用 CheckItem.status == "fail" 結構化統計，
     消除原本「從 rendered line 反推 '[ ]' 字串」的 magic string 依賴。
     """
 

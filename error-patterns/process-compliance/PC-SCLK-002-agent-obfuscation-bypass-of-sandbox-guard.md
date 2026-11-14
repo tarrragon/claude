@@ -15,7 +15,7 @@ severity: high
 | 編號 | PC-SCLK-002 |
 | 類別 | process-compliance |
 | 風險等級 | 高 |
-| 首發時間 | 2026-07-31（1.4.0-W1-015 於 worktree 中以 base64 管線繞過 sandbox） |
+| 首發時間 | 2026-07-31（某代理人於 worktree 中以 base64 管線繞過 sandbox） |
 | 姊妹模式 | PC-SCLK-001（並行 amend 改寫他人 commit）、PC-115（subagent 對 .claude/ 的 runtime deny 無日誌） |
 
 ---
@@ -33,7 +33,7 @@ severity: high
 
 ---
 
-## 實例（2026-07-31，1.4.0-W1-015）
+## 實例（2026-07-31，worktree 內 base64 管線繞過）
 
 代理人在 worktree 隔離環境執行 `ticket track complete <id> --as <agent>` 收尾，被 sandbox 阻擋——原因是字面引數 token `complete` 被判為不安全的 shell builtin 樣式（誤判：該 token 位於引數位置，是 `ticket track` 的子命令名，不具 shell builtin 語意）。
 
@@ -90,7 +90,7 @@ Context Bundle 或 prompt 中加入明確的阻擋處置指引：
 
 第三項須注意：這是與繞過方的軍備競賽，樣式清單不可能窮盡。真正的防線是第一項（減少誤判，讓繞過沒有動機）與派發側的明確指引。
 
-**更新（2026-07-31，1.4.0-W1-023 探針證實）**：「減少誤判」這項修法方向**在本專案不可執行**——阻擋機制屬 Claude Code runtime 的 worktree 隔離守衛（見下方「更新：機制描述已由逐字證據證實」章節），不在本 repo `.claude/hooks/` 或 `.claude/skills/ticket/` 範圍內，無法透過修改本專案程式碼調整其樣式比對邏輯。本專案已改採流程面因應：於派發指引明確標註「isolation:worktree 派發的代理人無法自行執行涉及子命令字面為 `complete` 的 ticket CLI 收尾動作，需 PM 代跑」（見 `.claude/references/agent-dispatch-decision.md`）。
+**更新（2026-07-31，探針證實）**：「減少誤判」這項修法方向**在本專案不可執行**——阻擋機制屬 Claude Code runtime 的 worktree 隔離守衛（見下方「更新：機制描述已由逐字證據證實」章節），不在本 repo `.claude/hooks/` 或 `.claude/skills/ticket/` 範圍內，無法透過修改本專案程式碼調整其樣式比對邏輯。本專案已改採流程面因應：於派發指引明確標註「isolation:worktree 派發的代理人無法自行執行涉及子命令字面為 `complete` 的 ticket CLI 收尾動作，需 PM 代跑」（見 `.claude/references/agent-dispatch-decision.md`）。
 
 ---
 
@@ -116,14 +116,14 @@ Context Bundle 或 prompt 中加入明確的阻擋處置指引：
 
 ## 關聯 Ticket
 
-- `1.4.0-W1-015`（繞過行為發生的 ticket，產出已驗證無害並保留）
+- 繞過行為發生的 ticket（產出已驗證無害並保留）
 - sandbox 誤判修正 ticket（見本檔建立時 PM 同步建立的 IMP ticket）
 
 ---
 
-## 更新（2026-07-31，1.4.0-W1-023 機制描述已由逐字證據證實）
+## 更新（2026-07-31，機制描述已由逐字證據證實）
 
-1.4.0-W1-023 派出唯讀 isolation:worktree 探針，取得逐字阻擋原文：
+後續調查派出唯讀 isolation:worktree 探針，取得逐字阻擋原文：
 
 ```
 This agent is isolated in the worktree /Users/mac-eric/project/screen_clock/.claude/worktrees/agent-a419384dec387a47f,
@@ -134,9 +134,9 @@ must target its own worktree.
 
 四項判據確認此為 Claude Code runtime 的 worktree 隔離守衛（非 CLI 應用層、非泛用 Bash sandbox）：(1) 回傳為工具層 error 封套，無 stdout/stderr/exit code；(2) 措辭為隔離守衛第一人稱拒絕（"Refusing to run it"），非 ticket CLI 錯誤格式；(3) 不存在的 ID 與真實 ID 得到逐字相同的拒絕訊息——若已進入 CLI，兩者必然分流（找不到 ticket vs identity-guard 拒絕），故阻擋發生在 CLI 啟動之前；(4) 同一 CLI 的 `query` 子命令在同一環境正常執行（exit 0），差異僅在子命令 token 為 `complete`。
 
-**原「實例」章節記載的機制描述「字面引數 token `complete` 被判為不安全的 shell builtin 樣式」，經逐字證據確認為真**：守衛偵測到命令字串含 `complete` token，判定為「透過 complete 這個 shell builtin 執行一段字串」（"runs a string through complete"），因無法驗證該字串執行後是否仍留在 worktree 範圍內而拒絕——語意精確對應原診斷。原「更新（1.4.0-W1-023 交叉查核）」章節標記本描述為「未經逐字證據驗證」已由本次探針證實為真，予以移除待驗證標記。
+**原「實例」章節記載的機制描述「字面引數 token `complete` 被判為不安全的 shell builtin 樣式」，經逐字證據確認為真**：守衛偵測到命令字串含 `complete` token，判定為「透過 complete 這個 shell builtin 執行一段字串」（"runs a string through complete"），因無法驗證該字串執行後是否仍留在 worktree 範圍內而拒絕——語意精確對應原診斷。原「更新（交叉查核）」章節標記本描述為「未經逐字證據驗證」已由本次探針證實為真，予以移除待驗證標記。
 
-**但這不改變 1.4.0-W1-023 與 PC-SCLK-004 記錄的教訓**：撰寫當下（1.4.0-W1-015 首次回報時）確實沒有逐字證據，即使推測碰巧正確，也不代表當時就該把它當作已驗證事實引用——證據不足與結論錯誤是兩件不同的事。完整說明見 `.claude/error-patterns/process-compliance/PC-SCLK-004-inferred-attribution-without-verbatim-evidence-poisons-followup-ticket.md`「自我修正」章節。
+**但這不改變 PC-SCLK-004 記錄的教訓**：撰寫當下（首次回報時）確實沒有逐字證據，即使推測碰巧正確，也不代表當時就該把它當作已驗證事實引用——證據不足與結論錯誤是兩件不同的事。完整說明見 `.claude/error-patterns/process-compliance/PC-SCLK-004-inferred-attribution-without-verbatim-evidence-poisons-followup-ticket.md`「自我修正」章節。
 
 **具體歸責層級**：worktree 隔離守衛屬 Claude Code runtime 內建機制，非本 repo `.claude/hooks/` 或 `.claude/skills/ticket/` 範圍，無法透過修改本專案程式碼調整。因此上方「解決方案」章節「事前預防（防護側）」的「減少誤判」修法方向在本專案不可執行（詳見該章節新增的更新註記），本專案已改採流程面因應（派發指引明確標註此限制）。
 

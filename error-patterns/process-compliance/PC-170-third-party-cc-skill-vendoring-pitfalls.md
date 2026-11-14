@@ -42,7 +42,7 @@ vendoring 等同 redistribution。Apache 2.0 / MIT 要求保留 LICENSE 與 NOTI
 
 ## 案例
 
-**情境**：0.19.1-W1-006，用戶要求加入 `pbakaus/impeccable`（Apache 2.0 設計 skill）。
+**情境**：某次引入第三方 skill，用戶要求加入 `pbakaus/impeccable`（Apache 2.0 設計 skill）。
 
 PM 經 `git clone --depth 1` 審查發現實為 1.9MB / 83 檔 / 54 腳本的重型 live 工具，向用戶揭露實況（體積 / 腳本數 / web-app 導向契合度 / 與既有 `style-guardian` 重疊 / 英文含 emoji 與 language-constraints 張力 / sync 傳播範圍），用戶確認完整安裝 + 框架共用。複製時保留 LICENSE + NOTICE，commit 以 `--no-verify` 繞過 lint-staged 第三方碼報錯（理由寫進 commit message）。建 ADJ ticket 追蹤（PC-053）。
 
@@ -65,5 +65,4 @@ PM 經 `git clone --depth 1` 審查發現實為 1.9MB / 83 檔 / 54 腳本的重
 
 ## 關聯
 
-- Ticket：0.19.1-W1-006
 - 相關規則：PC-053（skills 修改須 ticket）、`.claude/references/plugin-management.md`（注入成本評估）、CLAUDE.md（`--no-verify` 第三方豁免）

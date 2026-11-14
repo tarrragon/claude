@@ -25,9 +25,9 @@ Skill 不假設特定專案環境存在。
 | 假設類型 | 禁止 | 替代 |
 |---------|------|------|
 | 專案特定路徑 | `docs/work-logs/v0.18.0/` | `專案工作日誌目錄` |
-| 專案特定 CLI | `ticket track claim W17-001` | `專案任務追蹤系統`（若存在） |
+| 專案特定 CLI | `ticket track claim <ticket-id>` | `專案任務追蹤系統`（若存在） |
 | 專案特定 Hook | `acceptance-gate-hook 會攔截` | 不依賴特定 Hook 存在 |
-| 專案特定術語 | `W17-001`、`PC-093`、`skip-gate` | 通用描述或條件語（「若專案已採用 X」） |
+| 專案特定術語 | 專案層級票號（`<ticket-id>` 形態）、`PC-093`、`skip-gate` | 通用描述或條件語（「若專案已採用 X」） |
 
 **Why**：上架後使用者環境不可控——沒有你的 Hook 系統、沒有你的 ticket CLI、沒有你的 error-pattern 編號。硬編碼這些會讓 skill 在其他環境產生 dangling reference 或無意義的指令。
 
@@ -95,9 +95,9 @@ Skill 引用 `.claude/rules/`、`.claude/pm-rules/`、`.claude/methodologies/`�
 | `.claude/rules/`、`.claude/pm-rules/`、`.claude/methodologies/`、`.claude/references/`（框架文件）、`.claude/hooks/`、`.claude/agents/` | 框架共用層引用 | 本節 | 否 |
 | `.claude/error-patterns/*.md`（含 PC-XXX、IMP-XXX 等框架級編號） | 框架共用層引用（見下方「與 §1.2 的邊界」） | 本節 | 否 |
 | `.claude/skills/<other-skill>/`（絕對或相對路徑，指向其他 skill 的 SKILL.md 或 references） | 跨 skill 硬連結 | §2.1 / §4.2 | 是——依 §2.1 轉條件語 |
-| `docs/work-logs/`、版本或 ticket 特定 ID 作為敘事引用（如「W17-001 修復了」）、專案特定 CLI 操作步驟 | 專案特定產物 | §1.2 / §4.1 | 是——通用化或搬 `references/project-integration/` |
+| `docs/work-logs/`、版本或 ticket 特定 ID 作為敘事引用（如「某票號修復了」）、專案特定 CLI 操作步驟 | 專案特定產物 | §1.2 / §4.1 | 是——通用化或搬 `references/project-integration/` |
 
-**與 §1.2 的邊界**：§1.2 禁止的是「這個特定專案的實例資料」——某個版本目錄、某張 ticket 的敘事引用、某個專案自建 CLI 的操作指令，這些在其他專案環境中不存在對應物。`.claude/error-patterns/` 內的 PC-XXX/IMP-XXX 編號雖帶專案識別符外觀，但 error-patterns 目錄本身是框架級可重用知識庫（`quality-baseline.md` 規則 6：「跨專案可重現的結構性錯誤紀錄」），引用它的語意是「此防護措施的來源案例」，不是「這個專案發生過的事」。判別方式：把 skill 移植到另一個採用同一框架的專案，該路徑是否仍然存在且語意不變——`.claude/rules/core/`、`.claude/error-patterns/` 在任何採用本框架的專案下都存在；`docs/work-logs/v0.18.0/`、`W17-001` 只在原專案存在。
+**與 §1.2 的邊界**：§1.2 禁止的是「這個特定專案的實例資料」——某個版本目錄、某張 ticket 的敘事引用、某個專案自建 CLI 的操作指令，這些在其他專案環境中不存在對應物。`.claude/error-patterns/` 內的 PC-XXX/IMP-XXX 編號雖帶專案識別符外觀，但 error-patterns 目錄本身是框架級可重用知識庫（`quality-baseline.md` 規則 6：「跨專案可重現的結構性錯誤紀錄」），引用它的語意是「此防護措施的來源案例」，不是「這個專案發生過的事」。判別方式：把 skill 移植到另一個採用同一框架的專案，該路徑是否仍然存在且語意不變——`.claude/rules/core/`、`.claude/error-patterns/` 在任何採用本框架的專案下都存在；`docs/work-logs/v0.18.0/` 與專案層級票號只在原專案存在。
 
 **Marketplace extraction 階段的處理**：日常開發不視為違規，不代表框架共用層引用在真正上架時不需處理。skill 進入 extraction 流程時（見 §4.2），需對每筆框架共用層引用選擇以下一種處置：(a) 內容 inline 化——把被引用規則的必要片段直接寫入 skill 本體；(b) 轉為條件語——「若目標框架具備等價的品質基線規則，可對照使用」；(c) 於落地層文件明確列為 install-time dependency（框架必須具備的能力清單）。三者擇一，不可保留原始路徑直接上架——上架後的獨立環境不保證存在 `.claude/rules/` 這個框架。
 
@@ -134,7 +134,7 @@ your-skill/
 ### 4.1 環境無關性
 
 - [ ] SKILL.md 和通用 references 無專案特定路徑（`docs/work-logs/`、`.claude/hooks/`）
-- [ ] 無專案特定 ticket ID（`W17-001`、`PC-093`）或 error-pattern 編號
+- [ ] 無專案特定 ticket ID（`<ticket-id>` 形態、`PC-093`）或 error-pattern 編號
 - [ ] 無專案特定 CLI 命令（`ticket track`、`npm run test:hooks`）
 - [ ] 無專案特定 Hook 名稱（`acceptance-gate-hook`、`skip-gate`）
 - [ ] 專案整合內容已分離至 `references/project-integration/`
@@ -205,5 +205,5 @@ wrap-decision 被其他 skill 引用時的正確寫法：
 
 **Last Updated**: 2026-08-23
 **Version**: 1.1.0 — 新增 §2.4「框架共用層引用」：區分框架共用層引用（`rules/`、`pm-rules/`、`methodologies/`、`references/`、`hooks/`、`agents/`、`error-patterns/`，日常開發不違規）與 §2.1 跨 skill 硬連結（仍全面禁止）；同步更新 §4.2 獨立性檢查清單（上游 ANA 對 40 個 skill 235 筆跨界引用三分類判定落地）
-**Version**: 1.0.0 — 初版建立（1.3.0-W1-001 + W1-001.1 合併落地）
-**Source**: W12-001 驗收 F 案外移規則需求 + W8-012 跨專案回流 dangling reference + memory feedback（skill 獨立性三準則）；1.1.0: 上游 ANA（40 skill 235 筆跨界引用三分類，2026-08-23）
+**Version**: 1.0.0 — 初版建立
+**Source**: 驗收 F 案外移規則需求 + 跨專案回流 dangling reference + memory feedback（skill 獨立性三準則）；1.1.0: 上游 ANA（40 skill 235 筆跨界引用三分類，2026-08-23）

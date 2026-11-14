@@ -47,7 +47,7 @@
 
 ## AskUserQuestion 18 場景覆蓋對照
 
-> **單一來源**（W5-008）：本表是 AUQ 場景與象限對照的唯一權威；`pm-rules/askuserquestion-rules.md` 場景表不再重複象限欄。
+> **單一來源**：本表是 AUQ 場景與象限對照的唯一權威；`pm-rules/askuserquestion-rules.md` 場景表不再重複象限欄。
 
 | 場景 | 所屬象限 | 備註 |
 |------|---------|------|

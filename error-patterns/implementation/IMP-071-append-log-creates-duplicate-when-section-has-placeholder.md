@@ -4,9 +4,6 @@ title: ticket track append-log 在章節已有 placeholder 時建立重複內容
 category: implementation
 severity: low
 created: 2026-05-11
-related:
- - W17-190
- - W17-191
 ---
 
 # IMP-071: ticket track append-log 在章節已有 placeholder 時建立重複內容
@@ -58,17 +55,17 @@ CLI 直接定位 section header 後在末尾追加，不評估該 section 既有
 
 新追加內容 + 原 placeholder 之間出現 `---`（schema 模板章節分隔符），與 PC-110「`---` 切斷 schema section 擷取範圍」雙層共振：
 
-- W17-071 已修 validator 不再把 `---` 當邊界（一定程度）
+- validator 已修為不再把 `---` 當邊界（一定程度）
 - 但作者視覺上看到「兩個區塊」會混淆任務狀態
 
 ## 案例
 
-### W17-190 ANA（2026-05-11）
+### 某 ANA 票寫 Problem Analysis（2026-05-11）
 
 PM 寫 Problem Analysis：
 
 ```bash
-ticket track append-log 0.18.0-W17-190 --section "Problem Analysis" "$(cat <<EOF
+ticket track append-log <ticket-id> --section "Problem Analysis" "$(cat <<EOF
 ### 問題根因
 ...
 EOF
@@ -123,7 +120,7 @@ PM 需手動 Edit 移除前半 placeholder 區塊。
 ## 相關規則 / 文件
 
 - PC-110：body-check-false-negative-via-schema-separator（同源根因之一）
-- W17-071：validator 不再把 `---` 當 schema section 邊界（部分修復）
+- validator 不再把 `---` 當 schema section 邊界（部分修復）
 - ticket_skill：`/ticket track append-log` 子命令設計
 
 ## 範本：發現後的處理

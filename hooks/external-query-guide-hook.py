@@ -11,7 +11,8 @@ External Query Guide Hook - PreToolUse Hook
      輸出工作流指導提示，建議派發 oregano-data-miner 執行外部資源研究。
 
 觸發時機: 執行 WebFetch 或 WebSearch 工具時
-行為: 輸出提示訊息到 stderr，允許命令繼續執行 (exit code 0)
+行為: 指導訊息經 additionalContext 給模型、同時寫 stderr；exit 0，
+      不輸出 permissionDecision（提醒類 hook 不代用戶核可權限）
 
 設計原則:
 - 提醒工作流，而非阻止操作
@@ -26,7 +27,7 @@ from typing import Dict, Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib import ...`
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output  # noqa: E402
 from lib.hook_messages import WorkflowMessages, format_message  # noqa: E402
 
 
@@ -122,18 +123,15 @@ def main() -> int:
         # 輸出友好的工作流提示
         _print_guide_message(tool_name, tool_input)
 
-        # 輸出符合官方規範的 JSON 格式
-        result = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": format_message(
-                    WorkflowMessages.EXTERNAL_QUERY_DETECTED,
-                    tool_name=tool_name
-                )
-            }
-        }
-        print(json.dumps(result, ensure_ascii=False))
+        # 提醒受眾含模型：走 additionalContext（exit 0 的 stderr 模型看不到）。
+        # 不帶 permissionDecision：allow 會略過平台的權限提示，等於代用戶核可；
+        # 本 hook 只提醒，是否提示交回平台權限流程與 settings 規則決定。
+        emit_hook_output(
+            "PreToolUse",
+            additional_context=format_message(
+                WorkflowMessages.EXTERNAL_QUERY_GUIDE, tool_name=tool_name
+            ),
+        )
 
         return 0
 

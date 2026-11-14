@@ -62,4 +62,4 @@ ticket 可派發代理人全自主（self-managed）的條件：
 
 **Last Updated**: 2026-06-20
 **Version**: 1.0.0 — 初始建立，提取自 v0.19.0 W4 session source data（8 case，四組 SOP），冷卻期 20 天觀察命中率 >50% 達提取門檻
-**Source**: 1.1.0-W1-017
+**Source**: 某次 stale ticket 清理 session

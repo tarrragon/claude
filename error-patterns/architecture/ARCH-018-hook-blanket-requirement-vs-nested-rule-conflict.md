@@ -65,7 +65,7 @@ PM 被迫前台執行實作代理人任務（非 RED 測試規格定義）時，
 - 是否某 Hook × 某架構規則衝突？
 - 若是，建 ANA Ticket 分析，後續 IMP 修正 Hook
 
-本 pattern 即透過此手段被發現（W10-039.3 觸發 → W10-041 ANA → W10-042 IMP）。
+本 pattern 即透過此手段被發現（thyme 派發被 Hook 阻擋觸發 → ANA 分析 → IMP 修正）。
 
 ## 實戰案例
 
@@ -76,9 +76,9 @@ PM 被迫前台執行實作代理人任務（非 RED 測試規格定義）時，
 - ARCH-015：`.claude/` 修改不能用 worktree subagent（CC runtime hardcoded 拒絕 Edit）
 - 本專案 Chrome Extension，thyme 幾乎 100% 派發涉及 `.claude/hooks/`，每次派發都撞牆
 
-**觸發**：PM 派發 thyme 處理 W10-039.3（`.claude/hooks/tests/` 測試擴充）時被 Hook 阻擋，改 PM 前台執行。
+**觸發**：PM 派發 thyme 處理 `.claude/hooks/tests/` 測試擴充時被 Hook 阻擋，改 PM 前台執行。
 
-**解決**：W10-041 ANA 分析三方案，選方案 A（Hook 路徑檢測豁免）。W10-042 實作 `_classify_prompt_paths()` 函式，加入三分類決策：
+**解決**：ANA 分析三方案，選方案 A（Hook 路徑檢測豁免）。IMP 實作 `_classify_prompt_paths()` 函式，加入三分類決策：
 - 僅 `.claude/` → 放行（ARCH-015 豁免）
 - 跨路徑 → 阻擋（要求拆分）
 - 僅非 `.claude/` → 原強制 worktree

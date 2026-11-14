@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.39.0 — `references/round-1-compliance.md` 1-B〈引用的評價評的時間點〉跟上 compositional-writing 1.60.0：觸發範圍擴到考證、鑑定的結論與排名；逐處表加「論斷的對象」一欄（照那一節的定義由 reviewer 自己判，不採作者自述，兩種用途都有時判成被評的對象），比較幾個對象的評價註明比較的對象、範圍與標準；評的時間點那一欄的考證與鑑定填下判斷的日期；讀者要判斷的時間點那一欄，論斷的對象是評價本身時填「不適用」，考證與鑑定填「現在」；開 finding 的情形不再寫計數。
+
+**Version**: 2.38.0 — `references/round-1-compliance.md` 1-B 新增「引用的評價評的時間點」：稿件引用樂評、評測、使用心得或量測時，reviewer 在報告附一張逐處表（每一處引用的每一份評價一列：引用的位置、評的時間點、讀者要判斷的時間點、判定），不開 finding 的也列；稿件沒有引用評價時也寫一列，附找過的形態。評的時間點查不到時填「查不到」與查過的位置，照兩個時間點不同處理；讀者要判斷的時間點每一處各判，填「當年」要指出稿件哪一句顯示這一處在交代歷史。開不開 finding 的情形與兩個判別（評語寫成當時的狀態還是對現況的描述、引用的是評語還是紀錄）不在本檔另寫，照 compositional-writing 1.58.0〈引用評價時留意它評的時間點〉的審查者那幾段。這一段的檢查是留意項：每一次都逐處查、都交出表，對象改變了多少由作者判斷，reviewer 不拿相隔的年數當條件、不列必修、不替作者決定處置；修法欄只寫查得到的事實並請作者照那一節重新判斷，不列舉處置的選項。稿件裡當成評的時間點的版本號或日期不算本 frame 的事件帳目，保留。派發的人要 reviewer 先讀那一節，並附上作者交稿時的紀錄。沒有取代或縮短既有的段落：1-B 原本沒有查引用的評價這一項。
+
 **Version**: 2.37.0 — `references/round-1-compliance.md` 1-A 的計數式摘要：成員緊鄰數字寫出來的，數字也拿掉（數字是寫死在文章裡的值，內容增減就過期），取代先前的「合規」；量測事實仍合規。跟 compositional-writing 1.56.0 的〈計數式摘要〉一致。
 
 **Version**: 2.36.0 — `references/planning-and-stopping.md` 新增〈設計稽核〉：審查對象是規則類文件時，這一輪有一半以上（含剛好一半）的必修，指出的缺陷是上一輪之後的修改造成的（逐則拿上一輪的凍結版本對照，措辭不同而缺陷相同的算既有；不用 diff 的行，也不只照字面 grep），或同一段被修法改過兩次以上，就不派下一輪、不再照 finding 補句子；查三項結構事實（沒有工具比對的完整副本、一節裡混寫「怎麼寫」與「既有文字怎麼處理」、例外上的例外），成立的各自照對應的寫法重寫，重寫的版本從 Round 1 開始審；〈大綱稽核〉與〈設計稽核〉共用一個停點，定義寫在〈Round N 規劃判讀〉開頭：「同一批」指使用者交辦的這一次審查，重寫後從 Round 1 重新起算仍算同一批；「第二次」數的是兩項稽核的結構事實成立的次數，兩項合計；第一次成立時重組或重寫，第二次成立時不重組也不重寫，交給使用者，不受 Round 3 之前不問的限制。`integrating-findings.md` 與 principle 卡的角色段指到這一節；noun-without-its-owner 副本與 `round-2-probes.md` 2-B⁗ 補知識卡段標不要求寫出所屬。〈大綱稽核〉原本寫「規則類文件時不做」而沒有對應的停點，改成指到〈設計稽核〉；`SKILL.md` 的路由表與檔頭同步。principle 卡 review-nonconvergence-points-to-outline 補規則類文件的實例、反模式、〈修法〉第 5 項與判讀徵兆。另外，「住在」與同族（各住）換成實際的動詞（`SKILL.md`、`references/round-2-probes.md` 與 principle 卡），照寫作規範「住在一律換」的判定。principle 副本同步：ask-for-the-object-not-the-verdict 改寫「追問的那一側」那幾句、noun-without-its-owner-passes-the-slot-check 的角色說明，以及 positioning、translation、one-fix、spoken-emphasis、teaching-is-not-lecturing 的換詞。

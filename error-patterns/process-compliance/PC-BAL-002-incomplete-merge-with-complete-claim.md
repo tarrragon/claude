@@ -18,7 +18,7 @@
 
 ## 案例
 
-flutter_balance 專案 0.0.1-W1-003 與 0.0.1-W1-005。
+flutter_balance 專案的 hook 合併刪除票與其後的移植票。
 
 `cli-error-feedback-hook.py:12` 檔頭載明「合併自 `skill-cli-error-feedback-hook.py`（ticket/skill CLI 錯誤偵測）」。實際比對函式清單：
 
@@ -28,20 +28,20 @@ flutter_balance 專案 0.0.1-W1-003 與 0.0.1-W1-005。
 | `is_excluded_error` | 有 | 有 |
 | `detect_skill_error_type` | 有 | 有 |
 | `check_skill_cli_error` | 有 | 有 |
-| `is_envelope_output` + `ENVELOPE_VERSION_MARKER`（W17-008.5.5） | 有（line 97/220/405） | 無 |
-| `classify_error` / `detect_system_gap`（W3-073） | 有 | 無 |
+| `is_envelope_output` + `ENVELOPE_VERSION_MARKER` | 有（line 97/220/405） | 無 |
+| `classify_error` / `detect_system_gap` | 有 | 無 |
 
 四個主流程函式完整移植，兩組邊緣判斷遺漏。行為實測：以含 `__error_envelope_v1__` 標記與不含標記的兩組 payload 餵入後繼者，`additionalContext` 皆為 532 字元，證實抑制判斷不存在。
 
-原檔未在 settings.json 註冊，故該功能在框架中處於雙重失效狀態。0.0.1-W1-003 原規劃將原檔作為 superseded dead code 刪除，刪除前的函式比對才揭露遺漏，據此撤回刪除並建票移植（0.0.1-W1-005 完成移植後刪除，`classify_error` 組另建 0.0.1-W1-008 決策）。
+原檔未在 settings.json 註冊，故該功能在框架中處於雙重失效狀態。該票原規劃將原檔作為 superseded dead code 刪除，刪除前的函式比對才揭露遺漏，據此撤回刪除並建票移植（移植完成後刪除，`classify_error` 組另建決策票）。
 
 遺漏兩處而非一處，是判定其為系統性而非單點疏漏的依據。
 
 ## 案例二：比對通過的對照組，以及介面比對的失效（2026-07-27）
 
-flutter_balance 專案 0.2.1-W3-038。
+flutter_balance 專案的另一次 hook 合併刪除前比對。
 
-`post-test-hook.py:9-12` 檔頭宣稱「合併以下 2 個 Hook：1. test-timeout-post.py — 測試超時監控」，原檔 `test-timeout-post.py` 未於 settings.json 註冊，形態與案例一完全相同。依本 pattern 防護執行刪除前比對，結果為**吸收完整**，刪除放行（處置票 0.2.1-W3-064）。
+`post-test-hook.py:9-12` 檔頭宣稱「合併以下 2 個 Hook：1. test-timeout-post.py — 測試超時監控」，原檔 `test-timeout-post.py` 未於 settings.json 註冊，形態與案例一完全相同。依本 pattern 防護執行刪除前比對，結果為**吸收完整**，刪除放行。
 
 這是本 pattern 首次記錄到「比對通過」的結果。案例一只有攔截結果，單一方向的結果無法證明該檢查是判別器而非否決器——兩種結果都出現過，才確立它會依事實分流。
 
@@ -97,4 +97,4 @@ flutter_balance 專案 0.2.1-W3-038。
 
 ---
 
-Last Updated: 2026-07-27 | Source: flutter_balance 0.0.1-W1-003 刪除前驗證、0.0.1-W1-005 移植執行、0.2.1-W3-038 比對通過對照組與介面比對失效
+Last Updated: 2026-07-27 | Source: flutter_balance 刪除前驗證、移植執行、比對通過對照組與介面比對失效

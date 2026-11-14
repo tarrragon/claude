@@ -2,7 +2,7 @@
 name: line-board
 description: "多線開發看板 plugin：在 Pane 顯示用戶待辦、每條線的現行佇列、各 session 狀態與合併閘門最近紀錄，並註冊模型可呼叫的 line_status 工具（各線接續狀態與過期項）。Use when: 查看多線並行進度、啟用或關閉看板、設定協調票、看板或 line_status 顯示異常。"
 metadata:
-  version: 0.13.0
+  version: 0.15.0
 ---
 
 # line-board

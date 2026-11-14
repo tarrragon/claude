@@ -41,7 +41,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .git_command_parse import parse_command_statements, skip_prefix_wrapper_count
+from .git_command_parse import (
+    parse_command_statements,
+    skip_prefix_wrapper_count,
+    strip_heredoc_bodies,
+    strip_line_comments,
+)
 
 RUNNER_FLUTTER = "flutter"
 RUNNER_DART = "dart"
@@ -468,6 +473,24 @@ def find_variable_target_statements(command: str) -> List[Tuple[str, ...]]:
     return found
 
 
+def find_wrapped_self_slotted(command: str) -> Optional[List[Tuple[Tuple[str, ...], str]]]:
+    """經 run-with-timeout 包裝的 SELF_SLOTTED_COMMANDS 敘述；每筆為（去除包裝後的命令, 重導向文字）。
+
+    自行取得名額的命令內部有自己的排隊與逾時；外層包裝的計時器從啟動即開始，
+    會把內部排隊算進逾時，排得久就被外層中止。無法解析回 None。
+    """
+    statements = parse_command_statements(command)
+    if statements is None:
+        return None
+    found = []
+    for statement in statements:
+        cmd_tokens, redirects = split_redirections(list(_without_trailing_operators(statement)))
+        stripped, wrapped = _strip_launch_prefixes_tracking(cmd_tokens)
+        if wrapped and stripped and _is_self_slotted(stripped):
+            found.append((tuple(stripped), " ".join(redirects)))
+    return found
+
+
 def find_unwrapped_heavy_with_redirects(command: str) -> Optional[List[Tuple[Tuple[str, ...], str]]]:
     """同 find_unwrapped_heavy，每筆另附渲染後的重導向文字（無則空字串）；供產生建議寫法。
 
@@ -503,13 +526,105 @@ _RUNNER_MENTION_RE = re.compile(
 )
 
 
+# 引號內容仍屬可執行文字的兩種前綴：`bash|sh|zsh -c`／`eval` 的引數（間接執行），
+# 以及變數賦值的值（`CMD="uv run pytest"; $CMD` 之後以變數展開執行）。
+_EXEC_STRING_PREFIX_RE = re.compile(
+    r"(?:(?:^|[\s;&|(])(?:ba|z)?sh\s+(?:-\w+\s+)*-\w*c\w*\s*|(?:^|[\s;&|(])eval\s+)$"
+)
+_ASSIGNMENT_PREFIX_RE = re.compile(r"(?:^|[\s;&|(])[A-Za-z_][A-Za-z0-9_]*=$")
+
+
+def _read_substitution(text: str, start: int) -> Tuple[str, int]:
+    """從 `$(` 之後的位置讀到對應的 `)`，回傳 (內文, 結束後位置)；不平衡時讀到結尾。"""
+    depth, i = 1, start
+    while i < len(text):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return text[start:i], i + 1
+        i += 1
+    return text[start:], len(text)
+
+
+def _scan_executable(text: str) -> str:
+    """回傳 shell 實際會當成命令解讀的文字：引號外內容、命令替換，以及
+    `bash -c`／`eval`／變數賦值後的引號字串（遞迴處理）；其餘引號內文（訊息、
+    --why 文字等引數）以空白取代。不嘗試完整 shell 語法，引號未閉合時其後一律保留。
+    """
+    out: List[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "\\" and i + 1 < n:
+            out.append(text[i:i + 2])
+            i += 2
+            continue
+        if ch not in ("'", '"'):
+            out.append(ch)
+            i += 1
+            continue
+        end = text.find(ch, i + 1) if ch == "'" else _find_double_quote_end(text, i + 1)
+        if end < 0:  # 未閉合：保守保留其後全文
+            out.append(text[i:])
+            break
+        body = text[i + 1:end]
+        before = "".join(out)
+        if _EXEC_STRING_PREFIX_RE.search(before) or _ASSIGNMENT_PREFIX_RE.search(before):
+            out.append(" " + _scan_executable(body) + " ")
+        elif ch == '"':
+            out.append(" " + _double_quote_substitutions(body) + " ")
+        else:
+            out.append(" ")
+        i = end + 1
+    return "".join(out)
+
+
+def _find_double_quote_end(text: str, start: int) -> int:
+    """雙引號字串的結束位置（略過反斜線跳脫）；找不到回 -1。"""
+    i = start
+    while i < len(text):
+        if text[i] == "\\":
+            i += 2
+            continue
+        if text[i] == '"':
+            return i
+        i += 1
+    return -1
+
+
+def _double_quote_substitutions(body: str) -> str:
+    """雙引號內只有 `$(...)` 與反引號會執行，取出其內文（遞迴處理），其餘丟棄。"""
+    parts: List[str] = []
+    i = 0
+    while i < len(body):
+        if body.startswith("$(", i):
+            inner, i = _read_substitution(body, i + 2)
+            parts.append(_scan_executable(inner))
+            continue
+        if body[i] == "`":
+            end = body.find("`", i + 1)
+            end = len(body) if end < 0 else end
+            parts.append(_scan_executable(body[i + 1:end]))
+            i = end + 1
+            continue
+        i += 1
+    return " ".join(parts)
+
+
+def _executable_text(command: str) -> str:
+    """剝除 heredoc 內文與行註解後，只留下 shell 會當成命令解讀的文字。"""
+    return _scan_executable(strip_line_comments(strip_heredoc_bodies(command)))
+
+
 def find_unrecognized_runner_mention(command: str) -> Optional[str]:
     """命令文字含 runner 字樣、但 find_test_invocations 辨識不出任何測試呼叫時，回傳該字樣。
 
     辨識結果為 []（可解析但無測試呼叫）或 None（無法解析）都算辨識不出；已辨識出至少
     一個測試呼叫時回 None（直接形態已由封堵端與環境檢查處理）。命令不含 runner 字樣回 None。
     """
-    match = _RUNNER_MENTION_RE.search(command or "")
+    match = _RUNNER_MENTION_RE.search(_executable_text(command or ""))
     if match is None:
         return None
     invocations = find_test_invocations(command)
@@ -526,3 +641,64 @@ def find_unwrapped_heavy(command: str) -> Optional[List[Tuple[str, ...]]]:
     """
     found = find_unwrapped_heavy_with_redirects(command)
     return None if found is None else [cmd for cmd, _ in found]
+
+
+# FVM 管理的執行檔，以及代表「已是釘選版」的執行檔路徑片段（專案內 .fvm/flutter_sdk、
+# fvm 快取的 versions/<版本>）：直接以這些路徑呼叫即為釘選版，不需再加 fvm 前綴。
+FVM_MANAGED_EXECUTABLES = frozenset({RUNNER_FLUTTER, RUNNER_DART})
+_PINNED_SDK_PATH_MARKERS = ("/.fvm/", ".fvm/flutter_sdk", "/fvm/versions/")
+
+
+def strip_prefixes_noting_fvm(tokens: List[str]) -> Tuple[List[str], bool]:
+    """與 _strip_launch_prefixes 相同的剝除，另回報過程中是否經過 fvm。"""
+    via_fvm = False
+    while tokens:
+        if tokens[0] == "fvm":
+            via_fvm = True
+        stripped = _strip_one_launcher(tokens)
+        if stripped == tokens:
+            break
+        tokens = stripped
+    return tokens, via_fvm
+
+
+def _cd_target(statement: List[str], base: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """敘述為 `cd <目錄>` 時回 (True, 新基準)；目標含變數或無法判定時新基準為 None。"""
+    if not statement or statement[0] != "cd":
+        return False, base
+    args = [t for t in statement[1:] if not t.startswith("-")]
+    if base is None or len(args) != 1 or "$" in args[0] or args[0] == "-":
+        return True, None
+    return True, os.path.normpath(os.path.join(base, os.path.expanduser(args[0])))
+
+
+def find_unmanaged_flutter_statements(
+    command: str, start_dir: str, uses_fvm
+) -> Optional[List[Tuple[str, ...]]]:
+    """命令位置為 flutter／dart、所在專案使用 FVM、而未經 fvm 呼叫的敘述。
+
+    逐敘述追蹤 `cd <字面目錄>` 更新基準目錄；cd 目標無法判定後的敘述不判定（放行）。
+    uses_fvm 為判定函式（lib.flutter_launcher.uses_fvm），由呼叫端傳入。
+    無法解析回 None；無命中回 []。
+    """
+    statements = parse_command_statements(command)
+    if statements is None:
+        return None
+    found = []
+    base: Optional[str] = start_dir
+    for statement in statements:
+        cmd_tokens, _ = split_redirections(list(_without_trailing_operators(statement)))
+        is_cd, base = _cd_target(cmd_tokens, base)
+        if is_cd or base is None or not cmd_tokens:
+            continue
+        stripped, via_fvm = strip_prefixes_noting_fvm(cmd_tokens)
+        if via_fvm or not stripped:
+            continue
+        executable = stripped[0]
+        if Path(executable).name not in FVM_MANAGED_EXECUTABLES:
+            continue
+        if any(marker in executable for marker in _PINNED_SDK_PATH_MARKERS):
+            continue
+        if uses_fvm(base):
+            found.append(tuple(cmd_tokens))
+    return found

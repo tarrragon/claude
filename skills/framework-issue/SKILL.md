@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Manages framework issues on tarrragon/claude: dedup, create, comment-as-section init/update/observe/check, fix-matrix close, folding tickets into issues. Use for: framework issue, 框架 issue, canonical issue, ticket 收束, 跨 consumer 修復追蹤, curator 派發."
 metadata:
-  version: 2.9.0
+  version: 2.12.1
 ---
 
 # Framework Issue
@@ -50,8 +50,10 @@ metadata:
 | `show` | `section_comment.py` | 以 body 索引為入口，區分區段與觀測流 |
 | `check` | `section_comment.py` | 三項警訊：當前結論落後最新觀測（主）、comment 數、索引一致性 |
 | `todo` | `section_comment.py` | 唯讀，跨 open issue 聚合「待辦與來源*」表格列；預設本 consumer 擁有的 open issue，`--all`／`--issue N` 改範圍，`--status`／`--stage`／`--priority`／`--consumer`／`--json` 可用 |
+| `rebuild-owned` | `rebuild_owned.py` | 明示重建本專案的擁有登記檔：以 owner 前綴（預設專案目錄名）搜尋 GitHub、驗證區段 owner、整份覆寫登記檔，查無時寫入空清單。送出前列出將送出的資料，`--dry-run` 只列不送。登記檔位於主 repo 的 `.claude/state/framework-issue-owned.json`（在 worktree 內執行也寫到主 repo）。SessionStart 檢查只讀登記檔、只查其中的 issue 編號，不送專案名，缺檔時不發 gh 命令；新 clone 或既有擁有區段要靠本命令補登，這是唯一會把專案目錄名送到 GitHub 的命令 |
 | `create` | `create_issue.py` | 建 issue，body 自動附環境資訊（OS、Claude Code、Python、框架版本） |
 | `list` | `list_issues.py` | 列 issue，`--search` 作粗篩 |
+| `feedback` | `feedback.py` | 唯讀，主控方發版後回饋檢查用。以上一版 tag 時間為界線（預設取 todolist 版號最高的 completed 版本，`--since-version` 覆寫；先查本地 tag，再查遠端 tag，都查不到時 exit 2，要求 `--since`），列出界線之後的新開與新觀測，未標記留言另列且不計入回饋數；欄位含 issue 號、標題、類別、建立時間、最後合格留言、框架版本、標籤，可加 `--json` |
 | `link` | `link_issue.py` | 把 issue ref stamp 進本地 error-pattern 的分類資訊表 |
 | `fix-status` | `fix_status.py` | 查或標記本 consumer 的修復狀態（body 內 fix-matrix 表） |
 | `fix-version` | `fix_version.py` | 追加修復版本號（body 內 fix-versions 表），close 前置 |

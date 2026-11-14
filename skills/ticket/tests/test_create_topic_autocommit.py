@@ -175,7 +175,7 @@ class TestParentChildrenBackfillCommitted:
         repo = topic_repo
         tickets_dir = repo / "tickets"
         parent_id = "0.0.0-W1-999"
-        _write_source_ticket_for_bundle(tickets_dir, parent_id)
+        _write_source_ticket_for_bundle(tickets_dir, parent_id, status="in_progress")
         _install_context_bundle_path_mocks(monkeypatch, tickets_dir)
         monkeypatch.setattr(
             "ticket_system.lib.ticket_builder.get_ticket_path",

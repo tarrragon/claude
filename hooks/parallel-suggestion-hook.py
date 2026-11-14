@@ -48,8 +48,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
+    from lib.hook_base import get_shared_state_root
     from lib import (
         setup_hook_logging,
+        get_hook_log_dir,
         parse_ticket_frontmatter,
         read_json_from_stdin,
         run_hook_safely,
@@ -198,7 +200,7 @@ def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
         logger: 日誌物件
 
     Returns:
-        dict - 票務資訊 (id, status, blockedBy, where_files, chain 等)
+        dict - 票務資訊 (id, status, blockedBy, where_files, parent_id 等)
     """
     try:
         content = file_path.read_text(encoding="utf-8")
@@ -207,19 +209,10 @@ def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
         # 解析 frontmatter
         frontmatter = parse_ticket_frontmatter(content, logger)
 
-        # 提取 chain 資訊
-        chain = {}
-        if isinstance(frontmatter.get("chain"), dict):
-            chain = frontmatter["chain"]
-        else:
-            # 若前面的 YAML 解析失敗，嘗試正則表達式
-            root_match = re.search(r'root:\s*"?([^"\n]+)"?', content)
-            if root_match:
-                chain["root"] = root_match.group(1).strip()
-
-            parent_match = re.search(r'parent:\s*"?([^"\n]+)"?', content)
-            if parent_match:
-                chain["parent"] = parent_match.group(1).strip()
+        # 同鏈判定改用 parent_id（建票 CLI 寫入的欄位）；不再以全文 regex 回退，
+        # 原回退的 `root:` 會命中內文的 `project_root:`
+        parent_id = frontmatter.get("parent_id")
+        parent_id = parent_id if isinstance(parent_id, str) and parent_id else None
 
         # 提取 blockedBy
         blocked_by = frontmatter.get("blockedBy", "")
@@ -238,7 +231,7 @@ def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
             "where": frontmatter.get("where") if isinstance(frontmatter.get("where"), dict) else {},
             "where_files": frontmatter.get("where_files", ""),
             "where_layer": frontmatter.get("where_layer", ""),
-            "chain": chain,
+            "parent_id": parent_id,
             "wave": frontmatter.get("wave")
         }
 
@@ -415,10 +408,10 @@ def check_files_overlap(files1: Set[str], files2: Set[str]) -> bool:
 
 def find_pending_tickets_in_chain(root_id: str, all_tickets: List[Dict[str, Any]], logger) -> List[Dict[str, Any]]:
     """
-    在任務鏈中找到所有 pending Ticket
+    在任務鏈中找到所有 pending Ticket（parent_id 等於鏈鍵者）
 
     Args:
-        root_id: 任務鏈根 ID
+        root_id: 鏈鍵（最近完成票的 parent_id；根票則為其自身 ID）
         all_tickets: 所有 Ticket 資訊
         logger: 日誌物件
 
@@ -428,8 +421,8 @@ def find_pending_tickets_in_chain(root_id: str, all_tickets: List[Dict[str, Any]
     pending = []
 
     for ticket in all_tickets:
-        # 檢查是否屬於該任務鏈
-        if ticket["chain"].get("root") == root_id and ticket["status"] == "pending":
+        # 檢查是否屬於該任務鏈（root_id 為鏈鍵：同 parent 的子票）
+        if ticket.get("parent_id") == root_id and ticket["status"] == "pending":
             pending.append(ticket)
             logger.debug(f"找到待處理 Ticket: {ticket['id']}")
 
@@ -518,10 +511,10 @@ def find_latest_completed_ticket_root(all_tickets: List[Dict[str, Any]], logger)
     Returns:
         str - 任務鏈根 ID，或 None
     """
-    # 過濾已完成且有有效 chain 的 Ticket
+    # 鏈鍵：有 parent 者取 parent_id（同 parent 的兄弟票）；根票取自身 ID（其子票）
     completed = [
         t for t in all_tickets
-        if t and t.get("status") == "completed" and t.get("chain") and t["chain"].get("root")
+        if t and t.get("status") == "completed" and t.get("id")
     ]
 
     if not completed:
@@ -532,7 +525,7 @@ def find_latest_completed_ticket_root(all_tickets: List[Dict[str, Any]], logger)
         # 取最新修改的一個
         latest = max(completed, key=lambda t: t["path"].stat().st_mtime)
 
-        root_id = latest["chain"].get("root")
+        root_id = latest.get("parent_id") or latest["id"]
         if root_id:
             logger.info(f"最近完成的任務鏈: {root_id} (from {latest['id']})")
             return root_id
@@ -670,8 +663,7 @@ def save_analysis_log(
         parallel_count: 並行任務數
         logger: 日誌物件
     """
-    project_dir = get_project_root()
-    log_dir = project_dir / ".claude" / "hook-logs" / "parallel-suggestion"
+    log_dir = get_hook_log_dir("parallel-suggestion")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     report_file = log_dir / f"analysis-{datetime.now().strftime('%Y%m%d')}.log"
@@ -749,7 +741,7 @@ def main() -> int:
         # 步驟 4: 掃描 Ticket 並分析
         logger.info("開始掃描並行任務...")
 
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
         all_tickets = find_ticket_files(project_root, logger=logger)
         tickets_info = []
 
@@ -783,7 +775,7 @@ def main() -> int:
                 # 判準：以 ticket status 為準，不改綁 lease registry）
                 seed_tickets = [
                     t for t in tickets_info
-                    if t["chain"].get("root") == root_id
+                    if t.get("parent_id") == root_id
                     and t.get("status") == "in_progress"
                     and not is_stale_in_progress(t)
                 ]

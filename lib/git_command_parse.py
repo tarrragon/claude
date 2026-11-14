@@ -1109,6 +1109,30 @@ def parse_command_statements(command: str) -> Optional[List[List[str]]]:
     return _split_statements(tokens)
 
 
+def parse_command_statements_with_dirs(
+    command: str, base_dir: Optional[str] = None
+) -> Optional[List[Tuple[List[str], Optional[str], bool]]]:
+    """語句切分並附上每條語句開始時的目錄（追蹤 `cd`／`pushd`／`popd` 與括號作用域）。
+
+    與 `find_git_invocations` 的 effective_dir 共用同一套目錄追蹤，供非 git
+    命令（如 ticket CLI）判定命令實際作用的目錄。
+
+    Returns:
+        - `None`：命令字串無法安全 tokenize。
+        - 清單：每項為 (語句 token, 目錄, 目錄不可信旗標)。目錄為 None 代表
+          無 base_dir 且未切換；不可信旗標為真時目錄為 None。
+    """
+    if not command:
+        return []
+    tokens = _tokenize_command(command)
+    if tokens is None:
+        return None
+    return [
+        (statement, None if state.unknown else state.path, state.unknown)
+        for statement, state in _walk_statements(tokens, _DirState(base_dir))
+    ]
+
+
 def find_git_invocations(
     command: str, subcommands: Iterable[str], base_dir: Optional[str] = None,
     scan: bool = False,

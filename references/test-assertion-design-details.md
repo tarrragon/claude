@@ -1,14 +1,14 @@
 # 測試斷言設計規則（完整論證與實證）
 
-> **定位**：本檔為 `.claude/rules/core/test-assertion-design-rules.md`（速查 stub）的完整論證與案例考古版本，按需讀取。stub 提供四規則速查與檢查清單，本檔提供各規則 Why/Consequence 全文、W1-017 / W1-018 實證數字、`tests/perf/` 檔頭範本、適用範圍表、兩個延伸路由章全文與 quality-baseline 交叉引用。
+> **定位**：本檔為 `.claude/rules/core/test-assertion-design-rules.md`（速查 stub）的完整論證與案例考古版本，按需讀取。stub 提供四規則速查與檢查清單，本檔提供各規則 Why/Consequence 全文、計時斷言修復與盤點的實證數字、`tests/perf/` 檔頭範本、適用範圍表、兩個延伸路由章全文與 quality-baseline 交叉引用。
 >
-> **概念框架路由**：跨專案通用概念框架（9 類型斷言問題、斷言品質三問、判斷決策表）位於 `.claude/skills/test-assertion-design/SKILL.md`。本檔為**本專案（Chrome Extension / JS / Jest）專屬規則**，規範具體精度數字（`numDigits <= 2`）、測試目錄規定（`tests/perf/`）與實證案例引用（W1-017、W1-018）。兩者分層互補：skill 提供判斷概念，本檔提供專案落地約束。
+> **概念框架路由**：跨專案通用概念框架（9 類型斷言問題、斷言品質三問、判斷決策表）位於 `.claude/skills/test-assertion-design/SKILL.md`。本檔為**本專案（Chrome Extension / JS / Jest）專屬規則**，規範具體精度數字（`numDigits <= 2`）、測試目錄規定（`tests/perf/`）與實證案例引用。兩者分層互補：skill 提供判斷概念，本檔提供專案落地約束。
 
 本文件定義所有 JavaScript 測試（Jest / Puppeteer）中斷言設計的品質底線，防止計時依賴與高精度浮點斷言在 CI 或全套件負載下造成 flaky。
 
 > **設計前提**：效能差是設計問題，不是功能問題。測試的職責是驗證功能正確性，不是量測執行速度。
 > **與 quality-baseline 的邊界**：`quality-baseline.md` 規則 1 要求「測試通過率 100%」。本規則是實現規則 1 的前置條件——若斷言設計依賴環境計時，100% 通過率在 CI 負載下無法保證。兩者互補：規則 1 是通過率目標，本規則是斷言設計約束。
-> **觸發案例**：W1-017（event-system 與 UC07 計時硬門檻修復）、W1-018（全專案計時斷言盤點）。
+> **觸發案例**：event-system 與 UC07 計時硬門檻修復、全專案計時斷言盤點。
 
 ---
 
@@ -18,7 +18,7 @@
 
 **禁止在 `tests/unit/` 和 `tests/integration/`（即 `npm test` 掃描範圍）使用 `toBeLessThan(Nms)` 等計時硬門檻作為 pass-fail 驗收條件。**
 
-**Why**：Jest 在 jsdom 環境下大量使用 mock，計時值受全套件機器負載、GC 觸發、JIT 暖機影響，是非確定性數值。在開發機單獨執行時通過，在 CI 或完整 `npm test`（195 suites 並行）下容易超過門檻失敗。W1-017 實證：`avgSuggestionTime < 2ms` 單獨執行連續 23/23 通過，完整 `npm test` 下實測 2.48ms 失敗。
+**Why**：Jest 在 jsdom 環境下大量使用 mock，計時值受全套件機器負載、GC 觸發、JIT 暖機影響，是非確定性數值。在開發機單獨執行時通過，在 CI 或完整 `npm test`（195 suites 並行）下容易超過門檻失敗。計時斷言修復案例實證：`avgSuggestionTime < 2ms` 單獨執行連續 23/23 通過，完整 `npm test` 下實測 2.48ms 失敗。
 
 **Consequence**：計時斷言在完整套件下 intermittent flaky，違反 `quality-baseline.md` 規則 1（測試通過率 100%）。每次失敗需人工判斷是真實回歸還是環境噪音，增加診斷成本；積累多個計時斷言後 npm test 變成不可信指標。
 
@@ -42,7 +42,7 @@
 
 **計時斷言必須集中在 `tests/perf/` 目錄，透過 `npm run test:perf` 獨立執行，禁止殘留於 npm test 主套件。**
 
-**Why**：效能量測需要隔離環境（低負載、預熱後）才有意義。Jest jsdom 非有效效能量測環境，與功能測試混跑時 JIT 暖機狀態、記憶體壓力都不一致，量測結果無可重現性基準。W1-017 採方案 A 物理拆檔，將兩個純效能 describe 移至 `tests/perf/` 後，`npm test` 達穩定 100%，`npm run test:perf` 提供獨立可控的效能基準。
+**Why**：效能量測需要隔離環境（低負載、預熱後）才有意義。Jest jsdom 非有效效能量測環境，與功能測試混跑時 JIT 暖機狀態、記憶體壓力都不一致，量測結果無可重現性基準。該修復採方案 A 物理拆檔，將兩個純效能 describe 移至 `tests/perf/` 後，`npm test` 達穩定 100%，`npm run test:perf` 提供獨立可控的效能基準。
 
 **Consequence**：效能測試殘留 `tests/integration/` 或 `tests/unit/` 會導致：（a）環境依賴使 npm test 不穩定；（b）效能基準資料在全套件負載下失真，無法作為有效回歸偵測依據。
 
@@ -57,7 +57,7 @@
 
 `npm test` 解析為 `jest tests/unit tests/integration`，路徑正則不覆蓋 `tests/perf/`，自動排除，無需額外 exclusion 配置。
 
-**tests/perf/ 檔頭標準**：每個效能測試檔開頭應有以下標注（W1-017 實作範本）：
+**tests/perf/ 檔頭標準**：每個效能測試檔開頭應有以下標注（修復案例的實作範本）：
 
 ```javascript
 /**
@@ -75,9 +75,9 @@
 
 **`toBeCloseTo(value, numDigits)` 的 `numDigits` 參數不得超過 2，例外情況需附加說明。**
 
-**Why**：`toBeCloseTo(v, 5)` 表示精度到小數點後 5 位（±0.000005）。浮點平均值、信賴度計算等結果在 IEEE 754 下因 JIT 編譯路徑、運算順序不同，5 位精度可能因環境差異產生不同的末位數字。W1-017 實證：`expect(avgProgress).toBeCloseTo(scenario.averageProgress, 5)` 在完整 `npm test` 首次執行失敗（intermittent），單獨執行 13/13 通過，確認為高精度 × 跨 suite 負載的共振問題。
+**Why**：`toBeCloseTo(v, 5)` 表示精度到小數點後 5 位（±0.000005）。浮點平均值、信賴度計算等結果在 IEEE 754 下因 JIT 編譯路徑、運算順序不同，5 位精度可能因環境差異產生不同的末位數字。計時斷言修復案例實證：`expect(avgProgress).toBeCloseTo(scenario.averageProgress, 5)` 在完整 `npm test` 首次執行失敗（intermittent），單獨執行 13/13 通過，確認為高精度 × 跨 suite 負載的共振問題。
 
-**Consequence**：高精度浮點斷言 intermittent flaky，在 CI 中零星失敗，難以與真實回歸區分。盤點（W1-018）發現三處 `numDigits=5` 斷言分布於兩個檔案，屬系統性問題而非個案。
+**Consequence**：高精度浮點斷言 intermittent flaky，在 CI 中零星失敗，難以與真實回歸區分。全專案盤點發現三處 `numDigits=5` 斷言分布於兩個檔案，屬系統性問題而非個案。
 
 **Action**：
 
@@ -104,7 +104,7 @@ expect(avgProgress).toBeCloseTo(scenario.averageProgress, 5);
 
 **驗證快取加速效果時，禁止用 `secondRunTime < firstRunTime * N` 的計時比較斷言；改用快取命中率 `getCacheHitRate()` 或等效的快取狀態查詢。**
 
-**Why**：`secondRunTime < firstRunTime * 0.8`（「第二次快 20%」）是相對計時比較，同樣受 GC、JIT 暖機影響。在 mock 環境下兩次呼叫的時間差可能在雜訊範圍內（sub-millisecond），使相對比較失去意義。W1-018 盤點發現 `readmoo-data-validator.test.js:641` 使用此模式，屬設計不良需重新設計。
+**Why**：`secondRunTime < firstRunTime * 0.8`（「第二次快 20%」）是相對計時比較，同樣受 GC、JIT 暖機影響。在 mock 環境下兩次呼叫的時間差可能在雜訊範圍內（sub-millisecond），使相對比較失去意義。全專案盤點發現 `readmoo-data-validator.test.js:641` 使用此模式，屬設計不良需重新設計。
 
 **Consequence**：相對計時比較無法區分「快取確實有效」與「第二次 JIT 已暖機」，測試既不能正確驗證快取功能，又因環境依賴有 flaky 風險。此斷言同時具備「功能驗證失效」和「環境依賴 flaky」兩個問題，是最不值得保留的計時斷言類型。
 
@@ -159,7 +159,7 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 
 **Why**：`src/` 字串字面（log 前綴、錯誤訊息、UI 文案）修改後，`tests/` 斷言期待值（`toHaveBeenCalledWith` / `toContain`）若未同步更新，兩者靜默不一致。`npm run build:dev` 只驗編譯，不驗斷言期待值，build 綠燈不能代表 test 綠燈。
 
-**Consequence**：修改 src 字面只驗 build 的 IMP 一旦 complete，後續 `npm test` 執行時爆發跨 ticket 隱性回歸，回溯根因和補修成本均遠高於同步驗證（W1-005.2 → W1-005.3：12 檔 48+ 處斷言補修）。
+**Consequence**：修改 src 字面只驗 build 的 IMP 一旦 complete，後續 `npm test` 執行時爆發跨 ticket 隱性回歸，回溯根因和補修成本均遠高於同步驗證（一次實測：12 檔 48+ 處斷言補修）。
 
 **Action**：IMP ticket 修改 `src/` 字串字面時，acceptance 必須包含「complete 時驗收：`npm test` exit 0」，不可只驗 `npm run build:dev`。
 
@@ -193,8 +193,8 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 | quality-baseline 規則 | 本規則的對應關係 |
 |----------------------|----------------|
 | 規則 1（測試通過率 100%） | 本規則是達成規則 1 的設計前提；計時斷言 flaky 是規則 1 最常見的違反路徑之一 |
-| 規則 3（設計問題立即修正） | 發現計時斷言違規時，不可延後處理（W1-018 已完整盤點，W1-019 跟進修復） |
-| 規則 5（所有發現必須追蹤） | 盤點中發現的每個違規斷言必須有對應 ticket（W1-018 → W1-019 + W1-020） |
+| 規則 3（設計問題立即修正） | 發現計時斷言違規時，不可延後處理（盤點已完整、修復另票跟進） |
+| 規則 5（所有發現必須追蹤） | 盤點中發現的每個違規斷言必須有對應 ticket（盤點票 → 修復票） |
 
 ---
 
@@ -205,12 +205,12 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 - `.claude/rules/core/quality-baseline.md` — 規則 1（測試通過率 100%）、規則 3（設計問題立即修正）
 - `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md` — 測試綠燈不等於 runtime 正確（修復鏈 acceptance 含 runtime 驗證）
 - `.claude/pm-rules/ticket-body-schema.md` — IMP 「src 字串輸出變更額外 acceptance」章節（src 字面修改必含 npm test）
-- `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W1-017.md` — 計時斷言修復案例（event-system + UC07）
-- `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W1-018.md` — 全專案盤點分析（7 檔 21 個斷言的分類判斷）
+- 計時斷言修復案例（event-system + UC07，見來源專案 v0.19.0 工作日誌）
+- 全專案計時斷言盤點分析（7 檔 21 個斷言的分類判斷，見來源專案 v0.19.0 工作日誌）
 - `tests/perf/` — 效能測試目錄（`npm run test:perf`）
 
 ---
 
 **Last Updated**: 2026-10-31
 **Version**: 1.1.0 — 新增〈延伸路由：測試晚於實作時，以突變確認補鑑別力的證據〉：晚寫的測試沒有 RED 觀察，鑑別力以「一個突變打一個行為、確認只有目標案轉紅、還原驗證乾淨、寫進票面」四步取得；反向案需另做突變。
-**Version**: 1.0.0 — 從 `.claude/rules/core/test-assertion-design-rules.md` v1.3.0 主文外移（1.0.0-W7-004.1 auto-load token 收斂試水溫首檔），substance 零刪失。歷史版本演進見原 stub 檔 footer 與 git log。
+**Version**: 1.0.0 — 從 `.claude/rules/core/test-assertion-design-rules.md` v1.3.0 主文外移（auto-load token 收斂試水溫首檔），substance 零刪失。歷史版本演進見原 stub 檔 footer 與 git log。

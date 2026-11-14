@@ -9,7 +9,7 @@
 | 編號 | PC-105 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-04-21（W17-036 session 連續多次觸發 SKILL 引導品質回饋 hook） |
+| 首發時間 | 2026-04-21（某 session 連續多次觸發 SKILL 引導品質回饋 hook） |
 | 姊妹模式 | PC-066（decision-quality autopilot）— 本模式為「CLI 語法領域的 autopilot」專項 |
 
 ---
@@ -26,7 +26,7 @@
 
 ---
 
-## 案例（W17-036 session 實證）
+## 案例（某 session 實證）
 
 | # | 嘗試命令 | 錯誤 | 根因 |
 |---|---------|------|------|
@@ -73,7 +73,7 @@
 | 層級 | 措施 | 狀態 |
 |------|------|------|
 | 即時反射 | 看到 CLI 錯誤後 **第一反應是 --help**，禁止直接二次嘗試 | 規則層（本 PC） |
-| SKILL.md 覆蓋 | 補完常見誤用（append-log 位置參數、create 為頂層命令、claim 無 --agent） | 待追蹤（可與 W17-008 相關項合併） |
+| SKILL.md 覆蓋 | 補完常見誤用（append-log 位置參數、create 為頂層命令、claim 無 --agent） | 待追蹤 |
 | Hook 強化 | 連續 ≥ 2 次同類 CLI 錯誤時升級為 block（非 warning） | 待評估 |
 
 ---
@@ -104,5 +104,5 @@
 ---
 
 **Last Updated**: 2026-04-21
-**Version**: 1.0.0 — W17-036 session 連續三次 CLI 誤用觸發，提煉為通用模式
+**Version**: 1.0.0 — 某 session 連續三次 CLI 誤用觸發，提煉為通用模式
 **Source**: PM 自我觀察（同一 session 多次撞 skill-cli-error-feedback-hook 後，發現「相似變體重試」為共通行為）

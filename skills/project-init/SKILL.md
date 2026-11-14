@@ -4,7 +4,7 @@ description: "Use this skill whenever the user needs to check or set up developm
 argument-hint: "<subcommand>"
 allowed-tools: Bash(project-init *), Read, Write, Edit
 metadata:
-  version: 1.2.2
+  version: 1.4.0
 ---
 
 # Project Init Tool v1.0

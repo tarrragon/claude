@@ -28,7 +28,7 @@ framework issue 的一般協作寫法。適用於「問題的分析與方案 con
 | `check` | 輸出三項警訊（見下）：當前結論時效、comment 數閾值、索引一致性 | 任何 session |
 | `todo` | 唯讀：跨 open issue 聚合全部「待辦與來源*」區段的表格列（見下方〈待辦表欄位與列舉〉），預設掃本 consumer 擁有的 open issue，`--all`／`--issue N` 可改變範圍；支援 `--status`／`--stage`／`--priority`／`--consumer` 篩選與 `--json` | 任何 session |
 
-**`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併寫入，故 `init` 必為「查重 → （無 `--force` 時先掃描既有區段 comment，已有則拒絕）→ 建區段 comment → 取得 id → 讀 body 與既有索引列合併 → PATCH 一次」。body 其後不再由工具改寫，`update` 只動區段 comment。區段 comment 全數建立成功即把 `(issue number, owner, updated_at)` 落地到本地擁有登記檔 `.claude/state/framework-issue-owned.json`（per-worktree、不入版控），不等索引回填；回填失敗時登記仍成立，供 SessionStart 檢查省去搜尋往返。`init` 原本以本次區段清單整段覆寫索引，第二個 session 對已 `init` 過的 issue 再次執行會使第一個 session 的既有區段從 `show` 消失（見 #81 事故）；現改為與既有索引列合併，且預設拒絕已有區段的 issue（避免誤用），`--force` 才會略過拒絕檢查並執行合併。
+**`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併寫入，故 `init` 必為「查重 → （無 `--force` 時先掃描既有區段 comment，已有則拒絕）→ 建區段 comment → 取得 id → 讀 body 與既有索引列合併 → PATCH 一次」。body 其後不再由工具改寫，`update` 只動區段 comment。區段 comment 全數建立成功即把 `(issue number, owner, updated_at)` 落地到本地擁有登記檔 `.claude/state/framework-issue-owned.json`（落在共用狀態根，linked worktree 內也寫到主倉庫，同專案各 worktree 共用一份；不入版控），不等索引回填；回填失敗時登記仍成立，供 SessionStart 檢查省去搜尋往返。`init` 原本以本次區段清單整段覆寫索引，第二個 session 對已 `init` 過的 issue 再次執行會使第一個 session 的既有區段從 `show` 消失（見 #81 事故）；現改為與既有索引列合併，且預設拒絕已有區段的 issue（避免誤用），`--force` 才會略過拒絕檢查並執行合併。
 
 **`add` 補上「`init` 預設每張 issue 只能跑一次」的缺口**：後續 session 要在同一 issue 新增區段時仍建議用 `add`（不需重新查重），流程為「POST 單一區段 comment → 讀 body → 合併既有索引列與新列 → PATCH 一次」，既有列的 comment id／連結不變；成功後同樣落地擁有登記檔。`init`／`add` 共用同一 owner 格式驗證（見下方〈owner 識別格式〉），`transfer-owner` 另有獨立的跨 consumer 逃生口驗證，不合法一律 exit 3 並印格式說明。`add`／`init` 合併索引列時皆以 comment id 去重，並把 body 內未加 `<!-- section-index -->` 標記的手寫索引表視為既有列來源（讀 `parse_index_table` 結果）整段移除後併入合併結果，不再於其後追加第二張表。`add` 成功時比照 `transfer-owner` 逐字印出結果（`區段「<名稱>」已建立 @ <issue-ref>，owner=<值>`），操作者不需另開 comment 即可確認建立結果。
 
@@ -193,7 +193,7 @@ id 推導，僅檢查通用形狀。
 
 「同一問題領域出現第二張 issue」不是 `check` 的輸出項，其檢查點在 `init` 之前：此類失效一旦發生，兩張 issue 各自的 `check` 都看不出彼此的存在。
 
-`check` 由 SessionStart hook 對本 session 擁有區段的 issue 自動執行；擁有關係讀本地登記檔，登記檔缺失時退回目錄名前綴推導。
+`check` 由 SessionStart hook 對本 session 擁有區段的 issue 自動執行；擁有關係只讀本地登記檔。登記檔缺失時 hook 不發任何 gh 命令，因為以目錄名搜尋會把專案名送到 GitHub；要啟用檢查，執行 `rebuild-owned` 明示重建（送出前會列出將送出的資料，`--dry-run` 只列不送）。
 
 ## 增長語意與 close 語意
 

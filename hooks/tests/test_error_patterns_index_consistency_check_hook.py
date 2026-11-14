@@ -830,7 +830,7 @@ class TestMainEndToEnd:
             readme_body="| ID | 標題 | 風險 | 來源版本 |\n|----|----|----|----|\n",
             files_by_category={"test": ["TEST-001-a.md", "TEST-001-b.md"]},
         )
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
@@ -851,7 +851,7 @@ class TestMainEndToEnd:
             ),
             files_by_category={"test": ["TEST-001-a.md"]},
         )
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
@@ -861,7 +861,7 @@ class TestMainEndToEnd:
     def test_main_never_exits_nonzero_even_on_missing_readme(self, tmp_path, monkeypatch):
         root = tmp_path / "project"
         (root / ".claude" / "error-patterns").mkdir(parents=True)
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         assert exit_code == 0
 
@@ -885,7 +885,7 @@ class TestMainEndToEnd:
         (cat_dir / "PC-002-b.md").write_text(
             "---\nid: PC-002\ncreated: 2026-08-19\n---\n\n# B\n", encoding="utf-8"
         )
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
@@ -915,7 +915,7 @@ class TestMainEndToEnd:
         (cat_dir / "PC-002-b.md").write_text(
             "---\nid: PC-002\ncreated: 2026-01-01\n---\n\n# B\n", encoding="utf-8"
         )
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
@@ -940,7 +940,7 @@ class TestMainEndToEnd:
         (cat_dir / "PC-002-b.md").write_text(
             "---\nid: PC-002\nrelated: [PC-001]\n---\n\n# B\n", encoding="utf-8"
         )
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
@@ -986,7 +986,7 @@ class TestMainEndToEnd:
             encoding="utf-8",
         )
 
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0
@@ -1014,7 +1014,7 @@ class TestMainEndToEnd:
             ),
             files_by_category={"process-compliance": ["PC-BAL-040.md"]},
         )
-        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        monkeypatch.setattr(_hook, "get_code_root", lambda: str(root))
         exit_code = _hook.main()
         captured = capsys.readouterr()
         assert exit_code == 0

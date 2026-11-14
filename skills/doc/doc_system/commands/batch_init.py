@@ -57,7 +57,7 @@ def _load_tracking(tracking_file: str) -> dict:
 
 
 def _get_proposal_info(tracking: dict, prop_id: str) -> dict | None:
-    """依 id 於 proposals 清單中線性查找（list-based，非 dict-keyed-by-id，W1-013 修復）。
+    """依 id 於 proposals 清單中線性查找（list-based，非 dict-keyed-by-id）。
 
     Why: 舊實作以 `proposals.get(prop_id)` 將 proposals 當 dict 處理，與
     PROPOSALS_TRACKING_SCHEMA SSOT（"proposals_format": "list"）及 create.py

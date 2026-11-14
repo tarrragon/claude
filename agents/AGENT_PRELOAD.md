@@ -72,9 +72,9 @@ ticket track append-log <id> --section "Test Results" "測試結果"
 | 遇到阻塞 | Problem Analysis | 「發現 X 問題，需 PM 決策」 |
 | **任務完成（收尾）** | check-acceptance + complete（worktree 隔離派發止於 worktree commit，見 2.4） | 非隔離：`ticket track check-acceptance --all <id> --as <自身 agent 名稱>` 後 `ticket track complete <id> --as <自身 agent 名稱>`；隔離：勾選 acceptance、填 Solution / Test Results、`ticket track commit ... --worktree`，不執行 complete |
 
-#### 2.4 收尾責任：自律 complete（W17-033）
+#### 2.4 收尾責任：自律 complete
 
-**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每次需額外執行 check-acceptance + complete（W17-020、W17-016.3 實證）。**Consequence**：違反代理人自律主責原則，PM 處理 N 個 ticket 即多 N 次 tool call 浪費。**Action**：實作類 agent 在 commit + body 填寫完成後，主動執行：
+**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每次需額外執行 check-acceptance + complete（實測如此）。**Consequence**：違反代理人自律主責原則，PM 處理 N 個 ticket 即多 N 次 tool call 浪費。**Action**：實作類 agent 在 commit + body 填寫完成後，主動執行：
 
 **前提一（主判準）：who.current 機械對照（PC-V1-002 防護）**。對任何 ticket 做寫入操作（claim / 勾選 acceptance / complete / append-log）之前，先執行 `ticket track query <id>` 讀取 `who.current`，與自己的 agent 身份對照：
 
@@ -95,11 +95,11 @@ ticket track check-acceptance --all <ticket-id> --as <自身 agent 名稱>
 ticket track complete <ticket-id> --as <自身 agent 名稱>
 ```
 
-**--as 全覆蓋要求（W1-049 裁決前置）**：`check-acceptance` / `set-acceptance` / `complete` 三個寫入命令**一律帶 `--as <自身 agent 名稱>`**。**Why**：telemetry 首輪 13 筆樣本顯示 92% warn 來自 check-acceptance 未帶 --as（SOP 過去只教 complete 帶）。**Consequence**：缺 --as 的寫入在過渡期雖 warn 放行，但每筆都記入 usage.log 成為評估噪音——噪音不除，--as 轉強制的後續裁決永遠拿不到乾淨資料。**Action**：收尾三命令逐一帶 --as；若 --as 被 deny（與 who.current 不符），**禁止拿掉 --as 重試繞過**，改在最終訊息回報 PM「who.current 不符」由 PM 裁決（--as 被拒可能源於身份誤判而非真正越權，需 PM 複核而非逕自繞過）。
+**--as 全覆蓋要求**：`check-acceptance` / `set-acceptance` / `complete` 三個寫入命令**一律帶 `--as <自身 agent 名稱>`**。**Why**：telemetry 首輪 13 筆樣本顯示 92% warn 來自 check-acceptance 未帶 --as（SOP 過去只教 complete 帶）。**Consequence**：缺 --as 的寫入在過渡期雖 warn 放行，但每筆都記入 usage.log 成為評估噪音——噪音不除，--as 轉強制的後續裁決永遠拿不到乾淨資料。**Action**：收尾三命令逐一帶 --as；若 --as 被 deny（與 who.current 不符），**禁止拿掉 --as 重試繞過**，改在最終訊息回報 PM「who.current 不符」由 PM 裁決（--as 被拒可能源於身份誤判而非真正越權，需 PM 複核而非逕自繞過）。
 
 > **邊界**：本段處理 **hook 強制層的 deny**（identity-guard 對照不符即擋）；前提一是 **agent 自律層**的 who.current 事前對照（不符即零寫入）。兩層互補、觸發路徑不同——自律層在寫入前自查，強制層在寫入時攔截。
 
-> **回覆勾選不算數，frontmatter 才是 SOT（W2-003）**：final message 裡描述「acceptance 已完成」屬記錄平面，`ticket track set-acceptance` / `check-acceptance` 寫入的 frontmatter 才是世界平面 SOT（見 `tool-output-trust-rules` 規則 5）。兩者不同步時 acceptance-gate-hook 只認 frontmatter，complete 會被擋下。收尾前務必實際執行上方 CLI 指令，不可只在回覆文字宣告完成。
+> **回覆勾選不算數，frontmatter 才是 SOT**：final message 裡描述「acceptance 已完成」屬記錄平面，`ticket track set-acceptance` / `check-acceptance` 寫入的 frontmatter 才是世界平面 SOT（見 `tool-output-trust-rules` 規則 5）。兩者不同步時 acceptance-gate-hook 只認 frontmatter，complete 會被擋下。收尾前務必實際執行上方 CLI 指令，不可只在回覆文字宣告完成。
 
 **隔離派發的收尾界線（worktree，用戶裁決，2026-10-14）**：以 `Agent(isolation: "worktree")` 派發時，上方 check-acceptance + complete 兩步中，**complete 不由代理人執行**。**Why**：代理人在合併前收尾，會讓票面在程式碼尚未進 main 時即為完成；平台對隔離代理人的 complete 另有阻擋，別名 `finish` 雖能通過且同樣經 acceptance-gate 驗收，但收尾時點仍在合併之前。**Consequence**：隔離代理人 complete 或 finish，票面狀態領先程式碼狀態，PM 無從在合併與測試之後才宣告完成。**Action**：隔離代理人收尾止於以下五步，完成後回報 PM，由 PM 於合併並驗證後在主 checkout 執行 complete：(1) `ticket track set-acceptance <id> --check <編號> --as <自身 agent 名稱>` 逐項勾選；(2) 以 `ticket track append-log` 填 Solution（含 `### 自檢結果與 Phase 4 評估`）與 Test Results；(3) `ticket track commit <id> -m "<描述>" --worktree <worktree 絕對路徑> -- <檔案>` 提交產品檔；(4) 不執行 `ticket track complete`，也不執行其別名 `ticket track finish`；(5) 回報 PM。自檢仍由代理人在執行期撰寫，PM 收尾只執行 complete，不代填自檢。非隔離派發（主 checkout cwd）維持上方 complete 流程。
 
@@ -168,13 +168,13 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 如需在獨立分支工作，PM 會使用 `Agent(isolation: "worktree")` 派發，代理人無需自行建立分支。
 
-#### worktree 隔離派發時必須 commit 產品碼進 worktree 分支（強制，1.2.0-W1-028 事故一）
+#### worktree 隔離派發時必須 commit 產品碼進 worktree 分支（強制）
 
 > **Why**：worktree 隔離時，未提交工作樹只存在於該 worktree，PM 在主 repo `git status` 看不到，且 `ticket track complete` 只 auto-commit ticket metadata（frontmatter/log），不 commit 產品碼。
-> **Consequence**：實作 agent 若只建檔+跑測試卻未 commit 產品碼，worktree 分支上只有 metadata commit；PM `worktree remove --force` 即永久刪除未提交產品碼（git fsck 無 unreachable，無法復原），交付物遺失需重做整個 ticket。此為 1.2.0-W1-028 事故一實發根因。
+> **Consequence**：實作 agent 若只建檔+跑測試卻未 commit 產品碼，worktree 分支上只有 metadata commit；PM `worktree remove --force` 即永久刪除未提交產品碼（git fsck 無 unreachable，無法復原），交付物遺失需重做整個 ticket。此為某次 worktree 隔離派發事故的實發根因。
 > **Action**：worktree 隔離派發時，回報完成前必須將產品碼 commit 進 worktree 分支（僅 commit 不 push，未違反 PC-024 的 push 禁令）。預設 `ticket track commit <id> -m "<描述>" --worktree <該 worktree 絕對路徑> -- <exact files>`（隔離索引；`--worktree` 必帶，agent 呼叫當下 cwd 依 harness 慣例重設回主倉庫，未帶旗標會誤綁主 repo，見 ticket skill〈track commit 子命令〉〈`--worktree` 條件〉）；僅該命令失敗或不可用時降級為 fallback：`git add <where.files> && git commit -m "<描述>"`。此規則凌駕上表「Phase 3b+ 禁止 git commit」——worktree 隔離場景中 commit 進隔離分支是交付物可見性的前提，非主 repo 提交。
 
-#### worktree 隔離派發時禁用 dart MCP 寫入工具（強制，W3-008）
+#### worktree 隔離派發時禁用 dart MCP 寫入工具（強制）
 
 > **Why**：worktree 隔離對 daemon-rooted 寫入工具不生效。dart MCP daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root；dart MCP 寫入會繞過隔離邊界洩漏污染主 repo 工作樹。
 
@@ -187,9 +187,9 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 | dart MCP `dart_fix` / `dart_format` | Bash `dart fix` / `dart format` |
 | dart MCP 其他寫入工具 | Bash 對應命令 或 Edit |
 
-> **來源**：W3-008（worktree 隔離對 daemon-rooted dart MCP 寫入工具不生效）。PM 端對應規則見 `.claude/pm-rules/parallel-dispatch.md`「worktree 實作 agent 禁用 dart MCP 寫入工具」；根因機制見 `.claude/skills/worktree/references/agent-isolation-worktree.md`「Base ref 與隔離邊界」章節。
+> **來源**：某次實測（worktree 隔離對 daemon-rooted dart MCP 寫入工具不生效）。PM 端對應規則見 `.claude/pm-rules/parallel-dispatch.md`「worktree 實作 agent 禁用 dart MCP 寫入工具」；根因機制見 `.claude/skills/worktree/references/agent-isolation-worktree.md`「Base ref 與隔離邊界」章節。
 
-#### worktree 環境禁止以 Bash/Python 直寫主 repo（強制，W2-009 / W2-021）
+#### worktree 環境禁止以 Bash/Python 直寫主 repo（強制）
 
 > **Why**：worktree 隔離僅對 Edit/Write 工具生效（CC runtime 層攔截），Bash redirect（`> /path`）和 Python `open()`/`write()` 不受攔截，可繞過隔離邊界直寫主 repo 檔案——真實副作用洩漏出隔離範圍，PM 需手動 `git checkout --` 還原。
 
@@ -204,7 +204,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 | 以 Edit 修改 worktree 內的 ticket md 副本（副本是舊版本，寫入不進主 repo 票面） | 直接執行 `ticket track append-log`（CLI 解析 `CLAUDE_PROJECT_DIR`，寫入主 repo 票面，此為票面的唯一正確寫入位置） |
 
 > **識別方式**：路徑含 `CLAUDE_PROJECT_DIR` 值、專案根目錄絕對路徑、或 `..` 回溯至 worktree 外 → 違規。僅限相對路徑或 `$PWD` 下的路徑 → 合規。
-> **來源**：W2-009（worktree agent 以 Python 直寫繞過隔離修改主 repo ticket 檔）。
+> **來源**：某次事件（worktree agent 以 Python 直寫繞過隔離修改主 repo ticket 檔）。
 
 #### worktree 全套件測試前若遇大量編譯失敗，先查 gitignored 生成產物是否缺失
 
@@ -215,7 +215,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ### 7. 工具選擇規則（MCP 寫入工具優先序）
 
-> **Why**：LLM 傾向選擇「單步高精度」工具（如 serena MCP 寫入工具），即使一般文字修改用 Edit / Write 即可完成。此偏誤（PC-088）加上 MCP 寫入工具在背景派發環境常不在 allow list，會導致代理人被拒後錯誤泛化為「所有寫入工具都被拒」而 early stop（W17-088 根因）。
+> **Why**：LLM 傾向選擇「單步高精度」工具（如 serena MCP 寫入工具），即使一般文字修改用 Edit / Write 即可完成。此偏誤（PC-088）加上 MCP 寫入工具在背景派發環境常不在 allow list，會導致代理人被拒後錯誤泛化為「所有寫入工具都被拒」而 early stop（某次 thyme early stop 失敗的根因）。
 
 > **Consequence**：未遵循優先序時，代理人在 MCP 工具被拒後停止工作，未嘗試可行的 Edit / Write，造成任務失敗且 PM 無法察覺根本可執行。
 
@@ -240,7 +240,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 2. **禁止 self-imposed early stop**：看到 MCP 工具一個被拒，不可推論「Edit 也會被拒」，必須實際嘗試
 3. 判別準則：`mcp__serena__*` 寫入工具屬 MCP 層限制；Edit / Write 屬 Claude Code 內建工具層，兩者限制機制完全不同
 
-> **來源**：PC-088（LLM 工具選擇偏誤）；W17-088（thyme early stop 失敗案例：serena 被拒 → 錯誤泛化 → Edit 未嘗試）
+> **來源**：PC-088（LLM 工具選擇偏誤）；某次 thyme early stop 失敗案例（serena 被拒 → 錯誤泛化 → Edit 未嘗試）
 
 #### 程式碼大檔讀取（read-only）
 
@@ -258,7 +258,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 `mcp__serena__*` read-only 工具不受規則 7 寫入限制影響，subagent 環境可正常呼叫。
 
-> **來源**：W17-093 ANA 方案 2 限縮版（W17-091 觀察期：serena read-only 工具對程式碼大檔的 token ROI 顯著但 PM/subagent 心智模型未建立）。
+> **來源**：某次 ANA 方案 2 限縮版（觀察期結論：serena read-only 工具對程式碼大檔的 token ROI 顯著但 PM/subagent 心智模型未建立）。
 
 ---
 
@@ -266,7 +266,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 > **Why**：spec 和 ANA 規劃文件中對既有資源（CLI flag、hook 檔名、模組路徑）的描述屬於「事實陳述」，不是設計選擇。若以「語意推測」取代「grep/ls 驗證」，錯誤名稱會傳入 spawn IMP ticket 的 `where.files`，直到 Phase 3b 實作時才發現，回溯成本隨 Phase 推進而上升。
 
-> **Consequence**：已記錄兩次跨 agent 重現（W10-115 lavender CLI flag、W14-036 basil ANA hook 名稱），說明此模式不受 agent 類型限制，是規劃框架未強制驗證步驟的系統性缺口。
+> **Consequence**：已記錄兩次跨 agent 重現（lavender 規劃 CLI flag 名稱、basil ANA 規劃 hook 名稱），說明此模式不受 agent 類型限制，是規劃框架未強制驗證步驟的系統性缺口。
 
 > **Action**：任何 agent 在 spec / ANA Solution 中描述「既有資源名稱」前，必須先執行驗證並在文件中標註來源。
 
@@ -496,19 +496,19 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 **Version**: 1.22.0 - 新增規則 13「既有失敗歸因規範（PC-BAL-022）」：宣稱測試/建置失敗為既有前須附 baseline 對照結果，僅因果核對不足以結案；本檔為原文定義，實際送達由 `agent-dispatch-template.md`「既有失敗歸因約束句」制式句承擔（header 送達現況同步補一句）；檢查清單同步補項。修的是送達路徑，PC-BAL-022 原文不動
 **Version**: 1.21.0 - 新增規則 2.6「執行中建票血緣回填」：禁止裸 `create` 只標 `--related-to`，須帶 `--source-ticket` 或改走 `add-spawn-request`（禁令 + 路由形態，完整判準指向 `agent-dispatch-template.md`「建票血緣回填義務」節）；檢查清單同步補項
 **Version**: 1.20.0 - 規則 12 對齊 reference-stability-rules.md 規則 8 現行「全禁 + 五類分類」判準：移除已廢止的「歷史錨點 / 設計脈絡型允許」分支（原表誤示 Version footer 可保留 ticket ID），改為論證依據型/時點標注型/案例敘事主詞型一律禁止、僅被說明對象型與測試資料型路徑豁免；標題與檢查清單同步改用「全禁原則」表述
-**Version**: 1.19.0 - 規則 12 依賴型判準表改用「括號是否為陳述具體事實的完整子句」取代「句型/位置（如『來源：ID』開頭）」，解決字面與框架內 45 處 `> 來源：ID（機制描述）` 標準寫法矛盾的問題；新增「判準單位：整句」明文。完整論證與正反範例見 reference-stability-rules.md 規則 8（0.2.1-W3-096，源 0.2.1-W3-094 稽核發現）
-**Version**: 1.18.0 - 新增規則 12「框架檔案禁依賴型 ticket 引用」（DOC-010 已復發 6 次的結構性防護，禁令從按需讀取層 reference-stability-rules 規則 8 上移至預設載入層；含依賴型 / 歷史錨點型 / 功能字串三分判準，非一刀切）；檢查清單同步補項（0.2.1-W3-093）
-**Version**: 1.17.0 - 規則 9.1 D1 三階段表「進入」列標註前提條件（規則 2.4 前提一），補表後說明 claim 亦屬 ticket 寫入操作、無條件執行會踩中 PC-V1-002 第三變體；與規則 2.4 原文一致化（0.2.1-W3-011，源 0.2.1-W3-009 缺口 B）
+**Version**: 1.19.0 - 規則 12 依賴型判準表改用「括號是否為陳述具體事實的完整子句」取代「句型/位置（如『來源：ID』開頭）」，解決字面與框架內 45 處 `> 來源：ID（機制描述）` 標準寫法矛盾的問題；新增「判準單位：整句」明文。完整論證與正反範例見 reference-stability-rules.md 規則 8
+**Version**: 1.18.0 - 新增規則 12「框架檔案禁依賴型 ticket 引用」（DOC-010 已復發 6 次的結構性防護，禁令從按需讀取層 reference-stability-rules 規則 8 上移至預設載入層；含依賴型 / 歷史錨點型 / 功能字串三分判準，非一刀切）；檢查清單同步補項
+**Version**: 1.17.0 - 規則 9.1 D1 三階段表「進入」列標註前提條件（規則 2.4 前提一），補表後說明 claim 亦屬 ticket 寫入操作、無條件執行會踩中 PC-V1-002 第三變體；與規則 2.4 原文一致化
 **Version**: 1.16.0 - 規則 6（worktree 隔離）補「全套件測試前若遇大量編譯失敗，先查 gitignored 生成產物是否缺失」提示：未來新增生成產物的判讀準則（源自 `IMP-APP-003` 對照實驗）
 
-**Version**: 1.15.0 - 新增規則 11「最小變更紀律（Surgical Changes）」（1.5.0-W5-009.1 落地，源自外部 CLAUDE.md 範例第 4/10 章）：四類越界禁令 + 三明示 + 級聯範圍失控訊號，substance 路由 quality-common §1.7；檢查清單同步補項
-**Version**: 1.14.0 - 規則 2.4 補「回覆勾選不算數，frontmatter 才是 SOT」提醒：final message 屬記錄平面，`set-acceptance`/`check-acceptance` 寫入的 frontmatter 才是世界平面 SOT，兩者不同步時 acceptance-gate-hook 只認 frontmatter（0.4.1-W2-003，源 0.4.1-W1-001 摩擦 F3：0.4.0 W2-002/003 回覆勾選未動 frontmatter 二度擋 complete）
-**Version**: 1.13.0 - 規則 2.4 收尾三命令（check-acceptance / set-acceptance / complete）改為一律帶 `--as`（--as 全覆蓋），新增 deny 時禁繞過須回報 PM 條款；2.3 表格與檢查清單同步（W1-049 首輪裁決前置：92% warn 噪音源自 check-acceptance 未帶 --as）
+**Version**: 1.15.0 - 新增規則 11「最小變更紀律（Surgical Changes）」（源自外部 CLAUDE.md 範例第 4/10 章）：四類越界禁令 + 三明示 + 級聯範圍失控訊號，substance 路由 quality-common §1.7；檢查清單同步補項
+**Version**: 1.14.0 - 規則 2.4 補「回覆勾選不算數，frontmatter 才是 SOT」提醒：final message 屬記錄平面，`set-acceptance`/`check-acceptance` 寫入的 frontmatter 才是世界平面 SOT，兩者不同步時 acceptance-gate-hook 只認 frontmatter（源自回覆勾選未動 frontmatter 而二度擋 complete 的事件）
+**Version**: 1.13.0 - 規則 2.4 收尾三命令（check-acceptance / set-acceptance / complete）改為一律帶 `--as`（--as 全覆蓋），新增 deny 時禁繞過須回報 PM 條款；2.3 表格與檢查清單同步（--as 轉強制的前置：92% warn 噪音源自 check-acceptance 未帶 --as）
 **Version**: 1.12.0 - 新增規則 10「忽略含 `[PM-ONLY]` 前綴的 hook 注入訊息」：Stop event 無 agent_id 致程式層 subagent 偵測失效，前綴為該盲區唯一受眾標記，subagent 須不執行、不轉述（PC-V1-004 防護 C 規則層）；檢查清單同步補項
 **Version**: 1.11.0 - 新增規則 9「嵌套派發資訊協議」：D1 ticket 為唯一主通道（三階段表 + 禁止模式表）+ D3 層級自覺（parent_id 鏈深度、can_descend() 單一判準、五步自檢流程）+ D2 決策速查（ascend 優先於 descend）；MAX_TICKET_DEPTH 數值單一定義點；檢查清單同步補項
 **Version**: 1.10.0 - 規則 2.4 前提升級為雙判準：前提一 who.current 機械對照（主判準，世界平面 SSOT 兩事實相等比較）+ 前提二引用 ≠ 指派（輔助判準，原 1.9.0 條款降級）；例外表與檢查清單同步（WRAP 二輪裁決方案 E，PC-V1-002）
 **Version**: 1.9.0 - 規則 2.4 新增「引用 ≠ 指派」前提（PC-V1-002 防護）：收尾自律僅適用 prompt 明確指示執行的 ticket；僅含追溯格式 Ticket ID 時零 ticket 寫入；例外情境表與檢查清單同步補項（探針越權勾選 acceptance + complete 事件落地）
-**Version**: 1.8.0 - 規則 7 新增「程式碼大檔讀取」子節：程式碼類 subagent (parsley/fennel/thyme/cinnamon/clove) 讀 >200 行原始碼前優先用 `mcp__serena__get_symbols_overview` + `find_symbol`，Read 為 fallback；檢查清單同步補項（W17-136 / 源 W17-093 ANA 方案 2 限縮）
-**Version**: 1.7.0 - 新增規則 2.4「收尾責任：自律 complete」+ 2.3 表格「任務完成」列 + 檢查清單 complete 項：實作類 agent commit/body 填寫完成後主動執行 check-acceptance --all + complete，acceptance-gate-hook 為安全網（W17-033 / 源 W17-022）
-**Version**: 1.6.0 - 新增規則 7「工具選擇規則（MCP 寫入工具優先序）」：一般 .md 修改用 Edit/Write，serena MCP 限於符號級重構；MCP 被拒時必須 fallback Edit，禁 self-imposed early stop（PC-088 / W17-088）
+**Version**: 1.8.0 - 規則 7 新增「程式碼大檔讀取」子節：程式碼類 subagent (parsley/fennel/thyme/cinnamon/clove) 讀 >200 行原始碼前優先用 `mcp__serena__get_symbols_overview` + `find_symbol`，Read 為 fallback；檢查清單同步補項（源自 ANA 方案 2 限縮版）
+**Version**: 1.7.0 - 新增規則 2.4「收尾責任：自律 complete」+ 2.3 表格「任務完成」列 + 檢查清單 complete 項：實作類 agent commit/body 填寫完成後主動執行 check-acceptance --all + complete，acceptance-gate-hook 為安全網
+**Version**: 1.6.0 - 新增規則 7「工具選擇規則（MCP 寫入工具優先序）」：一般 .md 修改用 Edit/Write，serena MCP 限於符號級重構；MCP 被拒時必須 fallback Edit，禁 self-imposed early stop（PC-088）
 **Purpose**: 確保所有代理人遵守核心規則

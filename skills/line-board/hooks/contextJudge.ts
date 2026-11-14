@@ -85,21 +85,33 @@ export function selectedPercent(record: ContextUsageRecord): number | null {
   return record.autoCompactThreshold === null ? record.percent : record.compactPercent
 }
 
-/** 待 compact／待 clear 判定；沒有用量檔、選中值缺席或 role 為 none 時不標。 */
+/**
+ * 用量是 compact 前的量測：phase 為 compacted，且量測時間不晚於 compact 完成時間。
+ * 實測（3.2.0 執行期）compact 完成時寫入端在同一毫秒寫下 phase compacted，tokens 與百分比仍是 compact 前的值，
+ * 下一次回應前不會再更新；以這筆值判定會對剛 compact 過的線再標［待 compact］。
+ */
+export function isPreCompactMeasure(record: ContextUsageRecord): boolean {
+  return record.phase !== null && record.phase.kind === 'compacted' && record.measuredAt <= record.phase.at
+}
+
+/** 待 compact／待 clear 判定；沒有用量檔、選中值缺席、用量為 compact 前的量測或 role 為 none 時不標。 */
 export function contextMarkOf(input: { record: ContextUsageRecord | null; role: ContextRole; holdsInProgress: boolean }): ContextMark {
   const { record, role, holdsInProgress } = input
-  const percent = record === null ? null : selectedPercent(record)
+  const percent = record === null || isPreCompactMeasure(record) ? null : selectedPercent(record)
   if (percent === null || role === 'none') return null
   if (role === 'coordinator') return percent >= COORDINATOR_T_COMPACT ? 'compact' : null
   if (holdsInProgress) return percent >= LANE_T_COMPACT ? 'compact' : null
   return percent >= LANE_T_CLEAR ? 'clear' : null
 }
 
-/** 「各 session」列的用量字尾：`ctx <百分比>%（<量測距今>）`；用量缺席寫「ctx 未量測」；沒有用量檔為 null。 */
+/**
+ * 「各 session」列的用量字尾：`ctx <百分比>%（<量測距今>）`；用量缺席寫「ctx 未量測」；
+ * compact 前的量測寫 `ctx compact 前 <百分比>%`（不是目前用量，compact 後尚未重新量測）；沒有用量檔為 null。
+ */
 export function contextUsageSuffix(record: ContextUsageRecord | null, nowMs: number): string | null {
   if (record === null) return null
   const percent = selectedPercent(record)
-  const value = percent === null ? '未量測' : `${percent}%`
+  const value = percent === null ? '未量測' : isPreCompactMeasure(record) ? `compact 前 ${percent}%` : `${percent}%`
   return `ctx ${value}（${formatAge(nowMs, record.measuredAt)}）`
 }
 

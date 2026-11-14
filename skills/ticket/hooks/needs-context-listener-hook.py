@@ -19,7 +19,6 @@ NeedsContext Listener Hook - PostToolUse (Bash)
   - 其他情況靜默通過 (exit 0)
 
 來源:
-  - 0.18.0-W17-010（W17-007 ANA 三 IMP 合併）
   - 協議定義：ticket body 中 `## NeedsContext` section，子項含缺失項/觸發位置/
     影響/建議補料/重派成本
 
@@ -137,7 +136,7 @@ def main_logic() -> int:
     logger = setup_hook_logging(HOOK_NAME)
     payload = read_json_from_stdin(logger)
 
-    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
     # 「請 PM 確認補料」屬 PM-only 訊息，注入 subagent context 無作用且污染其報告 token
     if is_subagent_environment(payload):
         logger.debug(
@@ -173,7 +172,7 @@ def main_logic() -> int:
     ):
         return EXIT_SUCCESS
 
-    # W3-097 中性化（方案 V）：不預設 caller 為代理人，對 PM 自填與代理人回報情境皆適用
+    # 中性化（方案 V）：不預設 caller 為代理人，對 PM 自填與代理人回報情境皆適用
     message = (
         f"[NeedsContext] 已更新於 {ticket_id}，"
         f"請 PM 確認是否需補料或評估後續動作"

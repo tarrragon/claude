@@ -26,6 +26,8 @@
 
 # 添加子 Ticket
 /ticket track add-child <parent-id> <child-id>
+# 父票為 completed／closed 時拒絕（errno PARENT_TERMINAL），create --parent、
+# set-parent 同此；已結案父票的後續工作改用 --source-ticket <父票>，或先重開父票
 
 # 修正 parent_id（改寫或清除，同步上游 children，誤用 --parent 後的修正路徑）
 /ticket track set-parent <child-id> <new-parent-id>    # 改寫（同步舊/新上游 children）
@@ -117,6 +119,7 @@
 /ticket track set-blocked-by <id> <id2> --remove       # 移除指定 blockedBy
 /ticket track set-blocked-by <id> "<id2> <id3>" --add  # 一次追加多個：value 是單一位置參數，須引號包成一個字串（否則 argparse 報 unrecognized arguments）
 # 覆寫與 --add 指向有非終態 children 的 ANA 時，stdout 印 [HINT] 說明 ANA 將保持開啟；只提示，exit code 不變（見 create-command.md〈指向 ANA 的耦合後果提示〉）
+# 覆寫與 --add 寫入後，若本票同時依賴 2 個以上同父兄弟票（且並非全為終態），拒絕寫入（errno BLOCKED_BY_MULTI_SIBLING，exit 1，ARCH-017）；--remove 不檢查。create --parent --blocked-by、set-parent、add-child 同此判定
 
 # 設定相關關係（relatedTo 欄位）
 /ticket track set-related-to <id> <related-id>         # 覆寫（設定單一 relatedTo）
@@ -163,7 +166,7 @@
 | 驗收記錄（CLI 層，`lifecycle.py complete()` Step 3） | 全部 | 阻擋，無 `--force` 等旁路 | frontmatter `acceptance` 全數以 `[x]` 開頭 | `set-acceptance --all-check` 或 `check-acceptance --all-check` |
 | 驗收記錄（Hook 層，`acceptance-gate-hook.py` PreToolUse，`acceptance_checker.py`） | 全部 | 警告，不阻擋 Bash 呼叫本身 | acceptance 全勾選，或 body 含必填章節關鍵字，二擇一成立 | 同左，或補齊 Solution／Test Results 等必填章節關鍵字 |
 | ANA 後續票／spawn 規劃一致性 | ANA 型 | 警告／不一致時阻擋 | `spawned_tickets` 存在性 + Solution spawn 規劃表格與 `spawned_tickets`＋`children` 數量一致 | `add-spawned` 補登記，或於 Solution 逐項標豁免理由 |
-| ANA `multi_view_status` 標註 | ANA 型 | 非法值阻擋／缺標註警告 | Solution 含 `multi_view_status`，值須為 `reviewed`／`skipped`／`n_a` | `ticket track fix-multi-view-status <id> --value <值> --reason "..."` |
+| ANA `multi_view_status` 標註 | ANA 型 | 非法值與缺標註皆警告（不阻擋） | Solution 含 `multi_view_status`，值須為 `reviewed`／`skipped`／`n_a` | `ticket track fix-multi-view-status <id> --value <值> --reason "..."` |
 | Spawn Requests 未處理條目 | 全部 | 警告 | 「Spawn Requests」章節內無 pending 條目 | `resolve-spawn-request` 標記 `processed`／`dismissed` |
 | Error-pattern 衝突／新增 | 全部 | 資訊 | 修改模組與既有 error-pattern 是否衝突；本次是否新增 error-pattern 檔 | `/error-pattern query` 先行確認 |
 | 5W1H 完整性 | 全部 | 警告 | `who`／`what`／`when`／`where`／`why`／`how` 六欄位皆已填 | `set-who`／`set-what` 等 6 個 set-* 命令補齊 |

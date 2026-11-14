@@ -91,6 +91,7 @@ def _write_baseline(root: Path, skills: dict) -> Path:
 def _patch_project_root(hook_mod, monkeypatch, tmp_path):
     """所有測試預設隔離對本專案真實 get_project_root() / baseline 檔的依賴。"""
     monkeypatch.setattr(hook_mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_mod, "get_code_root", lambda: tmp_path)
 
 
 def _over_threshold_description(extra_chars: int) -> str:

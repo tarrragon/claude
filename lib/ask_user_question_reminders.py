@@ -25,7 +25,7 @@ AskUserQuestion 執行時指引模組 - 關鍵決策點 PM 操作提醒
 - Ticket complete 後 Checkpoint 提醒
 
 Memory 分流指引訊息（判別問句、排除理由、三分流判準）定義於獨立模組
-`lib/memory_triage_messages.py`（0.2.1-W3-196 Phase 4 第二輪修正）——本模組
+`lib/memory_triage_messages.py`——本模組
 自身 docstring 已宣告「這些不是簡短的訊息常數」，故不收留該類常數，改為
 import 使用，COMMIT_HANDOFF_REMINDER 直接組合其 THREE_WAY_GUIDANCE。
 """
@@ -462,7 +462,7 @@ ticket track complete 已成功。下一步強制流程：
 
 
 # ============================================================================
-# AUQ Option Pattern Detector Hook 訊息（W5-042 / PC-064）
+# AUQ Option Pattern Detector Hook 訊息（PC-064）
 # ============================================================================
 
 

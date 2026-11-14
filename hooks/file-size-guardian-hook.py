@@ -19,7 +19,7 @@ File Size Guardian Hook - 過大檔案掃描
 核心理念：行數超標是症狀，domain 混合是病因。
 回合耗盡 = 認知負擔過載的具體訊號。
 
-來源: PC-042（單檔掃描）、1.0.0-W7-004.7（auto-load 預算量測）
+來源: PC-042（單檔掃描）；auto-load 預算量測
 """
 
 import json
@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root
+from lib import setup_hook_logging, run_hook_safely, get_project_root, get_code_root, get_hook_log_dir
 
 # 閾值設定
 RULE_FILE_WARN = 200       # 規則/文件檔案警戒值
@@ -39,7 +39,7 @@ RULE_FILE_CRITICAL = 300   # 規則/文件檔案必須拆分值
 CODE_FILE_WARN = 300       # 程式碼檔案警戒值
 CODE_FILE_CRITICAL = 500   # 程式碼檔案必須拆分值
 
-# Auto-load 集合 token 預算（來源: 1.0.0-W7-004.7，防止自動載入層回彈膨脹）
+# Auto-load 集合 token 預算（防止自動載入層回彈膨脹）
 AUTO_LOAD_BUDGET_TOKENS = 45_000
 # Token 估算係數：tokens = int(chars / CHARS_PER_TOKEN)。
 # 校準依據（2026-06-12）：/context Memory files 同集合實測 38.9k tokens
@@ -105,7 +105,7 @@ def scan_directory(root: Path, rel_dir: str, ext: str, warn: int, critical: int,
 
 def main():
     logger = setup_hook_logging("file-size-guardian")
-    root = get_project_root()
+    root = get_code_root()  # 掃描 rules/CLAUDE.md 等框架檔（CR）
 
     if not root:
         return
@@ -129,7 +129,7 @@ def _report_oversized_files(root: Path) -> None:
         return
 
     verbose = os.environ.get("FILE_SIZE_GUARDIAN_VERBOSE") == "1"
-    log_path = root / ".claude" / "hook-logs" / "file-size-guardian.log"
+    log_path = get_hook_log_dir("file-size-guardian") / "file-size-guardian.log"
     sorted_criticals = sorted(all_criticals, key=lambda x: -x[1])
     sorted_warnings = sorted(all_warnings, key=lambda x: -x[1])
 
@@ -154,7 +154,7 @@ def _print_summary(criticals: list, warnings: list, log_path: Path) -> None:
         print(f"\nTop 3 超標檔案 (閾值 {RULE_FILE_CRITICAL}):")
         for path, lines, label in criticals[:3]:
             print(f"  {path}: {lines} 行 ({label})")
-    print(f"\n完整清單: {log_path.relative_to(log_path.parents[2])}")
+    print(f"\n完整清單: {log_path.relative_to(log_path.parents[3])}")
     print("(設定 FILE_SIZE_GUARDIAN_VERBOSE=1 還原完整輸出)")
 
 
@@ -194,7 +194,7 @@ def _write_full_report(log_path: Path, criticals: list, warnings: list) -> None:
 
 
 # ============================================================
-# Auto-load 預算量測（來源: 1.0.0-W7-004.7）
+# Auto-load 預算量測
 # ============================================================
 
 
@@ -263,7 +263,7 @@ def measure_auto_load_budget(root: Path) -> tuple[int, list[tuple[str, int]]]:
 
 
 def _get_budget_state_path(root: Path) -> Path:
-    return root / ".claude" / "hook-logs" / "auto-load-budget-state.json"
+    return get_hook_log_dir("file-size-guardian") / "auto-load-budget-state.json"
 
 
 def load_previous_budget_total(state_path: Path) -> int | None:

@@ -407,6 +407,8 @@ def _arm_monitor(root, seconds_ago):
 def _run_at(module, monkeypatch, tmp_path, logger, seconds_ago):
     monitor = _arm_monitor(tmp_path, seconds_ago)
     monkeypatch.setattr(module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     msg = module.check_test_timeout({}, {}, logger)
     return msg, monitor
 
@@ -483,6 +485,8 @@ def test_no_obsolete_constant_name(hook_module):
 
 def _run_logged_evaluation(hook_module, monkeypatch, tmp_path, logger, tool_response):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     input_data = {
         "tool_name": "Bash",
         "tool_input": {"command": "pytest -q"},
@@ -531,6 +535,8 @@ def _eval_response(hook_module, logger, tool_name, tool_response):
 
 def test_bash_dict_edit_diff_not_evaluated(hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     response = {"stdout": "..........\n82 passed in 0.25s\n", "stderr": "",
                 "bashEditDiff": _EDIT_DIFF}
     assert _eval_response(hook_module, logger, "Bash", response) is None
@@ -538,6 +544,8 @@ def test_bash_dict_edit_diff_not_evaluated(hook_module, monkeypatch, tmp_path, l
 
 def test_bash_dict_real_failure_still_reported(hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     response = {"stdout": "x\nFAILED tests/a.py::t - boom\n1 failed, 5 passed in 0.5s\n",
                 "stderr": "", "bashEditDiff": ""}
     result = _eval_response(hook_module, logger, "Bash", response)
@@ -546,17 +554,23 @@ def test_bash_dict_real_failure_still_reported(hook_module, monkeypatch, tmp_pat
 
 def test_bash_dict_stderr_failure_reported(hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     response = {"stdout": "", "stderr": "AssertionError: expected 1 to equal 2"}
     assert _eval_response(hook_module, logger, "Bash", response) is not None
 
 
 def test_bash_dict_missing_stdout_stderr_fail_open(hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     assert _eval_response(hook_module, logger, "Bash", {"bashEditDiff": _EDIT_DIFF}) is None
 
 
 def test_non_bash_dict_keeps_original_behavior(hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     response = {"output": "x FAILED tests/a.py::t"}
     result = _eval_response(hook_module, logger, "mcp__dart__run_tests", response)
     assert result is not None and "TEST FAILURE" in result
@@ -592,6 +606,8 @@ def test_green_shortcut_not_taken_when_any_summary_has_failure(hook_module, outp
 
 def test_multi_run_pytest_output_reports_test_failure(hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     response = {"stdout": "5 passed in 1s\nFAILED tests/a.py::t - boom\n1 failed in 2s\n",
                 "stderr": ""}
     result = _eval_response(hook_module, logger, "Bash", response)
@@ -624,6 +640,8 @@ def test_lowercase_failed_in_commit_title_not_test_failure(hook_module, logger):
 
 def test_lowercase_failed_in_commit_title_end_to_end(hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     response = {"stdout": _COMMIT_TITLE_MIXED, "stderr": ""}
     assert _eval_response(hook_module, logger, "Bash", response) is None
 
@@ -651,6 +669,8 @@ def test_framework_real_failure_output_reports_test_failure(hook_module, logger,
 def test_green_summary_with_prefix_short_circuits_despite_uppercase_title(
         hook_module, monkeypatch, tmp_path, logger):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     stdout = ("fix(x): post-test-hook 裸 FAILED 改區分大小寫並補小寫摘要樣式\n"
               "rc=0 108 passed in 2.27s")
     response = {"stdout": stdout, "stderr": ""}
@@ -664,6 +684,8 @@ def test_green_summary_with_prefix_short_circuits_despite_uppercase_title(
 def test_prefixed_failure_summary_still_reported(
         hook_module, monkeypatch, tmp_path, logger, stdout):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     result = _eval_response(hook_module, logger, "Bash", {"stdout": stdout, "stderr": ""})
     assert result is not None and "TEST FAILURE" in result
 
@@ -676,6 +698,8 @@ def test_prefixed_failure_summary_still_reported(
 ])
 def test_green_shortcut_not_covering_flutter_failure(hook_module, monkeypatch, tmp_path, logger, output):
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     assert not hook_module._is_green_summary(output)
     result = _eval_response(hook_module, logger, "Bash", {"stdout": output, "stderr": ""})
     assert result is not None and "TEST FAILURE" in result
@@ -696,6 +720,8 @@ _FAILING_RESPONSE = {"stdout": "FAILED tests/a.py::t - boom\n1 failed in 1s", "s
 def _run_main(hook_module, monkeypatch, tmp_path, tool_input):
     monitor = _arm_monitor(tmp_path, 2000)
     monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: tmp_path)
+    monkeypatch.setattr(hook_module, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     data = {"tool_name": "Bash", "tool_input": tool_input,
             "tool_response": _FAILING_RESPONSE}
     monkeypatch.setattr(hook_module, "read_json_from_stdin", lambda _logger: data)
@@ -726,3 +752,64 @@ def test_background_false_treated_as_foreground(hook_module, monkeypatch, tmp_pa
               {"command": "pytest -q", "run_in_background": False})
     assert hook_module.main() == 0
     assert "TEST FAILURE" in capsys.readouterr().out
+
+
+# ---- 失敗樣式補洞：Mocha N failing、pytest 收集錯誤（tarrragon/claude#58）----
+
+MOCHA_FAILING = "  3 passing (20ms)\n  1 failing\n\n  1) suite a:\n     Error: boom\n"
+MOCHA_ALL_PASSING = "  4 passing (20ms)\n"
+PYTEST_COLLECT_ERROR = (
+    "==================================== ERRORS ====================================\n"
+    "_______________________ ERROR collecting tests/test_x.py _______________________\n"
+    "ImportError while importing test module\n"
+)
+
+
+def test_mocha_failing_is_not_green_and_classified(hook_module, logger):
+    assert hook_module._is_green_summary(MOCHA_FAILING) is False
+    error_type, errors = hook_module._classify_errors(MOCHA_FAILING, logger)
+    assert error_type == hook_module.ErrorType.TEST_FAILURE
+    assert any("Mocha" in e["description"] for e in errors)
+
+
+def test_mocha_all_passing_still_green(hook_module, logger):
+    """對照：沒有 failing 行時維持綠燈，錯誤分類為空。"""
+    assert hook_module._is_green_summary(MOCHA_ALL_PASSING) is True
+    assert hook_module._classify_errors(MOCHA_ALL_PASSING, logger)[1] == []
+
+
+def test_pytest_collect_error_without_summary_is_classified(hook_module, logger):
+    error_type, errors = hook_module._classify_errors(PYTEST_COLLECT_ERROR, logger)
+    assert error_type == hook_module.ErrorType.TEST_FAILURE
+    assert any("tests/test_x.py" in e["description"] for e in errors)
+
+
+@pytest.mark.parametrize("text", [
+    "the docs mention that 2 tests are failing intermittently",  # 句中 failing，非行首摘要
+    "see error collecting metrics in the dashboard",             # 小寫一般文字
+])
+def test_prose_mentions_do_not_match_new_patterns(hook_module, text):
+    assert not any(p.search(text) for p, _ in hook_module.FAILURE_SUMMARY_PATTERNS)
+
+
+# ---- 完成類命令回顯的豁免（finish／batch-complete）----
+
+@pytest.mark.parametrize("command", [
+    "ticket track finish 3.3.0-W1-001",
+    "ticket track batch-complete 3.3.0-W1-001 3.3.0-W1-002",
+    "cd /x && ticket track finish 3.3.0-W1-001 2>&1 | tail -5",
+])
+def test_complete_verbs_are_exempt(hook_module, command):
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+    assert hook_module._is_ticket_body_write(payload, payload["tool_input"]) is True
+
+
+@pytest.mark.parametrize("command", [
+    "pytest tests/test_finish.py",   # 檔名含 finish，不是完成類命令
+    "grep -n finish tests/test_a.py",
+    "ticket track query 3.3.0-W1-001",
+])
+def test_non_complete_commands_not_exempt(hook_module, command):
+    """對照（E2）：非完成類命令不豁免，FAILED 輸出照常評估。"""
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+    assert hook_module._is_ticket_body_write(payload, payload["tool_input"]) is False

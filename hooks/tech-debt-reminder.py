@@ -47,6 +47,7 @@ from lib import (
     scan_ticket_files_by_version,
     parse_ticket_frontmatter,
 )
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 # 全域常數
 EXIT_SUCCESS = 0
@@ -58,7 +59,7 @@ def find_ticket_files_for_version(
     logger
 ) -> List[Path]:
     """
-    尋找版本的 Ticket 檔案清單（W17-188 修復：改用共用 helper 支援雙結構）
+    尋找版本的 Ticket 檔案清單（改用共用 helper 支援雙結構）
 
     使用 hook_utils.scan_ticket_files_by_version 支援：
     - 舊扁平結構：docs/work-logs/v{version}/tickets/
@@ -84,8 +85,8 @@ def extract_frontmatter(file_path: Path, logger) -> Optional[Dict[str, Any]]:
     """
     從 Markdown 檔案提取 frontmatter
 
-    W17-189 修復：原版本使用 yaml.safe_load 但未 import yaml，所有呼叫靜默 return None。
-    改用 hook_utils.parse_ticket_frontmatter（W17-188 同方向，DRY 對齊 hook_utils 既有 helper）。
+    修復：原版本使用 yaml.safe_load 但未 import yaml，所有呼叫靜默 return None。
+    改用 hook_utils.parse_ticket_frontmatter（DRY 對齊 hook_utils 既有 helper）。
 
     格式:
     ---
@@ -116,7 +117,7 @@ def extract_frontmatter(file_path: Path, logger) -> Optional[Dict[str, Any]]:
 
 def scan_tech_debt_tickets(ticket_files: List[Path], logger) -> List[Dict[str, Any]]:
     """
-    掃描 Ticket 檔案清單中的 Tech Debt Ticket（W17-188 修復：改接受檔案清單）
+    掃描 Ticket 檔案清單中的 Tech Debt Ticket（改接受檔案清單）
 
     過濾條件:
     1. 檔案副檔名為 .md
@@ -281,7 +282,7 @@ def main() -> int:
             return EXIT_SUCCESS
 
         # 步驟 3: 取得專案根目錄
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
         logger.info(f"專案根目錄: {project_root}")
 
         # 步驟 4: 從 todolist.yaml 取得版本（專案類型無關）
@@ -291,7 +292,7 @@ def main() -> int:
             print(suppress_json)
             return EXIT_SUCCESS
 
-        # 步驟 5: 尋找 ticket 檔案清單（W17-188 修復：支援雙結構）
+        # 步驟 5: 尋找 ticket 檔案清單（支援雙結構）
         ticket_files = find_ticket_files_for_version(project_root, version, logger)
         if not ticket_files:
             logger.info("無 ticket 檔案，靜默跳過")

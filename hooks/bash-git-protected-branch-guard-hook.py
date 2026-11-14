@@ -6,8 +6,8 @@
 """
 Bash Git Protected-Branch Guard Hook - PreToolUse Hook
 
-功能: 封閉 branch-verify-hook 的 Bash 層繞道路徑（0.2.1-W3-151，PC-V1-012 實例），
-並封閉 0.2.1-W3-154 發現的 add-and-commit 串接繞道。
+功能: 封閉 branch-verify-hook 的 Bash 層繞道路徑（PC-V1-012 實例），
+並封閉後續發現的 add-and-commit 串接繞道。
 branch-verify-hook 只註冊於 Edit/Write matcher，以 file_path 判斷保護分支；
 Bash `git commit` 可達成同一後果（外部 repo 保護分支被寫入）卻不受檢查。
 本 hook 專責 Bash 路徑，與 branch-verify-hook（Edit/Write 路徑）分離。
@@ -17,7 +17,7 @@ Matcher: Bash
 Decision: "allow"（無輸出，沿用 bash-edit-guard-hook 慣例）| "deny"
 
 ============================================================
-方案取捨（0.2.1-W3-151 ticket Solution 摘要，完整記錄見 ticket md）
+方案取捨（原票 Solution 摘要，完整記錄見該 ticket md）
 ============================================================
 選定：另建專責 Bash 守衛（而非擴充 branch-verify-hook 加 Bash matcher）。
 
@@ -32,7 +32,7 @@ Decision: "allow"（無輸出，沿用 bash-edit-guard-hook 慣例）| "deny"
    GENERIC_EXEMPT_EXACT（SSOT）共用，而非各自維護一份清單。
 
 ============================================================
-add-and-commit 串接繞道與修復設計（0.2.1-W3-154）
+add-and-commit 串接繞道與修復設計
 ============================================================
 根因：PreToolUse 評估時機在 Bash 命令「執行前」。若命令為
 `git add X && git commit`，hook 評估當下 `add` 尚未真正跑，`git diff --cached`
@@ -57,9 +57,9 @@ commit 完成後會納入的檔案集合，三個來源取聯集：
 三者皆可列舉且聯集為空集合 → 真正 no-op，放行（不誤擋，acceptance 3）。
 
 ============================================================
--C 目標 shell 展開語法繞道與修復設計（0.2.1-W3-156）
+-C 目標 shell 展開語法繞道與修復設計
 ============================================================
-根因：0.2.1-W3-154 落地後 PM 以 scratchpad 臨時 repo 實測，同一違規情境
+根因：串接繞道修復落地後 PM 以 scratchpad 臨時 repo 實測，同一違規情境
 （外部 repo 在保護分支、add 非豁免檔後 commit）依 `-C` 目標的字面形式產生
 相反結果——目標為字面絕對路徑正確 deny；目標為 shell 變數（如
 `git -C $T add x && git -C $T commit`）時靜默放行。成因：PreToolUse 時機看到
@@ -77,7 +77,7 @@ pathspec 無法靜態列舉時採 fail-closed 的原則矛盾：兩種「不確�
    子行程，見下方殘留限制）。
 2. **純粹不含展開語法但無法解析**（相對路徑、或指向不存在的字面絕對路徑）
    → `outcome="unresolvable"`，維持 **fail-open**（allow，沿用
-   0.2.1-W3-151 既有邊界）。理由：該命令本身在真正執行時就會因路徑不存在
+   本 hook 既有邊界）。理由：該命令本身在真正執行時就會因路徑不存在
    而失敗，不需要 hook 額外把關。
 
 **已知且無法收口的殘留類別**：一旦 `-C` 目標含 shell 展開語法，hook
@@ -174,6 +174,7 @@ from lib.git_command_parse import (
 from lib.git_utils import (
     GENERIC_EXEMPT_EXACT,
     find_target_repo,
+    get_action_root,
     get_current_branch,
     get_project_root,
     is_protected_branch,
@@ -210,7 +211,7 @@ _SHORT_VALUE_FLAG_CHARS = frozenset("mcCFt")
 # stage-all，一律 fail-closed（範疇邊界：不嘗試用 git diff --name-only 反推）
 _SHORT_FLAG_RE = re.compile(r"^-[a-zA-Z]+$")
 
-# 0.2.1-W3-156：-C/cd 目標含 shell 展開語法（$變數/`反引號`/~家目錄）時，
+# -C/cd 目標含 shell 展開語法（$變數/`反引號`/~家目錄）時，
 # PreToolUse 看到的是未展開的原始文字，無法信任其字面內容，須 fail-closed。
 _SHELL_EXPANSION_RE = re.compile(r"[$`~]")
 
@@ -220,7 +221,6 @@ def _has_shell_expansion_syntax(s: str) -> bool:
 
     命令字串在 PreToolUse 時機為原始未展開文字，這些字元代表實際執行時
     的值會與此刻看到的字面文字不同，靜態比對其字面內容不可靠
-    （0.2.1-W3-156）。
     """
     if not s:
         return False
@@ -291,10 +291,10 @@ def _resolve_repo_root(repo_hint: str) -> Tuple[str, Optional[str]]:
     回傳 (outcome, target_root)：
     - outcome="resolved"：target_root 為實際 repo 根目錄。
     - outcome="shell_expansion"：repo_hint 含 $/`` ` ``/~ 等 shell 展開語法，
-      target_root 恆為 None，呼叫端應 fail-closed（0.2.1-W3-156）。
+      target_root 恆為 None，呼叫端應 fail-closed。
     - outcome="unresolvable"：不含展開語法但非絕對路徑，或指向不存在的
       git repo，target_root 恆為 None，呼叫端維持 fail-open（該命令本身
-      在真正執行時會失敗，範疇邊界沿用 0.2.1-W3-151）。
+      在真正執行時會失敗，範疇邊界沿用本 hook 既有設計）。
 
     repo_hint 可能指向 repo 內任意子目錄（git -C 語意），用 find_target_repo
     向上尋找 .git 標記取得真正的 repo 根目錄。
@@ -307,6 +307,19 @@ def _resolve_repo_root(repo_hint: str) -> Tuple[str, Optional[str]]:
     if target_root is None:
         return "unresolvable", None
     return "resolved", target_root
+
+
+def _resolve_host_root(payload: Dict[str, object]) -> str:
+    """host 為 payload.cwd 所屬 checkout；缺 cwd 時沿用 get_project_root。
+
+    情境 C（env=MAIN、cwd=linked worktree）下 get_project_root 恆回 MAIN，
+    與命令實際作用面不一致。缺 cwd 不呼叫 get_action_root，避免新增 stderr。
+    """
+    project_root = get_project_root()
+    cwd = payload.get("cwd")
+    if not cwd or not isinstance(cwd, str):
+        return str(project_root)
+    return str(get_action_root(payload, fallback_root=project_root))
 
 
 def _is_host_repo(target_root: str, host_root: str) -> bool:
@@ -347,7 +360,7 @@ def _parse_literal_paths(tokens: List[str], unenumerable_flags: "set") -> Option
         if tok == "--":
             continue
         if is_shell_redirection_token(tok):
-            continue  # shell 重導向 token（2>&1 等）不是路徑，略過（W3-156）
+            continue  # shell 重導向 token（2>&1 等）不是路徑，略過
         if tok.startswith("-"):
             continue  # 其餘 flag（如 -v/--verbose）不影響列舉，略過
         if not is_literal_pathspec_token(tok):
@@ -399,7 +412,7 @@ def _parse_commit_pathspec(tokens: List[str]) -> Tuple[bool, Optional[List[str]]
             continue
 
         if is_shell_redirection_token(tok):
-            i += 1  # shell 重導向 token（2>&1 等）不是路徑，略過（W3-156）
+            i += 1  # shell 重導向 token（2>&1 等）不是路徑，略過
             continue
 
         if tok.startswith("-"):
@@ -468,7 +481,7 @@ def build_bash_cross_repo_deny_message(
     """跨專案保護分支 Bash commit 的 deny 訊息，與 Write 路徑語意一致。
 
     附目標 repo/branch、非豁免檔案清單（或 fail-closed 說明）、可執行的
-    下一步指令（0.2.1-W3-149 依此決定執行方式）。
+    下一步指令（呼叫端依此決定執行方式）。
     """
     if fail_closed:
         files_block = (
@@ -509,7 +522,7 @@ def build_bash_cross_repo_deny_message(
 
 
 def build_shell_expansion_deny_message(repo_hint: str) -> str:
-    """`-C`/`cd` 目標含 shell 展開語法時的 deny 訊息（0.2.1-W3-156）。
+    """`-C`/`cd` 目標含 shell 展開語法時的 deny 訊息。
 
     PreToolUse 時機看到的是命令的原始未展開文字，`$` 變數 / 反引號指令
     替換 / `~` 家目錄展開的實際值只有 shell 真正執行時才知道，靜態比對
@@ -535,7 +548,7 @@ def _resolve_cross_repo_protected_target(
 
     回傳 (outcome, target)：
     - outcome="shell_expansion"：-C/cd 目標含 shell 展開語法，target=None，
-      呼叫端應 fail-closed deny（0.2.1-W3-156，無法區分是否恰好指向本專案，
+      呼叫端應 fail-closed deny（無法區分是否恰好指向本專案，
       見檔頭殘留限制說明）。
     - outcome="skip"：其餘安全放行條件（不含展開語法但無法解析 / 同 host
       repo / 無法取得分支 / 非保護分支），target=None，呼叫端允許。
@@ -614,11 +627,11 @@ def _determine_pending_files(
     """推導本次 commit 完成後會納入的完整檔案集合（相對 repo root）。
 
     三來源聯集：commit pathspec（來源 1）/ 同範圍 git add（來源 2）/
-    呼叫當下已 staged（來源 3，沿用 0.2.1-W3-151 既有邏輯）。
+    呼叫當下已 staged（來源 3，沿用既有邏輯）。
 
     回傳 (fail_closed, files)：
     - fail_closed=True：任一來源無法靜態列舉，files 恆為空清單，
-      呼叫端應直接 deny（0.2.1-W3-154 範疇：-a/-am/--all、萬用字元、
+      呼叫端應直接 deny（add-and-commit 串接範疇：-a/-am/--all、萬用字元、
       shlex 無法切分、staged 清單讀取失敗）。
     - fail_closed=False：files 為三來源聯集後的完整清單，可能為空
       （真正 no-op）。
@@ -681,7 +694,7 @@ def _check_files_for_target(
 def _check_invocation(command: str, inv: Dict[str, object], host_root: str, logger) -> Optional[str]:
     """檢查單一 write 呼叫，回傳 deny 訊息（None 表示允許）。
 
-    Phase 4（0.2.1-W3-156）：拆為「解析 invocation 的三態結果」與「命中時
+    Phase 4 重構：拆為「解析 invocation 的三態結果」與「命中時
     的檔案集合檢查」兩段，前者交由 `_resolve_cross_repo_protected_target`，
     後者交由 `_check_files_for_target`，本函式僅負責依 outcome 分派。
     """
@@ -730,7 +743,7 @@ def main() -> int:
         logger.debug("命令含 git 但無可解析的 write 呼叫（-C 或子 shell cd 形式），允許")
         return 0
 
-    host_root = str(get_project_root())
+    host_root = _resolve_host_root(input_data)
 
     for inv in invocations:
         deny_message = _check_invocation(command, inv, host_root, logger)
@@ -747,5 +760,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # 不整支宣告 fail_closed：本 hook 經 dispatcher 對每個 Bash 命令執行，整支宣告時
+    # 單支逾時或載入期例外會擋下全部 Bash 命令。保護分支 commit 的高風險分支已在
+    # _determine_pending_files 內保守處理（檔案集合無法靜態列舉或 staged 讀取失敗即阻擋）。
     exit_code = run_hook_safely(main, "bash-git-protected-branch-guard")
     sys.exit(exit_code)

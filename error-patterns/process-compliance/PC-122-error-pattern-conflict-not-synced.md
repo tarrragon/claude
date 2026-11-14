@@ -27,14 +27,14 @@ PM 或 framework 維護者建立新 error-pattern 推翻既有 PC 的指引，�
 
 ## 觸發案例
 
-**事件**（2026-04-17 至 2026-05-03，0.18.0-W17-120 ANA 識別）：
+**事件**（2026-04-17 至 2026-05-03，某 ANA 識別）：
 
 | 日期 | 事件 |
 |------|------|
 | 2026-04-17 | PC-073 建立：「ANA Ticket 的 Solution 建議『後續 IMP 實作』→ 衍生關係（spawned）」 |
 | 2026-04-18 | PC-091 建立：「ANA 結論的執行延伸（IMP/DOC 落地）必為 children（不可用 spawned）」一日內覆蓋 PC-073 |
 | 2026-04-19 至 2026-05-03 | 約 16 天並存期間。PC-073 未加 deprecated 標註，PC-091 未引用 PC-073；PM 在不同情境讀到不同規則 |
-| 2026-05-03 | W17-120 ANA 多視角審查（linux + saffron + basil）才識別衝突，需執行修訂 |
+| 2026-05-03 | 該 ANA 多視角審查（linux + saffron + basil）才識別衝突，需執行修訂 |
 
 ---
 
@@ -87,7 +87,7 @@ PM 或 framework 維護者建立新 error-pattern 推翻既有 PC 的指引，�
 2. 決定主導 PC（通常較新且更完整的版本）
 3. 既有 PC 加 deprecated 標註 + 範圍縮限說明（保留有效範圍如有）
 4. 主導 PC 加 sister pattern 引用 + 取代日期
-5. 評估是否需建立 SSOT 文件統一概念（如 W17-120 建立 field-semantics.md）
+5. 評估是否需建立 SSOT 文件統一概念（如該 ANA 建立 field-semantics.md）
 6. 跨文件 grep 修正所有引用舊 PC 的下游文件
 
 ---
@@ -96,7 +96,7 @@ PM 或 framework 維護者建立新 error-pattern 推翻既有 PC 的指引，�
 
 1. **建立規則時的「破壞影響檢查」必須與規則內容並重**：新規則的價值不只在「它說什麼」，還在「它如何與既有規則協同」
 2. **acceptance-gate / commit hook 是規則完整性的最後防線**：人工自檢失效時，hook 是兜底
-3. **多視角審查在規則層的價值**：W17-120 的衝突若只用 PM 單視角審查不易識別，三 reviewer 並行才能交叉驗證
+3. **多視角審查在規則層的價值**：該次衝突若只用 PM 單視角審查不易識別，三 reviewer 並行才能交叉驗證
 
 ---
 
@@ -112,9 +112,9 @@ PM 或 framework 維護者建立新 error-pattern 推翻既有 PC 的指引，�
 - `.claude/error-patterns/process-compliance/PC-073-ana-spawned-misused-as-children.md` — 觸發案例之二（已加 deprecated 標註，範圍縮限）
 - `.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md` — 姊妹模式（memory 升級盲視）
 - `.claude/error-patterns/process-compliance/PC-093-yagni-deferred-decision-accumulation.md` — 「之後再改」反模式
-- `.claude/skills/ticket/references/field-semantics.md` — W17-120 建立的 SSOT 範例
+- `.claude/skills/ticket/references/field-semantics.md` — 該 ANA 建立的 SSOT 範例
 
 ---
 
 **Last Updated**: 2026-05-03
-**Version**: 1.0.0 — 從 W17-120 ANA 識別 PC-073 vs PC-091 並存衝突提煉
+**Version**: 1.0.0 — 從某 ANA 識別 PC-073 vs PC-091 並存衝突提煉

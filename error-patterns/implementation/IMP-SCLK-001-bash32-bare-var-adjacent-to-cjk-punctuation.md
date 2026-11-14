@@ -4,7 +4,6 @@ title: macOS bash 3.2 在 UTF-8 locale 下將裸 $VAR 後緊鄰的全形標點�
 category: implementation
 severity: medium
 created: 2026-08-01
-source_ticket: 1.4.0-W2-033
 ---
 
 # IMP-SCLK-001: bash 3.2 裸 `$VAR` 緊鄰全形標點在 `set -u` 下崩潰
@@ -118,4 +117,4 @@ echo "失敗（exit $CODE）"     # 3.2 + UTF-8 locale 下崩潰
 
 ---
 
-**Source**: 1.4.0-W2-033（建立 `scripts/run-tests.sh` 時於實測失敗分支發現並修正）
+**Source**: 某次（建立 `scripts/run-tests.sh` 時於實測失敗分支發現並修正）

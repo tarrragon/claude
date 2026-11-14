@@ -64,9 +64,10 @@ def _load_ownership_guard_skills() -> Tuple:
 # skill_dir 路徑與執行指令；package_name 可能與 cli_name 不同（如
 # ticket-system / ticket），但那只是 uv tool 全域安裝名，與 shim 執行路徑
 # 無關，本腳本不使用。
-CLI_NAMES: Tuple[str, ...] = tuple(
-    entry.cli_name for entry in _load_ownership_guard_skills()
-)
+_SKILLS = _load_ownership_guard_skills()
+CLI_NAMES: Tuple[str, ...] = tuple(entry.cli_name for entry in _SKILLS)
+# 跳過既有檔時，警告文字要給出 uv tool 的套件名（uninstall／--force 復原用）
+_PACKAGE_BY_CLI = {entry.cli_name: entry.package_name for entry in _SKILLS}
 
 # shim 識別標記，供 --check 與 ownership 偵測辨認「這是 shim 非 uv tool bin」
 SHIM_MARKER = "# cwd-resolving shim (ARCH-APP-002)"
@@ -89,12 +90,76 @@ def bin_dir() -> Path:
     return Path(os.environ.get("SKILL_CLI_BIN_DIR", str(Path.home() / ".local" / "bin")))
 
 
+# 目標檔狀態：只有 ABSENT 與 SHIM 可寫入；其餘一律不寫並警告。
+ABSENT, SHIM, SYMLINK, FOREIGN, UNREADABLE = "absent", "shim", "symlink", "foreign", "unreadable"
+
+
+def classify_target(target: Path) -> str:
+    """判斷 <bin>/<cli> 能不能安全寫入 shim。
+
+    以 lstat 判斷，不跟隨 symlink：uv tool install 在 bin 目錄放的是指向
+    tool 環境入口檔的 symlink，順著寫會把 shim 寫進 tool 環境、改壞該環境。
+    判定過程出錯一律回 UNREADABLE（保守側：不寫入）。
+    """
+    try:
+        st = os.lstat(target)
+    except FileNotFoundError:
+        return ABSENT
+    except OSError:
+        return UNREADABLE
+    if stat.S_ISLNK(st.st_mode):
+        return SYMLINK
+    if not stat.S_ISREG(st.st_mode):
+        return FOREIGN
+    try:
+        content = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return UNREADABLE
+    return SHIM if SHIM_MARKER in content else FOREIGN
+
+
+def _uv_package_name(cli: str, target: Path) -> str:
+    """uv tool 的 symlink 指向 <tool 目錄>/<套件名>/bin/<cli>，能解析就用實際套件名。"""
+    try:
+        resolved = Path(os.readlink(target))
+        if resolved.parent.name == "bin" and resolved.parent.parent.name:
+            return resolved.parent.parent.name
+    except OSError:
+        # 非 symlink 或讀不到連結：改用清單上的套件名，警告仍可給出指令
+        pass
+    return _PACKAGE_BY_CLI.get(cli, cli)
+
+
+def skip_warning(cli: str, target: Path, state: str) -> str:
+    pkg = _uv_package_name(cli, target)
+    reason = {
+        SYMLINK: "是 symlink（多半是 uv tool install 安裝的版本）",
+        FOREIGN: "不是本機制產生的 shim",
+        UNREADABLE: "狀態讀取失敗",
+    }[state]
+    return (
+        f"[install-skill-clis] WARNING: {target} {reason}，未寫入 shim，保留原檔。"
+        f"此 CLI 在框架專案內執行的是既有版本，不是當前專案的 skill 源碼。"
+        f"要改用 shim：先 `uv tool uninstall {pkg}`（或移除該檔）再重開 session。"
+        f"若非框架專案執行 {cli} 出現「找不到當前專案的 .claude/skills/{cli}」，"
+        f"代表 uv tool 環境已被舊版本機制寫壞，以原安裝指令加 --force 復原，"
+        f"例如 `uv tool install --force --from <skill 目錄> {pkg}`。"
+    )
+
+
+def _write_shim(target: Path, body: str) -> None:
+    # O_NOFOLLOW：判定後若目標被換成 symlink，open 失敗而不是寫穿
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o755)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(body)
+    target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
 def check() -> int:
     bd = bin_dir()
     missing = []
     for cli in CLI_NAMES:
-        target = bd / cli
-        if not target.exists() or SHIM_MARKER not in target.read_text(encoding="utf-8", errors="replace"):
+        if classify_target(bd / cli) != SHIM:
             missing.append(cli)
     if missing:
         print(f"[install-skill-clis] 尚未 shim 化: {', '.join(missing)}", file=sys.stderr)
@@ -108,8 +173,20 @@ def install() -> int:
     bd.mkdir(parents=True, exist_ok=True)
     for cli in CLI_NAMES:
         target = bd / cli
-        target.write_text(shim_body(cli), encoding="utf-8")
-        target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        state = classify_target(target)
+        if state not in (ABSENT, SHIM):
+            # stdout 進 SessionStart context（模型可見），stderr 給用戶
+            warning = skip_warning(cli, target, state)
+            print(warning)
+            print(warning, file=sys.stderr)
+            continue
+        try:
+            _write_shim(target, shim_body(cli))
+        except OSError as exc:
+            warning = f"[install-skill-clis] WARNING: 寫入 {target} 失敗（{exc}），未安裝 shim。"
+            print(warning)
+            print(warning, file=sys.stderr)
+            continue
         print(f"[install-skill-clis] 已安裝 shim: {target}")
     print(f"[install-skill-clis] 完成。確認 {bd} 在 PATH 中即可使用 {', '.join(CLI_NAMES)}。")
     return 0

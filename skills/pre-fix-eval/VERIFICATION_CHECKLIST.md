@@ -94,7 +94,7 @@
   - 檔案大小: 11 KB [OK]
 
 - [x] 原始快速參考保留
-  - 路徑: `.claude/quick-ref-pre-fix-eval.md` [WARN]️ 已於 W10-049.1 (2026-04-15) 移除，內容已內化至本 skill
+  - 路徑: `.claude/quick-ref-pre-fix-eval.md` [WARN]️ 已於 2026-04-15 移除，內容已內化至本 skill
   - 檔案大小: 5.7 KB（原始）
 
 - [x] 原始 hook-specs 檔案保留

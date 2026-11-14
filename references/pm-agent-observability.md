@@ -145,7 +145,7 @@ PM **必須紀律性只讀狀態標籤**，忽略 `<output>` 內容。若需深�
 
 ---
 
-### 5. SendMessage shutdown_request（idle agent 放生，W1-008 ANA 落地）
+### 5. SendMessage shutdown_request（idle agent 放生）
 
 **適用場景**：
 - named agent（Agent tool 帶 name 參數 spawn）完工後轉入 idle 態，同 Wave 無同類型 pending ticket 需要續用
@@ -275,7 +275,7 @@ SendMessage(
 
 ---
 
-## 代理人結束狀態協議（W17-010）
+## 代理人結束狀態協議
 
 為讓 PM 從代理人 session 結束後能**可靠判斷結果**，代理人於 ticket body 中維護兩個結構化 section：
 
@@ -384,15 +384,15 @@ Claude Code CLI 提供的外部觀察指令，列出當前機器上所有活躍 
 **Last Updated**: 2026-10-08
 **Version**: 1.5.2 - 決策樹「續用還是放生」分支補路由：續用前先確認 worktree 仍在
 **Last Updated**: 2026-07-08
-**Version**: 1.5.1 - SendMessage shutdown_request 驗證狀態由兩層（已驗證 PM 端發送 / 間接驗證 agent 端終止）升級為單層「已驗證」——Wave 1 收尾對 8 個 idle agent 批次放生實機 8/8 收到 shutdown_approved 並觀察 teammate_terminated 事件，PM 端與 agent 端皆有直接觀測證據（W1-010 completion 後即時修正）
+**Version**: 1.5.1 - SendMessage shutdown_request 驗證狀態由兩層（已驗證 PM 端發送 / 間接驗證 agent 端終止）升級為單層「已驗證」——Wave 1 收尾對 8 個 idle agent 批次放生實機 8/8 收到 shutdown_approved 並觀察 teammate_terminated 事件，PM 端與 agent 端皆有直接觀測證據（收尾後即時修正）
 
-**Version**: 1.5.0 - 五工具擴為六工具：新增「SendMessage shutdown_request」章節（idle agent 放生協議，schema/範本/驗證層級標注/限制），決策樹新增 idle 續用/放生分支（W1-008 ANA 落地，W1-010）
+**Version**: 1.5.0 - 五工具擴為六工具：新增「SendMessage shutdown_request」章節（idle agent 放生協議，schema/範本/驗證層級標注/限制），決策樹新增 idle 續用/放生分支（ANA 落地）
 
-**Version**: 1.4.0 - 新增「CC 2.1.161 #18 修復標註：subagent 卡 running 顯示（已消解）」段落，記錄 finalize 出錯卡 running 的平台修復及對 PM 狀態判讀的影響（0.19.1-W1-010 標註落地）
+**Version**: 1.4.0 - 新增「CC 2.1.161 #18 修復標註：subagent 卡 running 顯示（已消解）」段落，記錄 finalize 出錯卡 running 的平台修復及對 PM 狀態判讀的影響（標註落地）
 
-**Version**: 1.3.0 - 新增「附錄：外部觀察工具速查」段落，記錄 `claude agents --json` (v2.1.145+) schema 與適用 / 不適用情境（W3-027 ANA 方案 D 落地，W3-027.1）
+**Version**: 1.3.0 - 新增「附錄：外部觀察工具速查」段落，記錄 `claude agents --json` (v2.1.145+) schema 與適用 / 不適用情境（ANA 方案 D 落地）
 
-**Version**: 1.2.0 - 新增「代理人結束狀態協議」（W17-010 三 IMP 合併：NeedsContext section + Exit Status YAML schema + needs-context-listener-hook）
+**Version**: 1.2.0 - 新增「代理人結束狀態協議」（三 IMP 合併：NeedsContext section + Exit Status YAML schema + needs-context-listener-hook）
 
 **Version**: 1.1.0 - 新增 Hook 廣播訊號可靠度表 + 派發時間閾值規則（PC-050 模式 E / PC-070 防護）；常見錯誤模式新增 Hook 訊號誤判條目
-**Source**: TaskOutput 對 local_agent 狀態查詢的實證結論 + agent-failure-sop.md 與 PC-050 的 TaskOutput 安全規則升級 + W10-059 ANA / W10-061 防護強化
+**Source**: TaskOutput 對 local_agent 狀態查詢的實證結論 + agent-failure-sop.md 與 PC-050 的 TaskOutput 安全規則升級 + 後續 ANA 與防護強化

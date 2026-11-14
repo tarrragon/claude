@@ -26,7 +26,7 @@ from ticket_system.lib.paths import get_project_root, get_ticket_state_root
 _logger = logging.getLogger(__name__)
 
 
-# W17-181.1: 真 SSOT delegate 至 hook_utils.hook_ticket
+#真 SSOT delegate 至 hook_utils.hook_ticket
 # lib 不再持有 ticket 路徑解析責任，直接 delegate 至 find_ticket_file（單一來源）。
 # 子進程環境（如 stop hook subprocess）下 cwd / fallback 路徑解析失誤的根因消除。
 # Why: ARCH-020 跨進程同構邏輯反模式；先前 load_and_validate_ticket 走 paths.get_tickets_dir
@@ -81,7 +81,7 @@ def _load_ticket_status(
     ticket_id: str,
     project_root: Optional[Path] = None,
 ) -> Optional[str]:
-    """W17-181.1：透過 hook_utils.find_ticket_file + parse_ticket_frontmatter
+    """透過 hook_utils.find_ticket_file + parse_ticket_frontmatter
     取得 ticket status（單一 SSOT 路徑解析來源）。
 
     Args:
@@ -94,7 +94,7 @@ def _load_ticket_status(
     if _find_ticket_file is None or _parse_ticket_frontmatter is None:
         return None
 
-    root = project_root if project_root is not None else get_project_root()
+    root = project_root if project_root is not None else get_ticket_state_root()
     ticket_path = _find_ticket_file(ticket_id, root)
     if ticket_path is None:
         return None
@@ -114,13 +114,13 @@ def is_ticket_completed(
     """
     檢查 Ticket 是否已 completed。
 
-    W17-181.1：改用 hook_utils.find_ticket_file + parse_ticket_frontmatter（單一 SSOT），
+    改用 hook_utils.find_ticket_file + parse_ticket_frontmatter（單一 SSOT），
     並接受顯式 project_root，消除子進程環境下 cwd 推導錯誤的根因（ARCH-020 同構修復）。
 
     若無法載入（不存在或格式錯誤），返回 False（保守策略：不確定時顯示）。
 
     Args:
-        ticket_id: Ticket ID，格式如 "0.31.1-W5-004"
+        ticket_id: Ticket ID，格式如 "<ticket-id>"
         project_root: 專案根目錄；None 時 fallback 至 get_project_root()（CLI 場景）
 
     Returns:
@@ -155,7 +155,7 @@ def is_ticket_missing(
     if _find_ticket_file is None:
         return False
     try:
-        root = project_root if project_root is not None else get_project_root()
+        root = project_root if project_root is not None else get_ticket_state_root()
         return _find_ticket_file(ticket_id, root) is None
     except Exception as exc:
         # 查詢失敗不等於查無此票：回 False 保守不清，但留下可觀測訊號
@@ -170,7 +170,7 @@ def is_ticket_terminal(
     """
     檢查 Ticket 是否處於 terminal 狀態（completed 或 closed）。
 
-    W17-181.2：將 stop hook 自定義的 terminal 判定上移至 lib，消除
+    將 stop hook 自定義的 terminal 判定上移至 lib，消除
     跨進程同構邏輯（ARCH-020）。stop hook 的 GC / handoff 過濾路徑使用，
     避免 closed 的 ticket 對應 handoff JSON 被誤報為「待恢復」阻止退出。
 
@@ -221,7 +221,7 @@ def is_ticket_in_progress_or_completed(
     """
     檢查 Ticket 是否已 in_progress 或 completed。
 
-    W17-181.1：改用 hook_utils.find_ticket_file + parse_ticket_frontmatter（單一 SSOT），
+    改用 hook_utils.find_ticket_file + parse_ticket_frontmatter（單一 SSOT），
     並接受顯式 project_root，消除子進程環境下 cwd 推導錯誤的根因（ARCH-020 同構修復）。
 
     用於判斷任務鏈 handoff 的目標 ticket 是否已啟動。
@@ -230,7 +230,7 @@ def is_ticket_in_progress_or_completed(
     若無法載入（不存在或格式錯誤），返回 False（保守策略：不確定時顯示）。
 
     Args:
-        ticket_id: Ticket ID，格式如 "0.31.1-W5-004"
+        ticket_id: Ticket ID，格式如 "<ticket-id>"
         project_root: 專案根目錄；None 時 fallback 至 get_project_root()（CLI 場景）
 
     Returns:
@@ -248,7 +248,7 @@ def extract_direction_target_id(direction: str) -> Optional[str]:
     從 direction 字串提取 target_id。
 
     格式：direction 可為 "type:target_id"（含目標）或 "type"（無目標）。
-    - "to-sibling:0.1.0-W9-002" → "0.1.0-W9-002"
+    - "to-sibling:<ticket-id>" → "<ticket-id>"
     - "to-parent" → None
     - "context-refresh" → None
 
@@ -294,7 +294,7 @@ def is_valid_direction(direction: str) -> bool:
 
 def resolve_target(record: dict) -> Optional[str]:
     """
-    統一解析 handoff record 的 target ticket id（W17-164 / L2-A）。
+    統一解析 handoff record 的 target ticket id（L2-A）。
 
     讀取優先序：
     1. 顯式 target_ticket_id 欄位（非空字串）
@@ -329,9 +329,9 @@ def is_handoff_stale(
     """判斷 handoff record 是否為 stale。
 
     收斂三套消費者（reminder-hook / stop-hook / handoff_gc）對 stale 的判斷規則於單一函式，
-    避免規則漂移（W17-095 根因）。
+    避免規則漂移。
 
-    W17-181.1：新增 project_root 參數，傳遞給 is_ticket_completed /
+    新增 project_root 參數，傳遞給 is_ticket_completed /
     is_ticket_in_progress_or_completed 與內部 status 探測，確保子進程環境下
     路徑解析正確（ARCH-020 同構修復）。
 
@@ -453,6 +453,83 @@ def is_handoff_active(
         if orphan:
             return False, orphan
     return True, ""
+
+
+# ---------------------------------------------------------------------------
+# 交接檔建立者的 Claude 行程識別
+# ---------------------------------------------------------------------------
+# 用途：Stop hook 只對建立交接檔的那個 Claude 行程阻擋，其他 session 不阻擋。
+# 以 Claude 行程（pid＋啟動時間）而非 session_id 識別：/clear 會換 session_id，
+# 而建立交接檔的 session 照指示 /clear 之後，新 context 正是預期的接手方，兩者同屬一個 Claude 行程。
+# pid 會被重用，所以身分是 (pid, lstart) 一組；lstart 以 UTC、C locale 取得並正規化空白，
+# 同 multi-session-orchestration master_resume_hint 的 PS_ENV 判準。
+
+CREATOR_PROCESS_FIELD = "creator_process"
+# 沿父行程鏈找 claude 祖先的最多層數（實際鏈約為 python → uv → zsh → claude）
+_MAX_ANCESTOR_DEPTH = 8
+_CLAUDE_COMM_MARK = "claude"
+_PS_TIMEOUT_SECONDS = 5
+
+
+def _ps_field(pid: int, field: str) -> Optional[str]:
+    """以 ps 取行程欄位；行程不存在、ps 失敗或逾時回傳 None（呼叫端把 None 當查不到，判定落在阻擋側）。"""
+    import os
+    import subprocess
+
+    env = {"TZ": "UTC", "LC_ALL": "C", "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+    try:
+        out = subprocess.run(
+            ["ps", "-o", f"{field}=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=_PS_TIMEOUT_SECONDS, env=env,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        _logger.info("ps 取行程欄位失敗 pid=%s field=%s: %s", pid, field, exc)
+        return None
+    text = out.stdout.strip()
+    return text if out.returncode == 0 and text else None
+
+
+def current_claude_process(start_pid: Optional[int] = None) -> Optional[dict]:
+    """目前所在的 Claude 行程識別 {pid, lstart}；沿父行程鏈找第一個執行檔名含 claude 的祖先。
+
+    找不到、ps 失敗或逾時回傳 None。start_pid 預設為呼叫者的父行程。
+    """
+    import os
+
+    pid: Optional[int] = start_pid if start_pid is not None else os.getppid()
+    for _ in range(_MAX_ANCESTOR_DEPTH):
+        if pid is None or pid <= 1:
+            return None
+        comm = _ps_field(pid, "comm") or ""
+        if _CLAUDE_COMM_MARK in os.path.basename(comm).lower():
+            lstart = _ps_field(pid, "lstart")
+            return {"pid": pid, "lstart": " ".join(lstart.split())} if lstart else None
+        ppid = _ps_field(pid, "ppid")
+        pid = int(ppid) if ppid is not None and ppid.isdigit() else None
+    return None
+
+
+def _valid_process(value: object) -> Optional[tuple]:
+    """把行程識別正規化為 (pid, lstart)；形狀不符（缺欄、型別錯、空字串）回傳 None。"""
+    if not isinstance(value, dict):
+        return None
+    pid, lstart = value.get("pid"), value.get("lstart")
+    if isinstance(pid, bool) or not isinstance(pid, int) or not isinstance(lstart, str) or not lstart.strip():
+        return None
+    return pid, " ".join(lstart.split())
+
+
+def is_other_claude_process(record: dict, current: Optional[dict]) -> bool:
+    """交接檔是否確定由另一個 Claude 行程建立。
+
+    只有建立者欄位與目前行程都取得完整識別、且兩者不同時才回 True；
+    舊格式（無欄位）、欄位損毀、目前行程查不到時一律回 False，Stop hook 照常阻擋。
+    """
+    creator = _valid_process((record or {}).get(CREATOR_PROCESS_FIELD))
+    here = _valid_process(current)
+    if creator is None or here is None:
+        return False
+    return creator != here
 
 
 def scan_pending_handoffs() -> List[ParsedHandoff]:

@@ -2,7 +2,7 @@
 name: branch-worktree-guardian
 description: "Branch Worktree Guardian - Git 分支和 Worktree 管理工具。Use for: (1) 新開發需求時建立隔離分支, (2) 使用 worktree 機制避免分支衝突, (3) 驗證當前工作分支正確性, (4) 預防在錯誤分支上開發"
 metadata:
-  version: 1.0.1
+  version: 1.0.2
 ---
 
 # Branch Worktree Guardian
@@ -182,17 +182,9 @@ Hook 整合和分支保護規則的配置說明：
 
 ---
 
-## 修改 source 後必須重新安裝
+## 修改 source 後不需安裝
 
-> **重要**：本 skill 透過 `uv tool install` 安裝為獨立 CLI，source（本目錄）與 installed（`~/.local/share/uv/tools/<package>/`）是兩份獨立 Python package。修改 source 後若未 reinstall，CLI 仍使用 stale installed 版本，新增的函式會 AttributeError 或被 hasattr 包裝靜默吞掉（W11-037 根因）。
-
-**修復指令**：
-
-```bash
-cd .claude/skills/<本 skill 目錄> && uv tool install . --force --reinstall
-```
-
-**自動偵測**：每次 SessionStart 由 `uv-tool-staleness-check-hook` 比對 source vs installed SHA256，偵測 stale 時提示修復指令。對應 ticket-skill 本身另有 `ticket-reinstall-hook` 自動 reinstall。
+本 skill 沒有 CLI 入口（`pyproject.toml` 無 `[project.scripts]`），不經 `uv tool` 安裝，也不在 `install-skill-clis.py` 的 shim 清單內。`scripts/` 下的腳本一律以 `python .claude/skills/branch-worktree-guardian/scripts/<腳本>.py` 從原始碼直接執行，修改後下一次執行即生效，沒有過期的安裝副本需要同步。
 
 ---
 

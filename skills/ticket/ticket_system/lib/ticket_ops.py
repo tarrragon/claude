@@ -35,10 +35,10 @@ def resolve_id_from_ref(ref: Any) -> str:
         str: Ticket ID（若無法提取返回空字串）
 
     Examples:
-        >>> resolve_id_from_ref("0.1.0-W2-001")
-        '0.1.0-W2-001'
-        >>> resolve_id_from_ref({"id": "0.1.0-W2-001", "status": "pending"})
-        '0.1.0-W2-001'
+        >>> resolve_id_from_ref("<ticket-id>")
+        '<ticket-id>'
+        >>> resolve_id_from_ref({"id": "<ticket-id>", "status": "pending"})
+        '<ticket-id>'
         >>> resolve_id_from_ref({})
         ''
         >>> resolve_id_from_ref(None)
@@ -77,7 +77,7 @@ def load_and_validate_ticket(
             失敗：(None, error_message)
 
     Examples:
-        >>> ticket, error = load_and_validate_ticket("0.31.0", "0.31.0-W1-001")
+        >>> ticket, error = load_and_validate_ticket("0.31.0", "<ticket-id>")
         >>> if error:
         ...     return 1
         >>> # 使用 ticket
@@ -122,10 +122,10 @@ def resolve_ticket_path(
         Path: Ticket 檔案路徑
 
     Examples:
-        >>> ticket, _ = load_and_validate_ticket("0.31.0", "0.31.0-W1-001")
-        >>> path = resolve_ticket_path(ticket, "0.31.0", "0.31.0-W1-001")
+        >>> ticket, _ = load_and_validate_ticket("0.31.0", "<ticket-id>")
+        >>> path = resolve_ticket_path(ticket, "0.31.0", "<ticket-id>")
         >>> print(path)
-        Path(.../docs/work-logs/v0.31.0/tickets/0.31.0-W1-001.md)
+        Path(.../docs/work-logs/v0.31.0/tickets/<ticket-id>.md)
     """
     return Path(ticket.get("_path", get_ticket_path(version, ticket_id)))
 

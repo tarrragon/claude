@@ -205,7 +205,10 @@ def build_pattern_groups(config: StyleConfig) -> dict[str, list[tuple[str, str]]
              f'改用 {radius}'),
         ],
         "i18n": [
-            (r"Text\s*\(\s*['\"](?!http|[A-Z_]+|v\d)[^'\"]+['\"]",
+            # 常數排除須整串錨定（[A-Z][A-Z0-9_]* 後緊接結束引號）：只看開頭字元時，
+            # 所有大寫開頭的 UI 文字（如 'Save'）都會被當成常數放行。
+            # 全大寫短字（如 'OK'）與常數同形，刻意保留放行。
+            (r"Text\s*\(\s*['\"](?!http|[A-Z][A-Z0-9_]*['\"]|v\d)[^'\"]+['\"]",
              f'字串移入 ARB，改用 {l10n}'),
             (r"title\s*:\s*Text\s*\(\s*['\"][^'\"]+['\"]",
              f'AppBar 標題移入 ARB，改用 {l10n}'),

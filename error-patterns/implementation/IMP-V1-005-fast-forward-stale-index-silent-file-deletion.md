@@ -4,7 +4,6 @@ title: index.lock 競爭下 fast-forward 移動 HEAD 但 index 寫入失敗，�
 category: implementation
 severity: high
 created: 2026-07-03
-source_ticket: 0.4.0-W1-002
 ---
 
 # IMP-V1-005: Fast-forward 移動 HEAD 但 index 過時，後續 commit 靜默刪檔
@@ -21,7 +20,7 @@ source_ticket: 0.4.0-W1-002
 2. **fast-forward 的非原子性**：merge 判定可 FF 後先移動 HEAD ref，再寫 index/working tree；HEAD 更新成功、index 寫入因 lock 失敗，留下「HEAD 已在新 commit、index 仍是舊 tree」的分裂狀態。
 3. **後續 commit 以 index 為準**：下一個 `git add <特定檔> && git commit` 只更新被 add 的路徑，其餘 tree 內容沿用過時 index——相對於新 HEAD（含被合併檔案），該 commit 等效**刪除**了所有 FF 帶入的檔案，且 `git status` 事前不顯示任何異常（status 比對的也是同一份過時 index）。
 
-**具體案例（0.4.0-W1-002）**：合併 worktree 分支（postgres 測試骨架 2 檔）時 FF + index 寫入失敗；接著 commit W1-008 的 ticket md，該 commit 對 parent 的 diff 含 `postgres.go | 121 ------` 與 `postgres_test.go | 473 ------`。
+**具體案例**：合併 worktree 分支（postgres 測試骨架 2 檔）時 FF + index 寫入失敗；接著 commit 另一張票的 ticket md，該 commit 對 parent 的 diff 含 `postgres.go | 121 ------` 與 `postgres_test.go | 473 ------`。
 
 ## 偵測
 

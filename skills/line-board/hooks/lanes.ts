@@ -147,13 +147,20 @@ function lastMatchPerLane(text: string, pattern: RegExp): Map<number, RegExpExec
 /**
  * 掃協調票的 Solution，每條線只取最後一次出現的現行佇列行，依線號排序；各線附上 parseLaneGoals 的目標（沒有時為 null）。
  * 最後一行票序為 `（無）` 的線不回傳；歷史行（同線較早的行）的票號不進結果。
+ * 附說明的收線寫法（endedForm 為 with-note）仍回傳，ended 標 'with-note'，供看板與 line_status 同樣歸為收線寫法；其餘為 null。
  * prefix 為協調票推導的短票號前綴（shared.ts ticketPrefixOf），原樣傳給 parseQueue 補全短票號。
  */
 export function parseLanes(text: string, prefix: string): Lane[] {
   const goals = parseLaneGoals(text)
   return parseLaneLines(text)
     .filter(({ queue }) => endedForm(queue) !== 'exact')
-    .map(({ lane, session, queue }) => ({ lane, session, goal: goals.get(lane) ?? null, tokens: parseQueue(queue, prefix) }))
+    .map(({ lane, session, queue }) => ({
+      lane,
+      session,
+      goal: goals.get(lane) ?? null,
+      tokens: parseQueue(queue, prefix),
+      ended: endedForm(queue) === 'with-note' ? 'with-note' : null,
+    }))
 }
 
 /**
@@ -167,12 +174,14 @@ export function parseLaneLines(text: string): LaneLine[] {
 }
 
 /**
- * 票序不含任何票號、但有非票號文字（如寫錯的收線記號「（結束了）」或說明文字「等主控通知」）。
+ * 票序不含任何票號：只有非票號文字（如寫錯的收線記號「（結束了）」或說明文字「等主控通知」），
+ * 或票序為空（空字串、只有分隔符）。空票序同樣列入：線沒收、也沒有可做的票，不標示時看板與 line_status 都沒有任何警示。
  * 看板的線標題標示與 line_status 的 no-ticket 過期項共用此判定，「佇列無票號」的定義只有這一份。
- * 輸入為 parseQueue 的結果；收線記號由呼叫端先以 endedForm 排除（看板經 parseLanes 濾掉 exact，line_status 跳過收線的線）。
+ * 輸入為 parseQueue 的結果；收線寫法由呼叫端先以 endedForm 排除（看板經 parseLanes 濾掉 exact、以 Lane.ended 另標 with-note，
+ * line_status 跳過收線的線）。
  */
 export function isQueueWithoutTicket(tokens: readonly QueueToken[]): boolean {
-  return !tokens.some(token => token.kind === 'ticket') && tokens.some(token => token.kind === 'text')
+  return !tokens.some(token => token.kind === 'ticket')
 }
 
 /** 所有線的佇列完整票號，保留首次出現順序並去重。 */

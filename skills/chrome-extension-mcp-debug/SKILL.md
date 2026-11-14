@@ -3,7 +3,7 @@ name: chrome-extension-mcp-debug
 description: "Chrome Extension 實機測試與 debug 工作流，以 chrome-devtools-mcp 為核心工具。Use when: (1) 完成功能後實機驗證 / manual test / 試看看 / 跑看看 / verify feature, (2) extension debug / popup 不作動 / content script 不注入 / service worker 報錯 / background 出問題, (3) 安裝 unpacked extension / load unpacked / 載入未封裝, (4) 看 console / 看 network / 看 log / view console / inspect requests, (5) 功能更新後重新載入 extension / rebuild reload / reload extension。涵蓋 Manifest V3 service worker / content script / popup / options page 的 chrome-devtools-mcp 工具呼叫流程。不取代 Puppeteer / Playwright 自動化 E2E（CI 用），定位為開發期手動驗證與 LLM-assisted debug。"
 license: MIT
 metadata:
-  version: 1.1.0
+  version: 1.1.1
   category: chrome-extension-engineering
 ---
 
@@ -15,7 +15,7 @@ metadata:
 
 > **前置假設**：`.mcp.json` 已註冊 `chrome-devtools` MCP server（pipe 模式預設，至少含 `--isolated` + `--categoryExtensions`）。若尚未註冊，先做專案級設定（參考各專案的 `docs/` 或 chrome-devtools-mcp 官方 README）。
 >
-> **不建議**在 `.mcp.json` 設 `--chromeArg=--load-extension=<path>` 預載 extension：(1) 相對路徑在 chrome-devtools-mcp npx 啟動環境不會生效（W1-001.1 / W1-005 實證 `list_extensions` 回空）；(2) 絕對路徑會把開發者本機路徑寫死進 tracked config，跨機器不可移植。改在 Workflow A 用 `install_extension(path="<絕對路徑>")` 動態載入為標準步驟。
+> **不建議**在 `.mcp.json` 設 `--chromeArg=--load-extension=<path>` 預載 extension：(1) 相對路徑在 chrome-devtools-mcp npx 啟動環境不會生效（實測 `list_extensions` 回空）；(2) 絕對路徑會把開發者本機路徑寫死進 tracked config，跨機器不可移植。改在 Workflow A 用 `install_extension(path="<絕對路徑>")` 動態載入為標準步驟。
 
 ---
 
@@ -89,7 +89,7 @@ npm run build:dev    # 或 npm run build / yarn dev / pnpm build 等，產出 un
 
 ### 為何不在 `.mcp.json` 用 `--chromeArg=--load-extension` 預載
 
-**Why**：W1-001.1 / W1-005 實證 chrome-devtools-mcp npx 啟動環境下 `--load-extension=<相對路徑>` 不會生效（`list_extensions` 初次回空）；改絕對路徑雖可載入但會把開發者本機路徑寫進 tracked config 不可移植。
+**Why**：實測 chrome-devtools-mcp npx 啟動環境下 `--load-extension=<相對路徑>` 不會生效（`list_extensions` 初次回空）；改絕對路徑雖可載入但會把開發者本機路徑寫進 tracked config 不可移植。
 
 **Action**：所有專案統一改用 `install_extension(path="<絕對路徑>")` 動態載入；`.mcp.json` 只保留 `--isolated` + `--categoryExtensions` 等模式類旗標。
 

@@ -6,8 +6,6 @@ severity: medium
 created: 2026-05-11
 related:
  - PC-113
- - W17-094
- - W17-190
 ---
 
 # PC-138: Validator 將 trade-off 表格的 N/A cell 誤判為 placeholder
@@ -35,7 +33,7 @@ related:
 
 ### 根因一：PC-113 加 `\b` 字邊界後仍誤判合法 `N/A`
 
-W17-094 修復 PC-113 加入 `\bN/A\b` 字邊界（避免 `Na/A`、`xN/Ax` 等 substring 命中）。但 trade-off 表格 cell 內的 `| N/A |` 正好是 word boundary 命中（前後 ` ` 空白屬非單字字元），仍觸發 placeholder 判定。
+PC-113 的修復加入 `\bN/A\b` 字邊界（避免 `Na/A`、`xN/Ax` 等 substring 命中）。但 trade-off 表格 cell 內的 `| N/A |` 正好是 word boundary 命中（前後 ` ` 空白屬非單字字元），仍觸發 placeholder 判定。
 
 `.claude/skills/ticket/ticket_system/lib/ticket_validator.py:_is_placeholder` 當前邏輯：
 
@@ -61,7 +59,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
 
 ## 案例
 
-### W17-190 ANA Solution（2026-05-11）
+### ANA Solution 三方案對照表（2026-05-11）
 
 PM 在 Solution 寫三方案對照表，方案 C「測試檔 UV script header 補 deps」標 N/A 表示不適用：
 
@@ -75,17 +73,17 @@ PM 在 Solution 寫三方案對照表，方案 C「測試檔 UV script header �
 
 `ticket track complete` 報「Solution 未填寫」。逐行 grep `\bN/A\b` 命中 5 處（C 列五個 cell）。改 `N/A` → `不適用` 後通過。
 
-### W10-131 ANA → W10-133 IMP（2026-05-13/15）— 家族延伸：非表格描述性 N/A
+### ANA → IMP（2026-05-13/15）— 家族延伸：非表格描述性 N/A
 
-W10-131 ANA 撰寫「N/A keyword 誤判」分析過程中遭遇 `_is_placeholder` 阻擋 complete，必須 `--skip-body-check`。場景為非表格情境的描述性多視角標記（如 `Layer 2: N/A` / `Phase 4 N/A`），證實 W10-125 表格 cell 豁免後仍有未覆蓋的合法情境。
+該 ANA 撰寫「N/A keyword 誤判」分析過程中遭遇 `_is_placeholder` 阻擋 complete，必須 `--skip-body-check`。場景為非表格情境的描述性多視角標記（如 `Layer 2: N/A` / `Phase 4 N/A`），證實表格 cell 豁免後仍有未覆蓋的合法情境。
 
-W10-133 治本：`ticket_validator._is_placeholder()` 新增豁免 regex `^[\s\-\*\+>]*(?:Layer\s+\w+|Phase\s+\w+)\s*[:：]?\s*N/A\s*\.?\s*$`，剝除描述性 N/A 行後再做 keyword 檢查。保守設計：僅 N/A keyword 豁免；混合 TODO/TBD 的行不豁免（pytest 案例 `test_descriptive_layer_with_todo_still_placeholder` 守護）。
+IMP 治本：`ticket_validator._is_placeholder()` 新增豁免 regex `^[\s\-\*\+>]*(?:Layer\s+\w+|Phase\s+\w+)\s*[:：]?\s*N/A\s*\.?\s*$`，剝除描述性 N/A 行後再做 keyword 檢查。保守設計：僅 N/A keyword 豁免；混合 TODO/TBD 的行不豁免（pytest 案例 `test_descriptive_layer_with_todo_still_placeholder` 守護）。
 
-新增 pytest 8 案例（`tests/test_ticket_validator.py::TestDescriptiveNAExemption`）覆蓋三類：W10-125 regression 守護、W10-133 主場景豁免、混合情境防擴散。
+新增 pytest 8 案例（`tests/test_ticket_validator.py::TestDescriptiveNAExemption`）覆蓋三類：表格 cell 豁免 regression 守護、描述性 N/A 主場景豁免、混合情境防擴散。
 
-### W14-053 IMP Test Results（2026-05-20）— 家族延伸：acceptance 列表中文描述後接 inline N/A
+### IMP Test Results（2026-05-20）— 家族延伸：acceptance 列表中文描述後接 inline N/A
 
-W14-053 IMP `.claude/state/` gitignore 修復，在 Test Results 章節「Acceptance 對應」列表中寫：
+該 IMP `.claude/state/` gitignore 修復，在 Test Results 章節「Acceptance 對應」列表中寫：
 
 ```markdown
 - [x] 既有 marker 若 tracked 已 git rm --cached：marker 從未 tracked，N/A 自動滿足
@@ -93,11 +91,11 @@ W14-053 IMP `.claude/state/` gitignore 修復，在 Test Results 章節「Accept
 
 中文敘述 + 冒號 + 結論短語含 `N/A`。`ticket track complete` 阻擋並報「未填寫的必填章節：Test Results」。
 
-W10-133 豁免規則為 `^[\s\-\*\+>]*(?:Layer\s+\w+|Phase\s+\w+)\s*[:：]?\s*N/A\s*\.?\s*$`，僅匹配 `Layer X: N/A` / `Phase X: N/A` 規範化句型。本案例 acceptance 描述行不符合此 pattern（前綴為「既有 marker...」中文敘述），仍命中 `\bN/A\b` 觸發。
+上述描述性 N/A 豁免規則為 `^[\s\-\*\+>]*(?:Layer\s+\w+|Phase\s+\w+)\s*[:：]?\s*N/A\s*\.?\s*$`，僅匹配 `Layer X: N/A` / `Phase X: N/A` 規範化句型。本案例 acceptance 描述行不符合此 pattern（前綴為「既有 marker...」中文敘述），仍命中 `\bN/A\b` 觸發。
 
 作者端修復：將「N/A 自動滿足」改為「此項自動滿足」（去除 N/A keyword）即通過驗證。
 
-驗證模式：本案例證實 W10-133 豁免規則對「結尾簡短結論含 N/A」的散文情境仍未覆蓋。validator 端治本需擴充豁免句型或實施「整段檢查時忽略中文描述行尾 N/A」策略。
+驗證模式：本案例證實上述豁免規則對「結尾簡短結論含 N/A」的散文情境仍未覆蓋。validator 端治本需擴充豁免句型或實施「整段檢查時忽略中文描述行尾 N/A」策略。
 
 ## 防護
 
@@ -129,8 +127,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_table_na, re.IG
 
 ## 相關規則 / 文件
 
-- PC-113：原始 word boundary 修復（W17-094）
-- W17-190 / W17-191：本 PC 觸發案例
+- PC-113：原始 word boundary 修復
 - ticket_validator.py:_is_placeholder（line 312-383）
 
 ## 範本：發現後的處理

@@ -214,5 +214,5 @@ Claude Code 於 session 啟動時載入 skill 註冊表並快取路徑與內容�
 
 **Last Updated**: 2026-11-09
 **Version**: 1.2.0 — push 改為只由主控方在發版時執行：§1 push 指令列與 Why、§2 使用時機表（consumer 本地有框架修改改為回報 issue）、§4.3 第 5 步、§6.2 canonical 中轉兩步同步改寫。角色判定路由 escalation-flow〈角色：主控方與 consumer〉。
-**Version**: 1.1.0 — 新增 §6 全域覆蓋層（`~/.claude/`）正規流程：禁止單一專案 rsync 至全域、canonical 中轉三步、消費者數判別提問、包含或分支的雙向 grep 判定、session 快取導致的生效時機落差；檢查清單補 2 項（0.2.1-W3-123，承接 0.2.1-W3-108 acceptance 4）
+**Version**: 1.1.0 — 新增 §6 全域覆蓋層（`~/.claude/`）正規流程：禁止單一專案 rsync 至全域、canonical 中轉三步、消費者數判別提問、包含或分支的雙向 grep 判定、session 快取導致的生效時機落差；檢查清單補 2 項
 **Version**: 1.0.0 — 初版：pull/push 時機、base SHA 與三方合併、full overlay fallback 風險與處理、preserve 維護時機

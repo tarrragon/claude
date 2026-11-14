@@ -161,7 +161,7 @@ exit code 0（無衝突）時方可依原計畫並行派發。指令用法、判
 
 ### Dispatch-Plan 先行（多任務 / group / spawned 場景）
 
-> **來源**：W17-029 / W17-035 — Linux 類比後的結論是保留單一 ticket / agent / exit status 的生命週期，用 Makefile-like dispatch-plan 描述 orchestration，不新增 batch dispatch CLI。
+> **來源**：Linux 類比分析 — Linux 類比後的結論是保留單一 ticket / agent / exit status 的生命週期，用 Makefile-like dispatch-plan 描述 orchestration，不新增 batch dispatch CLI。
 
 以下任一情境成立時，PM 必須先在 ticket Problem Analysis 或 Solution 寫 dispatch-plan，再派發 agent：
 
@@ -179,7 +179,7 @@ dispatch-plan 是 orchestration description，不是 execution automation：
 | 角色 | 描述多個 job 的依賴、ownership、context source、run mode | 自動批量派發 agent |
 | 生命週期 | 保留每張 ticket 的獨立 prompt、commit、Exit Status | 容易弱化 ticket / agent 邊界 |
 | 首輪落地 | 強制使用 | 禁止新增 |
-| 升級條件 | W17-030 T3 顯示 PM 仍拼單避免派發 | 另建 INV/IMP 評估 |
+| 升級條件 | 觀測顯示 PM 仍拼單避免派發 | 另建 INV/IMP 評估 |
 
 dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準：`ticket` / `agent` / `files` / `deps` / `context source` / `commit policy` / `run mode`。
 
@@ -206,7 +206,7 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 
 ### 派發 prompt 必含精準 git staging（並行 commit 場景，強制）
 
-> **來源**：PC-092 — 2026-04-18 W5-043 並行派發事件，四個 thyme-python-developer 代理人併發 `git add .`，導致 batch 3 的 6 個檔案被 batch 4 代理人一併 staged + commit，commit 訊息標 batch 4 但實際 diff 含 batch 3 + 4。
+> **來源**：PC-092 — 2026-04-18 並行派發事件，四個 thyme-python-developer 代理人併發 `git add .`，導致 batch 3 的 6 個檔案被 batch 4 代理人一併 staged + commit，commit 訊息標 batch 4 但實際 diff 含 batch 3 + 4。
 
 當並行派發的代理人各自執行 `git commit` 時，prompt 必須明示精準 staging，且防護必須延伸到 commit 階段本身：
 
@@ -232,7 +232,7 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 被掃入時：停手、記錄 SHA 與檔案清單、上報 PM；禁 revert / reset --soft / amend / 反向套用。
 ```
 
-> **歷史註記**：本段 4.11.0–4.24.0 曾以 path-limited commit（`git commit -- <paths>`）為主防護，後經實測推翻（pathspec 形式對同一路徑上他人未 stage 的編輯無隔離，且丟棄既有 index），由 `bash-tool-usage-rules.md` 規則七明文禁止。現行預設：代理人票務提交場景採 `ticket track commit`（隔離索引）為主路徑；精確 add + 核對 + 裸 commit 降為該命令失敗或不可用時的 fallback；PM 收尾等無票務 CLI 場景仍以精確 add 三步為預設（完整性三要件見 `bash-tool-usage-details.md`）。
+> **歷史註記**：本段 4.11.0–4.24.0 曾以 path-limited commit（`git commit -- <paths>`）為主防護，後經實測推翻（pathspec 形式對同一路徑上他人未 stage 的編輯無隔離，且丟棄既有 index），由 `bash-tool-usage-rules.md` 規則七明文禁止。現行預設：代理人票務提交場景採 `ticket track commit`（隔離索引）為主路徑；精確 add + 核對 + 裸 commit 降為該命令失敗或不可用時的 fallback；PM 收尾等無票務 CLI 場景仍以精確 add 三步為預設（完整性要件見 `bash-tool-usage-details.md`）。
 
 **新增檔案同樣需精確 `git add`**：untracked 新檔（新建 Ticket md、新增測試檔等）不會出現在 `git diff --cached`，漏 add 即漏提交；裸 commit 前的核對步驟以 `git status --porcelain` 一併確認無本票 untracked 殘留。
 
@@ -264,9 +264,9 @@ cwd-resolving 即時生效的工具（ticket/doc/worktree 等 shim CLI 套件源
 
 > 完整案例與方案取捨（shim pin 不採理由）：`.claude/error-patterns/process-compliance/PC-BAL-041-live-tool-source-edit-bare-window.md`
 
-### worktree 實作 agent 禁用 dart MCP 寫入工具（強制，W3-008）
+### worktree 實作 agent 禁用 dart MCP 寫入工具（強制）
 
-> **來源**：W3-008 — worktree 隔離對 daemon-rooted 寫入工具不生效（dart MCP daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root），dart MCP 寫入會繞過隔離邊界洩漏到主 repo。
+> **來源**：一次實測 — worktree 隔離對 daemon-rooted 寫入工具不生效（dart MCP daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root），dart MCP 寫入會繞過隔離邊界洩漏到主 repo。
 
 派發 worktree 隔離的實作 agent（parsley / fennel / thyme / cinnamon 等）時，prompt 必須明示禁用 dart MCP 寫入工具，改用尊重 agent cwd 的替代工具：
 
@@ -389,7 +389,7 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 **核心規則**：`.claude/` 修改類並行數限制（worktree 模式 ≤ 2，見 `.claude/references/parallel-dispatch-worktree-details.md`「`.claude/` 修改類並行數限 ≤ 2」章節）以「同一時刻全系統並行操作 `.claude/` 的 agent 總數」計算，**跨層累計**，不依派發層級分開計數。
 
-**Why**：該限制是 runtime deny 行為的觀察結論，runtime 不區分 dispatch 層級——嵌套層 agent 對主 repo `.claude/` 的 Edit 與 PM 直接派發的 agent 在 runtime 眼中等價（W1-056.4 已實證 hook 與 runtime 行為在嵌套層一致生效）。
+**Why**：該限制是 runtime deny 行為的觀察結論，runtime 不區分 dispatch 層級——嵌套層 agent 對主 repo `.claude/` 的 Edit 與 PM 直接派發的 agent 在 runtime 眼中等價（已實證 hook 與 runtime 行為在嵌套層一致生效）。
 
 **Consequence**：若各層獨立計數（L0 派 2 + 嵌套層再派 1 = 實際 3 並行），全系統並行數超過觀察安全上限，預期觸發 runtime deny；deny 無 hook stderr 可診斷，且需 PM 接手手動修復，併行收益被抹除。
 
@@ -406,7 +406,7 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 **Why**：PC-092 的根因是並行 commit 時廣域 staging 把他人變更帶入 commit；嵌套加深後「他人」包含父層 agent 自身——父層與 child 若在同一 working copy（主 repo cwd 或 bgIsolation: none），child 執行 `git add .` 會把父層未 commit 的中間產物一併帶走。
 
-**Consequence**：commit 邊界跨層混雜後，git blame 與 ticket 歸因失效——W1-056.4 實證嵌套層 git 操作可歸因到具體 agent，但歸因正確性以精準 staging 為前提；廣域 staging 會讓歸因結果指向錯誤的 ticket。
+**Consequence**：commit 邊界跨層混雜後，git blame 與 ticket 歸因失效——實證嵌套層 git 操作可歸因到具體 agent，但歸因正確性以精準 staging 為前提；廣域 staging 會讓歸因結果指向錯誤的 ticket。
 
 **Action**：
 
@@ -473,13 +473,13 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
-## 派發機制選用準則（named agent vs 一般 subagent，W2-002 ANA 落地）
+## 派發機制選用準則（named agent vs 一般 subagent）
 
 > **完整規則**：`.claude/references/parallel-dispatch-agent-lifecycle-details.md`（按需讀取，含選用準則決策表、兩機制差異對照，以及下方「idle agent 回收 SOP」的完整內容）。
 
 ---
 
-## idle agent 回收 SOP（W1-008 ANA 落地）
+## idle agent 回收 SOP
 
 > **完整規則**：`.claude/references/parallel-dispatch-agent-lifecycle-details.md`（按需讀取，含 idle_notification 語意、續用/放生二分判準、主題聚焦維度、SOP 流程、範本）。本節處理**票已 completed** 但 teammate 仍 idle 的回收；票仍 `in_progress` 時改走下一節。
 
@@ -596,11 +596,11 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 **Version**: 4.19.0 - 「派發 prompt 必含職責邊界聲明（強制）」章節改寫為「派發 prompt 依權威骨架執行、不重述 ticket 已載欄位（強制）」：`agent-dispatch-template.md` 骨架收斂為單一權威版後，本節同步不再要求 prompt 逐項複製 `where.files` 為允許/禁止清單，改引用權威骨架的四項開場結構與「prompt 不重述 ticket 已載欄位」正面清單；並行安全檢查 checklist 與「相關文件」條目同步更新措辭
 **Version**: 4.18.0 - 「兩機制差異對照」回傳方式列補強：明示 named agent 純文字完工輸出結構性不送達 PM（idle_notification 不攜帶文字，不索回即零送達，非機率性遺失），並路由 PC-BAL-038「區辨因子」章節取樣實證（named 純文字 0/6、SendMessage 索回 6/6、unnamed 3/3）；一般 subagent 欄同步註明完工通知含 result 欄位文字直達。評估結論：既有「PM 以 SendMessage 取報告」已含索回步驟宣告，不另立新章節，僅補強語氣與實證路由
 **Version**: 4.17.0 - 新增「跨 session 同儕來訊時的脈絡存續判讀」章節：對號分界表區分沉默方向（上節）與來訊方向（本節）+ 五列決策表 + 兩條禁令（禁預設接續、承諾必落 ticket），引用 `PC-BAL-042`；與上節共用「訊號誤讀家族」論述
-**Version**: 4.16.0 - 新增「派發前 where.files 交集檢查」章節：兩票 `where.files` 共用同一檔案時的拆分/序列派發判準，防護 PC-BAL-008 檔案級共用變體（W3-295/296 實證，兩票均遵守精準 staging 規範仍發生跨票內容吸收）
+**Version**: 4.16.0 - 新增「派發前 where.files 交集檢查」章節：兩票 `where.files` 共用同一檔案時的拆分/序列派發判準，防護 PC-BAL-008 檔案級共用變體（實證：兩票均遵守精準 staging 規範仍發生跨票內容吸收）
 **Version**: 4.15.0 - 「worktree 派發注意事項」新增第三則條款：worktree 隔離派發的收尾指引改用 `ticket track finish`（`complete` 別名），避開 CC runtime worktree isolation guard 對 argv basename 誤判 bash builtin `complete` 而條件性阻擋收尾；`complete` 本身不動、主 repo cwd 場景維持原名
 **Version**: 4.14.0 - idle agent 回收 SOP 補兩項條款：(1) 續用/放生二分判準新增檔案佔用前提，明示同類型 pending ticket 存在不等於可派發，須先核對 `where.files` 與在途代理人修改範圍是否重疊；(2) 新增「idle_notification 的語意」小節，說明通知為狀態快照非事實斷言，正確用法是作為查證世界平面的觸發訊號。兩項條款源於實際派發過程中重複觀察到的情境（非推測）：同類型 pending 存在但目標檔案正被在途代理人佔用而無法派發；idle_notification 內容與 PM 讀取時的實際狀態存在時序落差。
 
-**Version**: 4.13.0 - Worktree 隔離章節從「強制」改為「風險分級」：新增風險分級表（低/高/中三級），低風險（ANA/DOC/唯讀）免 worktree 為既有實務明文化，高風險（IMP/重構/測試實作）維持 worktree 強制，中風險暫緩待 W5-033 實驗結論；原代理人類型表合併至風險分級表，Source of truth 註記同步更新（0.38.0-W5-034，W5-008 方案 C 分段採納落地）
+**Version**: 4.13.0 - Worktree 隔離章節從「強制」改為「風險分級」：新增風險分級表（低/高/中三級），低風險（ANA/DOC/唯讀）免 worktree 為既有實務明文化，高風險（IMP/重構/測試實作）維持 worktree 強制，中風險暫緩待後續實驗結論；原代理人類型表合併至風險分級表，Source of truth 註記同步更新（方案 C 分段採納落地）
 
 **Version**: 4.12.0 - 清理 2 處依賴型專案 ticket ID 引用（改抽象描述，避免框架資產 sync 至其他專案後成死連結）：嵌套派發整合條款的協議設計依據引用改指向規則本身；`.claude/` 並行數限制的重啟條件改抽象描述並改引用 PC-137（框架 error-pattern，跨專案穩定）
 
@@ -610,22 +610,22 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 **Version**: 4.11.0 - PC-092 防護延伸至 commit 階段：正確/錯誤對照表新增「commit 階段」列（path-limited commit `git commit -m ... -- <路徑>` vs 不帶路徑的 `git commit`）；新增「為何精準 git add 仍不足」機制說明（index 共享，`git commit` 不帶路徑會提交整個 index）；新增「條款缺口成因」段落（防護覆蓋跟隨曾被觀察到的失敗，index.lock 有錯誤訊息可攔而跨票 commit 吸收是零錯誤訊息的靜默 race）；新增收尾核對步驟（`git status` / `git diff --cached --stat` 核對後 `git restore --staged` 撤除非本票檔案），與 path-limited commit 並列非取代；並行安全 checklist 同步擴充精準 staging 項
 
-**Version**: 4.10.0 - 新增「派發機制選用準則（named agent vs 一般 subagent）」章節：選用準則決策表 + 兩機制差異對照 + 與 agent-team SKILL.md 快速決策表的分層關係說明；置於「idle agent 回收 SOP」之前（先講何時該用，再講用了怎麼回收），填補 W2-001 PM 誤用 named agent 的規範缺口（0.38.0-W2-002 ANA 落地，W4-005）
+**Version**: 4.10.0 - 新增「派發機制選用準則（named agent vs 一般 subagent）」章節：選用準則決策表 + 兩機制差異對照 + 與 agent-team SKILL.md 快速決策表的分層關係說明；置於「idle agent 回收 SOP」之前（先講何時該用，再講用了怎麼回收），填補 PM 誤用 named agent 的規範缺口
 
-**Version**: 4.9.0 - 新增「idle agent 回收 SOP」章節：續用/放生二分判準表 + SendMessage 續用/shutdown_request 放生範本 + Wave 收尾批次放生流程（W1-008 ANA 落地，W1-010）
+**Version**: 4.9.0 - 新增「idle agent 回收 SOP」章節：續用/放生二分判準表 + SendMessage 續用/shutdown_request 放生範本 + Wave 收尾批次放生流程
 
-**Version**: 4.8.0 - 新增「嵌套派發整合條款」章節：`.claude/` 並行數限制跨層累計口徑（常態收斂於 L0 dispatch-plan 帳本）+ 嵌套 descend staging 責任歸屬表（PC-092 延伸）+ worktree 模式與嵌套相容性（D1 不變量隔離檔案層差異）；協議權威來源引用 AGENT_PRELOAD 規則 9 與 1.0.0-W1-056.5 v2，不複寫條件表（1.0.0-W1-056.10）
+**Version**: 4.8.0 - 新增「嵌套派發整合條款」章節：`.claude/` 並行數限制跨層累計口徑（常態收斂於 L0 dispatch-plan 帳本）+ 嵌套 descend staging 責任歸屬表（PC-092 延伸）+ worktree 模式與嵌套相容性（D1 不變量隔離檔案層差異）；協議權威來源引用 AGENT_PRELOAD 規則 9 v2，不複寫條件表
 
-**Version**: 4.7.0 - Worktree 隔離章節開頭新增 worktree base 可能過舊提示，引用 agent-dispatch-template.md「worktree 派發 base 同步指引（W1-035）」交叉引用（0.19.0-W1-053）
+**Version**: 4.7.0 - Worktree 隔離章節開頭新增 worktree base 可能過舊提示，引用 agent-dispatch-template.md「worktree 派發 base 同步指引」交叉引用
 
-**Version**: 4.6.0 - bgIsolation: none 並行安全章節升級為策略 C 條件式採用（W3-034.4 並行受控實驗 3/3 success 落地）；風險矩陣與 Action 表分 4 場景；新增「對照 PC-137 v1.1.0」雙模式對照表
+**Version**: 4.6.0 - bgIsolation: none 並行安全章節升級為策略 C 條件式採用（並行受控實驗 3/3 success 落地）；風險矩陣與 Action 表分 4 場景；新增「對照 PC-137 v1.1.0」雙模式對照表
 
-**Version**: 4.5.0 - 新增 dispatch-plan 先行規則，明確區分 orchestration description 與 batch dispatch CLI（W17-044）
+**Version**: 4.5.0 - 新增 dispatch-plan 先行規則，明確區分 orchestration description 與 batch dispatch CLI
 
-**Version**: 4.4.0 - Worktree 隔離章節新增「並行場景路徑區分（.claude/ vs src/）」子章節，涵蓋規則表/業界證據（2026）/CC runtime 例外/實務落地對照（W5-047.3）
+**Version**: 4.4.0 - Worktree 隔離章節新增「並行場景路徑區分（.claude/ vs src/）」子章節，涵蓋規則表/業界證據（2026）/CC runtime 例外/實務落地對照
 
-**Version**: 4.3.0 - 新增「派發 prompt 必含精準 git staging（並行 commit 場景）」強制要求，並行安全檢查 checklist 同步增項（PC-092 / W5-047.1）
+**Version**: 4.3.0 - 新增「派發 prompt 必含精準 git staging（並行 commit 場景）」強制要求，並行安全檢查 checklist 同步增項（PC-092）
 
-**Version**: 4.2.0 - 新增「派發 prompt 必含職責邊界聲明」強制要求，引用 agent-dispatch-template.md（W5-044）
+**Version**: 4.2.0 - 新增「派發 prompt 必含職責邊界聲明」強制要求，引用 agent-dispatch-template.md
 
 **Version**: 4.1.0 - 新增「驗證類任務自動派發」章節，明文化不詢問用戶規則

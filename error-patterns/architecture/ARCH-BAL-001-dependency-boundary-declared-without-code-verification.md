@@ -3,7 +3,6 @@ id: ARCH-BAL-001
 title: 架構依賴方向底線未用程式碼 import 鏈驗證，導致底線與現況矛盾
 severity: high
 category: architecture
-source_ticket: 0.1.0-W2-014
 created: 2026-07-22
 ---
 
@@ -13,7 +12,7 @@ created: 2026-07-22
 
 架構規範文件（domain map / 分層規範 / 依賴方向底線）宣告一條「X 只依賴 Y」式的依賴方向規則，但該規則從未對照現有程式碼的實際 import / 呼叫鏈驗證。結果底線在文字上成立、在程式碼中被打臉——按底線拆檔或重構時，才發現實際存在底線禁止的依賴邊。
 
-**本案具體樣態**（W2-014 domain map）：
+**本案具體樣態**（某次 domain map 審查）：
 
 - 底線寫「read-model bundle 僅依賴 `Ledger`」。
 - 但 `leverageMultiple` / `stressNetWorth` / `allocation` / `netWorthChangePct` 全都消費 `Totals` / `totalsAt`（另一 read-model「Networth」的概念）。
@@ -47,6 +46,6 @@ created: 2026-07-22
 
 ## 相關
 
-- 來源：`0.1.0-W2-014`（domain map 四視角審查，linux H1 發現）
+- 來源：domain map 四視角審查（linux H1 發現）
 - 產物：`docs/domain-map.md` §2 依賴方向底線、§4.1 目標 vs 現況標註
 - 相關規則：`.claude/rules/core/tool-output-trust-rules.md`（記錄平面 vs 世界平面：架構文件是記錄平面，程式碼 import 鏈是世界平面，重大斷言以世界平面為準）

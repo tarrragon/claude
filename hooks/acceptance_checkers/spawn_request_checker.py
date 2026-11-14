@@ -1,7 +1,7 @@
 """
 Spawn Request Checker - Spawn Requests 章節處理狀態檢查
 
-對應 Ticket 1.5.0-W5-024（1.5.0-W5-022 ANA 結論）：
+依 ANA 結論：
 agent 執行中透過 `ticket track add-spawn-request` 產生的 Spawn Requests 條目，
 若在 ticket complete 前仍為 `status: pending`，代表 PM 尚未評估是否要建立對應
 ticket（`processed`）或評估後決定不需要（`dismissed`）。

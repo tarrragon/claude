@@ -6,9 +6,6 @@ severity: medium
 created: 2026-04-30
 related:
  - ARCH-015
- - W10-053
- - W10-072
- - W10-043
 ---
 
 # PC-114: .claude/ 修改任務派發雙重阻擋
@@ -55,13 +52,13 @@ CC runtime 對 worktree 內的 `.claude/` 路徑有硬編碼保護：subagent �
 
 ## 案例
 
-### 案例 1：W17-094 派發 thyme 失敗（2026-04-30）
+### 案例 1：某次派發 thyme 修 regex 的事件（2026-04-30）
 
-W17-094 任務範圍：
+該任務範圍：
 
 - Edit `.claude/skills/ticket/ticket_system/lib/ticket_validator.py`（regex 加字邊界）
 - Edit `.claude/skills/ticket/ticket_system/tests/test_ticket_validator.py`（新增 3 條測試）
-- Edit `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-007.md:77`（還原一行）
+- Edit `docs/work-logs/v0/v0.18/v0.18.0/tickets/<ticket-id>.md`（還原一行）
 
 PM 派發 `Agent(subagent_type="thyme-python-developer", ...)` 沒帶 `isolation: "worktree"` → hook 1 擋。改加 worktree → 預期 ARCH-015 擋。
 
@@ -73,9 +70,9 @@ PM 後續走 fallback：直接前台執行（10 分鐘完成），同時 commit 
 
 | Ticket | 狀態 | 用途 |
 |--------|------|------|
-| 0.18.0-W10-053 | pending | 診斷 subagent .claude/ Edit 受阻 + Bash sed/awk 攔截雙向阻塞 |
-| 0.18.0-W10-072 | pending | 審查 IMP/DOC 類 Hook 對純文件編輯任務的識別與訊息 |
-| 0.18.0-W10-043 | pending | 審查所有 75+ hooks 單維度強制邏輯與 ARCH-018 風險 |
+| 診斷票 A | pending | 診斷 subagent .claude/ Edit 受阻 + Bash sed/awk 攔截雙向阻塞 |
+| 審查票 B | pending | 審查 IMP/DOC 類 Hook 對純文件編輯任務的識別與訊息 |
+| 審查票 C | pending | 審查所有 75+ hooks 單維度強制邏輯與 ARCH-018 風險 |
 
 ## 修復方式
 
@@ -99,7 +96,7 @@ PM 後續走 fallback：直接前台執行（10 分鐘完成），同時 commit 
 | C | 兩階段派發：worktree 派改 tests/non-`.claude/`，PM 主 repo 改 `.claude/` | 低（程序複雜，PCB 拆分成本高） |
 | D | 維持現狀，累積 3-5 次同類事件再評估 | 低投入，長觀察 |
 
-當前選 D（維持現狀），事件案例累積至 W10-043 / W10-053 / W10-072 ANA 進場時統一決策。
+當前選 D（維持現狀），事件案例累積至上表三張 ANA 進場時統一決策。
 
 ## 防護
 
@@ -115,7 +112,7 @@ PM 後續走 fallback：直接前台執行（10 分鐘完成），同時 commit 
 
 每次踩到此雙重阻擋：
 
-1. append trigger case 至 W10-043 / W10-053 / W10-072 之一的 Problem Analysis
+1. append trigger case 至上表既有追蹤 ticket 之一的 Problem Analysis
 2. 不另開新 ticket（避免追蹤膨脹）
 3. 累積到 5 個 trigger case 後評估是否升級為框架修改
 
@@ -123,10 +120,9 @@ PM 後續走 fallback：直接前台執行（10 分鐘完成），同時 commit 
 
 - ARCH-015 — runtime 限制原則
 - ARCH-018 — Hook × 架構規則衝突偵測
-- 0.18.0-W10-043 / W10-053 / W10-072 — 既有追蹤 ticket
 - `.claude/methodologies/friction-management-methodology.md` — 摩擦力管理（PM 前台 vs 派發 trade-off）
 
 ---
 
 **Last Updated**: 2026-04-30
-**Source**: W17-094 派發 thyme 失敗事件（2026-04-30）— PM 改用 fallback 直接執行，事件提煉為 PC-114 沉澱
+**Source**: 派發 thyme 修 regex 失敗事件（2026-04-30）— PM 改用 fallback 直接執行，事件提煉為 PC-114 沉澱

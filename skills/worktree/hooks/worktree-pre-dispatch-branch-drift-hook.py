@@ -6,10 +6,10 @@
 """
 Worktree Pre-Dispatch Branch Drift Check Hook - PreToolUse (Agent)
 
-Guard B（來源 1.2.0-W1-028 事故二）：派發 worktree subagent 前，檢查主 repo HEAD
+Guard B（來源：主 repo 漂移事故）：派發 worktree subagent 前，檢查主 repo HEAD
 是否仍在預期分支（main/master）。偵測「主 repo 漂移到 feat 分支」。
 
-事故重現：cwd 污染後 main repo HEAD 漂移到 feat/1.2.0-W1-025-terminal-frame，
+事故重現：cwd 污染後 main repo HEAD 漂移到某個 feat 分支，
 PM 後續 `git -C <main> merge` 落在誤切分支而非 main，push 顯示 up-to-date、
 `git log main` 無對應 ticket → 工作落錯位置難以察覺。
 
@@ -32,14 +32,14 @@ from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, run_g
 
 EXPECTED_BRANCHES = ("main", "master")
 
-BLOCK_MESSAGE = """[1.2.0-W1-028 Guard B] 主 repo HEAD 漂移，禁止派發 worktree subagent
+BLOCK_MESSAGE = """[Guard B] 主 repo HEAD 漂移，禁止派發 worktree subagent
 
 當前主 repo 分支: {current}
 預期分支: main 或 master
 
 事故背景：主 repo 漂移到 feat 分支時派發 worktree，後續 merge 會落在誤切分支
 而非 main（push 顯示 up-to-date 卻 `git log main` 查無交付物）。這正是
-1.2.0-W1-028 事故二的根因。
+主 repo 漂移事故的根因。
 
 修復方式：
   1. 用固定值確認當前狀態（tool-output-trust 規則 3，勿靠 cwd-relative 推斷）：

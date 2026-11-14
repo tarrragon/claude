@@ -20,7 +20,7 @@
     v
 ┌─ 已知下個 target ticket id? ─┐
 │                              │
-是（絕對指向，W17-164）         否
+是（絕對指向）         否
 │                              │
 v                              v
 /ticket handoff                ┌─ 知道方向? ─┐
@@ -46,7 +46,7 @@ v                              v
                                                                    [等待恢復]
 ```
 
-**絕對指向 vs 相對方向**（W17-164 / L2-A）：
+**絕對指向 vs 相對方向**：
 
 | 模式 | 旗標 | 寫入欄位 | 適用情境 |
 |------|------|---------|---------|
@@ -62,7 +62,7 @@ v                              v
 - `/ticket handoff --to-parent` - 返回父任務
 - `/ticket handoff --to-child <id>` - 切換到子任務
 - `/ticket handoff --to-sibling <id>` - 切換到兄弟任務
-- `/ticket handoff --next <target-id>` - 絕對指向下 session 該做的 ticket（W17-164）
+- `/ticket handoff --next <target-id>` - 絕對指向下 session 該做的 ticket
 - `/ticket handoff --status` - 查看交接狀態
 
 ## 狀態-命令映射規則

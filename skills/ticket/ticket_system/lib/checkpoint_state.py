@@ -8,15 +8,15 @@
 
 設計依據：Phase 3a §1.2 / §4 / §5；Phase 2 §3 Group D / E。
 
-TD / AD 錨點（W10-017.13 AC5 回填，供後續追溯；完整表見 017.1 worklog §技債追蹤）:
+TD / AD 錨點（回填供後續追溯）:
 - TD-A: caller 以 Literal 守邊（CheckpointCaller），Phase 4 評估升級 enum → 見
   `CheckpointCaller` 定義附近註解。
 - TD-B: get_suggested_commands O(n) 反查 PRIORITIES，現 5 列無效能問題；擴張 > 10
   列再建索引 dict → 見 checkpoint_view.get_suggested_commands。
-- TD-C: snapshot 降級 vs full 渲染重複，已 W10-017.11/12 整併至 lib 層 view
+- TD-C: snapshot 降級 vs full 渲染重複，已整併至 lib 層 view
   function → 見 commands/track_snapshot._render_degraded_snapshot。
 - TD-D: IO_ERRORS 三命令差異，已統一至本檔 IO_ERRORS → 見下方 `IO_ERRORS` 定義。
-- TD-E: pyproject testpaths 納入 ticket_system/tests → W10-017.13 AC4 已落地，
+- TD-E: pyproject testpaths 納入 ticket_system/tests → 已落地，
   見 pyproject.toml [tool.pytest.ini_options]。
 - AD-1: snapshot exit code 永遠 0（fail-open）→ 見 commands/track_snapshot 及
   lib/checkpoint_view.render_ready_check footer。
@@ -48,7 +48,7 @@ from .constants import TERMINAL_STATUSES
 #   (1) CLI 三命令實際傳入值：snapshot / handoff-ready / checkpoint-status
 #   (2) 未指定 caller 時的 log fallback 值：unknown
 # checkpoint_view._VALID_CALLERS 從本 Literal 透過 typing.get_args 派生並過濾掉
-# "unknown"，確保 CLI caller 集合單一 source of truth（W10-017.11 AC 1/2）。
+# "unknown"，確保 CLI caller 集合單一 source of truth。
 # Python runtime 不強制 Literal，型別檢查器（mypy/pyright）會警告誤植。
 CheckpointCaller = Literal[
     "snapshot", "handoff-ready", "checkpoint-status", "unknown"
@@ -81,7 +81,7 @@ class PendingCheck:
 class CheckpointState:
     """Checkpoint 決策狀態（純 state，不含 view 字串）。
 
-    Phase 4 L10 重構（W10-017.8.2）：原 phase_label / next_action 兩個人類可讀
+    Phase 4 L10 重構：原 phase_label / next_action 兩個人類可讀
     字串改由 format_phase_label(state) / format_next_action(state) view function
     產生，CheckpointState 保持純 state 不耦合 view 層，便於未來 i18n 擴展。
 
@@ -92,7 +92,7 @@ class CheckpointState:
       unmerged_worktrees / active_handoff / in_progress_tickets
     - 元資訊：data_sources / computed_at
 
-    W10-017.13 AC3：pending_checks 欄位決策「保留」，理由記錄於此：
+    pending_checks 欄位決策「保留」，理由記錄於此：
     - 由 SAFE_CALL 在資料源 I/O 失敗時 append auto_detectable=False 的 PendingCheck
     - ready_for_clear 推導依賴此 list（見 checkpoint_state() Step 4：
       `all(not c.auto_detectable for c in pending)`）
@@ -121,7 +121,7 @@ class CheckpointState:
 # ---------------------------------------------------------------------------
 
 # linux Good Taste：用資料結構取代 if/elif 鏈；新增優先級只動資料。
-# W10-017.12 AC2：改用 NamedTuple 取代匿名 5-tuple，欄位具名避免匿名 unpack。
+# 改用 NamedTuple 取代匿名 5-tuple，欄位具名避免匿名 unpack。
 
 
 class PriorityRule(NamedTuple):
@@ -208,7 +208,7 @@ FALLBACK: FallbackRule = FallbackRule(
 def _resolve_rule(state: CheckpointState) -> Tuple[str, str, str, List[str]]:
     """依 PRIORITIES 從高到低找第一個命中的規則，回傳完整詮釋。
 
-    W10-017.12 AC3：合併 _derive_checkpoint 與 get_suggested_commands 為單次
+    合併 _derive_checkpoint 與 get_suggested_commands 為單次
     PRIORITIES loop，避免兩次同構掃描（一次為 phase/label/action，一次為 commands）。
 
     Args:
@@ -239,7 +239,7 @@ def _derive_checkpoint(state: CheckpointState) -> Tuple[str, str, str]:
         (current_phase, phase_label, next_action) 三元組。
 
     Note:
-        W10-017.12 後改為 _resolve_rule 的薄包裝；保留 3-tuple 簽章以維持
+        後來改為 _resolve_rule 的薄包裝；保留 3-tuple 簽章以維持
         現有測試與呼叫端契約。
     """
 
@@ -541,7 +541,7 @@ def _read_git_worktrees(project_root: Optional[Path] = None) -> List[str]:
 # Phase 3a §4：log 路徑與 rotate 策略
 _METRICS_LOG_RELPATH = Path(".claude/logs/pm-automation-metrics.jsonl")
 _METRICS_LOG_ROTATE_BYTES = 10 * 1024 * 1024  # 10 MB
-# 保留的歷史份數（.1.jsonl ~ .N.jsonl）。W10-017.8.3 (TD3) 由 1 擴充為 3。
+# 保留的歷史份數（.1.jsonl ~ .N.jsonl）。TD3 由 1 擴充為 3。
 _METRICS_LOG_ROTATE_KEEP = 3
 
 

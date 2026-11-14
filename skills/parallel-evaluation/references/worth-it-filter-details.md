@@ -169,6 +169,6 @@
 ---
 
 **Last Updated**: 2026-05-04
-**Version**: 2.1.0 — 套用 compositional-writing 改寫（W17-135）：本檔開頭補意圖陳述；決策矩陣段「核心原則」改寫為三明示 Why / Consequence / Action，明示連結至 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5
+**Version**: 2.1.0 — 套用 compositional-writing 改寫：本檔開頭補意圖陳述；決策矩陣段「核心原則」改寫為三明示 Why / Consequence / Action，明示連結至 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5
 
 **Version**: 2.0.0 - Worth-It Filter 語義修正：「跳過」拆分為「執行決策」+「追蹤決策」，所有發現必須建 Ticket 追蹤

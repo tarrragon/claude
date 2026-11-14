@@ -68,8 +68,10 @@ v2.1.0 變更:
 
 防重複觸發:
     使用固定的 flag 檔案路徑 .claude/handoff/.stop-blocked
-    flag 檔案內容包含時間戳，過期時間為 300 秒（5 分鐘）
-    同一 session 內的多次觸發在 5 分鐘內被抑制，新 session 時 flag 已過期
+    flag 檔案內容包含時間戳，過期時間為 7200 秒（2 小時，見 STOP_FLAG_EXPIRY_SECONDS）
+    同一 session 內的多次觸發在 2 小時內被抑制，新 session 時 flag 已過期
+    flag 留在 session 所在的根（get_project_root）；pending 掃描、票面讀取、archive 寫入
+    同用共用狀態根（get_shared_state_root），linked worktree 內讀主倉庫狀態
 """
 
 import sys
@@ -82,6 +84,7 @@ from typing import Dict, Any, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
+from lib.hook_base import get_shared_state_root  # noqa: E402
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -92,7 +95,7 @@ from lib import (
     PM_ONLY_PREFIX,
 )
 
-# W3-039: session 管理 domain 已抽出為獨立模組（與本檔同目錄，合法識別符可直接 import）。
+# session 管理 domain 已抽出為獨立模組（與本檔同目錄，合法識別符可直接 import）。
 # 本檔上方 sys.path.insert(.../"hooks") 已涵蓋 handoff_session_mgmt 的 hook_utils 依賴；
 # 本檔目錄因 hook 以絕對路徑執行不在 sys.path 上，故補加 __file__ 父目錄。
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -104,7 +107,7 @@ from handoff_session_mgmt import (  # noqa: E402
     read_session_state,
 )
 
-# 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale（W17-095.2）
+# 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale
 # 同時加入 skills/ticket 父路徑以解析 handoff_utils 內部的 `from ticket_system.lib.*` import
 _TICKET_SKILL_PATH = Path(__file__).resolve().parents[1]
 _TICKET_LIB_PATH = _TICKET_SKILL_PATH / "ticket_system" / "lib"
@@ -113,7 +116,12 @@ for _p in (_TICKET_SKILL_PATH, _TICKET_LIB_PATH):
         sys.path.insert(0, str(_p))
 
 try:
-    from handoff_utils import is_handoff_stale, resolve_target  # type: ignore
+    from handoff_utils import (  # type: ignore
+        current_claude_process,
+        is_handoff_stale,
+        is_other_claude_process,
+        resolve_target,
+    )
 except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用時退化為原邏輯（保留任務鏈）
     # PC-135 防護：silent fallback 改 noisy。lib import 失敗代表 hook 子進程環境
     # 缺少必要依賴（如 pyyaml 經 ticket_system.lib.__init__ → ticket_loader 鏈），
@@ -137,7 +145,15 @@ except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用�
         # 由呼叫端 `resolve_target(record) or record.get("ticket_id")` 自動 fallback 至來源票。
         return None
 
-# W17-181.2: delegate is_ticket_terminal 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。
+    def current_claude_process(start_pid=None):  # type: ignore
+        # 退化 fallback：無 lib 時查不到目前行程
+        return None
+
+    def is_other_claude_process(record, current):  # type: ignore
+        # 退化 fallback：無法判斷建立者，一律視為同一行程（照常阻擋，不放行）
+        return False
+
+# delegate is_ticket_terminal 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。
 try:
     from handoff_utils import is_ticket_terminal as _lib_is_ticket_terminal  # type: ignore
 except Exception as _import_err:  # pragma: no cover
@@ -151,19 +167,47 @@ except Exception as _import_err:  # pragma: no cover
     def _lib_is_ticket_terminal(ticket_id, project_root=None):  # type: ignore
         return False
 
+# 孤兒判準與 handoff GC 共用 handoff_utils.orphan_reason（2026-11-12）。
+try:
+    from handoff_utils import orphan_reason as _lib_orphan_reason  # type: ignore
+except Exception as _import_err:  # pragma: no cover
+    # PC-135 防護：退化為「永不判孤兒」偏保留側（孤兒照舊列入待恢復），須讓 PM 看見。
+    sys.stderr.write(
+        f"[handoff-auto-resume-stop-hook][PC-135] handoff_utils.orphan_reason import failed, "
+        f"using degraded fallback (orphan handoffs stay pending). "
+        f"Cause: {type(_import_err).__name__}: {_import_err}\n"
+    )
+    def _lib_orphan_reason(record, ticket_id, project_root=None):  # type: ignore
+        return ""
+
+
+def _orphan_reason(record: dict, project_root: Optional[Path], logger) -> str:
+    """回傳孤兒原因；非孤兒或無法判斷時回空字串。來源票取法與 is_handoff_active 一致。"""
+    source_id = record.get("from_ticket") or record.get("ticket_id") or ""
+    if not source_id:
+        return ""
+    try:
+        return _lib_orphan_reason(record, source_id, project_root)
+    except Exception as err:
+        # 判斷失敗不等於孤兒：保留 handoff（照常參與阻擋判定），留日誌
+        logger.warning(f"orphan_reason 判斷失敗 ({source_id}): {err}")
+        return ""
+
 EXIT_SUCCESS = 0
 
 # 常數定義
-# W3-039: STOP_FLAG_FILE / STOP_FLAG_EXPIRY_SECONDS / STATE_FILE_TEMPLATE
+# STOP_FLAG_FILE / STOP_FLAG_EXPIRY_SECONDS / STATE_FILE_TEMPLATE
 # 隨 session 管理 domain 一併移至 handoff_session_mgmt 模組。
 PENDING_DIR_NAME = ".claude/handoff/pending"
 ARCHIVE_DIR_NAME = ".claude/handoff/archive"  # stale handoff GC 目標：歸檔而非刪除
+# 目前無引用端（日誌經 setup_hook_logging 寫入，已解析到共用狀態根）；
+# 不可再以此相對路徑拼接寫入（依 cwd，linked worktree 內與主 repo 分處兩地），取目錄用 get_hook_log_dir。
 LOG_DIR_NAME = ".claude/hook-logs/handoff-auto-resume"
 LOG_FILE_PREFIX = "stop-hook"
 RECENT_TASK_THRESHOLD_MINUTES = 30  # 30 分鐘內視為「最近任務」（可能有代理人正在執行）
-RECENT_HANDOFF_WINDOW_SECONDS = 300  # W17-118: 最近 N 秒內建立的 handoff 視為下 session 接手點，不計入 pending
+RECENT_HANDOFF_WINDOW_SECONDS = 300  # 最近 N 秒內建立的 handoff 視為下 session 接手點，不計入 pending
 
-# W17-181.2: Terminal 狀態集合已上移至 lib `handoff_utils.is_ticket_terminal`
+# Terminal 狀態集合已上移至 lib `handoff_utils.is_ticket_terminal`
 # （透過 ticket_system.constants.TERMINAL_STATUSES 引用），消除跨進程同構邏輯（ARCH-020）。
 
 def _load_frontmatter_cached(
@@ -272,10 +316,10 @@ def is_ticket_completed(project_root: Path, ticket_id: str, logger) -> bool:
     """
     檢查 Ticket 是否處於 terminal 狀態（completed 或 closed）。
 
-    W17-181.2：delegate 至 lib `handoff_utils.is_ticket_terminal`（單一 SSOT），
+    delegate 至 lib `handoff_utils.is_ticket_terminal`（單一 SSOT），
     消除 ARCH-020 跨進程同構邏輯。函式名保持 is_ticket_completed 以維持
     呼叫端 (project_root, ticket_id, logger) 簽名相容；語義為 terminal
-    狀態判定（W17-165 L2-C 既有設計）。
+    狀態判定。
 
     Args:
         project_root: 專案根目錄
@@ -296,10 +340,10 @@ def should_preserve_pending_json(record: dict, logger, project_root: Optional[Pa
     """
     判斷是否應保留 pending JSON，即使來源 Ticket 已完成。
 
-    W17-095.2 改造：對齊 CLI stale 規則，引用 handoff_utils.is_handoff_stale(record)。
+    改造：對齊 CLI stale 規則，引用 handoff_utils.is_handoff_stale(record)。
     回傳值定義為「非 stale → 應保留」，與原本的「任務鏈類型 → 保留」相比，
     新增「任務鏈目標已 in_progress/completed → 視為 stale → 不保留（GC）」分支，
-    修正 W17-095 根因：原邏輯任務鏈一律 return True，導致目標已啟動的 stale handoff
+    修正根因：原邏輯任務鏈一律 return True，導致目標已啟動的 stale handoff
     反覆誤觸發 Stop hook block。
 
     record 必要欄位（由 handoff_utils.is_handoff_stale 解析）：
@@ -325,7 +369,7 @@ def should_preserve_pending_json(record: dict, logger, project_root: Optional[Pa
 
 def is_handoff_recently_created(record: dict, logger) -> bool:
     """
-    判斷 handoff record 是否在 RECENT_HANDOFF_WINDOW_SECONDS 內建立（W17-118）
+    判斷 handoff record 是否在 RECENT_HANDOFF_WINDOW_SECONDS 內建立
 
     剛建立的 handoff 為「下 session 接手點」，當前 session Stop hook 不應將其
     視為待恢復任務阻塞退出。timestamp 欄位由 /ticket handoff CLI 寫入，格式為
@@ -358,20 +402,20 @@ def is_handoff_recently_created(record: dict, logger) -> bool:
 
 
 def is_subagent_context(input_data: Dict[str, Any], logger) -> bool:
-    """判斷 stdin 是否帶 subagent context 標記（W1-044）。
+    """判斷 stdin 是否帶 subagent context 標記。
 
     Why：本 hook 註冊於 Stop event（主線程停止）。CC hook input schema
     （.claude/references/hook-architect-technical-reference.md）中 SubagentStop
     才帶 agent_id / agent_type，Stop 不帶。若 stdin 出現 agent_id / agent_type，
     代表本次觸發實際處於 subagent context（CC 版本路由變更或誤註冊 SubagentStop），
-    此時注入 decision:block + 恢復指令會劫持 agent 最終訊息（W1-024 / W1-030 證實）。
+    此時注入 decision:block + 恢復指令會劫持 agent 最終訊息。
 
     Consequence：subagent context 下不偵測會把 PM 用的恢復指令注入 agent 回傳值，
-    覆寫 agent 真實最終訊息（W1-024 實證 basil 回傳值遺失）。
+    覆寫 agent 真實最終訊息。
 
     Action：caller 在 generate_hook_output 開頭呼叫；True 時回 {"suppressOutput": True}
     跳過所有注入。採 documented schema 欄位（agent_id/agent_type）判別，
-    不用 transcript 長度等不可靠 heuristic（ticket W1-044 防護要求）。
+    不用 transcript 長度等不可靠 heuristic（既有防護要求）。
 
     與 subagent-stop-dispatch-cleanup-hook.py 的 agent_id 依賴形成一致慣例。
     """
@@ -391,7 +435,7 @@ def has_background_agents(input_data: Dict[str, Any], logger) -> bool:
     """
     判斷 input_data 是否有背景代理人正在執行。
 
-    W3-026.1：用 Claude Code v2.1.145 新欄位 background_tasks 取代
+    用 Claude Code v2.1.145 新欄位 background_tasks 取代
     started_at 30 分鐘閾值推斷。採「弱依賴策略」——只判斷 list 非空，
     不依賴 task object 內部 schema，避免 schema 不確定風險。
 
@@ -507,9 +551,11 @@ def scan_pending_handoff_tasks(
         logger.debug(f"pending 目錄不存在: {pending_dir}")
         return pending_tasks, recent_tasks
 
-    # W3-036：has_background_agents 屬 loop-invariant——其唯一輸入 input_data
+    # has_background_agents 屬 loop-invariant——其唯一輸入 input_data
     # 在整個迴圈中固定不變。提升至迴圈外一次性計算，消除 O(n) 重複呼叫與重複日誌。
     bg_active = has_background_agents(input_data or {}, logger)
+    # 目前的 Claude 行程（loop-invariant）；查不到時為 None，下方判定一律照常阻擋
+    current_process = current_claude_process()
 
     try:
         for file_path in sorted(pending_dir.glob("*.json")):
@@ -538,7 +584,7 @@ def scan_pending_handoff_tasks(
                         if target_frontmatter and target_frontmatter.get("title"):
                             display_title = target_frontmatter["title"]
 
-                    # W17-118 Phase 2: 剛建 handoff 視為下 session 接手點，不阻塞
+                    # Phase 2: 剛建 handoff 視為下 session 接手點，不阻塞
                     # 即使 stale (任務鏈目標已啟動) 也不在當前 session 阻擋退出
                     recently_created = is_handoff_recently_created(data, logger)
                     if recently_created:
@@ -553,7 +599,7 @@ def scan_pending_handoff_tasks(
                         )
                         continue
 
-                    # W17-118 Phase 1: 計數前先 stale 過濾（與 ticket resume --list 對齊）
+                    # Phase 1: 計數前先 stale 過濾（與 ticket resume --list 對齊）
                     # stale 條件包含「任務鏈目標已啟動 / 已完成」「來源 ticket 已 completed」
                     # 對齊既有 GC 行為：刪除檔案不計入 pending_tasks
                     is_stale, stale_reason = is_handoff_stale(data, project_root)
@@ -563,6 +609,21 @@ def scan_pending_handoff_tasks(
                             context=(
                                 f"ticket_id={ticket_id}, direction={direction}, "
                                 f"reason={stale_reason}"
+                            ),
+                        )
+                        continue
+
+                    # 孤兒（目標或來源查無）與 stale 同樣歸檔、不計入。
+                    # 判準與 handoff GC 共用 orphan_reason；不用 is_handoff_active，
+                    # 因為它在票查詢模組載不到時回「無效」，那是派發守衛的安全方向，
+                    # 在本 hook 會變成不擋退出並歸檔。orphan_reason 在無法判斷時回空字串，保留 handoff。
+                    orphan = _orphan_reason(data, project_root, logger)
+                    if orphan:
+                        _archive_stale_handoff_json(
+                            file_path, project_root, logger,
+                            context=(
+                                f"ticket_id={ticket_id}, direction={direction}, "
+                                f"reason={orphan}"
                             ),
                         )
                         continue
@@ -607,7 +668,7 @@ def scan_pending_handoff_tasks(
                                 f"建議性 handoff ({direction_type})，不阻塞退出: {target_id}"
                             )
                         elif bg_active:
-                            # W3-026.1：v2.1.145 background_tasks 直接判斷，
+                            # v2.1.145 background_tasks 直接判斷，
                             # 優先於 started_at 30 分鐘閾值推斷
                             recent_tasks.append({
                                 "ticket_id": target_id,
@@ -629,6 +690,17 @@ def scan_pending_handoff_tasks(
                             })
                             logger.info(
                                 f"找到最近執行的任務（可能有代理人正在處理）: {target_id}"
+                            )
+                        elif is_other_claude_process(data, current_process):
+                            # 交接檔確定由另一個 Claude 行程建立：本 session 不是接手方，不阻擋。
+                            # 舊格式、欄位損毀、目前行程查不到時 is_other_claude_process 回 False，走下方阻擋。
+                            recent_tasks.append({
+                                "ticket_id": target_id,
+                                "title": display_title,
+                                "direction": direction
+                            })
+                            logger.info(
+                                f"交接檔由其他 Claude 行程建立，本 session 不阻擋: {target_id}"
                             )
                         else:
                             pending_tasks.append({
@@ -709,8 +781,8 @@ def generate_hook_output(
         dict - Hook 輸出 JSON
     """
     try:
-        # Step 0: subagent context 偵測（W1-044）。subagent stop 時跳過所有注入，
-        # 避免恢復指令劫持 agent 最終訊息（W1-024 / W1-030）。
+        # Step 0: subagent context 偵測。subagent stop 時跳過所有注入，
+        # 避免恢復指令劫持 agent 最終訊息。
         if is_subagent_context(input_data or {}, logger):
             return {"suppressOutput": True}
 
@@ -719,8 +791,10 @@ def generate_hook_output(
             logger.info("此 session 已觸發過 Stop hook，跳過")
             return {"suppressOutput": True}
 
-        project_root = get_project_root()
-        logger.debug(f"專案根目錄: {project_root}")
+        # pending 掃描、票面讀取、archive 寫入必須同根（共用狀態根）；
+        # .stop-blocked flag 屬 session 旗標，仍由 handoff_session_mgmt 取 session 根
+        project_root = get_shared_state_root(get_project_root())
+        logger.debug(f"共用狀態根: {project_root}")
 
         # Step 2: 讀取 session 狀態
         session_state = read_session_state(logger, input_data)
@@ -754,7 +828,7 @@ def generate_hook_output(
                 ticket_id = task.get("ticket_id")
                 logger.info(f"單任務，提示恢復: {ticket_id}")
                 # reason 會被注入給主線程 PM（恢復指令屬 PM 專屬動作）。
-                # Stop event 無 agent_id，程式層偵測（Step 0 的 W1-044 路徑）
+                # Stop event 無 agent_id，程式層偵測（Step 0 的子代理人判斷路徑）
                 # 涵蓋不到的環境由前綴 + AGENT_PRELOAD 忽略規則補位（PC-V1-004）。
                 return {
                     "decision": "block",
@@ -768,11 +842,11 @@ def generate_hook_output(
                     )
                 }
             else:
-                # 多任務時：列出清單到 stderr，exit 2 阻止停止
+                # 多任務時：列出清單到 stderr，並以 decision=block 阻止停止
                 tasks_list = format_pending_tasks_list(pending_tasks)
                 logger.warning(f"多任務清單:\n{tasks_list}")
 
-                # 輸出到 stderr（exit 2）
+                # 輸出到 stderr
                 print(tasks_list, file=sys.stderr)
 
                 # 同單任務路徑：reason 屬 PM 專屬注入，加受眾標記前綴（PC-V1-004）。
@@ -831,7 +905,7 @@ def main() -> int:
     try:
         logger.info("Handoff 自動恢復 Stop Hook 啟動")
 
-        # W3-026.1: 讀取 stdin 取得 input_data.background_tasks（v2.1.145 新欄位）
+        # 讀取 stdin 取得 input_data.background_tasks（v2.1.145 新欄位）
         # 解析失敗 / tty / 欄位不存在皆 fallback 到 started_at 推斷
         input_data: Dict[str, Any] = {}
         if not sys.stdin.isatty():

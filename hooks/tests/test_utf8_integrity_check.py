@@ -56,7 +56,7 @@ def _prime_sampling_counter(project_root: Path):
     以 get_project_root() 動態解析），使 prime 對象與 subprocess 內
     CLAUDE_PROJECT_DIR 指向的隔離目錄一致。
     """
-    counter_file = project_root / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+    counter_file = project_root / ".claude" / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
     counter_file.parent.mkdir(parents=True, exist_ok=True)
     counter_file.write_text(str(SAMPLING_N - 1))
 
@@ -102,19 +102,21 @@ class TestSamplingCounterPathResolution:
         fake_root_1 = tmp_path / "root1"
         fake_root_2 = tmp_path / "root2"
 
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root_1)
+        monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(fake_root_1))
         path1 = _get_sampling_counter_file()
-        assert path1 == fake_root_1 / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+        assert path1 == fake_root_1 / ".claude" / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
 
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root_2)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(fake_root_2))
         path2 = _get_sampling_counter_file()
-        assert path2 == fake_root_2 / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+        assert path2 == fake_root_2 / ".claude" / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
 
         assert path1 != path2, "同一 process 內兩次呼叫應反映 get_project_root() 的最新值"
 
     def test_counter_path_uses_hook_logs_sampling_subdir(self, monkeypatch, tmp_path):
         """A2: 計數器路徑固定為 <project_root>/hook-logs/_sampling/utf8-integrity-check-hook.count。"""
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+        monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         path = _get_sampling_counter_file()
         assert path.parent.name == "_sampling"
         assert path.parent.parent.name == "hook-logs"
@@ -135,12 +137,13 @@ class TestProjectDirIsolation:
         """B1: should_sample_run() 寫入的計數檔落在被 monkeypatch 的隔離根目錄。"""
         import logging
 
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+        monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         logger = logging.getLogger("test_utf8_integrity_check")
 
         should_sample_run(logger)
 
-        counter_file = tmp_path / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+        counter_file = tmp_path / ".claude" / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
         assert counter_file.exists(), "計數檔應建立於隔離根目錄下"
 
     def test_isolated_counter_independent_of_repo_counter(
@@ -149,13 +152,14 @@ class TestProjectDirIsolation:
         """B2: 隔離根目錄下的計數與 production 計數互不影響（不同路徑各自累計）。"""
         import logging
 
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+        monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         logger = logging.getLogger("test_utf8_integrity_check")
 
         for _ in range(3):
             should_sample_run(logger)
 
-        counter_file = tmp_path / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+        counter_file = tmp_path / ".claude" / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
         assert counter_file.read_text().strip() == "3"
 
     def test_subprocess_isolation_via_hook_project_env(self, hook_project_env):
@@ -166,7 +170,7 @@ class TestProjectDirIsolation:
 
         _run_hook(_make_write_payload(str(target)), project_root, env)
 
-        counter_file = project_root / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+        counter_file = project_root / ".claude" / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
         assert counter_file.exists(), "隔離環境下計數檔應建立於 tmp_path，而非 repo 層級"
 
 

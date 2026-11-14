@@ -53,6 +53,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -354,6 +355,55 @@ class TestLibTransitiveDependencies:
         assert "yaml" in issues[0].detail
         assert "requests" in issues[0].detail
 
+    @pytest.mark.parametrize("scan", ["check_file_consistency", "scan_all"])
+    def test_lib_importing_local_package_not_flagged(self, hook_mod, tmp_path, scan):
+        """lib 模組匯入以 sys.path 掛載的本地套件（如 ticket_system），經 lib 遞移時不報。
+
+        本地套件在 lib 目錄外（skills/<x>/ 底下含 __init__.py 的目錄），修正前 lib 的
+        外部匯入只排除 lib 自身模組名，ticket_system 被算成第三方，整批 hook 誤報。
+        """
+        content = "#!/usr/bin/env python3\nfrom lib.hook_ticket import load\n"
+        project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
+        _add_lib_module(
+            project_root,
+            "hook_ticket",
+            "import ticket_system\nimport doc_system\n\n\ndef load():\n    return ticket_system\n",
+        )
+        for pkg in ("skills/ticket/ticket_system", "skills/doc/doc_system"):
+            pkg_dir = project_root / ".claude" / pkg
+            pkg_dir.mkdir(parents=True)
+            (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
+
+        if scan == "scan_all":
+            issues = hook_mod.scan_all(project_root, logging.getLogger("t"))
+        else:
+            stdlib = hook_mod._get_stdlib_module_names()
+            local = hook_mod.build_local_module_index(project_root / ".claude")
+            issues = hook_mod.check_file_consistency(
+                ".claude/hooks/foo-hook.py", project_root, stdlib, local
+            )
+
+        assert issues == []
+
+    def test_lib_local_package_and_third_party_reports_only_third_party(self, hook_mod, tmp_path):
+        """正向對照：同一 lib 模組另匯入未宣告的第三方套件，該套件仍報、本地套件不列入."""
+        content = "#!/usr/bin/env python3\nfrom lib.hook_ticket import load\n"
+        project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
+        _add_lib_module(
+            project_root,
+            "hook_ticket",
+            "import ticket_system\nimport requests\n\n\ndef load():\n    return requests\n",
+        )
+        pkg_dir = project_root / ".claude" / "skills" / "ticket" / "ticket_system"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
+
+        issues = hook_mod.scan_all(project_root, logging.getLogger("t"))
+
+        assert len(issues) == 1
+        assert "requests" in issues[0].detail
+        assert "ticket_system" not in issues[0].detail
+
     def test_lib_submodule_without_third_party_import_not_flagged(self, hook_mod, tmp_path):
         content = "#!/usr/bin/env python3\nfrom lib.plain_module import bar\n"
         project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
@@ -519,7 +569,7 @@ class TestTriggerRouting:
         content = "#!/usr/bin/env python3\nimport yaml\n"
         project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
 
-        monkeypatch.setattr(hook_mod, "get_project_root", lambda: project_root)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: project_root)
         monkeypatch.setattr(
             sys, "stdin", _stdin_json({"hook_event_name": "SessionStart"})
         )
@@ -541,7 +591,7 @@ class TestTriggerRouting:
         project_root = _make_project(
             tmp_path, ".claude/hooks/foo-hook.py", "#!/usr/bin/env python3\nimport os\n"
         )
-        monkeypatch.setattr(hook_mod, "get_project_root", lambda: project_root)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: project_root)
         monkeypatch.setattr(
             sys, "stdin", _stdin_json({"hook_event_name": "SessionStart"})
         )
@@ -558,7 +608,7 @@ class TestTriggerRouting:
         content = "#!/usr/bin/env python3\nimport yaml\n"
         project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
 
-        monkeypatch.setattr(hook_mod, "get_project_root", lambda: project_root)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: project_root)
         payload = {
             "tool_name": "Edit",
             "tool_input": {"file_path": str(project_root / ".claude" / "settings.json")},
@@ -579,7 +629,7 @@ class TestTriggerRouting:
         content = "#!/usr/bin/env python3\nimport yaml\n"
         project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
 
-        monkeypatch.setattr(hook_mod, "get_project_root", lambda: project_root)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: project_root)
         payload = {
             "tool_name": "Edit",
             "tool_input": {
@@ -602,7 +652,7 @@ class TestTriggerRouting:
         content = "#!/usr/bin/env python3\nimport yaml\n"
         project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
 
-        monkeypatch.setattr(hook_mod, "get_project_root", lambda: project_root)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: project_root)
         payload = {
             "tool_name": "Edit",
             "tool_input": {"file_path": str(project_root / "docs" / "readme.md")},
@@ -624,7 +674,7 @@ class TestTriggerRouting:
         content = "#!/usr/bin/env python3\nimport yaml\n"
         project_root = _make_project(tmp_path, ".claude/hooks/foo-hook.py", content)
 
-        monkeypatch.setattr(hook_mod, "get_project_root", lambda: project_root)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: project_root)
         monkeypatch.setattr(
             sys, "stdin", _stdin_json({"hook_event_name": "SessionStart"})
         )

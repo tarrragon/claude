@@ -187,7 +187,7 @@ TaskOutput(
 | 2026-04-10 | 模式 C | 共用分支失去隔離 |
 | 2026-04-10 | 模式 B | 代理人仍在執行時 commit |
 | 2026-04-12 | 模式 D | 寫失敗分析/建 handoff，task-notification 到達後全部回退更正 |
-| 2026-04-15 | 模式 E | Phase 4b 重構派發後信任 Hook 廣播+dispatch 清空+無 commit，準備走失敗 SOP，用戶打斷指正代理人實為 running（觸發 W10-059 ANA） |
+| 2026-04-15 | 模式 E | Phase 4b 重構派發後信任 Hook 廣播+dispatch 清空+無 commit，準備走失敗 SOP，用戶打斷指正代理人實為 running（觸發一次根因分析） |
 
 > 具體案例細節保留在各專案 worklog，此表僅記錄發生頻率和誤判分布。
 

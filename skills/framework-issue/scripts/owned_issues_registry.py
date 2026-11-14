@@ -1,12 +1,11 @@
 """owned-issues 本地登記檔：schema、路徑解析、讀寫，供 section_comment.py
 （寫入端）與 session-start-issue-check-hook.py（讀取端）共用。
 
-背景：session-start-issue-check-hook.py 原以「git 主 repo 目錄名稱
-kebab-case 化」heuristic 推導 owner 前綴，再以 gh search issues 粗篩候選、
-逐張讀 comments 驗證 owner——對「從未建立過 framework issue 區段」的
-consumer，此為每次 SessionStart 皆付出固定 gh API 往返成本、且結果必然
-為空（實測單次數秒等級，含 uv 啟動時間；SessionStart 現有數十支 hook 同
-時觸發，此成本乘以 hook 數）。
+背景：session-start-issue-check-hook.py 原以專案目錄名推導 owner 前綴、
+以 gh search issues 粗篩候選再驗證 owner。這條路徑每次 SessionStart 都
+付出 gh 往返成本，而且把專案名送到 GitHub。現在 hook 只讀本登記檔，缺檔
+時不發 gh 命令；前綴搜尋移到使用者明示執行的 `rebuild-owned`
+（rebuild_owned.py），以 write_registry 整份覆寫本登記檔。
 
 本登記檔由 section_comment.py 的 init／update 子命令於成功寫入 GitHub 後
 同步落地——此時 owner／issue number 已由呼叫端確定為真（init 呼叫者提供
@@ -14,10 +13,12 @@ owner 且已成功建立區段；update 呼叫者已讀回既有 comment 驗證�
 故登記檔內容視為「本專案已知擁有」的正確清單，讀取端不需再驗證 owner
 （省略舊路徑的候選發現＋本地驗證兩步驟，僅保留呼叫既有 check 子命令）。
 
-落點：`.claude/state/framework-issue-owned.json`（per-worktree，已列入
-.gitignore 的 `.claude/state/`，不入版控、不跨機器同步——與 gh 上的真實
-狀態相比僅是本機快取，遺失/不同步時 fail-open 退回舊路徑，不影響正確性，
-只影響是否能走快速路徑）。
+落點：共用狀態根下的 `.claude/state/framework-issue-owned.json`。根目錄一律
+經 `lib.hook_base.get_shared_state_root` 解析：在 linked worktree 內寫入或
+讀取時都落在主倉庫，同一專案的所有 worktree 共用一份；本模組不另寫根目錄
+解析。`.claude/state/` 已列入 .gitignore，不入版控、不跨機器同步——與 gh 上的
+真實狀態相比僅是本機快取，遺失/不同步時 fail-open 退回舊路徑，不影響正確性，
+只影響是否能走快速路徑。
 
 Schema（v1）：
     {
@@ -41,51 +42,29 @@ section_comment.py、直接以 gh api 建立/更新區段 comment 者同樣不�
 
 import json
 import os
-import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# 掛載 `.claude` 根目錄以 import lib（scripts -> framework-issue -> skills -> .claude）。
+_CLAUDE_ROOT = Path(__file__).resolve().parents[3]
+if str(_CLAUDE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_CLAUDE_ROOT))
+
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 SCHEMA_VERSION = 1
 REGISTRY_RELATIVE_PARTS = (".claude", "state", "framework-issue-owned.json")
 
-# 讀寫端解析 project root 的逾時（秒）：`git rev-parse` 正常網路下遠低於此值，
-# 逾時值只是異常環境的安全上限（同 session-start-issue-check-hook.py 的
-# GH_TIMEOUT_SECONDS 設計取向）。
-_GIT_TOPLEVEL_TIMEOUT_SECONDS = 5
-
-
-def _project_root() -> Path:
-    """git worktree 根目錄解析（獨立於 .claude/lib，維持本模組零耦合——
-    section_comment.py 家族現行不依賴 .claude/lib，見同目錄 gh_common.py
-    的既有取向）。
-
-    優先序精簡對齊 lib.git_utils.get_project_root()：CLAUDE_PROJECT_DIR
-    環境變數 -> git rev-parse --show-toplevel -> Path.cwd()（永不失敗）。
-    不含該函式的「向上搜尋 CLAUDE.md」第三層 fallback——該分支僅在前兩者
-    皆失敗的極端情境才觸發，本模組的讀寫皆為 best-effort、無需完整覆蓋
-    此邊界；呼叫端（hook）持有 .claude/lib 時應改傳入 project_root 參數
-    覆寫本函式，維持與 hook 自身 get_project_root() 解析結果一致。
-    """
-    env_dir = os.getenv("CLAUDE_PROJECT_DIR")
-    if env_dir:
-        return Path(env_dir)
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TOPLEVEL_TIMEOUT_SECONDS,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip())
-    except (subprocess.TimeoutExpired, OSError):
-        pass
-    return Path.cwd()
-
 
 def registry_path(project_root: Optional[Path] = None) -> Path:
-    """回傳登記檔絕對路徑；project_root 未提供時自動解析。"""
-    root = project_root if project_root is not None else _project_root()
+    """回傳登記檔絕對路徑，根目錄經 get_shared_state_root 解析。
+
+    project_root 是呼叫端已解析的專案根，只在不處於 linked worktree 時採用
+    （語意同 get_shared_state_root 的 default_root）；linked worktree 內一律
+    解析到主倉庫，讓讀寫兩端落在同一份登記檔。
+    """
+    root = get_shared_state_root(project_root)
     for part in REGISTRY_RELATIVE_PARTS:
         root = root / part
     return root
@@ -119,6 +98,26 @@ def owned_issue_numbers(project_root: Optional[Path] = None) -> Optional[List[in
         if isinstance(entry, dict) and isinstance(entry.get("number"), int):
             numbers.append(entry["number"])
     return numbers
+
+
+def write_registry(entries: List[Dict], project_root: Optional[Path] = None) -> Path:
+    """以 entries 整份覆寫登記檔（供 rebuild-owned 使用），回傳寫入路徑。
+
+    entries 為 {"number", "owner", "updated_at"} 清單；空清單代表「已確認本專案
+    沒有擁有任何 issue」，讀取端據此不發任何 gh 命令。與 record_owned_issue 不同，
+    寫入失敗會拋出 OSError：重建是使用者明示執行的命令，失敗須讓使用者看見。
+    """
+    path = registry_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(
+        {"schema_version": SCHEMA_VERSION, "issues": list(entries)},
+        indent=2,
+        ensure_ascii=False,
+    ) + "\n"
+    tmp_path = path.with_name(path.name + ".tmp")
+    tmp_path.write_text(payload, encoding="utf-8")
+    os.replace(tmp_path, path)
+    return path
 
 
 def record_owned_issue(

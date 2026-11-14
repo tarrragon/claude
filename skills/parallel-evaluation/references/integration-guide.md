@@ -188,6 +188,6 @@ Phase 3 報告產出後，PM 依下表決定後續行動。所有「延後」項
 
 **Last Updated**: 2026-09-23
 **Version**: 1.2.0 — 報告流轉表「評估是否在當前版本處理」改寫為「評估是否納入本版本範圍（依 scope 判斷）」，對齊 `version-progression.md` scope 凍結模型（舊制字面已由該模型取代）。
-**Version**: 1.1.0 — 套用 compositional-writing 改寫（W17-135）：各章節開頭補意圖陳述（atomic / intent-revealing），整合判準前置；報告流轉段引用 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5
+**Version**: 1.1.0 — 套用 compositional-writing 改寫：各章節開頭補意圖陳述（atomic / intent-revealing），整合判準前置；報告流轉段引用 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5
 
 **Version**: 1.0.0

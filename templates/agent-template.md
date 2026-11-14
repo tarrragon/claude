@@ -280,7 +280,7 @@ You are a {role description in English}. Your core mission is {mission statement
 
 驗證式：`grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md | wc -l`，預期輸出 `3`。
 
-> 概念對應的 `## 核心職責` / `## 觸發條件` 為豐富補充段，不取代上述精確標題；W8-016 執法 hook 驗三區塊存在性，本範本確保內容到位。
+> 概念對應的 `## 核心職責` / `## 觸發條件` 為豐富補充段，不取代上述精確標題；執法 hook 驗三區塊存在性，本範本確保內容到位。
 
 ### 觸發條件（補充）
 
@@ -409,5 +409,5 @@ You are a {role description in English}. Your core mission is {mission statement
 ---
 
 **Last Updated**: 2026-05-13
-**Version**: 1.2.0 — 新增 8 個 CC 2.1.x frontmatter 欄位（permissionMode/effort/maxTurns/background/initialPrompt/disallowedTools/hooks/memory），範本 frontmatter 補入選填欄位佔位符；Frontmatter 必要章節說明拆為「必填/選填」雙表；範本檢查清單補入新欄位檢查項目（0.18.0-W6-005）
+**Version**: 1.2.0 — 新增 8 個 CC 2.1.x frontmatter 欄位（permissionMode/effort/maxTurns/background/initialPrompt/disallowedTools/hooks/memory），範本 frontmatter 補入選填欄位佔位符；Frontmatter 必要章節說明拆為「必填/選填」雙表；範本檢查清單補入新欄位檢查項目
 **Version**: 1.1.0

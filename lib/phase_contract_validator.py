@@ -20,7 +20,7 @@ Legacy vs Non-legacy 文件判定：
 
     validator = PhaseContractValidator(contracts_path=".claude/tdd/contracts.yaml")
     result = validator.validate(
-        ticket_id="0.1.2-W1-002",
+        ticket_id="<ticket-id>",
         phase="1",
         ticket_dir="docs/work-logs/v0.1.2/tickets/"
     )
@@ -100,7 +100,7 @@ class PhaseContractValidator:
         執行四層驗證
 
         Args:
-            ticket_id: Ticket ID（如 0.1.2-W1-002）
+            ticket_id: Ticket ID（標準格式 {version}-W{wave}-{seq}）
             phase: Phase 代號（"1" | "2" | "3a" | "3b"）
             ticket_dir: Ticket 文件所在目錄
 

@@ -336,7 +336,7 @@ effort: low
 - [ ] 派發時目標路徑是否在主 repo cwd 內？→ 若否，改走 PM 直接執行或設 `additionalDirectories`
 - [ ] `name`、`description`、`tools` 三欄必填？
 - [ ] 需要代理人取得 `AGENT_PRELOAD.md` 內容時，已用 `initialPrompt` 顯式指示 `Read .claude/agents/AGENT_PRELOAD.md`（見上方「使用場景」範例）？單純在主文加 `@.claude/agents/AGENT_PRELOAD.md` 引用行不會展開為內容（已實測），不構成有效載入手段
-- [ ] **唯讀分析型代理人**（不需 Ticket ID 即可派發，如 Explore/code-explorer/Plan 類型）？→ 確認是否需加入 `.claude/skills/ticket/hooks/agent-ticket-validation-hook.py`（隨 ticket skill 私有化）的 `TICKET_EXEMPT_AGENT_TYPES` 白名單，否則該代理人會因 prompt 不含 Ticket ID 被 deny（W10-043.1 audit P2 風險）
+- [ ] **唯讀分析型代理人**（不需 Ticket ID 即可派發，如 Explore/code-explorer/Plan 類型）？→ 確認是否需加入 `.claude/skills/ticket/hooks/agent-ticket-validation-hook.py`（隨 ticket skill 私有化）的 `TICKET_EXEMPT_AGENT_TYPES` 白名單，否則該代理人會因 prompt 不含 Ticket ID 被 deny（audit P2 風險）
   （原路徑 `.claude/hooks/agent-ticket-validation-hook.py`，2026-08-22 文件複查更正）<!-- broken-link-exempt: 本行為更正說明，原路徑已不存在是預期的 -->
 
 ---
@@ -387,13 +387,13 @@ effort: low
 - `.claude/agents/AGENT_PRELOAD.md` — 代理人共用前置知識
 - `.claude/rules/core/pm-role.md` — PM 派發角色邊界
 - permissionMode 與 worktree 路徑的歷史修復紀錄（詳見 PC-059）
-- 代理人 model 重新評估歷史：W9-005（2026-04-16）
+- 代理人 model 重新評估歷史：2026-04-16
 
 ---
 
 **Last Updated**: 2026-10-05
 **Version**: 1.4.0 — Model 選擇指南改為路由至 `agent-model-selection.md`（移除與權威檔矛盾的分級表與過時分類統計）；frontmatter 範例與欄位表的 model 值改為 `sonnet[1m]`／`opus[1m]`
 **Version**: 1.3.0 — 「檢查清單」的「引用 AGENT_PRELOAD.md？」項改述：單純加 `@-import` 引用行不構成有效載入（已實測不展開為內容），改要求 `initialPrompt` 顯式 `Read` 指令
-**Version**: 1.2.0 — 新增 CC 2.1.x 完整 frontmatter 欄位說明（8 欄位：initialPrompt/memory/permissionMode 確認/hooks/background/effort/maxTurns/disallowedTools，每欄位含場景範例）+ 代理人升級建議清單（13 個代理人，含優先序分級）（0.18.0-W6-005）
-**Version**: 1.1.0 — 新增 Model 選擇指南（W9-005 落地）
-**Source**: PC-059 retry5 模式調查結論 + W9-005 代理人 model 重新評估
+**Version**: 1.2.0 — 新增 CC 2.1.x 完整 frontmatter 欄位說明（8 欄位：initialPrompt/memory/permissionMode 確認/hooks/background/effort/maxTurns/disallowedTools，每欄位含場景範例）+ 代理人升級建議清單（13 個代理人，含優先序分級）
+**Version**: 1.1.0 — 新增 Model 選擇指南
+**Source**: PC-059 retry5 模式調查結論 + 代理人 model 重新評估

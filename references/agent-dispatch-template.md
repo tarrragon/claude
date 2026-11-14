@@ -4,7 +4,7 @@
 >
 > **分檔**：收尾政策、測試入口政策、worktree 派發政策、PM 自做規則編輯、情境變體各自在同目錄的 `agent-dispatch-closeout.md`、`agent-dispatch-testing.md`、`agent-dispatch-worktree.md`、`agent-dispatch-pm-edit.md`、`agent-dispatch-variants.md`；本檔對被移走的段標保留同名標題加一行路由，〈段標〉引用不需改寫。
 >
-> **收斂緣由**：本文件曾同時提供三套對「prompt 是否應複製 ticket 欄位」給出相反答案的骨架——舊版「職責邊界聲明骨架」要求逐項複製 `where.files` 至「允許的產出」/「禁止的產出」清單、「三段式快速填空骨架」（W17-048 方案 F）僅用指標零重述、「短 Prompt Snippets」（PC-040/PC-065）的 `Allowed:`/`Forbidden:` 亦要求複製 `where.files`。三者並存使 PM 選任一皆合規，抽樣量測顯示派發 prompt 重述比例在樣本間離散（15%-62%，單一樣本達 55% 字元量），也使任何「prompt 與 ticket 重疊度」檢查機制必然誤報 template-compliant 的 prompt。本次收斂：三段式骨架升格為單一權威版；短 Prompt Snippets 改寫為權威版的情境變體，不再要求複製 `where.files`；舊版職責邊界聲明骨架的防越界意圖併入權威版，改用指標式表達（見下方「歷史脈絡」段）。
+> **收斂緣由**：本文件曾同時提供三套對「prompt 是否應複製 ticket 欄位」給出相反答案的骨架——舊版「職責邊界聲明骨架」要求逐項複製 `where.files` 至「允許的產出」/「禁止的產出」清單、「三段式快速填空骨架」僅用指標零重述、「短 Prompt Snippets」（PC-040/PC-065）的 `Allowed:`/`Forbidden:` 亦要求複製 `where.files`。三者並存使 PM 選任一皆合規，抽樣量測顯示派發 prompt 重述比例在樣本間離散（15%-62%，單一樣本達 55% 字元量），也使任何「prompt 與 ticket 重疊度」檢查機制必然誤報 template-compliant 的 prompt。本次收斂：三段式骨架升格為單一權威版；短 Prompt Snippets 改寫為權威版的情境變體，不再要求複製 `where.files`；舊版職責邊界聲明骨架的防越界意圖併入權威版，改用指標式表達（見下方「歷史脈絡」段）。
 
 ---
 
@@ -18,11 +18,11 @@
 
 ## 骨架（權威版）
 
-> **用途**：PM 派發前最常用的中文對話式骨架（原稱「三段式快速填空骨架」，W17-048 方案 F）。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。骨架本體（`SKELETON_TEMPLATE_NORMAL`，不含 commit 制式句）約 10 行（含一條固定句：測試與其結果為後續步驟前置的命令一律前景執行，`run_in_background` 僅限真正可並行的旁路任務）；`--commit-policy agent`（預設）另附精準 staging 短版指標句（3 行，26 行全文改冪等寫入票的「### Commit 規範」章節，見下方「精準 staging 制式句」節），最長組合 22 行（hook 提醒、worktree 搜尋句、測試入口、紅燈句全疊加；參數化守衛量測，留至少 8 行給 PM 填寫）。agent-prompt-length-guard 的 Layer 1 硬上限（30 行）**無任何豁免**——模板關鍵字只影響 Layer 2 軟提示（10-30 行缺關鍵字時的提示），不影響 Layer 1 判定；骨架實際行數與硬上限的綁定測試見 `.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`。
+> **用途**：PM 派發前最常用的中文對話式骨架（原稱「三段式快速填空骨架」）。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。骨架本體（`SKELETON_TEMPLATE_NORMAL`，不含 commit 制式句）約 10 行（含一條固定句：測試與其結果為後續步驟前置的命令一律前景執行，`run_in_background` 僅限真正可並行的旁路任務）；`--commit-policy agent`（預設）另附精準 staging 短版指標句（3 行，26 行全文改冪等寫入票的「### Commit 規範」章節，見下方「精準 staging 制式句」節），最長組合 22 行（hook 提醒、worktree 搜尋句、測試入口、紅燈句全疊加；參數化守衛量測，留至少 8 行給 PM 填寫）。agent-prompt-length-guard 的 Layer 1 硬上限（30 行）**無任何豁免**——模板關鍵字只影響 Layer 2 軟提示（10-30 行缺關鍵字時的提示），不影響 Layer 1 判定；骨架實際行數與硬上限的綁定測試見 `.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`。
 
-> **機制選擇前置（0.38.0-W2-002 ANA 落地）**：呼叫 `Agent(...)` 時**預設不帶 `name` 參數**（一般 subagent）。僅當任務符合「平行派發且 Agent A 的發現會改變 Agent B 正在進行的工作」（改用 Agent Teams）或「同 Wave 有 3+ 張同類型 ticket 且預期逐一派發」（named agent 可選續用）時才加 `name`。循序一次性任務、獨立分析/實作任務一律不帶 `name`。完整選用準則決策表見 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」章節。
+> **機制選擇前置**：呼叫 `Agent(...)` 時**預設不帶 `name` 參數**（一般 subagent）。僅當任務符合「平行派發且 Agent A 的發現會改變 Agent B 正在進行的工作」（改用 Agent Teams）或「同 Wave 有 3+ 張同類型 ticket 且預期逐一派發」（named agent 可選續用）時才加 `name`。循序一次性任務、獨立分析/實作任務一律不帶 `name`。完整選用準則決策表見 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」章節。
 >
-> **帶 `name` 的代價（W3-182 實證）**：背景 named agent 的最終回覆文字**不送達主線程**，PM 只收到 `idle_notification`。唯讀型 named agent 因此既不能落檔也無 final message，產出必然遺失，除非 prompt 明寫「以 `SendMessage({to: "main"})` 送出報告本體」。此代價使「順手給個名字方便定址」成為實質的通道變更，不是命名偏好。重派也不解決此代價——若未修正 prompt，新執行體會複製同一失效，三次觀測見 `PC-BAL-038`。通道對照見下方「交付通道速查」維度二。
+> **帶 `name` 的代價（實證）**：背景 named agent 的最終回覆文字**不送達主線程**，PM 只收到 `idle_notification`。唯讀型 named agent 因此既不能落檔也無 final message，產出必然遺失，除非 prompt 明寫「以 `SendMessage({to: "main"})` 送出報告本體」。此代價使「順手給個名字方便定址」成為實質的通道變更，不是命名偏好。重派也不解決此代價——若未修正 prompt，新執行體會複製同一失效，三次觀測見 `PC-BAL-038`。通道對照見下方「交付通道速查」維度二。
 
 > **實戰範例為歷史記錄，複製請以本節骨架為準**：下方 IMP/ANA/DOC 三則範例為過去實際派發的逐字記錄，不隨骨架後續修訂回溯改寫；派發時複製對象是「骨架（3 段）」本身，不是任一則範例。
 
@@ -40,9 +40,11 @@
 
 > **紅燈實跑行由 CLI 條件式加入**：票 type 為 IMP 且 acceptance 含測試字樣或 E1／E2 時，骨架多一行「先實跑新增測試並把紅燈輸出摘要貼入 Test Results，再修改產品碼；只有環境無法執行（如缺裝置、缺外部服務）時可改標推論，須寫明無法執行的原因與所用命令，先改產品碼不屬此例外」（權威為 `dispatch_skeleton.py` 的 `RED_RUN_LINE` 與 `requires_red_run`），DOC／ANA 與無測試 acceptance 的 IMP 骨架不變；PM 不需再手寫此句。
 
+> **IMP 派發前先確認分析章節**：子代理人寫產品檔時，`analysis-before-edit-checkpoint-hook.py` 會讀它所對應的 IMP 票。分析章節仍是 placeholder 時，寫入會被擋下：一般讀 Problem Analysis，形態 T（acceptance 含測試字樣）讀 Test Results 的紅燈紀錄。CLI 自動寫入的查重紀錄、派發日誌、Commit 規範不算已填。骨架沒有為形態 P 加句子，被擋時由 deny 訊息帶出要填的章節與 append-log 命令。DOC／ANA 不受此檢查影響。
+
 > **閘門逐檔檢查由 CLI 條件式併入收尾句**：checkout 根有合併閘門宣告（`.claude/project-integration/merge-gate.yaml`）時，若 where.files 落在帶 `changed_files` 的套件範圍內，該套件命令與命中檔會插進收尾句的 commit 之前，寫成「提交前跑閘門逐檔檢查（結束碼須為 0）：…」。這類套件只檢查本次改動檔，代理人在本機就能重現。如果沒有轉成本機要求，紅燈要到合併閘門才會出現，多佔一輪閘門名額。插進既有句子而不新增行，因為最長骨架已達 PM 填寫空間的上限。沒有宣告或沒有命中時，骨架不變。權威為 `dispatch_skeleton.py` 的 `GATE_CHECK_CLAUSE` 與 `gate_check_commands`，細節見 ticket skill `references/track-command-dispatch.md`〈閘門逐檔檢查併入收尾句〉；PM 不需再手寫格式檢查句。
 
-> **claim 行必帶 `--as {agent_name}`**（派發身份前移，W5-005 F1a）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
+> **claim 行必帶 `--as {agent_name}`**（派發身份前移）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
 
 > **停手上報而非定義優先序**：在只讀得到 prompt 與正本兩份文本的條件下，agent 無可靠判別依據——故不定義三方優先序表，交由 PM 裁決；裁決回票面方式見「衝突裁決回票面（PM 端）」節。
 
@@ -97,7 +99,7 @@ Ticket: 0.18.0-W17-048.3
 
 **觸發條件**：文件票（DOC ticket）的產出涉及持久化型態、schema 結構、或元件接線現況的陳述（如 domain-map §3 資料契約引用欄、SPEC 資料契約文件、任何描述「某表/某元件是否已實作/已接線」的段落）。
 
-**Why/Consequence**：並行文件票各自涉及同一底層事實時，未實查的一方會轉述舊文件或憑推論下斷言，且各自 acceptance 不驗證對方涵蓋的事實範圍，誤述只在 PM 合併期交叉比對才暴露（實證：PC-BAL-007，W10-006 誤述 loan domain 為「無獨立持久化」，同時段 W10-003 實查確認為實表）。
+**Why/Consequence**：並行文件票各自涉及同一底層事實時，未實查的一方會轉述舊文件或憑推論下斷言，且各自 acceptance 不驗證對方涵蓋的事實範圍，誤述只在 PM 合併期交叉比對才暴露（實證：PC-BAL-007，某並行文件票誤述 loan domain 為「無獨立持久化」，同時段另一票實查確認為實表）。
 
 **Action**：prompt 必須含以下句子（可併入任務段或獨立一行）：
 
@@ -148,7 +150,7 @@ Ticket: 0.18.0-W17-048.3
 派發前確認：
 
 - [ ] 第一行為 `Ticket: {id}`（Hook 強制驗證）
-- [ ] 含「讀取 ticket」指引（W17-048.2 軟提示檢查）
+- [ ] 含「讀取 ticket」指引（軟提示檢查）
 - [ ] 含 `claim {id} --as {agent_name}` 認領行（派發身份前移；agent 端對稱綁定，見骨架下方說明）
 - [ ] context 已在 ticket 的 Problem Analysis / Context Bundle（不塞 prompt）
 - [ ] prompt 總行數 ≤ 30 行硬上限（無豁免）；`ticket track dispatch --commit-policy agent` 預設輸出約 21-30 行屬正常範圍，非異常
@@ -265,9 +267,9 @@ actions above would also undo the peer's legitimate work.
 
 > 已移至 `agent-dispatch-variants.md`〈L0 唯讀型（Plan type）〉。
 
-## 交付通道速查（W5-005.12）
+## 交付通道速查
 
-> 已移至 `agent-dispatch-variants.md`〈交付通道速查（W5-005.12）〉。
+> 已移至 `agent-dispatch-variants.md`〈交付通道速查〉。
 
 ---
 
@@ -319,15 +321,15 @@ actions above would also undo the peer's legitimate work.
 
 ---
 
-## 唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）
+## 唯讀派發豁免 worktree 強制（框架 issue 36）
 
-> 已移至 `agent-dispatch-worktree.md`〈唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）〉。
+> 已移至 `agent-dispatch-worktree.md`〈唯讀派發豁免 worktree 強制（框架 issue 36）〉。
 
 ---
 
-## worktree 派發 base 同步指引（W1-035）
+## worktree 派發 base 同步指引
 
-> 已移至 `agent-dispatch-worktree.md`〈worktree 派發 base 同步指引（W1-035）〉。
+> 已移至 `agent-dispatch-worktree.md`〈worktree 派發 base 同步指引〉。
 
 ### worktree 派發收尾指引：complete 由 PM 於合併後執行
 
@@ -335,15 +337,15 @@ actions above would also undo the peer's legitimate work.
 
 ---
 
-## tests/ 修改派發 SOP（W1-051）
+## tests/ 修改派發 SOP
 
-> 已移至 `agent-dispatch-testing.md`〈tests/ 修改派發 SOP（W1-051）〉。
+> 已移至 `agent-dispatch-testing.md`〈tests/ 修改派發 SOP〉。
 
 ---
 
-## worktree 快照過舊防護（W2-007）
+## worktree 快照過舊防護
 
-> 已移至 `agent-dispatch-worktree.md`〈worktree 快照過舊防護（W2-007）〉。
+> 已移至 `agent-dispatch-worktree.md`〈worktree 快照過舊防護〉。
 
 ### 阻塞回報後：重派新 agent 優先於 SendMessage 恢復
 
@@ -375,7 +377,7 @@ actions above would also undo the peer's legitimate work.
 
 三層防護並存，prompt 端聲明是派發時的最後防線。
 
-> **備用第四層：`Tool(param:value)` 權限語法（CC 2.1.178+）**。permission rules 可比對工具輸入參數，如 `Agent(model:opus)` 阻擋特定模型的 subagent 派發。**現況不啟用**：本專案派發 incident 根因均為職責邊界模糊（hook 層已覆蓋），無「模型/參數錯誤派發」案例，無痛點的預防規則是維護負債且無法驗證正確性。**啟用條件（絆腳索）**：出現「代理人以錯誤模型/參數被派發且 hook 層未攔截」的實際 incident 時，以該案例寫出可驗證的規則（評估紀錄見 1.5.0-W5-001.5）。
+> **備用第四層：`Tool(param:value)` 權限語法（CC 2.1.178+）**。permission rules 可比對工具輸入參數，如 `Agent(model:opus)` 阻擋特定模型的 subagent 派發。**現況不啟用**：本專案派發 incident 根因均為職責邊界模糊（hook 層已覆蓋），無「模型/參數錯誤派發」案例，無痛點的預防規則是維護負債且無法驗證正確性。**啟用條件（絆腳索）**：出現「代理人以錯誤模型/參數被派發且 hook 層未攔截」的實際 incident 時，以該案例寫出可驗證的規則（評估結論：現況不啟用）。
 
 ---
 
@@ -418,19 +420,19 @@ ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 
 ---
 
-## 收尾 --as 全覆蓋與建票 who 對齊（W1-049 裁決前置）
+## 收尾 --as 全覆蓋與建票 who 對齊
 
-> 已移至 `agent-dispatch-closeout.md`〈收尾 --as 全覆蓋與建票 who 對齊（W1-049 裁決前置）〉。
+> 已移至 `agent-dispatch-closeout.md`〈收尾 --as 全覆蓋與建票 who 對齊〉。
 
 ---
 
-## 收尾義務標準段（W2-003）
+## 收尾義務標準段
 
-> 已移至 `agent-dispatch-closeout.md`〈收尾義務標準段（W2-003）〉。
+> 已移至 `agent-dispatch-closeout.md`〈收尾義務標準段〉。
 
-### 4. Solution 自檢結果子章節義務（W2-008）
+### 4. Solution 自檢結果子章節義務
 
-> 已移至 `agent-dispatch-closeout.md`〈4. Solution 自檢結果子章節義務（W2-008）〉。
+> 已移至 `agent-dispatch-closeout.md`〈4. Solution 自檢結果子章節義務〉。
 
 ---
 
@@ -489,41 +491,40 @@ ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 **Version**: 1.22.0 — 「收尾義務標準段」章節新增「建票血緣回填義務」小節：執行中建票禁止裸 `create` 只標 `--related-to`，須帶 `--source-ticket` 或改走 `add-spawn-request`（兩通道由 CLI 自動回填血緣欄位），並補判準速查表；四塊改五塊
 **Version**: 1.21.0 — 「填空檢查清單」中「代理人受 AGENT_PRELOAD 規則 12 約束無需 prompt 重複」一項改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，改指向已實測確認每次派發都會注入的 `document-format-rules.md`「引用穩定性規則」
 **Version**: 1.20.0 — 「填空檢查清單」新增一列：防護類 ticket 的產生路徑盤點表存在性確認（盤點表於建票時產出並寫入 how.strategy / Solution，本清單僅確認其存在，格式權威在 ticket-body-schema 同名節；PC-BAL-035）
-**Version**: 1.19.0 — 新增「唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）」章節：prompt 首行 `Dispatch-Mode: readonly` 聲明速查 + 骨架範例 + 禁止情境 + 適用情境速查表 + 與 review mode 的 OR 關係；完整判準權威來源指向 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節，避免雙處維護漂移
-**Version**: 1.18.0 — 「worktree 派發 base 同步指引」章節新增「環境前置欄位（0.2.1-W3-274，框架 issue 46）」小節：worktree 為 git 層隔離，gitignore 排除的建置狀態不隨之而來，補派發模板「環境前置」選填欄位與填寫指引；框架層不寫任何專案專屬命令字面，指向 consumer 專案層文件；與 worktree SKILL「worktree 不含的狀態」節交叉引用
+**Version**: 1.19.0 — 新增「唯讀派發豁免 worktree 強制（框架 issue 36）」章節：prompt 首行 `Dispatch-Mode: readonly` 聲明速查 + 骨架範例 + 禁止情境 + 適用情境速查表 + 與 review mode 的 OR 關係；完整判準權威來源指向 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節，避免雙處維護漂移
+**Version**: 1.18.0 — 「worktree 派發 base 同步指引」章節新增「環境前置欄位（框架 issue 46）」小節：worktree 為 git 層隔離，gitignore 排除的建置狀態不隨之而來，補派發模板「環境前置」選填欄位與填寫指引；框架層不寫任何專案專屬命令字面，指向 consumer 專案層文件；與 worktree SKILL「worktree 不含的狀態」節交叉引用
 **Version**: 1.17.0 — 「worktree 派發 base 同步指引」章節新增「worktree 派發收尾指引：用 finish 別名避開 complete 誤判」小節：CC runtime worktree isolation guard 對 argv basename 誤判 bash builtin `complete` 而條件性阻擋，收尾指令改用別名 `ticket track finish`（與 complete 行為完全等價），含正確/錯誤指令範例對照
-**Version**: 1.16.0 — 「交付通道速查」拆為兩個維度：維度一沿用既有 agent 能力三列，新增維度二派發形態（有無 `name`）——背景 named agent 的 final message 不送達主線程，唯一通道為 `SendMessage({to: "main"})`；明示兩維度交會處（唯讀 + named）為零通道組合。「機制選擇前置」補帶 `name` 的 Consequence（原僅有 Action，讀者無從評估違反成本）。L0 Fallback SOP 增第 4 步：久無回報先要求以 SendMessage 重送再判定失聯，`idle_notification` 不是未執行的證據（`PC-BAL-015`）。實證為 0.2.1-W3-174 的 Layer 2 派發（0.2.1-W3-182）
-**Version**: 1.15.0 — 「與派發前 commit gate 的關係」章節新增「派發前 origin 同步驗證（PC-154 前置 1 延伸）」小節：worktree base 可能反映 origin/main 而非本機 HEAD，補派發前 `git push origin main` 驗證步驟，與 PC-154 前置 1 交叉引用（memory 搬遷落地，0.2.1-W3-085）
-**Version**: 1.14.0 — 「填空檢查清單」新增一項：派發 `.claude/` 框架檔案修改時，代理人已受 AGENT_PRELOAD 規則 12（禁依賴型 ticket 引用）約束，prompt 不需重複交代（0.2.1-W3-093）
-**Version**: 1.13.0 — 「唯讀探針派發 SOP」章節新增「parallel-evaluation 常駐審查委員免 Ticket ID 派發」條目：`basil-writing-critic` / `linux` 已列入 `TICKET_EXEMPT_AGENT_TYPES`（0.2.1-W3-010 落地），派發時直接走優先序 1，禁止借用他人 pending ticket ID 湊格式要求（PC-V1-002 案例變體二防護，0.2.1-W3-011）
+**Version**: 1.16.0 — 「交付通道速查」拆為兩個維度：維度一沿用既有 agent 能力三列，新增維度二派發形態（有無 `name`）——背景 named agent 的 final message 不送達主線程，唯一通道為 `SendMessage({to: "main"})`；明示兩維度交會處（唯讀 + named）為零通道組合。「機制選擇前置」補帶 `name` 的 Consequence（原僅有 Action，讀者無從評估違反成本）。L0 Fallback SOP 增第 4 步：久無回報先要求以 SendMessage 重送再判定失聯，`idle_notification` 不是未執行的證據（`PC-BAL-015`）。實證為某次 Layer 2 派發
+**Version**: 1.15.0 — 「與派發前 commit gate 的關係」章節新增「派發前 origin 同步驗證（PC-154 前置 1 延伸）」小節：worktree base 可能反映 origin/main 而非本機 HEAD，補派發前 `git push origin main` 驗證步驟，與 PC-154 前置 1 交叉引用（memory 搬遷落地）
+**Version**: 1.14.0 — 「填空檢查清單」新增一項：派發 `.claude/` 框架檔案修改時，代理人已受 AGENT_PRELOAD 規則 12（禁依賴型 ticket 引用）約束，prompt 不需重複交代
+**Version**: 1.13.0 — 「唯讀探針派發 SOP」章節新增「parallel-evaluation 常駐審查委員免 Ticket ID 派發」條目：`basil-writing-critic` / `linux` 已列入 `TICKET_EXEMPT_AGENT_TYPES`，派發時直接走優先序 1，禁止借用他人 pending ticket ID 湊格式要求（PC-V1-002 案例變體二防護）
 **Version**: 1.12.0 — 「三段式快速填空骨架」章節新增「機制選擇前置」提示：預設呼叫 `Agent(...)` 不帶 `name` 參數，例外情境（Agent Teams / 同 Wave 續用）指向 `parallel-dispatch.md`「派發機制選用準則」章節；相關文件補交叉引用
 
 **Version**: 1.11.0 — 「收尾義務標準段」章節擴充：新增「Solution 自檢結果子章節義務」項，收尾四塊改為含此項；實測發現 warning 被大量忽略（受眾/時點雙錯），為擴充依據
-**Version**: 1.10.0 — 新增「收尾義務標準段（W2-003）」章節：set-acceptance 指令範例（--all-check / --check index 兩型）+ ticket body 填寫義務（Solution/Test Results/Exit Status）+「回覆勾選不算數，frontmatter 才是 SOT」明示提醒；引用 0.4.1-W1-001 摩擦 F3（0.4.0 W2-002/003 回覆勾選未動 frontmatter 二度擋 complete，prompt 明示後四票收斂）為 source
-**Version**: 1.9.0 — 新增「worktree 快照過舊防護（W2-007）」章節：session 中途新 commit 後的派發，prompt 第 0 步強制 merge main + ls/grep 驗證目標檔案存在；阻塞回報後重派新 agent 優先於 SendMessage 恢復（無變更 worktree 被平台自動回收，恢復時 cwd 靜默 fallback 主 repo）；引用 0.3.6-W2-007 為 source
-**Version**: 1.8.0 — 新增「收尾 --as 全覆蓋與建票 who 對齊」章節（W1-049 首輪裁決前置）：收尾三命令一律帶 --as、PM 建子票必帶 --who（繼承 parent who 為 false positive deny 誤傷源）、agent deny 時禁繞過須回報；/goal 章節收尾範例同步補 --as
-**Version**: 1.8.0 — 派發身份前移（W5-005 F1a）：三段式骨架與三個實戰範例、嵌套 child prompt 範例均補 `claim {id} --as {agent_name}` 認領行；填空檢查清單新增對應核對項；骨架下方補 Why 說明（dispatch hook 綁定為第一道，claim --as 為 agent 端對稱綁定與 fallback）
+**Version**: 1.10.0 — 新增「收尾義務標準段」章節：set-acceptance 指令範例（--all-check / --check index 兩型）+ ticket body 填寫義務（Solution/Test Results/Exit Status）+「回覆勾選不算數，frontmatter 才是 SOT」明示提醒；來源為某版本內回覆勾選未動 frontmatter、二度擋 complete 的摩擦（prompt 明示後四票收斂）
+**Version**: 1.9.0 — 新增「worktree 快照過舊防護」章節：session 中途新 commit 後的派發，prompt 第 0 步強制 merge main + ls/grep 驗證目標檔案存在；阻塞回報後重派新 agent 優先於 SendMessage 恢復（無變更 worktree 被平台自動回收，恢復時 cwd 靜默 fallback 主 repo）
+**Version**: 1.8.0 — 新增「收尾 --as 全覆蓋與建票 who 對齊」章節：收尾三命令一律帶 --as、PM 建子票必帶 --who（繼承 parent who 為 false positive deny 誤傷源）、agent deny 時禁繞過須回報；/goal 章節收尾範例同步補 --as
+**Version**: 1.8.0 — 派發身份前移：三段式骨架與三個實戰範例、嵌套 child prompt 範例均補 `claim {id} --as {agent_name}` 認領行；填空檢查清單新增對應核對項；骨架下方補 Why 說明（dispatch hook 綁定為第一道，claim --as 為 agent 端對稱綁定與 fallback）
 
 **Version**: 1.7.0 — 新增「嵌套派發（descend）派發端指引」章節：descend 條件速查（派發端動作對照）+ dispatch-plan 嵌套欄位（parent / depth-can_descend）+ child prompt 三段式範例；協議 SSOT 引用 AGENT_PRELOAD 規則 9，深度上限數值不在本檔重複定義（嵌套派發協議 S2 落地）
 
 **Version**: 1.7.0 — commit policy 骨架同步 PC-092 commit 階段防護：單任務與並行多任務短 prompt snippet 補 path-limited commit 形式（`git commit -m "..." -- <paths>`）與收尾 `git status` 核對步驟；dispatch-plan template `commit policy` 欄位說明補 path-limited 形式指引，交叉引用 parallel-dispatch.md PC-092 防護章節
 
-**Version**: 1.6.0 — worktree 派發 base 同步指引（W1-035）章節新增「cc runtime worktree base 選擇邏輯（實證歸納）」與「三方案評估與選定理由」（選定方案 B，0.19.0-W1-053）
+**Version**: 1.6.0 — worktree 派發 base 同步指引章節新增「cc runtime worktree base 選擇邏輯（實證歸納）」與「三方案評估與選定理由」（選定方案 B）
 
-**Version**: 1.5.0 — 新增「與 /goal 的邊界」章節：層級對照表（7 維度）、不可互相取代原因（含死鎖風險）、允許搭配使用範例（W3-032.1 落地，對應 W3-032 ANA 方案 D）
+**Version**: 1.5.0 — 新增「與 /goal 的邊界」章節：層級對照表（7 維度）、不可互相取代原因（含死鎖風險）、允許搭配使用範例
+**Version**: 1.4.0 — 新增「共用 lib 修復派發提醒（PC-136 強制）」章節：觸發條件表、prompt 插入範本、三層協同說明
 
-**Version**: 1.4.0 — 新增「共用 lib 修復派發提醒（PC-136 強制）」章節：觸發條件表、prompt 插入範本、三層協同說明（W17-182.1 落地）
+**Version**: 1.3.1 — 批次落地 Layer 2 審查剩餘違規修正：(1) P1 #7 適用範圍表新增「可省略條件」欄（5 列分別給條件）；(2) P2 #5 步驟 6 commit 標題加「（建議）」；(3) P2 #6「Layer 2 不適用情境」段落補正向陳述「上述兩類以外預設走 Layer 2，模糊場景偏向走 Layer 2 換取盲區發現」；P2 #8 屬事實陳述（basil 報告判定可接受）無修
 
-**Version**: 1.3.1 — W17-128 批次落地 W17-124 剩餘 Layer 2 違規修正：(1) P1 #7 適用範圍表新增「可省略條件」欄（5 列分別給條件）；(2) P2 #5 步驟 6 commit 標題加「（建議）」；(3) P2 #6「Layer 2 不適用情境」段落補正向陳述「上述兩類以外預設走 Layer 2，模糊場景偏向走 Layer 2 換取盲區發現」；P2 #8 屬事實陳述（W17-124 basil 報告判定可接受）無修
+**Version**: 1.3.0 — 新增「Layer 1 自檢觸發指引」章節：觸發條件表、標準版與精簡版 prompt 末段範本、放末段的設計理由
 
-**Version**: 1.3.0 — 新增「Layer 1 自檢觸發指引」章節（W17-061）：觸發條件表、標準版與精簡版 prompt 末段範本、放末段的設計理由
+**Version**: 1.3.0（同號第二落地——與上條為兩次獨立變更誤用同一版號；保留原號以對應歷史引用） — 新增「唯讀探針派發 SOP」章節（PC-V1-002 防護）：白名單型優先 + 三禁約束範本，固化「引用 ≠ 指派」原則（探針越權勾選 acceptance + complete 事件落地）
 
-**Version**: 1.3.0（同號第二落地——與上條為兩次獨立變更誤用同一版號；保留原號以對應 W1-046 等歷史引用，整序見 W1-080） — 新增「唯讀探針派發 SOP」章節（PC-V1-002 防護）：白名單型優先 + 三禁約束範本，固化「引用 ≠ 指派」原則（探針越權勾選 acceptance + complete 事件落地）
+**Version**: 1.2.1 — 依 Layer 2 審查（basil-writing-critic）修正 P1 違規 3 條：(1) 標題「必經步驟」改「標準步驟（6 步，跳過項需評估成本）」；(2) 步驟 1 補同 session 已讀豁免條件；(3) 步驟 3 補規範性文字 vs 事實陳述場景區分。剩餘 P1 #7（適用範圍可省略條件欄）+ 4 條 P2 排入 follow-up
 
-**Version**: 1.2.1 — 依 W17-124 Layer 2 審查（basil-writing-critic）修正 P1 違規 3 條：(1) 標題「必經步驟」改「標準步驟（6 步，跳過項需評估成本）」；(2) 步驟 1 補同 session 已讀豁免條件；(3) 步驟 3 補規範性文字 vs 事實陳述場景區分。剩餘 P1 #7（適用範圍可省略條件欄）+ 4 條 P2 排入 follow-up
+**Version**: 1.2.0 — 新增「PM 自做 framework 規則編輯流程」章節：6 步驟標準流程、Commit msg 標記規範、適用範圍對照、三層協同表。文字以機會成本語氣示範（dogfooding，避免該 ANA Solution 自身違規重蹈）
 
-**Version**: 1.2.0 — 新增「PM 自做 framework 規則編輯流程」章節（W17-124 / W17-122 ANA Layer C 落地）：6 步驟標準流程、Commit msg 標記規範、適用範圍對照、三層協同表（與 W17-125/126/127 銜接）。文字以機會成本語氣示範（dogfooding，避免 W17-122 Solution 自身違規重蹈）
+**Version**: 1.1.0 — 新增短 prompt snippets 與 dispatch-plan template
 
-**Version**: 1.1.0 — 新增短 prompt snippets 與 dispatch-plan template（W17-044）
-
-**Version**: 1.0.0 — 初版建立代理人派發職責邊界聲明骨架（W5-044 落地，源 W5-009 方案 2）
+**Version**: 1.0.0 — 初版建立代理人派發職責邊界聲明骨架

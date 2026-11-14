@@ -7,7 +7,7 @@
 Worktree Zombie Cleanup Hook (SessionStart)
 
 Purpose: 自動清理 .claude/worktrees/agent-* 中已殭屍的 worktree。
-Source: 0.18.0-W17-119 / 0.18.0-W17-119.1 — 4 週累積 24 個殭屍 worktree，PID 全死，缺自動 GC。
+Source: 4 週累積 24 個殭屍 worktree，PID 全死，缺自動 GC。
 
 邏輯:
 1. 列舉 .claude/worktrees/agent-*
@@ -197,8 +197,8 @@ def get_worktree_branch(project_root: Path, worktree_path: Path) -> Optional[str
     必須在 worktree 移除前呼叫；回傳如 "worktree-agent-xxx"（去除 refs/heads/ 前綴）。
     找不到對應 worktree 或處於 detached HEAD 時回傳 None（不純字串拼接分支名）。
 
-    改用 lib.git_utils.get_worktree_list(cwd=...)（0.2.1-W3-290）；路徑比對鍵沿用
-    0.2.1-W3-286 結論——用絕對路徑（resolve）比對避免同名不同層誤配。
+    改用 lib.git_utils.get_worktree_list(cwd=...)；路徑比對鍵沿用
+    既有結論——用絕對路徑（resolve）比對避免同名不同層誤配。
     """
     try:
         worktrees = get_worktree_list(cwd=str(project_root))

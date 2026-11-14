@@ -3,7 +3,7 @@
 本檔記錄 PM 派發 IMP 前驗證 ANA 結論關鍵假設的具體案例，作為「派發前假設驗證」機制的對照參考。
 
 > **入口**：`.claude/pm-rules/dispatch-gate.md` 關卡三 / `.claude/skills/wrap-decision/SKILL.md` R.2
-> **背景**：本機制源於 W10-140 第四輪 4 視角分析，融合 saffron 切入點 + ginger 按需 + bay tripwire 警告
+> **背景**：本機制源於派發前驗證 ANA 第四輪 4 視角分析，融合 saffron 切入點 + ginger 按需 + bay tripwire 警告
 
 ---
 
@@ -31,13 +31,13 @@ PM 派發 IMP 前，若任一條件成立，必須執行假設驗證：
 
 ---
 
-## 案例 1：W10-137 — Hook 強制狀態驗證
+## 案例 1：刪除 ticket-skill-sync-check 規則的 IMP — Hook 強制狀態驗證
 
 **情境**（2026-05-14）：
 
-W10-134 第二輪 linux 結論建議「P0：刪除 `.claude/rules/core/ticket-skill-sync-check.md`」，理由：「對應 hook 已強制執行 + 0 PC 引用 = 安全刪除」。<!-- broken-link-exempt: 歷史引文原文，該檔現已更名為 skill-cli-sync-check.md -->
+規則瘦身 ANA 第二輪 linux 結論建議「P0：刪除 `.claude/rules/core/ticket-skill-sync-check.md`」，理由：「對應 hook 已強制執行 + 0 PC 引用 = 安全刪除」。<!-- broken-link-exempt: 歷史引文原文，該檔現已更名為 skill-cli-sync-check.md -->
 
-**bay devil's advocate 警告**（W10-134.7）：「unknown unknowns 風險」「prose rules 同時是規範 + 教育材料」。
+**bay devil's advocate 警告**（同一 ANA 的 bay 視角）：「unknown unknowns 風險」「prose rules 同時是規範 + 教育材料」。
 
 **主線程派發前驗證指令**：
 
@@ -55,7 +55,7 @@ grep -A 10 "exit\|behavior" .claude/hooks/ticket-skill-sync-check-hook.py
 
 **修正動作**：
 
-W10-137 IMP 範圍從「刪除 ticket-skill-sync-check.md」調整為「移到 references/，rules/core 留 stub」（同 pm-role.md v4.0.0 的 73% 裁剪模式）。
+該 IMP 範圍從「刪除 ticket-skill-sync-check.md」調整為「移到 references/，rules/core 留 stub」（同 pm-role.md v4.0.0 的 73% 裁剪模式）。
 
 **結果**：保留 prose 教育價值（避免 PC-066 風險），同時實現 -19.3% rules/core 縮減 / -5.5K tokens 節省。
 
@@ -67,11 +67,11 @@ W10-137 IMP 範圍從「刪除 ticket-skill-sync-check.md」調整為「移到 r
 
 ---
 
-## 案例 2：W10-141 派發前驗證（自我示範）
+## 案例 2：派發前假設驗證 IMP 的派發前驗證（自我示範）
 
 **情境**（2026-05-14）：
 
-W10-141 IMP「派發前假設驗證機制最小可行版本」涉及修改 wrap-decision SKILL.md / dispatch-gate.md / 新建 references/。派發 thyme-python-developer 前主線程執行假設驗證。
+該 IMP「派發前假設驗證機制最小可行版本」涉及修改 wrap-decision SKILL.md / dispatch-gate.md / 新建 references/。派發 thyme-python-developer 前主線程執行假設驗證。
 
 **驗證指令**：
 
@@ -108,21 +108,21 @@ ls .claude/references/ | grep -i "dispatch\|pre-validation"        # 既有相�
 
 ---
 
-## Tripwire（W10-140 仲裁設計）
+## Tripwire（PM 仲裁設計）
 
 **升級條件**（任一觸發即評估擴展）：
 
-1. **30 天觀察期內**：W10-137 類事件 ≥ 3 次 → 評估升級加 D 強制（wrap-decision R.2 改強制問）
-2. **6 個月內**：W10-137 類事件再爆 2 次 → 評估升級加 B 窄場景 hook
+1. **30 天觀察期內**：案例 1 類事件 ≥ 3 次 → 評估升級加 D 強制（wrap-decision R.2 改強制問）
+2. **6 個月內**：案例 1 類事件再爆 2 次 → 評估升級加 B 窄場景 hook
 3. **規則超載閾值**：rules/core + pm-rules 總 checklist 項超 200 → 強制裁剪而非新增
 
 **回滾條件**：
 
-- 30 天內無 W10-137 類事件 → 本檔改 references-only（更輕）
+- 30 天內無案例 1 類事件 → 本檔改 references-only（更輕）
 - 機制造成 PM 自動駕駛跳過（PC-066 模式發生）→ 改純 self-audit（不再強制）
 
 ---
 
 **Last Updated**: 2026-05-14
-**Version**: 1.0.0 — 初版建立派發前假設驗證案例集（4 視角分析產出）（W10-141 落地）
-**Source**: W10-137 案例（首例）+ W10-140 PM 仲裁（融合 saffron / ginger / bay 視角）
+**Version**: 1.0.0 — 初版建立派發前假設驗證案例集（4 視角分析產出）
+**Source**: 案例 1（首例）+ PM 仲裁（融合 saffron / ginger / bay 視角）

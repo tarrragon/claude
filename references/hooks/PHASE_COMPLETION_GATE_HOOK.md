@@ -233,7 +233,7 @@ python3 -m py_compile $CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-ho
 
 # 手動執行測試
 export HOOK_DEBUG=true
-cat /tmp/test-input.json | python3 $CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py
+cat /tmp/test-input.json | uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py
 
 # 查看日誌
 tail -50 $CLAUDE_PROJECT_DIR/.claude/hook-logs/phase-completion-gate/phase-completion-gate.log
@@ -286,7 +286,7 @@ ls -lt $CLAUDE_PROJECT_DIR/.claude/hook-logs/phase-completion-gate/completion-re
 - [TDD 流程](../../pm-rules/tdd-flow.md) - 完整 TDD 流程說明
 - @.claude/agents/cinnamon-refactor-owl.md - Phase 4 執行指南
 - [五重文件系統](../document-system.md) - 文件系統規則
-- Ticket 0.30.0-W2-004 - 原始 Ticket（歷史；舊版本工作日誌路徑已隨版本目錄重構失效）
+- 原始 Ticket（歷史；舊版本工作日誌路徑已隨版本目錄重構失效）
 
 ---
 

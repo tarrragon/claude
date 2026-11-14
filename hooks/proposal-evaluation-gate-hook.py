@@ -21,10 +21,10 @@ PreToolUse Hook（Write / Edit / MultiEdit），落地
     4. tracking.yaml 中 status=confirmed|approved 但 ticket_refs 為空
     5. tracking.yaml 中 status=confirmed|approved 但所有 ticket_refs 皆為 ANA 類
 
-章節檢查為「升級閘門」（W2-025）：
+章節檢查為「升級閘門」：
     僅在 status 由非 confirmed/approved 升級為 confirmed/approved 時觸發章節檢查
     （含新建檔直接 confirmed/approved）。confirmed→confirmed 維護編輯豁免章節檢查，
-    避免凍結 pre-existing 缺章節的 confirmed PROP（W2-024 §7 維護被擋實證）。
+    避免凍結 pre-existing 缺章節的 confirmed PROP（實測維護編輯曾因此被擋）。
     規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2.-1 / 2.5。
 
 豁免（permissionDecision=allow）：
@@ -38,8 +38,6 @@ PreToolUse Hook（Write / Edit / MultiEdit），落地
     - 規則 4：confirmed/approved 必綁非 ANA ticket_refs
     - IMP-049：避免 try-except 吞掉 NameError
     - IMP-055：deny 訊息使用 hookSpecificOutput 完整 JSON 結構
-
-來源：0.18.0-W10-046（W10-035.1 ANA 落地）
 """
 
 import json
@@ -88,7 +86,7 @@ HEAVY_REQUIRED_SECTIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
 MICRO_EDIT_THRESHOLD = 30
 
 # Ticket ID 中 ANA 類判定（依 ticket type 命名慣例）
-# 由於 tracking.yaml 僅存 ticket ID（如 0.18.0-W10-046），無法直接看 type，
+# 由於 tracking.yaml 僅存 ticket ID（如 <版本>-W<波次>-<序號>），無法直接看 type，
 # 故採用「至少一個 ticket_refs 不為空」作為基本檢查；ANA-only 偵測需另查
 # ticket md。為避免本 hook 過度耦合，採取「ticket_refs 非空即過」第一階段，
 # 並以 stderr 提示應人工確認非 ANA-only。
@@ -158,7 +156,7 @@ def is_upgrade_transition(old_status: Optional[str], new_status: str) -> bool:
     - confirmed→confirmed / approved→approved 等維護編輯：非升級，豁免章節檢查。
 
     Why：章節完備度是「升級閘門」（draft→confirmed/approved 把關），非「維護閘門」。
-    對 confirmed PROP 每次編輯都掃章節會凍結 pre-existing 缺章節的 confirmed PROP（W2-024 實證）。
+    對 confirmed PROP 每次編輯都掃章節會凍結 pre-existing 缺章節的 confirmed PROP（實測確認）。
     規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2。
     """
     if new_status not in UPGRADED_STATUSES:
@@ -217,7 +215,7 @@ def check_prop_content(
     # 升級閘門：章節檢查僅在「升級轉換」時觸發（draft/discussing→confirmed/approved，
     # 或新建檔直接 confirmed/approved）。confirmed→confirmed 等維護編輯豁免章節檢查。
     # Why：章節完備度是升級閘門，非維護閘門。對 confirmed PROP 每次編輯都掃章節會
-    #     凍結 pre-existing 缺章節的 confirmed PROP（W2-024 §7 維護被擋實證）。
+    #     凍結 pre-existing 缺章節的 confirmed PROP（實測維護編輯曾因此被擋）。
     # 規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2。
     if not is_upgrade_transition(old_status, new_status):
         logger.info(

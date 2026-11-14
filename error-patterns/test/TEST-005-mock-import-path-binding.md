@@ -79,7 +79,7 @@ with patch('ticket_system.commands.track_relations.save_ticket'):  # 正確
 
 ```python
 with mock.patch.object(topic_backfill, "get_project_root", return_value=tmp):
-    topic_backfill.append_assignment("0.2.1-W3-002", "主題 B")
+    topic_backfill.append_assignment("<ticket-id>", "主題 B")
 ```
 
 `append_assignment` 自身的寫入正確落在 tmp，但它內部呼叫的 `topic_registry.append_topic` 走的是**未被 patch 的第二個 binding**，於是那次寫入落到真實 repo，留下一個 untracked 的清單檔。腳本輸出完全正常，污染是事後 `git status` 才發現的。
@@ -147,5 +147,5 @@ def _assert_no_repo_pollution():
 ---
 
 **建立日期**: 2026-04-13
-**來源**: 0.18.0-W5-031 ANA 根因分析 + 0.18.0-W5-032 執行驗證
+**來源**: ANA 根因分析 + 後續執行驗證
 **Version**: 1.1.0 — 新增「變體：patch 位置正確但呼叫鏈上有第二個未涵蓋的 binding」（PM 驗收實測，跨模組同名 binding 遺漏致真實路徑污染）

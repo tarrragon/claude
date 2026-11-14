@@ -861,20 +861,219 @@ class TestTargetRepoResolution:
         command = f"git -C {other} stash && git -C {main_repo} reset --hard"
         assert _run_target_hook(monkeypatch, command, main_repo, str(main_repo)) == 2
 
-    def test_linked_worktree_of_main_keeps_main_attribution(
-        self, monkeypatch, capsys, two_repos, tmp_path
-    ):
+    @staticmethod
+    def _add_worktree(main_repo: Path, wt: Path, branch: str = "wtb") -> Path:
         import subprocess
 
-        main_repo, _ = two_repos
-        wt = tmp_path / "wt"
         subprocess.run(
-            ["git", "-C", str(main_repo), "worktree", "add", "-q", "-b", "wtb", str(wt)],
+            ["git", "-C", str(main_repo), "worktree", "add", "-q", "-b", branch, str(wt)],
             check=True,
             capture_output=True,
         )
-        code = _run_target_hook(monkeypatch, f"git -C {wt} stash", main_repo, str(main_repo))
-        assert code == 2
+        return wt
+
+    def _run_linked(self, monkeypatch, command, main_repo, dispatches):
+        """主 repo 有未提交變更、活躍派發數依 dispatches 計（並行期），只換派發條目。"""
+        monkeypatch.setattr(hook_module, "_read_dispatches_strict", lambda root: dispatches)
+        payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(main_repo)}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: main_repo)
+        monkeypatch.setattr(
+            hook_module, "_get_active_dispatch_count", lambda root, logger: len(dispatches) or 1
+        )
+        return main()
+
+    def test_e1_linked_worktree_without_bound_dispatch_allowed(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        """放寬：派發條目都綁在別處，清理該 worktree 放行（修改前為 exit 2）。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        busy = self._add_worktree(main_repo, tmp_path / "busy", "busyb")
+        dispatches = [{"ticket_id": "X-1", "work_checkout": str(busy)}]
+        code = self._run_linked(monkeypatch, f"git -C {wt} restore .", main_repo, dispatches)
+        assert code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_e2_linked_worktree_with_bound_dispatch_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        """正向對照：有派發條目的 work_checkout 指向該 worktree 時仍阻擋。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        dispatches = [{"ticket_id": "X-1", "work_checkout": str(wt)}]
+        assert self._run_linked(monkeypatch, f"git -C {wt} restore .", main_repo, dispatches) == 2
+
+    @pytest.mark.parametrize("entry", [{"ticket_id": "X-1"}, {"ticket_id": "X-1", "work_checkout": ""}])
+    def test_e2_linked_worktree_with_unknown_location_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path, entry
+    ):
+        """正向對照：有 work_checkout 不明的條目時仍阻擋。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        assert self._run_linked(monkeypatch, f"git -C {wt} stash", main_repo, [entry]) == 2
+
+    def test_e2_linked_worktree_dispatch_read_failure_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        """判定失敗落在阻擋一側：派發記錄讀不到時維持主 repo 判定。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+
+        def boom(root):
+            raise OSError("unreadable")
+
+        payload = {"tool_name": "Bash", "tool_input": {"command": f"git -C {wt} stash"}, "cwd": str(main_repo)}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: main_repo)
+        monkeypatch.setattr(hook_module, "_read_dispatches_strict", boom)
+        monkeypatch.setattr(hook_module, "_get_active_dispatch_count", lambda root, logger: None)
+        assert main() == 2
+
+    @pytest.mark.parametrize(
+        "content, lenient",
+        [("{not json", []), ('{"other": []}', []), ('{"dispatches": "x"}', "x")],
+    )
+    def test_e2_linked_worktree_corrupt_state_file_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path, content, lenient
+    ):
+        """判定失敗落在阻擋一側：狀態檔損毀時，get_active_dispatches 回空清單（與沒有派發同形）
+        或非清單值，放寬路徑以嚴格讀取改判阻擋。活躍派發數照實讀，主 repo 有未提交變更。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        state = main_repo / ".claude" / "dispatch-active.json"
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(content, encoding="utf-8")
+        assert hook_module.get_active_dispatches(main_repo) == lenient  # 對照：寬鬆讀取不拋例外
+        payload = {"tool_name": "Bash", "tool_input": {"command": f"git -C {wt} stash"}, "cwd": str(main_repo)}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: main_repo)
+        assert main() == 2
+
+    def test_e1_linked_worktree_absent_state_file_allowed(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        """狀態檔不存在 = 沒有派發：放行（主 repo 有未提交變更，修改前為 exit 2）。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        payload = {"tool_name": "Bash", "tool_input": {"command": f"git -C {wt} stash"}, "cwd": str(main_repo)}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: main_repo)
+        assert main() == 0
+
+    def test_e2_linked_worktree_unresolvable_bound_path_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        """判定失敗落在阻擋一側：條目位置路徑不存在（無法比對）視為綁定。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        dispatches = [{"ticket_id": "X-1", "work_checkout": str(tmp_path / "gone")}]
+        assert self._run_linked(monkeypatch, f"git -C {wt} stash", main_repo, dispatches) == 2
+
+    def test_e2_linked_and_main_in_same_command_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        """同命令另有呼叫指向主 repo：不放行。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        command = f"git -C {wt} stash && git -C {main_repo} reset --hard"
+        assert self._run_linked(monkeypatch, command, main_repo, []) == 2
+
+    # ---- 只有刪除的條件（無派發綁定時仍須成立）----
+    _WIPE_COMMANDS = [
+        "git -C {wt} stash",
+        "git -C {wt} checkout -- .",
+        "git -C {wt} reset --hard",
+        "git -C {wt} clean -fd",
+        "git -C {wt} restore .",
+    ]
+
+    @pytest.mark.parametrize("template", _WIPE_COMMANDS)
+    def test_e1_linked_worktree_deletion_only_allowed(
+        self, monkeypatch, capsys, two_repos, tmp_path, template
+    ):
+        """只有 tracked 檔刪除、無派發綁定：每一種清空命令都放行。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        (wt / "f.txt").unlink()
+        code = self._run_linked(monkeypatch, template.format(wt=wt), main_repo, [])
+        assert code == 0
+
+    @pytest.mark.parametrize("template", _WIPE_COMMANDS)
+    @pytest.mark.parametrize(
+        "change",
+        ["modified", "untracked", "staged_add"],
+    )
+    def test_e2_linked_worktree_other_changes_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path, template, change
+    ):
+        """正向對照：有修改、未追蹤或新增檔，無派發綁定，每一種清空命令仍阻擋。"""
+        import subprocess
+
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        if change == "modified":
+            (wt / "f.txt").write_text("work in progress\n")
+        else:
+            (wt / "new.txt").write_text("n\n")
+            if change == "staged_add":
+                subprocess.run(["git", "-C", str(wt), "add", "new.txt"], check=True, capture_output=True)
+        assert self._run_linked(monkeypatch, template.format(wt=wt), main_repo, []) == 2
+
+    def test_e2_linked_worktree_deletion_plus_modification_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path
+    ):
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        (wt / "g.txt").write_text("g\n")
+        import subprocess
+
+        subprocess.run(["git", "-C", str(wt), "add", "g.txt"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(wt), "commit", "-q", "-m", "g"], check=True, capture_output=True)
+        (wt / "f.txt").unlink()
+        (wt / "g.txt").write_text("changed\n")
+        assert self._run_linked(monkeypatch, f"git -C {wt} restore .", main_repo, []) == 2
+
+    @pytest.mark.parametrize("flags", ["-fdx", "-fX", "-x -f"])
+    def test_e2_linked_worktree_clean_ignored_flags_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path, flags
+    ):
+        """clean -x／-X 刪 ignored 檔，status 不列 ignored，不適用放寬（乾淨的 worktree 也擋）。"""
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        assert self._run_linked(monkeypatch, f"git -C {wt} clean {flags}", main_repo, []) == 2
+
+    @pytest.mark.parametrize("failure", ["nonzero", "timeout", "oserror"])
+    def test_e2_linked_worktree_status_failure_denied(
+        self, monkeypatch, capsys, two_repos, tmp_path, failure
+    ):
+        """status 讀取失敗（非 0、逾時、例外）一律阻擋。"""
+        import subprocess
+
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        real_run = subprocess.run
+
+        def fake_run(args, *a, **kw):
+            if "status" in args and str(wt) in args:
+                if failure == "nonzero":
+                    return subprocess.CompletedProcess(args, 128, "", "fatal")
+                if failure == "timeout":
+                    raise subprocess.TimeoutExpired(args, 5)
+                raise OSError("no git")
+            return real_run(args, *a, **kw)
+
+        monkeypatch.setattr(hook_module.subprocess, "run", fake_run)
+        assert self._run_linked(monkeypatch, f"git -C {wt} stash", main_repo, []) == 2
+
+    def test_linked_worktree_allow_is_logged(self, monkeypatch, caplog, two_repos, tmp_path):
+        main_repo, _ = two_repos
+        wt = self._add_worktree(main_repo, tmp_path / "wt")
+        test_logger = logging.getLogger("test-wipe-guard-linked")
+        monkeypatch.setattr(hook_module, "setup_hook_logging", lambda name: test_logger)
+        with caplog.at_level(logging.INFO, logger=test_logger.name):
+            assert self._run_linked(monkeypatch, f"git -C {wt} stash", main_repo, []) == 0
+        assert any("無綁定派發的 linked worktree" in r.getMessage() for r in caplog.records)
 
     @pytest.mark.parametrize(
         "template",
@@ -995,3 +1194,60 @@ class TestParseCauseMessages:
         err = capsys.readouterr().err
         assert "未閉合引號" not in err
         assert "非命令位置" not in err
+
+
+# 切詞失敗（未閉合引號）且含 git 字樣的命令（3.3.0-W1-213.14）
+_UNPARSEABLE_GIT_COMMANDS = [
+    "git reset --hard 'unclosed",
+    "git status 'unclosed",
+    "python3 -c 'note = \"about git usage, this ticket's fine\"'",
+]
+
+
+class TestUnparseableOperationLabel:
+    """切詞失敗時訊息不冠具體子命令；阻擋判定與修正前相同。"""
+
+    @pytest.mark.parametrize("command", _UNPARSEABLE_GIT_COMMANDS)
+    def test_detect_returns_unparseable_label(self, command):
+        assert _detect_operation(command) == (hook_module.UNPARSEABLE_OPERATION, None)
+
+    @pytest.mark.parametrize("command", _UNPARSEABLE_GIT_COMMANDS)
+    def test_deny_message_does_not_claim_git_stash(self, monkeypatch, capsys, command):
+        assert _run_hook(monkeypatch, command, dispatch_count=1) == 2
+        err = capsys.readouterr().err
+        assert "git stash" not in err
+        assert hook_module.UNPARSEABLE_OPERATION in err
+        assert "未閉合引號" in err
+
+    def test_warn_message_does_not_claim_git_stash(self, monkeypatch, capsys):
+        assert _run_hook(monkeypatch, "git status 'unclosed", dispatch_count=0) == 0
+        err = capsys.readouterr().err
+        assert "git stash" not in err
+        assert hook_module.UNPARSEABLE_OPERATION in err
+
+    @pytest.mark.parametrize(
+        "command",
+        _UNPARSEABLE_GIT_COMMANDS
+        + [
+            "git stash",
+            "git stash push -- a.py",
+            "git reset --hard",
+            "setsid git reset --hard",
+            "git checkout -- .",
+            "git clean -fd",
+            "git restore .",
+            "git status",
+            "echo hello",
+        ],
+    )
+    def test_detection_truthiness_matches_detector_loop(self, command):
+        """阻擋與否與修正前相同：修正前的判定即「任一偵測器命中」（main 只看是否為 None）。"""
+        before = hook_module.contains_git_word(command) and any(
+            detector(command) for _, detector, _ in hook_module._OPERATIONS
+        )
+        assert (_detect_operation(command) is not None) == bool(before)
+
+    def test_real_stash_label_unchanged(self, monkeypatch, capsys):
+        """對照：可切詞的真實 git stash 仍標成 git stash。"""
+        assert _run_hook(monkeypatch, "git stash", dispatch_count=1) == 2
+        assert "[全工作區破壞性操作被阻擋：git stash]" in capsys.readouterr().err

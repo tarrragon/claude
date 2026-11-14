@@ -59,7 +59,7 @@ DICT_FIELD_SUBKEY: Dict[str, str] = {
     "where": "layer",
     "how": "strategy",
 }
-"""dict 型欄位與主要子欄位的對應表（W10-086 修復）。
+"""dict 型欄位與主要子欄位的對應表。
 
 Why: set-who/set-where/set-how 應僅更新子欄位（current/layer/strategy），
 保留 dict 其他 key（history/files/task_type）；原實作直接覆寫整個 dict 為 string，
@@ -127,7 +127,7 @@ def _looks_like_path(item: str) -> bool:
 
 
 def _parse_where_path_entries(value: Any) -> Optional[list]:
-    """解析 set-where 輸入值為路徑清單；非路徑型輸入回傳 None（W1-078 修復）。
+    """解析 set-where 輸入值為路徑清單；非路徑型輸入回傳 None。
 
     Why: agent-dispatch-validation-hook 以 where.files 為 scope source of truth
     （L3 純 .claude/ 覆蓋），set-where 僅寫 where.layer 會讓 files 保留 stale 值，
@@ -185,7 +185,7 @@ def _apply_hook_template_to_ticket(ticket: Dict[str, Any], files: Optional[list]
 
 
 def _get_str_arg(args: argparse.Namespace, name: str) -> Optional[str]:
-    """安全讀取可選 CLI flag 的字串值（W1-009：子欄位寫入路徑）。
+    """安全讀取可選 CLI flag 的字串值。
 
     僅接受字串型別；None 與非字串（含測試替身 Mock 未顯式設定時自動生成的屬性）
     一律視為未提供，避免誤判觸發子欄位寫入分支（讓既有以 Mock() 建構 args 的
@@ -206,7 +206,7 @@ def _execute_set_dict_subfields(
     field_name: str,
     subfields: Dict[str, Any],
 ) -> int:
-    """設定 dict 型欄位（who/where/how）的個別子欄位（W1-009：補齊子欄位寫入路徑）。
+    """設定 dict 型欄位（who/where/how）的個別子欄位。
 
     與 execute_set_field 的整體覆寫（位置參數 value）路徑互補：呼叫端偵測到至少一個
     子欄位 flag 被提供時才呼叫本函式。若 value 同時提供，先套用至 DICT_FIELD_SUBKEY
@@ -371,7 +371,7 @@ def execute_set_field(
         - ticket track set-why <ticket-id> <value>
         - ticket track set-how <ticket-id> <value>
     """
-    # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
+    # file_lock 包圍 load → modify → save，消除 logical race。
     # Lock target 用 get_ticket_path 計算路徑（不依賴 load 後的 _path）。
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
@@ -394,7 +394,7 @@ def execute_set_field(
         if isinstance(prior_scope, list):
             prior_scope = list(prior_scope)
 
-        # 更新欄位：dict 型欄位僅更新子欄位（W10-086 修復，防止壓扁 dict 為 string）
+        # 更新欄位：dict 型欄位僅更新子欄位
         synced_files: Optional[list] = None
         if actual_field_name in DICT_FIELD_SUBKEY:
             subkey = DICT_FIELD_SUBKEY[actual_field_name]
@@ -405,7 +405,7 @@ def execute_set_field(
                 existing = _build_dict_field(
                     actual_field_name, subkey, _DICT_FIELD_DEFAULTS[actual_field_name][subkey]
                 )
-            # W1-078 修復：set-where 路徑型輸入同步更新 where.files，
+            # 修復：set-where 路徑型輸入同步更新 where.files，
             # 維持 layer/files 一致（dispatch hook 消費契約）
             if actual_field_name == "where":
                 synced_files = _sync_where_files(existing, new_value)
@@ -444,7 +444,7 @@ def execute_set_field(
     if synced_files is None:
         print(f"   新值: {new_value}")
         if actual_field_name == "where":
-            # 非路徑型輸入不同步 files（W1-078 全有全無設計）：整份輸入退回
+            # 非路徑型輸入不同步 files：整份輸入退回
             # layer 描述，files 完全不變。印出實際寫入的 files 陣列，讓這個
             # 靜默失敗對呼叫者可見（不能只靠上面那行「新值」，那是 layer 的值）。
             current_files = existing.get("files", []) if isinstance(existing, dict) else []
@@ -491,7 +491,7 @@ def execute_get_who(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_set_who(args: argparse.Namespace, version: str) -> int:
-    """設定 Ticket 的 who 欄位（整體覆寫 value 或子欄位 --current，W1-009）。
+    """設定 Ticket 的 who 欄位（整體覆寫 value 或子欄位 --current）。
 
     value 位置參數已改為可選（nargs='?'），使 --current 可獨立使用；
     兩者皆未提供時視為呼叫錯誤，避免 value=None 誤寫入 who.current。
@@ -551,7 +551,7 @@ def execute_get_where(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_set_where(args: argparse.Namespace, version: str) -> int:
-    """設定 Ticket 的 where 欄位（整體覆寫 value 或子欄位 --layer/--files，W1-009）。
+    """設定 Ticket 的 where 欄位（整體覆寫 value 或子欄位 --layer/--files）。
 
     value 位置參數已改為可選（nargs='?'），使 --layer/--files 可獨立使用；
     三者皆未提供時視為呼叫錯誤，避免 value=None 誤寫入 where.layer。
@@ -602,7 +602,7 @@ def execute_get_how(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_set_how(args: argparse.Namespace, version: str) -> int:
-    """設定 Ticket 的 how 欄位（整體覆寫 value 或子欄位 --task-type/--strategy，W1-009）。
+    """設定 Ticket 的 how 欄位（整體覆寫 value 或子欄位 --task-type/--strategy）。
 
     value 位置參數已改為可選（nargs='?'），使 --task-type/--strategy 可獨立使用；
     三者皆未提供時視為呼叫錯誤，避免 value=None 誤寫入 how.strategy。
@@ -695,7 +695,7 @@ def execute_add_acceptance(args: argparse.Namespace, version: str) -> int:
     if deny is not None:
         return deny
 
-    # W14-045: file_lock 包圍 load → modify → save
+    # file_lock 包圍 load → modify → save
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         ticket, error = load_and_validate_ticket(version, args.ticket_id)
@@ -742,7 +742,7 @@ def execute_remove_acceptance(args: argparse.Namespace, version: str) -> int:
     """移除驗收條件（按 index，從 1 開始）"""
     import sys
 
-    # W14-045: file_lock 包圍 load → modify → save
+    # file_lock 包圍 load → modify → save
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         ticket, error = load_and_validate_ticket(version, args.ticket_id)
@@ -820,7 +820,7 @@ def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
     """
     import sys as _sys
 
-    # W14-045: file_lock 包圍 load → modify → save
+    # file_lock 包圍 load → modify → save
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         ticket, error = load_and_validate_ticket(version, args.ticket_id)
@@ -1011,7 +1011,7 @@ def execute_remove_spawned(args: argparse.Namespace, version: str) -> int:
 
 def execute_set_decision_tree(args: argparse.Namespace, version: str) -> int:
     """設定 Ticket 的 decision_tree_path 欄位（3 個子欄位）"""
-    # W14-045: file_lock 包圍 load → modify → save
+    # file_lock 包圍 load → modify → save
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         ticket, error = load_and_validate_ticket(version, args.ticket_id)

@@ -478,7 +478,7 @@ fvm dart format --output=none --set-exit-if-changed <本票改動的 .dart 檔>
 7. **禁止過濾 Hook 警告**：執行 `flutter test` 或 `dart analyze` 後，若 Hook 輸出包含 `[WARNING]` 或產生 exitCode=2 阻塞訊息，**必須**在回報主線程時包含此警告摘要
    - 不得以「pre-existing」「與當前任務無關」為由省略 Hook 警告
    - 若判斷為已知問題，仍須在回報中標記「Hook 警告：{摘要}，判斷為 pre-existing」
-   - **來源**：PC-026 + 0.2.0-W5-010 分析
+   - **來源**：PC-026 及其對應的分析
 
 ### 違規處理
 
@@ -599,7 +599,7 @@ testWidgets('複雜佈局測試', (tester) async {
 
 ### Widget 測試核心策略（PROP-006 四視角審查結論）
 
-> **來源**：PROP-006 四視角審查（Consistency + Impact + linux + parsley）結論。W7-001 的根因是知識問題，不是基礎設施缺陷。
+> **來源**：PROP-006 四視角審查（Consistency + Impact + linux + parsley）結論。該次 Widget 測試問題的根因是知識問題，不是基礎設施缺陷。
 
 **第一原則：優先使用 `WidgetTestHelper.createFullTestApp()`**
 
@@ -622,9 +622,9 @@ await tester.pumpWidget(
 
 **禁止**：從零開始手動建構 `MaterialApp` + `ScreenUtilInit` + `ProviderScope`，除非有明確的技術理由。
 
-### Widget 測試常見陷阱（W7-001 實戰教訓）
+### Widget 測試常見陷阱（實戰教訓）
 
-> **來源**：0.31.1-W7-001 Legacy Code 驗證過程中，6 個 UC 的 Widget 測試反覆出現相同類型的問題。
+> **來源**：某次 Legacy Code 驗證過程中，6 個 UC 的 Widget 測試反覆出現相同類型的問題。
 
 #### 1. 元件類型斷言必須匹配實作
 
@@ -959,7 +959,7 @@ mcp__serena__replace_symbol_body
 
 ### 2.2 記憶體與資源管理（即時監控場景）
 
-> **來源**：W5-002 — ccsession 佔用 70GB 記憶體；W5-003/004 — 多處資源累積無上限。
+> **來源**：某次 ccsession 佔用 70GB 記憶體的事件；某次多處資源累積無上限的事件。
 
 本專案是即時監控系統，資料會持續增長。實作時必須考慮資源的生命週期和上限。
 

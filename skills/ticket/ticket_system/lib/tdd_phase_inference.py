@@ -1,17 +1,17 @@
 """
-TDD Phase 自動推導（0.4.1-W2-009）
+TDD Phase 自動推導
 
 claim --as <agent> 時依 registry.yaml 的 agent -> tdd_phases 對應，自動推導
 應寫入 ticket frontmatter 的 tdd_phase。同時定義 tdd_phase_source 兩種來源
 枚舉，讓 `ticket track phase` 手動設定過的值不被此推導覆蓋。
 
-背景：0.4.1-W2-004 ANA 結論——tdd_phase 推進機制存在但不在熱路徑，
+背景：ANA 結論——tdd_phase 推進機制存在但不在熱路徑，
 0.4.0 十八票零呼叫。本模組把「agent 認領時應處於哪個 phase」接上 claim 熱路徑。
 """
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_cli_code_root
 from ticket_system.lib.registry_loader import load_registry
 
 REGISTRY_RELATIVE_PATH = Path(".claude") / "agents" / "registry.yaml"
@@ -34,7 +34,7 @@ def _load_agent_tdd_phases(agent: str) -> List[str]:
     Returns:
         該 agent 宣告的 tdd_phases 清單，找不到對應時回傳空清單。
     """
-    registry_path = get_project_root() / REGISTRY_RELATIVE_PATH
+    registry_path = get_cli_code_root() / REGISTRY_RELATIVE_PATH
     registry = load_registry(registry_path)
     agents = registry.get("agents", {}) if isinstance(registry, dict) else {}
     config = agents.get(agent) or {}

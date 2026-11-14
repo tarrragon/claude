@@ -3,7 +3,6 @@ id: PC-155
 title: ticket complete auto-stage 與 worktree append-log 並行編輯同一 ticket md 造成 merge conflict
 category: process-compliance
 severity: low
-source_case: 0.19.0-W1-048.2
 created: 2026-05-23
 ---
 
@@ -27,7 +26,7 @@ Automatic merge failed; fix conflicts and then commit the result.
 
 ## Why
 
-- **main 端**：`ticket track complete` 的 auto-stage hook 將 main repo 內的 ticket md 加入 staging（W11-035 行為）；PM 隨後 `git commit -am` 把 staged 變更落地。這個變更通常是 cinnamon agent complete metadata sync 的副本（路徑被 hook 同時管控）。
+- **main 端**：`ticket track complete` 的 auto-stage hook 將 main repo 內的 ticket md 加入 staging（既有行為）；PM 隨後 `git commit -am` 把 staged 變更落地。這個變更通常是 cinnamon agent complete metadata sync 的副本（路徑被 hook 同時管控）。
 - **worktree 端**：subagent 在 complete 流程中 `append-log` 多次寫入 ticket md，且 complete 自身寫入 frontmatter status / completed_at 等欄位。worktree 累積多個 commit。
 - merge 時：兩條 commit 鏈在 ticket md 同行區段（frontmatter status / log section）有不同寫入，git ort 策略無法自動推斷哪一份是「最新意圖」。
 
@@ -94,17 +93,17 @@ git merge --no-ff worktree-agent-<id> -m "merge: ..."
 | Pattern | 關係 |
 |---------|------|
 | PC-154（worktree 派發兩前置） | 兩者皆為 worktree 工作流問題；PC-154 在派發**前**、PC-155 在合併**後** |
-| W11-035（complete auto-stage 機制） | PC-155 是該機制的副作用；W11-035 不該關閉，但 PM 需理解其與 worktree 並行的時序 |
+| complete auto-stage 機制 | PC-155 是該機制的副作用；該機制不該關閉，但 PM 需理解其與 worktree 並行的時序 |
 | `.claude/pm-rules/worktree-operations.md`「階段 2：合併時」 | 該階段強調「立即合併」，PC-155 補充「合併前先處理 staged」 |
 
 ## 案例
 
-### 案例 1（變體 A）：0.19.0-W1-048.2（2026-05-23）
+### 案例 1（變體 A）：complete auto-stage 與 worktree 並行（2026-05-23）
 
 ```
 1. PM 派發 thyme-extension-engineer to worktree
 2. subagent 完成：append-log Test Results + Solution + ticket complete（metadata sync）
-3. main 端 auto-stage hook 把 docs/.../0.19.0-W1-048.2.md 加入 staging
+3. main 端 auto-stage hook 把 docs/.../<ticket-id>.md 加入 staging
 4. PM `git commit -am "chore(...): main repo metadata sync (auto-stage)"` 落地該 staged 變更
 5. PM `git merge --no-ff worktree-agent-<id>` → conflict
 6. PM 採 fallback：git checkout --theirs <ticket.md> 解決
@@ -119,7 +118,7 @@ worktree:        ╲─── W1 (refactor) ─── W2 (ticket md append) ─�
                                               W3 與 A 各自寫 ticket md frontmatter / log
 ```
 
-### 案例 2（變體 B）：0.32.0-W3-030（2026-06-17）
+### 案例 2（變體 B）：PM append-log auto-commit 後派發（2026-06-17）
 
 ```
 1. PM 建 feature branch，執行 append-log Problem Analysis + Context Bundle（auto-commit 兩筆）
@@ -152,4 +151,4 @@ worktree:    ╲─── W1 (claim) ─── W2 (refactor) ─── W3 (appen
 
 ---
 
-**Last Updated**: 2026-06-17 | **Version**: 1.1.0 — 新增變體 B（PM append-log auto-commit 觸發）、預防方案（push origin 再派發）、案例 2（0.32.0-W3-030）、Fallback 變體對照表
+**Last Updated**: 2026-06-17 | **Version**: 1.1.0 — 新增變體 B（PM append-log auto-commit 觸發）、預防方案（push origin 再派發）、案例 2、Fallback 變體對照表

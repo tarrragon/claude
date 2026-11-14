@@ -43,7 +43,6 @@ try:
         setup_hook_logging,
         run_hook_safely,
         read_json_from_stdin,
-        get_project_root,
         save_check_log,
         validate_hook_input,
         is_subagent_environment,

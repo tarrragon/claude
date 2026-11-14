@@ -154,7 +154,7 @@ echo '{
     "file_path": ".claude/tickets/test.md",
     "content": "test"
   }
-}' | python3 .claude/hooks/file-type-permission-hook.py
+}' | uv run --quiet .claude/hooks/file-type-permission-hook.py
 ```
 
 預期：輸出提示訊息到 stderr，包含 permissionDecision: "allow"
@@ -168,7 +168,7 @@ echo '{
     "file_path": "lib/main.dart",
     "content": "test"
   }
-}' | python3 .claude/hooks/file-type-permission-hook.py
+}' | uv run --quiet .claude/hooks/file-type-permission-hook.py
 ```
 
 預期：無任何輸出，exit code 0
@@ -182,7 +182,7 @@ echo '{
     "file_path": "docs/work-logs/v1.0.0/worklog.md",
     "content": "test"
   }
-}' | python3 .claude/hooks/file-type-permission-hook.py
+}' | uv run --quiet .claude/hooks/file-type-permission-hook.py
 ```
 
 預期：輸出提示訊息到 stderr，包含 permissionDecision: "allow"

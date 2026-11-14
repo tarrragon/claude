@@ -9,7 +9,7 @@
 | 編號 | PC-082 |
 | 類別 | process-compliance |
 | 風險等級 | 中（修復方向錯誤導致規則違反持續累積） |
-| 首發時間 | 2026-04-17（W13-015 test_track_board emoji regression 修復 session） |
+| 首發時間 | 2026-04-17（test_track_board emoji regression 修復 session） |
 | 姊妹模式 | PC-081（PM 自我檢查比用戶規則更嚴格）— 相反維度：本模式是「PM 修復比用戶規則更寬鬆」 |
 
 ---
@@ -26,14 +26,14 @@
 
 ---
 
-## 實際案例（W13-015）
+## 實際案例
 
-**W12-002.4.3 批量 emoji 清理**：
+**批量 emoji 清理**：
 - `.claude/skills/ticket/tests/test_track_board.py` 的 `😀` 被改為 `[SMILE]`
 - `test_emoji` 預期 `get_char_display_width` 接收單一 emoji 字元返回 2
 - `[SMILE]`（7 字元字串）觸發 `unicodedata.east_asian_width` TypeError
 
-**PM 錯誤修復**（W13-015 v1）：
+**PM 錯誤修復**（第 1 版）：
 - 將 `[SMILE]` 還原為 `😀`
 - 測試恢復 102 passed
 - **但規則 3「禁用 emoji」適用於所有地方，含測試數據**
@@ -41,7 +41,7 @@
 **用戶正確指正**：
 > 「修復是把 emoji 去掉 不要用 emoji 驗收，這個做法本身設計有問題，我們也要求不應該再任何地方使用 emoji」
 
-**正確修復**（W13-015 v2）：
+**正確修復**（第 2 版）：
 - 刪除 `test_emoji`、`test_emoji_characters`、`test_visual_width_with_mixed_emoji` 三個測試
 - 功能性驗證由 `test_fullwidth_punctuation`（「，」）+ `test_hiragana`（「あ」）+ `test_hangul`（「가」）覆蓋
 - 結果：99 passed（移除 3 個冗餘測試）
@@ -93,7 +93,7 @@
 | 流程 | regression 修復前自問：「還原的舊值是否違反任何全域規則？」 | 行為準則 |
 | 流程 | 若原值違反規則，**刪除依賴該值的程式碼**而非還原；缺失功能另補測試 | 行為準則 |
 | 流程 | 批量清理腳本應在設計階段考慮「測試數據 / fixture / mock 是否應清理」，不應豁免 | 設計原則 |
-| 規則 | language-constraints 規則 3 補充「適用範圍含所有檔案類型（含測試、fixture、mock）」 | 建議實施（W13-016 追蹤） |
+| 規則 | language-constraints 規則 3 補充「適用範圍含所有檔案類型（含測試、fixture、mock）」 | 建議實施 |
 | Memory | 記錄本失誤作為跨 session 提醒 | 已實施（配對本檔） |
 
 ---
@@ -127,10 +127,9 @@
 
 - `.claude/rules/core/language-constraints.md` — 規則 3 禁用 emoji
 - `.claude/error-patterns/process-compliance/PC-081-pm-self-check-stricter-than-user-rule.md` — 姊妹模式
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W13-015.md` — 實際案例
 
 ---
 
 **Last Updated**: 2026-04-17
 **Version**: 1.0.0
-**Source**: W13-015 emoji regression 修復 session，PM 選「還原 emoji」作為首選，用戶明確指正「不應該在任何地方使用 emoji」
+**Source**: emoji regression 修復 session，PM 選「還原 emoji」作為首選，用戶明確指正「不應該在任何地方使用 emoji」

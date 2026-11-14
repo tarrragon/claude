@@ -58,7 +58,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root, emit_model_reminder
+from lib import setup_hook_logging, run_hook_safely, get_code_root, emit_model_reminder
 
 # error-patterns 底下的分類目錄（排除 README.md 本身）
 CATEGORY_DIRS = [
@@ -492,10 +492,10 @@ def select_model_actionable(result: dict) -> dict:
 
 def main() -> int:
     logger = setup_hook_logging("error-patterns-index-consistency-check")
-    root = get_project_root()
+    root = get_code_root()
 
     if not root:
-        logger.info("get_project_root() 回傳空值，略過檢查（非標準情境）")
+        logger.info("get_code_root() 回傳空值，略過檢查（非標準情境）")
         return 0
 
     root = Path(root)

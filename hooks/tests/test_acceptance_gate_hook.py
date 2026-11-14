@@ -926,7 +926,7 @@ def test_force_bypass_lists_incomplete_children_in_additional_context(project_di
     output = module.generate_hook_output(parent_id, result, project_dir, logger)
 
     hook_out = output["hookSpecificOutput"]
-    assert hook_out["permissionDecision"] == "allow"
+    assert "permissionDecision" not in hook_out
     assert child_id in hook_out["additionalContext"]
     assert "--force" in hook_out["additionalContext"]
 
@@ -1036,7 +1036,11 @@ def test_force_does_not_bypass_ana_spawn_consistency(project_dir, logger):
 
 
 def test_force_still_runs_spawn_check_when_children_bypassed(project_dir, logger):
-    """旁路 children 後，spawn 一致性檢查仍照常執行（規劃數 > 落地數 → 警告帶出）。"""
+    """旁路 children 後，spawn 一致性檢查仍照常執行（規劃數 > 落地數 → 阻擋）。
+
+    2026-11-12 部分落地由警告升為阻擋；--force 只旁路 children 未完成，
+    不旁路 spawn 一致性。
+    """
     ticket_id = "0.18.0-W30-085"
     child_id = "0.18.0-W30-086"
     _write_force_ticket(
@@ -1048,12 +1052,46 @@ def test_force_still_runs_spawn_check_when_children_bypassed(project_dir, logger
         project_dir, ticket_id, logger, f"ticket track complete {ticket_id} --force"
     )
 
-    assert result.should_block is False
-    assert result.force_bypassed_children
-    assert result.message, "spawn warning must survive the bypass"
+    assert result.should_block is True
+    assert result.block_source == "ana_spawn"
+    assert "未落地" in (result.message or "")
 
 
-def test_force_does_not_bypass_illegal_multi_view_status(project_dir, logger):
+def test_doc_spawn_planning_without_landing_blocked_by_gate(project_dir, logger):
+    """DOC 進入 spawn 一致性檢查（2026-11-12 由 ANA 擴及 DOC）。"""
+    ticket_id = "0.18.0-W30-087"
+    _write_force_ticket(project_dir, ticket_id, ticket_type="DOC", body=_SPAWN_BODY)
+
+    result = _check_via_orchestrator(
+        project_dir, ticket_id, logger, f"ticket track complete {ticket_id}"
+    )
+
+    assert result.should_block is True
+    assert result.block_source == "ana_spawn"
+    assert "DOC Ticket" in (result.message or "")
+
+
+def test_doc_reverse_lineage_tickets_on_disk_count_as_landing(project_dir, logger):
+    """回指本票的票（source_ticket／discovered_during）由 gate 掃描磁碟計入落地。"""
+    ticket_id = "0.18.0-W30-088"
+    _write_force_ticket(project_dir, ticket_id, ticket_type="DOC", body=_SPAWN_BODY)
+    _write_force_ticket(
+        project_dir, "0.19.0-W1-001", extra_frontmatter=f"source_ticket: {ticket_id}\n"
+    )
+    _write_force_ticket(
+        project_dir, "0.19.0-W1-002", extra_frontmatter=f"discovered_during: {ticket_id}\n"
+    )
+
+    result = _check_via_orchestrator(
+        project_dir, ticket_id, logger, f"ticket track complete {ticket_id}"
+    )
+
+    assert result.block_source != "ana_spawn"
+    assert "spawn 規劃未落地" not in (result.message or "")
+
+
+def test_illegal_multi_view_status_warns_after_force_bypass(project_dir, logger):
+    """值非法已降為警告：--force 旁路 children 後放行，警告仍帶出。"""
     ticket_id = "0.18.0-W30-090"
     child_id = "0.18.0-W30-091"
     body = "## Solution\n\nmulti_view_status: done\nconclusion: ok\n\n## Test Results\n"
@@ -1064,7 +1102,23 @@ def test_force_does_not_bypass_illegal_multi_view_status(project_dir, logger):
         project_dir, ticket_id, logger, f"ticket track complete {ticket_id} --force"
     )
 
-    assert result.should_block is True
+    assert result.should_block is False
+    assert result.force_bypassed_children
+    assert _MSG_ILLEGAL_VALUE in (result.message or "")
+
+
+def test_illegal_multi_view_status_without_children_is_not_blocked(project_dir, logger):
+    """正向對照：無 children、值非法的 ANA 票，complete 放行並輸出值非法警告。"""
+    ticket_id = "0.18.0-W30-092"
+    body = "## Solution\n\nmulti_view_status: done\nconclusion: ok\n\n## Test Results\n"
+    _write_force_ticket(project_dir, ticket_id, ticket_type="ANA", body=body)
+
+    result = _check_via_orchestrator(
+        project_dir, ticket_id, logger, f"ticket track complete {ticket_id}"
+    )
+
+    assert result.should_block is False
+    assert result.block_source == ""
     assert _MSG_ILLEGAL_VALUE in (result.message or "")
 
 
@@ -1084,6 +1138,92 @@ def test_deny_checklist_item5_shows_ana_task_type(project_dir, logger):
     assert result.should_block is True
     assert result.task_type == "ANA"
     assert _MSG_NOT_ANA not in output["hookSpecificOutput"]["additionalContext"]
+
+
+# ----------------------------------------------------------------------------
+# 提前回傳時的清單：未執行的檢查不得以預設值標 [x] 或「不適用」
+# ----------------------------------------------------------------------------
+
+def _checklist_lines(output: dict) -> list:
+    context = output["hookSpecificOutput"]["additionalContext"]
+    import re
+    block = context.split("[Complete 清單]\n", 1)[1]
+    item_re = re.compile(r"^\[(x|--|WARNING)\] \d+\. ")
+    return [line for line in block.split("\n") if item_re.match(line)]
+
+
+def _deny_checklist(project_dir, logger, ticket_id, module_name):
+    module = _load_gate_module(module_name)
+    result = module.check_acceptance_status(
+        ticket_id, project_dir, logger, f"ticket track complete {ticket_id}"
+    )
+    output = module.generate_hook_output(ticket_id, result, project_dir, logger)
+    return result, _checklist_lines(output)
+
+
+def test_hook_protection_block_on_imp_marks_items_unevaluated(project_dir, logger):
+    """防護類必含項擋下 IMP 票：第 8、9 項不得標「非 IMP 不適用」，任何項不得標 [x]。"""
+    ticket_id = "0.18.0-W31-001"
+    _write_force_ticket(
+        project_dir, ticket_id,
+        extra_frontmatter="where:\n  files:\n  - .claude/hooks/new-guard-hook.py\n",
+    )
+
+    result, lines = _deny_checklist(project_dir, logger, ticket_id, "gate_unevaluated_hp")
+
+    assert result.should_block is True
+    assert result.block_source == "hook_protection"
+    assert result.task_type == "IMP"
+    assert not [line for line in lines if line.startswith("[x]")], lines
+    item8 = next(line for line in lines if " 8. " in line)
+    item9 = next(line for line in lines if " 9. " in line)
+    assert "未評估" in item8 and "不適用" not in item8
+    assert "未評估" in item9 and "不適用" not in item9
+
+
+def test_children_block_marks_applicable_items_unevaluated(project_dir, logger):
+    """children 擋下 IMP 票：原本以預設值標 [x] 的第 2、3、10、11 項改為未評估。"""
+    parent_id, _ = _force_fixture(project_dir, "0.18.0-W31-010")
+
+    result, lines = _deny_checklist(project_dir, logger, parent_id, "gate_unevaluated_children")
+
+    assert result.should_block is True
+    assert not [line for line in lines if line.startswith("[x]")], lines
+    for number in (2, 3, 10, 11):
+        line = next(item for item in lines if f" {number}. " in item)
+        assert "未評估：前序檢查已阻擋" in line, line
+
+
+def test_full_evaluation_still_renders_checked_items(project_dir, logger):
+    """正向對照：未提前回傳時清單照常輸出 [x]，evaluated 預設為 True。"""
+    ticket_id = "0.18.0-W31-020"
+    _write_force_ticket(project_dir, ticket_id)
+
+    result, lines = _deny_checklist(project_dir, logger, ticket_id, "gate_unevaluated_full")
+
+    assert result.should_block is False
+    assert result.evaluated is True
+    assert [line for line in lines if line.startswith("[x]")], lines
+
+
+def test_missing_ticket_marks_all_items_unevaluated(project_dir, logger):
+    """找不到票時票型未知，11 項全部標未評估（檢查未完成），不標 [x]。"""
+    result, lines = _deny_checklist(project_dir, logger, "0.18.0-W31-099", "gate_unevaluated_missing")
+
+    assert result.evaluated is False
+    assert len(lines) == 11
+    assert all("未評估：檢查未完成" in line for line in lines), lines
+
+
+def test_unevaluated_checklist_keeps_type_inapplicable_items():
+    """票型已知時，不適用該票型的項目照常標不適用（DOC：5、6、9、10、11）。"""
+    module = _load_gate_module("gate_unevaluated_helper")
+
+    lines = module.build_unevaluated_checklist("DOC", should_block=True)
+
+    inapplicable = [line for line in lines if "不適用" in line]
+    assert [line.split(".")[0].split()[-1] for line in inapplicable] == ["5", "6", "9", "10", "11"]
+    assert "未評估" in next(line for line in lines if " 8. " in line)
 
 
 def test_children_incomplete_message_documents_force_bypass():

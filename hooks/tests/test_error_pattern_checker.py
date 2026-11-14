@@ -94,3 +94,93 @@ class TestCheckErrorPatternConflictsExemptAndEdgeCases:
     def test_missing_error_patterns_dir_returns_empty(self, tmp_path):
         fm = {"type": "IMP", "where": {"files": ["lib/widget_helper.dart"]}}
         assert check_error_pattern_conflicts(fm, tmp_path, _logger()) == []
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-12 收斂：通用目錄名排除、底線連字號互通、相關度排序、README 排除
+# ---------------------------------------------------------------------------
+
+from acceptance_checkers.error_pattern_checker import (  # noqa: E402
+    extract_conflict_keywords,
+)
+
+
+def _write(patterns_root: Path, rel: str, body: str) -> None:
+    path = patterns_root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+@pytest.fixture
+def ranked_corpus(tmp_path):
+    """模擬全庫：多數 pattern 只提到通用目錄 hooks，少數直接相關。"""
+    root = tmp_path / ".claude" / "error-patterns"
+    for i in range(30):
+        _write(root, f"process-compliance/PC-{i:03d}-generic.md", "說明 .claude/hooks 的慣例。\n")
+    _write(root, "process-compliance/PC-900-hook-health-monitor-noise.md",
+           "hook-health-monitor 在 SessionStart 誤報。\n")
+    _write(root, "implementation/IMP-901-other.md", "提到 hook_health_monitor 模組。\n")
+    _write(root, "process-compliance/PC-902-dir-only.md", "acceptance_checkers 目錄的慣例。\n")
+    _write(root, "README.md", "索引：hook-health-monitor、acceptance_checkers。\n")
+    return tmp_path
+
+
+def test_generic_directory_names_not_used_as_keywords():
+    keywords = extract_conflict_keywords([".claude/hooks/hook-health-monitor.py"])
+    assert "hooks" not in keywords
+    assert ".claude" not in keywords
+    assert "hook-health-monitor" in keywords
+
+
+def test_stem_keyword_weighted_above_directory_keyword():
+    keywords = extract_conflict_keywords([".claude/hooks/acceptance_checkers/x_checker.py"])
+    assert keywords["x_checker"] > keywords["acceptance_checkers"]
+
+
+def test_single_hook_file_no_longer_matches_whole_corpus(ranked_corpus):
+    """修改前：關鍵詞含 hooks，30 個只提到 hooks 的 pattern 全部命中。"""
+    fm = {"type": "IMP", "where": {"files": [".claude/hooks/hook-health-monitor.py"]}}
+
+    result = check_error_pattern_conflicts(fm, ranked_corpus, _logger())
+
+    assert not any("generic" in r for r in result)
+    assert len(result) == 2
+
+
+def test_underscore_and_hyphen_variants_both_match(ranked_corpus):
+    fm = {"type": "IMP", "where": {"files": [".claude/hooks/hook-health-monitor.py"]}}
+
+    result = check_error_pattern_conflicts(fm, ranked_corpus, _logger())
+
+    assert any("PC-900" in r for r in result)
+    assert any("IMP-901" in r for r in result)
+
+
+def test_relevant_patterns_ranked_first(ranked_corpus):
+    """正向對照：檔名與關鍵詞直接相關的 pattern 排在只命中目錄名者之前。"""
+    fm = {
+        "type": "IMP",
+        "where": {"files": [".claude/hooks/acceptance_checkers/hook-health-monitor.py"]},
+    }
+
+    result = check_error_pattern_conflicts(fm, ranked_corpus, _logger())
+
+    assert "PC-900" in result[0]
+    assert "PC-902" in result[-1]
+
+
+def test_readme_index_excluded(ranked_corpus):
+    fm = {"type": "IMP", "where": {"files": [".claude/hooks/hook-health-monitor.py"]}}
+
+    result = check_error_pattern_conflicts(fm, ranked_corpus, _logger())
+
+    assert not any(r.endswith("README.md") for r in result)
+
+
+def test_result_order_is_deterministic(ranked_corpus):
+    fm = {"type": "IMP", "where": {"files": [".claude/hooks/acceptance_checkers/hook-health-monitor.py"]}}
+
+    first = check_error_pattern_conflicts(fm, ranked_corpus, _logger())
+    second = check_error_pattern_conflicts(fm, ranked_corpus, _logger())
+
+    assert first == second

@@ -13,12 +13,12 @@ Hook 類型：PreToolUse
 匹配工具：Agent
 退出碼：0 = 放行，2 = 阻擋（stderr 回饋給 Claude）
 
-派發位置決策（對應 ARCH-015 2026-04-18 W5-050 重驗版）：
+派發位置決策（對應 ARCH-015 2026-04-18 重驗版）：
 
 | Prompt 路徑分類 | isolation=worktree | Hook 行為 |
 |---------------|--------------------|----------|
 | 僅主 repo .claude/ | 不要求 | 放行（豁免 worktree） |
-| 主 repo .claude/ + 非 .claude/ | 要求 | 放行（W5-050 新發現） |
+| 主 repo .claude/ + 非 .claude/ | 要求 | 放行 |
 | 主 repo .claude/ + 非 .claude/ | 無 | 阻擋（強制 worktree） |
 | 僅非 .claude/ | 要求 | 放行 |
 | 僅非 .claude/ | 無 | 阻擋（強制 worktree） |
@@ -42,17 +42,25 @@ from lib import (
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    get_code_root,
+    get_main_checkout_root,
+    get_hook_log_dir,
     extract_where_files,
 )
 
-# W17-127.1：framework 類別清單改由 SSOT 提供（避免與 layer-boundary 雙寫漂移）
+# framework 類別清單改由 SSOT 提供（避免與 layer-boundary 雙寫漂移）
 from lib.framework_paths import get_categories as _get_framework_categories
-from lib.checkout_identity import owning_checkout_root, same_repo
+from lib.checkout_identity import (
+    is_absolute_path,
+    owning_checkout_root,
+    same_repo,
+    strip_root_prefix,
+)
 
-# 0.2.1-W3-269：dispatch_mode=readonly 豁免 worktree 強制（框架 issue 36 落地）
+# dispatch_mode=readonly 豁免 worktree 強制（框架 issue 36 落地）
 #
-# 背景：0.2.1-W3-263 ANA 裁決方案 A 為 Agent tool_input 結構化欄位
-# `dispatch_mode: "readonly"`。探針實測（W3-269 Problem Analysis 附 log 原文）
+# 背景：ANA 裁決方案 A 為 Agent tool_input 結構化欄位
+# `dispatch_mode: "readonly"`。探針實測（log 原文附於分析票）
 # 確認 CC runtime 組 PreToolUse hook payload 時剝離該自訂欄位——client 端
 # 接受並成功 spawn，但 hook 收到的 tool_input 僅剩 description/prompt/
 # subagent_type/name 四個標準鍵，dispatch_mode 未 passthrough。前提不成立，
@@ -99,7 +107,7 @@ _RELATIVE_CLAUDE_PATTERN = re.compile(r"(?<![/\w])\.claude/")
 
 # 偵測 prompt 中絕對路徑 .claude/（/xxx/.../.claude/）
 # 用於區分主 repo 內外：比對匹配字串是否以主 repo root 為前綴
-# W11-016: 加 lookbehind 限定 match 起點為「絕對路徑開頭」（前面非路徑字元），
+# 加 lookbehind 限定 match 起點為「絕對路徑開頭」（前面非路徑字元），
 # 避免 finditer 對含巢狀 .claude/ 的路徑產生多重匹配導致誤判 external。
 _ABSOLUTE_CLAUDE_PATTERN = re.compile(r"(?<![\w./-])(/[^\s]+?)/\.claude/")
 
@@ -124,11 +132,31 @@ def _is_same_repo_sibling_checkout(prefix: str, project_root_str: Optional[str])
     owner = owning_checkout_root(prefix + "/x")
     if owner is None:
         return False
+    # 同層比對以主 checkout 根（MR）為準；MR 解析失敗退回 hook 專案根（AR）
+    mr = _main_root_str(project_root_str)
     if os.path.dirname(os.path.realpath(owner)) != os.path.dirname(
-        os.path.realpath(project_root_str)
+        os.path.realpath(mr or project_root_str)
     ):
         return False
     return same_repo(owner, project_root_str)
+
+
+def _main_root_str(project_root_str: Optional[str]) -> Optional[str]:
+    """hook 專案根（AR）所屬 repo 的主 checkout 根（MR）字串；解析失敗回 None。"""
+    if not project_root_str:
+        return None
+    mr = get_main_checkout_root(project_root_str)
+    return str(mr) if mr is not None else None
+
+
+def _is_under_main_root(norm_path: str, project_root_str: Optional[str]) -> bool:
+    """絕對路徑是否在 AR 或 MR 樹內（MR 樹內屬 CC runtime 允許寫入的主 repo 樹，ARCH-015）。"""
+    if not project_root_str:
+        return False
+    if strip_root_prefix(norm_path, project_root_str) is not None:
+        return True
+    mr = _main_root_str(project_root_str)
+    return mr is not None and strip_root_prefix(norm_path, mr) is not None
 
 # 偵測 prompt 中非 .claude/ 的實作目標路徑
 # 策略：匹配常見專案路徑開頭（避免誤判 `.claude/docs` 這類巢狀路徑為 docs/）
@@ -136,7 +164,7 @@ _NON_CLAUDE_PATH_PATTERN = re.compile(
     r"(?<![./\w])(?:src|tests?|lib|app|assets|scripts|public|bin|cmd)/"
 )
 
-# W5-047.2: 廣域 staging 偵測（PC-092 防護）
+# 廣域 staging 偵測（PC-092 防護）
 # 匹配 `git add .` / `git add -A` / `git add --all`（允許額外空白）
 # 排除 `git add --`（具體路徑引導符）、`git add src/x` 等精準路徑
 _WIDE_STAGING_PATTERN = re.compile(
@@ -299,10 +327,10 @@ def _emit_worktree_complete_warning(prompt: str, logger) -> None:
         return
     if not matched:
         return
+    # 只提醒，不帶 permissionDecision：allow 會略過平台的權限提示，等於代用戶核可
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
             "additionalContext": _WORKTREE_COMPLETE_WARNING,
         }
     }
@@ -310,7 +338,7 @@ def _emit_worktree_complete_warning(prompt: str, logger) -> None:
     logger.info("提示：worktree 派發 prompt 含收尾類子命令，收尾應止於 track commit")
 
 
-# Ticket ID 偵測：0.18.0-W17-015.2、W17-015.2、0.18.0-W17-015 等格式
+# Ticket ID 偵測：完整 ID、短 ID、子任務 ID 等格式
 _TICKET_ID_PATTERN = re.compile(
     r"(?<![.\w])(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)(?![\w])"
 )
@@ -326,7 +354,7 @@ def _extract_ticket_ids(prompt: str) -> List[str]:
 def _load_ticket_where_files(ticket_id: str) -> List[str]:
     """讀 ticket md 的 frontmatter where.files 欄位。
 
-    W11-004.7.2：改用 hook_utils.hook_ticket.extract_where_files 共用 helper，
+    改用 hook_utils.hook_ticket.extract_where_files 共用 helper，
     消除與 file-ownership-guard / parallel-dispatch-verification 的重複實作。
 
     Returns:
@@ -341,20 +369,23 @@ def _classify_paths(paths: List[str], project_root_str: str) -> Tuple[bool, bool
     has_ext = False
     has_other = False
     for p in paths:
-        # 絕對路徑 .claude/ 判斷主 repo vs 外部
-        abs_match = _ABSOLUTE_CLAUDE_PATTERN.search(p)
-        if abs_match:
-            if project_root_str and p.startswith(project_root_str):
+        # 分隔符先統一：Windows 反斜線路徑原本找不到 "/.claude/" 而落到 has_other
+        norm = p.replace("\\", "/")
+        # 絕對路徑（含磁碟機路徑）.claude/ 判斷主 repo vs 外部；
+        # 歸屬經 strip_root_prefix 比對，含目錄邊界（/a/proj2 不在 /a/proj 之下）
+        if is_absolute_path(norm) and "/.claude/" in norm:
+            prefix = norm.split("/.claude/", 1)[0]
+            if _is_under_main_root(norm, project_root_str):
                 has_main = True
-            elif _is_placeholder_path(abs_match.group(1)):
+            elif _is_placeholder_path(prefix):
                 pass
-            elif _is_same_repo_sibling_checkout(abs_match.group(1), project_root_str):
+            elif _is_same_repo_sibling_checkout(prefix, project_root_str):
                 has_main = True
             else:
                 has_ext = True
             continue
         # 相對路徑 .claude/ → 主 repo
-        if p.startswith(".claude/") or "/.claude/" in p:
+        if norm.startswith(".claude/") or "/.claude/" in norm:
             has_main = True
             continue
         # 其他路徑 → has_other（不過濾特定 prefix，ticket where.files 已是具體路徑）
@@ -396,8 +427,9 @@ def _classify_prompt_paths(prompt: str) -> Tuple[bool, bool, bool]:
         start = match.start(1)
         is_main = False
         if project_root_str:
-            root_prefix = project_root_str + "/"
-            is_main = prompt[start:start + len(root_prefix)] == root_prefix
+            for root in (project_root_str, _main_root_str(project_root_str)):
+                if root and prompt[start:start + len(root) + 1] == root + "/":
+                    is_main = True
         prefix = match.group(1)
         if is_main:
             has_main_repo_claude = True
@@ -456,14 +488,19 @@ def _resolve_path_classification(
     ticket_ids: List[str],
     *,
     logger: Optional[logging.Logger] = None,
+    is_implementation_agent: bool = True,
 ) -> Tuple[bool, bool, bool]:
-    """統一決議 prompt 的路徑分類結果（W11-004.7）。
+    """統一決議 prompt 的路徑分類結果。
 
     依序套用三層規則並回傳合併後的 (has_main_repo_claude, has_external_claude, has_other)：
 
     L1. 從 prompt 抽取分類（沿用 _classify_prompt_paths）
-    L2. W17-018 fallback：若 L1 全 False 且有 ticket_ids → 從 where.files 補分類
-    L3. W11-004.7 覆蓋：若 L1 has_other=True 且 ticket scope 純 .claude/
+    L2. ticket scope fallback：若 L1 全 False 且有 ticket_ids → 從 where.files 補分類。
+        只對實作名單內代理人套用：名單外代理人（研究／審查）prompt 中的
+        票號是被分析的對象而非派發目標，套用會把被分析票的 where.files
+        誤當成派發目標，使「沒寫路徑的名單外派發放行」失效，且結果取決於
+        prompt 是否碰巧提到 .claude/ 路徑。
+    L3. 純 .claude/ scope 覆蓋：若 L1 has_other=True 且 ticket scope 純 .claude/
         → 將 has_other 降為 False、has_main_repo_claude 升為 True
         理由：ticket where.files 是 scope 的 source of truth；prompt 內出現的
         tests/、src/、lib/ token 在純 .claude/ ticket 下視為 .claude/ 巢狀路徑
@@ -475,6 +512,7 @@ def _resolve_path_classification(
         prompt: 派發 prompt 全文
         ticket_ids: 已抽出的 ticket ID 清單（可為空）
         logger: 用於記錄 L2/L3 觸發的 logger；None 時不輸出日誌
+        is_implementation_agent: 派發對象是否在實作名單內；False 時略過 L2
 
     Returns:
         (has_main_repo_claude, has_external_claude, has_other) tuple
@@ -483,27 +521,34 @@ def _resolve_path_classification(
     # 狀態：(m, e, o) 反映 prompt 內實際出現的路徑訊號
     m, e, o = _classify_prompt_paths(prompt)
 
-    # 入口前置呼叫 _merge_ticket_scope 一次（W11-004.7.1 polish）：
+    # 入口前置呼叫 _merge_ticket_scope 一次：
     # L2/L3 都需要 ticket scope 分類，前置呼叫消除重複 I/O 與重複解析。
     # ticket_ids 為空時不呼叫，保留 (False, False, False) 預設值。
     ticket_m = ticket_e = ticket_o = False
     if ticket_ids:
         ticket_m, ticket_e, ticket_o = _merge_ticket_scope(ticket_ids)
 
-    # L2: W17-018 fallback（prompt 全空 → 用 ticket scope 補分類）
+    # L2: ticket scope fallback（prompt 全空 → 用 ticket scope 補分類）
     # 觸發條件：L1 三欄全 False AND ticket_ids 非空
     # 狀態轉換：(False, False, False) → (ticket_m, ticket_e, ticket_o)
-    if not m and not e and not o and ticket_ids:
+    if not m and not e and not o and ticket_ids and not is_implementation_agent:
+        if logger is not None:
+            logger.info(
+                "略過 ticket scope fallback：名單外代理人 prompt 中的票號視為被分析對象"
+                "（ids=%s）",
+                ticket_ids,
+            )
+    elif not m and not e and not o and ticket_ids:
         m = m or ticket_m
         e = e or ticket_e
         o = o or ticket_o
         if logger is not None and (m or o or e):
             logger.info(
-                "W17-018 fallback：prompt 路徑不明，由 ticket where.files 補分類："
+                "ticket scope fallback：prompt 路徑不明，由 ticket where.files 補分類："
                 "ids=%s main_claude=%s external=%s other=%s",
                 ticket_ids, m, e, o,
             )
-    # L3: W11-004.7 覆蓋（has_other=True 但 ticket scope 純 .claude/）
+    # L3: 純 .claude/ scope 覆蓋（has_other=True 但 ticket scope 純 .claude/）
     # 觸發條件：L1 含 has_other AND 無 external_claude AND ticket_ids 非空
     #          AND ticket scope 為純 .claude/（m=True, e=False, o=False）
     # 狀態轉換：(*, False, True) → (True, False, False)
@@ -518,7 +563,7 @@ def _resolve_path_classification(
         if ticket_m and not ticket_e and not ticket_o:
             if logger is not None:
                 logger.info(
-                    "W11-004.7 覆蓋：ticket scope 純 .claude/（ids=%s），"
+                    "純 .claude/ scope 覆蓋：ticket scope 純 .claude/（ids=%s），"
                     "prompt 內 src/tests/lib/ token 視為 .claude/ 巢狀路徑",
                     ticket_ids,
                 )
@@ -555,7 +600,7 @@ EXTERNAL_CLAUDE_BLOCK_MESSAGE = """錯誤：實作代理人 {agent} 的 prompt �
 
 
 # ============================================================================
-# W5-045：Agent 禁止行為關鍵字衝突掃描
+# Agent 禁止行為關鍵字衝突掃描
 # ============================================================================
 #
 # 解析 agent .md 的「## 禁止行為」區塊，提取 `**禁止XX**` 標籤作為 prohibited
@@ -563,7 +608,7 @@ EXTERNAL_CLAUDE_BLOCK_MESSAGE = """錯誤：實作代理人 {agent} 的 prompt �
 # 偵測用 regex，對派發 prompt 進行子字串/regex 匹配。
 #
 # 策略（Warn vs Block）：初版一律 warn（exitcode 0 + stderr），累積 pattern
-# 資料後再評估升級為 block。依賴 W5-043 標準化結構確保每個 agent 皆有此區塊。
+# 資料後再評估升級為 block。依賴 agent 定義的標準化結構確保每個 agent 皆有此區塊。
 
 # 定位 agent .md 中的 `## 禁止行為` 區塊（下一個 `## ` 為結尾，或 EOF）
 _PROHIBITED_SECTION_PATTERN = re.compile(
@@ -576,7 +621,7 @@ _PROHIBITED_SECTION_PATTERN = re.compile(
 _PROHIBITED_LABEL_PATTERN = re.compile(r"\*\*禁止([^\*\n]+?)\*\*")
 
 # 關鍵字 → prompt 偵測 regex 清單映射。
-# 初版聚焦 W5-001 派發 sage 越界案例的常見衝突樣態。
+# 初版聚焦 <ticket-id> 派發 sage 越界案例的常見衝突樣態。
 # 擴充原則：發現誤報率可控（<5%）的新 pattern 時加入；高誤報者先保留測試。
 FORBIDDEN_KEYWORD_MAP: Dict[str, List[re.Pattern]] = {
     "實作": [
@@ -609,7 +654,7 @@ FORBIDDEN_KEYWORD_MAP: Dict[str, List[re.Pattern]] = {
         re.compile(r"\brun\s+tests?\b", re.IGNORECASE),
         re.compile(r"\bpytest\b", re.IGNORECASE),
     ],
-    # W11-004.1.2：新增 A-F 六類 pattern（擴充 keyword map 覆蓋 W5-001 以降新型越界）
+    # 新增 A-F 六類 pattern（擴充 keyword map 覆蓋 sage 越界案例以降新型越界）
     # 類別 A：Ticket CLI 操作（rosemary/incident-responder 禁止直接執行）
     "ticket CLI": [
         re.compile(r"\bticket\s+(?:track|create|migrate|handoff|claim|complete)\b", re.IGNORECASE),
@@ -668,11 +713,11 @@ def _extract_prohibited_actions(agent_md_path: Path) -> List[str]:
     return labels
 
 
-# W11-004.1.1：events.jsonl 路徑（與 dispatch_stats.py 必須一致）
+# events.jsonl 路徑（與 dispatch_stats.py 必須一致，兩端皆經 get_hook_log_dir）
+# 204.1.6.5：linked worktree 內解析到主 checkout 的 hook-logs（與 logger 同根）
 try:
     _EVENTS_JSONL_PATH = (
-        get_project_root()
-        / ".claude/hook-logs/agent-dispatch-validation/events/events.jsonl"
+        get_hook_log_dir("agent-dispatch-validation") / "events" / "events.jsonl"
     )
 except Exception:
     _EVENTS_JSONL_PATH = (
@@ -689,7 +734,7 @@ def _make_excerpt(prompt: str, start: int, end: int, padding: int = 20) -> str:
 
 
 # ============================================================================
-# W11-004.1.3：白名單過濾 - 合法引用情境排除誤觸
+# 白名單過濾 - 合法引用情境排除誤觸
 # ============================================================================
 #
 # 設計：四條白名單規則（純函式 + WHITELIST_RULES 清單），在 _detect_keyword_conflicts
@@ -721,11 +766,11 @@ _NEGATION_PATTERN_EN = re.compile(
 )
 
 # 句子邊界字元（跨越則不算前綴）
-# W11-004.1.3.3：加入 `，`、`！`、`？`，配合視窗擴至 20，讓逗號分隔的長句
+# 加入 `，`、`！`、`？`，配合視窗擴至 20，讓逗號分隔的長句
 # 不會把跨子句的否定詞誤判為前綴。
 _SENTENCE_BOUNDARY_CHARS = set("。；;.\n\r，,！!？?")
 
-# W11-004.1.3.3：否定詞視窗字元數（由 10 擴至 20，涵蓋「請不要在這個 ticket 裡面實作」
+# 否定詞視窗字元數（由 10 擴至 20，涵蓋「請不要在這個 ticket 裡面實作」
 # 這類常見中文長句型。跨句邊界仍會被 _SENTENCE_BOUNDARY_CHARS 裁切）。
 _NEGATION_WINDOW_SIZE = 20
 
@@ -735,7 +780,7 @@ _PATH_PREFIXES = (".claude/", "docs/", "src/", "tests/", "test/", "lib/", "app/"
 # 副檔名（向後 15 字內出現視為檔案路徑上下文）
 _FILE_EXTENSIONS = (".md", ".py", ".js", ".ts", ".dart", ".go", ".json", ".yaml", ".yml")
 
-# W11-004.1.3.3：路徑合法字元正向 token（僅 ASCII；CJK 等非 ASCII 字元視為非路徑內容）
+# 路徑合法字元正向 token（僅 ASCII；CJK 等非 ASCII 字元視為非路徑內容）
 # 刻意不用 \w（Python 預設 \w 涵蓋 CJK，會把 `禁止`、`實作` 等關鍵字誤判為路徑字元）。
 _PATH_TOKEN_CHARS = set(
     "abcdefghijklmnopqrstuvwxyz"
@@ -754,11 +799,11 @@ def _is_path_token(text: str) -> bool:
     if not text:
         return True
     return all(ch in _PATH_TOKEN_CHARS for ch in text)
-# Ticket ID 模式（如 0.18.0-W11-004.1.2）
+# Ticket ID 模式（如 <ticket-id>）
 _TICKET_ID_PATTERN = re.compile(r"\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*")
 
 # Meta-task 宣告關鍵字（prompt 前 100 字元內出現任一即視為 meta-task）
-# W17-127.1：類別清單改由 SSOT framework-paths.yaml 提供
+# 類別清單改由 SSOT framework-paths.yaml 提供
 def _build_meta_task_patterns() -> Tuple[re.Pattern, ...]:
     """從 framework_paths SSOT 動態組裝 meta-task patterns。
 
@@ -837,7 +882,7 @@ def _has_negation_prefix(prompt: str, start: int, end: int = None) -> Tuple[bool
     回傳：(is_whitelisted, reason)。
     參數 end 為簽名統一用（與 per-match 規則 A/C 一致），此規則不消費 end。
 
-    W11-004.1.3.3 調校：視窗由 10 擴至 20（_NEGATION_WINDOW_SIZE），配合句子邊界
+    調校：視窗由 10 擴至 20（_NEGATION_WINDOW_SIZE），配合句子邊界
     新增逗號/驚嘆/問號，涵蓋「請不要在這個 ticket 裡面實作」這類中長距否定句。
     """
     _ = end  # 簽名統一：per-match 規則共同接收 (prompt, start, end)，此規則忽略 end
@@ -870,7 +915,7 @@ def _has_negation_prefix(prompt: str, start: int, end: int = None) -> Tuple[bool
 def _is_in_path_context(prompt: str, start: int, end: int) -> Tuple[bool, str]:
     """規則 C：判斷匹配位置是否落在檔案路徑/ticket ID 上下文內。
 
-    W11-004.1.3.3 調校：改用正向 token 驗證取代「無空白」反向判斷。
+    調校：改用正向 token 驗證取代「無空白」反向判斷。
     匹配字串本身必須全由 _PATH_TOKEN_CHARS 組成（ASCII 路徑字元），CJK 關鍵字
     如「禁止」「實作」即使緊接 `.claude/xxx` 之後也不會被誤判為路徑內容。
 
@@ -919,7 +964,7 @@ def _is_in_path_context(prompt: str, start: int, end: int) -> Tuple[bool, str]:
 def _is_meta_task_prompt(prompt: str) -> Tuple[bool, str]:
     """規則 D：判斷 prompt 是否為 meta-task（修改規則/agent 定義/FORBIDDEN_KEYWORD_MAP）。
 
-    W11-004.1.3.3 調校：視窗由固定 100 字改為「第一段語意邊界或前 500 字」。
+    調校：視窗由固定 100 字改為「第一段語意邊界或前 500 字」。
     典型 Ticket prompt 第一行為 `Ticket: 0.18.0-W...` 標題，meta-task 動詞描述
     出現在空行後第二段；原本 100 字視窗無法涵蓋會漏判。
 
@@ -985,7 +1030,7 @@ def _detect_keyword_conflicts(
     if not prompt or not prohibited_actions:
         return []
 
-    # 規則 D（TD-2 修復，W11-004.1.3.2）：
+    # 規則 D（TD-2 修復）：
     # Meta-task prompt 不再整體豁免，改為 per-match 降級。
     # 若 prompt 為 meta-task，對於命中 meta-task 相關關鍵字（「修改」「編輯」「更新」
     # 等通常用於描述規則文件變更的動詞）的 conflict，附帶 whitelist_reason，
@@ -1101,14 +1146,14 @@ def _write_event_jsonl(
 def _agent_md_path(subagent_type: str) -> Path:
     """回傳 agent .md 檔的主 repo 路徑（可能不存在）。"""
     try:
-        project_root = get_project_root()
+        project_root = get_code_root()  # agents/*.md 為框架檔（CR）
     except Exception:
         project_root = Path.cwd()
     return project_root / ".claude" / "agents" / f"{subagent_type}.md"
 
 
 # ============================================================================
-# W11-004.1.4：分層判決（high-confidence block / low-confidence warn / bypass）
+# 分層判決（high-confidence block / low-confidence warn / bypass）
 # ============================================================================
 #
 # 設計依據：先以 annotate/stats 機制量化誤報率，再據以調整偵測閾值。
@@ -1169,7 +1214,7 @@ def _partition_by_confidence(
 
 _KEYWORD_CONFLICT_BLOCK_TEMPLATE = """錯誤：派發 {agent} prompt 含高信心越界動作，已阻擋
 
-為什麼阻止（W11-004.1.4 分層判決）：
+為什麼阻止：
   下列關鍵字屬直接可執行的 git/CLI 動作，與 {agent} 的「## 禁止行為」宣告衝突。
   誤報率極低（已排除引號引用/否定前綴/路徑上下文/meta-task 白名單）。
 
@@ -1187,13 +1232,13 @@ Agent 職責摘要：
   兩者皆會降級為 warn，仍會寫入 events.jsonl 供審計。
 
 詳見：.claude/rules/core/agent-definition-standard.md
-      .claude/error-patterns/process-compliance/（W5-001 派發越界學習）"""
+      .claude/error-patterns/process-compliance/"""
 
 
 _KEYWORD_CONFLICT_WARNING_TEMPLATE = """[警告] 派發 {agent} 偵測到 prompt 與 agent 禁止行為衝突
 
 為什麼警告：
-  W5-001 派發 sage 越界事件：PM prompt 要求 agent 執行其「## 禁止行為」區塊宣告
+  派發 sage 越界事件：PM prompt 要求 agent 執行其「## 禁止行為」區塊宣告
   不可做的動作（如實作、git commit、修改規格）。本 Hook 掃描 agent 宣告的禁止
   項，與 prompt 內關鍵字比對，發現潛在越界時提示。
 
@@ -1206,7 +1251,7 @@ _KEYWORD_CONFLICT_WARNING_TEMPLATE = """[警告] 派發 {agent} 偵測到 prompt
   3. 若 prompt 要求越界，請改派適合的代理人或拆分任務
 
 詳見：.claude/rules/core/agent-definition-standard.md
-      .claude/error-patterns/process-compliance/（W5-001 派發越界學習）
+      .claude/error-patterns/process-compliance/
 
 本訊息為警告（非阻擋），派發將繼續進行。"""
 
@@ -1216,7 +1261,7 @@ def _emit_keyword_conflict_warning_if_any(
 ) -> str:
     """掃描 agent 禁止行為與 prompt 衝突。
 
-    W11-004.1.4：分層判決
+    分層判決
       - 回傳 "block"：偵測到高信心衝突且未 bypass → 呼叫端應 exit 2
       - 回傳 "warn"：僅低信心衝突、或高信心但已 bypass → 已印 stderr 但放行
       - 回傳 "pass"：無衝突、或輸入無效
@@ -1244,7 +1289,7 @@ def _emit_keyword_conflict_warning_if_any(
     if not conflicts:
         return "pass"
 
-    # W11-004.1.3.2（TD-2 修復）：per-match 降級
+    # per-match 降級
     meta_filtered = [c for c in conflicts if c.get("whitelist_reason")]
     real_conflicts = [c for c in conflicts if not c.get("whitelist_reason")]
 
@@ -1259,7 +1304,7 @@ def _emit_keyword_conflict_warning_if_any(
     if not real_conflicts:
         return "pass"
 
-    # W11-004.1.4：分層判決 + bypass
+    # 分層判決 + bypass
     high_conflicts, low_conflicts = _partition_by_confidence(real_conflicts)
     bypassed, bypass_reason = _is_bypass_requested(prompt)
 
@@ -1275,7 +1320,7 @@ def _emit_keyword_conflict_warning_if_any(
         )
         print(message, file=sys.stderr)
         logger.warning(
-            "阻擋：%s prompt 偵測到 %d 項高信心關鍵字衝突（W11-004.1.4）",
+            "阻擋：%s prompt 偵測到 %d 項高信心關鍵字衝突",
             subagent_type, len(high_conflicts),
         )
         # 仍寫入 events.jsonl 供誤報率統計
@@ -1300,12 +1345,12 @@ def _emit_keyword_conflict_warning_if_any(
     print(message, file=sys.stderr)
     if bypassed and high_conflicts:
         logger.warning(
-            "bypass：%s 高信心衝突 %d 項被 %s 降級（W11-004.1.4）",
+            "bypass：%s 高信心衝突 %d 項被 %s 降級",
             subagent_type, len(high_conflicts), bypass_reason,
         )
     else:
         logger.info(
-            "警告：%s prompt 偵測到 %d 項關鍵字衝突（W5-045 低信心）",
+            "警告：%s prompt 偵測到 %d 項關鍵字衝突",
             subagent_type, len(real_conflicts),
         )
     _write_event_jsonl(subagent_type, prompt, real_conflicts, logger)
@@ -1343,9 +1388,9 @@ def main() -> int:
 
     prompt = tool_input.get("prompt", "") or ""
 
-    # W5-045 + W11-004.1.4：agent 禁止行為關鍵字衝突掃描
+    # agent 禁止行為關鍵字衝突掃描
     # 分層判決：高信心衝突 block（exit 2），低信心/bypass 僅 warn。
-    # 不受 IMPLEMENTATION_AGENTS 限制：W5-001 派發 sage 越界事件中 sage 非
+    # 不受 IMPLEMENTATION_AGENTS 限制：某次派發 sage 越界事件中 sage 非
     # 實作代理人，但 prompt 要求實作而觸發越界，正需此掃描防護。
     verdict = _emit_keyword_conflict_warning_if_any(subagent_type, prompt, logger)
     if verdict == "block":
@@ -1363,14 +1408,15 @@ def main() -> int:
 
     # Target-based 分類
 
-    # W5-047.2：並行場景廣域 staging 警告（PC-092 防護，非阻擋）
+    # 並行場景廣域 staging 警告（PC-092 防護，非阻擋）
     _emit_wide_staging_warning_if_parallel(prompt, logger)
 
-    # W11-004.7：統一路徑分類 helper，整合 L1 prompt + L2 W17-018 fallback
+    # 統一路徑分類 helper，整合 L1 prompt + L2 ticket scope fallback
     # + L3 純 .claude/ ticket 覆蓋（防止 prompt tests/ token 誤觸 worktree 強制）。
     ticket_ids = _extract_ticket_ids(prompt)
     has_main_repo_claude, has_external_claude, has_other = _resolve_path_classification(
-        prompt, ticket_ids, logger=logger
+        prompt, ticket_ids, logger=logger,
+        is_implementation_agent=is_implementation_agent,
     )
 
     # 優先順序判斷：
@@ -1387,7 +1433,7 @@ def main() -> int:
 
     isolation = tool_input.get("isolation", "")
 
-    # (1.5) 0.2.1-W3-269：唯讀派發豁免 worktree 強制（框架 issue 36）
+    # (1.5) 唯讀派發豁免 worktree 強制（框架 issue 36）
     #       條件：prompt 首行為固定格式 `Dispatch-Mode: readonly`
     #       理由：探針實測確認 CC runtime 剝離 Agent tool_input 自訂欄位，
     #            改採 prompt 首行結構化協議（非關鍵字比對，見函式 docstring）
@@ -1402,7 +1448,7 @@ def main() -> int:
         return 0
 
     # (2) 已使用 worktree → 放行（先於 ARCH-015，log 才記為 worktree 放行）
-    #     涵蓋：主 repo .claude/ + 非 .claude/ + worktree（W5-050 新發現）
+    #     涵蓋：主 repo .claude/ + 非 .claude/ + worktree
     #           僅非 .claude/ + worktree、僅主 repo .claude/ + worktree
     if isolation == "worktree":
         _emit_worktree_complete_warning(prompt, logger)

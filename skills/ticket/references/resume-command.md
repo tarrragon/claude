@@ -51,7 +51,7 @@ SessionStart hook → 顯示「Handoff 提醒」（僅提醒）
 
 | 參數 | 說明 |
 |------|------|
-| `<id>` | Ticket ID（如 `1.0.0-W13-003`） |
+| `<id>` | Ticket ID（如 `<version>-W<wave>-<seq>`） |
 | `--list` | 列出所有待恢復任務 |
 | `--version` | 指定版本號（可選） |
 
@@ -79,6 +79,7 @@ SessionStart hook → 顯示「Handoff 提醒」（僅提醒）
 - `direction` 值域（`handoff_utils._KNOWN_DIRECTION_VALUES`）：`to-parent` / `to-child` / `to-sibling` / `context-refresh` / `next-wave` / `auto`
 - `resumed_at` 為 `null`：待接手
 - `resumed_at` 有 ISO 時間戳：已接手（由 `/ticket resume` 寫入）
+- `creator_process`：建立交接檔的 Claude 行程 `{pid, lstart}`（`handoff_utils.current_claude_process`，沿父行程鏈找第一個 claude 祖先，lstart 以 UTC、C locale 取得）；查不到時為 `null`。Stop hook（`handoff-auto-resume-stop-hook.py`）只對同一行程阻擋，`/clear` 後 session_id 會換但行程不變，所以接手方仍在範圍內；其他 Claude 行程只列為建議性任務。欄位缺漏（舊格式）、損毀或目前行程查不到時一律照擋（`is_other_claude_process` 回 False）
 
 ### `exit_status` 欄位：票面 Exit Status 章節到 handoff JSON 的橋
 

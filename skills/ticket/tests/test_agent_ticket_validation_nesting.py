@@ -52,7 +52,7 @@ def test_main_thread_dispatch_depth_4_allows():
     module = _load_hook_module()
     rc, parsed = _run(module, _payload("Ticket: 1.0.0-W1-004"), {"1.0.0-W1-004": 4})
     assert rc == module.EXIT_SUCCESS
-    assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "permissionDecision" not in parsed["hookSpecificOutput"]
 
 
 def test_subagent_holding_depth_3_is_blocked():

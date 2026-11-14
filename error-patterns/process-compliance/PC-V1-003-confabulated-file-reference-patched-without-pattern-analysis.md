@@ -57,4 +57,4 @@
 
 **Last Updated**: 2026-06-11
 **Version**: 1.0.0
-**Source**: 2026-06-11 session 二度發生（W1-056 where.files 不存在檔名 + W1-065 PC-069 錯誤檔名 = memory slug 直譯），均個案修補後繼續，由用戶指出「發現錯誤情報未深入系統錯誤直接略過」後固化（W1-067）
+**Source**: 2026-06-11 session 二度發生（where.files 不存在檔名 + PC-069 錯誤檔名 = memory slug 直譯），均個案修補後繼續，由用戶指出「發現錯誤情報未深入系統錯誤直接略過」後固化

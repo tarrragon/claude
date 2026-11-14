@@ -2,7 +2,7 @@
 name: doc-flow
 description: "Manages project documentation system including CHANGELOG, worklog, tickets, error-patterns, and todolist. Use for: (1) worklog initialization and updates, (2) todolist management, (3) version collaboration workflows, (4) documentation consistency checks"
 metadata:
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # Doc-Flow SKILL

@@ -3,7 +3,6 @@ id: ARCH-BAL-005
 title: 自證式豁免——豁免決定與豁免理由在資料結構上分離，只有前者被消費
 category: architecture
 severity: high
-source_ticket: 0.2.1-W3-039
 related:
  - ARCH-BAL-003
  - PC-BAL-010
@@ -50,7 +49,7 @@ created: 2026-07-27
 
 **理由零消費者**：`hook_checker.py` 的 `get_exclude_patterns()` 只讀 `exclude` 與 `exclude_patterns` 兩鍵。`grep -rn "notes" hook_checker.py hook-completeness-check.py` → exit 1（零命中）。
 
-**12 條豁免理由的稽核結果**（`0.2.1-W3-035`，逐條實查）：
+**12 條豁免理由的稽核結果**（逐條實查）：
 
 | 分組 | 條數 | 內容 |
 |------|------|------|
@@ -58,7 +57,7 @@ created: 2026-07-27
 | 理由過期 | 7 | 5 條宣稱「被其他 Hook 引入」的檔案已搬遷至 `.claude/lib/`（其中 `hook_utils.py` 全 repo 已不存在）；`archived/*` 對 basename 比對恆假，寫了等於沒寫；`eval_pyyaml.py` 評估已結案而豁免仍在 |
 | 理由從未成立 | 3 | `phase-contract-validator-hook.py`（宣稱 argv CLI，實測零 argv caller）、`dart-presence-detection-hook.py` 與 `test-timeout-post.py`（皆宣稱「Node.js 專案不適用」，而本專案為 Flutter/Dart） |
 
-**掩護死碼的具體案例**：`phase-contract-validator-hook.py` 的理由「CLI 工具（透過 argv 使用），非 stdin JSON Hook」使 `hook-completeness-check` 對此檔閉嘴，把「未在 settings.json 註冊」正當化。實測全 repo 零 argv caller，settings.json 命中數 0——它不是 CLI 工具，是無人呼叫的死碼。理由把死碼包裝成合理例外，直到 `0.2.1-W3-023` 才暴露。後續稽核發現同型殘留檔另有兩個（`dart-presence-detection-hook.py` 已被 `presence-detection-hook.py` 取代、`test-timeout-post.py` 已被 `post-test-hook.py` 吸收），三者的豁免理由皆與「被繼任者取代」這個真實原因無關。
+**掩護死碼的具體案例**：`phase-contract-validator-hook.py` 的理由「CLI 工具（透過 argv 使用），非 stdin JSON Hook」使 `hook-completeness-check` 對此檔閉嘴，把「未在 settings.json 註冊」正當化。實測全 repo 零 argv caller，settings.json 命中數 0——它不是 CLI 工具，是無人呼叫的死碼。理由把死碼包裝成合理例外，直到後續稽核才暴露。後續稽核發現同型殘留檔另有兩個（`dart-presence-detection-hook.py` 已被 `presence-detection-hook.py` 取代、`test-timeout-post.py` 已被 `post-test-hook.py` 吸收），三者的豁免理由皆與「被繼任者取代」這個真實原因無關。
 
 **兩條「Node.js 專案不適用」是模板污染的指紋**：依這兩條理由自身的邏輯，在 Flutter 專案裡這兩個檔應該要註冊而非豁免。理由在寫入當下就沒有針對本專案驗證過，而沒有任何管道會發現這件事。
 
@@ -90,7 +89,7 @@ created: 2026-07-27
 
 讀者遇到新實例時的判別順序：先問「這個宣告有沒有任何程式碼讀它」——答案為否即本模式，且不必再談檢查條件是否敏感（沒有檢查條件可談）。答案為是，再問「讀它的那個檢查會不會隨事實改變結果」——否即 `PC-BAL-010`。兩問皆通過而仍出錯，才是 `ARCH-BAL-003` 的同步問題。
 
-把本模式折入 `PC-BAL-010` 會使後者膨脹為「所有未經驗證的東西」而失去診斷價值（此判定由 `0.2.1-W3-035` 作出）。與 `IMP-BAL-003`（稽核端與消費端解析器嚴格度落差）亦相鄰而不同：該模式兩端都有解析，只是寬嚴不一；本模式是一端根本不解析。
+把本模式折入 `PC-BAL-010` 會使後者膨脹為「所有未經驗證的東西」而失去診斷價值（此判定出自豁免理由稽核）。與 `IMP-BAL-003`（稽核端與消費端解析器嚴格度落差）亦相鄰而不同：該模式兩端都有解析，只是寬嚴不一；本模式是一端根本不解析。
 
 ## 防護
 
@@ -143,4 +142,4 @@ created: 2026-07-27
 ---
 
 **Created**: 2026-07-27
-**Source**: `hook-exclude-list.json` 的 `notes` 零消費者事件（`0.2.1-W3-035` 稽核，`0.2.1-W3-023` 首次暴露，`0.2.1-W3-039` 提煉）
+**Source**: `hook-exclude-list.json` 的 `notes` 零消費者事件（豁免理由稽核發現、首次暴露於死碼清查、其後提煉）

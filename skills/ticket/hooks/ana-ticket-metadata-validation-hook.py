@@ -29,7 +29,7 @@ ticket-file-access-guard-hook 已阻擋直接 Write/Edit ticket frontmatter，
   - 始終 exit 0
   - 僅檢查由 ANA 類代理人建立的 ticket（who.current 為 ANA 類，或 source_ticket 非空）
 
-對應 Ticket: 0.18.0-W11-004.5
+對應 Ticket: <ticket-id>
 對應 Error Pattern: PC-058
 """
 
@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
-    get_effort_level, get_project_root, emit_model_reminder,
+    get_effort_level, get_code_root, emit_model_reminder,
 )
 
 try:
@@ -348,7 +348,7 @@ def main() -> int:
     # get_project_root()：worktree 感知 + git toplevel 等多層 fallback，
     # 不受呼叫端 cwd 影響（原 CLAUDE_PROJECT_DIR-or-cwd fallback 未設環境
     # 變數時退回 cwd，會使讀取專案設定靜默失敗，驗證邏輯無聲 no-op）。
-    project_root = get_project_root()
+    project_root = get_code_root()  # 讀 CLAUDE.md（CR）
     expected_agent = get_project_implementation_agent(project_root, logger)
 
     # 執行驗證

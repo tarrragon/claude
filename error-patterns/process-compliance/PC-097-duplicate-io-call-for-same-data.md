@@ -9,7 +9,7 @@
 | 編號 | PC-097 |
 | 類別 | process-compliance |
 | 風險等級 | 中（效能損耗 + 兩次取值間資料漂移風險，破壞單次請求內資料一致性） |
-| 首發時間 | 2026-04-19（W10-017.1 Phase 1 多視角審查 Plan 視角揭露） |
+| 首發時間 | 2026-04-19（Phase 1 多視角審查 Plan 視角揭露） |
 | 姊妹模式 | PC-006（過早抽象統一）、PC-068（Phase 3a 規劃新工具未掃描既有） |
 
 ---
@@ -27,7 +27,7 @@
 
 ## 實際案例
 
-### 案例 1（W10-017.1 handoff-ready 規格，2026-04-19）
+### 案例 1（handoff-ready 規格，2026-04-19）
 
 **任務**：實作 `ticket track snapshot` 增強「當前建議」+「/clear Ready Check」區塊
 
@@ -120,7 +120,6 @@ PM 呼叫 ticket track snapshot
 
 ## 相關文件
 
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W10-017.1.md` — 案例 1 來源（Phase 1 多視角審查 Plan 視角第 2 條發現）
 - `.claude/skills/ticket/ticket_system/lib/checkpoint_state.py` — 案例 1 涉及的 lib 層
 - `.claude/error-patterns/process-compliance/PC-006-premature-unification-abstraction.md` — 姊妹模式（過早統一抽象）
 - `.claude/error-patterns/process-compliance/PC-068-phase3a-planning-new-utility-without-scan.md` — 姊妹模式（規劃新工具未掃描既有）
@@ -129,4 +128,4 @@ PM 呼叫 ticket track snapshot
 
 **Last Updated**: 2026-04-19
 **Version**: 1.0.0
-**Source**: W10-017.1 Phase 1 多視角審查 Plan 視角第 2 條結構性發現
+**Source**: Phase 1 多視角審查 Plan 視角第 2 條結構性發現

@@ -283,7 +283,7 @@ dispatch-readiness <ticket_id>:
 ticket track dispatch-check
 ```
 
-不帶任何參數；讀取當下（依「Ticket 狀態與程式碼提交的 root 分離」節同一套 root 解析規則，統一指向主倉庫）的 `.claude/dispatch-active.json`。
+不帶參數時只做檢查（`--prune`、`--release` 見下方各節）；讀取當下（依「Ticket 狀態與程式碼提交的 root 分離」節同一套 root 解析規則，統一指向主倉庫）的 `.claude/dispatch-active.json`。
 
 ### 判定規則
 
@@ -313,6 +313,29 @@ ticket track dispatch-check --prune
 | registry 讀取失敗（git 不可用 / 檔案缺失 / 解析失敗） | 保留全部條目——無法判定時保守不清理，輸出 `[INFO] --prune：pm-registry 不可用，無法判定 session 是否存在，本次不清理` |
 
 清理結果雙通道輸出：stderr 逐筆列出 `agent`／`ticket`／`session_id`／`dispatched_at`，同時寫入 `.claude/hook-logs/dispatch-check-prune/dispatch-check-prune-{YYYYMMDD}.log`（`INFO` 級別，供事後稽核，符合可觀測性規則 4）。無符合條件的條目時輸出 `[INFO] --prune：無符合「[STALE] 且 session 不存在」條件的條目`，不誤報為已清理。清理後若 `dispatches` 歸零，回傳 `[PASS]`（exit 0）；仍有剩餘活躍派發則照常輸出 `[WARN]`（exit 1）。
+
+### `--release <agent_handle|agent_id>`：明示放棄恢復本 session 的代理人
+
+```bash
+ticket track dispatch-check --release <agent_handle|agent_id>
+```
+
+代理人回合結束後仍可能被 SendMessage 恢復並寫檔，所以回合結束不會移除條目；本 session 的無票條目原本只能等 24 小時 TTL，期間守衛持續把它算成並行中。PM 確定不再恢復某個代理人時，用本旗標移除其條目。被移除的條目留下釋放紀錄（保留 24 小時）；之後若仍以 SendMessage 恢復該代理人，`active-dispatch-tracker-hook.py`（PostToolUse，matcher `SendMessage`）會把條目放回，恢復期間的寫檔仍在守衛視野內。
+
+| 條目狀態 | 處置 | Exit code |
+|------|------|-----------|
+| 本 session、無 `ticket_id`、非 isolation=worktree | 移除並留下釋放紀錄，輸出 `[OK] 已釋放 ...` | 0 |
+| 找不到符合的 `agent_handle`／`agent_id` | 保留，`[REFUSED] 找不到 ...` | 1 |
+| 屬其他 session | 保留，`[REFUSED] ... 屬其他 session` | 1 |
+| 本 session 有多筆符合 | 保留，`[REFUSED] ... 請改用 agent_id 指定` | 1 |
+| 有 `ticket_id` | 保留，`[REFUSED]` 並提示改在該票以 `ticket track complete` 清除 | 1 |
+| isolation=worktree（`branch_name` 為 `worktree`） | 保留——`isolated-subagent-main-write-guard-hook.py` 依此條目判定隔離代理人身分 | 1 |
+| 回合仍在進行（`turn_ended_at` 為空） | 保留——釋放會讓守衛立刻看不到執行中的代理人；卡住不結束的回合由 1 小時回合中 TTL 回收 | 1 |
+| 取不到目前 session_id、狀態檔讀取失敗或結構不符 | 不改動狀態檔，`[FAIL] ...`（stderr） | 2 |
+
+**代理人仍有背景工作時不要釋放**（已知缺口）：代理人因背景工作完成而恢復時不經 SendMessage，條目不會放回，恢復後的寫檔在守衛視野外——`bare-commit-guard` 與 `workspace-wipe-guard` 會把這段期間判為無並行。`[OK]` 訊息後固定附一行 `[WARN]` 提醒。涵蓋所有恢復路徑的放回點另行追蹤。
+
+參數與 SendMessage 的 `to` 都接受 `name [ref]` 形式，比對前剝除 `[ref]` 後綴。session_id 依 `CLAUDE_CODE_SESSION_ID` 環境變數、其次 registry 內唯一的 FRESH session 解析。釋放結果寫 stderr，並寫入 `.claude/hook-logs/dispatch-check-prune/`。帶 `--release` 時不做活躍派發評估。
 
 ### 與 track dispatch-validate 的差異
 

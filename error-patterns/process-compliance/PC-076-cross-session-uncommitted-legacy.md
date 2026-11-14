@@ -9,7 +9,7 @@
 | 編號 | PC-076 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-04-17（W13-003 commit 後 git status 清點發現 W12-005 遺留） |
+| 首發時間 | 2026-04-17（某任務 commit 後 git status 清點發現遺留任務 A 的變更） |
 | 姊妹模式 | **PC-078（並行 session 狀態變化）**——PC-076 處理靜態遺留，PC-078 處理動態並行；與 `.claude/rules/core/bash-tool-usage-rules.md` 規則三（禁串接 git 寫入，index.lock 競爭防護）同屬 git 流程紀律 |
 
 ---
@@ -17,39 +17,39 @@
 ## 症狀
 
 1. Session-start 的 `branch-status-reminder` Hook 顯示 `M test_ana_spawned_checker.py` 一條，給出「主 repo 有未提交變更」警告
-2. PM 依 session 任務（W12-001 完結）推進工作
+2. PM 依 session 任務（第一次事件任務 完結）推進工作
 3. 工作中某個 `git status` 呼叫（通常是 Checkpoint 1 commit 準備階段）才揭露：除了本 session 成果，還有 4+ 個前 session 未 commit 的實作檔案（例：`.claude/skills/ticket/ticket_system/commands/lifecycle.py`、`test_track_lifecycle.py`、`command_lifecycle_messages.py`、`track.py`、對應 Ticket 的 where.files 與 Problem Analysis）
-4. 這些檔案屬於另一個 Ticket（例 W12-005），非本 session 任務範疇
+4. 這些檔案屬於另一個 Ticket（例 遺留任務 A），非本 session 任務範疇
 5. PM 需臨時決定：合併 commit、拆分 commit、或擱置不 commit
 
-## 實例（2026-04-17 W12-001 完結 session）
+## 實例（2026-04-17 第一次事件任務 完結 session）
 
 - Session-start git status 僅顯示 `M test_ana_spawned_checker.py`
-- W12-001 complete 後 git status 突然出現：
+- 第一次事件任務 complete 後 git status 突然出現：
   - `M .claude/skills/ticket/tests/test_track_lifecycle.py`
   - `M .claude/skills/ticket/ticket_system/commands/lifecycle.py`（實為新增 145 行）
   - `M .claude/skills/ticket/ticket_system/commands/track.py`
   - `M .claude/skills/ticket/ticket_system/lib/command_lifecycle_messages.py`
-  - `M docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W12-005.md`（+237 行 Problem Analysis）
-- 屬前 session 對 W12-005 / PC-075 Phase 2 的實作遺留，未 commit 即結束 session
+  - `M docs/work-logs/v0/v0.18/v0.18.0/tickets/<ticket-id>.md`（+237 行 Problem Analysis）
+- 屬前 session 對 遺留任務 A / PC-075 Phase 2 的實作遺留，未 commit 即結束 session
 - 本 session 拆出獨立 commit B 處理
 
-## 實例（2026-04-17 W14-013 session）
+## 實例（2026-04-17 第二次事件任務 session）
 
-- Session-start `branch-status-reminder` 僅顯示 1 個變更：`M docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W14-016.md`
-- PM 認領並執行 W14-013（與 W14-016 主題完全無關）
-- W14-013 修復檔 + check-acceptance 完成、準備 commit 時跑 `git status` 才浮現額外 4 個檔案：
-  - `M .claude/hooks/acceptance_checkers/children_checker.py`（W14-016 H 方案 import 路徑改造）
+- Session-start `branch-status-reminder` 僅顯示 1 個變更：`M docs/work-logs/v0/v0.18/v0.18.0/tickets/<ticket-id>.md`
+- PM 認領並執行 第二次事件任務（與 遺留任務 B 主題完全無關）
+- 第二次事件任務 修復檔 + check-acceptance 完成、準備 commit 時跑 `git status` 才浮現額外 4 個檔案：
+  - `M .claude/hooks/acceptance_checkers/children_checker.py`（遺留任務 B H 方案 import 路徑改造）
   - `M .claude/skills/ticket/ticket_system/lib/constants.py`（改為 shim）
-  - `?? .claude/skills/ticket/ticket_system/constants.py`（W14-016 新建 canonical 常數）
-  - W14-016.md 又被改（前 session 勾了 AC1/AC3 + 補實作摘要）
-- 屬前 session 對 W14-016 H 方案實作遺留，AC1/AC3 已勾但未 commit 即中斷
-- 本 session 隔離 commit：(a) 先單獨 commit W14-016.md status 元資料 (b) 再 commit W14-013 修復；W14-016 程式碼變更暫留待後續處理
+  - `?? .claude/skills/ticket/ticket_system/constants.py`（遺留任務 B 新建 canonical 常數）
+  - 遺留任務 B.md 又被改（前 session 勾了 AC1/AC3 + 補實作摘要）
+- 屬前 session 對 遺留任務 B H 方案實作遺留，AC1/AC3 已勾但未 commit 即中斷
+- 本 session 隔離 commit：(a) 先單獨 commit 遺留任務 B.md status 元資料 (b) 再 commit 第二次事件任務 修復；遺留任務 B 程式碼變更暫留待後續處理
 
 ### 本案例新觀察
 
-1. **遺留檔案中可能含 untracked 新檔**：W14-016 案例新增了 `constants.py`，需用 `git status` 而非 `git diff` 才看得到
-2. **遺留 ticket md 同時被多 session 修改**：W14-013 session 當下 commit 過 W14-016.md 一次（status: in_progress + 5W1H 細節），但前 session 還做了 AC 勾選與實作摘要追加，必須再分離 commit
+1. **遺留檔案中可能含 untracked 新檔**：遺留任務 B 案例新增了 `constants.py`，需用 `git status` 而非 `git diff` 才看得到
+2. **遺留 ticket md 同時被多 session 修改**：第二次事件任務 session 當下 commit 過 遺留任務 B.md 一次（status: in_progress + 5W1H 細節），但前 session 還做了 AC 勾選與實作摘要追加，必須再分離 commit
 3. **使用者用 /ticket 預設流程選擇新 pending 時，並未提示「另一 in_progress ticket 含未 commit 程式碼變更」**：建議 /ticket 流程在列出 pending 前先做 git status 全量檢查並警告
 
 ---
@@ -67,7 +67,7 @@
    - 可能因：用戶中斷、/clear 未強制 commit、認為「後續再做」
 
 3. **PM 工作邊界假設**
-   - PM 認領 W12-001 任務時預設「git 工作區處於乾淨或僅含本任務相關變更」狀態
+   - PM 認領 第一次事件任務 任務時預設「git 工作區處於乾淨或僅含本任務相關變更」狀態
    - 未在 session 初期執行 `git status --porcelain | wc -l` 全量清點
 
 ---
@@ -86,10 +86,10 @@
 
 | 層級 | 措施 | 狀態 |
 |------|------|------|
-| Hook | branch-status-reminder 改為列出所有 tracked-modified 與 untracked（分組 staged/modified/untracked，上限 50 + 完整清單提示，雙通道 stderr + logger.warning） | **已升級至 Hook（W13-011 落地，v1.3.0）** |
-| 規則 | PM session-start 全量清點 SOP（讀 Hook 輸出 + `git status --porcelain --untracked=all` 雙重驗證 + 來源判定 + 遺留入 Ticket） | **已升級至 `.claude/references/pm-role-details.md` Session-start 全量清點章節（W13-011 落地）** |
+| Hook | branch-status-reminder 改為列出所有 tracked-modified 與 untracked（分組 staged/modified/untracked，上限 50 + 完整清單提示，雙通道 stderr + logger.warning） | **已升級至 Hook（已落地，v1.3.0）** |
+| 規則 | PM session-start 全量清點 SOP（讀 Hook 輸出 + `git status --porcelain --untracked=all` 雙重驗證 + 來源判定 + 遺留入 Ticket） | **已升級至 `.claude/references/pm-role-details.md` Session-start 全量清點章節** |
 | 流程 | Commit 前再次 `git status` 清點，將無關變更拆為獨立 commit 並標明「前 session 遺留」 | 行為準則 |
-| 流程 | Session 結束前強制執行完整 commit cycle；未完成實作留在工作區必須於該 session 內整合處理 | 建議實施（W10-014 相關） |
+| 流程 | Session 結束前強制執行完整 commit cycle；未完成實作留在工作區必須於該 session 內整合處理 | 建議實施 |
 
 ---
 
@@ -139,5 +139,5 @@
 
 **Last Updated**: 2026-08-18
 **Version**: 1.3.0 — 相關文件補一行指向 `parallel-dispatch.md`「跨 session 同儕沉默時的接管判準」章節，說明遺留檔案對應的票若仍由同儕持有且停擺（票驅動觸發）時轉往該節判斷能否自助接管；此前須經 `PC-078` 中轉兩跳
-**Version**: 1.2.0 — Hook 層 + 規則層防護已落地（W13-011）：branch-status-reminder v1.3.0 列全量 + 分組 + 雙通道；pm-role.md v4.2.0 加 Session-start 全量清點章節
-**Source**: 2026-04-17 W12-001 完結 session 與 W14-013 session，連續兩次 commit 前 git status 揭露前 session 遺留實作
+**Version**: 1.2.0 — Hook 層 + 規則層防護已落地：branch-status-reminder v1.3.0 列全量 + 分組 + 雙通道；pm-role.md v4.2.0 加 Session-start 全量清點章節
+**Source**: 2026-04-17 第一次事件任務 完結 session 與 第二次事件任務 session，連續兩次 commit 前 git status 揭露前 session 遺留實作

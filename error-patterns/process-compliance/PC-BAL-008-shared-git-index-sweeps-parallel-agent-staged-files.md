@@ -61,11 +61,11 @@ created: 2026-07-26
 
 ### 症狀
 
-- 並行派發 W3-295 與 W3-296 兩票，規格皆指向同一檔案 `.claude/skills/framework-issue/tests/test_framework_issue.py`
+- 並行派發票 A 與票 B 兩票，規格皆指向同一檔案 `.claude/skills/framework-issue/tests/test_framework_issue.py`
 - 兩位代理人均遵守本文件「明確路徑 git add」規範
-- W3-296 進行中對該檔案新增 33 行測試（`fix_version`/`close_issue` 相關）尚未 commit
-- W3-295 較晚對同一路徑執行 `git add tests/test_framework_issue.py && git commit`，commit `0f6e6678` 卻同時包含 W3-296 進行中的 33 行內容
-- 內容本身無損（兩者的測試新增都保留在檔案中），但 commit 訊息宣稱 W3-295 的工作，diff 卻含 W3-296 尚未收尾的變更
+- 票 B 進行中對該檔案新增 33 行測試（`fix_version`/`close_issue` 相關）尚未 commit
+- 票 A 較晚對同一路徑執行 `git add tests/test_framework_issue.py && git commit`，commit `0f6e6678` 卻同時包含票 B 進行中的 33 行內容
+- 內容本身無損（兩者的測試新增都保留在檔案中），但 commit 訊息宣稱票 A 的工作，diff 卻含票 B 尚未收尾的變更
 
 ### 根因
 
@@ -177,12 +177,12 @@ created: 2026-07-26
 - 實證八（過期 index 項進入 HEAD）：2026-08-21 案例，詳見上方同名章節——與前七條的分別在於錯的是內容版本而非路徑範圍，三要件對此無效
 - PC-BAL-007（並行文件票未交叉驗證的事實漂移）：同屬並行派發的副作用家族；該模式風險在**內容**，本模式風險在**版控狀態**
 - **姊妹模式（跨 consumer）**：PC-SCLK-005——screen_clock 專案獨立捕獲的同家族模式，兩者互不知情各自命中。PC-SCLK-005 曾聚焦路徑級隔離的「commit 帶精準 pathspec」結論，該結論與本文件原文同源，已被 `.claude/rules/core/bash-tool-usage-rules.md` 規則七推翻（見上方「已淘汰」說明：pathspec commit 會吸入指定路徑上他人未 staged 的編輯，非有效防護）；本文件上方「變體：檔案級共用」章節額外實證，當兩票 `where.files` 指向同一實體檔案時，即使雙方都用精準 pathspec commit 仍會吸收對方尚未收尾的變更，是規則七禁令根因的具體顯現之一。讀 PC-SCLK-005 時應一併參照本文件「已淘汰」與「變體：檔案級共用」兩章節，避免誤判 pathspec 為有效或充分防護
-- 實證一：flutter_balance 0.2.1-W3-003 / W3-005（2026-07-26），commit `73e4ea3` 標題為 W3-005 收尾、內容全為 W3-003 檔案；W3-005 的原始碼變更早已由其 agent 自行 commit。內容無遺失，僅訊息與內容不符，兩票已交叉記錄
-- 實證二：flutter_balance 0.2.1-W3 並行度 11 的批次（2026-08-04），同一批次內三名 agent 各自獨立命中，全數已依當時條款使用精確路徑 `git add`。此批次提供三項新資訊：
+- 實證一：flutter_balance 兩張並行票（2026-07-26），commit `73e4ea3` 標題為其中一票收尾、內容全為另一票的檔案；前者的原始碼變更早已由其 agent 自行 commit。內容無遺失，僅訊息與內容不符，兩票已交叉記錄
+- 實證二：flutter_balance 並行度 11 的批次（2026-08-04），同一批次內三名 agent 各自獨立命中，全數已依當時條款使用精確路徑 `git add`。此批次提供三項新資訊：
   - **污染源定位到工具建議指令**：`ticket track complete` 印出的 metadata sync 建議指令未帶 pathspec，commit `e19664a1` 的訊息逐字符合該建議格式，`git show --stat` 顯示夾帶 12 個檔案（5 張無關 ticket 的 md、4 個框架檔的刪除或改名、1 個 script 修改）。執行者確認即照該建議操作
   - **`git reset --soft` 二次事故**：一名 agent 發現污染後以 `reset --soft` 撤銷，但撤銷到重新 commit 之間與他人的並發 commit 撞期，自己的兩檔變更最終落入對方的 commit。該 agent 判斷「repo 持續有並發 commit，改寫歷史風險大於保留現狀」而未進一步 rebase，此判斷正確
   - **pathspec commit 實測有效（後續被規則七推翻）**：同批次後續改用 `git commit -m "..." -- <路徑...>` 的 commit 全數乾淨，`git show --stat` 涵蓋範圍與參數一致，無夾帶。原文對 pathspec commit 的保守表述據此修正為「首選」；此結論只驗證了「他人變更落在不同路徑」的情境，未觸及「他人在同一路徑的未 staged 編輯」，`.claude/rules/core/bash-tool-usage-rules.md` 規則七已就後者將 pathspec commit 列為禁令（見上方「已淘汰」章節），本條實證的歷史敘述保留，「首選」結論不再適用
-- 實證三（驗證步驟本身失效，非 commit 內容污染）：flutter_balance 0.2.1-W3（2026-07-28），PM 提交 worklog（commit `56dbe0e`，1 檔，內容正確無夾帶）後立即執行 `git show --stat HEAD` 驗證，因並行執行的另一位代理人在 PM 的 commit 與驗證之間插入 commit `02811ac`，`HEAD` 已前移，驗證輸出顯示的是該代理人 ticket md 的變更（13 insertions）而非 PM 自己提交的內容；改以 commit 自身印出的短 SHA 查證後才確認 `56dbe0e` 內容正確。與實證一/二不同——此處 commit 內容本身無誤，出錯的是**驗證步驟自己選錯了要檢查的 commit**，且此失效恰好發生在驗證步驟意圖防護的並行情境中，形態上與真正的污染無法區分，靠人工複查才辨明。**同批修正過程中即時復現**（2026-08-04）：撰寫本條修正時，commit 完成後另開一次呼叫執行 `SHA=$(git rev-parse HEAD)`，兩次呼叫之間已有另一代理人插入新 commit，`rev-parse` 取到的是他人 commit 的 SHA；改用 commit 當下 stdout 已印出的短 SHA 直接驗證才正確——證實「擷取 SHA 這一步也必須與 commit 同一次呼叫內完成」並非理論推演，是同一失效模式的變體
-- 實證五（核對步驟與 commit 之間的殘留競態）：flutter_balance 0.2.1-W3（2026-08-21），PM 依 `agent-dispatch-template.md`「精準 staging 制式句」執行——`git add` 兩個 ticket metadata 檔後，以 `git diff --cached --name-only` 核對 index，輸出確認只含該兩檔；隨即裸 `git commit`，stdout 卻回報 `3 files changed`。`git show --stat 377bbc59a` 確認第三檔為並行代理人的測試檔，該代理人在 PM 核對通過之後、`git commit` 之前完成自己的 `git add`。此條補上前四項實證未涵蓋的一環：**制式句的第二道防線（核對 index 範圍）本身有 TOCTOU 窗口**——核對通過不代表 commit 當下範圍仍相同，兩個動作之間 index 是全域共用且可被他人寫入的。前四項實證處理的是「精確 add 不足」與「驗證選錯 commit」，皆未觸及核對與提交之間的時間差。內容正確且測試通過，依 quality-baseline 規則 6 未回退；結構性處置（每個代理人以 `GIT_INDEX_FILE` 取得獨立 index，或改用 worktree 隔離）另由 ticket 追蹤
-- 實證六（反向套用還原撤銷他人合法寫入）：flutter_balance 0.2.1-W3 並行批次（2026-08-21），代理人 commit `260c12a30` 被掃進同儕 session 代理人在同一窗口內執行 `ticket track complete` 寫入的 frontmatter 終態（status / completed_at），代理人以 `f28792c33`、`2b910fade` 兩個「反向套用」commit 將非本票內容原樣反轉，淨效果是**同儕的完成狀態被撤銷**（同儕重新 complete，`3d7ed58a5`）。此條補上與實證二同型的另一面：實證二是「撤銷後變更落入他人 commit」，本條是「撤銷把他人合法變更一併撤掉」。機制：被掃進的「誤吸髒資料」與「他人在同一窗口的合法寫入」在 diff 上不可區分，任何事後還原都必然波及後者。同批次另觀察到：制式句「`git restore --staged <非本票檔案>`」對 PM 自己已 stage 未 commit 的內容同樣生效，PM 的 staged 狀態在有並行代理人時不可假定存活到下一次呼叫。PM 端改以 `GIT_INDEX_FILE=$(mktemp)` + `read-tree HEAD` + `update-index --add <exact>` + `write-tree` + `commit-tree -p HEAD` + `update-ref refs/heads/main <new> <old>` 提交（`36d18cb48`、`3c665717e`、`e614fa1bf`），全程不觸碰共用 index，三次皆正確；匯流 ticket 見該專案 W3-774
+- 實證三（驗證步驟本身失效，非 commit 內容污染）：flutter_balance（2026-07-28），PM 提交 worklog（commit `56dbe0e`，1 檔，內容正確無夾帶）後立即執行 `git show --stat HEAD` 驗證，因並行執行的另一位代理人在 PM 的 commit 與驗證之間插入 commit `02811ac`，`HEAD` 已前移，驗證輸出顯示的是該代理人 ticket md 的變更（13 insertions）而非 PM 自己提交的內容；改以 commit 自身印出的短 SHA 查證後才確認 `56dbe0e` 內容正確。與實證一/二不同——此處 commit 內容本身無誤，出錯的是**驗證步驟自己選錯了要檢查的 commit**，且此失效恰好發生在驗證步驟意圖防護的並行情境中，形態上與真正的污染無法區分，靠人工複查才辨明。**同批修正過程中即時復現**（2026-08-04）：撰寫本條修正時，commit 完成後另開一次呼叫執行 `SHA=$(git rev-parse HEAD)`，兩次呼叫之間已有另一代理人插入新 commit，`rev-parse` 取到的是他人 commit 的 SHA；改用 commit 當下 stdout 已印出的短 SHA 直接驗證才正確——證實「擷取 SHA 這一步也必須與 commit 同一次呼叫內完成」並非理論推演，是同一失效模式的變體
+- 實證五（核對步驟與 commit 之間的殘留競態）：flutter_balance（2026-08-21），PM 依 `agent-dispatch-template.md`「精準 staging 制式句」執行——`git add` 兩個 ticket metadata 檔後，以 `git diff --cached --name-only` 核對 index，輸出確認只含該兩檔；隨即裸 `git commit`，stdout 卻回報 `3 files changed`。`git show --stat 377bbc59a` 確認第三檔為並行代理人的測試檔，該代理人在 PM 核對通過之後、`git commit` 之前完成自己的 `git add`。此條補上前四項實證未涵蓋的一環：**制式句的第二道防線（核對 index 範圍）本身有 TOCTOU 窗口**——核對通過不代表 commit 當下範圍仍相同，兩個動作之間 index 是全域共用且可被他人寫入的。前四項實證處理的是「精確 add 不足」與「驗證選錯 commit」，皆未觸及核對與提交之間的時間差。內容正確且測試通過，依 quality-baseline 規則 6 未回退；結構性處置（每個代理人以 `GIT_INDEX_FILE` 取得獨立 index，或改用 worktree 隔離）另由 ticket 追蹤
+- 實證六（反向套用還原撤銷他人合法寫入）：flutter_balance 並行批次（2026-08-21），代理人 commit `260c12a30` 被掃進同儕 session 代理人在同一窗口內執行 `ticket track complete` 寫入的 frontmatter 終態（status / completed_at），代理人以 `f28792c33`、`2b910fade` 兩個「反向套用」commit 將非本票內容原樣反轉，淨效果是**同儕的完成狀態被撤銷**（同儕重新 complete，`3d7ed58a5`）。此條補上與實證二同型的另一面：實證二是「撤銷後變更落入他人 commit」，本條是「撤銷把他人合法變更一併撤掉」。機制：被掃進的「誤吸髒資料」與「他人在同一窗口的合法寫入」在 diff 上不可區分，任何事後還原都必然波及後者。同批次另觀察到：制式句「`git restore --staged <非本票檔案>`」對 PM 自己已 stage 未 commit 的內容同樣生效，PM 的 staged 狀態在有並行代理人時不可假定存活到下一次呼叫。PM 端改以 `GIT_INDEX_FILE=$(mktemp)` + `read-tree HEAD` + `update-index --add <exact>` + `write-tree` + `commit-tree -p HEAD` + `update-ref refs/heads/main <new> <old>` 提交（`36d18cb48`、`3c665717e`、`e614fa1bf`），全程不觸碰共用 index，三次皆正確
 - 影響邊界（實證一、二一致）：**不遺失資料，遺失的是追溯性**。內容完整落在 git 歷史中，但 `git log --grep <票號>` 找不到，需 `git log -S` 或逐 commit 比對才能還原歸屬

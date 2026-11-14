@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.git_command_parse import match_git_commit
+from lib.hook_base import get_shared_state_root
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -158,7 +159,7 @@ def scan_wave_tickets(
         list - [{wave, status, file}] 清單；wave 為 yaml.safe_load 原生型別
         （通常為 int）、status 為 str，兩者皆可能為 None
     """
-    # 使用共用 helper 支援雙結構（flat + hierarchical），W17-188 修復
+    # 使用共用 helper 支援雙結構（flat + hierarchical）
     ticket_files = scan_ticket_files_by_version(project_dir, version, logger)
 
     if not ticket_files:
@@ -172,7 +173,7 @@ def scan_wave_tickets(
 
         for ticket_file in ticket_files:
             try:
-                # W11-021：改用統一 frontmatter 解析（PyYAML 透過 hook_utils）。
+                # 改用統一 frontmatter 解析（PyYAML 透過 hook_utils）。
                 # frontmatter 現已由 yaml.safe_load 原生型別解析，wave 保持 int，
                 # 不再字串化——舊 str() 轉型是 regex 手刻路徑（回傳字串 "11"）與
                 # 手寫 parser 時代的相容補償，消費端（本檔 detect_wave_completion）
@@ -215,7 +216,7 @@ def detect_wave_completion(logger) -> bool:
         bool - 是否為情境 C（Wave 完成）。若無 in_progress ticket 或讀取失敗，安全降級為 False
     """
     try:
-        project_dir = get_project_root()
+        project_dir = get_shared_state_root(get_project_root())
 
         # Step 1: 讀取當前版本
         current_version = get_current_version_from_todolist(project_dir, logger)

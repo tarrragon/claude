@@ -67,7 +67,7 @@ describe('parseLanes', () => {
 
   test('行內沒寫 session 名稱時為 null；沒有目標行時 goal 為 null', () => {
     expect(parseLanes('## Solution\n**L5 現行佇列**：100\n', PREFIX)).toEqual([
-      { lane: 5, session: null, goal: null, tokens: [{ kind: 'ticket', serial: '100', id: '0.5.0-W1-100', note: '' }] },
+      { lane: 5, session: null, goal: null, tokens: [{ kind: 'ticket', serial: '100', id: '0.5.0-W1-100', note: '' }], ended: null },
     ])
   })
 
@@ -120,8 +120,23 @@ describe('parseLanes 共用案例（queue-line-cases.json 的 TS 副本 QUEUE_LI
         lane: lane.lane,
         session: lane.session,
         tickets: lane.tokens.flatMap(t => (t.kind === 'ticket' ? [{ serial: t.serial, id: t.id, note: t.note }] : [])),
+        ended: lane.ended ?? null,
       }))
       expect(actual).toEqual(c.expect)
+    })
+  }
+})
+
+describe('現行線判定（與 Python queue_line.is_current_lane 同一案例表）', () => {
+  // 狀態列只顯示現行線：未標收線寫法且有票號；此處以看板的判定（Lane.ended、isQueueWithoutTicket）計算，
+  // 期望值由案例表推導，Python 測試以同一推導比對 is_current_lane，任一側判定改動對應測試翻紅
+  for (const c of QUEUE_LINE_CASES) {
+    test(`${c.category}：${c.name}`, () => {
+      const current = parseLanes(c.text, c.prefix)
+        .filter(lane => (lane.ended ?? null) === null && !isQueueWithoutTicket(lane.tokens))
+        .map(lane => lane.lane)
+      const expected = c.expect.filter(lane => lane.ended === null && lane.tickets.length > 0).map(lane => lane.lane)
+      expect(current).toEqual(expected)
     })
   }
 })
@@ -207,7 +222,28 @@ describe('isQueueWithoutTicket', () => {
     }
   })
 
-  test('空票序（沒有任何 token）不判為佇列無票號', () => {
-    expect(isQueueWithoutTicket(parseQueue('', PREFIX))).toBe(false)
+  test('E2 正向對照：空票序（沒有任何 token、只有分隔符）判為佇列無票號', () => {
+    for (const queue of ['', '→', '→ ∥']) {
+      expect(isQueueWithoutTicket(parseQueue(queue, PREFIX))).toBe(true)
+    }
+  })
+})
+
+describe('parseLanes 的 ended 欄', () => {
+  test('E2 正向對照：附說明的收線寫法回傳並標 with-note；E1 對照：一般佇列與無票號文字為 null；整段收線記號不回傳', () => {
+    const text = [
+      '## Solution',
+      '**L1 現行佇列**（a）：（無）（全數終態）',
+      '**L2 現行佇列**（b）：無（併入 L1）',
+      '**L3 現行佇列**（c）：100',
+      '**L4 現行佇列**（d）：等主控通知',
+      '**L5 現行佇列**（e）：（無）',
+    ].join('\n')
+    expect(parseLanes(text, PREFIX).map(l => [l.lane, l.ended])).toEqual([
+      [1, 'with-note'],
+      [2, 'with-note'],
+      [3, null],
+      [4, null],
+    ])
   })
 })

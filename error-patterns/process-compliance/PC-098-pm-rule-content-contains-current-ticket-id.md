@@ -2,13 +2,13 @@
 
 ## 錯誤症狀
 
-PM 在 `.claude/rules/`、`.claude/methodologies/`、`.claude/error-patterns/`、`.claude/skills/` 等框架層檔案中，將當下執行任務的 Ticket ID（如 `W10-011`、`W10-011.1`）寫入規則本文，作為「動機案例」「驗證樣本」或「銜接說明」的引用標記。
+PM 在 `.claude/rules/`、`.claude/methodologies/`、`.claude/error-patterns/`、`.claude/skills/` 等框架層檔案中，將當下執行任務的 Ticket ID（如 `<ticket-id>`、`<ticket-id>.1`）寫入規則本文，作為「動機案例」「驗證樣本」或「銜接說明」的引用標記。
 
 典型表現：
-1. **規則內文嵌入 ticket ID**：規則段落直接寫「W10-011 為註解專項套用」「W10-011.1 落地」等
+1. **規則內文嵌入 ticket ID**：規則段落直接寫「<ticket-id> 為註解專項套用」「<ticket-id>.1 落地」等
 2. **相關文件章節列 ticket ID**：「相關文件」段落列帶 ticket ID 的標籤或引用
-3. **Version footer 紀念當下 ticket**：`Version: 1.0.0 — W10-011.1 落地`
-4. **Source 章節引用 ticket 鏈**：`Source: W10-011 系列（父子銜接見...）`
+3. **Version footer 紀念當下 ticket**：`Version: 1.0.0 — <ticket-id>.1 落地`
+4. **Source 章節引用 ticket 鏈**：`Source: <ticket-id> 系列（父子銜接見...）`
 
 > **範圍邊界（對齊規則 8 引用性質判準）**：本 PC 禁止的均屬**依賴型**引用——以 ticket ID 作動機 / 銜接 / 驗證 / 來源跳轉，移除後理解斷裂。**歷史錨點 / 設計脈絡型**引用（程式碼 comment 標注「何時 / 因何變更」，移除 ticket ID 後句子仍完整）不在本 PC 範圍，依 `reference-stability-rules.md` 規則 8「引用性質判準」章節允許。
 
@@ -16,7 +16,7 @@ PM 在 `.claude/rules/`、`.claude/methodologies/`、`.claude/error-patterns/`�
 
 ### 表層原因：撰寫脈絡與成品脈絡未分離
 
-PM 撰寫規則時心智狀態是「我在執行 W10-011.1 任務、它的父是 W10-011、它的兄弟是 W10-011.2」。此脈絡是當下 PM 工作的真實情境。
+PM 撰寫規則時心智狀態是「我在執行 <ticket-id>.1 任務、它的父是 <ticket-id>、它的兄弟是 <ticket-id>.2」。此脈絡是當下 PM 工作的真實情境。
 
 撰寫時 PM 將此脈絡直接寫入規則內文，視為「正當的因果連結」。
 
@@ -44,12 +44,12 @@ PM 撰寫規則時心智狀態是「我在執行 W10-011.1 任務、它的父是
 
 PM 撰寫 `.claude/rules/core/document-writing-style.md`（文件撰寫明示性規則），首次 Write 時包含以下引用：
 
-- 適用範圍表格：「程式碼短註解（W10-011 專項）」
-- 與其他規則邊界表格：「W10-011 為註解專項套用」「W10-011 註解規則」
-- 銜接章節：「DRY 銜接：W10-011 註解規則...」
-- quality-baseline 銜接 Action：「如 W10-011.2 之於 PC-066」
+- 適用範圍表格：「程式碼短註解（<ticket-id> 專項）」
+- 與其他規則邊界表格：「<ticket-id> 為註解專項套用」「<ticket-id> 註解規則」
+- 銜接章節：「DRY 銜接：<ticket-id> 註解規則...」
+- quality-baseline 銜接 Action：「如 <ticket-id>.2 之於 PC-066」
 - 相關文件章節：註解撰寫與驗證相關規範
-- Footer：「Version: 1.0.0 — W10-011.1 落地」「Source: PC-066 + W10-011 系列」
+- Footer：「Version: 1.0.0 — <ticket-id>.1 落地」「Source: PC-066 + <ticket-id> 系列」
 
 `boundary-validation hook` 攔截 10 處警告 `[WARNING] Layer 1/2 邊界驗證警告 / 禁止項：Wave/Patch 版本概念 / 內容：W10`。
 

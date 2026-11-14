@@ -1,10 +1,10 @@
 """
-ticket track stale-list 命令（W17-200）
+ticket track stale-list 命令
 
 列舉 stale ticket 明細（pending status），補 list 命令僅顯示彙總計數
 而無法定位個別 stale ticket 的缺口。
 
-1.5.0-W5-005.7 擴充（in_progress release hint）：
+擴充（in_progress release hint）：
 table 格式追加 stale in-progress 章節（started_at 單平面判定，復用
 is_stale_in_progress），附 `ticket track release` 指令提示。ids / yaml
 格式維持 pending-only（既有 pipe 消費者語意不變，Never break userspace）。

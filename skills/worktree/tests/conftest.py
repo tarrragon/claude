@@ -4,9 +4,30 @@ pytest fixtures for worktree SKILL tests
 提供共用的 mock 和測試資料。
 """
 
+import os
 import pytest
 from pathlib import Path
 import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "lib"))
+import liveness_session_isolation as _liveness_iso  # noqa: E402
+
+_SENTINEL = {}
+
+
+def pytest_configure(config):
+    """洩漏哨兵：測試前拍真實 hook-logs 快照（本套件有 hook 測試，無 hooks conftest 隔離）。"""
+    real_root = Path(__file__).resolve().parents[4]
+    _SENTINEL["root"] = real_root
+    _SENTINEL["real_session_id"] = os.environ.get(_liveness_iso.ENV_SESSION_ID)
+    _SENTINEL["snapshot"] = _liveness_iso.take_snapshot(real_root)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if _SENTINEL.get("snapshot") is not None:
+        _liveness_iso.apply_snapshot_sentinel(
+            session, _SENTINEL["root"], _SENTINEL["snapshot"], _SENTINEL["real_session_id"]
+        )
 
 
 # ===== 套件層級 cwd 隔離 =====

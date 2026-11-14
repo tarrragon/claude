@@ -54,12 +54,12 @@ from ticket_system.lib.handoff_utils import (
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 # 跨 sibling-module 存取 track_runqueue 的私有 helper，與 track_dashboard 共用 priority
-# 排序語意。當第 3 consumer 出現時，依 W10-119 結論抽出至 lib/runqueue_helpers.py。
+# 排序語意。當第 3 consumer 出現時，依既有結論抽出至 lib/runqueue_helpers.py。
 from ticket_system.commands.track_runqueue import _priority_rank
 from ticket_system.lib.ticket_ops import load_and_validate_ticket
 
 
-# W7-004：定義 handoff 列表結果型別（從函式屬性改為明確的返回值）
+# 定義 handoff 列表結果型別（從函式屬性改為明確的返回值）
 # 包含有效 handoff 清單、過濾計數和格式錯誤計數
 HandoffListResult = namedtuple("HandoffListResult", ["handoffs", "stale_count", "schema_error_count"])
 
@@ -109,7 +109,7 @@ def _find_handoff_file(ticket_id: str, subdir: str = HANDOFF_PENDING_SUBDIR) -> 
         return (md_file, "markdown")
 
     # Fallback：僅在 pending 目錄掃描，支援兩種情況：
-    # 1. direction 欄位反向查找目標（例：direction: "to-sibling:0.1.0-W9-001"）
+    # 1. direction 欄位反向查找目標（例：direction: "to-sibling:<ticket-id>"）
     # 2. ticket_id 欄位直接比對（兼容 legacy 命名如 v{id}-handoff.json，檔名非 {id}.json）
     if subdir == HANDOFF_PENDING_SUBDIR:
         for json_candidate in sorted(dir_path.glob("*.json")):
@@ -175,7 +175,7 @@ def list_pending_handoffs() -> HandoffListResult:
         if record.format == "json":
             direction = record.direction
             if not is_valid_direction(direction):
-                # W9-001：改為逐檔案處理，不中斷整個迴圈
+                # 改為逐檔案處理，不中斷整個迴圈
                 schema_error_count += 1
                 print(f"[WARNING] 跳過未知 direction 的 handoff：{record.file_path.name}（direction={direction!r}）", file=sys.stderr)
                 continue
@@ -186,7 +186,7 @@ def list_pending_handoffs() -> HandoffListResult:
             # delegate 消除 ARCH-020 跨模組同構邏輯漂移風險。
             is_stale, _reason = is_handoff_stale(record.data)
             if is_stale:
-                stale_count += 1  # W4-002 計數
+                stale_count += 1  # stale 計數
                 continue
 
             handoffs.append(record.data)
@@ -194,12 +194,12 @@ def list_pending_handoffs() -> HandoffListResult:
         elif record.format == "markdown":
             # Markdown 格式：根據 ticket_id 檢查是否 completed
             if record.ticket_id and is_ticket_completed(record.ticket_id):
-                stale_count += 1  # W4-002 計數
+                stale_count += 1  # stale 計數
                 continue  # 跳過 stale 條目
 
             handoffs.append(record.data)
 
-    # W7-004：改為返回 namedtuple，取代函式屬性機制
+    # 改為返回 namedtuple，取代函式屬性機制
     # 明確的返回值提高程式碼清晰度和類型安全性
     return HandoffListResult(
         handoffs=handoffs,
@@ -450,7 +450,7 @@ def _apply_runqueue_ordering(handoffs: List[Dict[str, Any]]) -> List[Dict[str, A
     排序鍵與 track_runqueue._render_list 一致：
         (priority_rank, ticket_id)
     確保 resume --list 與 ticket track runqueue --context=resume 結果同序，
-    讓 runqueue 成為 ticket 排序的單一入口（W17-027.2）。
+    讓 runqueue 成為 ticket 排序的單一入口。
 
     無法載入 ticket 的 handoff 以未知 priority 排最後。
 
@@ -477,18 +477,18 @@ def _execute_list() -> int:
     try:
         result = list_pending_handoffs()
     except HandoffDirectionUnknownError as e:
-        # W9-001：安全網，正常情況不會觸發（未知 direction 已改為 per-file 處理）
+        # 安全網，正常情況不會觸發（未知 direction 已改為 per-file 處理）
         # 此 exception 保留供未來邊界情況使用
         print(f"[WARNING] 未預期的 direction 異常：{e}", file=sys.stderr)
         if e.guidance:
             print(f"  指引：{e.guidance}", file=sys.stderr)
         return 0
 
-    # W7-004：從 namedtuple 提取 handoff 清單和 stale 計數
+    # 從 namedtuple 提取 handoff 清單和 stale 計數
     handoffs = result.handoffs
     stale_count = result.stale_count
 
-    # W17-027.2：套用 runqueue context=resume 排序（priority + ticket_id），
+    # 套用 runqueue context=resume 排序（priority + ticket_id），
     # 與 track runqueue --context=resume 同序，讓 runqueue 成為單一排序入口。
     handoffs = _apply_runqueue_ordering(handoffs)
     if not handoffs:
@@ -526,7 +526,7 @@ def _execute_list() -> int:
         print()
 
     print(f"總計: {len(handoffs)} 個下 session 建議項目")
-    # W4-002: 顯示 stale 過濾計數（有結果時也提示是否有被過濾）
+    # 顯示 stale 過濾計數（有結果時也提示是否有被過濾）
     if stale_count > 0:
         print(f"[提示] 另有 {stale_count} 個 stale handoff 已自動過濾（執行 ticket handoff gc --dry-run 查看）")
     print()

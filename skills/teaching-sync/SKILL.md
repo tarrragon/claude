@@ -3,7 +3,7 @@ name: teaching-sync
 description: "Repo ↔ 教學文章雙向同步。實作撞牆或設計階段發現教學缺口時建 challenge 記錄；回補教學章節；教學新章節產生實作需求時建 issue 追蹤。觸發詞：teaching-sync、教學同步、撞牆記錄、回補教學、challenge、教學回補、blog sync、知識同步、設計缺口、教學缺口、gap 分析。Use when: 實作遇到挑戰需記錄、設計階段發現教學覆蓋不足、需要回補教學章節、教學章節需要實作驗證、schema/transport 變更需同步教學文件。"
 license: MIT
 metadata:
-  version: 2.0.0
+  version: 2.0.1
   category: knowledge-management
 ---
 
@@ -119,20 +119,20 @@ UC / spec / proposal 設計過程中，比對教學內容發現覆蓋不足時�
    - 其他維度：依 compositional-writing keyword bank 判準
 
    判定結果記錄為表格（維度 / 命中數 / 判定），違規項立即修正後 commit。
-8. **commit + merge + push**：
+8. **commit + merge + push**：執行前先把 blog repo 路徑展開成字面絕對路徑（例如先 `echo "$BLOG_REPO"` 取得），再以字面路徑下命令。原因：PreToolUse 守衛在命令執行前只看到未展開的文字，`git -C "$BLOG_REPO"` 這類寫法無法判定作用在哪個 repo，寫入類 git 命令會被擋下。
    ```bash
-   git -C "$BLOG_REPO" add <changed-files>
+   git -C <blog repo 絕對路徑> add <changed-files>
 
-   git -C "$BLOG_REPO" commit -m "docs(monitoring): 回補教學缺口 — <摘要>
+   git -C <blog repo 絕對路徑> commit -m "docs(monitoring): 回補教學缺口 — <摘要>
 
    來源：docs/challenges/<NNN>.md (<Gap-ID>)
 
    Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
-   git -C "$BLOG_REPO" checkout main
-   git -C "$BLOG_REPO" merge feat/monitor-teaching-backfill-NNN
-   git -C "$BLOG_REPO" push origin main
-   git -C "$BLOG_REPO" branch -d feat/monitor-teaching-backfill-NNN
+   git -C <blog repo 絕對路徑> checkout main
+   git -C <blog repo 絕對路徑> merge feat/monitor-teaching-backfill-NNN
+   git -C <blog repo 絕對路徑> push origin main
+   git -C <blog repo 絕對路徑> branch -d feat/monitor-teaching-backfill-NNN
    ```
    審查修正如有額外 commit，同樣走 feature branch → merge → push 流程。
 9. 更新 `docs/sync-pending.md`，將完成項目標記 `[x]` 並附 commit hash

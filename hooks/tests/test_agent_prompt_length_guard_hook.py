@@ -118,7 +118,7 @@ def test_15_lines_without_keyword_emits_soft_hint(monkeypatch, capsys):
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "提示" in captured.err
-    assert "W17-048" in captured.err
+    assert "未偵測到模板關鍵字" in captured.err
     assert "15 行" in captured.err
 
 

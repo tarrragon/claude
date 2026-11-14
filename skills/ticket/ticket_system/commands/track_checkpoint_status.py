@@ -1,4 +1,4 @@
-"""ticket track checkpoint-status 命令（W10-017.1 v2 新增）。
+"""ticket track checkpoint-status 命令。
 
 純報告型命令：輸出當前 Checkpoint 編號 + phase_id + ready_for_clear + 資料源狀態。
 退出碼：永遠 exit 0（純報告）；內部錯誤 exit 1。

@@ -47,7 +47,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from lib import setup_hook_logging, run_hook_safely
+    from lib import setup_hook_logging, run_hook_safely, get_hook_log_dir
     from lib.common_functions import get_project_root, hook_output
     from lib import hook_health
     from lib.hook_registry import merge_dispatch_registry
@@ -63,10 +63,10 @@ except ImportError as e:
 WARNING_THRESHOLD_HOURS = 24  # 發出警告的時間閾值
 CRITICAL_THRESHOLD_HOURS = 48  # 發出嚴重警告的時間閾值
 
-# W13-017: 觸發頻率掃描使用「7 天 baseline」(W13-008 量化標準)
+# 觸發頻率掃描使用「7 天 baseline」量化標準
 FREQUENCY_SCAN_WINDOW_DAYS = 7
 
-# W13-017: marker file 相對於 project_root 的路徑
+# marker file 相對於 project_root 的路徑
 SESSION_MARKER_RELPATH = (".claude", "state", "last-session-start.marker")
 
 
@@ -202,7 +202,8 @@ def resolve_hook_log_dir(
         (log_dir_name, full_path, dir_exists)
     """
     stem = Path(hook_filename).stem
-    base_dir = project_root / ".claude" / "hook-logs"
+    # 與寫入端同源：linked worktree 內讀主 checkout 的 hook-logs 根
+    base_dir = get_hook_log_dir("")
 
     primary = base_dir / stem
     if primary.is_dir():
@@ -378,10 +379,9 @@ def _output_health_report(
 
 
 def write_session_marker(project_root: Path, now: Optional[datetime] = None) -> Path:
-    """W13-017: SessionStart 時寫入 last-session-start.marker (ISO timestamp)
+    """SessionStart 時寫入 last-session-start.marker (ISO timestamp)
 
-    供後續 hook-health 掃描判定「本 session 觸發」邊界，取代 timestamp gap heuristic
-    (W13-008 §Session 邊界)。
+    供後續 hook-health 掃描判定「本 session 觸發」邊界，取代 timestamp gap heuristic。
 
     Args:
         project_root: 專案根目錄
@@ -398,7 +398,7 @@ def write_session_marker(project_root: Path, now: Optional[datetime] = None) -> 
 
 
 def _load_settings(settings_path: Path) -> Dict:
-    """讀取 settings.json；錯誤時回 {} (W13-017 內部工具)"""
+    """讀取 settings.json；錯誤時回 {}（內部工具）"""
     if not settings_path.exists():
         return {}
     try:
@@ -415,7 +415,7 @@ def _today_str(now: Optional[datetime] = None) -> str:
 
 
 def _compute_baseline(per_day: Dict[str, int], window_days: int = FREQUENCY_SCAN_WINDOW_DAYS) -> float:
-    """W13-008 量化標準：baseline = sum(last_7_days) / 7
+    """量化標準：baseline = sum(last_7_days) / 7
 
     使用 scan_logs 取得的 per_day 字典；不足 7 天時除以實際天數可能膨脹基線，
     故除以固定 window_days 以保持保守 (under-trigger 優於 over-trigger)。
@@ -430,10 +430,9 @@ def run_frequency_scan(
     now: Optional[datetime] = None,
     logs_root: Optional[Path] = None,
 ) -> List[Tuple[str, "hook_health.Verdict"]]:
-    """W13-017: 掃描全部 hooks 的觸發頻率並產出 stderr 摘要
+    """掃描全部 hooks 的觸發頻率並產出 stderr 摘要
 
-    Scope 從原 SessionStart hooks 擴大為「全部出現在 hook-logs/ 的 hooks」
-    (W13-008 IMP-2 acceptance)。
+    Scope 從原 SessionStart hooks 擴大為「全部出現在 hook-logs/ 的 hooks」。
 
     步驟：
       1. scan_logs(since=7d) → 每 hook 的 total/per_day
@@ -479,7 +478,7 @@ def run_frequency_scan(
 
         flagged.append((hook_name, verdict))
 
-        # W13-008 Solution §自動建 Ticket 流程：純 stderr 提醒，不自動建 ticket
+        # 自動建 Ticket 流程：純 stderr 提醒，不自動建 ticket
         threshold = baseline * verdict.multiplier if not verdict.bootstrap else None
         if verdict.bootstrap:
             stderr_msg = (
@@ -502,7 +501,7 @@ def run_frequency_scan(
 
     if flagged:
         print(
-            "建議：手動建 ANA 排查（ticket track create --type ANA --who basil-hook-architect ...）",
+            "建議：手動建 ANA 排查（ticket create --type ANA --who basil-hook-architect ...）",
             file=sys.stderr,
         )
 
@@ -515,13 +514,13 @@ def main() -> int:
 
     # get_project_root() 回傳 str（git_utils），但本檔全函式以 Path 標註並使用
     # `/` 與 .joinpath()，故統一包成 Path，避免 write_session_marker 等處對 str
-    # 呼叫 Path 方法拋 AttributeError（0.37.0-W6-003）。
+    # 呼叫 Path 方法拋 AttributeError。
     project_root = Path(get_project_root())
     if not project_root:
         hook_output("Error: Cannot find project root", "error")
         return 1
 
-    # W13-017 (1): SessionStart marker — 給後續掃描判定 session 邊界
+    # (1) SessionStart marker — 給後續掃描判定 session 邊界
     try:
         write_session_marker(project_root)
     except OSError as e:
@@ -529,7 +528,7 @@ def main() -> int:
         logger.warning("Failed to write session marker: {}".format(e))
         print("[hook-health] WARN: failed to write session marker: {}".format(e), file=sys.stderr)
 
-    # W13-017 (2): 觸發頻率掃描（全部 hooks）— 純 stderr 提醒，不阻擋既有邏輯
+    # (2) 觸發頻率掃描（全部 hooks）— 純 stderr 提醒，不阻擋既有邏輯
     try:
         run_frequency_scan(project_root, logger)
     except Exception as e:  # noqa: BLE001 — 監測本身禁止讓既有健康檢查降級

@@ -45,6 +45,7 @@ from lib import (  # noqa: E402
     read_json_from_stdin,
     get_project_root,
 )
+from lib.hook_base import get_shared_state_root  # noqa: E402
 from lib.hook_io import is_subagent_environment  # noqa: E402
 
 EXIT_SUCCESS = 0
@@ -71,7 +72,9 @@ def _load_pending_entries(project_root: Path, logger):
     except ImportError as exc:
         logger.info("todo_pending_registry 模組載入失敗，退化為全列沉默: %s", exc)
         return None
-    return todo_pending_registry.pending_entries(project_root=project_root)
+    return todo_pending_registry.pending_entries(
+        project_root=get_shared_state_root(project_root)
+    )
 
 
 def _build_context(entries: List[Dict]) -> str:

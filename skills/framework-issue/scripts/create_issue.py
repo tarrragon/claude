@@ -6,7 +6,7 @@ provenance 錨點 / error-pattern canonical key / 跨 consumer 修復追蹤源�
 
 環境資訊自動收集：每個 issue body 自動附加 OS / Claude Code 版本 / Python
 版本，以標記區段 `<!-- env-info -->...<!-- /env-info -->` 包裹，供跨環境
-排查時區分徵狀差異是否源於環境不同（0.2.1-W3-295）。任一項收集失敗降級為
+排查時區分徵狀差異是否源於環境不同。任一項收集失敗降級為
 unknown，不阻擋 issue 建立。
 """
 

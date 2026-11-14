@@ -9,7 +9,7 @@
 | 編號 | PC-081 |
 | 類別 | process-compliance |
 | 風險等級 | 中（影響任務推進速度與用戶信任） |
-| 首發時間 | 2026-04-17（W12-002 系列 Hook/rules/skills/templates emoji 清理 session） |
+| 首發時間 | 2026-04-17（emoji 清理系列 Hook/rules/skills/templates session） |
 | 姊妹模式 | PC-080（WRAP A 階段框架檢查未做）、PC-078（並行 session 狀態誤判） |
 
 ---
@@ -25,9 +25,9 @@ PM 執行 ticket 過程中反覆推薦保守選項（handoff / /clear / 拆更�
 
 ---
 
-## 實際案例（W12-002 系列 session）
+## 實際案例（emoji 清理系列 session）
 
-**任務序列**：W13-007 ANA → W12-002.5 遷 → W12-002.2 → .3 → .4 拆分 → .4.1 → .4.2 → .4.3
+**任務序列**：一個 ANA → 遷移任務 → 多張 emoji 清理子任務依序執行（含再拆分）
 
 **PM 保守推薦**（每個 commit 後 AUQ #11）：
 - Commit 2: 「Handoff 預設推薦」
@@ -40,7 +40,7 @@ PM 執行 ticket 過程中反覆推薦保守選項（handoff / /clear / 拆更�
 - 「可以繼續」
 - 「派代理人修改之前有成功派發過，只要不開 worktree」
 
-**結果**：本 session 完成 9 commits / 4 tickets complete / 5 新 spawn ticket / 2 新 error-pattern。若照 PM 建議 session 2 就結束，只會完成 W13-007 + spawn 就 handoff。
+**結果**：本 session 完成 9 commits / 4 tickets complete / 5 新 spawn ticket / 2 新 error-pattern。若照 PM 建議 session 2 就結束，只會完成該 ANA + spawn 就 handoff。
 
 ---
 
@@ -90,7 +90,7 @@ PM 執行 ticket 過程中反覆推薦保守選項（handoff / /clear / 拆更�
 | 流程 | AUQ 推薦 Handoff 前先自問：「用戶表達過疲勞或停止意圖嗎？」— 否則用戶知情推進 | 行為準則 |
 | 流程 | 引用 memory 前先驗證當下條件（如派 subagent 前確認用戶是否有成功經驗） | 行為準則 |
 | 流程 | 連續被糾正 2 次後停止推薦 Handoff，改為 neutral 列選項 | 行為準則 |
-| 規則 | askuserquestion-rules 場景 11 補充「用戶表達繼續意圖後，handoff 推薦降為中性」 | 建議實施（W13-015 建追蹤） |
+| 規則 | askuserquestion-rules 場景 11 補充「用戶表達繼續意圖後，handoff 推薦降為中性」 | 建議實施 |
 | Memory | 記錄本模式作為跨 session 提醒 | 已實施（配對本檔） |
 
 ---
@@ -129,4 +129,4 @@ PM 執行 ticket 過程中反覆推薦保守選項（handoff / /clear / 拆更�
 
 **Last Updated**: 2026-04-17
 **Version**: 1.0.0
-**Source**: W12-002 系列 session 中 PM 反覆推薦 handoff，用戶連續 3+ 次糾正「太保守了」後識別此保守偏見模式
+**Source**: emoji 清理系列 session 中 PM 反覆推薦 handoff，用戶連續 3+ 次糾正「太保守了」後識別此保守偏見模式

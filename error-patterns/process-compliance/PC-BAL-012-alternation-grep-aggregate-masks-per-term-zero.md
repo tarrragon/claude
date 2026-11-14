@@ -3,7 +3,6 @@ id: PC-BAL-012
 title: 複合條件搜尋的加總計數遮蔽單一詞項的零命中——一項證據被當成多項的覆蓋證明
 severity: high
 category: process-compliance
-source_ticket: 0.2.1-W3-090
 related:
  - PC-BAL-010
  - PC-161

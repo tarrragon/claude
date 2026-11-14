@@ -45,10 +45,10 @@
 在 blog repo 建 feature branch，寫入教學補充：
 
 ```bash
-cd "$BLOG_REPO"
-git checkout -b feat/monitor-teaching-backfill-001
+# <blog repo 絕對路徑> 先展開成字面路徑再下命令（守衛無法判定變數路徑指向哪個 repo）
+git -C <blog repo 絕對路徑> worktree add <worktree 絕對路徑> -b feat/monitor-teaching-backfill-001
 # 編輯 python-platform.md 新增「短生命週期腳本」章節
-git commit -m "docs(monitoring): 短生命週期腳本 SDK 行為"
+git -C <worktree 絕對路徑> commit -m "docs(monitoring): 短生命週期腳本 SDK 行為"
 ```
 
 ### 標記完成

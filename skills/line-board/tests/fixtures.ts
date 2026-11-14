@@ -9,7 +9,7 @@ import type { DispatchRecord, SessionState } from '../types'
  */
 // BEGIN queue-line-cases.json
 const QUEUE_LINE_CASES_RAW = String.raw`{
-  "_doc": "佇列行解析的唯一案例來源：lanes.test.ts 與後續 Python hook 共用。text 為協調票全文，prefix 為短票號前綴，expect 為各線 {lane, session, tickets[{serial,id,note}]}（只列 ticket token）。category: positive_control = 容易被誤判的寫法（括號附註、全終態但未寫（無）），normal = 一般寫法。",
+  "_doc": "佇列行解析的唯一案例來源：lanes.test.ts、coordination-queue-line-check hook 與 statusline_lane 的 Python 測試共用（Python 解析在 multi-session-orchestration/scripts/queue_line.py）。text 為協調票全文，prefix 為短票號前綴，expect 為各線 {lane, session, tickets[{serial,id,note}], ended}（只列 ticket token；收線（（無）、（結束））的線不列入；ended 為 with-note 表示附說明的收線寫法，否則為 null）。現行線 = ended 為 null 且 tickets 非空，狀態列只顯示現行線。category: positive_control = 容易被誤判的寫法（括號附註、全終態但未寫（無）、附說明收線、無票號的行），normal = 一般寫法。",
   "cases": [
     {
       "name": "正常寫法：session 名稱、→ 與 ∥",
@@ -24,7 +24,8 @@ const QUEUE_LINE_CASES_RAW = String.raw`{
             { "serial": "100", "id": "0.5.0-W1-100", "note": "" },
             { "serial": "337.1", "id": "0.5.0-W1-337.1", "note": "" },
             { "serial": "353", "id": "0.5.0-W1-353", "note": "" }
-          ]
+          ],
+          "ended": null
         }
       ]
     },
@@ -33,6 +34,13 @@ const QUEUE_LINE_CASES_RAW = String.raw`{
       "category": "normal",
       "prefix": "0.5.0-W1-",
       "text": "## Solution\n**L5 現行佇列**：100\n**L5 現行佇列**：（無）\n",
+      "expect": []
+    },
+    {
+      "name": "正常寫法：最後一行票序為（結束）的線不列入",
+      "category": "normal",
+      "prefix": "0.5.0-W1-",
+      "text": "## Solution\n**L5 現行佇列**：100\n**L5 現行佇列**：（結束）\n",
       "expect": []
     },
     {
@@ -47,16 +55,45 @@ const QUEUE_LINE_CASES_RAW = String.raw`{
           "tickets": [
             { "serial": "100", "id": "0.5.0-W1-100", "note": "（已完成，待合併）" },
             { "serial": "101", "id": "0.5.0-W1-101", "note": "（待用戶驗證）" }
-          ]
+          ],
+          "ended": null
         }
       ]
     },
     {
-      "name": "正向對照：票序為（無）加括號附註不等於（無），線仍列入",
+      "name": "正向對照：票序為（無）加括號附註不等於（無），線仍列入並標收線寫法",
       "category": "positive_control",
       "prefix": "0.5.0-W1-",
       "text": "## Solution\n**L5 現行佇列**：（無）（全數終態）\n",
-      "expect": [{ "lane": 5, "session": null, "tickets": [] }]
+      "expect": [{ "lane": 5, "session": null, "tickets": [], "ended": "with-note" }]
+    },
+    {
+      "name": "正向對照：無（附說明）也是收線寫法，不是現行線",
+      "category": "positive_control",
+      "prefix": "0.5.0-W1-",
+      "text": "## Solution\n**L5 現行佇列**（s-a）：無（今天收工）\n",
+      "expect": [{ "lane": 5, "session": "s-a", "tickets": [], "ended": "with-note" }]
+    },
+    {
+      "name": "正向對照：票序空白，無票號，不是現行線",
+      "category": "positive_control",
+      "prefix": "0.5.0-W1-",
+      "text": "## Solution\n**L5 現行佇列**（s-a）：\n",
+      "expect": [{ "lane": 5, "session": "s-a", "tickets": [], "ended": null }]
+    },
+    {
+      "name": "正向對照：票序只有分隔符，無票號，不是現行線",
+      "category": "positive_control",
+      "prefix": "0.5.0-W1-",
+      "text": "## Solution\n**L5 現行佇列**（s-a）： → \n",
+      "expect": [{ "lane": 5, "session": "s-a", "tickets": [], "ended": null }]
+    },
+    {
+      "name": "正向對照：票序只有文字，無票號，不是現行線",
+      "category": "positive_control",
+      "prefix": "0.5.0-W1-",
+      "text": "## Solution\n**L5 現行佇列**（s-a）：待命，等用戶裁定\n",
+      "expect": [{ "lane": 5, "session": "s-a", "tickets": [], "ended": null }]
     },
     {
       "name": "正向對照：票全為終態但行尾未寫（無），解析不推斷終態，線仍列入",
@@ -70,7 +107,8 @@ const QUEUE_LINE_CASES_RAW = String.raw`{
           "tickets": [
             { "serial": "100", "id": "0.5.0-W1-100", "note": "（completed）" },
             { "serial": "101", "id": "0.5.0-W1-101", "note": "（completed）" }
-          ]
+          ],
+          "ended": null
         }
       ]
     }
@@ -85,7 +123,12 @@ export const QUEUE_LINE_CASES: {
   category: 'normal' | 'positive_control'
   prefix: string
   text: string
-  expect: { lane: number; session: string | null; tickets: { serial: string; id: string; note: string }[] }[]
+  expect: {
+    lane: number
+    session: string | null
+    tickets: { serial: string; id: string; note: string }[]
+    ended: 'with-note' | null
+  }[]
 }[] = JSON.parse(QUEUE_LINE_CASES_RAW).cases
 
 /**
@@ -260,6 +303,8 @@ export const NO_TICKET_LANE_LINES = [
   '**L6 現行佇列**（s6）：等主控通知',
   '**L7 現行佇列**（s7）：100',
   '**L8 現行佇列**（s8）：100 → 等主控通知',
+  '**L9 現行佇列**（s9）：',
+  '**L10 現行佇列**（s10）：（無）（全數終態）',
 ].join('\n')
 
 /** 仿 worktree-merge.log：開始／結束之間夾著驗收、測試、預檢等其他行。 */

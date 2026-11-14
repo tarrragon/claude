@@ -34,6 +34,7 @@ from typing import Callable, Iterator, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # .claude/，供 import lib
 from lib import slot_gate  # noqa: E402
+from lib.flutter_launcher import launch_argv  # noqa: E402
 
 try:
     from .merge_cas import CheckResult
@@ -58,9 +59,10 @@ SUITE_HOOKS = "hooks"
 SUITE_SCRIPTS = "scripts"
 SUITE_SKILL_PREFIX = "skill:"
 
-# 全套件命令（argv）；相對於快照根目錄執行
+# 全套件命令（argv）；相對於快照根目錄執行。flutter／dart 開頭者執行前經 launch_argv
+# 依快照是否使用 FVM 補 fvm 前綴（suite_command、declared_artifacts），此處不寫死
 SUITE_COMMANDS = {
-    SUITE_FLUTTER: ["fvm", "flutter", "test"],
+    SUITE_FLUTTER: ["flutter", "test"],
     SUITE_HOOKS: ["uv", "--directory", ".claude/hooks", "run", "pytest"],
     SUITE_SCRIPTS: ["uv", "--directory", ".claude/scripts", "run", "pytest"],
 }
@@ -73,7 +75,7 @@ FLUTTER_MARKER_FILE = "pubspec.yaml"
 
 # 快照內執行前必須就緒的 gitignored 生成產物：套件 -> ((產物路徑, 生成命令), ...)
 REQUIRED_ARTIFACTS = {
-    SUITE_FLUTTER: ((".dart_tool/package_config.json", ["fvm", "flutter", "pub", "get"]),),
+    SUITE_FLUTTER: ((".dart_tool/package_config.json", ["flutter", "pub", "get"]),),
     SUITE_HOOKS: (),
     SUITE_SCRIPTS: (),
 }
@@ -224,11 +226,17 @@ def _in_declared_scope(path: str, decl: dict) -> bool:
     return any(path.startswith(s["prefixes"]) or path in s["files"] for s in decl.values())
 
 
-def declared_artifacts(suite: str, decl: Declaration) -> tuple:
-    """套件快照內須就緒的產物：宣告優先，其餘沿用 REQUIRED_ARTIFACTS。"""
+def declared_artifacts(suite: str, decl: Declaration, root: Optional[str] = None) -> tuple:
+    """套件快照內須就緒的產物：宣告優先（argv 原樣），其餘沿用 REQUIRED_ARTIFACTS。
+
+    給 root 時，內建生成命令依該目錄是否使用 FVM 補前綴；宣告的命令由專案自行寫定，不改。
+    """
     if decl is not None and suite in decl:
         return decl[suite]["artifacts"]
-    return REQUIRED_ARTIFACTS.get(suite, ())
+    builtin = REQUIRED_ARTIFACTS.get(suite, ())
+    if root is None:
+        return builtin
+    return tuple((path, launch_argv(generator, root)) for path, generator in builtin)
 
 
 # CAS 重試沿用驗證結果的豁免清單：測試不讀取這些檔，只改它們不影響全套件結果。
@@ -451,7 +459,7 @@ def suite_command(suite: str, root: str, files: Optional[list] = None) -> list:
     if decl is not None and suite in decl:
         return decl[suite]["command"] + (files or [])
     if not suite.startswith(SUITE_SKILL_PREFIX):
-        return SUITE_COMMANDS[suite]
+        return launch_argv(SUITE_COMMANDS[suite], root)
     name = suite[len(SUITE_SKILL_PREFIX):]
     if os.path.isfile(os.path.join(root, ".claude", "skills", name, "pyproject.toml")):
         return ["uv", "--directory", f".claude/skills/{name}", "run", "pytest"]
@@ -637,7 +645,7 @@ def _rc_reason(suite: str, rc: int, output: str, detail_path: str = "",
 
 def _ensure_artifacts(suite: str, snapshot: str, project_root: str, runner: SuiteRunner) -> str:
     """缺 gitignored 生成產物時先生成；生成失敗或仍缺則回傳指名缺漏的理由，否則空字串。"""
-    for artifact, generator in declared_artifacts(suite, load_declaration(snapshot)):
+    for artifact, generator in declared_artifacts(suite, load_declaration(snapshot), snapshot):
         if os.path.exists(os.path.join(snapshot, artifact)):
             continue
         rc, out = runner(wrapped_argv(generator), snapshot)

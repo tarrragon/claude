@@ -8,7 +8,7 @@
 |------|------|
 | 編號 | PC-V1-009 |
 | 類別 | process-compliance |
-| source_ticket | 1.0.0-W1-085（parallel-evaluation 發現） |
+| 發現來源 | parallel-evaluation 發現 |
 | 發現日期 | 2026-06-16 |
 | 風險等級 | 中 |
 

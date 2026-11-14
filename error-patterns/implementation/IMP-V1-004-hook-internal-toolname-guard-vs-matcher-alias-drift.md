@@ -4,7 +4,6 @@ title: Hook 內部工具名字面守衛因平台工具改名靜默早退（match
 category: implementation
 severity: high
 created: 2026-07-02
-source_ticket: 1.5.0-W5-002
 ---
 
 # IMP-V1-004: Hook 內部工具名字面守衛 vs matcher 投遞名漂移
@@ -23,13 +22,13 @@ Hook 在 settings.json 註冊正常、matcher 有效收到事件，但 hook 從�
 
 結果是「matcher 活著、hook 死了」的分層錯覺：註冊層的相容機制遮蔽了程式層的失效。
 
-**具體案例（1.5.0-W5-002 固定值取證）**：單日 11 次真實 Agent 派發，`askuserquestion-reminder-hook` 的 log 全數記錄「非 Task 工具: Agent，跳過」；`task-dispatch-readiness-check` 因守衛位於 log 初始化之前，連 log 目錄都不存在——代理人分派正確性檢查自工具改名起從未執行。
+**具體案例（固定值取證）**：單日 11 次真實 Agent 派發，`askuserquestion-reminder-hook` 的 log 全數記錄「非 Task 工具: Agent，跳過」；`task-dispatch-readiness-check` 因守衛位於 log 初始化之前，連 log 目錄都不存在——代理人分派正確性檢查自工具改名起從未執行。
 
 ## 解決方案
 
 1. **守衛寫法**：工具名守衛一律寫成集合比對並同時涵蓋新舊名：`if tool_name not in ("Agent", "Task"): sys.exit(0)`（修復 commit `01f7c7410`）。
 2. **偵測手段**：懷疑 hook 是否實際執行時，用固定值證據——比對「同事件下其他 hook 的 log 檔數」與「本 hook 的 log 檔數」；零檔或全數「跳過」紀錄即功能性死亡。
-3. **結構性收斂**：matcher 註冊收斂至現行工具名（見 1.5.0-W5-002.2），避免依賴平台別名投遞的未承諾行為。
+3. **結構性收斂**：matcher 註冊收斂至現行工具名（本案的結構性修復），避免依賴平台別名投遞的未承諾行為。
 
 ## 防護措施
 

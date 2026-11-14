@@ -11,7 +11,6 @@
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -20,10 +19,8 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import coordination_ticket as ct  # noqa: E402
 
-SOLUTION_HEADING = "## Solution"
-# 與 .claude/skills/line-board/hooks/lanes.ts 的 LANE_LINE 同一規則：只比對行首。
-LANE_LINE = re.compile(r"^\*\*L(\d+) 現行佇列\*\*(?:（([^）]*)）)?：(.*)$")
-ENDED_MARKERS = frozenset({"（結束）", "（無）"})  # 看板用（無），票面慣例亦見（結束）
+# 佇列行解析的 Python 唯一實作（與 line-board lanes.ts 共用 queue-line-cases.json 案例）
+import queue_line as ql  # noqa: E402
 INNER_TIMEOUT_SECONDS = 10
 PREFIX_SEPARATOR = " │ "
 
@@ -67,20 +64,13 @@ def resolve_session_name(payload: dict) -> Optional[str]:
     return None
 
 
-def active_lanes(ticket_text: str) -> dict:
-    """掃 Solution 段，每線取最後一行；回傳 {線號: session 名稱}，結束的線不含。"""
-    in_solution = False
-    latest = {}
-    for line in (raw.rstrip() for raw in ticket_text.split("\n")):
-        if line == SOLUTION_HEADING or line.startswith(SOLUTION_HEADING + " "):
-            in_solution = True
-            continue
-        if in_solution and line.startswith("## "):
-            break
-        match = LANE_LINE.match(line) if in_solution else None
-        if match:
-            latest[int(match.group(1))] = (match.group(2), match.group(3).strip())
-    return {n: s for n, (s, queue) in latest.items() if queue not in ENDED_MARKERS}
+def active_lanes(ticket_text: str, prefix: str = "") -> dict:
+    """回傳現行線 {線號: session 名稱}：收線、附說明收線、只有文字或分隔符而無票號的線都不含。
+
+    分類由 queue_line 判定，與看板（lanes.ts）同一規則。prefix 為協調票推導的短票號前綴，
+    只影響 W<波次>-<序號> 寫法能否辨識為票號。
+    """
+    return {lane["lane"]: lane["session"] for lane in ql.parse_lanes(ticket_text, prefix) if ql.is_current_lane(lane)}
 
 
 def auto_resolve_ticket(project_dir: Optional[Path]) -> Optional[Path]:
@@ -116,7 +106,8 @@ def lane_label(name: str, ticket_path: Path) -> str:
     except OSError as exc:
         _warn(f"協調票不可讀：{exc}")
         return ""
-    lanes = sorted(n for n, session in active_lanes(text).items() if session == name)
+    prefix = ql.ticket_prefix_of(ticket_path.stem) or ""
+    lanes = sorted(n for n, session in active_lanes(text, prefix).items() if session == name)
     return "·".join(f"L{n}" for n in lanes)
 
 

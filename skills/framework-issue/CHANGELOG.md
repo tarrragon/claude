@@ -2,6 +2,17 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.12.1 — 命令總表 `rebuild-owned` 列補寫登記檔位置（主 repo 的 `.claude/state/framework-issue-owned.json`，worktree 內執行也寫到主 repo），並寫明 SessionStart 檢查只查登記檔內的 issue 編號、不送專案名，`rebuild-owned` 是唯一會把專案目錄名送到 GitHub 的命令。框架 README〈導入後會多出什麼〉的對外連線列同步改寫。只改文件。
+- 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；僅註解與文件，行為不變。
+
+**Version**: 2.12.0 — SessionStart 的 issue 檢查不再以專案目錄名搜尋 GitHub。`session-start-issue-check-hook.py` 只讀 owned-issues 登記檔，缺檔或損毀時略過，不發任何 gh 命令，只寫 hook-logs；原本缺檔時每次 startup／resume 都以目錄名作 `gh search issues`，等於每個 session 都把專案名送出。前綴搜尋移到新命令 `rebuild-owned`（`scripts/rebuild_owned.py`），由使用者明示執行：送出前列出將送出的資料，`--dry-run` 只列不送；驗證區段 owner 後以 `owned_issues_registry.write_registry` 整份覆寫登記檔，查無時寫入空清單。新 clone 的專案與本機制上線前已擁有區段的 issue，執行一次 `rebuild-owned` 後 SessionStart 檢查才會啟用。`todo` 的前綴退路不變（屬使用者明示執行的命令）。`comment-as-section-protocol.md`、`ticket-intake.md` 的缺檔描述同步。
+
+**Version**: 2.11.1 — owned-issues 登記檔改落共用狀態根：`owned_issues_registry.registry_path` 經 `lib.hook_base.get_shared_state_root` 解析，linked worktree 內的寫入與讀取都落在主倉庫的 `.claude/state/framework-issue-owned.json`，同專案各 worktree 共用一份；移除模組自寫的根目錄解析。原本登記檔跟著 worktree 走，新 worktree 沒有登記檔，SessionStart 檢查因此常態退回以專案目錄名搜尋 GitHub。呼叫端與命令行為不變，`comment-as-section-protocol.md` 的落點描述同步。
+
+**Version**: 2.11.0 — 新增唯讀命令 `feedback`（`scripts/feedback.py`），支援發版後回饋檢查（version-progression〈版本生命週期〉「發版後回饋檢查」）。界線是上一版的 tag 時間。上一版預設取 todolist 版號最高的 completed 版本，`--since-version` 可覆寫。先查本地 tag，再查框架 repo 的遠端 tag。兩處都查不到時 exit 2，要求 `--since`，不自行推測界線。界線之後的 issue 分三類：建立時間在界線之後為「新開」；有帶 observation 標記的留言為「新觀測」；只有不帶標記的留言為「未標記留言」，另列，不計入回饋數。區段留言是 owner 的整理內容，三類都不計。分類不看 updatedAt，因為主控方的分診留言也會更新它（v3.2.1 實測 4 筆全是誤報）。框架版本取自 env-info 區段或最後一則觀測的 framework-version 標記，都沒有時填 unknown。可加 `--json`。
+
+**Version**: 2.10.0 — `escalation-flow.md`〈規劃期的輸入清單〉加 patch 分診欄：填發版後回饋檢查的分類（version-progression〈版本生命週期〉「發版後回饋檢查」），只有上一版發版之後才出現或有新觀測的 issue 才填；分類為「仍重現，且承諾未達成」者排進最新 minor 的 patch，不交用戶挑選。
+
 **Version**: 2.9.0 — `escalation-flow.md`〈修復時點：派修或累積到清理線〉改為〈修復時點：版本分診〉：清理線移除，主控方的修復時點只用版本分診，路由至 version-progression〈兩期〉〈收斂〉與主控方的版本規劃文件；P0／P1 阻擋與用戶要求兩列保留為本版處理的例外，對齊〈兩期〉的 `--scope-blocker`。「拖慢專案」標記保留，同一 issue 達 2 則即為之後第一個版本規劃期的必審項（選入或寫明不選的理由）；原「版本收尾摘要」改為規劃期的輸入清單。〈兩條路徑〉A／B 列與〈角色〉Action 的派修用語同步，SKILL.md 路由表同步。來源：用戶裁定（2026-11-09）。
   同版補記三項 CLI 變更（發生在 2.8.x 期間，當時未升版號）：
   - `close --reason "not planned"` 不再要求修復版本表，改為 `--comment` 必填（判定理由），工具自動在關閉留言附上本地 `.claude/VERSION`；理由空白或讀不到 VERSION 時 exit 3，不關閉。`completed`（或省略 `--reason`）沿用修復版本表閘門。前置條件對照見 `fix-matrix-commands.md`〈close〉。

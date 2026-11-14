@@ -12,7 +12,7 @@ related:
 
 # PC-091: ANA Ticket 落地下游用兄弟而非子任務（血緣斷裂）
 
-> **2026-05-03 升格**：W17-120 多視角審查共識——本規則為「ANA 落地下游關係選擇」**唯一權威**。PC-073 對 ANA 衍生 IMP 用 spawned 的指引已 deprecated，由本規則取代。權威語意彙總：`.claude/skills/ticket/references/field-semantics.md`。
+> **2026-05-03 升格**：多視角審查共識——本規則為「ANA 落地下游關係選擇」**唯一權威**。PC-073 對 ANA 衍生 IMP 用 spawned 的指引已 deprecated，由本規則取代。權威語意彙總：`.claude/skills/ticket/references/field-semantics.md`。
 >
 > **2026-11-11 加版本維度**（用戶裁定 2026-11-09）：本檔「落地用 children」的射程限於**本版範圍**的落地。依〈兩期〉排入後續版本的落地，在目標版本以 `--source-ticket <ANA-ID>` 建根票（建好即可 complete ANA，目標版本未登記先登記）；放棄這類落地票時，關票理由寫明對 ANA 結論的處置並回寫來源 ANA。理由：子票必然落在父票的版本，執行期 ANA 的落地若用 children，只能落在已凍結的本版。本檔防的「血緣斷裂」由 `source_ticket`／`spawned_tickets` 雙向欄位承擔，不依賴 children。完整路線與 complete 時點以 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉為準。
 
@@ -21,28 +21,28 @@ related:
 PM 將 ANA Ticket 的「落地行動」（Solution 中提出的 IMP/DOC Ticket）建立為**兄弟 Ticket**（同 Wave 獨立編號）或**衍生 Ticket**（spawned_tickets），而非 ANA 的**子任務**（children），導致：
 
 1. 血緣關係斷裂：`tree` / `chain` 命令看不到 ANA → 落地的延伸鏈
-2. 編號語意誤導：W5-009（ANA）與 W5-043~046（落地）編號相距大，看似無關
+2. 編號語意誤導：ANA 與其落地票的編號相距大，看似無關
 3. 概念混淆：把 ANA 結論的「落地責任」誤當「衍生副產品」
 
 ## 觸發案例
 
-**事件**（2026-04-18，0.18.0-W5-009）：
+**事件**（2026-04-18）：
 
-PM 完成 ANA Ticket 0.18.0-W5-009「檢討 PM 派發職責邊界」後，AC-4 要求「將結論落地為後續 IMP Ticket」。PM 執行：
+PM 完成 ANA Ticket「檢討 PM 派發職責邊界」後，AC-4 要求「將結論落地為後續 IMP Ticket」。PM 執行：
 
 ```bash
 ticket create --version 0.18.0 --wave 5 --action ... --type IMP ...
-# (4 次，建立 W5-043, W5-044, W5-045, W5-046)
+# (4 次，建立 4 張落地 IMP)
 ```
 
-並把這 4 個 ID 寫入 W5-009 的 `spawned_tickets` 欄位。
+並把這 4 個 ID 寫入該 ANA 的 `spawned_tickets` 欄位。
 
 用戶指出：「應建立為子任務而非兄弟任務」。
 
 ## 根本原因
 
 ### 表層原因
-PM 沒使用 `--parent 0.18.0-W5-009` 參數。
+PM 沒使用 `--parent <ANA-ID>` 參數。
 
 ### 深層原因
 1. **概念混淆**：把「執行獨立性」（4 個 IMP 可獨立執行）誤當「血緣獨立性」（4 個 IMP 與 ANA 無關）
@@ -61,9 +61,9 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 >
 > **框架終局佐證**：`field-semantics.md` L115——「ANA spawned 阻擋是 children 路徑收斂前的過渡補丁，hook 重構後 ANA 落地統一走 children 路徑，spawned 對 ANA 回到不阻擋設計」。即 spawned 終將只表達「真衍生副產品」，不表達 ANA 落地。
 
-> **盤點/規劃型 ANA 釐清（W8-025 Option A，2026-06-13）**：「交付物是計畫/盤點表」**不等於**「問題已解決」。盤點型 ANA（產出分類處置計畫，問題需後續清理才算解決）**仍是防護性 → 落地用 children，ANA 保持 in_progress 直到清理 children 完成**。
+> **盤點/規劃型 ANA 釐清（Option A，2026-06-13）**：「交付物是計畫/盤點表」**不等於**「問題已解決」。盤點型 ANA（產出分類處置計畫，問題需後續清理才算解決）**仍是防護性 → 落地用 children，ANA 保持 in_progress 直到清理 children 完成**。
 >
-> **反模式（本 session W8-009 實證）**：盤點 ANA 用 children 撞 acceptance-gate「子任務未完成不可 complete」後，**誤改用 `spawned_tickets + --yes-spawned` 強制完成**——這繞過了「只診斷不開藥」保護，且牴觸 L115。正確處置：盤點 ANA 維持 in_progress，等清理 children 完成才 complete（清理延後則 ANA 跨 round 開著，由 `stuck-anas` + session-start「Spawned 推進清單」追蹤，不強制本輪 complete）。
+> **反模式（某盤點 ANA 的實證）**：盤點 ANA 用 children 撞 acceptance-gate「子任務未完成不可 complete」後，**誤改用 `spawned_tickets + --yes-spawned` 強制完成**——這繞過了「只診斷不開藥」保護，且牴觸 L115。正確處置：盤點 ANA 維持 in_progress，等清理 children 完成才 complete（清理延後則 ANA 跨 round 開著，由 `stuck-anas` + session-start「Spawned 推進清單」追蹤，不強制本輪 complete）。
 >
 > **禁止**：用 `spawned + --yes-spawned` 表達 ANA 落地以繞過 acceptance-gate。
 
@@ -75,7 +75,7 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 > - 否，但發現於執行中（與當前 ticket 無因果）→ spawned_tickets（用 `--source-ticket`）
 > - 否，是獨立發現 / 規劃 → sibling
 >
-> **陷阱**：別把盤點 ANA 的清理當成「衍生副產品」（spawned）——清理是盤點結論的**執行延伸（落地）**，必為 children。spawned 只給「執行中意外發現、與當前 ticket 無因果」的工作（如 W8-013 審查中發現的 W8-015/016 新需求）。
+> **陷阱**：別把盤點 ANA 的清理當成「衍生副產品」（spawned）——清理是盤點結論的**執行延伸（落地）**，必為 children。spawned 只給「執行中意外發現、與當前 ticket 無因果」的工作（如某審查中發現的兩項新需求）。
 
 ## 案例：下游 blockedBy 指向 ANA 父票（children 的傳遞阻擋）
 
@@ -87,9 +87,9 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 
 ## 補救措施（觸發案例）
 
-1. 編輯 W5-009 frontmatter：`children: [W5-043, W5-044, W5-045, W5-046]`，`spawned_tickets: []`
-2. 編輯 W5-043~046 frontmatter：`parent_id: 0.18.0-W5-009`，`source_ticket: 0.18.0-W5-009`
-3. `ticket track tree 0.18.0-W5-009` 驗證血緣鏈顯示正確
+1. 編輯 ANA frontmatter：`children: [<IMP-ID-1>, <IMP-ID-2>, <IMP-ID-3>, <IMP-ID-4>]`，`spawned_tickets: []`
+2. 編輯 4 張 IMP frontmatter：`parent_id: <ANA-ID>`，`source_ticket: <ANA-ID>`
+3. `ticket track tree <ANA-ID>` 驗證血緣鏈顯示正確
 
 ## 預防措施
 
@@ -113,6 +113,6 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 ---
 
 **Last Updated**: 2026-06-13
-**Version**: 1.2.0 — W8-025 Option A 釐清（非改規則，補邊界）：盤點/規劃型 ANA「交付物是計畫」不等於「問題已解決」，仍是防護性 → children + 保持 in_progress 至清理完成；補反模式「禁用 spawned + --yes-spawned 表達 ANA 落地繞 gate」（本 session W8-009 實證）+ field-semantics L115 框架終局佐證。children 唯一路線不變
-**Version**: 1.1.0 — W17-120 多視角審查升格為 ANA 落地唯一權威，PC-073 對 ANA 衍生 IMP 的指引已併入 deprecated；範圍確立、引用 field-semantics.md SSOT
-**Version**: 1.0.0 — 2026-04-18 W5-009 觸發案例首發
+**Version**: 1.2.0 — Option A 釐清（非改規則，補邊界）：盤點/規劃型 ANA「交付物是計畫」不等於「問題已解決」，仍是防護性 → children + 保持 in_progress 至清理完成；補反模式「禁用 spawned + --yes-spawned 表達 ANA 落地繞 gate」（某盤點 ANA 的實證）+ field-semantics L115 框架終局佐證。children 唯一路線不變
+**Version**: 1.1.0 — 多視角審查升格為 ANA 落地唯一權威，PC-073 對 ANA 衍生 IMP 的指引已併入 deprecated；範圍確立、引用 field-semantics.md SSOT
+**Version**: 1.0.0 — 2026-04-18 觸發案例首發

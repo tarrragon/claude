@@ -5,6 +5,7 @@ Ticket lifecycle 操作模組
 """
 
 import argparse
+import logging
 import re
 import subprocess
 import sys
@@ -91,7 +92,7 @@ from ticket_system.lib.worklog_appender import (
 
 
 def _build_worklog_path_for_stage(version: str) -> str:
-    """W11-035：取得 worklog 絕對路徑供 git add 使用。
+    """取得 worklog 絕對路徑供 git add 使用。
 
     薄封裝 `_build_worklog_path`，回傳 str 並隔離測試替身（test 可 patch
     此 symbol 而不影響 worklog_appender 內部呼叫）。
@@ -111,7 +112,7 @@ from ticket_system.commands.claim_verification import (
 
 
 # ============================================================================
-# Source ANA 完成提示（W17-008.15 方案 D）
+# Source ANA 完成提示
 # ============================================================================
 
 def _print_source_ana_complete_hint(ticket: Dict[str, Any], version: str) -> None:
@@ -462,7 +463,7 @@ def _print_phase_prerequisite_warning(
 
 
 # ============================================================================
-# Body 同步輔助函式（W17-016.4）
+# Body 同步輔助函式
 # ============================================================================
 
 def sync_completion_body_fields(
@@ -593,8 +594,8 @@ class TicketLifecycle:
         6. 顯示認領檢查清單
 
         Args:
-            ticket_id: Ticket ID，例如 "0.31.0-W4-001"
-            as_agent: 認領時申報的執行身份（W2-018）。非空時寫入 who.current，
+            ticket_id: Ticket ID，例如 "<ticket-id>"
+            as_agent: 認領時申報的執行身份。非空時寫入 who.current，
                 使後續 ``complete --as <self>`` 對稱通過 identity-guard，無需
                 set-who 繞過。None / 空字串時維持現行為（不碰 who.current，
                 向後相容）。
@@ -602,8 +603,8 @@ class TicketLifecycle:
         Returns:
             0 表示成功，非 0 表示失敗
         """
-        # W14-044: file_lock 包圍 load → modify → save，消除 logical race
-        # （W14-005 同類型 pattern 重現實驗 lost rate 55.6%~71.9%）。
+        # file_lock 包圍 load → modify → save，消除 logical race
+        # （同類型 pattern 重現實驗 lost rate 55.6%~71.9%）。
         # Lock target 用 get_ticket_path 計算路徑（不依賴 load 後的 _path）。
         lock_target = Path(get_ticket_path(self.version, ticket_id))
         with file_lock(lock_target):
@@ -648,7 +649,7 @@ class TicketLifecycle:
             ticket["assigned"] = True
             ticket["started_at"] = datetime.now().isoformat(timespec="seconds")
 
-            # W2-018：申報執行身份時寫入 who.current（與 complete --as 對稱）
+            # 申報執行身份時寫入 who.current（與 complete --as 對稱）
             _apply_claim_identity(ticket, as_agent)
 
             # --acknowledge：兄弟結構警告的顯式確認，理由追加到票面（不改 claim 語意）
@@ -658,7 +659,7 @@ class TicketLifecycle:
                     + f"\n\n[claim acknowledge] {acknowledge.strip()}\n"
                 )
 
-            # W2-009：依 registry agent -> tdd_phases 對應自動推進 tdd_phase
+            # 依 registry agent -> tdd_phases 對應自動推進 tdd_phase
             _apply_auto_tdd_phase(ticket, as_agent)
 
             ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
@@ -691,11 +692,11 @@ class TicketLifecycle:
         - ``summary.status == 'has_failures'``（S3） → render + prompt。
           y → claim；n → return 1。
 
-        W4-019: 已移除 ``skip_verify`` 參數（W3-092 + W4-015 兩輪觀察期
+        已移除 ``skip_verify`` 參數（兩輪觀察期
         累計 24hr / 75 commits / 5 ticket cycles 驗證：外部依賴 = 0、
         runtime deprecation 觸發 = 0）。如需單獨執行驗證（不 claim）請改用
         ``ticket track verify <id>`` 子命令；如需跳過驗證直接 claim，
-        不傳 ``--verify`` 旗標即為預設行為（W3-046 後 claim 預設不驗證）。
+        不傳 ``--verify`` 旗標即為預設行為。
 
         Args:
             ticket_id: Ticket ID。
@@ -773,10 +774,10 @@ class TicketLifecycle:
         return 1
 
     def verify_only(self, ticket_id: str) -> int:
-        """W4-019：執行 AC verification 但不 claim（與 claim 解耦）。
+        """執行 AC verification 但不 claim（與 claim 解耦）。
 
         提供 ``ticket track verify <id>`` 子命令的後端實作。語意為「我只想
-        看 AC 驗證結果，不變更 ticket 狀態」，補足 W3-046 後 claim 預設
+        看 AC 驗證結果，不變更 ticket 狀態」，補足 claim 預設
         不驗證所造成的查詢缺口（PM 想巡檢 AC 漂移卻不想 claim）。
 
         Args:
@@ -840,17 +841,17 @@ class TicketLifecycle:
         2. 檢查狀態（已完成 → 友好訊息；未認領/被阻塞 → 阻止）
         3. 檢查驗收條件（有未完成項 → 列出並阻止）
         3.5. 執行日誌 soft check
-        3.6. ANA spawned 非 terminal blocking confirmation（W12-005 / PC-075 Phase 2）
+        3.6. ANA spawned 非 terminal blocking confirmation
         4. 執行完成操作
 
         Args:
-            ticket_id: Ticket ID，例如 "0.31.0-W4-001"
+            ticket_id: Ticket ID，例如 "<ticket-id>"
             yes_spawned: 非互動環境下旁路 ANA spawned 非 terminal 的 confirmation
 
         Returns:
             0 表示成功，2 表示 spawned 阻擋/取消，其他非 0 表示失敗
         """
-        # W14-044: file_lock 包圍 load → 驗證 → modify → save 全段，消除 logical race。
+        # file_lock 包圍 load → 驗證 → modify → save 全段，消除 logical race。
         # 互動 prompt（_handle_ana_spawned_confirmation）持鎖屬可接受設計（complete
         # 本身互斥；非互動環境鎖持有 < 1 秒）。Cascade 在 save 後（鎖外）執行，
         # 操作 children 不同檔，無巢狀風險。
@@ -876,7 +877,7 @@ class TicketLifecycle:
                 print(format_info(status_msg))
                 return 0
 
-            # W3-044: body-op precondition（status 必須 in_progress；force 旁路與既有 children-force 共用旗標）
+            # body-op precondition（status 必須 in_progress；force 旁路與既有 children-force 共用旗標）
             ok, error_msg = require_in_progress(
                 ticket,
                 ticket_id,
@@ -911,13 +912,13 @@ class TicketLifecycle:
                 print("   請完成所有驗收條件後再執行 complete")
                 return 1
 
-            # Step 3.5：type-aware body schema 驗證（W17-016.3 hard block + escape valve）
+            # Step 3.5：type-aware body schema 驗證（hard block + escape valve）
             # 對照 .claude/pm-rules/ticket-body-schema.md 各 type 必填章節；含佔位符則阻擋。
             body = ticket.get("_body", "")
             ticket_type = ticket.get("type", "")
             if body and not skip_body_check:
                 typed_passed, typed_unfilled = validate_execution_log_by_type(ticket_type, body)
-                # 0.4.1-W2-010：Layer 1 自檢子章節（`### 自檢結果`）warning 升 gate。
+                # Layer 1 自檢子章節（`### 自檢結果`）warning 升 gate。
                 # IMP/ANA 缺該子章節時併入同一阻擋輸出；DOC 沿用免填規則（函式內
                 # 已對非 IMP/ANA type 直接放行，見 validate_self_check_subsection）。
                 self_check_passed, self_check_label = validate_self_check_subsection(
@@ -973,14 +974,14 @@ class TicketLifecycle:
                     print("   --skip-body-check 已啟用，強制完成；請於 Completion Info 記錄理由")
                     print()
 
-            # Step 3.6：ANA spawned 非 terminal blocking confirmation（W12-005 / PC-075 Phase 2）
+            # Step 3.6：ANA spawned 非 terminal blocking confirmation
             spawned_exit = _handle_ana_spawned_confirmation(ticket, self.version, yes_spawned)
             if spawned_exit is not None:
                 return spawned_exit
 
-            # Step 3.7：pending children blocking（W11-003.2）
+            # Step 3.7：pending children blocking
             # 父 ticket 含未完成（非 terminal）children 時阻擋 complete；--force 旁路（警告但成功）。
-            # W5-019 cascade 解鎖在通過此 step 後（含 --force 路徑）仍會執行。
+            # cascade 解鎖在通過此 step 後（含 --force 路徑）仍會執行。
             children_exit = _handle_pending_children_block(ticket, self.version, force)
             if children_exit is not None:
                 return children_exit
@@ -990,7 +991,7 @@ class TicketLifecycle:
             ticket["completed_at"] = datetime.now().isoformat(timespec="seconds")
             _advance_tdd_phase_on_complete(ticket)
 
-            # W17-016.4：同步 completed_at / Executing Agent 寫回 body
+            # 同步 completed_at / Executing Agent 寫回 body
             existing_body = ticket.get("_body", "")
             if existing_body:
                 who = ticket.get("who") or {}
@@ -1003,7 +1004,7 @@ class TicketLifecycle:
                     overwrite_agent=bool(history_agent),
                     review_status=_judge_review_status(ticket),
                 )
-                # W11-003.3 Layer 2：complete 寫回 body 前 idempotent dedupe Schema H2
+                # Layer 2：complete 寫回 body 前 idempotent dedupe Schema H2
                 try:
                     from ticket_system.lib.ticket_builder import dedupe_schema_sections
                     new_body = dedupe_schema_sections(new_body)
@@ -1022,7 +1023,7 @@ class TicketLifecycle:
         # Ticket 轉終態時同步清除其 dispatch-active 條目（fail-open，見函式 docstring）
         _clear_dispatch_for_completed_ticket(ticket_id)
 
-        # W5-014.2: self-verify — 讀回真實 status 附在 stdout（opinionated-default）
+        # self-verify — 讀回真實 status 附在 stdout（opinionated-default）
         verified_ticket = load_ticket(self.version, ticket_id)
         if verified_ticket:
             v_status = verified_ticket.get("status", "unknown")
@@ -1054,14 +1055,14 @@ class TicketLifecycle:
         )
 
         # 任務鏈後續步驟建議
-        # W11-002.1：頂層統一載入 all_tickets，建立 ticket_map 一次後下傳
+        # 頂層統一載入 all_tickets，建立 ticket_map 一次後下傳
         # 給 _analyze_next_steps 與 _post_complete_cascade，消除 cascade 內重複 I/O
         all_tickets = list_tickets(self.version)
         ticket_map: Dict[str, Any] = {t.get("id"): t for t in all_tickets}
         analysis = _analyze_next_steps(ticket, all_tickets)
         _print_next_steps(analysis)
 
-        # W5-019：父 complete → 子 cascade 解鎖 + 未完成 children 警告
+        # 父 complete → 子 cascade 解鎖 + 未完成 children 警告
         # 置於 _auto_handoff_if_needed 之前，讓解鎖後的子狀態可影響 handoff 建議
         # 被解鎖且 save 成功的票檔路徑（可跨版本）經 unblocked_paths 帶回，
         # 併入下方 post-completion commit：解鎖寫入屬 complete 的連帶寫入，
@@ -1071,13 +1072,13 @@ class TicketLifecycle:
             ticket, self.version, ticket_map, saved_paths=unblocked_paths
         )
 
-        # W1-082：children cascade 之外，反向掃描 blockedBy 引用者解鎖非 children
-        # 關係的兄弟 Ticket（W1-081 根因修復）。
+        # children cascade 之外，反向掃描 blockedBy 引用者解鎖非 children
+        # 關係的兄弟 Ticket。
         _reverse_unblock_blockedby(
             ticket_id, self.version, ticket_map, saved_paths=unblocked_paths
         )
 
-        # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
+        # 方案 D：IMP complete 後檢查 source ANA 是否可 complete
         _print_source_ana_complete_hint(ticket, self.version)
 
         # where.files 重疊 pending 票提示：純提示不阻擋，判定交由收尾者
@@ -1123,19 +1124,19 @@ class TicketLifecycle:
         """
         釋放 Ticket - 將進行中的 Ticket 退回等待態。
 
-        W3-082：目標狀態依 blockedBy 決定，取代先前一律設為 blocked 的語意缺口。
+        目標狀態依 blockedBy 決定，取代先前一律設為 blocked 的語意缺口。
         - blockedBy 為空（trigger ticket、主動讓出的 ready ticket）→ 退回 pending 休眠態。
         - blockedBy 非空（確實被其他 ticket 擋著）→ 設為 blocked。
         blocked 語意是「被其他 ticket 擋著」；無 blocker 卻設 blocked 會讓 dashboard
         與後續接手者誤判該 ticket 有依賴未解。
 
         Args:
-            ticket_id: Ticket ID，例如 "0.31.0-W4-001"
+            ticket_id: Ticket ID，例如 "<ticket-id>"
 
         Returns:
             0 表示成功，非 0 表示失敗
         """
-        # W14-044: file_lock 包圍 load → modify → save
+        # file_lock 包圍 load → modify → save
         lock_target = Path(get_ticket_path(self.version, ticket_id))
         with file_lock(lock_target):
             ticket, error = load_and_validate_ticket(self.version, ticket_id)
@@ -1161,7 +1162,7 @@ class TicketLifecycle:
                 )
                 return 1
 
-            # W3-082：依 blockedBy 是否為空決定目標狀態（沿用同檔 blockedBy 慣例）
+            # 依 blockedBy 是否為空決定目標狀態（沿用同檔 blockedBy 慣例）
             blocked_by = ticket.get("blockedBy") or []
             target_status = STATUS_BLOCKED if blocked_by else STATUS_PENDING
 
@@ -1173,7 +1174,7 @@ class TicketLifecycle:
             ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
             save_ticket(ticket, ticket_path)
 
-        # 狀態顯示名集中於 STATUS_LABELS（禁散落字面，W3-082）
+        # 狀態顯示名集中於 STATUS_LABELS（禁散落字面）
         status_label = STATUS_LABELS.get(target_status, target_status)
         print(format_info(InfoMessages.TICKET_RELEASED, ticket_id=ticket_id))
         print(f"   狀態: {status_label}")
@@ -1257,7 +1258,7 @@ class TicketLifecycle:
         - complete：自己做完（需 who + acceptance 全勾）
         - close：被其他 Ticket 解決（需 resolved_by）
 
-        W15-027 / PC-090：reason_code 必填且須為 CLOSE_REASONS 枚舉之一。
+        / PC-090：reason_code 必填且須為 CLOSE_REASONS 枚舉之一。
         retrospective=True 時允許填 'unknown'（C4 回顧式 close 補填場景）。
 
         Args:
@@ -1287,7 +1288,7 @@ class TicketLifecycle:
             return 1
 
         # Step 0.5：驗證 resolved_by / reason_note 依 reason_code 分歧的合法性
-        # （0.3.6-W1-006 正規化規則定案 / PC-MON-002：必填欄位缺值驗證）
+        # （正規化規則 / PC-MON-002：必填欄位缺值驗證）
         error_msg = self._validate_close_resolution(
             resolved_by=resolved_by,
             reason_code=reason_code,
@@ -1298,7 +1299,7 @@ class TicketLifecycle:
             print(error_msg)
             return 1
 
-        # W14-044: file_lock 包圍 load → modify → save
+        # file_lock 包圍 load → modify → save
         lock_target = Path(get_ticket_path(self.version, ticket_id))
         with file_lock(lock_target):
             # Step 1：載入 Ticket
@@ -1614,7 +1615,7 @@ def _print_claim_checklist(ticket: Dict[str, Any]) -> None:
     print("開始前請確認:")
     print(LifecycleMessages.CHECKLIST_DESIGN_DOCS)
     print(LifecycleMessages.CHECKLIST_ACCEPTANCE)
-    # Context 驗證（W12-009：所有 Ticket 類型適用）
+    # Context 驗證
     print(LifecycleMessages.CHECKLIST_TARGET_EXISTS)
     print(LifecycleMessages.CHECKLIST_ASSUMPTIONS_VALID)
     print(LifecycleMessages.CHECKLIST_CROSS_PROJECT)
@@ -1630,16 +1631,117 @@ def _print_claim_checklist(ticket: Dict[str, Any]) -> None:
     print(LifecycleMessages.CHECKLIST_EXECUTION_LOG)
     print()
 
-    # 附加簡化 WRAP 三問提示（Ticket 0.18.0-W10-028，來源 W10-027）
+    # 2026-11-13：動手前就列出相關 error-pattern，不等到 complete 才比對
+    _print_error_pattern_candidates(ticket)
+
+    # 附加簡化 WRAP 三問提示
     _print_claim_wrap_prompt(ticket_type, ticket)
+
+
+# claim 時 error-pattern 候選的列出上限，與 acceptance-gate 的
+# ERROR_PATTERN_CONFLICT_DISPLAY_LIMIT 取同值，兩端看到的前段清單一致
+CLAIM_ERROR_PATTERN_CANDIDATE_LIMIT = 10
+_CLAIM_EP_LOG_FILENAME = "claim-error-pattern-candidates.log"
+_CLAIM_EP_LOGGER_NAME = "ticket.claim.error_pattern_candidates"
+
+
+def _print_error_pattern_candidates(ticket: Dict[str, Any]) -> None:
+    """claim 成功後列出與 where.files 相關的 error-pattern 候選（2026-11-13 新增）。
+
+    比對沿用 complete 閘門（acceptance-gate Step 2.7）的同一函式，排序與豁免
+    型別（DOC/ANA/REF）一致；where.files 為空或豁免型別時該函式回傳空清單，
+    本函式不輸出任何內容。比對失敗不影響 claim（狀態已在呼叫前落盤）：
+    失敗原因寫 stderr 並寫入 hook-logs 日誌後返回。
+    """
+    logger = _claim_candidate_logger()
+    try:
+        candidates = _find_error_pattern_candidates(ticket, logger)
+    except Exception as e:  # noqa: BLE001 — 任何比對失敗都不可中斷 claim
+        message = (
+            f"[error-pattern 候選] 比對失敗，略過候選清單（claim 不受影響）："
+            f"{type(e).__name__}: {e}"
+        )
+        sys.stderr.write(message + "\n")
+        logger.error(f"{ticket.get('id', '?')} {message}")
+        return
+    finally:
+        for handler in logger.handlers:
+            handler.close()
+
+    if not candidates:
+        return
+
+    shown = candidates[:CLAIM_ERROR_PATTERN_CANDIDATE_LIMIT]
+    print(
+        f"[error-pattern 候選] 與 {len(candidates)} 個 error-pattern 相關，"
+        f"依相關度列出前 {len(shown)} 個（動手前先讀，complete 時閘門會再比對一次）:"
+    )
+    for path in shown:
+        print(f"   - {path}")
+    print()
+
+
+def _find_error_pattern_candidates(
+    ticket: Dict[str, Any], logger: logging.Logger
+) -> List[str]:
+    """以 acceptance_checkers 的比對函式取得已排序的候選路徑清單。
+
+    比對函式的模組取自本檔所在的 .claude/（與 _resolve_framework_path_checker
+    相同的上溯方式），error-patterns 目錄取自專案根目錄。
+    """
+    claude_dir = Path(__file__).resolve().parents[4]
+    for import_root in (claude_dir, claude_dir / "hooks"):
+        if str(import_root) not in sys.path:
+            sys.path.insert(0, str(import_root))
+    from acceptance_checkers.error_pattern_checker import (  # noqa: WPS433
+        check_error_pattern_conflicts,
+    )
+    return check_error_pattern_conflicts(ticket, get_project_root(), logger)
+
+
+def _hook_logs_root() -> Path:
+    """hook-logs 根目錄：優先經 hook_logging.get_hook_log_dir（linked worktree 內為主 repo）。
+
+    載不到 .claude/lib 時改用 get_ticket_state_root()（同為共用狀態根），
+    因 ticket CLI 可能在無 .claude/lib 的環境執行。
+    """
+    mod = load_claude_lib("hook_logging")
+    if mod is not None:
+        return mod.get_hook_log_dir("")
+    return get_ticket_state_root() / ".claude" / "hook-logs"
+
+
+def _claim_candidate_logger() -> logging.Logger:
+    """候選比對的日誌：寫入 .claude/hook-logs/，日誌目錄不可寫時只留 stderr。
+
+    每次呼叫建立未註冊於全域 logging manager 的獨立 logger，handler 由呼叫端
+    用畢關閉；不沿用具名 logger，避免 handler 綁在第一次解析到的專案根上。
+    """
+    logger = logging.Logger(_CLAIM_EP_LOGGER_NAME)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    try:
+        log_dir = _hook_logs_root()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handler: logging.Handler = logging.FileHandler(
+            log_dir / _CLAIM_EP_LOG_FILENAME, encoding="utf-8", delay=True
+        )
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        )
+    except OSError as e:
+        sys.stderr.write(f"[error-pattern 候選] 日誌檔無法開啟，改寫 stderr：{e}\n")
+        handler = logging.StreamHandler(sys.stderr)
+    logger.addHandler(handler)
+    return logger
 
 
 def _has_framework_path(ticket: Dict[str, Any]) -> bool:
     """檢查 ticket where.files 是否任一路徑命中 framework 路徑前綴。
 
-    [Ticket 0.18.0-W17-127.2] 改用 .claude/lib/framework_paths 為唯一 SSOT，
+    改用 .claude/lib/framework_paths 為唯一 SSOT，
     移除原 _FRAMEWORK_PATH_PREFIXES inline 清單（避免 SSOT 漂移）。
-    [Ticket 0.18.0-W17-132] 改用 is_framework_path_broad（strict + .claude/hooks/）：
+    改用 is_framework_path_broad（strict + .claude/hooks/）：
     hook 內警告訊息屬規範性產物，編輯時亦應觸發 S 問提示讀 SKILL。
     若 lib 不可用（隔離測試環境）則 fallback 至既有前綴清單以維持向後相容。
     """
@@ -1678,7 +1780,7 @@ def _resolve_framework_path_checker():
 
 # Fallback 前綴清單（與 .claude/config/framework-paths.yaml 的 framework_paths_broad 對齊）
 # 僅在 lib.framework_paths 不可用時使用；正常路徑由 lib SSOT 負責。
-# [Ticket 0.18.0-W17-132] 加入 .claude/hooks/ 對齊 broad 範圍。
+# 加入 .claude/hooks/ 對齊 broad 範圍。
 _FALLBACK_FRAMEWORK_PREFIXES = (
     ".claude/rules/",
     ".claude/pm-rules/",
@@ -1707,7 +1809,7 @@ def _print_claim_wrap_prompt(
 
     所有 ticket 類型共用三問區段；ANA 類型額外附加完整 /wrap-decision 提示。
     type=IMP 且 where.files 含 framework 路徑時額外附加 S 問（SKILL trigger）。
-    來源：Ticket 0.18.0-W10-027（ANA 分析結論）、0.18.0-W17-125（S 問擴增）。
+    來源：ANA 分析結論與 S 問擴增。
 
     Args:
         ticket_type: Ticket 類型（IMP/ANA/DOC 等），用於條件式輸出與文案格式化
@@ -1727,7 +1829,7 @@ def _print_claim_wrap_prompt(
     print()
 
     # S 問（SKILL trigger）：type=IMP 且涉及 framework 路徑
-    # [Ticket 0.18.0-W17-125] 來源 W17-122 Solution Layer B
+    # 來源：ANA Solution Layer B
     if ticket_type == "IMP" and ticket is not None and _has_framework_path(ticket):
         print(ClaimWrapMessages.WRAP_SKILL_TRIGGER)
         print()
@@ -1741,7 +1843,7 @@ def _print_claim_wrap_prompt(
 
 
 # ============================================================================
-# W5-019：父子 cascade 解鎖 + children 警告
+# 父子 cascade 解鎖 + children 警告
 # ============================================================================
 
 
@@ -1767,11 +1869,11 @@ def _can_cascade_unblock(
 
 
 # ============================================================================
-# ANA spawned 非 terminal 檢查（W12-005 / PC-075 Phase 2 — 方案 K）
+# ANA spawned 非 terminal 檢查
 # ============================================================================
 
 # Terminal 狀態由 ticket_system/lib/constants.TERMINAL_STATUSES 統一提供，
-# 與 .claude/hooks/acceptance_checkers/children_checker 的檢查同源（W14-004）。
+# 與 .claude/hooks/acceptance_checkers/children_checker 的檢查同源。
 
 
 def _find_non_terminal_by_id(
@@ -2025,7 +2127,7 @@ def _collect_pending_children(
 def _handle_pending_children_block(
     ticket: Dict[str, Any], version: str, force: bool
 ) -> Optional[int]:
-    """檢查 ticket 的 children 狀態，必要時阻擋 complete（W11-003.2）。
+    """檢查 ticket 的 children 狀態，必要時阻擋 complete。
 
     流程：
       1. children 空 → 跳過（返回 None）
@@ -2238,8 +2340,8 @@ def _post_complete_cascade(
     """
     complete() 後處理：cascade 解鎖子 Ticket + 印出解鎖/警告訊息。
 
-    W11-002.1 從 complete() 抽出，讓 complete() 主體只做編排。
-    W11-035：回傳 unblocked 清單供呼叫端顯示或未來擴充（先前無回傳）。
+    從 complete() 抽出，讓 complete() 主體只做編排。
+    回傳 unblocked 清單供呼叫端顯示或未來擴充（先前無回傳）。
     被解鎖且 save 成功的票檔路徑經 ``saved_paths`` 帶回，由呼叫端併入提交範圍。
     若 parent 無 children，回傳空 list。
 
@@ -2344,7 +2446,7 @@ def _cascade_unblock_children(
     """
     對 parent 的 blocked children 執行 cascade 解鎖，並收集未完成 children 清單。
 
-    W11-002.2 重構：classify → dispatch → collect 三步資料流。
+    重構：classify → dispatch → collect 三步資料流。
     - classify：純函式 ``_classify_child`` 決策每個 child 的 ``ChildOutcome``
     - dispatch：對 unblock 類別嘗試 save_ticket；成功歸入 unblocked，失敗歸入 save_failed
     - collect：unblocked 清單回傳；blocked_pending / in_progress_warning / save_failed
@@ -2359,7 +2461,7 @@ def _cascade_unblock_children(
     - children 中找不到（資料不一致） → 跳過
     - save 失敗（§6.7） → non-fail-fast，列入警告（不再隱藏）
 
-    呼叫契約（W11-002.5 / ANA W5-022）：
+    呼叫契約：
     - **caller 必須在呼叫前已將 parent 落盤為 completed**：cascade 透過
       ``_can_cascade_unblock`` → ``is_fully_unblocked`` 檢查 child.blockedBy
       中每個 blocker（含 parent）的 status；若 parent 尚未 save，fallback 路徑
@@ -2476,8 +2578,8 @@ def _reverse_unblock_blockedby(
     """
     complete() 後反向掃描 blockedBy 引用者，解鎖非 children 關係的兄弟 Ticket。
 
-    W1-082：`_post_complete_cascade` 只走 children 路徑，遺漏 blockedBy 引用
-    已完成 Ticket、但未登記為 children 的兄弟 Ticket（W1-081 根因）。本函式
+    `_post_complete_cascade` 只走 children 路徑，遺漏 blockedBy 引用
+    已完成 Ticket、但未登記為 children 的兄弟 Ticket。本函式
     獨立於 children 關係，全量掃描 ticket_map 找出 status=blocked 且
     blockedBy 含 completed_ticket_id 的 Ticket，通過 is_fully_unblocked 檢查
     （AND 語義，closed 亦視為已解除）後解鎖為 pending。
@@ -2536,7 +2638,7 @@ def _reverse_unblock_blockedby(
 
 
 def _print_blockedby_unblocked(unblocked: List[Dict[str, Any]]) -> None:
-    """印出 blockedBy 反向掃描解鎖訊息（W1-082）。"""
+    """印出 blockedBy 反向掃描解鎖訊息。"""
     print()
     print(LifecycleMessages.BLOCKEDBY_UNBLOCKED_HEADER)
     for item in unblocked:
@@ -2578,7 +2680,7 @@ def _print_children_warnings(pending: List[Dict[str, Any]]) -> None:
 # ============================================================================
 
 def _apply_claim_identity(ticket: Dict[str, Any], as_agent: Optional[str]) -> None:
-    """W2-018：認領時將申報身份寫入 ticket who.current。
+    """認領時將申報身份寫入 ticket who.current。
 
     as_agent 為 None / 空字串時不做任何事（維持現行為，向後相容）。
     防禦 who 可能為 legacy string 格式（v0.16/v0.17 早期）或缺失：
@@ -2654,7 +2756,7 @@ def reassign_who_from_pm_if_takeover(
 
 
 def _apply_auto_tdd_phase(ticket: Dict[str, Any], as_agent: Optional[str]) -> None:
-    """W2-009：claim --as 時依 registry agent -> tdd_phases 對應自動推進 tdd_phase。
+    """claim --as 時依 registry agent -> tdd_phases 對應自動推進 tdd_phase。
 
     `ticket track phase` 手動設定過（tdd_phase_source == "manual"）時不覆蓋，
     保留手動意圖。agent 在 registry 無 tdd_phases 對應、或無法判斷「最早未完成
@@ -2706,7 +2808,7 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
     PROP-010 方案 4：claim 前若 Ticket 建立已超過 INFO 閾值（7 天），
     輸出 stale 提示供 PM 重新評估。
 
-    W4-019: 已移除 ``--skip-verify`` 旗標（W3-092 + W4-015 兩輪觀察期累計
+    已移除 ``--skip-verify`` 旗標（兩輪觀察期累計
     24hr / 75 commits / 5 ticket cycles 驗證：外部依賴 = 0、runtime
     deprecation 觸發 = 0）。需單獨驗證請改用 ``ticket track verify <id>``。
     """
@@ -2734,12 +2836,12 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
     lifecycle = TicketLifecycle(version)
     auto_yes = bool(getattr(args, "yes", False))
     verify_opt_in = bool(getattr(args, "verify", False))
-    as_agent = getattr(args, "as_agent", None)  # W2-018
+    as_agent = getattr(args, "as_agent", None)
 
-    # W3-046 (Strategy B): 預設不執行 AC verification，避免 claim 觸發 npm test
+    # (Strategy B): 預設不執行 AC verification，避免 claim 觸發 npm test
     # 全套件造成同 wave 並行 claim 衝突（PC-078 根本解）。--verify 旗標明示啟用
     # 才走 claim_with_verification（保留除錯場景）。
-    # W4-019: --skip-verify 旗標已移除（兩輪觀察期 trigger 達成）；單獨驗證
+    # --skip-verify 旗標已移除（兩輪觀察期 trigger 達成）；單獨驗證
     # 請改用 ticket track verify 子命令（與 claim 解耦）。
     if verify_opt_in:
         acknowledge = getattr(args, "acknowledge", None)
@@ -2752,7 +2854,7 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
         ack_kw = {"acknowledge": acknowledge} if acknowledge else {}
         rc = lifecycle.claim(args.ticket_id, as_agent=as_agent, **ack_kw)
 
-    # W17-002.2：claim 成功後自動抽取 Context Bundle（異常降級；idempotent merge 自然防止重複）
+    # claim 成功後自動抽取 Context Bundle（異常降級；idempotent merge 自然防止重複）
     if rc == 0:
         _auto_extract_context_bundle_post_claim(
             version,
@@ -2773,7 +2875,7 @@ def _auto_extract_context_bundle_post_claim(
     verbose: bool = False,
     json_output: bool = False,
 ) -> None:
-    """Claim 後的 Context Bundle 自動抽取 wire-in（W17-002.2）。
+    """Claim 後的 Context Bundle 自動抽取 wire-in。
 
     觸發條件：target ticket 具 source_ticket / blocked_by / related_to 其一。
     冪等性：依賴 `merge_auto_extracted_block` 的 sources 主鍵冪等保證，
@@ -2818,7 +2920,7 @@ def execute_complete(args: argparse.Namespace, version: str) -> int:
 
     使用 TicketLifecycle 物件執行實際操作。
 
-    W12-005：新增 --yes-spawned flag 傳遞（ANA spawned 非 terminal 非互動旁路）。
+    新增 --yes-spawned flag 傳遞（ANA spawned 非 terminal 非互動旁路）。
     """
     lifecycle = TicketLifecycle(version)
     yes_spawned = bool(getattr(args, "yes_spawned", False))

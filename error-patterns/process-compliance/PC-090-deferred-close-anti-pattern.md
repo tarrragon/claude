@@ -28,33 +28,33 @@ PM 在 ticket 尚未完成目標的情況下，以「暫緩」「等 data」「�
 
 ### 四層動機分析
 
-W15-024 ANA 透過 WRAP Reality Test 識別推延性 close 的深層動機：
+該 ANA 透過 WRAP Reality Test 識別推延性 close 的深層動機：
 
 | 動機類型 | 表面說法 | 深層動機 |
 |---------|---------|---------|
 | A 成本迴避 | 「E2 實驗 40 session 成本高」 | 想省推理 token / 估算成本後迴避 |
 | B 閘門混淆（主因） | 「E3 > 0.3 未觸發，任務已完成」 | 把「ANA 成本閘門未達」當「目標完成」 |
 | C 決策疲勞 | 「W15 已有 11 個 ticket 收尾」 | 想快速結束 session，誤判收狀時機 |
-| D 責任轉移錯誤 | 「W15-016 已處理此事」 | 誤把 follow-up 建立標記當本 ticket 完成 |
+| D 責任轉移錯誤 | 「另一張 follow-up 票已處理此事」 | 誤把 follow-up 建立標記當本 ticket 完成 |
 
 **真根因**：動機 B（閘門混淆）為主，A 和 C 加乘。閘門未達只代表「本 ticket 定義的條件未發生」，不代表「目標已達成或任務不再需要」。
 
 ---
 
-## W15-015 案例對照
+## 條件型 ticket 案例對照
 
 ### 案例背景
 
-W15-015 是一個條件型 ticket，設計為「E3 實驗結果 > 0.3 才投入 E2 深度實驗」。
+該案例是一個條件型 ticket，設計為「E3 實驗結果 > 0.3 才投入 E2 深度實驗」。
 
 ### 事件序列
 
 | 時間點 | 事件 | 問題 |
 |--------|------|------|
 | W15 末期 | E3 結果 < 0.3，閘門未觸發 | 正常，非問題 |
-| session 準備收尾 | PM 提議：「閘門未達，W15-015 可以 close」 | 把閘門未觸發等同於目標達成 |
+| session 準備收尾 | PM 提議：「閘門未達，這張可以 close」 | 把閘門未觸發等同於目標達成 |
 | 用戶指正 | ticket 只能做或收狀，「等之後判斷」不是合法 close | PM 動機為推延性 close 反模式 |
-| 校正後 | W15-015 重新設計為 find_files 子實驗，不 close | 閘門未達 → 應 rescope 或 migrate，不是 close |
+| 校正後 | 該 ticket 重新設計為 find_files 子實驗，不 close | 閘門未達 → 應 rescope 或 migrate，不是 close |
 
 ### 正確處理路徑
 
@@ -158,10 +158,7 @@ PM 出現以下思路時，應立即停止並重新評估：
 ## 相關資源
 
 - `.claude/error-patterns/process-compliance/PC-090-deferred-close-anti-pattern.md`（本檔）
-- `.claude/pm-rules/ticket-lifecycle.md` — close 條件規則 C1-C4 落地位置（W15-025 IMP）
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W15-024.md` — 原始 ANA WRAP 分析
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W15-025.md` — ticket-lifecycle.md 規則落地
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W15-026.md` — 本 error-pattern 建立任務
+- `.claude/pm-rules/ticket-lifecycle.md` — close 條件規則 C1-C4 落地位置
 
 ---
 
@@ -172,4 +169,4 @@ PM 出現以下思路時，應立即停止並重新評估：
 ---
 
 **Last Updated**: 2026-04-18
-**Version**: 1.0.0 — 初建，從 W15-024 ANA WRAP 分析轉化（W15-026 DOC）
+**Version**: 1.0.0 — 初建，從 ANA WRAP 分析轉化

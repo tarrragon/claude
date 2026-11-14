@@ -72,19 +72,20 @@ def test_complete_gitignore_passes(tmp_path):
 # ---------------------------------------------------------------------------
 def test_missing_entry_warns(tmp_path):
     hook = load_hook_module()
-    # 故意缺 .claude/pm-status.json
-    entries = sorted(hook.REQUIRED_GITIGNORE_ENTRIES - {".claude/pm-status.json"})
+    # 故意缺 pm-status.json 的必要條目（巢狀形式 .claude/**/pm-status.json）
+    entry = ".claude/**/pm-status.json"
+    entries = sorted(hook.REQUIRED_GITIGNORE_ENTRIES - {entry})
     _make_gitignore(tmp_path, "\n".join(entries) + "\n")
     with patch.object(hook.subprocess, "run", return_value=_mk_ls_files("")):
         missing, tracked, exists = hook.run_checks(tmp_path, MagicMock())
     assert exists is True
-    assert ".claude/pm-status.json" in missing
+    assert entry in missing
     assert tracked == []
     output = hook.build_hook_output(missing, tracked, exists)
     assert "suppressOutput" in output
     assert output["suppressOutput"] is False
     ctx = output["hookSpecificOutput"]["additionalContext"]
-    assert ".claude/pm-status.json" in ctx
+    assert entry in ctx
     assert "WARNING" in ctx
 
 
@@ -190,7 +191,11 @@ def test_required_derived_from_manifest_sot():
     hook = load_hook_module()
     import sys
     sys.path.insert(0, str(HOOK_PATH.parent.parent / "lib"))
-    from sync_exclude_manifest import GITIGNORE_EXPECTED, NESTED_LOCAL_ONLY_NAMES
+    from sync_exclude_manifest import (
+        GITIGNORE_EXPECTED,
+        GITIGNORE_EXTRA_ENTRIES,
+        NESTED_LOCAL_ONLY_NAMES,
+    )
 
     def entry(n):
         return f".claude/**/{n}" if n in NESTED_LOCAL_ONLY_NAMES else f".claude/{n}"
@@ -200,10 +205,51 @@ def test_required_derived_from_manifest_sot():
         assert entry(name) in hook.REQUIRED_GITIGNORE_ENTRIES, (
             f"manifest 名稱 {name} 未被 derive 進 REQUIRED（雙 SOT 漂移）"
         )
-    # 反向：REQUIRED 中 .claude/ 範疇者必源自 manifest（coverage/ 等非 .claude extra 除外）
+    # 反向：REQUIRED 除 lib 明列的 GITIGNORE_EXTRA_ENTRIES 外，全部源自 manifest
     manifest_derived = {entry(n) for n in GITIGNORE_EXPECTED}
-    claude_scoped = {e for e in hook.REQUIRED_GITIGNORE_ENTRIES if e.startswith(".claude/")}
-    assert claude_scoped == manifest_derived
+    assert hook.REQUIRED_GITIGNORE_ENTRIES - GITIGNORE_EXTRA_ENTRIES == manifest_derived
+
+
+# ---------------------------------------------------------------------------
+# onboard 同源：REQUIRED 即 lib 的 required_gitignore_entries()（project-init onboard 讀同一函式）
+# ---------------------------------------------------------------------------
+def test_required_is_shared_lib_function():
+    import sys
+    hook = load_hook_module()
+    sys.path.insert(0, str(HOOK_PATH.parent.parent / "lib"))
+    from sync_exclude_manifest import required_gitignore_entries
+
+    assert hook.REQUIRED_GITIGNORE_ENTRIES == required_gitignore_entries()
+
+
+def test_missing_local_only_entry_reported_and_user_visible():
+    """正向對照：缺 settings.local.json 條目時報缺，且 systemMessage 列出該條目."""
+    import logging
+    hook = load_hook_module()
+    target = ".claude/**/settings.local.json"
+    entries = set(hook.REQUIRED_GITIGNORE_ENTRIES) - {target}
+
+    missing = hook.check_missing_entries(entries, logging.getLogger("t"))
+    output = hook.build_hook_output(missing, [], True)
+
+    assert missing == [target]
+    assert target in output["systemMessage"]
+    assert target in output["hookSpecificOutput"]["additionalContext"]
+
+
+def test_user_message_lists_tracked_and_missing_gitignore():
+    hook = load_hook_module()
+    output = hook.build_hook_output([".claude/logs"], [".claude/pm-status.json"], False)
+
+    message = output["systemMessage"]
+    assert "沒有 .gitignore" in message
+    assert ".claude/logs" in message
+    assert ".claude/pm-status.json" in message
+
+
+def test_clean_result_has_no_user_message():
+    hook = load_hook_module()
+    assert "systemMessage" not in hook.build_hook_output([], [], True)
 
 
 # ---------------------------------------------------------------------------

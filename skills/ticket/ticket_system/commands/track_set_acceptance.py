@@ -235,8 +235,8 @@ def _apply_remove(
 
 def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
     """執行 set-acceptance 命令。"""
-    # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
-    # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因
+    # --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
+    # 傳入 command 名稱，使 telemetry 可做 per-command 歸因
     from ticket_system.lib.identity_guard import check_identity
     deny = check_identity(
         version,
@@ -252,14 +252,14 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.INVALID_OPERATION, operation=err) if hasattr(ErrorMessages, "INVALID_OPERATION") else f"[ERROR] {err}")
         return 1
 
-    # W14-045: file_lock 包圍 load → modify → save，消除 logical race
+    # file_lock 包圍 load → modify → save，消除 logical race
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         ticket, load_err = load_and_validate_ticket(version, args.ticket_id)
         if load_err:
             return 1
 
-        # W3-044: body-op precondition（set-acceptance 不允許 completed）。
+        # body-op precondition（set-acceptance 不允許 completed）。
         # allow_pending=True：acceptance 清單修改分建票期（PM bookkeeping，
         # status=pending）與執行期（agent 認領後勾選，status=in_progress）
         # 兩階段，前者屬例行修訂不應強制 --force。
@@ -328,10 +328,10 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         save_ticket(ticket, ticket_path)
 
-        # 0.2.1-W3-258: 寫入後 auto-commit ticket md，與 append-log 同保護等級
-        # （path-limited + graceful degrade）。W7-001 根因解：body 停留於未
+        # 寫入後 auto-commit ticket md，與 append-log 同保護等級
+        # （path-limited + graceful degrade）。根因解：body 停留於未
         # commit 的 working tree 時，git worktree remove --force 會靜默丟棄
-        # 變更（0.2.1-W3-256 實驗證實 exit 0 無警告）；set-acceptance 是代理人
+        # 變更；set-acceptance 是代理人
         # 收尾唯一必經的 frontmatter 寫入命令，risk 集中於此。auto-commit 置於
         # file_lock 內（與 append-log 的 _execute_append_log_locked 一致設計），
         # 確保 lock 釋放前 commit 已完成或已 graceful degrade，避免並發窗口。

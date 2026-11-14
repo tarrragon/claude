@@ -75,7 +75,7 @@ def get_ticket_what(ticket: Dict[str, Any]) -> str:
         >>> ticket = {"action": "建立", "target": "Ticket 系統"}
         >>> get_ticket_what(ticket)
         '建立 Ticket 系統'
-        >>> ticket = {"title": "系統重構", "id": "0.31.0-W4-001"}
+        >>> ticket = {"title": "系統重構", "id": "<ticket-id>"}
         >>> get_ticket_what(ticket)
         '系統重構'
     """
@@ -107,12 +107,12 @@ def format_ticket_summary(ticket: Dict[str, Any], include_elapsed: bool = False)
 
     Examples:
         >>> ticket = {
-        ...     "id": "0.31.0-W3-001",
+        ...     "id": "<ticket-id>",
         ...     "status": "pending",
         ...     "what": "實作功能"
         ... }
         >>> format_ticket_summary(ticket)
-        '0.31.0-W3-001 | [待處理] | 實作功能'
+        '<ticket-id> | [待處理] | 實作功能'
     """
     ticket_id = ticket.get("id") or ticket.get("ticket_id", DEFAULT_UNKNOWN_VALUE)
     status = ticket.get("status", "pending")
@@ -243,11 +243,11 @@ def _build_tree_node(ticket: Dict[str, Any], indent: str) -> str:
         str: 格式化的單行樹節點（包含 ID、狀態圖示、描述）
 
     Examples:
-        >>> ticket = {"id": "0.31.0-W4-001", "status": "completed", "title": "實作功能"}
+        >>> ticket = {"id": "<ticket-id>", "status": "completed", "title": "實作功能"}
         >>> _build_tree_node(ticket, "")
-        '0.31.0-W4-001 [已完成] - 實作功能'
+        '<ticket-id> [已完成] - 實作功能'
         >>> _build_tree_node(ticket, "  ")
-        '  ├─ 0.31.0-W4-001 [已完成] - 實作功能'
+        '  ├─ <ticket-id> [已完成] - 實作功能'
     """
     # 提取 Ticket 關鍵資訊
     ticket_id = ticket.get("id") or ticket.get("ticket_id", DEFAULT_UNKNOWN_VALUE)
@@ -285,13 +285,13 @@ def format_ticket_tree(
 
     Examples:
         >>> tickets = [
-        ...     {"id": "0.31.0-W3-001", "status": "completed", "what": "實作"},
-        ...     {"id": "0.31.0-W3-001.1", "parent_id": "0.31.0-W3-001",
+        ...     {"id": "<ticket-id>", "status": "completed", "what": "實作"},
+        ...     {"id": "<ticket-id>.1", "parent_id": "<ticket-id>",
         ...      "status": "pending", "what": "子任務"},
         ... ]
-        >>> print(format_ticket_tree(tickets, "0.31.0-W3-001"))
-        0.31.0-W3-001 [已完成] - 實作
-        + 0.31.0-W3-001.1 [待處理] - 子任務
+        >>> print(format_ticket_tree(tickets, "<ticket-id>"))
+        <ticket-id> [已完成] - 實作
+        + <ticket-id>.1 [待處理] - 子任務
     """
     # 尋找匹配的根 Ticket
     if root_id is None:
@@ -345,10 +345,10 @@ def format_ticket_list(
 
     Examples:
         >>> tickets = [
-        ...     {"id": "0.31.0-W3-001", "status": "pending", "what": "實作"},
+        ...     {"id": "<ticket-id>", "status": "pending", "what": "實作"},
         ... ]
         >>> print(format_ticket_list(tickets))
-        0.31.0-W3-001 | [待處理] | 實作
+        <ticket-id> | [待處理] | 實作
     """
     lines = []
     tags = lease_tags or {}

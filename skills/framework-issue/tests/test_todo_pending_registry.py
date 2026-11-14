@@ -6,13 +6,17 @@ subprocess 呼叫或觸碰開發者本機的 .claude/state/。
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import todo_pending_registry as registry  # noqa: E402
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 
 # --- registry_path：路徑組成 ---
@@ -159,3 +163,57 @@ def test_sync_section_rows_swallows_oserror_without_raising(tmp_path, monkeypatc
         33, "owner-1", [_row()], "t1", tmp_path
     )
     assert (added, removed) == (0, 0)
+
+
+# --- 回歸：cwd 在 linked worktree 時，傳入根優先（不被改寫到主 repo） ---
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture
+def cwd_in_linked_worktree(tmp_path, monkeypatch):
+    """tmp 主 repo + linked worktree，cwd 切入 worktree，關閉測試隔離旗標。
+    回傳 (主 repo 根, 傳入用的 tmp 根)。"""
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-q")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "init")
+    wt = tmp_path / "wt"
+    _git(main, "worktree", "add", "-q", str(wt), "-b", "wt-branch")
+    passed_root = tmp_path / "passed-root"
+    passed_root.mkdir()
+    monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+    monkeypatch.chdir(wt)
+    return main.resolve(), passed_root
+
+
+def test_registry_path_prefers_passed_root_in_linked_worktree(cwd_in_linked_worktree):
+    main, passed_root = cwd_in_linked_worktree
+    assert registry.registry_path(passed_root) == (
+        passed_root / ".claude" / "state" / "framework-issue-todo-pending.json"
+    )
+    # 未傳入根時才回推主 repo
+    assert registry.registry_path().resolve().is_relative_to(main)
+
+
+def test_sync_and_read_with_passed_root_never_touch_main_repo(cwd_in_linked_worktree):
+    main, passed_root = cwd_in_linked_worktree
+    registry.sync_section_rows(33, "owner-1", [_row()], "t1", passed_root)
+    assert len(registry.pending_entries(passed_root)) == 1
+    assert (passed_root / ".claude/state/framework-issue-todo-pending.json").exists()
+    assert not (main / ".claude").exists()
+
+
+def test_old_wrapping_would_land_in_main_repo_for_same_input(cwd_in_linked_worktree):
+    """正向對照：舊寫法（一律包 get_shared_state_root）在同一輸入下落在主 repo，
+    證明上面兩個測試能鑑別新舊行為。"""
+    main, passed_root = cwd_in_linked_worktree
+    old_root = get_shared_state_root(passed_root)
+    assert old_root.resolve() == main
+    assert old_root.resolve() != passed_root.resolve()

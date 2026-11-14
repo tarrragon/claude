@@ -64,6 +64,9 @@ FORMAT_TABLE = "table"
 FORMAT_JSON = "json"
 
 LIVENESS_SUBDIR = ("hook-logs", "_liveness")
+# hook-nonblocking-error-relay-hook 寫入：runtime 記為 non-blocking error 的
+# hook 執行（exit 非 0 非 2，含 import 期崩潰），一 session 一檔，以 hook 檔名比對
+NONBLOCKING_SUBDIR = ("hook-logs", "_nonblocking_errors")
 HOOKS_SUBDIR = (".claude", "hooks")
 
 # 已由原始碼確認的解析來源（可信任 0 筆代表 hook 確實未觸發）
@@ -182,11 +185,103 @@ def resolve_hook_name(
 # ---------------------------------------------------------------------------
 
 
+def _shared_state_root(project_root: Path) -> Path:
+    """linked worktree 內回主 repo 根（與 hook_base.get_shared_state_root 語意對齊）。
+
+    HOOK_TEST_ISOLATION=1 或查詢失敗時回 project_root（寫入端同規則）。
+    """
+    import os
+    import subprocess
+
+    if os.environ.get("HOOK_TEST_ISOLATION") == "1":
+        return project_root
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "--path-format=absolute",
+             "--git-common-dir"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return project_root
+    out = proc.stdout.strip()
+    if proc.returncode != 0 or not out:
+        return project_root
+    return Path(out).parent
+
+
 def _liveness_dir(project_root: Path) -> Path:
     d = project_root / ".claude"
     for part in LIVENESS_SUBDIR:
         d = d / part
     return d
+
+
+def _nonblocking_dir(project_root: Path) -> Path:
+    d = project_root / ".claude"
+    for part in NONBLOCKING_SUBDIR:
+        d = d / part
+    return d
+
+
+def _hook_file_key(hook_input: str, resolution: Dict[str, Any]) -> str:
+    """runtime 錯誤紀錄以註冊命令中的 hook 檔名識別，與 HOOK_NAME 無關。"""
+    resolved = resolution.get("resolved_from_path")
+    name = Path(resolved).name if resolved else Path(hook_input).name
+    return name if name.endswith(".py") else name + ".py"
+
+
+def scan_nonblocking_errors(
+    hook_file: str,
+    errors_dir: Path,
+    *,
+    since: Optional[datetime] = None,
+    session_filter: Optional[str] = None,
+) -> Dict[str, Any]:
+    """統計指定 hook 檔名的 runtime 非阻擋錯誤紀錄。
+
+    Returns:
+        {"total": int, "by_event": {event: count},
+         "latest_ts": Optional[str], "latest_summary": Optional[str]}
+    """
+    total = 0
+    by_event: Dict[str, int] = {}
+    latest_ts: Optional[str] = None
+    latest_summary: Optional[str] = None
+
+    for path in _iter_liveness_files(errors_dir):
+        if session_filter and path.stem != session_filter:
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue  # 單檔讀不到不影響其餘 session 的統計
+        for line in lines:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict) or record.get("hook_file") != hook_file:
+                continue
+            ts = record.get("ts")
+            if since is not None and ts:
+                try:
+                    if datetime.fromisoformat(ts) < since:
+                        continue
+                except ValueError:
+                    pass
+            total += 1
+            event = record.get("hook_event") or "unknown"
+            by_event[event] = by_event.get(event, 0) + 1
+            if ts and (latest_ts is None or ts > latest_ts):
+                latest_ts = ts
+                latest_summary = record.get("summary")
+
+    return {
+        "total": total,
+        "by_event": by_event,
+        "latest_ts": latest_ts,
+        "latest_summary": latest_summary,
+    }
 
 
 def _iter_liveness_files(liveness_dir: Path) -> List[Path]:
@@ -274,7 +369,33 @@ def scan_liveness(
 # ---------------------------------------------------------------------------
 
 
-def _render_table(resolution: Dict[str, Any], result: Dict[str, Any]) -> str:
+def _nonblocking_lines(nb: Dict[str, Any]) -> List[str]:
+    lines = ["runtime 非阻擋錯誤: {} 筆（exit 非 0 非 2，含 import 期崩潰；"
+             "這類執行到不了 run_hook_safely，不計入上方筆數）".format(nb["total"])]
+    if nb["total"]:
+        lines.append("  依事件: " + "、".join(
+            "{} {}".format(k, v) for k, v in sorted(nb["by_event"].items())
+        ))
+        lines.append("  最近一筆: {} {}".format(nb["latest_ts"], nb["latest_summary"]))
+    return lines
+
+
+def _render_table(
+    resolution: Dict[str, Any],
+    result: Dict[str, Any],
+    nb: Optional[Dict[str, Any]] = None,
+) -> str:
+    lines = _render_liveness_lines(resolution, result, nb)
+    if nb is not None:
+        lines.extend(_nonblocking_lines(nb))
+    return "\n".join(lines)
+
+
+def _render_liveness_lines(
+    resolution: Dict[str, Any],
+    result: Dict[str, Any],
+    nb: Optional[Dict[str, Any]],
+) -> List[str]:
     lines: List[str] = []
     lines.append(
         "解析名稱: {} (來源: {})".format(resolution["name"], resolution["source"])
@@ -303,6 +424,14 @@ def _render_table(resolution: Dict[str, Any], result: Dict[str, Any]) -> str:
                 "0 筆不代表 hook 未觸發——名稱本身尚未確認正確，"
                 "請提供 hook 檔案路徑或確認正確的 HOOK_NAME 後重試。"
             )
+        elif nb and nb["total"]:
+            # 有 runtime 錯誤紀錄：hook 有被執行，只是在 run_hook_safely 之前就失敗
+            lines.append(
+                "[無記錄] 名稱已由原始碼確認為 '{}'（來源: {}），_liveness 無記錄，"
+                "但下方有 runtime 非阻擋錯誤：hook 有被執行，在寫入 liveness 前就失敗。".format(
+                    resolution["name"], resolution["source"]
+                )
+            )
         else:
             lines.append(
                 "[無記錄] 名稱已由原始碼確認為 '{}'（來源: {}），"
@@ -310,7 +439,7 @@ def _render_table(resolution: Dict[str, Any], result: Dict[str, Any]) -> str:
                     resolution["name"], resolution["source"]
                 )
             )
-        return "\n".join(lines)
+        return lines
 
     lines.append("總筆數: {}".format(result["total"]))
     lines.append("今日筆數: {}".format(result["today_count"]))
@@ -320,11 +449,17 @@ def _render_table(resolution: Dict[str, Any], result: Dict[str, Any]) -> str:
         result["by_session"].items(), key=lambda kv: kv[1], reverse=True
     ):
         lines.append("  {}: {}".format(session_id, count))
-    return "\n".join(lines)
+    return lines
 
 
-def _render_json(resolution: Dict[str, Any], result: Dict[str, Any]) -> str:
+def _render_json(
+    resolution: Dict[str, Any],
+    result: Dict[str, Any],
+    nb: Optional[Dict[str, Any]] = None,
+) -> str:
     payload = {"resolution": resolution, **result}
+    if nb is not None:
+        payload["nonblocking_errors"] = nb
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -352,7 +487,9 @@ def execute_hook_liveness(args: argparse.Namespace) -> int:
     project_root = Path(project_root_str)
 
     resolution = resolve_hook_name(hook_input, search_root=project_root)
-    liveness_dir = _liveness_dir(project_root)
+    # 寫入端落共用狀態根（linked worktree 內為主 repo），讀取端同根
+    state_root = _shared_state_root(project_root)
+    liveness_dir = _liveness_dir(state_root)
 
     since_dt: Optional[datetime] = None
     since_arg = getattr(args, "since", None)
@@ -371,12 +508,18 @@ def execute_hook_liveness(args: argparse.Namespace) -> int:
         since=since_dt,
         session_filter=getattr(args, "session", None),
     )
+    nb = scan_nonblocking_errors(
+        _hook_file_key(hook_input, resolution),
+        _nonblocking_dir(state_root),
+        since=since_dt,
+        session_filter=getattr(args, "session", None),
+    )
 
     fmt = getattr(args, "format", FORMAT_TABLE) or FORMAT_TABLE
     if fmt == FORMAT_JSON:
-        print(_render_json(resolution, result))
+        print(_render_json(resolution, result, nb))
     else:
-        print(_render_table(resolution, result))
+        print(_render_table(resolution, result, nb))
     return 0
 
 

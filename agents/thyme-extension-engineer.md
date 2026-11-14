@@ -288,5 +288,5 @@ lavender-interface-designer (Phase 1: 功能設計)
 ---
 
 **Last Updated**: 2026-04-01
-**Version**: 2.1.0 - 整合實戰知識庫、修正專案描述（W5-002, W5-003）
+**Version**: 2.1.0 - 整合實戰知識庫、修正專案描述
 **Specialization**: Chrome Extension Technical Planning and Manifest V3 Compliance Strategy

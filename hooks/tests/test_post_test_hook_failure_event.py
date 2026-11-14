@@ -92,6 +92,7 @@ def _run_main(module, monkeypatch, capsys, raw_stdin: str):
 
 def test_unmasked_failing_pytest_writes_evaluation_report(post_test, logger, tmp_path, monkeypatch):
     monkeypatch.setattr(post_test, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(post_test, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     payload = _failure_payload("uv run pytest tests/test_sample.py", PYTEST_FAILURE_ERROR)
 
     message = post_test.evaluate_test_failure(payload, payload["tool_input"], logger)
@@ -107,6 +108,7 @@ def test_unmasked_failing_pytest_writes_evaluation_report(post_test, logger, tmp
 
 def test_main_emits_failure_event_name(post_test, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(post_test, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(post_test, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     payload = _failure_payload("pytest tests/test_sample.py", PYTEST_FAILURE_ERROR)
 
     rc, captured = _run_main(post_test, monkeypatch, capsys, json.dumps(payload))
@@ -119,6 +121,7 @@ def test_main_emits_failure_event_name(post_test, tmp_path, monkeypatch, capsys)
 
 def test_masked_failure_post_tool_use_still_evaluated(post_test, logger, tmp_path, monkeypatch):
     monkeypatch.setattr(post_test, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(post_test, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     payload = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
@@ -138,6 +141,7 @@ def test_masked_failure_post_tool_use_still_evaluated(post_test, logger, tmp_pat
 @pytest.mark.parametrize("error", [None, 123, "", "no exit code line\nFAILED x", "Exit code abc\nFAILED x"])
 def test_post_test_unparseable_error_is_skipped(post_test, logger, tmp_path, monkeypatch, error):
     monkeypatch.setattr(post_test, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(post_test, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
     payload = _failure_payload("pytest tests/", error)
 
     assert post_test.evaluate_test_failure(payload, payload["tool_input"], logger) is None
@@ -192,3 +196,77 @@ def test_cli_feedback_main_emits_failure_event_name(cli_feedback, monkeypatch, c
 
     assert rc == 0
     assert json.loads(captured.out)["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+
+
+# ---------------------------------------------------------------------------
+# mcp__dart__run_tests 的 PostToolUseFailure
+# 欄位依官方文件（頂層 error 字串，無 tool_response）；未在 dart consumer 實機確認，
+# 缺欄位或形狀不同時只記日誌、不輸出、不拋例外。
+# ---------------------------------------------------------------------------
+
+DART_FAILURE_ERROR = (
+    "Some tests failed.\n"
+    "00:02 +3 -1: test/widget_test.dart: counter increments [E]\n"
+    "  Expected: <1>\n    Actual: <0>\n"
+    "00:02 +3 -1: Some tests failed.\n"
+)
+
+
+def _dart_failure_payload(**fields):
+    payload = {
+        "hook_event_name": "PostToolUseFailure",
+        "tool_name": "mcp__dart__run_tests",
+        "tool_input": {"roots": [{"root": "file:///proj"}]},
+        "is_interrupt": False,
+        "duration_ms": 2300,
+    }
+    payload.update(fields)
+    return payload
+
+
+def test_dart_failure_event_is_evaluated(post_test, tmp_path, monkeypatch, capsys):
+    """正向對照：error 為字串時產出失敗評估，事件名為 PostToolUseFailure。"""
+    monkeypatch.setattr(post_test, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(post_test, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
+    payload = _dart_failure_payload(error=DART_FAILURE_ERROR)
+
+    rc, captured = _run_main(post_test, monkeypatch, capsys, json.dumps(payload))
+
+    assert rc == 0
+    out = json.loads(captured.out)
+    assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+    assert "修復前強制評估" in out["hookSpecificOutput"]["additionalContext"]
+    assert len(_reports(tmp_path)) == 1
+
+
+@pytest.mark.parametrize("fields", [
+    {},                                   # 缺 error
+    {"error": None},
+    {"error": ""},
+    {"error": {"message": "x"}},          # 形狀不同
+    {"error": ["Some tests failed."]},
+    {"tool_response": {"content": [{"type": "text", "text": "Some tests failed."}]}},  # 只有 tool_response
+])
+def test_dart_failure_event_unusable_payload_is_silent(post_test, tmp_path, monkeypatch, capsys, caplog, fields):
+    monkeypatch.setattr(post_test, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(post_test, "get_hook_log_dir", lambda n: tmp_path / ".claude" / "hook-logs" / n)
+    payload = _dart_failure_payload(**fields)
+
+    with caplog.at_level(logging.INFO):
+        rc, captured = _run_main(post_test, monkeypatch, capsys, json.dumps(payload))
+
+    assert rc == 0
+    assert captured.out == ""
+    assert _reports(tmp_path) == []
+    assert any("mcp__dart__run_tests 失敗事件的 error 不可用" in r.getMessage() for r in caplog.records)
+
+
+def test_dart_failure_registered_in_settings():
+    settings = json.loads((HOOKS_DIR.parent / "settings.json").read_text(encoding="utf-8"))
+    entries = [
+        h["command"]
+        for m in settings["hooks"].get("PostToolUseFailure", [])
+        if m.get("matcher") == "mcp__dart__run_tests"
+        for h in m["hooks"]
+    ]
+    assert any(c.endswith("/.claude/hooks/post-test-hook.py") for c in entries)

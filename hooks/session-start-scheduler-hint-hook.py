@@ -12,15 +12,15 @@ SessionStart 事件觸發時，呼叫 `ticket track runqueue` 取得排程提示
 
 邏輯：
 1. 優先呼叫 `ticket track runqueue --context=resume --top 3`
-   - 有 handoff 建議項目 → 用該輸出（W17-165 L2-B：語意從「待恢復」改為「下 session 建議」，
+   - 有 handoff 建議項目 → 用該輸出（語意從「待恢復」改為「下 session 建議」，
      避免「恢復」一詞暗示中斷）
 2. 若 resume 無結果（輸出含「無可執行 Ticket」標記）→ fallback
    呼叫 `ticket track runqueue --format=list --top 1` 顯示下一個可執行任務
 3. 若兩者皆無 → 本節顯示「無排程提示」
 4. 另掃描當前版本的 completed ANA spawned pending，若有則追加「Spawned 推進清單」小節
-   （W17-041 / W17-036 軸 D 補強；PC-075 下游傳播路徑訊號通道）
+   （PC-075 下游傳播路徑訊號通道）
 5. 另掃描 .claude/handoff/pending/ 的 JSON，若 exit_status=needs_context，
-   則追加「NeedsContext 警示」小節（W17-031.5 盲區 E）
+   則追加「NeedsContext 警示」小節
 
 失敗模式：
 - CLI 執行錯誤 / timeout / 不存在 → logger.error（stderr）+ 靜默
@@ -28,10 +28,10 @@ SessionStart 事件觸發時，呼叫 `ticket track runqueue` 取得排程提示
 - Spawned 掃描失敗 → logger.warning + 回傳 None，不影響主排程提示
 - NeedsContext 掃描失敗 → logger.warning + 回傳 None，不影響主排程提示
 
-來源：
-- W17-011.4 / W17-009 scheduler 缺口 D（motd/login info 類比）
-- W17-041 / W17-036 軸 D：session-start 新增 spawned pending 提醒
-- W17-031.5：W17-028 盲區 E，session-start 顯示 needs_context 摘要
+設計來源：
+- scheduler 缺口（motd/login info 類比）
+- session-start 新增 spawned pending 提醒
+- session-start 顯示 needs_context 摘要
 """
 
 import json
@@ -53,6 +53,7 @@ from lib import (  # noqa: E402
     scan_ticket_files_by_version,
     find_ticket_file,
 )
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 EXIT_SUCCESS = 0
 
@@ -65,14 +66,14 @@ EMPTY_MARKER = "無可執行 Ticket"
 # Spawned pending 掃描限制（避免洗版）
 SPAWNED_PENDING_DISPLAY_LIMIT = 5
 
-# NeedsContext 警示顯示上限（W17-031.5 盲區 E）
+# NeedsContext 警示顯示上限
 NEEDS_CONTEXT_DISPLAY_LIMIT = 3
 
 # handoff pending 目錄（與 ticket_system.constants.HANDOFF_DIR 一致；
 # 此處硬編一致副本以維持 uv script dependencies=[] 約束）
 HANDOFF_PENDING_RELPATH = ".claude/handoff/pending"
 
-# Exit Status 枚舉值（W17-010 schema；只取 needs_context 作警示用）
+# Exit Status 枚舉值（ticket Exit Status schema；只取 needs_context 作警示用）
 EXIT_STATUS_NEEDS_CONTEXT = "needs_context"
 
 # Terminal 狀態（spawned 視為「已推進完成」的集合，不列入 pending 清單）
@@ -342,7 +343,7 @@ def fetch_spawned_pending_context(logger) -> Optional[str]:
     失敗靜默降級：任何步驟失敗回傳 None，不影響主排程提示輸出。
     """
     try:
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
     except Exception as e:  # noqa: BLE001
         logger.warning("取得 project_root 失敗: %s", e)
         return None
@@ -367,7 +368,7 @@ def scan_needs_context_handoffs(
     """掃描 .claude/handoff/pending/ 中 exit_status=needs_context 的 ticket_id。
 
     Schema 解耦：
-    - W17-031.2 才會擴充 handoff JSON 加 exit_status 欄位
+    - handoff JSON 的 exit_status 欄位為後續擴充，現行可能不存在
     - 本函式在欄位缺失時靜默忽略（不視為 needs_context），實作零依賴
     - JSON 解析失敗 / 檔案讀取失敗 / 目錄不存在皆 fail-open（回空 list）
 
@@ -457,7 +458,7 @@ def fetch_needs_context_section(logger) -> Optional[str]:
     任何步驟失敗回傳 None，不影響主排程提示輸出。
     """
     try:
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
     except Exception as e:  # noqa: BLE001
         logger.warning("取得 project_root 失敗（needs_context 跳過）: %s", e)
         return None
@@ -480,14 +481,14 @@ def build_hook_output(
 
     三個區塊獨立存在：
     - scheduler_context → `## 排程提示` 區塊（原排程 hint）
-    - spawned_pending_section → `## Spawned 推進清單` 區塊（W17-041）
-    - needs_context_section → `## NeedsContext 警示` 區塊（W17-031.5）
+    - spawned_pending_section → `## Spawned 推進清單` 區塊
+    - needs_context_section → `## NeedsContext 警示` 區塊
 
     皆無時回傳 suppressOutput=True；任一有內容即輸出 additionalContext。
     """
     sections: List[str] = []
     if scheduler_context:
-        # W17-165 L2-B：標題從「排程提示」改為「下 session 建議項目」，
+        # 標題從「排程提示」改為「下 session 建議項目」，
         # 語意上「建議」取代「待恢復」，避免「恢復」暗示中斷。
         # 保留 (scheduler hint) 副標以維持與 ticket runqueue 來源的可追蹤性，
         # 並保留 `## 排程提示` 子字串以向後相容既有測試與 grep 引用。

@@ -466,7 +466,6 @@ def _assert_tells_where_and_format(out: str) -> None:
     """讀者要能從警告得知補在哪裡、照什麼格式補。"""
     assert MAIN_WORKLOG_PATH in out
     assert guard_hook.MAIN_WORKLOG_TEMPLATE in out
-    assert guard_hook.TODOLIST_ENTRY_TEMPLATE in out
 
 
 class TestMissingMainWorklogWarningText:
@@ -493,3 +492,58 @@ class TestMissingMainWorklogWarningText:
 
     def test_relpath_rejects_non_three_part_version(self):
         assert guard_hook.main_worklog_relpath("1.0") is None
+
+
+# 每類漂移行自帶補法：(build_warning_lines 參數名, 參數值, 補法必含字樣)
+_DRIFT_CASES = [
+    ("multiple_active", ["3.3.0", "3.4.0"], ["docs/todolist.yaml", "status"]),
+    ("ghosts", ["0.0.1"], ["docs/todolist.yaml", guard_hook.TODOLIST_ENTRY_TEMPLATE]),
+    ("stale_active", ["3.3.0"], ["docs/todolist.yaml", "status", "completed"]),
+    ("tag_drift_version", "3.2.0", ["docs/todolist.yaml", "status", "completed"]),
+    ("closed_ticket_anomalies", ["9.9.0-W1-001: closed_by 缺失"], ["closed_by", "close_reason_note"]),
+    ("stale_proposals", ["PROP-001（target_version v3.2.0 已 completed）"],
+     ["docs/proposals-tracking.yaml", "status", "implemented"]),
+    ("unregistered_confirmed_proposals", ["PROP-002（target_version v9.9.0）"],
+     ["docs/todolist.yaml", "planned", guard_hook.TODOLIST_ENTRY_TEMPLATE]),
+    ("missing_main_worklog", ["0.37.0"], [guard_hook.MAIN_WORKLOG_TEMPLATE]),
+]
+
+
+def _lines_for(param: str, value) -> list:
+    kwargs = dict(
+        multiple_active=[], ghosts=[], stale_active=[], tag_drift_version=None,
+        versions={"3.2.0": "active"}, closed_ticket_anomalies=[], stale_proposals=[],
+        unregistered_confirmed_proposals=[], missing_main_worklog=[],
+    )
+    kwargs[param] = value
+    return guard_hook.build_warning_lines(**kwargs)
+
+
+def _assert_fix_attached(line: str, required: list) -> None:
+    """漂移行須自帶「補法：」並寫出要改的檔與欄位。"""
+    assert "補法：" in line
+    fix = line.split("補法：", 1)[1]
+    for token in required:
+        assert token in fix
+
+
+class TestPerDriftFixGuidance:
+    """每類漂移行各自附補法，取代區塊末尾的單一通用建議句"""
+
+    @pytest.mark.parametrize("param,value,required", _DRIFT_CASES, ids=[c[0] for c in _DRIFT_CASES])
+    def test_each_drift_line_carries_its_fix(self, param, value, required):
+        lines = _lines_for(param, value)
+        assert len(lines) == 1
+        _assert_fix_attached(lines[0], required)
+
+    @pytest.mark.parametrize("param,value,required", _DRIFT_CASES, ids=[c[0] for c in _DRIFT_CASES])
+    def test_legacy_line_without_fix_is_rejected(self, param, value, required):
+        """E2 正向對照：舊版漂移行只有描述沒有補法，斷言必須判紅"""
+        legacy_line = _lines_for(param, value)[0].split("\n", 1)[0]
+        with pytest.raises(AssertionError):
+            _assert_fix_attached(legacy_line, required)
+
+    def test_footer_drops_generic_suggestion(self, capsys):
+        guard_hook.print_warnings(_lines_for("ghosts", ["0.0.1"]))
+        out = capsys.readouterr().out
+        assert "建議：校準 docs/todolist.yaml，或補建缺漏版本條目" not in out

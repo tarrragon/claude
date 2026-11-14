@@ -59,7 +59,8 @@ def pdv_env(monkeypatch):
     monkeypatch.setattr(_pdv, "make_completed_verifier", lambda command: (lambda: True))
     monkeypatch.setattr(_pdv, "read_ticket_where_files", lambda *a, **k: ["src/a.py"])
     monkeypatch.setattr(_pdv, "read_ticket_type_and_children", lambda *a, **k: ("IMP", False))
-    monkeypatch.setattr(_pdv, "get_git_changed_files", lambda *a, **k: [])
+    monkeypatch.setattr(_pdv, "get_ticket_change_sets",
+                        lambda *a, **k: _pdv.TicketChangeSets([], []))
     monkeypatch.setattr(_pdv, "save_analysis_log", lambda *a, **k: None)
     monkeypatch.setattr(_pdv, "is_subagent_environment", lambda d: False)
 

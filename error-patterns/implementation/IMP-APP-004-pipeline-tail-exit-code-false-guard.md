@@ -4,7 +4,6 @@ title: 防呆判斷取 pipeline 末端命令 exit code——head/tail 恆 0 使�
 severity: medium
 category: implementation
 created: "2026-07-14"
-source_tickets: [0.38.1-W1-067]
 related_patterns: [IMP-008, IMP-009]
 ---
 
@@ -18,7 +17,7 @@ related_patterns: [IMP-008, IMP-009]
 - 判斷條件掛在 pipeline 之後（`&&` / `||` / `if`），而 pipeline 末端是 `head`、`tail`、`sed`、`awk` 等「無論輸入有無都 exit 0」的過濾器。
 - 警報訊息與其上方實際輸出內容矛盾（如印出「!! 異常 !!」但其前無任何命中行）。
 
-## 實證案例（0.38.1-W1-067 merge 防呆，2026-07-14）
+## 實證案例（merge 防呆，2026-07-14）
 
 ```bash
 git diff ... | grep -E '^\+' | grep -oE 'UC-10\.[0-9]|UC-[0-9]{3}' | head -3 && echo "!! 異常 !!"

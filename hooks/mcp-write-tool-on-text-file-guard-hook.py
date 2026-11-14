@@ -49,8 +49,16 @@ NON_CODE_EXTENSIONS = frozenset({
 })
 
 
+# serena 以 Claude Code plugin 安裝時，工具名前綴為 mcp__plugin_serena_serena__，
+# 以獨立 MCP server 安裝時為 mcp__serena__。兩種前綴指向同一組工具，判定時先正規化。
+PLUGIN_SERENA_PREFIX = "mcp__plugin_serena_serena__"
+SERENA_PREFIX = "mcp__serena__"
+
+
 def is_serena_write_tool(tool_name: str) -> bool:
-    """判斷工具是否屬於 serena 寫入工具集合。"""
+    """判斷工具是否屬於 serena 寫入工具集合（兩種安裝方式的命名皆涵蓋）。"""
+    if tool_name.startswith(PLUGIN_SERENA_PREFIX):
+        tool_name = SERENA_PREFIX + tool_name[len(PLUGIN_SERENA_PREFIX):]
     return tool_name in SERENA_WRITE_TOOLS
 
 

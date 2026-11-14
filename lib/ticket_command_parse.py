@@ -12,6 +12,7 @@ import os
 import re
 from typing import List, Optional, Tuple
 
+from .checkout_identity import common_dir, owning_checkout_root
 from .git_command_parse import (
     SCAN_OUTPUT_COMMANDS,
     SHELLS,
@@ -19,6 +20,7 @@ from .git_command_parse import (
     is_stdin_shell,
     nested_script,
     parse_command_statements,
+    parse_command_statements_with_dirs,
     raise_if_pipes_into_shell,
     skip_prefix_wrapper_count,
     skip_wrappers,
@@ -131,6 +133,104 @@ def find_ticket_track_invocations(
     的參數形狀由呼叫端解讀（如 `phase <ID> phase4`）。
     """
     return _scan_command(command, 0, verbs)
+
+
+# ===== 命令作用範圍：ticket 命令作用在 session 所屬 repo 還是他 repo =====
+
+SCOPE_NONE = "none"  # 無符合的 ticket 命令
+SCOPE_SESSION = "session"  # 全部作用在 session 所屬 repo（含其 worktree），或目錄無從判定而沿用修改前行為
+SCOPE_OTHER = "other"  # 全部作用在其他 repo
+SCOPE_MIXED = "mixed"  # 同時有 session repo 與其他 repo
+SCOPE_UNKNOWN = "unknown"  # 有命令的目錄含變數、命令替換、`cd -` 等，無法靜態解析
+SCOPE_UNPARSEABLE = "unparseable"  # 命令無法安全解析
+
+
+def _scan_targets(
+    command: str, base_dir: Optional[str], base_unknown: bool, depth: int,
+    verbs: Tuple[str, ...],
+) -> Optional[List[Tuple[str, Optional[str], bool]]]:
+    """同 `_scan_command`，另附每個命令作用的目錄：(動詞, 目錄, 目錄不可信)。"""
+    if depth > _MAX_SCAN_NESTING:
+        return None
+    statements = parse_command_statements_with_dirs(command, base_dir)
+    tokens = tokenize_command(command) if command else []
+    if statements is None or tokens is None:
+        return None
+    try:
+        raise_if_pipes_into_shell(tokens)
+    except UnparseableCommand:
+        return None
+    found: List[Tuple[str, Optional[str], bool]] = []
+    for statement, stmt_dir, stmt_unknown in statements:
+        unknown = base_unknown or stmt_unknown
+        if skip_wrappers(statement) is None:
+            continue
+        if "<<<" in statement and any(is_stdin_shell(statement, i) for i in range(len(statement))):
+            return None
+        for i, tok in enumerate(statement):
+            if os.path.basename(tok) in SCAN_OUTPUT_COMMANDS:
+                break
+            if (
+                os.path.basename(tok) == "ticket"
+                and len(statement) >= i + 3
+                and statement[i + 1] == "track"
+                and statement[i + 2] in verbs
+            ):
+                if not is_help_only(statement[i + 3:]):
+                    found.append((statement[i + 2], None if unknown else stmt_dir, unknown))
+                break
+            script = nested_script(statement, i)
+            if script:
+                nested = _scan_targets(
+                    script, None if unknown else stmt_dir, unknown, depth + 1, verbs
+                )
+                if nested is None:
+                    return None
+                found.extend(nested)
+                if os.path.basename(tok) not in SHELLS:
+                    break
+    return found
+
+
+def _checkout_root_of_dir(directory: str) -> Optional[str]:
+    """目錄所屬 checkout 根（含 .git 的最近祖先，含自身）；找不到回傳 None。"""
+    return owning_checkout_root(os.path.join(os.path.abspath(directory), "_"))
+
+
+def classify_ticket_command_scope(
+    command: str, verbs: Tuple[str, ...], session_dir: Optional[str]
+) -> str:
+    """判定命令中的 `ticket track <verbs>` 作用在 session 所屬 repo 還是他 repo。
+
+    目錄以 session_dir（payload cwd）為基準，依語句前的 `cd` 與括號作用域推算。
+    判不出 repo 時（目錄不在 git repo 內、common dir 無法解析）一律算作 session
+    repo，沿用修改前「讀 session repo 的票」的行為，不會因此改成放行。
+
+    Returns:
+        SCOPE_* 常數之一。
+    """
+    targets = _scan_targets(command, session_dir, False, 0, verbs)
+    if targets is None:
+        return SCOPE_UNPARSEABLE
+    if not targets:
+        return SCOPE_NONE
+    session_root = _checkout_root_of_dir(session_dir or os.getcwd())
+    session_common = common_dir(session_root) if session_root else None
+    kinds = set()
+    for _verb, directory, unknown in targets:
+        if unknown:
+            return SCOPE_UNKNOWN
+        root = _checkout_root_of_dir(directory) if directory else None
+        target_common = common_dir(root) if root else None
+        if session_common is None or target_common is None:
+            kinds.add(SCOPE_SESSION)
+        else:
+            kinds.add(SCOPE_SESSION if target_common == session_common else SCOPE_OTHER)
+    if kinds == {SCOPE_OTHER}:
+        return SCOPE_OTHER
+    if SCOPE_OTHER in kinds:
+        return SCOPE_MIXED
+    return SCOPE_SESSION
 
 
 def find_complete_invocations(command: str) -> Optional[List[Tuple[str, List[str]]]]:

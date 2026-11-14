@@ -42,7 +42,7 @@ from typing import Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/ (hook_utils)
 sys.path.insert(0, str(Path(__file__).parent.parent))   # .claude/       (lib.*)
-from lib import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely, get_hook_log_dir
 from lib.pyproject_scanner import load_pyproject_toml, scan_skills_directory
 from lib.uv_tool_utils import is_shimmed_cli
 
@@ -95,7 +95,8 @@ def _get_cache_dir(project_root: Path) -> Path:
     Returns:
         Path to the cache directory.
     """
-    cache_dir = project_root / ".claude" / "hook-logs" / HOOK_NAME / "cache"
+    # 經 get_hook_log_dir：讀寫皆落共用狀態根（project_root 不再參與路徑）
+    cache_dir = get_hook_log_dir(HOOK_NAME) / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 

@@ -4,7 +4,7 @@
 // 本檔是紀錄行的格式與上限截斷，不碰 $；讀寫由 register.tsx 負責。
 
 import type { ResumeSource } from '../types'
-import type { ResumeNoticeSkipReason } from './resumeNotice'
+import type { CoordinatorAddressSkipReason, ResumeNoticeSkipReason } from './resumeNotice'
 
 /** 送出紀錄檔：主 checkout 下的相對路徑。 */
 export const RESUME_NOTICE_LOG_PATH = '.claude/hook-logs/line-board/resume-notice.log'
@@ -28,7 +28,7 @@ export type ResumeNoticeOutcome =
   | { step: 'send-disabled' }
   | { step: 'config-unavailable'; detail: string }
   | { step: 'state-unavailable'; detail: string }
-  | { step: 'skipped'; reason: ResumeNoticeSkipReason }
+  | { step: 'skipped'; reason: ResumeNoticeSkipReason | CoordinatorAddressSkipReason }
   | { step: 'sent'; isDelivered: true }
   | { step: 'sent'; isDelivered: false; reason: string }
   | { step: 'error'; detail: string }

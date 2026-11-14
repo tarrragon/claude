@@ -18,25 +18,25 @@ related:
 
 **Why**：MCP 配置與 detector 是同源邏輯的兩個落點，常由同一份設計文件（規格或心智模型）派生。若設計者只用「直覺命名」（例如「這是 MCP server，binary 名稱應該是 X-mcp」）而沒 `which X` 或讀套件 `package.json` 的 `bin` 欄位實證，兩個落點會同步寫入錯誤名稱。
 
-**Consequence**：雙端誤判形成「自洽錯誤」——detector 報告 MISSING 看似合理（用戶以為是真的沒裝），用戶嘗試重裝後仍 MISSING（因為 detector 找錯名）。錯誤永久存活，直到有人從第三方角度（如本案例：用戶手動 `which codegraph` 發現實際 binary 名）才能識破。本 PC 觸發案例中，W6-001.2 已 completed 9 個月仍未被察覺，直到用戶在 W1-101 .mcp.json 修正後主動檢討。
+**Consequence**：雙端誤判形成「自洽錯誤」——detector 報告 MISSING 看似合理（用戶以為是真的沒裝），用戶嘗試重裝後仍 MISSING（因為 detector 找錯名）。錯誤永久存活，直到有人從第三方角度（如本案例：用戶手動 `which codegraph` 發現實際 binary 名）才能識破。本 PC 觸發案例中，detector 擴充票已 completed 9 個月仍未被察覺，直到用戶在 .mcp.json 修正後主動檢討。
 
 **Action**：新增 MCP server 配置或 detector 邏輯前，**必須** `which <suspected-binary-name>` 實證；若 binary 不存在於 PATH，需查套件 source（`npm view <package> bin` 或 `package.json` 的 `bin` 欄位）確認真實名稱再寫入配置。
 
 ## 觸發案例
 
-### W6-001.2 + W1-101 同源誤判（2026-05-27 揭露）
+### detector 擴充設計與 .mcp.json 同源誤判（2026-05-27 揭露）
 
 **時序**：
 
-1. 2026-04-XX：W6-001.2 設計 `project-init` MCP detector 擴充，`mcp_detector.py` 寫入 `_detect_binary("codegraph-mcp")` + 註解「對於不支援 --version 的 binary（如 codegraph-mcp），可傳 ['--info']」。設計者假設 binary 名稱 `codegraph-mcp`，未實證。
+1. 2026-04-XX：detector 擴充票設計 `project-init` MCP detector 擴充，`mcp_detector.py` 寫入 `_detect_binary("codegraph-mcp")` + 註解「對於不支援 --version 的 binary（如 codegraph-mcp），可傳 ['--info']」。設計者假設 binary 名稱 `codegraph-mcp`，未實證。
 2. 同期：`.mcp.json` codegraph section 寫入 `"command": "codegraph-mcp"`，同樣未實證。
-3. 2026-04-XX：W6-001.2 完成（acceptance 全勾，pytest 通過——測試 mock 也用 `codegraph-mcp` 字面，自洽通過）。
+3. 2026-04-XX：detector 擴充票完成（acceptance 全勾，pytest 通過——測試 mock 也用 `codegraph-mcp` 字面，自洽通過）。
 4. 用戶安裝 `@colbymchenry/codegraph` 0.9.4（npm package），實際暴露 binary 名為 `codegraph`（無 `-mcp` 後綴）。
 5. 每次 session 啟動：
    - MCP server 無法啟動（`codegraph-mcp` not found），`codegraph_*` tools 全部未註冊
    - `project-init check` 對 codegraph section 報告 MISSING（但因為 `project-init` 套件本身 OUTDATED 未 reinstall，連 MCP section 都沒顯示，雙重遮蔽）
    - 用戶完全沒可見錯誤訊息
-6. 2026-05-27：用戶在不相干情境中發現「codegraph_* tools 不能用」，PM 調查鏈：W1-101 修 `.mcp.json` → 用戶檢討「為何 session-start 沒抓到」→ 發現 W6-001.2 設計層同源誤判 → W1-102 修 `mcp_detector.py` → W1-104 立此 PC。
+6. 2026-05-27：用戶在不相干情境中發現「codegraph_* tools 不能用」，PM 調查鏈：修 `.mcp.json` → 用戶檢討「為何 session-start 沒抓到」→ 發現 detector 擴充設計層同源誤判 → 修 `mcp_detector.py` → 立此 PC。
 
 **雙重遮蔽機制**：
 
@@ -61,7 +61,7 @@ related:
 | 維度 | 說明 |
 |------|------|
 | 「實證」不在 detector 新增 SOP | 新增 MCP detector 前無「`which` 驗證 binary」的明文規範 |
-| 設計文件未要求 source-of-truth | W6-001.2 設計文件假設 binary 名為 detector design 的權威，未引用套件 `package.json` 或 npm registry |
+| 設計文件未要求 source-of-truth | detector 擴充設計文件假設 binary 名為 detector design 的權威，未引用套件 `package.json` 或 npm registry |
 | 觀察工具自驗證機制弱 | `project-init check` 對偵測對象的 source-of-truth 漂移無自警示 |
 
 ## 與 PC-068 / PC-143 / PC-131 的關係
@@ -114,7 +114,7 @@ related:
 
 **Consequence**：需修改 hook 並加跨來源驗證邏輯，工作量中等。
 
-**Action**：列為 follow-up ticket（屬於 W1-103 強化 stale CLI 提醒的進階版）。
+**Action**：列為 follow-up ticket（屬於強化 stale CLI 提醒的進階版）。
 
 ## 防護措施
 
@@ -132,7 +132,7 @@ detector pytest 加入「real binary lookup, skip if missing」測試層，避�
 
 ### 第三層：session-start 跨來源驗證 hook（長期）
 
-**適用條件**：跨整個專案的 MCP 配置一致性檢查，需獨立 ANA ticket 評估成本效益（W1-103 的進階延伸）。
+**適用條件**：跨整個專案的 MCP 配置一致性檢查，需獨立 ANA ticket 評估成本效益（stale CLI 提醒的進階延伸）。
 
 session-start hook 比對 `.mcp.json` command 名 vs PATH 真實 binary，不一致即警示。
 
@@ -155,11 +155,8 @@ session-start hook 比對 `.mcp.json` command 名 vs PATH 真實 binary，不一
 | PC-143 | lavender spec 描述既有 CLI flag 用未驗證值（同源延伸至 MCP 領域） |
 | PC-131 | 外部工具採用前精度實證（同核心原則） |
 | ARCH-015 | `.claude/` 派發位置決策（dispatch-position） |
-| W1-101 | `.mcp.json` 修正觸發案例 |
-| W1-102 | `mcp_detector.py` 修正觸發案例 |
-| W6-001.2 | 同源誤判設計源頭（已 completed 但實質失效） |
 
 ---
 
 **Last Updated**: 2026-05-27
-**Version**: 1.0.0 — 初始建立，源 W1-101 + W1-102 + W6-001.2 三案例證據鏈
+**Version**: 1.0.0 — 初始建立，源 `.mcp.json` 修正、`mcp_detector.py` 修正、detector 擴充設計源頭三案例證據鏈

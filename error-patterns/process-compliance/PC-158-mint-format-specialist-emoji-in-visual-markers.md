@@ -2,7 +2,7 @@
 
 > **錯誤類別**：流程合規（代理人對既有規則的內化失敗）
 > **嚴重度**：中（不阻擋執行但污染框架文件，需手動修正）
-> **發現案例**：0.19.0-W6-001.3（mint 在 search-tools-guide SKILL.md 三刀流決策樹 ASCII 圖中用 ✓ 標記推薦工具）
+> **發現案例**：某次 DOC 票（mint 在 search-tools-guide SKILL.md 三刀流決策樹 ASCII 圖中用 ✓ 標記推薦工具）
 
 ---
 
@@ -24,7 +24,7 @@ mint-format-specialist 的職責定位是「format 修正與品質優化」，�
 
 代理人並未主動執行二次審查（document-writing-style 強制要求）掃描 emoji，導致違規字元進入 commit。
 
-## 案例：W6-001.3 SKILL.md
+## 案例：search-tools-guide SKILL.md
 
 | 行號 | 違規內容 | 替換為 |
 |------|---------|--------|
@@ -74,5 +74,5 @@ PreToolUse:Bash 偵測 `git commit` 命令時，若 staged diff 含 emoji range 
 ---
 
 **Last Updated**: 2026-05-25
-**Source**: 0.19.0-W6-001.3 / W3-045 session 收尾發現
+**Source**: 2026-05-25 session 收尾發現
 **Status**: 短期防護已落地（PM merge 預檢），中期/長期待 follow-up ticket

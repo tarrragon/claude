@@ -19,7 +19,7 @@ class HandoffMessages:
 
     # 格式和用法說明
     ID_FORMAT_EXPECTED = "預期格式: v{version}-W{wave}-{seq} 或 {version}-W{wave}-{seq}"
-    ID_FORMAT_EXAMPLE = "範例: 0.31.0-W4-002 或 0.31.0-W4-002.1"
+    ID_FORMAT_EXAMPLE = "範例: <ticket-id> 或 <ticket-id>.1"
 
     # 版本偵測錯誤的詳細說明
     VERSION_ERROR_REASONS = "可能原因:"
@@ -97,8 +97,8 @@ class HandoffMessages:
     USAGE_TO_SIBLING = "  /ticket handoff <id> --to-sibling <sibling-id>"
     USAGE_STATUS = "  /ticket handoff --status"
     EXAMPLES_HEADER = "範例:"
-    EXAMPLE_BASIC = "  /ticket handoff 0.31.0-W4-002"
-    EXAMPLE_STATUS = "  /ticket handoff 0.31.0-W4-002 --status"
+    EXAMPLE_BASIC = "  /ticket handoff <ticket-id>"
+    EXAMPLE_STATUS = "  /ticket handoff <ticket-id> --status"
     EXAMPLE_STATUS_AUTO = "  /ticket handoff --status"
 
     # Command 線參數説明
@@ -138,7 +138,7 @@ class LifecycleMessages:
     # 認領檢查清單相關訊息
     CHECKLIST_DESIGN_DOCS = "   [ ] 已閱讀相關設計文件（功能規格、測試案例等）"
     CHECKLIST_ACCEPTANCE = "   [ ] 已理解驗收條件"
-    # Context 驗證檢查項（W12-009：認領時強制補充背景資訊）
+    # Context 驗證檢查項（認領時強制補充背景資訊）
     CHECKLIST_TARGET_EXISTS = "   [ ] 已驗證目標檔案/模組存在（where.files 列出的路徑）"
     CHECKLIST_ASSUMPTIONS_VALID = "   [ ] 已確認前提假設仍成立（架構狀態、依賴、API 未變更）"
     CHECKLIST_CROSS_PROJECT = "   [ ] 已檢查跨專案/版本關聯性（範疇正確、無重疊 Ticket）"
@@ -172,7 +172,7 @@ class LifecycleMessages:
     RELEASE_CANCELLED = "已取消釋放"
     RELEASE_INVALID_INPUT = "無效的輸入，請輸入 y 或 n"
 
-    # ANA spawned 非 terminal 檢查訊息（W12-005 / PC-075 Phase 2）
+    # ANA spawned 非 terminal 檢查訊息（PC-075 Phase 2）
     SPAWNED_NON_TERMINAL_HEADER = (
         "[WARNING] ANA Ticket {ticket_id} 有 {count} 個 spawned 非 terminal："
     )
@@ -196,7 +196,7 @@ class LifecycleMessages:
     )
     SPAWNED_DEFERRED_ITEM = "  - {spawned_id}: {status}（版本 {spawned_version}）"
 
-    # Cascade unblock 訊息（W11-002.3：父 complete 觸發子自動解鎖）
+    # Cascade unblock 訊息（父 complete 觸發子自動解鎖）
     CASCADE_UNBLOCKED_HEADER = "[Cascade] 以下子 Ticket 已自動解鎖（blocked → pending）："
     CASCADE_UNBLOCKED_ITEM = "   - {id}: {title}"
 
@@ -210,7 +210,7 @@ class LifecycleMessages:
     # Cascade save 失敗（§6.7 non-fail-fast）
     CASCADE_SAVE_FAILED = "cascade 解鎖 {ticket_id} 儲存失敗：{error}"
 
-    # blockedBy 反向掃描解鎖訊息（W1-082：complete cascade 補 blockedBy 引用者解鎖，
+    # blockedBy 反向掃描解鎖訊息（complete cascade 補 blockedBy 引用者解鎖，
     # 涵蓋未登記為 children 的兄弟 Ticket）
     BLOCKEDBY_UNBLOCKED_HEADER = (
         "[Cascade] 以下 blockedBy 引用者已自動解鎖（blocked → pending）："
@@ -233,7 +233,7 @@ class ResumeMessages:
     # 恢復命令範例
     RESUME_EXAMPLE_CMD = "   /ticket resume <ticket_id>"
     RESUME_LIST_CMD = "   /ticket resume --list"
-    RESUME_EXAMPLE_ID = "   /ticket resume 0.31.0-W4-001"
+    RESUME_EXAMPLE_ID = "   /ticket resume <ticket-id>"
 
     # 幫助命令提示
     RESUME_HELP = "查看說明:"
@@ -330,7 +330,7 @@ class CreateMessages:
     USAGE_HELP = "  /ticket create --help"
     EXAMPLES_HEADER = "範例:"
     EXAMPLE_ROOT = "  /ticket create --wave 9"
-    EXAMPLE_CHILD = "  /ticket create --parent 0.31.0-W9-001"
+    EXAMPLE_CHILD = "  /ticket create --parent <ticket-id>"
 
     # Command 線參數說明
     HELP_TEXT = "建立新 Ticket"
@@ -388,14 +388,14 @@ class CreateMessages:
         "       欄位：{field_name}"
     )
 
-    # 含糊驗收條件警告（W2-001.2 變更 1）
+    # 含糊驗收條件警告
     VAGUE_ACCEPTANCE_WARNING = (
         "[WARNING] 驗收條件含有模糊詞彙，建議補充量化指標\n"
         "          模糊詞彙：{vague_words}\n"
         "          範例：「完成」→「新增 5 個測試案例」，「通過」→「100% 測試通過」"
     )
 
-    # 認知負擔評估警告（W2-001.2 變更 4）
+    # 認知負擔評估警告
     COGNITIVE_LOAD_FILE_THRESHOLD_WARNING = (
         "[WARNING] 修改檔案數 > {threshold}，認知負擔可能超閾值，"
         "建議考慮拆分子任務"
@@ -405,14 +405,14 @@ class CreateMessages:
         "請使用 /ticket fields update <ticket-id> where <files> 補充"
     )
 
-    # SRP 多目標偵測警告（W3-002）
+    # SRP 多目標偵測警告
     SRP_MULTI_TARGET_WARNING = (
         "[WARNING] what 欄位含連接詞「{conjunctions}」，疑似包含多個獨立目標\n"
         "          Atomic Ticket 原則：一個 Ticket = 一個 Action + 一個 Target\n"
         "          建議：考慮拆分為多個 Ticket，或確認目標確實是單一職責"
     )
 
-    # SRP 跨模組驗收偵測警告（W3-002）
+    # SRP 跨模組驗收偵測警告
     SRP_CROSS_MODULE_WARNING = (
         "[WARNING] 驗收條件涉及多個模組（{modules}），疑似包含多個職責\n"
         "          Atomic Ticket 原則：所有驗收條件應指向同一目標\n"
@@ -442,7 +442,7 @@ class CreateMessages:
         "建議評估是否為預設值未調整（PC-058）"
     )
 
-    # SPEC 引用未登錄警告（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
+    # SPEC 引用未登錄警告（SPEC-008 誤植跨票傳染防護）
     UNREGISTERED_SPEC_REFERENCE_WARNING = (
         "[WARNING] 引用了未登錄於 SPEC 登錄簿"
         "（docs/traceability.yaml 或 docs/proposals-tracking.yaml）的 SPEC 編號："
@@ -450,7 +450,7 @@ class CreateMessages:
         "          請確認編號是否誤植，或先在其中一份登錄簿補登該 SPEC"
     )
 
-    # SPEC 登錄簿皆未初始化警告（0.38.1-W1-107：兩簿皆缺時不逐號誤報）
+    # SPEC 登錄簿皆未初始化警告（兩簿皆缺時不逐號誤報）
     SPEC_REGISTRY_UNINITIALIZED_WARNING = (
         "[WARNING] SPEC 登錄簿尚未初始化"
         "（docs/traceability.yaml 與 docs/proposals-tracking.yaml 皆不存在），"
@@ -462,7 +462,7 @@ class CreateMessages:
     # blockedBy 驗證錯誤訊息（Bug 1 修正）
     BLOCKED_BY_NOT_FOUND = "[ERROR] blockedBy 中的 {bid} 不存在，請確認 ID 是否正確"
 
-    # 重複偵測警告訊息（W3-003）
+    # 重複偵測警告訊息
     DUPLICATE_TICKETS_WARNING_HEADER = (
         "[WARNING] 發現 {count} 個可能重複的 Ticket，"
         "請確認是否需要建立新 Ticket："
@@ -483,7 +483,7 @@ class CreateMessages:
         "          建議：ticket track set-blocked-by <ticket-id> {ref_ids_cli}"
     )
 
-    # Tier 2 阻擋層訊息（1.0.0-W1-040.1）
+    # Tier 2 阻擋層訊息
     DUPLICATE_BLOCK_HEADER = (
         "[ERROR] 偵測到同窗口高相似度 Ticket，已阻擋建立（冪等防護）："
     )
@@ -498,7 +498,7 @@ class CreateMessages:
         "[INFO] --allow-duplicate 已啟用，略過同窗口高相似度阻擋"
     )
 
-    # 問題 4 新增常數（0.1.2-W4-001.1）
+    # 問題 4 新增常數
     EXEMPTED_PARTIAL_PARAMS_ERROR = (
         "[ERROR] 豁免條件下三個參數必須全部提供或全部省略"
     )
@@ -551,10 +551,10 @@ class FieldsMessages:
 
     # 更新欄位的範例
     EXAMPLES_HEADER = "範例:"
-    EXAMPLE_UPDATE_TITLE = "  /ticket fields update 0.31.0-W4-001 title '新標題'"
-    EXAMPLE_UPDATE_STATUS = "  /ticket fields update 0.31.0-W4-001 status in_progress"
-    EXAMPLE_GET_TITLE = "  /ticket fields get 0.31.0-W4-001 title"
-    EXAMPLE_LIST = "  /ticket fields list 0.31.0-W4-001"
+    EXAMPLE_UPDATE_TITLE = "  /ticket fields update <ticket-id> title '新標題'"
+    EXAMPLE_UPDATE_STATUS = "  /ticket fields update <ticket-id> status in_progress"
+    EXAMPLE_GET_TITLE = "  /ticket fields get <ticket-id> title"
+    EXAMPLE_LIST = "  /ticket fields list <ticket-id>"
 
     # Command 線參數說明
     HELP_TEXT = "管理 Ticket 欄位"
@@ -568,7 +568,7 @@ class FieldsMessages:
     FIELD_VALUE_SEPARATOR = ": "
     NO_FIELDS_FOUND = "未找到任何欄位"
 
-    # set-where 路徑型輸入同步 where.files（W1-078 修復）
+    # set-where 路徑型輸入同步 where.files
     WHERE_FILES_SYNCED = "   where.files 已同步（{count} 項）:"
 
 

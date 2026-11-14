@@ -89,15 +89,15 @@ tool_input = input_data.get("toolInput", {})        # 永遠 {}
 | `dispatch-count-guard-hook.py` line 331 | `input_data.get("hookEventName", "")` | 160 / 0（log 全為「未知的 Hook 事件: 」） |
 | `file-ownership-guard-hook.py` lines 256, 293-294 | `input_data.get("hookEventName")` / `toolName` / `toolInput` | 68 / 0（log 全為「非目標觸發」） |
 
-兩個 hook 從引入到診斷期間長期失效，但因為靜默 no-op，PM 與代理人從未察覺。直到 W10-035.3 ginger Hook 密度審計暴露「觸發很多但命中為 0」的異常分布，才引發 W10-048 ANA 完整診斷。
+兩個 hook 從引入到診斷期間長期失效，但因為靜默 no-op，PM 與代理人從未察覺。直到一次 Hook 密度審計（ginger）暴露「觸發很多但命中為 0」的異常分布，才引發完整根因診斷。
 
-### Case 2：W10-048 ANA → W17-141 IMP 修復實證
+### Case 2：診斷 → 修復實證
 
-| Ticket | 角色 | 重點 |
+| 階段 | 角色 | 重點 |
 |-------|------|------|
-| `0.18.0-W10-048` | ANA 完整診斷 | 確認根因為 stdin schema 命名混淆；對照 IMP-055（output camelCase）區分兩端規範；產出 4 行修復方案 |
-| `0.18.0-W17-141` | IMP 修復 | commit `8f84a58b`：line 331 / 256 / 293-294 改 snake_case；新增 6 個 dispatch-count 單元測試含 camelCase regression guard；既有 file-ownership 測試 fixture 從 camelCase 改 snake_case（既有測試之前在驗證 bug 行為，本身就是 Why 4 的具體案例） |
-| `0.18.0-W17-142` | DOC（本檔） | 將事件提煉為跨專案可重用的 error-pattern |
+| 分析票 | ANA 完整診斷 | 確認根因為 stdin schema 命名混淆；對照 IMP-055（output camelCase）區分兩端規範；產出 4 行修復方案 |
+| 實作票 | IMP 修復 | commit `8f84a58b`：line 331 / 256 / 293-294 改 snake_case；新增 6 個 dispatch-count 單元測試含 camelCase regression guard；既有 file-ownership 測試 fixture 從 camelCase 改 snake_case（既有測試之前在驗證 bug 行為，本身就是 Why 4 的具體案例） |
+| 文件票 | DOC（本檔） | 將事件提煉為跨專案可重用的 error-pattern |
 
 ### Case 3：與 IMP-055 的對照
 
@@ -173,9 +173,9 @@ Hook 撰寫者習慣假設「同一個系統的 input/output 通訊應該命名�
 - `.claude/hook-specs/claude-code-hooks-official-standards.md`（input vs output schema 規範權威來源）
 - `.claude/error-patterns/implementation/IMP-055-hook-stdout-plain-text-breaks-json-validation.md`（stdout 端 camelCase 規範）
 - `.claude/error-patterns/implementation/IMP-051-new-hook-not-registered.md`（新建 Hook 三件套）
-- W10-048 ANA：完整診斷與修復決策
-- W17-141 IMP：實際修復 commit `8f84a58b`
-- W17-142 DOC（本檔）：error-pattern 提煉
+- ANA：完整診斷與修復決策
+- IMP：實際修復 commit `8f84a58b`
+- DOC（本檔）：error-pattern 提煉
 - commit `2d64dc5f`：bug 引入點（外部 .claude v1.1.53 chore sync）
 
 ## 標籤

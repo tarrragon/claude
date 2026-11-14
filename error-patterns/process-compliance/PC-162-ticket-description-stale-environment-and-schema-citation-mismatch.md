@@ -33,13 +33,13 @@ PM 建 Ticket 時，描述基於過去的環境記憶或舊文件，未驗證當
 
 ## 觸發案例
 
-### W3-041 案例（2026-05-26）
+### pre-fix-eval hook 誤判票案例（2026-05-26）
 
 **完整時序**：
-- 2026-04-07 commit `7a22f9f0`（W10-001）刪除 `.claude/hooks/pre-fix-evaluation-hook.py`（432 行）<!-- broken-link-exempt: 案例敘事，本行明文陳述該路徑已刪除，路徑不存在是預期的 -->
+- 2026-04-07 commit `7a22f9f0` 刪除 `.claude/hooks/pre-fix-evaluation-hook.py`（432 行）<!-- broken-link-exempt: 案例敘事，本行明文陳述該路徑已刪除，路徑不存在是預期的 -->
   （邏輯合併到 `.claude/hooks/post-test-hook.py` L191-296，W9 審查清理「已合併的原始 Hook 檔案」）
-- 2026-05-21 PM 建 W3-041 ticket，描述「pre-fix-eval hook 對 ticket body 寫入內容誤判」，where.files 寫 `.claude/hooks`（目錄級，未指定具體檔案）
-- 2026-05-26 PM 接手 W3-041 → 觸發 schema 註解的「接手者驗證」提示 → grep 發現 `pre-fix-evaluation-hook.py` 已不存在 → 進一步 git log 考古發現實際邏輯在 `post-test-hook.py`
+- 2026-05-21 PM 建該 ticket，描述「pre-fix-eval hook 對 ticket body 寫入內容誤判」，where.files 寫 `.claude/hooks`（目錄級，未指定具體檔案）
+- 2026-05-26 PM 接手該 ticket → 觸發 schema 註解的「接手者驗證」提示 → grep 發現 `pre-fix-evaluation-hook.py` 已不存在 → 進一步 git log 考古發現實際邏輯在 `post-test-hook.py`
 
 **雙重觸發**：
 - 問題 A 觸發：ticket 描述 1.5 個月內已過時（hook 已合併）
@@ -58,7 +58,7 @@ PM 建 Ticket 時，描述基於過去的環境記憶或舊文件，未驗證當
 
 | 維度 | 說明 |
 |------|------|
-| 環境變動沒有追蹤機制 | hook 移除/合併沒有觸發相關 ticket 描述審查；W10-001 commit 沒有附 follow-up 任務檢查「是否有 ticket 引用被移除的 hook」 |
+| 環境變動沒有追蹤機制 | hook 移除/合併沒有觸發相關 ticket 描述審查；刪除該 hook 的 commit 沒有附 follow-up 任務檢查「是否有 ticket 引用被移除的 hook」 |
 | Schema 模板引用穩定性弱 | Schema 註解 + PC 編號的綁定是純文字，沒有自動驗證 |
 | 接手者驗證是事後安全網非事前防護 | 防護機制依賴接手者個人警覺 + schema 註解提醒，沒有 hook 層自動偵測 ticket 描述過時 |
 
@@ -89,7 +89,7 @@ PM 建 Ticket 時，描述基於過去的環境記憶或舊文件，未驗證當
 
 ## 補救措施（觸發案例）
 
-W3-041 處理：
+該案例處理：
 - 接手 PM 修正 where.files：`.claude/hooks` → `.claude/hooks/post-test-hook.py`
 - ticket Problem Analysis 補完整考古表格（hook 原檔位置 / 移除時間 / 移除原因 / 邏輯實際位置 / 註解標記）
 - 修復方向重寫對齊實際 hook（post-test-hook.py 加 ticket body 豁免）
@@ -134,11 +134,11 @@ grep "title:" .claude/error-patterns/<category>/PC-<NNN>*.md
 
 未來可加入 hook 在 ticket create 時掃描 where.files 路徑存在性 + PC 引用語意對應，但成本中等需獨立 ticket 評估。
 
-## 延伸：ANA reality-check 只覆蓋預設執行路徑、漏看 opt-in 分支致 ticket acceptance 失準（W1-009）
+## 延伸：ANA reality-check 只覆蓋預設執行路徑、漏看 opt-in 分支致 ticket acceptance 失準
 
 **Why**：ANA 做 reality-check 驗證程式碼行為時，若只讀「預設執行路徑」的說明、未驗證「opt-in / 條件分支」的實際行為，產出的 ticket acceptance 會建立在不完整的事證上。`--clean` 這類 opt-in 模式（預設不啟用）的副作用範圍，無法從預設路徑的程式碼說明推斷。
 
-**Consequence**：W1-016 ANA reality-check 比對 `hooks/*.py` 確認 28 個遷移孤兒，但只讀 `clean_stale_files` 的函式 docstring，未驗證 `--clean` opt-in 分支的 repo-wide 行為（遍歷整個 temp_dir 對齊 git tracked 樹）。據此寫的 W1-009 acceptance「核對與 27 孤兒一致則 push」無法機械執行——實測 `--clean` 範圍 = 755（28 倍偏差），執行期被迫暫停重新界定範圍。
+**Consequence**：某次 ANA reality-check 比對 `hooks/*.py` 確認 28 個遷移孤兒，但只讀 `clean_stale_files` 的函式 docstring，未驗證 `--clean` opt-in 分支的 repo-wide 行為（遍歷整個 temp_dir 對齊 git tracked 樹）。據此寫的後續 ticket acceptance「核對與 27 孤兒一致則 push」無法機械執行——實測 `--clean` 範圍 = 755（28 倍偏差），執行期被迫暫停重新界定範圍。
 
 **Action**：
 
@@ -155,9 +155,9 @@ grep "title:" .claude/error-patterns/<category>/PC-<NNN>*.md
 - PC-007（Command 引導與腳本實作行為不符，**本 PC schema 模板誤引用 PC-007**）
 - PC-100（spawned ticket 未繼承 PCB）— 同類 ticket 描述完整性問題
 - PC-111（PM narrative fabrication）— 接手者禁止依未驗證的描述直接行動
-- quality-baseline 規則 5（所有發現必須追蹤）— W3-041 處理 + spawned IMP 追蹤 substring 缺陷 + cache 殘留
+- quality-baseline 規則 5（所有發現必須追蹤）— 該案例處理 + spawned IMP 追蹤 substring 缺陷 + cache 殘留
 
 ---
 
 **Last Updated**: 2026-05-26
-**Source**: 0.19.0-W3-041（PM 接手 W3-041 觸發 PC-007 schema 註解引用 + git log 考古發現 W10-001 hook 合併歷史）
+**Source**: PM 接手 pre-fix-eval hook 誤判票，觸發 PC-007 schema 註解引用 + git log 考古發現該 hook 合併歷史

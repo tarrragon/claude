@@ -1,4 +1,4 @@
-"""共用 dispatch-* CLI 前置處理（0.18.0-W17-213 DRY 抽取）。
+"""共用 dispatch-* CLI 前置處理（DRY 抽取）。
 
 `dispatch-validate` 與 `dispatch-readiness` 兩命令前置 boilerplate 高度重複：
 
@@ -6,7 +6,7 @@
 2. `load_ticket(version, ticket_id)` 並判斷 None / `_yaml_error`
 3. 解包 `_body` / `where.files` / `acceptance` 三欄
 
-W17-053 linux 審查建議 1 指出「等第三個 dispatch-* 命令出現時可抽 helper」；
+linux 審查建議 1 指出「等第三個 dispatch-* 命令出現時可抽 helper」；
 本 ticket 提前落地避免後續重複（已有兩個呼叫端，符合 DRY 三次法則的 N=2 預警）。
 """
 

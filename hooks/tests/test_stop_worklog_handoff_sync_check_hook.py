@@ -714,7 +714,7 @@ class TestMainStdinIntegration:
         """mock detect_sync_drift 攔截 input_data 並回傳 None（避免實際輸出）。"""
 
         def fake_detect_sync_drift(
-            project_root, session_start, logger, input_data=None
+            project_root, session_start, logger, input_data=None, git_root=None
         ):
             captured["input_data"] = input_data
             captured["session_start"] = session_start
@@ -905,3 +905,59 @@ def test_session_incremental_diff_control_without_flag_rewrites_index(hook_mod, 
     before = index.read_bytes()
     _REAL_RUN(stripped, check=True, capture_output=True)
     assert index.read_bytes() != before, "對照不成立：fixture 無鑑別力"
+
+
+# ---------------------------------------------------------------------------
+# 3.3.0-W1-204.1.2.9：共用狀態根與 worklog 所屬 checkout 的 git 根
+# ---------------------------------------------------------------------------
+
+
+class TestLinkedWorktreeSharedStateRoot:
+    """session 在 linked worktree（WT），共用狀態讀主倉庫（SR），增量 git 跟 worklog 走。"""
+
+    def _setup(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        main, worklog = make_project_root(
+            tmp_path,
+            worklog_content="## 舊紀錄\n\n**下一站**：`0.18.0-W17-900`（歷史交接）。\n",
+            pending_ticket_ids=set(),
+            ticket_status_map={"0.18.0-W17-900": "pending", "0.18.0-W17-079": "pending"},
+        )
+        _init_git_repo(main)
+        _commit_all(main, "baseline")
+        wt = tmp_path / "wt"
+        _git(main, "worktree", "add", "-q", "-b", "wt-branch", str(wt))
+        return main, wt, worklog, time.time()
+
+    def _append_new_handoff(self, worklog, session_start):
+        with worklog.open("a", encoding="utf-8") as f:
+            f.write("\n**下一站**：`0.18.0-W17-079`（本 session 新交接）。\n")
+        os.utime(worklog, (session_start + 5, session_start + 5))
+
+    def test_increment_still_catches_new_section_from_worktree(self, tmp_path, monkeypatch, hook_mod):
+        main, wt, worklog, ss = self._setup(tmp_path, monkeypatch)
+        self._append_new_handoff(worklog, ss)
+        result = hook_mod.detect_sync_drift(main, ss, MagicMock(), git_root=wt)
+        assert result is not None
+        assert "0.18.0-W17-079" in result
+        assert "0.18.0-W17-900" not in result
+
+    def test_no_new_section_stays_silent_not_full_text(self, tmp_path, monkeypatch, hook_mod):
+        main, wt, worklog, ss = self._setup(tmp_path, monkeypatch)
+        os.utime(worklog, (ss + 5, ss + 5))
+        assert hook_mod.detect_sync_drift(main, ss, MagicMock(), git_root=wt) is None
+
+    def test_e1_control_git_root_wt_falls_back_to_full_text(self, tmp_path, monkeypatch, hook_mod):
+        """E1 對照：增量 git 根改用 WT，增量退回全文而誤報歷史交接（鑑別上一個測試）。"""
+        main, wt, worklog, ss = self._setup(tmp_path, monkeypatch)
+        os.utime(worklog, (ss + 5, ss + 5))
+        monkeypatch.setattr(hook_mod, "owning_checkout_root", lambda p: str(wt))
+        result = hook_mod.detect_sync_drift(main, ss, MagicMock(), git_root=wt)
+        assert result is not None and "0.18.0-W17-900" in result
+
+    def test_stop_flag_stays_on_session_root(self, tmp_path, monkeypatch):
+        module = _load_hook_module()
+        seen = []
+        monkeypatch.setattr(module, "_is_blocked_this_session", lambda r, l: seen.append(r) or True)
+        module.detect_sync_drift(tmp_path / "sr", 0, MagicMock(), git_root=tmp_path / "wt")
+        assert seen == [tmp_path / "wt"]

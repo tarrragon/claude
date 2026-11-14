@@ -1,5 +1,5 @@
 """
-Ticket track depth 查詢模組（W1-056.8 / 協議 v2 D3）
+Ticket track depth 查詢模組
 
 提供 `ticket track depth <id>` 命令，沿 parent_id 鏈計算並回報嵌套深度與
 can_descend 判定，供 agent 自檢層級自覺（無需上層 prompt 傳遞層級資訊）。

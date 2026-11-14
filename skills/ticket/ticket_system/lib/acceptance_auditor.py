@@ -28,9 +28,9 @@ from .constants import (
     VALID_STATUSES,
     VALID_TICKET_TYPES,
 )
-# W10-125：consolidate _is_placeholder 共用 ticket_validator 實作（ARCH-020 治本）
+# consolidate _is_placeholder 共用 ticket_validator 實作（ARCH-020 治本）
 # 原本 acceptance_auditor 內有平行版本（簡單 regex，無 word boundary / 表格豁免），
-# 與 ticket_validator 版本邏輯漂移；W10-125 起統一使用 ticket_validator 版本。
+# 與 ticket_validator 版本邏輯漂移；現統一使用 ticket_validator 版本。
 from .ticket_validator import _is_placeholder as _shared_is_placeholder
 from .ticket_validator import extract_version_from_ticket_id
 
@@ -272,7 +272,7 @@ def validate_spawned_tickets_completed(
     ticket: Dict[str, Any], version: str
 ) -> Tuple[bool, List[str], bool]:
     """
-    檢查 spawned_tickets 全部完成（W15-003）
+    檢查 spawned_tickets 全部完成
 
     規則：
     - ANA Ticket：spawned_tickets 必須全 completed，否則 fail
@@ -341,15 +341,15 @@ def validate_children_completed(ticket: Dict[str, Any], version: str) -> Tuple[b
 
 def _is_placeholder(text: str) -> bool:
     """
-    判斷文字是否為佔位符（W10-125 起共用 ticket_validator 實作）。
+    判斷文字是否為佔位符（共用 ticket_validator 實作）。
 
-    W10-125 重構：原本 acceptance_auditor 有平行的簡化版本（HTML 註解命中即 True、
+    重構：原本 acceptance_auditor 有平行的簡化版本（HTML 註解命中即 True、
     無 word boundary、無表格豁免），與 ticket_validator 版本邏輯漂移（ARCH-020 模式）。
     現統一 delegate 到 ticket_validator._is_placeholder，獲得：
-    - HTML 註解 + 實質內容不誤判（W17-032）
-    - markdown 分隔符剝除（W17-071）
-    - word boundary（W17-094 / PC-113）
-    - 表格 cell N/A / TODO / TBD 豁免（W10-125 / PC-138 / PC-144）
+    - HTML 註解 + 實質內容不誤判
+    - markdown 分隔符剝除
+    - word boundary（PC-113）
+    - 表格 cell N/A / TODO / TBD 豁免（PC-138 / PC-144）
     - 中文佔位符判定
     """
     return _shared_is_placeholder(text)
@@ -374,7 +374,7 @@ def validate_execution_log_completeness(body: str) -> Tuple[bool, List[str]]:
     if not body or not isinstance(body, str):
         return False, [f"所有區段未填寫：{', '.join(required_sections)}"]
 
-    # W17-117.1: 統一抽至 section_locator helper（雙層級 ##/###）
+    # 統一抽至 section_locator helper（雙層級 ##/###）
     from ticket_system.lib.section_locator import find_section
 
     for section in required_sections:
@@ -501,7 +501,7 @@ def detect_vague_acceptance(
         if not isinstance(condition, str):
             continue
 
-        # 移除 [ ] 或 [x] checkbox 前綴（共用 checkbox_utils，0.18.0-W11-001.5）
+        # 移除 [ ] 或 [x] checkbox 前綴（共用 checkbox_utils）
         _, cleaned = strip_checkbox_prefix(condition)
 
         # 判斷是否只包含模糊詞
@@ -674,8 +674,8 @@ def _extract_root_ticket_id(ticket_id: str) -> str:
     從 Ticket ID 提取任務鏈根 ID
 
     例如：
-    - "0.31.0-W4-052.4.1" → "0.31.0-W4-052"
-    - "0.31.0-W4-052" → "0.31.0-W4-052"
+    - "<ticket-id>.4.1" → "<ticket-id>"
+    - "<ticket-id>" → "<ticket-id>"
 
     Args:
         ticket_id: Ticket ID
@@ -694,7 +694,7 @@ def _get_all_siblings_in_chain(root_id: str, version: str) -> List[Dict[str, Any
     取得同一任務鏈中所有的兄弟 Ticket
 
     Args:
-        root_id: 任務鏈根 ID（如 "0.31.0-W4-052"）
+        root_id: 任務鏈根 ID（如 "<ticket-id>"）
         version: 版本號
 
     Returns:
@@ -766,7 +766,7 @@ def _has_followup_in_chain(ticket_id: str, version: str) -> bool:
     檢查同任務鏈中是否有序號更大的 Ticket
 
     例如：
-    - 若當前為 "0.31.0-W4-052.1"，檢查是否有 "0.31.0-W4-052.2"、"0.31.0-W4-052.3" 等
+    - 若當前為 "<ticket-id>.1"，檢查是否有 "<ticket-id>.2"、"<ticket-id>.3" 等
 
     Args:
         ticket_id: Ticket ID
@@ -779,7 +779,7 @@ def _has_followup_in_chain(ticket_id: str, version: str) -> bool:
     siblings = _get_all_siblings_in_chain(root_id, version)
 
     # 提取當前 Ticket 的序號深度和值
-    # 例如："0.31.0-W4-052.1.2" → [52, 1, 2]
+    # 例如："<ticket-id>.1.2" → [52, 1, 2]
     current_parts = ticket_id.split(".")
     root_parts = root_id.split(".")
     current_sequence = [int(p) for p in current_parts[3:]]  # 去掉版本-Wave-序號部分
@@ -985,7 +985,7 @@ def run_audit(ticket_id: str, version: Optional[str] = None) -> AuditReport:
         skipped=children_skipped
     ))
 
-    # Step 2.5: spawned_tickets 完成狀態檢查（W15-003，僅 ANA）
+    # Step 2.5: spawned_tickets 完成狀態檢查（僅 ANA）
     spawned_passed, spawned_issues, spawned_skipped = validate_spawned_tickets_completed(
         ticket, version
     )

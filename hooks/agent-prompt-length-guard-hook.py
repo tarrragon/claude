@@ -9,7 +9,7 @@ Agent Prompt Length Guard Hook - PreToolUse Hook
 功能：
   1. 硬上限：檢查 Agent/Task 派發的 prompt 行數是否超過 30 行限制（PC-040）。
      超過表示 context 未正確存入 Ticket，應先更新 Ticket Context Bundle。
-  2. 軟提示（W17-048 方案 B）：prompt 介於 10-30 行且未偵測到模板關鍵字時，
+  2. 軟提示（方案 B）：prompt 介於 10-30 行且未偵測到模板關鍵字時，
      輸出提示到 stderr 但仍放行（exit 0），引導 PM 改用派發模板結構。
 
 Hook 類型：PreToolUse
@@ -54,7 +54,7 @@ BLOCK_MESSAGE_TEMPLATE = """錯誤：Agent prompt 超過 {limit} 行限制（實
 
 詳見: .claude/error-patterns/process-compliance/PC-040-context-in-prompt-not-ticket.md"""
 
-SOFT_HINT_TEMPLATE = """提示：Agent prompt 為 {actual} 行，但未偵測到模板關鍵字（W17-048 方案 B）
+SOFT_HINT_TEMPLATE = """提示：Agent prompt 為 {actual} 行，但未偵測到模板關鍵字
 
 建議：改用 CLI 產生骨架 prompt（單一權威來源，避免手動複製漂移）
   ticket track dispatch {{ticket_id}} --as {{agent_name}}

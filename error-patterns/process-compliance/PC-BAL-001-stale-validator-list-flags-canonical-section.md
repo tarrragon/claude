@@ -16,7 +16,7 @@
 
 ## 案例
 
-flutter_balance 專案 0.0.1-W1-002 執行中，`acceptance-gate-hook` 回報 ticket body 的 `## Spawn Requests` 為「非 Schema H2 章節（W17-072）」。
+flutter_balance 專案某張 ticket 執行中，`acceptance-gate-hook` 回報 ticket body 的 `## Spawn Requests` 為「非 Schema H2 章節」。
 
 四份清單的實際狀態：
 
@@ -56,4 +56,4 @@ flutter_balance 專案 0.0.1-W1-002 執行中，`acceptance-gate-hook` 回報 ti
 
 ---
 
-Last Updated: 2026-07-20 | Source: flutter_balance 0.0.1-W1-002 自檢階段
+Last Updated: 2026-07-20 | Source: flutter_balance 某張 ticket 的自檢階段

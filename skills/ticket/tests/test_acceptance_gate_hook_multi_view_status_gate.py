@@ -56,10 +56,14 @@ placeholder
     return ticket_file
 
 
-class TestIllegalValueBlocksComplete:
-    """非法值（不在 reviewed/skipped/n_a）阻擋 complete，訊息含修正命令。"""
+class TestIllegalValueWarnsWithoutBlocking:
+    """非法值（不在 reviewed/skipped/n_a）降為警告、放行 complete，警告含修正命令。
 
-    def test_illegal_value_blocks_and_message_has_fix_command(self, tmp_path):
+    多視角審查的結論不影響收退（verification-framework〈驗收三項固定檢查〉），
+    標註格式也不構成退件，故與「未標註」同級。
+    """
+
+    def test_illegal_value_warns_and_message_has_fix_command(self, tmp_path):
         module = _load_hook_module()
         ticket_file = _write_ana_ticket(
             tmp_path, "multi_view_status: single-view-completed"
@@ -69,7 +73,9 @@ class TestIllegalValueBlocksComplete:
             "0.0.0-W1-999", tmp_path, _FakeLogger()
         )
 
-        assert result.should_block is True
+        assert result.should_block is False
+        assert result.multi_view_warning is not None
+        assert "值非法" in result.multi_view_warning
         assert result.message is not None
         assert "fix-multi-view-status" in result.message
         assert "0.0.0-W1-999" in result.message

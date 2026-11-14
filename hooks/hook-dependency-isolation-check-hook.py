@@ -83,7 +83,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 try:
     from lib import (
         setup_hook_logging, run_hook_safely, read_json_from_stdin,
-        get_project_root, emit_model_reminder,
+        get_code_root, emit_model_reminder,
     )
     from lib.hook_registry import registry_commands
 except ImportError as e:
@@ -438,11 +438,20 @@ def _resolve_init_eager_footprint(
     return footprint
 
 
-def build_lib_dependency_index(lib_dir: Path, stdlib_names: "Set[str]") -> "LibDependencyIndex":
+def build_lib_dependency_index(
+    lib_dir: Path,
+    stdlib_names: "Set[str]",
+    local_names: "Set[str]" = frozenset(),
+) -> "LibDependencyIndex":
     """走訪 `.claude/lib/*.py`，建立子模組間依賴圖與符號索引。
 
     用於解析 hook 經由 `lib` 套件間接觸及的第三方 import。lib 模組體積小
     （數十檔），無需比照 `build_local_module_index` 的 `os.walk` 剪枝優化。
+
+    `local_names` 為 `build_local_module_index` 的全域本地模組索引。lib 模組
+    同樣以 sys.path 掛載 `ticket_system`、`doc_system` 等本地套件，若只把 lib
+    自身模組名當本地，這些套件會被算成第三方依賴，再經遞移解析傳給每支
+    匯入 lib 的 hook，造成整批「未隔離」誤報。
     """
     module_stems = {p.stem for p in lib_dir.glob("*.py")} if lib_dir.is_dir() else set()
     direct_external: Dict[str, Set[str]] = {}
@@ -462,7 +471,7 @@ def build_lib_dependency_index(lib_dir: Path, stdlib_names: "Set[str]") -> "LibD
                 internal_graph[module_name] = set()
                 continue
             direct_external[module_name] = extract_external_imports(
-                content, stdlib_names, module_stems | {"lib"}
+                content, stdlib_names, module_stems | {"lib"} | set(local_names)
             )
             internal_graph[module_name] = _extract_lib_internal_targets(
                 tree, module_stems
@@ -556,7 +565,9 @@ def check_file_consistency(
         return []
 
     if lib_index is None:
-        lib_index = build_lib_dependency_index(project_root / ".claude" / "lib", stdlib_names)
+        lib_index = build_lib_dependency_index(
+            project_root / ".claude" / "lib", stdlib_names, local_names
+        )
 
     shebang = content.splitlines()[0] if content else ""
     uses_uv = _resolve_uses_uv(shebang, command_prefixes)
@@ -600,7 +611,9 @@ def scan_all(project_root: Path, logger) -> "List[HookConsistencyIssue]":
     rel_paths = extract_registered_hook_paths(settings_path)
     stdlib_names = _get_stdlib_module_names()
     local_names = build_local_module_index(project_root / ".claude")
-    lib_index = build_lib_dependency_index(project_root / ".claude" / "lib", stdlib_names)
+    lib_index = build_lib_dependency_index(
+        project_root / ".claude" / "lib", stdlib_names, local_names
+    )
     command_prefixes = extract_hook_command_prefixes(settings_path)
 
     all_issues: List[HookConsistencyIssue] = []
@@ -667,7 +680,7 @@ def main() -> int:
         logger.info("stdin 無 JSON 輸入，跳過")
         return 0
 
-    project_root = get_project_root()
+    project_root = get_code_root()  # CR：掃描載入中的 settings.json、hooks、lib
 
     # SessionStart：全量盤點（無 tool_name 欄位，與 PostToolUse 分流）
     if input_data.get("hook_event_name") == "SessionStart":

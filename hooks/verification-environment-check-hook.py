@@ -57,6 +57,7 @@ from lib import (  # noqa: E402
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    get_code_root,
 )
 
 EXIT_SUCCESS = 0
@@ -250,7 +251,9 @@ def build_device_unavailable_message(udid: str, skill_relpath: str) -> str:
     )
 
 
-def check_verification_environment(project_root: Path, logger) -> Optional[str]:
+def check_verification_environment(
+    project_root: Path, logger, code_root: Optional[Path] = None
+) -> Optional[str]:
     """執行四步檢查，回傳要顯示的訊息（INFO 或 WARNING）或 None（靜默跳過）。
 
     有 runtime surface 時必回傳訊息（INFO/WARNING 皆可能，AC 要求「配方存在
@@ -270,7 +273,7 @@ def check_verification_environment(project_root: Path, logger) -> Optional[str]:
         return None
 
     # Step 2：查配方存在性
-    skill_path = find_verify_skill(project_root)
+    skill_path = find_verify_skill(code_root or project_root)  # CR：載入中的 verify skill
     if skill_path is None:
         integration_test_exists = has_integration_test_dir(project_root)
         logger.warning(
@@ -335,7 +338,9 @@ def main() -> int:
         print(json.dumps(build_hook_output(None), ensure_ascii=False, indent=2))
         return EXIT_SUCCESS
 
-    message = check_verification_environment(project_root, logger)
+    message = check_verification_environment(
+        project_root, logger, code_root=get_code_root()
+    )
     output = build_hook_output(message)
     print(json.dumps(output, ensure_ascii=False, indent=2))
     logger.info("驗證環境檢查 hook 完成（has_message=%s）", message is not None)

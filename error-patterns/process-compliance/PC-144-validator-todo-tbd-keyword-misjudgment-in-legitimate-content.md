@@ -7,15 +7,13 @@ created: 2026-05-13
 related:
  - PC-113
  - PC-138
- - W17-094
- - W10-119
 ---
 
 # PC-144: Validator `\bTODO\b` / `\bTBD\b` 將合法內容中的關鍵字誤判為 placeholder
 
 ## 症狀
 
-`ticket track complete <id>` 阻擋通過 body schema 驗證，stderr 顯示「未填寫的必填章節：Solution」。但 Solution 章節實際含完整內容（如 W10-119 的 WRAP 四階段、Spawn 規劃表、自檢結果），唯一問題是內文多處提及「TODO trigger」「TODO 註解」描述程式碼中的實際 TODO 註解。
+`ticket track complete <id>` 阻擋通過 body schema 驗證，stderr 顯示「未填寫的必填章節：Solution」。但 Solution 章節實際含完整內容（如某 ANA 的 WRAP 四階段、Spawn 規劃表、自檢結果），唯一問題是內文多處提及「TODO trigger」「TODO 註解」描述程式碼中的實際 TODO 註解。
 
 ## 觸發情境
 
@@ -36,7 +34,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
     return True
 ```
 
-任一 keyword 命中即 `return True`，整個 section 被判 placeholder。雖然 W17-094 加 `\b` 字邊界，但合法內容中的 TODO（作為實際單字）仍會命中。
+任一 keyword 命中即 `return True`，整個 section 被判 placeholder。雖然 PC-113 的修復加 `\b` 字邊界，但合法內容中的 TODO（作為實際單字）仍會命中。
 
 ### 根因二：placeholder 偵測無「整段判定」vs「局部出現」分層
 
@@ -65,7 +63,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
 
 ## 歷史案例
 
-- 2026-05-13 W10-119（首例）：Solution 含 6 處「TODO trigger / TODO 註解」描述既有程式碼 TODO，被 validator 全段判 placeholder；改寫為「trigger 標記」後通過。
+- 2026-05-13 首例：Solution 含 6 處「TODO trigger / TODO 註解」描述既有程式碼 TODO，被 validator 全段判 placeholder；改寫為「trigger 標記」後通過。
 
 ## 與相關 error-pattern 的差異
 
@@ -87,4 +85,4 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
 ---
 
 **Last Updated**: 2026-05-13
-**Version**: 1.0.0 - 初次記錄（W10-119 首例觸發 + 與 PC-113 / PC-138 共構關係明確化）
+**Version**: 1.0.0 - 初次記錄（首例觸發 + 與 PC-113 / PC-138 共構關係明確化）

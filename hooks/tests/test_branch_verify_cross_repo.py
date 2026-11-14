@@ -109,6 +109,30 @@ def test_same_repo_random_file_not_exempt(tmp_path):
     )
 
 
+def test_same_repo_nested_readme_exempt(tmp_path):
+    # 任意層級 README.md 豁免（與 pm-role 可寫路徑一致）
+    repo = tmp_path / "host"
+    repo.mkdir()
+    _init_git_repo(repo)
+    file_path = str(repo / "lib" / "pkg" / "README.md")
+    # 顯式 host_root：確保走 same-repo 分支（否則測試隔離的 host 解析落到 cross-repo）
+    assert is_exempt_path_on_protected_branch(
+        file_path, target_repo=str(repo), host_root=str(repo)
+    )
+
+
+def test_same_repo_nested_other_md_not_exempt(tmp_path):
+    # E2 正向對照：同目錄其他 .md 與名稱近似 README 的檔仍擋
+    repo = tmp_path / "host"
+    repo.mkdir()
+    _init_git_repo(repo)
+    for name in ("NOTES.md", "README.md.bak", "XREADME.md", "readme.md"):
+        file_path = str(repo / "lib" / "pkg" / name)
+        assert not is_exempt_path_on_protected_branch(
+            file_path, target_repo=str(repo), host_root=str(repo)
+        ), name
+
+
 # ---------- is_exempt_path_on_protected_branch: cross repo ----------
 
 def test_cross_repo_readme_exempt(tmp_path):

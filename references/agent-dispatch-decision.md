@@ -62,11 +62,11 @@
 | worktree 中代理人編輯 .claude/ 被拒絕 | **CC runtime hardcoded 保護**（非 hook 攔截），additionalDirectories 無法繞過（ARCH-015） | **必須**改用主 repo cwd（PM 前台或主 repo subagent），不要繼續嘗試 additionalDirectories / --add-dir |
 | 代理人修改了 Ticket scope 外的檔案 | 重試 prompt 擴大 scope（PC-050 延伸） | 重試時嚴守原 Ticket 驗收條件 |
 | Worktree 建立後缺依賴 | worktree 不自動合併 blockedBy 分支 | prompt 加 `git merge feat/{dep}` 前置步驟 |
-| isolation:worktree 代理人無法自行 `ticket track complete` 收尾 | CC runtime 的 worktree 隔離守衛判定命令字串含 `complete` token 即「透過 shell builtin complete 執行一段字串，無法驗證留在 worktree 內」而拒絕（PC-SCLK-002，1.4.0-W1-023 探針取得逐字證據證實），非本 repo 可修正 | 見下方「isolation:worktree 派發的 complete 收尾限制」專節 |
+| isolation:worktree 代理人無法自行 `ticket track complete` 收尾 | CC runtime 的 worktree 隔離守衛判定命令字串含 `complete` token 即「透過 shell builtin complete 執行一段字串，無法驗證留在 worktree 內」而拒絕（PC-SCLK-002，探針取得逐字證據證實），非本 repo 可修正 | 見下方「isolation:worktree 派發的 complete 收尾限制」專節 |
 
 ---
 
-## isolation:worktree 派發的 complete 收尾限制（PC-SCLK-002，1.4.0-W1-023 探針證實）
+## isolation:worktree 派發的 complete 收尾限制（PC-SCLK-002，探針證實）
 
 **現象**：以 `isolation: worktree` 派發的代理人，在其收尾階段自行執行 `ticket track complete <id> --as <agent>` 時會被拒絕，逐字阻擋原文：
 
@@ -186,5 +186,5 @@ git checkout -b feat/ticket-N
 
 **Last Updated**: 2026-09-29
 **Version**: 1.2.0 - 〈派發模式決策流程〉加一行路由至 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準（強制）〉；〈方案 B：主 repo feat 分支（不隔離）〉加註已被〈禁止在共用主工作樹切換或建立分支（強制）〉取代（在共用主工作樹開分支會把並行 session 帶離 main，框架 issue 101）
-**Version**: 1.1.0 - 新增「isolation:worktree 派發的 complete 收尾限制」專節與失敗模式速查列（PC-SCLK-002，1.4.0-W1-023 探針取得逐字證據證實：CC runtime worktree 隔離守衛判定 `complete` token 為 shell builtin 呼叫而拒絕，本 repo 無法修正，需 PM 代跑收尾）
+**Version**: 1.1.0 - 新增「isolation:worktree 派發的 complete 收尾限制」專節與失敗模式速查列（PC-SCLK-002，探針取得逐字證據證實：CC runtime worktree 隔離守衛判定 `complete` token 為 shell builtin 呼叫而拒絕，本 repo 無法修正，需 PM 代跑收尾）
 **Version**: 1.0.0 - 初版，整合 PC-059 retry5 結論建立決策表

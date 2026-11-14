@@ -2,6 +2,40 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.54.0（2026-11-14）— 新增與行為變更，補記 2.50.0 之後未列入本檔的改動（2.51.0 至 2.53.0 已記者不重複）：
+- 父子關係：父票已是 completed／closed 時，`create --parent`、`track add-child`、`track set-parent` 拒絕寫入（errno `PARENT_TERMINAL`，不提供 `--force` 旁路），訊息指向 `--source-ticket` 或重開父票。原本可把未完成子票掛到已結案父票下。
+- `track claim`：成功後以 complete 閘門同一比對函式列出前 10 筆相關 error-pattern 與總數，知識在動手前送達；where.files 為空或 DOC／ANA／REF 豁免型別時不輸出，比對失敗不影響 claim（寫 stderr 與 hook-logs）。
+- `track dispatch`：實際寫入派發日誌 commit 且 `--isolation worktree` 時，stderr 提示派發前先推送 main（stdout 仍只有骨架）。CLI 寫入的子節（查重紀錄、派發日誌、Commit 規範）定義集中到 `ticket_system/lib/managed_subsections.py`，`track dispatch` 與 `track acceptance` 改從該處匯入。
+- `track hook-liveness`：新增 runtime 非阻擋錯誤筆數。`track hook-health` 的 flagged 建議改為實際存在的 `ticket create`。
+- 建票：hook 防護類 acceptance 模板補寫兩種合格證據（只有修改後分支才會產生的日誌行或輸出；同一輸入跑修改前後版本、輸出不同的對照），入口與提前回傳的判定行不算證據。放行與阻擋結果不變。
+- acceptance-gate：
+  - spawn 一致性：有規劃區段時落地確認區段不計入規劃數；部分落地由警告改為阻擋；範圍由 ANA 擴及 DOC；落地不足時另計回指本票的票。
+  - `multi_view_status` 值非法由阻擋降為警告，附修正途徑。
+  - 驗收記錄只認 frontmatter acceptance 全勾選，不再以 body 關鍵字判定（`references/ticket-lifecycle-details.md` 判準表同步）。
+  - 提前回傳時，清單不再以預設值把未執行的檢查標為已勾選，改標未評估。
+  - 同一命令鏈先 complete 全部未完成後代、再 complete 父票時，不以鏈前票面擋父票；父票走 batch-complete 或帶 `--force` 時不套用。
+  - error-pattern 衝突檢查收斂關鍵詞（排除通用目錄名）、依相關度排序，只列前 10 筆並附總數。
+  - 以子 shell 切到其他 repo 執行 ticket 命令時，依命令實際作用的 repo 判定；作用於其他 repo 即放行並寫日誌，目錄無法靜態解析時擋下並要求字面路徑。
+- 守衛：
+  - 放行時不再輸出 `permissionDecision`，只在阻擋時輸出 deny：`ticket-path-guard`、`ticket-file-access-guard`、`agent-ticket-validation`、`agent-dispatch-validation`、acceptance-gate。allow 會略過平台的權限提示，等於代使用者核可。
+  - `ticket-path-guard`：Edit／Write 傳絕對路徑時先剝除專案根再比對（原本恆放行）；Edit 禁用路徑 `.claude/tickets/` 下的既有檔由放行改為阻擋。
+  - `ticket-file-access-guard`：依 old_string 的實際位置判定是否編輯 frontmatter，任一出現位置落在 frontmatter 即 deny；deny 理由補 Edit body 章節、`append-log --replace`、`set-where`、`ticket migrate` 等合法途徑。根前綴剝除收斂為共用函式，補磁碟機代號與目錄邊界。
+  - `agent-dispatch-validation`：where.files 分類加目錄邊界與磁碟機路徑辨識；以 prompt 中票號的 where.files 補成派發目標的 fallback 只對實作類代理人名單內者套用（名單外代理人 prompt 中的票號是被分析對象）。
+- handoff：Stop hook 與 reminder hook 排除孤兒 handoff（目標或來源查無），Stop hook 歸檔不阻擋，reminder 不列入提醒；判準與 handoff GC 共用。
+- 全域 CLI 重裝：`ticket-reinstall-hook` 只在主 checkout 自動重裝全域 uv tool；linked worktree 內或判定失敗時改為提醒，不以未合併的源碼覆蓋全域 CLI。
+- linked worktree：CLI 讀框架設定改取程式碼所在的 checkout；`version`、`audit_version`、`blocker_resolution`、`handoff_utils` 讀 todolist、work-logs 與票面改用票務狀態根；handoff 系列 hook 與 stop-worklog-handoff-sync-check 的共用狀態改讀主 checkout；hook 日誌、liveness、identity_guard 讀寫與 events.jsonl／annotations.json 改經 `get_hook_log_dir`，落在主 checkout。
+- SKILL.md 命令層級慣例補一句：PC-093 延後語句守衛擋下且 ticket md 無法以 Edit 修改時，改用 `ticket track add-exempt-marker`，不改用 sed 或腳本寫檔。
+- 測試：hook-logs 洩漏哨兵改為前後快照比對；上述各項補對照測試。文件：`references/create-command.md`、`field-semantics.md`、`track-command-update.md` 同步。
+- 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符。運行時字串：claim 的簡化 WRAP 標題（`ClaimWrapMessages.WRAP_SECTION_TITLE`）不再帶來源票號，部分 CLI help 與錯誤訊息的票號範例改為 `<version>-W<wave>-<seq>`；`tests/` 的對應斷言改為斷言不含票號。其餘為註解與文件。命令與參數行為不變。
+
+**Version**: 2.53.0（2026-11-13）— `ticket track dispatch-check` 新增 `--release <agent_handle|agent_id>`：PM 明示放棄恢復某個本 session 的無票代理人時，移除其派發條目並留下釋放紀錄（`state["released"]`，保留 24 小時）。之後以 SendMessage 恢復該代理人時，`active-dispatch-tracker-hook.py`（新增 PostToolUse matcher `SendMessage`）把條目放回，`dispatched_at` 重設、原值存 `first_dispatched_at`。原本代理人回合結束後仍可被恢復寫檔，條目不能自動移除，本 session 的無票條目只能等 24 小時 TTL。拒絕且不改動條目：他 session、有 `ticket_id`（改用 complete）、isolation=worktree（isolated-subagent-main-write-guard 依此判定身分）、回合進行中（`turn_ended_at` 為空）、多筆符合、找不到；參數與 SendMessage 的 `to` 剝除 `[ref]` 後綴後比對。已知缺口：背景工作完成而恢復不經 SendMessage，條目不放回，`[OK]` 後附 `[WARN]` 提醒不要在代理人仍有背景工作時釋放；取不到 session_id 或狀態檔損毀時 exit 2 不寫入。`.claude/lib/dispatch_tracker.py` 新增 `release_dispatch`、`restore_released`。`references/track-command-dispatch.md`、`SKILL.md` 同步。測試：`ticket_system/tests/test_track_dispatch_check.py` 的 `TestReleaseFlag`、`.claude/hooks/tests/test_dispatch_release.py`。
+
+**Version**: 2.52.0（2026-11-13）— 寫入點檢查兄弟前驅數（ARCH-017，tarrragon/claude#54 第 11 項）。`create --parent --blocked-by`、`set-blocked-by`（覆寫與 `--add`）、`set-parent`、`add-child` 寫入前，以寫入後的 parent_id 與 blockedBy 判定：目標票，以及同父下依賴目標票的兄弟票，若同時依賴 2 個以上兄弟票且並非全為終態，就拒絕寫入（errno `BLOCKED_BY_MULTI_SIBLING`，exit 1，票檔不變）。`--remove`、`--clear` 不檢查。判定在新模組 `lib/sibling_predecessor_guard.py`；載入票檔發生例外時寫 stderr 並放行，claim／complete 仍有 sibling-blockedby-validator 後備檢查。原本這條規則只在 claim／complete 執行，寫入點只檢查成環。`references/track-command-update.md`、`field-semantics.md` 同步。測試：`tests/test_sibling_predecessor_guard.py`。
+
+**Version**: 2.51.1（2026-11-13）— 安裝提示對齊 shim 化：模組被直接執行、套件未安裝、不在 ticket 目錄時的提示，原本指示 `cd .claude/skills/ticket && uv tool install .`，改為在專案根目錄執行 `python3 .claude/scripts/install-skill-clis.py`。照舊指示安裝會在 uv tool 環境建立一份不隨原始碼更新的副本。涵蓋 `scripts/ticket.py`、`lib/messages.py`（含 `ModuleMessages.INSTALL_COMMAND`）與 `commands/` 下 7 個模組。命令行為不變。
+
+**Version**: 2.51.0（2026-11-12）— handoff Stop hook 只對建立交接檔的 Claude 行程阻擋（tarrragon/claude#45）。交接檔新增 `creator_process`（`{pid, lstart}`，`handoff_utils.current_claude_process` 沿父行程鏈找 claude 祖先）；`handoff-auto-resume-stop-hook.py` 的阻擋分支先以 `is_other_claude_process` 比對，確定是其他行程才改列建議性任務、不阻擋。原本 hook 不分接手方，長駐的協調 session 也被要求 /clear 後 resume。以行程而非 session_id 比對：/clear 會換 session_id，而 /clear 後的新 context 正是預期接手方。pid 重用以 lstart 區分。舊格式（無欄位）、欄位損毀、ps 失敗或逾時、找不到 claude 祖先時一律照擋；hook 的 lib 載入失敗時退化實作同樣照擋。`references/resume-command.md` 補欄位說明。
+
 **Version**: 2.50.0（2026-11-11）— 新增與行為變更，彙整自 2.49.5 發佈之後的改動：
 - 新子命令 `ticket track resolve`：以舊票號查出現行票號；`migrate` 結束時列出票檔以外的舊號殘留。
 - `ticket track dispatch-readiness` 新增檢查 7（where.files 寫入宣告）；建票時對盤點表格式問題輸出警告；版本偵測失敗的 hint 改述偵測規則，不再要求 `current_version`。

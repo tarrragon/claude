@@ -105,7 +105,7 @@ E2_HISTORY_KEYWORDS = (
 )
 E2_HISTORY_TICKET_RE = re.compile(r"W\d+-\d+")
 
-# §3.4-bis Markdown 表格選項偵測（W17-174.2 Solution §1）
+# §3.4-bis Markdown 表格選項偵測
 # 資料列：行首 | 後至少一個非 | 字元，再接 |
 TABLE_DATA_ROW_RE = re.compile(r"^\|[^|\n]+\|", re.MULTILINE)
 # 分隔列：只含 -、:、~、空白
@@ -175,7 +175,7 @@ def is_exempt_history(text: str) -> bool:
 
 
 def has_table_options(text: str) -> bool:
-    """§3.4-bis：判斷是否為 Markdown 表格選項列（W17-174.2 Solution §1）。
+    """§3.4-bis：判斷是否為 Markdown 表格選項列。
 
     必須同時滿足：
     (A) 至少 3 個資料列（資料列總數 - 分隔列數 - 標題列數 >= 3）
@@ -203,7 +203,7 @@ def _extract_first_table_header(text: str) -> str:
 
 
 def is_exempt_pure_data_table(text: str) -> bool:
-    """E6：純資料表格豁免（W17-174.2 Solution §2）。
+    """E6：純資料表格豁免。
 
     若表格標題列不含任何選項關鍵字（選項/方案/策略/Option/推薦 等），
     視為純資料表（測試結果、效能指標等），不應觸發提醒。
@@ -254,7 +254,7 @@ def detect_and_build_output(
     # Code block 預處理
     cleaned = strip_code_blocks(transcript_text)
 
-    # 偵測三路徑（W17-174.2 Solution §1：新增 §3.4-bis 表格路徑）
+    # 偵測三路徑（新增 §3.4-bis 表格路徑）
     hit_option_path = has_option_markers(cleaned) and has_question_ending(cleaned)
     hit_binary_path = is_binary_question(cleaned)
     hit_table_path = has_table_options(cleaned)
@@ -282,7 +282,7 @@ def read_last_assistant_text(transcript_path: Optional[str], logger) -> Optional
     """從 JSONL transcript 讀取最後一則 assistant 訊息文字。
 
     委派至 lib.transcript_tail_reader 共用工具，使用 offset 快取避免每次全檔
-    掃描（W11-004.11）。保留本函式名稱以維持既有 import 相容性。
+    掃描。保留本函式名稱以維持既有 import 相容性。
     """
     return _shared_read_last_assistant_text(transcript_path, logger)
 
@@ -301,7 +301,7 @@ def main() -> int:
         ))
         return 0
 
-    # Effort 感知（v2.1.133+，W14-037）：
+    # Effort 感知（v2.1.133+）：
     # PC-064 防護不可削弱 — AUQ 選項 pattern 偵測為事實判斷，
     # 必擋邏輯與 effort 無關。此處僅記錄 effort 供後續觀測。
     effort = get_effort_level(input_data)

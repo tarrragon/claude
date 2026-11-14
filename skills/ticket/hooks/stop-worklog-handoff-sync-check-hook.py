@@ -5,9 +5,9 @@
 # ///
 
 """
-Stop hook: 偵測 worklog 寫了 handoff 段落但 CLI 未執行的雙軌不同步（W17-083 S3）
+Stop hook: 偵測 worklog 寫了 handoff 段落但 CLI 未執行的雙軌不同步
 
-對應 W17-083 Phase 1 方案 D（A + C 組合）的 A 部分：
+雙軌同步檢查方案（A + C 組合）的 A 部分：
 session 結束時掃描 worklog 是否含 handoff 關鍵字，比對 .claude/handoff/pending/
 現況，列出缺失（worklog 有 / pending 無）與孤立（pending 有 / worklog 無）。
 
@@ -28,7 +28,7 @@ ARCH-020 同構雙寫風險：
 - SOT: .claude/skills/ticket/ticket_system/lib/worklog_parser.py
 - 任一處更新時需手動同步另一處（兩處 docstring 互相引用）
 
-來源：W17-083 ANA Phase 3a S3 設計
+設計來源：ANA Phase 3a S3 設計
 """
 
 import json
@@ -50,17 +50,19 @@ from lib import (  # noqa: E402
     parse_ticket_frontmatter,
     PM_ONLY_PREFIX,
 )
+from lib.hook_base import get_shared_state_root  # noqa: E402
+from lib.checkout_identity import owning_checkout_root  # noqa: E402
 from datetime import datetime  # noqa: E402
 
 EXIT_SUCCESS = 0
 HOOK_NAME = "stop-worklog-handoff-sync-check"
 
-# Stop flag 防重複觸發（W17-176 根因 1）
+# Stop flag 防重複觸發
 # 與 handoff-auto-resume-stop-hook 機制對齊但獨立 flag 路徑，避免互相干擾
 STOP_FLAG_FILE = ".claude/handoff/.stop-sync-check-blocked"
 STOP_FLAG_EXPIRY_SECONDS = 7200  # 2 小時（一個 session 的合理長度）
 
-# In-progress 偵測豁免（W17-176 根因 2）
+# In-progress 偵測豁免
 # 任務進行中提醒 handoff 邏輯倒置：handoff 是 session 結束時的動作
 IN_PROGRESS_STATUSES = {"in_progress"}
 
@@ -102,7 +104,7 @@ HANDOFF_KEYWORDS = (
     "未完成清單",
     "Spawned 推進清單",
 )
-# 0.2.1-W3-218 補「下一站」（本專案書寫慣例）。SOT-mirror，同步理由見
+# 補「下一站」（本專案書寫慣例）。SOT-mirror，同步理由見
 # worklog_parser.py:HANDOFF_KEYWORDS docstring。
 
 TICKET_ID_FULL_PATTERN = re.compile(
@@ -125,7 +127,7 @@ def _detect_handoff_keywords(content: str) -> bool:
 
 
 # 行首錨定容許前綴：關鍵字前只能有 '#' / '*' / 空白，排除句中出現
-# （0.2.1-W3-294 根因 1：rfind 未錨定行首，命中自指語料的歷史分析行）
+# （根因：rfind 未錨定行首，命中自指語料的歷史分析行）
 _ANCHOR_PREFIX_PATTERN = re.compile(r"^[#*\s]*$")
 _TITLE_LINE_PATTERN = re.compile(r"^#{1,6}\s")
 _INLINE_LIST_END_PATTERN = re.compile(r"^- ", re.MULTILINE)
@@ -153,7 +155,7 @@ def _iter_anchored_keyword_hits(content: str):
 
 
 def _extract_handoff_section(content: str) -> str:
-    """從 worklog 內容切出 handoff 相關段落（SOT-mirror，0.2.1-W3-294 重設計）。
+    """從 worklog 內容切出 handoff 相關段落（SOT-mirror）。
 
     策略：只採「行首錨定」的關鍵字命中（關鍵字前僅允許 '#' / '*' / 空白），
     取最後一個（idx 最大）；依關鍵字所在行的形態分派終點界定——標題式
@@ -169,7 +171,7 @@ def _extract_handoff_section(content: str) -> str:
     docstring 一致）。
 
     用於 detect_sync_drift 將 ticket ID 掃描範圍限制在 handoff 段落，避免從整個
-    worklog 抓到歷史 ticket 造成 false positive（W17-155 ANA / W17-156 修復）。
+    worklog 抓到歷史 ticket 造成 false positive。
     """
     if not content:
         return ""
@@ -279,7 +281,7 @@ def _find_worklog_path(project_root: Path, version: str) -> Path:
 def _scan_pending_dir(project_root: Path) -> Set[str]:
     """掃描 .claude/handoff/pending/ 下的 ticket ID（檔名 stem）。
 
-    W17-165 L2-C：過濾 from_ticket 處於 terminal 狀態（completed/closed）的
+    L2-C：過濾 from_ticket 處於 terminal 狀態（completed/closed）的
     handoff JSON，避免下游 orphan 比對誤報。設計取捨：
     - 純檔名掃描（O(N) glob）→ 加入 frontmatter 讀取（O(N) read + regex）
     - 在 session stop 時觸發，N 通常 < 20，額外成本可忽略
@@ -348,12 +350,12 @@ def _load_ticket_status(project_root: Path, ticket_id: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# Stop flag 防重複觸發 + in_progress 豁免（W17-176）
+# Stop flag 防重複觸發 + in_progress 豁免
 # ---------------------------------------------------------------------------
 
 
 def _get_stop_flag_path(project_root: Path) -> Path:
-    """取得 stop flag 檔案路徑（W17-176 根因 1）。"""
+    """取得 stop flag 檔案路徑。"""
     return project_root / STOP_FLAG_FILE
 
 
@@ -409,13 +411,13 @@ def _mark_blocked_this_session(project_root: Path, logger) -> None:
 
 
 def _is_subagent_context(input_data: dict, logger) -> bool:
-    """判斷 stdin 是否帶 subagent context 標記（W1-044）。
+    """判斷 stdin 是否帶 subagent context 標記。
 
     Why：本 hook 註冊於 Stop event（主線程停止）。CC hook input schema
     （.claude/references/hook-architect-technical-reference.md）中 SubagentStop
     才帶 agent_id / agent_type，Stop 不帶。若 stdin 出現 agent_id / agent_type，
     代表本次觸發實際處於 subagent context，此時注入 systemMessage 漂移警告會
-    劫持 agent 最終訊息（W1-030 判定 worklog-sync-check 為「中」劫持潛力來源）。
+    劫持 agent 最終訊息（先前評估判定 worklog-sync-check 為「中」劫持潛力來源）。
 
     Consequence：subagent context 下不偵測會把雙軌漂移警告注入 agent 回傳值。
 
@@ -438,7 +440,7 @@ def _is_subagent_context(input_data: dict, logger) -> bool:
 
 
 def _has_background_agents(input_data: dict, logger) -> bool:
-    """判斷 input_data 是否有背景代理人正在執行（W3-026.3）。
+    """判斷 input_data 是否有背景代理人正在執行。
 
     Why: Claude Code v2.1.145 stdin 提供 background_tasks 欄位，是「目前有
     背景任務」的直接訊號，比現行的 stop flag + in_progress ticket 推斷更精準；
@@ -469,7 +471,7 @@ def _has_background_agents(input_data: dict, logger) -> bool:
 
 
 def _has_in_progress_ticket(project_root: Path, version: str, logger) -> bool:
-    """偵測 active version 是否有 in_progress ticket（W17-176 根因 2）。
+    """偵測 active version 是否有 in_progress ticket。
 
     Fail-open 設計：偵測過程任何異常皆回傳 False（不阻塞 hook 後續邏輯，但
     本 hook 整體 fail-open 走向是「假設無 in_progress→繼續檢查」，可能造成
@@ -501,7 +503,7 @@ def _has_in_progress_ticket(project_root: Path, version: str, logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# S2：session 增量前置過濾（0.2.1-W3-294，僅 hook 端適用）
+# S2：session 增量前置過濾
 # ---------------------------------------------------------------------------
 
 
@@ -561,6 +563,10 @@ def _extract_session_incremental_content(
     """
     if session_start <= 0:
         return None
+    # git 讀共用狀態檔自身歷史時跟檔走：根取 worklog 所屬 checkout，
+    # base 與 diff 同一根，避免 WT 上 rc 128 退全文或相對路徑回空字串
+    owner = owning_checkout_root(str(worklog_path))
+    project_root = Path(owner) if owner else project_root
     base = _resolve_git_base_commit(project_root, session_start, logger)
     if not base:
         return None
@@ -605,8 +611,8 @@ def _extract_session_incremental_content(
 
 
 # ---------------------------------------------------------------------------
-# 第 7 格偵測：雙軌皆空但 session 有交接訊號（0.2.1-W3-219）
-# 來源票 0.2.1-W3-178「可用偵測訊號與誤報風險」：S3 閘門 + S1 主訊號 + S4 反向濾除。
+# 第 7 格偵測：雙軌皆空但 session 有交接訊號
+# 偵測訊號與誤報風險評估：S3 閘門 + S1 主訊號 + S4 反向濾除。
 # S2（commit body）/ S5（Context Bundle diff）列為後續增強，本函式不實作。
 # ---------------------------------------------------------------------------
 
@@ -628,7 +634,7 @@ def _get_session_active_tickets(
     project_root: Path, version: str, session_start: float, logger
 ) -> list[str]:
     """S3 閘門：找出 `started_at` / `completed_at` 落在 `session_start` 之後的
-    ticket，代表本 session 有實質 ticket 活動（來源票 W3-178 訊號表 S3 列）。
+    ticket，代表本 session 有實質 ticket 活動（訊號表 S3 列）。
 
     只證明「有活動」不指向交接目標本身，故僅作前置條件，非交接訊號本身。
     回傳 ticket id 清單，依 timestamp 新到舊排序（第一項作為建議的
@@ -665,7 +671,7 @@ def _detect_handoff_commit_signal(
 ) -> list[str]:
     """S1 主訊號 + S4 反向濾除：掃 session 時間窗內 commit subject 的交接語意。
 
-    來源票 W3-178 E4 實測：近 9 天 1035 個 commit 中 subject 命中交接語意僅 5 次
+    實測：近 9 天 1035 個 commit 中 subject 命中交接語意僅 5 次
     （0.5%），786 筆（75.9%）為 `chore(` 前綴的 append-log auto-commit 噪音，
     須先濾除否則訊號被淹沒。回傳命中的 commit subject 清單，無命中回空 list。
     """
@@ -732,14 +738,15 @@ def _format_dual_empty_warning(
         )
     lines.append("")
     lines.append(
-        "（0.2.1-W3-178 8 格矩陣第 7 格；session-switching-sop.md"
+        "（8 格矩陣第 7 格；session-switching-sop.md"
         "「Worklog 交接與 CLI handoff 同步」強制規則）"
     )
     return "\n".join(lines)
 
 
 def _check_dual_empty_handoff_signal(
-    project_root: Path, version: str, session_start: float, logger
+    project_root: Path, version: str, session_start: float, logger,
+    git_root: Optional[Path] = None,
 ) -> Optional[str]:
     """第 7 格偵測主流程：S3 閘門 -> S1 訊號（已內含 S4 濾除）-> 輸出建議命令。
 
@@ -750,7 +757,7 @@ def _check_dual_empty_handoff_signal(
         logger.debug("S3 閘門未命中（session 無 ticket 活動），跳過第 7 格偵測")
         return None
 
-    commit_hits = _detect_handoff_commit_signal(project_root, session_start, logger)
+    commit_hits = _detect_handoff_commit_signal(git_root or project_root, session_start, logger)
     if not commit_hits:
         logger.debug("S1 未命中交接語意 commit，跳過第 7 格偵測")
         return None
@@ -771,7 +778,7 @@ def _check_dual_empty_handoff_signal(
 
 
 def _format_warning(missing: list[str], orphan: list[str]) -> str:
-    """格式化警告輸出（對應 W17-083 Phase 1 §4 設計）。"""
+    """格式化警告輸出（對應 Phase 1 §4 設計）。"""
     lines = []
     lines.append("=" * 40)
     lines.append("[Worklog-CLI Handoff Sync Check]")
@@ -808,24 +815,28 @@ def detect_sync_drift(
     session_start: float,
     logger,
     input_data: dict | None = None,
+    git_root: Optional[Path] = None,
 ) -> Optional[str]:
     """主檢查邏輯：偵測雙軌不同步並回傳警告字串（無問題回 None）。
 
-    W17-176 + W3-026.3 三道防護（在原邏輯前依序檢查）：
+    project_root 為共用狀態根（todolist、票面、worklog、pending）；git_root 為
+    session 所在 checkout（stop flag、交接 commit 查詢），None 時同 project_root。
+
+    三道防護（在原邏輯前依序檢查）：
     1. Stop flag：本 session 已執行過 → 跳過（防重複觸發）
     2. in_progress ticket 偵測：有 in_progress ticket → 跳過（任務進行中不該提醒 handoff）
-    3. background_tasks（v2.1.145 stdin 直接訊號）：執行中時跳過（W3-026.3）
+    3. background_tasks（v2.1.145 stdin 直接訊號）：執行中時跳過
     4. （隱含）_extract_handoff_section 改 rfind 取最新 → 只列當前 session handoff
 
     input_data 參數設為 Optional 以保持向後相容（caller 不傳時等同 {} fallback）。
     """
-    # W1-044：subagent context 偵測。subagent stop 時跳過 sync check，避免
-    # systemMessage 漂移警告劫持 agent 最終訊息（W1-030）。置於所有偵測最前面。
+    # subagent context 偵測。subagent stop 時跳過 sync check，避免
+    # systemMessage 漂移警告劫持 agent 最終訊息。置於所有偵測最前面。
     if _is_subagent_context(input_data or {}, logger):
         return None
 
-    # W17-176 根因 1：stop flag 防重複觸發
-    if _is_blocked_this_session(project_root, logger):
+    # 根因 1：stop flag 防重複觸發
+    if _is_blocked_this_session(git_root or project_root, logger):
         return None
 
     version = _detect_active_version(project_root)
@@ -833,12 +844,12 @@ def detect_sync_drift(
         logger.debug("無 active version，靜默退出")
         return None
 
-    # W17-176 根因 2：in_progress ticket 偵測豁免（fail-open）
+    # 根因 2：in_progress ticket 偵測豁免（fail-open）
     if _has_in_progress_ticket(project_root, version, logger):
         logger.debug("偵測到 in_progress ticket，跳過 handoff sync check")
         return None
 
-    # W3-026.3：background_tasks 直接訊號（v2.1.145）
+    # background_tasks 直接訊號（v2.1.145）
     if _has_background_agents(input_data or {}, logger):
         logger.debug("偵測到 background_tasks 非空，跳過 sync check")
         return None
@@ -849,13 +860,15 @@ def detect_sync_drift(
         return None
 
     # mtime 過濾：本 session 未動 worklog → worklog 軌恆為「無交接段」（A=無）。
-    # 0.2.1-W3-219：此情形若 pending 亦空，正是第 7 格候選，須檢查交接訊號
+    # 此情形若 pending 亦空，正是第 7 格候選，須檢查交接訊號
     # 而非直接靜默；pending 非空則維持既有 orphan 邏輯範圍外的靜默（非本票範圍）。
     if session_start > 0 and worklog_path.stat().st_mtime < session_start:
         logger.debug("worklog mtime 早於 session_start，跳過關鍵字偵測")
         if _scan_pending_dir(project_root):
             return None
-        return _check_dual_empty_handoff_signal(project_root, version, session_start, logger)
+        return _check_dual_empty_handoff_signal(
+            project_root, version, session_start, logger, git_root
+        )
 
     try:
         full_content = worklog_path.read_text(encoding="utf-8")
@@ -873,12 +886,14 @@ def detect_sync_drift(
     pending_ids = _scan_pending_dir(project_root)
     has_keywords = _detect_handoff_keywords(content)
 
-    # 雙軌皆無 → 檢查第 7 格訊號（S3 閘門 + S1 主訊號 + S4 反向濾除，0.2.1-W3-219）；
+    # 雙軌皆無 → 檢查第 7 格訊號（S3 閘門 + S1 主訊號 + S4 反向濾除）；
     # 無交接訊號時仍靜默（第 8 格：確實無交接）
     if not has_keywords and not pending_ids:
-        return _check_dual_empty_handoff_signal(project_root, version, session_start, logger)
+        return _check_dual_empty_handoff_signal(
+            project_root, version, session_start, logger, git_root
+        )
 
-    # W17-156: 只掃 handoff 段落而非整份 worklog，避免抓到歷史 ticket 造成 false positive
+    # 只掃 handoff 段落而非整份 worklog，避免抓到歷史 ticket 造成 false positive
     if has_keywords:
         handoff_section = _extract_handoff_section(content)
         worklog_ids = _extract_ticket_ids(handoff_section, active_version=version)
@@ -905,7 +920,7 @@ def detect_sync_drift(
 def main():
     logger = setup_hook_logging("stop-worklog-handoff-sync-check")
     try:
-        # W3-026.3：讀取 stdin 取得 v2.1.145 background_tasks 欄位
+        # 讀取 stdin 取得 v2.1.145 background_tasks 欄位
         # 解析失敗 / tty / 欄位不存在皆 fallback 到空 dict（沿用既有行為）
         event: dict = {}
         if not sys.stdin.isatty():
@@ -922,23 +937,26 @@ def main():
 
         session_start = float(event.get("session_start_timestamp", 0) or 0)
 
-        project_root = get_project_root()
-        warning = detect_sync_drift(project_root, session_start, logger, input_data=event)
+        session_root = get_project_root()
+        project_root = get_shared_state_root(session_root)
+        warning = detect_sync_drift(
+            project_root, session_start, logger, input_data=event, git_root=session_root
+        )
 
         if warning:
             # Stop event schema 不允許 hookSpecificOutput.additionalContext；
-            # 改用 top-level systemMessage（W17-158）。
+            # 改用 top-level systemMessage。
             # 受眾標記（PC-V1-004 防護 C）：Stop event 無 agent_id，程式層無法
             # 過濾 subagent；加 PM-only 前綴讓 AGENT_PRELOAD 忽略規則補位，
-            # 與既有 subagent context 偵測（W1-030 / W1-044）互補形成雙層。
+            # 與既有 subagent context 偵測互補形成雙層。
             output = {
                 "systemMessage": PM_ONLY_PREFIX + warning,
             }
             print(json.dumps(output, ensure_ascii=False))
-            # W17-176 根因 1：成功輸出 warning 後標記 stop flag，後續本 session
+            # 根因 1：成功輸出 warning 後標記 stop flag，後續本 session
             # 不再重複觸發。設計取捨：只在「實際輸出」時標記，避免「無 drift
             # 也消耗 flag」造成下次有 drift 時被誤判跳過。
-            _mark_blocked_this_session(project_root, logger)
+            _mark_blocked_this_session(session_root, logger)
         sys.exit(EXIT_SUCCESS)
     except Exception as e:
         # 規則 4：失敗可見（stderr + 日誌）

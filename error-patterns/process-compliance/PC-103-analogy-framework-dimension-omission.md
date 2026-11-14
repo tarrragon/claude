@@ -37,7 +37,7 @@
 |------|------|
 | A 發散被刻板錨定 | 提到 Linux process，PM 腦中率先浮現 fork/exec/waitpid；scheduler/IPC 觸發頻率低不被啟動 |
 | B 收斂無全景 checklist | 類比完成後未列「原系統大層級清單」做覆蓋性檢查 |
-| C 類比量尺不完整 | W17-004.1 產出 8 項 POSIX 成功模式為量尺，但量尺本身聚焦「介面設計」不含「scheduling/runtime 管理」 |
+| C 類比量尺不完整 | 某並行分析產出 8 項 POSIX 成功模式為量尺，但量尺本身聚焦「介面設計」不含「scheduling/runtime 管理」 |
 | D WRAP 未對「維度完整性」做框架測試 | PC-080 要求 WRAP A 階段做框架測試，但未明確要求「類比覆蓋全層級」 |
 
 ---
@@ -78,9 +78,9 @@
 
 ## 觸發案例
 
-### W17-001 類比表漏排 scheduler 層（本 Pattern 發現案例）
+### 類比表漏排 scheduler 層（本 Pattern 發現案例）
 
-W17-001 Linux 類比表覆蓋：
+該 ANA 的 Linux 類比表覆蓋：
 - Process lifecycle: PID / PCB / fork / exec / waitpid / zombie
 - IPC: signal（類比 append-log）
 - Memory: mm_struct / page fault（隱喻 PCB 半填）
@@ -88,9 +88,9 @@ W17-001 Linux 類比表覆蓋：
 
 **漏排**：
 - **Scheduler 層**：runqueue / schedule() / TASK_RUNNING / nice / top — 完全沒對應
-- 後果：修復方向表僅 4 項（C PCB 自動化 / A dispatch-check / waitpid / signal），用戶追問「任務鏈串連執行順序」才建 W17-009 補 scheduler 層
+- 後果：修復方向表僅 4 項（C PCB 自動化 / A dispatch-check / waitpid / signal），用戶追問「任務鏈串連執行順序」才另建 ticket 補 scheduler 層
 
-**ROI 影響**：若 scheduler 層先被識別，W17 Wave 修復順序會不同（W17-009 的 `ticket track next` 實作對日常 PM 派發影響比 W17-007 waitpid 更大）。
+**ROI 影響**：若 scheduler 層先被識別，該 Wave 的修復順序會不同（`ticket track next` 實作對日常 PM 派發影響比 waitpid 更大）。
 
 ---
 
@@ -106,4 +106,4 @@ W17-001 Linux 類比表覆蓋：
 ---
 
 **Last Updated**: 2026-04-20
-**Version**: 1.0.0 — 從 W17-001 類比漏排 scheduler 層案例建立
+**Version**: 1.0.0 — 從類比漏排 scheduler 層案例建立

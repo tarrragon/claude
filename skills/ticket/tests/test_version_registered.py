@@ -40,7 +40,7 @@ class TestValidateVersionRegistered:
             ]
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             is_valid, error_msg = validate_version_registered("0.17.4")
@@ -56,7 +56,7 @@ class TestValidateVersionRegistered:
             ]
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             is_valid, error_msg = validate_version_registered("0.18.0")
@@ -74,7 +74,7 @@ class TestValidateVersionRegistered:
             ]
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             is_valid, error_msg = validate_version_registered("0.17.3")
@@ -92,7 +92,7 @@ class TestValidateVersionRegistered:
             ]
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             is_valid, error_msg = validate_version_registered("0.2.0")
@@ -104,7 +104,7 @@ class TestValidateVersionRegistered:
         """todolist.yaml 不存在時向後相容（允許）"""
         # 不建立 todolist.yaml
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             is_valid, error_msg = validate_version_registered("0.17.4")
@@ -116,7 +116,7 @@ class TestValidateVersionRegistered:
         """versions 列表為空時，版本視為未註冊"""
         _write_todolist(temp_project, {"versions": []})
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             is_valid, error_msg = validate_version_registered("0.17.4")
@@ -129,7 +129,7 @@ class TestValidateVersionRegistered:
         todolist_path = temp_project / "docs" / "todolist.yaml"
         todolist_path.write_text("{{invalid yaml", encoding="utf-8")
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             is_valid, error_msg = validate_version_registered("0.17.4")
@@ -145,9 +145,66 @@ class TestValidateVersionRegistered:
             ]
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             _, error_msg = validate_version_registered("0.99.0")
 
         assert "version-release" in error_msg or "doc-flow" in error_msg
+
+
+class TestVersionReadsTicketStateRootInLinkedWorktree:
+    """linked worktree 內讀 todolist 應取主 repo 那份（204.1.2.5 E1）。
+
+    E1 對照：把 version.get_ticket_state_root 換回 paths.get_project_root
+    （舊碼行為）時，同一 fixture 讀到 WT 那份。
+    """
+
+    @pytest.fixture
+    def linked_worktree(self, tmp_path, monkeypatch):
+        import subprocess
+
+        from ticket_system.lib import paths
+
+        main = tmp_path / "main"
+        wt = tmp_path / "wt"
+        main.mkdir()
+
+        def git(*args):
+            subprocess.run(
+                ["git", "-C", str(main), "-c", "user.name=t",
+                 "-c", "user.email=t@example.com", *args],
+                check=True, capture_output=True,
+            )
+
+        git("init", "-q")
+        (main / "CLAUDE.md").write_text("# marker\n", encoding="utf-8")
+        (main / "docs").mkdir()
+        _write_todolist(main, {"versions": [{"version": "1.0.0", "status": "active"}]})
+        git("add", "-A")
+        git("commit", "-q", "-m", "init")
+        git("worktree", "add", "-q", str(wt), "-b", "wt-branch")
+        _write_todolist(wt, {"versions": [{"version": "2.0.0", "status": "active"}]})
+
+        monkeypatch.delenv("TICKET_SYSTEM_TEST_ISOLATION", raising=False)
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(wt)
+        paths.reset_project_root_cache()
+        paths.reset_ticket_state_root_cache()
+        yield paths
+        paths.reset_project_root_cache()
+        paths.reset_ticket_state_root_cache()
+
+    def test_reads_main_repo_todolist(self, linked_worktree):
+        from ticket_system.lib.version import get_active_versions
+
+        assert get_active_versions() == ["v1.0.0"]
+
+    def test_old_root_resolver_reads_worktree_copy(self, linked_worktree, monkeypatch):
+        """E1 對照：舊解析函式在同一 fixture 回 WT 那份"""
+        from ticket_system.lib import version
+
+        monkeypatch.setattr(
+            version, "get_ticket_state_root", linked_worktree.get_project_root
+        )
+        assert version.get_active_versions() == ["v2.0.0"]

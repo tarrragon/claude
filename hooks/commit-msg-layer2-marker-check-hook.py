@@ -3,15 +3,15 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyyaml"]
 # ///
-"""commit-msg Layer 2 marker check hook（W17-126）。
+"""commit-msg Layer 2 marker check hook。
 
 職責（事後維度防護）：
-    git commit 完成後，若 commit 涉及 framework 路徑（依 W17-127.1 SSOT
+    git commit 完成後，若 commit 涉及 framework 路徑（依 SSOT
     `lib.framework_paths.is_framework_path`），則檢查 commit msg 是否含
     Layer 2 審查標記。缺則輸出機會成本語氣的警告（exit 0，不阻擋）。
 
 設計依據：
-    W17-122 ANA linux 視角警示三層防護的「事後 Layer 2」維度僅有 Layer C
+    ANA linux 視角警示三層防護的「事後 Layer 2」維度僅有 Layer C
     紙本約束，本 hook 補強為 Layer A（事後自動偵測）形成完整防護鏈。
 
 合法 Layer 2 標記格式（任一即可）：
@@ -216,7 +216,7 @@ def main() -> int:
     if input_data.get("tool_name", "") != "Bash":
         return EXIT_SUCCESS
 
-    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（PC-V1-004 入口污染防護）
     # Layer 2 補審查屬 PM 派發決策，注入 subagent context 會誘導唯讀委員越界
     if is_subagent_environment(input_data):
         logger.info(

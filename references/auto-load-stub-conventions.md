@@ -32,7 +32,7 @@
 | 2. hook 錨點保全 | 外移前 grep 確認 hook 引用的規則編號、章節標題、閾值數字仍在 stub 內 | `grep -rn "<規則檔名\|規則編號\|關鍵錨點字串>" .claude/hooks/ .claude/skills/*/hooks/` 全數仍可命中 |
 | 3. 引用鏈同步 | 更新 `.claude/` 與 `CLAUDE.md` 中指向舊路徑或舊章節名的引用（`docs/` 內屬歷史敘事，不在範圍） | `grep -rn "<舊路徑>" .claude/ CLAUDE.md` 逐一判定：改指新位置、或確認屬歷史敘事應保留原貌。章節名 grep 僅在該字串具鑑別度時使用（如「核心原則」會回數十筆雜訊） |
 | 4. 可達性驗證 | 確認新載體對其**受眾**有入邊——不只是檔案存在，而是受眾讀得到的位置，要有指向它的路由 | 寫出三元組並留在 ticket：受眾是誰 / 該受眾的載入根是什麼 / `grep -rl "<新檔路徑>" .claude/` 的命中結果中哪一處位於該根的可達範圍 |
-| 5. 預算驗證 | 修改後跑 file-size-guardian，確認集合總量未回彈 | `CLAUDE_PROJECT_DIR=$(pwd) uv run --script .claude/hooks/file-size-guardian-hook.py 2>&1 \| grep "Auto-load"` 顯示 <= 45k。**差值僅於超標時輸出**，需前後對照時改讀 `.claude/hook-logs/auto-load-budget-state.json` 的 `total_tokens` |
+| 5. 預算驗證 | 修改後跑 file-size-guardian，確認集合總量未回彈 | `CLAUDE_PROJECT_DIR=$(pwd) uv run --script .claude/hooks/file-size-guardian-hook.py 2>&1 \| grep "Auto-load"` 顯示 <= 45k。**差值僅於超標時輸出**，需前後對照時改讀 `.claude/hook-logs/file-size-guardian/auto-load-budget-state.json` 的 `total_tokens`（在 linked worktree 內執行時，此檔位於主 checkout） |
 
 **已知的非送達路徑**（步驟 4 判定時直接排除，勿再逐次重驗）：`.claude/agents/*.md` 主文的 `@path` 以字面字串留存不展開（2026-08-17 三探針實測）；`.claude/references/**` 與 `.claude/pm-rules/**` 非自動載入，僅在被明確指引時讀取。入邊若只落在這些位置，等同無入邊。
 
@@ -84,4 +84,4 @@
 
 **Last Updated**: 2026-08-18
 **Version**: 2.0.0 — 外移 SOP 由四步擴為六步（0 至 5），補三個實證缺口：新增步驟 0「去處清單」（舊版步驟 1 的驗證為 details 檔頭自我宣告，漏搬時照樣通過）；步驟 1 補「去處為既有壓縮版時須確認等價」判準；新增步驟 3「可達性驗證」（原無對應步驟——substance 保全但受眾不可達是獨立失效）；原步驟 3 引用鏈同步的 grep 範圍由兩個檔擴為全庫；步驟 2 的 grep 範圍補 skill 內嵌 hooks。三缺口皆有實際案例，回測確認新 SOP 可攔截。
-**Version**: 1.0.0 — 初始建立：W7 token 收斂（82.5k → 41.9k）的 stub 形態與外移 SOP 集中成文，取代散落各 ticket 的收斂不變量（W7-007）
+**Version**: 1.0.0 — 初始建立：W7 token 收斂（82.5k → 41.9k）的 stub 形態與外移 SOP 集中成文，取代散落各 ticket 的收斂不變量

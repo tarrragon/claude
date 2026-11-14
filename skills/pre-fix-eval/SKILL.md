@@ -2,7 +2,7 @@
 name: pre-fix-eval
 description: "修復前強制評估系統. Use for: (1) 測試失敗自動評估, (2) 編譯錯誤分類處理, (3) 強制 Ticket 開設流程"
 metadata:
-  version: 1.0.1
+  version: 1.0.2
 ---
 
 # 修復前強制評估 (Pre-Fix Evaluation)

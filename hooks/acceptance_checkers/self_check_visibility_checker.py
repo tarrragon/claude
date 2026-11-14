@@ -1,7 +1,7 @@
 """
-Self-Check Visibility Checker - Layer 1 自檢可觀測性檢查（W17-064）
+Self-Check Visibility Checker - Layer 1 自檢可觀測性檢查
 
-W17-064：偵測 IMP/ANA ticket 的 Solution 章節是否含 `### 自檢結果` 子章節。
+偵測 IMP/ANA ticket 的 Solution 章節是否含 `### 自檢結果` 子章節。
 若缺少則輸出 warning（不阻擋 complete），提示代理人執行 Layer 1 自檢
 （依 `.claude/references/agent-self-check-template.md`）。
 
@@ -59,7 +59,7 @@ def _has_self_check_subsection(solution_text: str) -> bool:
     """
     檢查 Solution 章節文字中是否含 `### 自檢結果` 子章節（H3）。
 
-    前綴匹配（W10-124 / W10-118 Case C）：標題後允許接補充說明，但補充說明必須
+    前綴匹配：標題後允許接補充說明，但補充說明必須
     以分隔符（whitespace / 全形或半形括號 / 連接詞「與」）開始，避免
     `### 自檢結果摘要` 等異義標題誤匹配。
     """
@@ -73,7 +73,7 @@ def solution_has_self_check_subsection(body: str) -> bool:
     公開判定 API：body（不含 frontmatter）之 `## Solution` 章節是否含
     `### 自檢結果` 子章節。
 
-    共用抽取判定（0.4.1-W2-010）：PreToolUse hook 的 warning 提示（本檔
+    共用抽取判定：PreToolUse hook 的 warning 提示（本檔
     `check_self_check_visibility`）與 `lifecycle.py complete()` 的 gate 阻擋
     共用同一判定邏輯，避免雙實作漂移（規則出處不同、行為卻各自維護）。
 
@@ -133,7 +133,7 @@ def check_self_check_visibility(
 
     logger.info(f"ticket type={type_upper} 的 Solution 缺 ### 自檢結果 子章節，輸出 warning")
     return (
-        "[Layer 1 自檢可觀測性] Solution 中未見 ### 自檢結果 子章節（W17-064）\n"
+        "[Layer 1 自檢可觀測性] Solution 中未見 ### 自檢結果 子章節\n"
         "依 `.claude/references/agent-self-check-template.md`，IMP/ANA ticket 完成前\n"
         "建議於 `## Solution` 下新增 `### 自檢結果` 子章節，記錄 Layer 1 自檢清單檢視結果。\n"
         "本檢查為 warning（不阻擋 complete），目的為提升自檢流程可觀測性。"

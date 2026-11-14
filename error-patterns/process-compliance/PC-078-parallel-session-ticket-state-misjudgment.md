@@ -9,7 +9,7 @@
 | 編號 | PC-078 |
 | 類別 | process-compliance |
 | 風險等級 | 高 |
-| 首發時間 | 2026-04-17（W13-003 commit 後誤 release W12-006 事件） |
+| 首發時間 | 2026-04-17（某任務 commit 後誤 release 被並行認領的任務 事件） |
 | 姊妹模式 | PC-076（前 session 未 commit 遺留）、ARCH-015（worktree 隔離） |
 
 ---
@@ -27,15 +27,15 @@ PM 在 `git status` 或 `ticket track query` 看到非本 session 主動操作�
 
 ---
 
-## 實例（2026-04-17 W13-003 commit 後誤 release W12-006）
+## 實例（2026-04-17 某任務 commit 後誤 release 被並行認領的任務）
 
-- PM 在本 session 完成 W13-003 commit 後執行 `git status`
-- 發現 W12-006 ticket md 變更：status `pending → in_progress`、`started_at` 填入新時間戳
+- PM 在本 session 完成 某任務 commit 後執行 `git status`
+- 發現 被並行認領的任務 ticket md 變更：status `pending → in_progress`、`started_at` 填入新時間戳
 - PM 誤判來源：「可能是 commit B ticket CLI 變更副作用或其他工作流觸發」
-- PM 動作：`ticket track release 0.18.0-W12-006`，然後 commit 訊息寫「意外被 claim（非主動認領），已 release」
+- PM 動作：`ticket track release <ticket-id>`，然後 commit 訊息寫「意外被 claim（非主動認領），已 release」
 - 用戶立即指出：**是另一個 terminal 在處理**
-- 實際情況：並行 terminal 剛 claim W12-006 正準備實作，被 PM 打斷
-- 補救：PM 重新 claim W12-006 還原 in_progress，建 PC-078 記錄教訓
+- 實際情況：並行 terminal 剛 claim 被並行認領的任務 正準備實作，被 PM 打斷
+- 補救：PM 重新 claim 被並行認領的任務 還原 in_progress，建 PC-078 記錄教訓
 
 ---
 
@@ -133,5 +133,5 @@ PM 在 `git status` 或 `ticket track query` 看到非本 session 主動操作�
 ---
 
 **Last Updated**: 2026-04-17
-**Version**: 1.0.0 — 首發記錄（誤 release W12-006 事件，commit c07bc00b 訊息含錯誤歸因）
-**Source**: 2026-04-17 W13-003 完結 session，PM 發現 W12-006 status 從 pending 變 in_progress 後誤判為「意外 claim」並 release；用戶即時指出為並行 terminal 活躍操作；PM reclaim 還原並建本錯誤模式
+**Version**: 1.0.0 — 首發記錄（誤 release 被並行認領的任務 事件，commit c07bc00b 訊息含錯誤歸因）
+**Source**: 2026-04-17 某任務 完結 session，PM 發現 被並行認領的任務 status 從 pending 變 in_progress 後誤判為「意外 claim」並 release；用戶即時指出為並行 terminal 活躍操作；PM reclaim 還原並建本錯誤模式

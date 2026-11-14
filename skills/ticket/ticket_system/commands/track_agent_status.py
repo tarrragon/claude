@@ -12,8 +12,8 @@ TaskOutput 安全查詢指引 CLI（Stub / Guidance）
 未來若 CC runtime 提供 shell-accessible 狀態查詢通道（例如透過 socket 或 task
 metadata 檔），可在本命令內加上實際查詢邏輯，維持 CLI 介面不變。
 
-來源 Ticket: 0.18.0-W10-061（項目 4，降級為 guidance stub）。
-相關 Ticket: 0.18.0-W10-059（ANA）。
+降級為 guidance stub。
+相關 Ticket: <ticket-id>（ANA）。
 """
 import argparse
 from typing import Optional

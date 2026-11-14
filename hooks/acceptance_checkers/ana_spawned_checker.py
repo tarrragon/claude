@@ -1,12 +1,15 @@
 """
 ANA Spawned Checker - ANA Ticket 後續 Ticket 檢查
 
-[DEPRECATED — W17-120.2 / PC-091]
+[DEPRECATED — PC-091]
 ====================================================================
 本模組已退場。ANA complete 阻擋判斷統一收斂到 children_checker。
 
 PC-091 路線決議：
-- ANA 落地統一用 children（`ticket track create --parent <ANA-ID>`）。
+- ANA 落地依版本分兩條路線（ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉）：
+  屬本版範圍者建 children（`ticket create --parent <ANA-ID>`）；
+  依〈兩期〉排入後續版本者在目標版本建根票
+  （`ticket create --version <目標版本> --source-ticket <ANA-ID>`）。
 - spawned_tickets 對 ANA 重定位為「弱 metadata」，不阻擋父 complete。
 
 acceptance-gate-hook.py 已移除 Step 2.5.1（check_spawned_tickets_blocking
@@ -21,10 +24,7 @@ acceptance-gate-hook.py 已移除 Step 2.5.1（check_spawned_tickets_blocking
   - check_spawned_tickets_blocking
 
 詳見：
-  - 父 ANA: 0.18.0-W17-120
-  - 規則層落地（DOC）: 0.18.0-W17-120.1
-  - hook 收斂（IMP）: 0.18.0-W17-120.2
-  - PC-091 error-pattern
+  - PC-091 error-pattern（規則層落地與 hook 收斂的依據）
 ====================================================================
 
 檢查 ANA（分析）Ticket 是否已將分析結論轉化為可追蹤的子任務或獨立 Ticket。
@@ -45,7 +45,7 @@ if str(_hooks_dir) not in sys.path:
 from lib import find_ticket_file, parse_ticket_frontmatter
 from lib.hook_messages import GateMessages, format_message
 from acceptance_checkers.ticket_parser import extract_children_from_frontmatter
-# 單一真實來源：terminal 狀態定義由 children_checker 集中管理（W12-004）
+# 單一真實來源：terminal 狀態定義由 children_checker 集中管理
 from acceptance_checkers.children_checker import TERMINAL_STATUSES
 
 
@@ -74,7 +74,7 @@ def extract_spawned_tickets_from_frontmatter(frontmatter: dict, logger) -> List[
         spawned = []
         lines = spawned_str.split("\n")
         if any(line.strip().startswith("-") for line in lines):
-            # 解析 YAML 清單格式 (e.g., "- 0.31.0-W4-036\n- 0.31.0-W4-037")
+            # 解析 YAML 清單格式 (e.g., "- <ticket-id-1>\n- <ticket-id-2>")
             for line in lines:
                 line = line.strip()
                 if line.startswith("-"):
@@ -82,7 +82,7 @@ def extract_spawned_tickets_from_frontmatter(frontmatter: dict, logger) -> List[
                     if ticket_id:
                         spawned.append(ticket_id)
         else:
-            # 單一純量寫法 (e.g., "spawned_tickets: 0.31.0-W4-036")，
+            # 單一純量寫法 (e.g., "spawned_tickets: <ticket-id>")，
             # 合法 YAML（schema 允許 list 欄位純量化），非手寫 parser 缺陷
             spawned.append(spawned_str)
     else:
@@ -140,7 +140,7 @@ def check_spawned_tickets_status(
 ) -> Optional[str]:
     """檢查 spawned tickets 的狀態，列出非 terminal 的項目。
 
-    Phase 1 警告層（W12-004）：
+    Phase 1 警告層：
         當防護性 ANA 的 spawned IMP 仍處於 pending/in_progress/blocked 時，
         產生警告訊息（不 block），讓 PM 看到防護缺口的可見訊號。
 
@@ -210,7 +210,7 @@ def check_spawned_tickets_blocking(
     project_dir: Path,
     logger,
 ) -> Tuple[bool, Optional[str]]:
-    """檢查 spawned tickets 是否全完成；未完成時回傳阻擋訊息（W15-003）。
+    """檢查 spawned tickets 是否全完成；未完成時回傳阻擋訊息。
 
     循環引用防護：
         使用 visited set 記錄已查詢的 spawned_id，避免 A spawns B / B spawns A 造成無限遞迴。

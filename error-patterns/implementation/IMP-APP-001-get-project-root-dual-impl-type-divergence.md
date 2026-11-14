@@ -4,7 +4,6 @@ title: get_project_root 雙實作回傳型別分歧 — consumer 用錯 Path 方
 category: implementation
 severity: medium
 created: 2026-06-24
-source_ticket: 0.37.0-W6-003
 ---
 
 # IMP-APP-001: get_project_root 雙實作回傳型別分歧

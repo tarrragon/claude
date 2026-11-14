@@ -301,5 +301,5 @@ Power_Index(Claude) =
 ---
 
 **Last Updated**: 2026-04-19
-**Version**: 1.0.0 — 從 `.claude/rules/core/ai-communication-rules.md` 規則 5 全文外移（W16-001）
+**Version**: 1.0.0 — 從 `.claude/rules/core/ai-communication-rules.md` 規則 5 全文外移
 **Source**: 原 ai-communication-rules.md §5.0–§5.12

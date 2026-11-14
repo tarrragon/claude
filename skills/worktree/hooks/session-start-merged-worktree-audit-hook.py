@@ -6,7 +6,7 @@
 """
 Session Start Merged Worktree Audit Hook - SessionStart
 
-W11-033 / PC-149：session 啟動時統一 audit 兩種「ticket complete 後系統性缺口」：
+PC-149：session 啟動時統一 audit 兩種「ticket complete 後系統性缺口」：
 
 Section 1 — Merged worktree audit
   列出 ahead=0 的 user worktree（排除主 repo 與 cc runtime worktree `.claude/worktrees/agent-*`）。
@@ -16,7 +16,7 @@ Section 2 — Metadata orphan audit
   列出 `status: completed` 但 ticket md 仍 modified（git status `M` / `A`）的孤兒。
   in_progress ticket md modified 屬正常狀態（agent 還在寫），不列入。
 
-Section 3 — Orphan branch audit（W3-021）
+Section 3 — Orphan branch audit
   列出無對應 worktree 的孤兒分支，涵蓋 `worktree-agent-*` 與人工命名分支兩類。
   worktree 已被移除（GC 或手動刪除目錄）但分支殘留（git worktree remove 不刪分支）。
   排除保護分支（main / master）與當前 checkout 分支。
@@ -49,7 +49,9 @@ from lib import (
     get_uncommitted_files,
     get_current_branch,
     is_protected_branch,
+    run_git,
 )
+from lib.hook_base import get_shared_state_root
 
 
 # ---------- worktree audit ----------
@@ -57,7 +59,7 @@ from lib import (
 def parse_worktree_list(logger) -> Optional[List[Tuple[str, str]]]:
     """解析 git worktree list，回傳 (path, branch) 列表（排除 main / master / detached）。
 
-    改用 lib.git_utils.get_worktree_list(exclude_main=True)（0.2.1-W3-290），
+    改用 lib.git_utils.get_worktree_list(exclude_main=True)，
     detached 項目無 branch 值，經 `if wt.get("branch")` 過濾後與原實作等價。
 
     Returns:
@@ -133,14 +135,54 @@ def collect_merged_user_worktrees(logger) -> Optional[List[Tuple[str, str]]]:
         if is_cc_runtime_worktree(wt_path):
             continue
         unmerged = get_unmerged_commits(branch, logger)
-        if unmerged is None:
+        if unmerged is None or unmerged:
             continue
-        if not unmerged:
-            merged.append((wt_path, branch))
+        reason = _in_progress_reason(wt_path, branch, logger)
+        if reason:
+            logger.info("worktree %s（%s）ahead=0 但%s，列為進行中，不給清理建議", wt_path, branch, reason)
+            continue
+        merged.append((wt_path, branch))
     return merged
 
 
-# ---------- orphan branch audit (W3-021 擴充：人工命名分支) ----------
+def _has_own_commits(branch: str, logger) -> Optional[bool]:
+    """分支頭是否不在 main 的 first-parent 歷史上（分支有過自己的提交）。
+
+    剛自 main 建立的分支頭就是 main 上的某個 commit，ahead=0 卻不代表已合併。
+    fast-forward 合併的分支會被判為沒有自有提交，結果是少列一筆清理建議（偏安全）。
+    True = 有自有提交；False = 沒有；None = 判定失敗。
+    """
+    tip = run_git(["git", "rev-parse", branch], timeout=10, logger=logger)
+    history = run_git(["git", "rev-list", "--first-parent", "main"], timeout=30, logger=logger)
+    if not tip or history is None:
+        return None
+    return tip.strip() not in set(history.split())
+
+
+def _worktree_dirty(wt_path: str, logger) -> Optional[bool]:
+    """worktree 是否有未提交變更或未追蹤檔；git status 失敗回傳 None（不等同乾淨）。"""
+    out = run_git(["git", "status", "--porcelain"], cwd=wt_path, timeout=10, logger=logger)
+    if out is None:
+        return None
+    return bool(out.strip())
+
+
+def _in_progress_reason(wt_path: str, branch: str, logger) -> Optional[str]:
+    """ahead=0 的 worktree 不該列為已合併時回傳原因；可列為已合併時回傳 None。"""
+    own = _has_own_commits(branch, logger)
+    if own is None:
+        return "無法判定分支是否有自己的提交"
+    if not own:
+        return "分支沒有自己的提交（剛自 main 建立）"
+    dirty = _worktree_dirty(wt_path, logger)
+    if dirty is None:
+        return "無法查詢工作區狀態"
+    if dirty:
+        return "工作區有未提交變更或未追蹤檔"
+    return None
+
+
+# ---------- orphan branch audit (擴充：人工命名分支) ----------
 
 def list_local_branches(logger) -> Optional[List[str]]:
     """列出所有本地分支名稱（不限 worktree-agent-* 前綴）。
@@ -295,7 +337,7 @@ def collect_orphan_agent_branches(
 def collect_modified_ticket_paths(project_root: Path, logger) -> Optional[List[str]]:
     """從 git status --porcelain 取出所有 modified / added 的 ticket md 相對路徑。
 
-    改用 lib.git_utils.get_uncommitted_files(cwd=...)（0.2.1-W3-290），
+    改用 lib.git_utils.get_uncommitted_files(cwd=...)，
     以 FileStatus.is_modified / is_added 取代自行判斷 status_code。
 
     Returns:
@@ -438,7 +480,7 @@ def build_message(
                 lines.append(f"  - {branch}  [{source_label}][ahead=0 可安全刪除]")
                 lines.append(f"    清理: git branch -d {branch}")
         lines.append("")
-        lines.append("W3-021：git worktree remove 不刪分支，孤兒分支殘留會污染分支清單（quality-baseline 規則 5）。")
+        lines.append("git worktree remove 不刪分支，孤兒分支殘留會污染分支清單（quality-baseline 規則 5）。")
 
     return "\n".join(lines)
 
@@ -467,7 +509,9 @@ def main() -> int:
 
     orphan_tickets_undetermined = False
     try:
-        orphan_tickets_result = collect_orphan_tickets(project_root, logger)
+        orphan_tickets_result = collect_orphan_tickets(
+            get_shared_state_root(project_root), logger
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("collect_orphan_tickets 失敗: %s", exc)
         orphan_tickets_result = None

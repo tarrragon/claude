@@ -14,7 +14,7 @@ related:
 
 ## 現象
 
-修改 `.claude/` 框架文件（rules/、pm-rules/、references/、error-patterns/、methodologies/ 等）時，在內容中加入 `（來源：0.18.0-W4-002）`、`（W5-021 教訓）`、`**Ticket**: 0.17.3-W12-001` 等專案 ticket ID 引用。這些引用在當前專案能查到對應 ticket 檔案，但 `.claude/` 透過 sync 機制（`sync-push`/`sync-pull`）同步到其他專案時，ticket ID 在目標專案並不存在，變成死連結和誤導性「來源」。
+修改 `.claude/` 框架文件（rules/、pm-rules/、references/、error-patterns/、methodologies/ 等）時，在內容中加入 `（來源：<ticket-id>）`、`（<ticket-id> 教訓）`、`**Ticket**: <ticket-id>` 等專案 ticket ID 引用。這些引用在當前專案能查到對應 ticket 檔案，但 `.claude/` 透過 sync 機制（`sync-push`/`sync-pull`）同步到其他專案時，ticket ID 在目標專案並不存在，變成死連結和誤導性「來源」。
 
 ## 觸發情境
 
@@ -22,8 +22,8 @@ PM 或代理人在以下情境容易犯此錯：
 
 1. **規則/方法論更新時**：想標注「這條規則的起源」→ 寫入專案 ticket ID
 2. **error-pattern 撰寫時**：「實際案例」表格列出各次觸發的專案 ticket 編號
-3. **Version footer**：`Version: 3.4.0 - XX 更新（W6-006 / W7-001）`
-4. **Python hook 程式碼 docstring**：`# 來源: 0.17.2-W8-005`
+3. **Version footer**：`Version: 3.4.0 - XX 更新（<ticket-id> / <ticket-id>）`
+4. **Python hook 程式碼 docstring**：`# 來源: <ticket-id>`
 5. **memory 記錄「已落實」**：誤以為 memory 足以承擔跨專案原則傳遞
 
 ## 根因分析
@@ -84,10 +84,10 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 
 | 原本寫法（禁止） | 改為 |
 |---------------|------|
-| `**（來源：0.18.0-W4-002）**：Hook error 干擾代理人判斷` | `（防範 Hook error 干擾代理人判斷）` |
-| `W5-001 Phase 1 誤判案例` | `看 transcript 中間狀態誤判案例` |
-| `PC-050 模式 D（0.17.3-W12-001）` | `PC-050 模式 D` |
-| `Version: 3.4.0 - 失敗判斷新增 Step 0.5（W6-006 / W7-001）` | `Version: 3.4.0 - 失敗判斷新增 Step 0.5（TaskOutput 狀態查詢整合）` |
+| `**（來源：<ticket-id>）**：Hook error 干擾代理人判斷` | `（防範 Hook error 干擾代理人判斷）` |
+| `<ticket-id> Phase 1 誤判案例` | `看 transcript 中間狀態誤判案例` |
+| `PC-050 模式 D（<ticket-id>）` | `PC-050 模式 D` |
+| `Version: 3.4.0 - 失敗判斷新增 Step 0.5（<ticket-id> / <ticket-id>）` | `Version: 3.4.0 - 失敗判斷新增 Step 0.5（TaskOutput 狀態查詢整合）` |
 
 ## 觸發案例（日期 + 模式統計）
 
@@ -95,7 +95,7 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 |------|------|------|
 | 2026-04-13 | PM 修改 pm-role.md + PC-050 + 新建 pm-agent-observability.md 時加入 ~18 處 ticket 引用 | 3 檔案 × 6 平均引用 |
 | 2026-05-11 | 縮減 CLAUDE.md 時將專案規範（含 `src/core/errors/` 路徑、產品名稱）誤外移到已刪除的舊路徑（見表後附註），並將含產品名稱的 Chrome Extension 速查放在 `.claude/references/chrome-extension-quickref.md`；後修正：強違反檔遷移至 `docs/project-conventions.md`、弱違反檔泛化保留並引用「CLAUDE.md 章節外移決策樹」 | 2 檔案違反規則 8（強 + 弱各 1） |
-| 2026-05-12 | W10-080 grep 全掃描發現 3 個既有強違反檔（W10-077.1 前已存在）；W10-102 採同模式處理：`.claude/eslint-error-handling-rules.md`（含 `src/core/errors/` 多處）遷移至 `docs/`；`.claude/code-quality-examples.md`（含 `src/extractors/readmoo/services/`、`ReadmooCatalogService` 等）遷移至 `docs/`；`.claude/chrome-extension-specs.md`（含 `src/background/` 與 Readmoo 產品名稱）內容已被 `chrome-extension-quickref.md` + `project-conventions.md` + `language-constraints.md` 全部覆蓋故直接刪除 | 3 檔案違反規則 8（2 強遷移 + 1 內容覆蓋刪除） <!-- broken-link-exempt: documented-error --> |
+| 2026-05-12 | grep 全掃描發現 3 個既有強違反檔；後續清理採同模式處理：`.claude/eslint-error-handling-rules.md`（含 `src/core/errors/` 多處）遷移至 `docs/`；`.claude/code-quality-examples.md`（含 `src/extractors/readmoo/services/`、`ReadmooCatalogService` 等）遷移至 `docs/`；`.claude/chrome-extension-specs.md`（含 `src/background/` 與 Readmoo 產品名稱）內容已被 `chrome-extension-quickref.md` + `project-conventions.md` + `language-constraints.md` 全部覆蓋故直接刪除 | 3 檔案違反規則 8（2 強遷移 + 1 內容覆蓋刪除） <!-- broken-link-exempt: documented-error --> |
 | 2026-05-13 | 對前批 grep 同類發現的 7 個產品名稱候選檔執行「角色二分」評估：A 類（框架描述性質：通用 agent 中的「本專案」聲明、跨專案 data-miner agent 中的書城列舉）spawn 新 IMP 處理泛化；B 類（具體舉例性質：寫作教學 SKILL references 中的 dry-run 測試任務情境設定 / 業務情境驅動 Dart 註解正例 / business intent vs syntax translation 文件正例表格 / 測試過度驗證反例的 Widget Key 命名 / 模組組裝遺漏 5 Whys 真實事件分析鏈中的 storage key）加 HTML 豁免註解保留；確立原則「產品名稱出現 ≠ 實質違反，需依語意角色（框架描述 vs 具體舉例）二分」 | 7 檔評估：2 強違反 spawn IMP + 5 弱舉例加豁免註解 |
 | 2026-07-27 | 同一 session 內兩個不同代理人各自復發：DOC 代理人在 skill 正文寫「處置待 PM 決定，詳見本票 NeedsContext」；hook 代理人在 Python docstring 與測試 docstring 寫「獨立封閉方案見 {ticket-id}」。兩者皆為依賴型引用。PM 對第一次復發的處置是在下一次派發的 prompt 加註禁令，第二次復發發生在**未加註該禁令的另一條派發線**——證明 prompt 層補丁不會跨派發線傳遞 | 2 代理人 × 各 1-2 處，皆於驗收攔下 |
 

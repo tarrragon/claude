@@ -87,7 +87,7 @@ def test_complete_cross_version_blocker_reverse_unblocks_other_version(capsys):
 def test_todolist_parse_failure_warns_on_stderr(tmp_path, capsys):
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "todolist.yaml").write_text("versions: [unclosed", encoding="utf-8")
-    with patch.object(blocker_resolution, "get_project_root", return_value=tmp_path):
+    with patch.object(blocker_resolution, "get_ticket_state_root", return_value=tmp_path):
         assert blocker_resolution.list_open_versions() == []
     assert "[blocker_resolution] WARNING" in capsys.readouterr().err
 
@@ -119,3 +119,77 @@ def test_reverse_unblock_ignores_other_version_blocked_by_unrelated_ticket():
         )
     assert result == []
     save.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# linked worktree：根應為主 repo（get_ticket_state_root），非 WT 副本
+# ---------------------------------------------------------------------------
+
+import subprocess
+
+import pytest
+
+from ticket_system.lib import audit_version, paths
+
+_TICKET_FM = "---\nid: {tid}\nversion: {ver}\n---\n# t\n"
+
+
+def _git(cwd, *args):
+    subprocess.run(
+        ["git", "-C", str(cwd), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        check=True, capture_output=True,
+    )
+
+
+def _write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+@pytest.fixture
+def linked_worktree(tmp_path, monkeypatch):
+    """主 repo 與 linked WT 內容不同；cwd 在 WT，隔離旗標關閉。"""
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-q", "-b", "main")
+    _write(main / "docs/todolist.yaml",
+           "versions:\n- version: 9.9.9\n  status: in_progress\n")
+    _write(main / "docs/work-logs/v9/v9.9/v9.9.9/tickets/9.9.9-W1-001.md",
+           _TICKET_FM.format(tid="9.9.9-W1-001", ver="9.9.9"))
+    _git(main, "add", "-A")
+    _git(main, "commit", "-q", "-m", "init")
+    wt = tmp_path / "wt"
+    _git(main, "worktree", "add", "-q", "-b", "feat", str(wt))
+    # 主 repo 之後新增的狀態（WT 副本看不到）
+    _write(main / "docs/todolist.yaml",
+           "versions:\n- version: 1.0.0\n  status: in_progress\n")
+    _write(main / "docs/work-logs/v1/v1.0/v1.0.0/tickets/1.0.0-W1-001.md",
+           _TICKET_FM.format(tid="1.0.0-W1-001", ver="1.0.0"))
+    monkeypatch.delenv("TICKET_SYSTEM_TEST_ISOLATION", raising=False)
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    monkeypatch.chdir(wt)
+    paths.reset_project_root_cache()
+    paths.reset_ticket_state_root_cache()
+    yield main
+    paths.reset_project_root_cache()
+    paths.reset_ticket_state_root_cache()
+
+
+def test_list_open_versions_reads_main_repo_in_linked_worktree(linked_worktree):
+    assert blocker_resolution.list_open_versions() == ["1.0.0"]
+
+
+def test_scan_all_tickets_reads_main_repo_in_linked_worktree(linked_worktree):
+    ids = {t.ticket_id for t in audit_version.scan_all_tickets()}
+    assert "1.0.0-W1-001" in ids
+
+
+def test_old_root_function_fails_same_fixture(linked_worktree):
+    """E1 對照：換回 get_project_root 時同一 fixture 必翻紅。"""
+    with patch.object(blocker_resolution, "get_ticket_state_root",
+                      paths.get_project_root):
+        assert blocker_resolution.list_open_versions() != ["1.0.0"]
+    with patch.object(audit_version, "get_ticket_state_root",
+                      paths.get_project_root):
+        ids = {t.ticket_id for t in audit_version.scan_all_tickets()}
+        assert "1.0.0-W1-001" not in ids

@@ -4,7 +4,6 @@ title: 豁免清單以檔名比對而非路徑錨定，使樹中任意深度的�
 severity: high
 category: implementation
 created: "2026-07-29"
-source_tickets: [0.2.1-W3-133]
 related_patterns: [IMP-MON-003, IMP-004, IMP-011]
 ---
 
@@ -27,7 +26,7 @@ related_patterns: [IMP-MON-003, IMP-004, IMP-011]
   沒有任何 `len(rel.parts) == 1` 之類的根目錄錨定條件。
 - 操作回報的處理數量與預期數量差一個小數目，且差額恰好等於受影響目錄數。
 
-## 實證案例（flutter_balance 0.2.1-W3-133，2026-07-29）
+## 實證案例（flutter_balance，2026-07-29）
 
 刪除 `.claude/skills/wrap-decision/references/integration-patterns/`（8 檔）後執行
 `sync-push --clean` 傳播刪除至 canonical repo。腳本回報「已清理 7 個遠端過時檔案」，

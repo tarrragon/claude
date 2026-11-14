@@ -507,13 +507,8 @@ def _extract_section(content: str, name: str) -> str:
     return match.group(1) if match else ""
 
 
-def missing_evidence_categories(content: str) -> List[str]:
-    """回傳在 Test Results／Solution 找不到證據的類別標籤（空清單表示齊備）。
-
-    - 實地觸發、liveness：需有 hook-logs/ 日誌行引文或 hook-liveness 輸出標頭
-    - 失敗語意：需有 fail-open／fail-closed 宣告，且同處有「觸發條件：<內容>」
-    """
-    evidence_text = "\n".join(_extract_section(content, n) for n in _EVIDENCE_SECTION_NAMES)
+def _strict_missing_evidence(evidence_text: str) -> List[str]:
+    """原有判定：只認 hook-logs/ 路徑、liveness 標頭、fail-open／closed 加觸發條件。"""
     missing = []
     if not _LOG_EVIDENCE_RE.search(evidence_text):
         missing.extend([_LABEL_TRIGGER, _LABEL_LIVENESS])
@@ -523,6 +518,176 @@ def missing_evidence_categories(content: str) -> List[str]:
     ):
         missing.append(_LABEL_FAILURE)
     return missing
+
+
+def missing_evidence_categories(
+    content: str,
+    acceptance_text: str = "",
+    hook_names: Tuple[str, ...] = (),
+    logger=None,
+    deferred_lookup=None,
+) -> List[str]:
+    """回傳在 Test Results／Solution 找不到證據的類別標籤（空清單表示齊備）。
+
+    - 實地觸發、liveness：hook-logs/ 日誌行引文、hook-liveness 輸出標頭，或
+      追得到來源的日誌行（見 `_has_traceable_log_line`）
+    - 失敗語意：fail-open／fail-closed 宣告加「觸發條件：」；宣告寫在 acceptance
+      亦算；「放行」「阻擋」與「觸發條件：」在同一行時視同宣告
+    - 標記：「證據不適用（類別）：理由」與「延後取證（類別）：票號」可抵該類別；
+      失敗語意不接受標記；「待主線程補證」只是交接，不抵任何類別
+
+    放寬辨識的任何例外都退回原有判定（不因放寬而多放行）。
+    """
+    evidence_text = "\n".join(_extract_section(content, n) for n in _EVIDENCE_SECTION_NAMES)
+    strict = _strict_missing_evidence(evidence_text)
+    try:
+        return _relaxed_missing_evidence(
+            strict, evidence_text, acceptance_text, hook_names, logger, deferred_lookup
+        )
+    except Exception as exc:  # 放寬辨識失敗：退回原有判定
+        if logger is not None:
+            logger.warning(f"證據放寬辨識拋例外，退回原有判定：{exc!r}")
+        return strict
+
+
+# 日誌行固定格式：`[YYYY-MM-DD HH:MM:SS] LEVEL - 訊息`（hook-logs 共用 formatter）
+_LOG_LINE_RE = re.compile(
+    r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] (?:DEBUG|INFO|WARNING|ERROR|CRITICAL) - "
+)
+_FENCE_RE = re.compile(r"^\s*```")
+_CN_FAIL_WORD_RE = re.compile(r"放行|阻擋")
+_MARKER_RE = re.compile(r"(證據不適用|延後取證)[（(]([^）)]+)[）)]\s*[:：]\s*(\S.*)")
+_TICKET_ID_RE = re.compile(r"\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*")
+_DEFERRED_LOG_PREFIX = "[evidence-deferred]"
+_MARKER_CATEGORY_KEYWORDS = {
+    _LABEL_TRIGGER: ("實地觸發",),
+    _LABEL_LIVENESS: ("liveness",),
+}
+
+
+def _relaxed_missing_evidence(
+    strict, evidence_text, acceptance_text, hook_names, logger, deferred_lookup
+) -> List[str]:
+    missing = list(strict)
+    if _LABEL_TRIGGER in missing and _has_traceable_log_line(evidence_text, hook_names):
+        missing = [m for m in missing if m not in (_LABEL_TRIGGER, _LABEL_LIVENESS)]
+    if _LABEL_FAILURE in missing and _has_failure_declaration(evidence_text, acceptance_text):
+        missing.remove(_LABEL_FAILURE)
+    for label in _labels_covered_by_markers(evidence_text, logger, deferred_lookup):
+        if label in missing:
+            missing.remove(label)
+    return missing
+
+
+def _has_traceable_log_line(text: str, hook_names: Tuple[str, ...]) -> bool:
+    """日誌行本身或其所在區塊的標頭行含本票改動的 hook 名，才算證據。
+
+    標頭行：往上略過日誌行、空行與 code fence 後的第一行。只認本票 where.files
+    的 hook 名，避免其他 hook 或無來源的日誌行過關。
+    """
+    names = [n for n in hook_names if n]
+    if not names:
+        return False
+    lines = text.splitlines()
+    for idx, line in enumerate(lines):
+        if not _LOG_LINE_RE.search(line):
+            continue
+        if any(name in line for name in names):
+            return True
+        header = _block_header(lines, idx)
+        if header and any(name in header for name in names):
+            return True
+    return False
+
+
+def _block_header(lines: List[str], idx: int) -> str:
+    for j in range(idx - 1, -1, -1):
+        candidate = lines[j]
+        if not candidate.strip() or _FENCE_RE.match(candidate) or _LOG_LINE_RE.search(candidate):
+            continue
+        return candidate
+    return ""
+
+
+def _has_failure_declaration(evidence_text: str, acceptance_text: str) -> bool:
+    """acceptance 的宣告同樣算；中文「放行／阻擋」須與「觸發條件：」同一行。"""
+    if _FAIL_DECLARATION_RE.search(acceptance_text) and _TRIGGER_CONDITION_RE.search(
+        acceptance_text
+    ):
+        return True
+    for line in (evidence_text + "\n" + acceptance_text).splitlines():
+        # 模板條目名「異常時的放行或阻擋行為」本身含兩字，不算宣告方向
+        declared = line.replace("放行或阻擋", "")
+        if _CN_FAIL_WORD_RE.search(declared) and _TRIGGER_CONDITION_RE.search(line):
+            return True
+    return False
+
+
+def _labels_covered_by_markers(text: str, logger, deferred_lookup) -> List[str]:
+    covered = []
+    for match in _MARKER_RE.finditer(text):
+        kind, category_text, body = match.group(1), match.group(2), match.group(3).strip()
+        label = _marker_label(category_text)
+        if label is None:
+            continue
+        if kind == "證據不適用":
+            if logger is not None:
+                logger.info(f"[evidence-not-applicable] category={label} reason={body}")
+            covered.append(label)
+        elif _deferred_marker_valid(body, label, logger, deferred_lookup):
+            covered.append(label)
+    return covered
+
+
+def _marker_label(category_text: str) -> Optional[str]:
+    lowered = category_text.lower()
+    for label, keywords in _MARKER_CATEGORY_KEYWORDS.items():
+        if any(k in lowered for k in keywords):
+            return label
+    return None  # 失敗語意與無法辨識的類別不接受標記
+
+
+def _deferred_marker_valid(body: str, label: str, logger, deferred_lookup) -> bool:
+    """延後取證的 trigger 必須是存在且未完成的票號；查不到或已完成都不算。"""
+    ticket_match = _TICKET_ID_RE.search(body)
+    if not ticket_match:
+        return False
+    target = ticket_match.group(0)
+    lookup = deferred_lookup or _deferred_ticket_open
+    if not lookup(target, logger):
+        return False
+    if logger is not None:
+        logger.warning(f"{_DEFERRED_LOG_PREFIX} category={label} trigger={target} 延後取證放行")
+    return True
+
+
+def _deferred_ticket_open(ticket_id: str, logger) -> bool:
+    """票存在且狀態不是 completed／closed 時回傳 True；查詢失敗回傳 False（不放行）。"""
+    try:
+        from lib.hook_ticket import find_ticket_file, parse_ticket_frontmatter
+
+        path = find_ticket_file(ticket_id, None, logger)
+        if not path:
+            return False
+        status = str(parse_ticket_frontmatter(Path(path), logger).get("status") or "")
+        return status not in ("completed", "closed")
+    except Exception as exc:  # 查詢失敗：不認延後取證標記
+        if logger is not None:
+            logger.warning(f"延後取證票號查詢失敗（{ticket_id}）：{exc!r}")
+        return False
+
+
+def _hook_names_from_where(where_files: List[str]) -> Tuple[str, ...]:
+    """where.files 中 hook 本體的檔名（去副檔名），另附去掉 -hook 後綴的形式。"""
+    names = []
+    for raw in where_files:
+        stem = PurePosixPath(str(raw).split("::", 1)[0]).stem
+        if not stem or "hooks" not in str(raw):
+            continue
+        names.append(stem)
+        if stem.endswith("-hook"):
+            names.append(stem[: -len("-hook")])
+    return tuple(dict.fromkeys(names))
 
 
 def _extract_how_strategy(frontmatter: dict) -> str:
@@ -581,7 +746,12 @@ def check_hook_protection_acceptance(
         )
     acceptance_text = _join_acceptance_text(frontmatter)
     literal_missing = _missing_categories(acceptance_text)
-    evidence_missing = missing_evidence_categories(content)
+    evidence_missing = missing_evidence_categories(
+        content,
+        acceptance_text=acceptance_text,
+        hook_names=_hook_names_from_where(where_files),
+        logger=logger,
+    )
     # 過渡期：證據缺失但 acceptance 字面命中 → WARN 放行並記 log；
     # 證據缺失且字面也缺 → 阻擋（維持原有強度）
     missing = [label for label in evidence_missing if label in literal_missing]
@@ -633,7 +803,9 @@ def check_hook_protection_acceptance(
 
 _EVIDENCE_FORMS = {
     _LABEL_TRIGGER: "Test Results 或 Solution 引用 .claude/hook-logs/ 下的日誌行"
-    "（路徑加該行內容），證明本 session 實地觸發並落檔",
+    "（路徑加該行內容），證明本 session 實地觸發並落檔；"
+    "日誌行須證明修改點有執行：只有修改後分支才會產生的行，"
+    "或同一輸入跑修改前後版本、輸出不同的對照（入口與提前回傳的判定行不算）",
     _LABEL_LIVENESS: "Test Results 或 Solution 貼 `ticket track hook-liveness` 輸出"
     "（含「解析名稱: ...」標頭），或 hook-logs/ 路徑下的日誌行引文",
     _LABEL_FAILURE: "Solution 寫 fail-open 或 fail-closed 二擇一，並附"

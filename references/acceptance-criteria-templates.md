@@ -346,4 +346,4 @@ acceptance:
 
 **Last Updated**: 2026-10-15
 **Version**: 1.1.0 - 品質驗收「單元測試通過」改為相關測試檔通過、全套件由合併閘門驗證
-**Version**: 1.0.0 - 從 acceptance-criteria-methodology.md 外移標準格式三式、好/壞範例 6 組、各系統整合完整模板與轉換範例（W8-020.2 方法論瘦身校準）
+**Version**: 1.0.0 - 從 acceptance-criteria-methodology.md 外移標準格式三式、好/壞範例 6 組、各系統整合完整模板與轉換範例（方法論瘦身校準）

@@ -51,7 +51,7 @@ created: 2026-08-06
 
 **自動 commit 的失效**：補救機制原設計以「工作區恰好只有本次 chmod 的變更」為 commit 條件（集合全等比較）。SessionStart 時工作區通常已有開發中變更，條件幾乎不成立——實測連續 4 次 chmod 全數跳過，觸發成功率 0%。對應單元測試在 tmp repo 中構造乾淨工作區，恆為綠燈，因而未暴露此失效（參 quality-baseline 規則 1「測試綠燈不等於 Runtime 正確」）。
 
-**修復**（0.2.1-W3-319）：
+**修復**：
 
 | 缺陷 | 修法 |
 |------|------|
@@ -91,4 +91,3 @@ created: 2026-08-06
 - `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md` — 共用 index 吸收他人變更
 - `.claude/rules/core/quality-baseline.md` 規則 1 — 測試綠燈不等於 Runtime 正確
 - `.claude/rules/core/opinionated-default-design.md` — 預設行為應引導正確做法
-- Ticket `0.2.1-W3-319`

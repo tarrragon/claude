@@ -15,6 +15,8 @@
 
 此 Hook 的目的是自動偵測 ARB 檔案的修改，並驗證對應的生成檔案是否已更新。若未同步，會提供清楚的警告和修復指引。
 
+> **FVM 專案**：專案有 FVM 設定檔（`.fvmrc` 或 `.fvm/fvm_config.json`）時，hook 自動執行的命令與修復步驟中的命令都會改為 `fvm flutter ...`，判定由 `.claude/lib/flutter_launcher.py` 負責。找不到 fvm 時，hook 回報失敗並阻擋，不改用全域 flutter，以免生成檔由與釘選版不同的 Flutter 產生。本文以下範例以未使用 FVM 的專案為準。
+
 ## 觸發條件
 
 - 事件: PostToolUse (檔案編輯後)
@@ -320,7 +322,7 @@ flutter gen-l10n
 
 ```bash
 echo '{"tool_name":"Edit","tool_input":{"file_path":"lib/widgets/home.dart"}}' | \
-  python3 .claude/hooks/l10n-sync-verification-hook.py
+  uv run --quiet .claude/hooks/l10n-sync-verification-hook.py
 
 # 預期: exit code 0, 無輸出
 ```
@@ -329,7 +331,7 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"lib/widgets/home.dart"}}' |
 
 ```bash
 echo '{"tool_name":"Edit","tool_input":{"file_path":"lib/l10n/app_en.arb"}}' | \
-  python3 .claude/hooks/l10n-sync-verification-hook.py
+  uv run --quiet .claude/hooks/l10n-sync-verification-hook.py
 
 # 預期: exit code 0, 允許繼續
 # JSON 輸出: {"hookSpecificOutput": {"decision": "allow"}}
@@ -345,7 +347,7 @@ touch lib/l10n/app_zh_TW.arb
 
 # 執行 Hook
 echo '{"tool_name":"Edit","tool_input":{"file_path":"lib/l10n/app_zh_TW.arb"}}' | \
-  python3 .claude/hooks/l10n-sync-verification-hook.py
+  uv run --quiet .claude/hooks/l10n-sync-verification-hook.py
 
 # 預期: exit code 0, 警告訊息
 # stderr: 包含修復步驟

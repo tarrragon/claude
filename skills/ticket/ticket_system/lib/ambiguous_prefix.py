@@ -1,4 +1,4 @@
-"""共用的 argparse 縮寫歧義攔截 helper（1.0.0-W1-028）。
+"""共用的 argparse 縮寫歧義攔截 helper。
 
 ## 背景
 
@@ -17,7 +17,7 @@ argparse 預設啟用 prefix matching（`allow_abbrev=True`）：當使用者輸
 
 helper 以「註冊在哪個 subparser」控制作用域。例如 `--all` 僅在 set-acceptance
 subparser 攔截，不影響 list/stale-list/td-status/stuck-anas 等將 `--all` 作為
-合法完整旗標的子命令（PM grep 實證 + 1.0.0-W1-028 約束 1）。
+合法完整旗標的子命令（PM grep 實證 + 約束 1）。
 """
 import argparse
 from typing import Optional

@@ -141,7 +141,7 @@ thyme 在上述流程中的執行序：需求接收（識別任務類型：轉�
 |------|---------|---------|
 | 查找特定章節或符號 | Serena MCP find_symbol | Grep + Read |
 | 分析引用關係和影響範圍 | Serena MCP find_referencing_symbols | Grep |
-| 在特定位置插入內容 | **Edit**（首選）/ Serena MCP insert_after_symbol | — |
+| 在特定位置插入內容 | **Edit** | — |
 | 廣範圍關鍵字搜尋 | Grep | - |
 | 完整檔案讀取 | Read | - |
 | 建立新檔案 | Write | - |
@@ -173,7 +173,7 @@ thyme 在上述流程中的執行序：需求接收（識別任務類型：轉�
 | 看到一個工具被拒就泛化為「所有寫入工具都被拒」 | 兩個工具層的 allow list 完全獨立 |
 | 未記錄實際嘗試過程就回報 deny | PM 無法判斷是真限制還是偏誤 |
 
-> **來源**：W17-088（thyme early stop 失敗案例：mcp__serena__replace_content 被拒 → 錯誤泛化為 Edit 也被拒 → 提前停止）；PC-088（LLM 工具選擇偏誤：單步敏感、總步驟盲）
+> **來源**：某次 thyme early stop 失敗案例（mcp__serena__replace_content 被拒 → 錯誤泛化為 Edit 也被拒 → 提前停止）；PC-088（LLM 工具選擇偏誤：單步敏感、總步驟盲）
 
 ---
 
@@ -312,5 +312,6 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 ---
 
-**Last Updated**: 2026-04-28
-**Version**: 2.3.0 - 新增「Fallback 規則」段落於工具使用策略章節：MCP 寫入工具被拒時必須 fallback Edit/Write，禁止 self-imposed early stop；更新「在特定位置插入內容」與「修改現有檔案特定內容」的首選工具為 Edit（PC-088 / W17-088）
+**Last Updated**: 2026-11-12
+**Version**: 2.3.1 - 工具使用策略「在特定位置插入內容」移除 Serena MCP insert_after_symbol：本代理人處理的是 Markdown 等文字檔，serena 寫入工具用於文字檔會被 mcp-write-tool-on-text-file-guard 擋下（tool-selection 規則 1）
+**Version**: 2.3.0 - 新增「Fallback 規則」段落於工具使用策略章節：MCP 寫入工具被拒時必須 fallback Edit/Write，禁止 self-imposed early stop；更新「在特定位置插入內容」與「修改現有檔案特定內容」的首選工具為 Edit（PC-088）

@@ -9,7 +9,7 @@
 | 編號 | PC-079 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-04-17（W13-007 Context Bundle append-log 時 shell 誤執行 backtick 內路徑） |
+| 首發時間 | 2026-04-17（某 ANA 的 Context Bundle append-log 時 shell 誤執行 backtick 內路徑） |
 | 姊妹模式 | `.claude/rules/core/bash-tool-usage-rules.md` 規則一（cd 污染）/ 規則三（git 串接）同屬 Bash 工具使用紀律 |
 
 ---
@@ -27,12 +27,12 @@ PM 執行 `ticket track append-log <id> --section "..." "..."` 或其他含長�
 
 ---
 
-## 實例（2026-04-17 W13-007 Context Bundle）
+## 實例（2026-04-17 某 ANA 的 Context Bundle）
 
 PM 執行：
 
 ```bash
-ticket track append-log 0.18.0-W13-007 --section "Problem Analysis" "...Hook 實作：`.claude/hooks/askuserquestion-charset-guard-hook.py` ..."
+ticket track append-log <ticket-id> --section "Problem Analysis" "...Hook 實作：`.claude/hooks/askuserquestion-charset-guard-hook.py` ..."
 ```
 
 Bash 將 `` `.claude/hooks/...py` `` 當 command 執行：
@@ -41,7 +41,7 @@ Bash 將 `` `.claude/hooks/...py` `` 當 command 執行：
 
 CLI 實際收到的參數：backtick 內容被 substitution 結果取代（多為空字串），Context Bundle 中：
 - `- Hook 實作：`（後面空白）
-- `- Hook 測試：（W13-003 新建 14 測試）`（路徑消失）
+- `- Hook 測試：（某 IMP 新建 14 測試）`（路徑消失）
 
 ---
 
@@ -109,11 +109,11 @@ CLI 實際收到的參數：backtick 內容被 substitution 結果取代（多�
 
 - `.claude/rules/core/bash-tool-usage-rules.md` — Bash 工具使用規則（規則一/三/**四 已升級**）
 - `.claude/references/bash-tool-usage-details.md` — 詳細案例
-- `ticket_system/commands/lifecycle.py`（W12-005 實作）— append-log 實作可考慮 `--from-file` 參數
+- `ticket_system/commands/lifecycle.py`— append-log 實作可考慮 `--from-file` 參數
 
 ---
 
 **Last Updated**: 2026-04-17
-**Version**: 1.1.0 — 防護升級至 bash-tool-usage-rules.md 規則四（W13-010 完成）
-**v1.0.0**: 首發記錄（W13-007 Context Bundle shell backtick substitution）
-**Source**: 2026-04-17 W13-003 完結 session 中，PM append-log W13-007 Context Bundle 含 markdown inline code 的檔案路徑 backtick，被 shell 執行為 command substitution 導致路徑被替換為空白
+**Version**: 1.1.0 — 防護升級至 bash-tool-usage-rules.md 規則四
+**v1.0.0**: 首發記錄（某 ANA 的 Context Bundle shell backtick substitution）
+**Source**: 2026-04-17 某 IMP 完結 session 中，PM append-log 某 ANA 的 Context Bundle 含 markdown inline code 的檔案路徑 backtick，被 shell 執行為 command substitution 導致路徑被替換為空白

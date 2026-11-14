@@ -94,10 +94,10 @@ class ChainAnalyzer:
                  - "completed": 任務鏈完成，無後續任務
 
         Examples:
-            >>> ticket = {"id": "0.31.0-W4-001", "status": "completed", "chain": {"parent": None}, "children": []}
+            >>> ticket = {"id": "<ticket-id>", "status": "completed", "chain": {"parent": None}, "children": []}
             >>> ChainAnalyzer.determine_direction(ticket)
             'completed'
-            >>> ticket = {"id": "0.31.0-W4-001", "status": "blocked", "chain": {}, "children": []}
+            >>> ticket = {"id": "<ticket-id>", "status": "blocked", "chain": {}, "children": []}
             >>> ChainAnalyzer.determine_direction(ticket)
             'wait'
         """
@@ -109,7 +109,7 @@ class ChainAnalyzer:
         parent_id = chain.get("parent")
 
         # 版本號解析：優先使用傳入參數，否則從 Ticket ID 提取
-        # Ticket ID 格式：version-Wn-seq（如 0.31.0-W4-001）
+        # Ticket ID 格式：version-Wn-seq（如 <ticket-id>）
         if not version:
             version = extract_version_from_ticket_id(ticket_id)
 
@@ -138,7 +138,7 @@ class ChainAnalyzer:
         檢查是否有待完成的子任務。
 
         子任務可能以兩種格式存在：
-        - 字串 ID：如 "0.31.0-W4-001.1"（需要載入檔案檢查狀態）
+        - 字串 ID：如 "<ticket-id>.1"（需要載入檔案檢查狀態）
         - 字典：包含 id 和 status 欄位（可直接檢查狀態）
 
         演算法:
@@ -216,7 +216,7 @@ class ChainAnalyzer:
                  - "all_done": 無待處理的兄弟任務（全部完成或無兄弟）
 
         Examples:
-            >>> ticket = {"id": "0.31.0-W4-001.1", "chain": {"parent": None}}
+            >>> ticket = {"id": "<ticket-id>.1", "chain": {"parent": None}}
             >>> ChainAnalyzer._get_sibling_status(ticket)
             'all_done'
         """
@@ -300,7 +300,7 @@ class ChainAnalyzer:
 
         Examples:
             >>> direction = "completed"
-            >>> ticket = {"id": "0.31.0-W4-001", "chain": {"root": "0.31.0-W4-001"}}
+            >>> ticket = {"id": "<ticket-id>", "chain": {"root": "<ticket-id>"}}
             >>> rec = ChainAnalyzer.get_recommendation(direction, ticket)
             >>> rec.reason
             '所有子任務已完成，無待處理項目'

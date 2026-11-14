@@ -4,7 +4,7 @@ Children Checker - 子任務完成度檢查（遞迴，含 closed/completed 終�
 檢查父 Ticket 的所有後代（子、孫…）是否已落入終止狀態
 （`completed` 或 `closed`），未完成時產生阻擋訊息。
 
-設計理念（對應 0.18.0-W10-036 任務鏈核心哲學）：
+設計理念（對應任務鏈核心哲學）：
     父 Ticket 的責任是「問題被解決」，不是「分析報告寫完」。
     子 Ticket 實作/驗證完成才是父責任履行的證據；
     若後代仍有未完成項，父就不應該 complete。
@@ -23,9 +23,9 @@ if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
 # 加入 .claude/skills/ticket 目錄以解析 ticket_system package
-# W14-004: TERMINAL_STATUSES 單一來源由 ticket_system.constants 提供，
+# TERMINAL_STATUSES 單一來源由 ticket_system.constants 提供，
 # hook 與 skill 雙邊從同處 import，避免雙邊宣告與語意飄移。
-# W14-016: 改用 package 頂層 ticket_system.constants（非 lib/constants），
+# 改用 package 頂層 ticket_system.constants（非 lib/constants），
 # 避免觸發 lib/__init__.py eager-import ticket_loader → parser → yaml 依賴鏈。
 # hook 以系統 Python 啟動（無 yaml），lib 路徑會噴 ModuleNotFoundError（已觀察 97 次）。
 _ticket_skill_dir = _hooks_dir.parent / "skills" / "ticket"
@@ -43,7 +43,7 @@ def _extract_children_robust(
 ) -> List[str]:
     """解析 children：使用 frontmatter dict。
 
-    W11-003.4 修復後，hook_utils._parse_yaml_lines 已正確處理頂層
+    hook_utils._parse_yaml_lines 已正確處理頂層
     YAML 列表（block-style 與 flow-style），不再需要原始文字 fallback。
     保留 ticket_file 參數以維持呼叫端簽名向後相容。
     """
@@ -198,7 +198,7 @@ def check_children_completed_from_frontmatter(
     """
     從 frontmatter 檢查子任務完成度（orchestrator 呼叫入口）。
 
-    檢查規則（對應 0.18.0-W10-036.2 AC）：
+    檢查規則（對應子票遞迴驗收條件）：
     1. 遞迴檢查所有後代（子 + 孫 + …）
     2. 任一後代非 `completed` 且非 `closed` → block (exit 2)
     3. 錯誤訊息列出所有未完成後代 ID、標題、狀態

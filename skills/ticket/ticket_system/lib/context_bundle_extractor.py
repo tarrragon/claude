@@ -11,7 +11,7 @@ Linux kernel ELF loader 類比：自動載入依賴 context，降低 PM 手填�
 - Phase 1 v2 §v2.0-§v2.7 + v3 §v3.1-§v3.5
 - Phase 2 v2 15 場景（sage-test-architect）
 - Phase 3a 策略（pepper-test-implementer）
-- W17-002.1 P2 風格與增強（placeholder list、opt-out、--json、metric hook、ac_parser 整合、專屬 Exception）
+- P2 風格與增強（placeholder list、opt-out、--json、metric hook、ac_parser 整合、專屬 Exception）
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ AUTO_EXTRACTED_BLOCK_PATTERN = re.compile(
 )
 
 # ============================================================================
-# UC 自動注入（0.38.1-W1-066.4）
+# UC 自動注入
 # ============================================================================
 #
 # 輕量偵測 regex：僅比對合法二位數格式，不處理大小寫/全形變體（那是
@@ -137,7 +137,7 @@ SkipReason = Literal[
 
 
 # ============================================================================
-# 專屬 Exception（W17-002.1 acceptance #5）
+# 專屬 Exception
 # ============================================================================
 #
 # 取代原本 yaml.YAMLError / RuntimeError 直接透出：caller 可 except 本類別
@@ -151,10 +151,10 @@ class ContextBundleExtractionError(Exception):
 
 
 # ============================================================================
-# Metric Event Hook（W17-002.1 acceptance #8）
+# Metric Event Hook
 # ============================================================================
 #
-# Tripwire T1（W17-002 母 ticket 規格）依賴可觀測數據：每次抽取的
+# Tripwire T1（母 ticket 規格）依賴可觀測數據：每次抽取的
 # sources_declared / sources_ok / total_chars / truncated 數量。
 # 注入模式（而非 import）保持 lib 模組的純粹性與可測試性。
 MetricEvent = dict
@@ -191,7 +191,7 @@ class ExtractableFieldRule:
     """單一欄位抽取規則。
 
     is_list=True → 套用 MAX_ITEMS_PER_FIELD（§v3.3 BLK-v3-3 統一套用）。
-    use_ac_parser=True → 透過 ac_parser 過濾已 checked 的 acceptance 項（W17-002.1 #6）。
+    use_ac_parser=True → 透過 ac_parser 過濾已 checked 的 acceptance 項。
     """
 
     source_field: str
@@ -243,7 +243,7 @@ class ExtractedField:
 
 @dataclass
 class SkipRecord:
-    """略過記錄（W17-002.1 acceptance #4 dataclass 化，取代早期 list[dict]）。"""
+    """略過記錄（dataclass 化，取代早期 list[dict]）。"""
 
     source_id: str
     source_kind: SourceKind
@@ -285,7 +285,7 @@ def _read_nested(ticket: dict, dotted_field: str) -> Any:
 def _is_placeholder(value: Any) -> bool:
     """偵測 placeholder / None / 空 list。
 
-    W17-002.1 acceptance #10：placeholder 擴為 list，涵蓋常見變體
+    placeholder 擴為 list，涵蓋常見變體
     （"待定義" / "TBD" / "TODO" / "待填寫" 等），由 constants 定義。
     """
     if value is None:
@@ -301,7 +301,7 @@ def _is_placeholder(value: Any) -> bool:
 
 
 def _detect_opt_out(target: dict) -> bool:
-    """偵測 opt-out 標記（W17-002.1 acceptance #9）。
+    """偵測 opt-out 標記。
 
     frontmatter 中 `context-bundle: manual`（或 YAML 解析後的 `context_bundle: manual`）
     表示 PM 明示手動維護，自動抽取應略過。
@@ -317,7 +317,7 @@ def _detect_opt_out(target: dict) -> bool:
 def _filter_acceptance_with_ac_parser(
     raw: Any, source_id: str, source_status: Optional[str] = None
 ) -> list:
-    """使用 checkbox 語義過濾 acceptance（W17-002.1 acceptance #6，status-aware 擴充）。
+    """使用 checkbox 語義過濾 acceptance（status-aware 擴充）。
 
     以 ac_parser 的 checkbox 解析邏輯過濾 acceptance 項目，讓自動抽取聚焦於
     對接手者價值最高的部分：
@@ -430,7 +430,7 @@ def _build_target_seen(target: dict, subsection: str) -> set:
 
 
 def _count_field_chars(f: ExtractedField) -> int:
-    """統一字元計算（W17-002.1 cinnamon 補充項：避免 _estimate_chars / _apply_total_chars_limit 邏輯重疊）。"""
+    """統一字元計算（避免 _estimate_chars / _apply_total_chars_limit 邏輯重疊）。"""
     if isinstance(f.raw_value, list):
         return sum(len(str(x)) for x in f.raw_value)
     return len(str(f.raw_value))
@@ -583,7 +583,7 @@ def extract_context_bundle(target_ticket: dict) -> ExtractResult:
     target_id = target_ticket.get("id", "")
     result = ExtractResult(status="no_source", target_ticket_id=target_id)
 
-    # Opt-out 短路（W17-002.1 acceptance #9）
+    # Opt-out 短路
     if _detect_opt_out(target_ticket):
         result.status = "opt_out"
         result.skipped.append(
@@ -748,7 +748,7 @@ def extract_context_bundle(target_ticket: dict) -> ExtractResult:
 
 
 def _build_metric_payload(result: ExtractResult) -> MetricEvent:
-    """建構 metric event payload（W17-002.1 acceptance #8）。
+    """建構 metric event payload。
 
     固定欄位：status / sources_declared / sources_ok / fields_extracted /
     total_chars / truncated_count / target_ticket_id。
@@ -870,7 +870,7 @@ _CHARS_BADGE_PATTERN = re.compile(r"\|\s*chars:\s*\d+\s*-->")
 
 
 def _is_auto_content_line(line: str) -> bool:
-    """判斷單行文字是否屬 render_context_bundle_markdown 可重現的行形態（0.2.1-W3-252）。
+    """判斷單行文字是否屬 render_context_bundle_markdown 可重現的行形態。
 
     白名單：空行、已知子區塊標題、以 `- ` 開頭的 bullet 行（EXTRACTABLE_FIELDS 四種
     format_template 皆以 `- ` 起始，故用此寬鬆前綴而非逐模板精確比對——精確比對對
@@ -917,7 +917,7 @@ def _find_next_known_heading(lines: List[str], start_idx: int) -> Optional[int]:
 
 
 def _find_auto_block_end(section_body: str, search_from: int) -> int:
-    """定位 auto-extracted 區塊終點（0.2.1-W3-252）。
+    """定位 auto-extracted 區塊終點。
 
     逐行掃描，命中第一個非 `_is_auto_content_line` 的行時，不直接判定為終點，改
     向後尋找下一個已知子區塊標題（`_find_next_known_heading`）：找到即代表該行僅是
@@ -928,9 +928,9 @@ def _find_auto_block_end(section_body: str, search_from: int) -> int:
 
     與舊版「以下一個 `## ` 或字串結尾為界」的差異：舊版對「無後續 `## ` 標題」的手動
     內容一律吞入 managed block，重抽 replace 時會整段覆蓋刪除，涵蓋兩種實測樣態：
-    (1) 手動內容自帶 H3 標題（如「### 並行派發約束」，0.2.1-W3-152 實例）；
+    (1) 手動內容自帶 H3 標題（如「### 並行派發約束」）；
     (2) 手動內容為緊接在最後一個已知子區塊 bullet 之後、無任何標題或空行分隔的純段落
-    （如「[PM 派發提醒 ...]」，0.2.1-W3-171 實例）。逐行分類可同時正確處理兩種樣態，
+    （如「[PM 派發提醒 ...]」）。逐行分類可同時正確處理兩種樣態，
     純以標題判斷的邊界（僅涵蓋樣態 1）無法偵測樣態 2。
 
     傳回終點 index（不含該行）；無命中則回傳字串結尾。
@@ -954,12 +954,12 @@ def _find_auto_block_end(section_body: str, search_from: int) -> int:
 
 
 def _normalize_for_content_compare(block_text: str) -> str:
-    """正規化 auto 區塊文字供冪等性內容比對（0.2.1-W3-252）。
+    """正規化 auto 區塊文字供冪等性內容比對。
 
     移除 chars 徽章（估算值，非語意內容）並收斂首尾空白。原冪等判定只比對
     marker 中的 source ID 集合，source 未變但來源票內容已改寫（如 why 被推翻
     重寫）時仍判定「無變更」而不更新，使 claim 時現成的重抽觸發點被短路
-    （0.2.1-W3-177 ANA 量測：254 張中 11 張漂移）。改以正規化後的內容比對取代，
+    （ANA 量測：254 張中 11 張漂移）。改以正規化後的內容比對取代，
     source 集合不變但內容已變時正確觸發更新；內容無實質差異（僅 chars 估算值
     不同）時仍判定冪等，避免空更新 commit。
     """
@@ -985,7 +985,7 @@ def merge_auto_extracted_block(
 ) -> Tuple[str, list]:
     """合併抽取結果到既有 Context Bundle section body。
 
-    §v3.1 白名單子標題邊界 + §v3.2 content-aware 冪等（0.2.1-W3-252：原 source-ID-only
+    §v3.1 白名單子標題邊界 + §v3.2 content-aware 冪等（原 source-ID-only
     冪等 + 「下一個 `## ` 或 EOF」邊界，改為內容比對 + 已知子區塊白名單邊界）。
     """
     if not new_extracted_markdown:
@@ -1067,7 +1067,7 @@ def format_cli_summary(
 ) -> str:
     """依 quiet/verbose 三檔輸出抽取摘要。
 
-    W17-002.1 acceptance #1：quiet **預設**為 True（單行輸出），避免
+    quiet **預設**為 True（單行輸出），避免
     PM 例行 claim 流程被多行訊息淹沒；需詳細訊息時傳 verbose=True 或
     quiet=False 顯式切換。
 
@@ -1146,7 +1146,7 @@ def format_cli_summary(
 
 
 def format_cli_summary_json(result: ExtractResult) -> str:
-    """JSON 結構化輸出（W17-002.1 acceptance #7）。
+    """JSON 結構化輸出。
 
     對齊其他 ticket 指令的 --json 輸出慣例，讓 PM / CI / metric pipeline
     能以穩定 schema 消費結果。
@@ -1200,11 +1200,11 @@ def extract_and_write_context_bundle(
     Non-raising 契約：
         - source ticket load 失敗 → 收集至 result.warnings，不拋例外。
         - target ticket load 失敗（load_ticket 拋例外）→ 拋 ContextBundleExtractionError
-          （W17-002.1 acceptance #5）。原先直接透出原始例外類別（yaml.YAMLError 等）
+          。原先直接透出原始例外類別（yaml.YAMLError 等）
           導致 caller 難以 except，改為統一專屬 Exception 並保留原因鏈。
     """
-    # W14-043: file_lock 包圍 load → modify → save 完整序列，消除 logical
-    # read-modify-write race（同 W14-042 ticket_builder.update_* 模式）。
+    # file_lock 包圍 load → modify → save 完整序列，消除 logical
+    # read-modify-write race（同 ticket_builder.update_* 模式）。
     # ticket_path 必須在 lock 之前計算（用於決定 lock file 位置）。
     ticket_path = get_ticket_path(version, ticket_id)
     with file_lock(ticket_path):

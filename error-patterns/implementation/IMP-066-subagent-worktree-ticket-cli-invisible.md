@@ -77,9 +77,9 @@ Read `{absolute-path-to-ticket.md}` 取得 Context Bundle，執行步驟並將�
 
 ## 觸發案例
 
-2026-04-18（W5-047.4.1/.2/.3 首輪派發事件）：
+2026-04-18（首輪派發事件）：
 
-PM 新建 W5-050 umbrella + W5-050.1/.2/.3 子任務 → commit c35da16b → 派發 3 個 thyme subagent with `isolation: worktree` → 3 agents 全部回報「Ticket 0.18.0-W5-050.X does not exist」。agent 實測 worktree HEAD 為 `2e1ae8db`（落後 c35da16b 至少 4 commits）。
+PM 新建 umbrella ticket 與 3 個子任務 → commit c35da16b → 派發 3 個 thyme subagent with `isolation: worktree` → 3 agents 全部回報「Ticket <ticket-id> does not exist」。agent 實測 worktree HEAD 為 `2e1ae8db`（落後 c35da16b 至少 4 commits）。
 
 修復：PM 改派發 prompt 為 Read 絕對路徑 + 結構化結果返回，第二輪派發全部成功。
 

@@ -15,6 +15,8 @@ archived/
 ├── hook-auto-register.py             # 廢棄: Hook 自動註冊機制
 ├── pre-compact.py                    # 廢棄: PreCompact Hook
 ├── required-features-check.py        # 廢棄: Session 啟動必要功能驗證
+├── settings-registration-exec-guard-hook.py       # 廢棄: hook 落地缺可執行位修復（降級後無效益）
+├── test_settings_registration_exec_guard_hook.py  # 上列 hook 的測試，隨 hook 歸檔
 ├── show-cache-stats.py               # 廢棄: Ticket Quality Gate 快取統計查詢
 ├── tdd-phase-check-hook.py           # 廢棄: TDD Phase 完整性檢查
 ├── test-summary.py                   # 廢棄: 測試摘要腳本（已由 test-summary.sh 取代）
@@ -46,6 +48,10 @@ archived/
 - **show-cache-stats.py** - 快取統計工具
 - **tdd-phase-check-hook.py** - 未在 settings.json 中註冊
 
+### 前提失效後的降級殘留
+
+- **settings-registration-exec-guard-hook.py**（2026-11-12 歸檔）- 原用途是 hook 檔經 Edit/Write/MultiEdit 落地時補可執行位。settings.json 的 hook 註冊全部改為顯式解譯器（`uv run` 或 `python3`）後，可執行位不再是 hook 被執行的前提，2026-08-22 降級為只記 info；降級後的 3 筆 PostToolUse 註冊只讓每次編輯多一次行程啟動。註冊移除，hook 與測試歸檔（測試移入本目錄後不在 pytest 的 `testpaths` 內，不再執行）
+
 ## 恢復廢棄腳本
 
 若要恢復廢棄腳本到正式使用：
@@ -66,4 +72,3 @@ git mv .claude/hooks/archived/script-name.py .claude/hooks/script-name.py
 
 - **歸檔時間**: 2026-02-11
 - **對應版本**: v0.31.0
-- **對應 Ticket**: 0.31.0-W18-001.2

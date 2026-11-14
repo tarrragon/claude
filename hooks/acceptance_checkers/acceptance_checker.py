@@ -1,7 +1,7 @@
 """
 Acceptance Checker - 驗收記錄檢查
 
-檢查 Ticket 是否有驗收記錄（關鍵字搜尋），以及是否需要驗收。
+檢查 Ticket 是否有驗收記錄（frontmatter acceptance 全勾選），以及是否需要驗收。
 """
 
 import sys
@@ -37,7 +37,7 @@ class _NullLogger:
         pass
 
 
-# W10-072.2: 純文件路徑前綴（用於識別 doc-only IMP）
+# 純文件路徑前綴（用於識別 doc-only IMP）
 # 命中以下前綴或副檔名 .md 視為純文件路徑
 _DOC_PATH_PREFIXES = (
     ".claude/rules/",
@@ -51,7 +51,7 @@ _DOC_PATH_PREFIXES = (
     ".claude/skills/",  # SKILL.md 等說明文件
     "docs/",
 )
-# W10-072.2: 純文件路徑門檻（≥ 80% 視為 doc-only）
+# 純文件路徑門檻（≥ 80% 視為 doc-only）
 _DOC_ONLY_THRESHOLD = 0.8
 
 
@@ -80,9 +80,9 @@ def is_doc_only_imp(frontmatter: Optional[dict], logger=None) -> bool:
     """
     if not frontmatter:
         return False
-    # 0.2.1-W3-337：改用 extract_where_files 正規化，避免
+    # 改用 extract_where_files 正規化，避免
     # parse_ticket_frontmatter 對巢狀列表產出換行字串時被
-    # isinstance(files, list) 靜默判定為空（見 0.2.1-W3-330 稽核結論：
+    # isinstance(files, list) 靜默判定為空（稽核結論：
     # 既有票 100% 命中此型別假設，doc-only 提示訊息從未在真實 runtime 觸發）
     valid_files = extract_where_files(frontmatter, logger or _NullLogger())
     if not valid_files:
@@ -115,28 +115,22 @@ def has_acceptance_record(
     """
     檢查 Ticket 是否有驗收記錄。
 
-    資料源優先序（與 CLI track_acceptance.py 寫入端對齊）：
-      1. 優先檢查 frontmatter acceptance list：全部項目 `[x]` 勾選 → True
-      2. 空 list / 部分勾選 / 無欄位 → fallback body 關鍵字掃描
+    唯一資料源是 frontmatter acceptance list（與 CLI track_acceptance.py
+    寫入端對齊）：全部項目 `[x]` 勾選 → True；空 list、部分勾選、無欄位
+    → False。
 
-    Body 關鍵字（fallback，保留舊 Ticket 相容）：
-    - 驗收結果: 通過
-    - Acceptance Audit Report
-    - 驗收通過
-    - 驗收者：
-    - Auditor:
-    - PM 直接驗收
-    - acceptance-auditor
+    不掃描 body 關鍵字：body 是被審方可自由寫入的文字，任一字串都能由
+    被審方自己寫進去，關鍵字命中不構成驗收訊號，只會讓缺驗收記錄的警告
+    消失（tarrragon/claude#70）。
 
     Args:
-        ticket_content: Ticket 檔案內容（body 文字）
+        ticket_content: Ticket 檔案內容（保留參數以相容既有呼叫端，不再讀取）
         logger: 日誌物件
-        frontmatter: Ticket frontmatter 結構（可選；None 表示舊 caller）
+        frontmatter: Ticket frontmatter 結構（None 表示無可判定的驗收清單）
 
     Returns:
         bool - 是否有驗收記錄
     """
-    # 優先：frontmatter acceptance list 全勾選
     if frontmatter is not None:
         acceptance_list = frontmatter.get("acceptance")
         if _all_acceptance_items_checked(acceptance_list):
@@ -146,23 +140,7 @@ def has_acceptance_record(
             )
             return True
 
-    # Fallback：body 關鍵字掃描
-    acceptance_keywords = [
-        "驗收結果: 通過",
-        "Acceptance Audit Report",
-        "驗收通過",
-        "驗收者：",
-        "Auditor:",
-        "PM 直接驗收",
-        "acceptance-auditor",
-    ]
-
-    for keyword in acceptance_keywords:
-        if keyword in ticket_content:
-            logger.info(f"找到驗收記錄關鍵字: {keyword}")
-            return True
-
-    logger.debug("未找到驗收記錄")
+    logger.debug("frontmatter acceptance 未全勾選，視為無驗收記錄")
     return False
 
 
@@ -198,7 +176,7 @@ def verify_acceptance_record(
     has_accept = has_acceptance_record(ticket_content, logger, frontmatter=frontmatter)
 
     if should_check_acceptance and not has_accept:
-        # W10-072.2: 純文件 IMP（where.files ≥ 80% 屬純文件路徑）使用差異化訊息
+        # 純文件 IMP（where.files ≥ 80% 屬純文件路徑）使用差異化訊息
         if is_doc_only_imp(frontmatter, logger):
             template = GateMessages.ACCEPTANCE_RECORD_DOC_ONLY_HINT
             logger.info(f"Ticket {ticket_id} 識別為純文件 IMP - 輸出手動驗收建議")

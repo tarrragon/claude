@@ -71,6 +71,9 @@ def project_tree(tmp_path):
 def _run_main(monkeypatch, project_root, input_data):
     """注入 stdin + get_project_root，執行 main()，回傳 (exit_code, stderr)。"""
     monkeypatch.setattr(_hook, "get_project_root", lambda: project_root)
+    monkeypatch.setattr(
+        _hook, "get_hook_log_dir", lambda name: project_root / ".claude" / "hook-logs" / name
+    )
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(input_data)))
     err = io.StringIO()
     monkeypatch.setattr("sys.stderr", err)
@@ -79,7 +82,9 @@ def _run_main(monkeypatch, project_root, input_data):
 
 
 def _read_audit(project_root: Path):
-    audit_path = project_root / ".claude" / "hook-logs" / "parallel-claim-audit.log"
+    audit_path = (
+        project_root / ".claude" / "hook-logs" / "parallel-claim-audit-hook" / "parallel-claim-audit.log"
+    )
     if not audit_path.exists():
         return []
     return [

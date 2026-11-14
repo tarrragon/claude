@@ -311,7 +311,7 @@
 - 必要的段落是否都存在（如「相關文件」「適用時機」）
 - 正交工具之間是否有區別說明
 - 新增內容是否已在所有相關入口點可被發現
-- 文件中所有「待建立」「TODO」「獨立 Ticket」「未來實作」標記是否都附 ticket ID（依 `decision-trigger-binding.md` 規則 1 / 2，無 ticket ID 即違規；W10-015）
+- 文件中所有「待建立」「TODO」「獨立 Ticket」「未來實作」標記是否都附 ticket ID（依 `decision-trigger-binding.md` 規則 1 / 2，無 ticket ID 即違規）
 
 ### Cognitive Load 視角
 
@@ -375,6 +375,6 @@ linux 評分直接對應 Worth-It Filter 的改善幅度，走同一套規則，
 ---
 
 **Last Updated**: 2026-05-04
-**Version**: 1.3.0 — 套用 compositional-writing 改寫（W17-135）：本檔開頭與各情境章節補意圖陳述（atomic / intent-revealing），linux 常駐委員段補職能說明
+**Version**: 1.3.0 — 套用 compositional-writing 改寫：本檔開頭與各情境章節補意圖陳述（atomic / intent-revealing），linux 常駐委員段補職能說明
 
-**Version**: 1.2.0 - 情境 C/D/F/G 各新增 basil 視角段落（W17-057，basil-writing-critic 常駐委員整合）
+**Version**: 1.2.0 - 情境 C/D/F/G 各新增 basil 視角段落（basil-writing-critic 常駐委員整合）

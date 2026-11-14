@@ -38,7 +38,7 @@ describe('resumeNoticeLogLine：送出結果（E2 正反對照）', () => {
   })
 
   test('target 為 null：寫出不送的原因，且沒有 isDelivered', () => {
-    for (const reason of ['no-session-name', 'coordinator', 'lane-not-found', 'lane-ended'] as const) {
+    for (const reason of ['no-session-name', 'coordinator', 'lane-not-found', 'lane-ended', 'coordinator-not-found', 'coordinator-ambiguous'] as const) {
       const line = lineOf({ step: 'skipped', reason })
       expect(line).toContain('step=skipped')
       expect(line).toContain(`reason=${reason}`)

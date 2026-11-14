@@ -125,10 +125,10 @@ Framework hook 透過 spawn 子 CLI 探測狀態，子 CLI 內部執行範圍超
 
 | 事件 | 日期 | 說明 |
 |------|------|------|
-| W17-139 | 2026-05-05 | zhtw-mcp 整合，hook 採用 `claude mcp list` 探測 |
-| W17-139 hook 驗證 | 2026-05-05 | 發現 hook 平均耗 8.9s，「偶爾 timeout」 |
+| zhtw-mcp 整合 | 2026-05-05 | hook 採用 `claude mcp list` 探測 |
+| hook 驗證 | 2026-05-05 | 發現 hook 平均耗 8.9s，「偶爾 timeout」 |
 | WRAP 分析 | 2026-05-05 | 揭露 timeout 訊號為設計副作用而非軟性瑕疵 |
-| W17-143 | 2026-05-05 | IMP ticket 修復 hook 改用 file-based 三層 scope 探測 |
+| 修復 | 2026-05-05 | IMP ticket 修復 hook 改用 file-based 三層 scope 探測 |
 
 ## 相關文件
 
@@ -140,4 +140,4 @@ Framework hook 透過 spawn 子 CLI 探測狀態，子 CLI 內部執行範圍超
 ---
 
 **Last Updated**: 2026-05-05
-**Version**: 1.0.0 — 初版；source W17-143 WRAP 分析（zhtw-mcp hook 探測機制設計副作用揭露）
+**Version**: 1.0.0 — 初版；source 為 WRAP 分析（zhtw-mcp hook 探測機制設計副作用揭露）

@@ -187,16 +187,15 @@ def test_path_guard_deny_bytes_unchanged(path_guard, monkeypatch, capsys):
     assert out == _single_line_bytes("deny", reason)
 
 
-def test_path_guard_allow_bytes_unchanged(path_guard, monkeypatch, capsys):
+def test_path_guard_pass_emits_nothing(path_guard, monkeypatch, capsys):
+    """放行路徑不輸出 decision（allow 會略過平台權限提示，等於代用戶核可）。"""
     _set_stdin(monkeypatch, _PATH_GUARD_ALLOW)
     assert path_guard.main() == 0
-    out = capsys.readouterr().out
-    reason = json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
-    assert out == _single_line_bytes("allow", reason)
+    assert capsys.readouterr().out == ""
 
 
 # ============================================================================
-# task-dispatch-readiness-check（不可等價遷移：indent=2 + systemMessage）
+# task-dispatch-readiness-check（不可等價遷移：indent=2）
 # ============================================================================
 
 
@@ -207,36 +206,11 @@ def task_dispatch():
     )
 
 
-def _strict_dispatch_setup(mod, monkeypatch):
-    monkeypatch.setattr(mod, "prompt_references_handoff_ticket", lambda prompt, logger=None, project_root=None: False)
-    monkeypatch.setattr(mod, "load_agents_config", lambda: {})
-    monkeypatch.setattr(mod, "get_hook_mode", lambda logger: mod.HOOK_MODE_STRICT)
-    monkeypatch.setattr(
-        mod,
-        "check_agent_dispatch",
-        lambda prompt, subagent_type, config, logger: {
-            "is_error": True,
-            "error_message": "分派錯誤測試",
-        },
-    )
-
-
 _NO_PROMPT = {"tool_name": "Agent", "tool_input": {}}
-_STRICT = {
-    "tool_name": "Agent",
-    "tool_input": {"prompt": "do x", "subagent_type": "wrong-agent"},
-}
 
 
 def test_task_dispatch_no_prompt_deny_failure_exits_2(task_dispatch, monkeypatch):
     _set_stdin(monkeypatch, _NO_PROMPT)
-    monkeypatch.setattr(sys, "stdout", _FailingStdout())
-    assert _run_safely(task_dispatch, "agent-dispatch-check") == 2
-
-
-def test_task_dispatch_strict_deny_failure_exits_2(task_dispatch, monkeypatch):
-    _strict_dispatch_setup(task_dispatch, monkeypatch)
-    _set_stdin(monkeypatch, _STRICT)
     monkeypatch.setattr(sys, "stdout", _FailingStdout())
     assert _run_safely(task_dispatch, "agent-dispatch-check") == 2
 

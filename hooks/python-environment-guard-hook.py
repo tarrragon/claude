@@ -206,7 +206,12 @@ def _check_path_contains(target_dir: Path) -> bool:
 
 
 def _emit(message: str) -> None:
-    """對用戶可見的輸出（SessionStart 會匯總顯示 stderr）。"""
+    """對用戶可見的輸出（SessionStart 會匯總顯示 stderr）。
+
+    受眾：用戶，不含模型。訊息要求的動作（安裝 Python、修改 shell profile 的 PATH、
+    重啟 session）都只能由用戶執行；模型之後若呼叫 python3 失敗，會從命令結果直接
+    得知。故維持 stderr，不經 emit_model_reminder。
+    """
     print(f"[python-env-guard] {message}", file=sys.stderr)
 
 

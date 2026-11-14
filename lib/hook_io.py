@@ -6,7 +6,7 @@ Hook 輸入輸出處理（SSOT）
 提供統一的 Hook JSON 輸入讀取、git 命令執行、資料提取、輸入驗證和輸出生成功能。
 消除各 Hook 檔案中的重複程式碼。
 
-本模組為 lib/ 與 hook_utils/hook_io 整併後的單一 SSOT（0.37.0-W6-005）：
+本模組為 lib/ 與 hook_utils/hook_io 整併後的單一 SSOT：
 保留 lib 既有的 read_hook_input / create_* 輸出建構函式，並吸收 hook_utils
 獨有的 git / 提取 / 驗證 / 輸出生成函式；同名 read_json_from_stdin 採 hook_utils 版。
 
@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from lib.hook_base import get_project_root
+from lib.hook_base import get_shared_state_root
 
 
 _VALID_EFFORT_LEVELS = ("low", "medium", "high")
@@ -294,14 +294,24 @@ def run_git(
         args: git 子命令和參數，如 ["log", "-1", "--format=%ct"]
         cwd: 工作目錄（預設為當前目錄）
         timeout: 執行超時秒數（預設 5）
-        logger: 可選日誌物件，失敗時記錄 warning
+        logger: 可選日誌物件，失敗時記錄 warning；未傳時使用模組 logger
 
     Returns:
         stdout 輸出（僅移除尾端換行，保留行首空白），或 None 若執行失敗
+
+    行為：
+        - 失敗（非零）、逾時、找不到 git 一律記 warning，不因未傳 logger 而靜默
+        - args 以 git 開頭時加 --no-optional-locks 與 diff.autoRefreshIndex=false，
+          唯讀命令不改寫 index（與 git_utils.run_git_command 預設對齊）
     """
+    logger = logger or logging.getLogger(__name__)
     if args and args[0] == "git":
         # 非 ASCII 路徑不加引號跳脫，呼叫端才能拿原始 UTF-8 路徑做比對
-        args = ["git", "-c", "core.quotepath=false"] + list(args[1:])
+        args = [
+            "git", "--no-optional-locks",
+            "-c", "core.quotepath=false",
+            "-c", "diff.autoRefreshIndex=false",
+        ] + list(args[1:])
     try:
         result = subprocess.run(
             args,
@@ -312,7 +322,7 @@ def run_git(
         )
         if result.returncode == 0:
             # 只移除尾端換行，保留行首空白（porcelain 格式 X 位置可能為空白，
-            # 整體 strip() 會剝除首行前導空白，見 IMP-BAL-007 / 0.2.1-W3-284）
+            # 整體 strip() 會剝除首行前導空白，見 IMP-BAL-007）
             return result.stdout.rstrip("\n")
         else:
             if logger:
@@ -467,7 +477,7 @@ def is_handoff_recovery_mode(
         return _handoff_recovery_cache
 
     try:
-        if _scan_handoff_pending(logger, get_project_root()):
+        if _scan_handoff_pending(logger, get_shared_state_root()):
             if logger:
                 logger.info("檢測到 Handoff 恢復模式")
             _handoff_recovery_cache = True
@@ -526,7 +536,7 @@ def _scan_handoff_pending(
     （目標已完成、來源與目標皆查無）不收，否則一個殘留檔就讓守衛對其指向的票放行。
     損壞或無法讀取的檔案略過並記錄；目錄不存在回傳空列表。判準載入失敗時回空列表。
     """
-    root = project_root if project_root is not None else get_project_root()
+    root = project_root if project_root is not None else get_shared_state_root()
     pending_dir = root / ".claude" / "handoff" / "pending"
     result: List[Tuple[str, Set[str]]] = []
 
@@ -589,7 +599,7 @@ def get_handoff_recovery_ticket_ids(
 
     Args:
         logger: 可選 Logger
-        project_root: 可選專案根目錄（測試注入；預設 get_project_root()）
+        project_root: 可選專案根目錄（測試注入；預設 get_shared_state_root()）
     """
     ticket_ids: Set[str] = set()
     for _, ids in _scan_handoff_pending(logger, project_root):
@@ -827,8 +837,7 @@ def is_background_dispatch(tool_input: "dict | None") -> bool:
         ...     logger.info("背景代理人啟動，跳過完成判定邏輯")
         ...     return EXIT_SUCCESS
 
-    相關 Ticket：0.18.0-W10-024（active-dispatch-tracker-hook 首例）、
-    0.18.0-W10-060（其他 PostToolUse(Agent) Hook 套用）
+    使用者：active-dispatch-tracker-hook（首例）與其他 PostToolUse(Agent) Hook。
     """
     if not tool_input:
         return False
@@ -930,7 +939,7 @@ def emit_hook_output(
 
     受眾過濾（PC-V1-004 防護 C）：audience="pm_only" 且觸發方為 subagent
     （input_data 含 agent_id）時，丟棄 additional_context，輸出退化為
-    無訊息的基本結構（沿用 W1-071 既有跳過慣例）。過濾邏輯只存在於
+    無訊息的基本結構（沿用既有跳過慣例）。過濾邏輯只存在於
     本函式，各 hook 禁止自行複製判斷（ARCH-020）。
 
     受眾標記前綴（PC-V1-004 防護 C 規則層）：audience="pm_only" 且觸發方為
@@ -1043,7 +1052,7 @@ def emit_model_reminder(
 # ============================================================================
 
 # CC 2.1.163 #4 解除 SubagentStop event schema 對
-# hookSpecificOutput.additionalContext 的限制（W17-159 / W17-160 當時被迫
+# hookSpecificOutput.additionalContext 的限制（此前被迫
 # 改用 top-level systemMessage）。低於此版本的 runtime 仍會拒絕
 # additionalContext，故以版本偵測決定輸出 shape，舊版 graceful fallback
 # 回 systemMessage。

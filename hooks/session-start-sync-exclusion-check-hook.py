@@ -19,8 +19,7 @@ SessionStart 事件觸發時，掃描 .claude/ 根目錄的 .json/.yaml/.yml 檔
 - 失敗模式：任何 I/O 或解析異常 → logger 紀錄 + 靜默降級，
   不阻塞 session 啟動（遵循 SessionStart Hook 原則）
 
-適用 Ticket：0.18.0-W17-045.3
-來源：W17-045 ANA — 框架新增 runtime state 機制時無 sync 評估強制點的結構性缺口
+背景：框架新增 runtime state 機制時，無 sync 評估強制點，屬結構性缺口。
 """
 
 import json
@@ -131,7 +130,7 @@ def build_gitignore_drift_section(drift: List[str]) -> str:
         "偵測到 `.gitignore` 未涵蓋 sync manifest 的 local-only 名稱"
         "（`GITIGNORE_EXPECTED`）。",
         "未列入 gitignore 的本地檔會被 push 端 clean-check 判為未追蹤而 abort"
-        "（W1-024 缺陷 T）。",
+        "。",
         "",
     ]
     for name in drift:
@@ -250,7 +249,7 @@ def main() -> int:
         return EXIT_SUCCESS
 
     # Housekeeping: GC dispatch-active.json 殘留記錄（TTL 1h）
-    # 失敗降級為 logger.warning，不阻塞 session 啟動（W11-024）
+    # 失敗降級為 logger.warning，不阻塞 session 啟動
     try:
         expired_count = cleanup_expired(project_root, max_age_hours=1)
         if expired_count > 0:
@@ -261,7 +260,7 @@ def main() -> int:
     claude_dir = project_root / ".claude"
     unexcluded = scan_unexcluded_files(claude_dir, logger)
 
-    # gitignore↔manifest 交叉驗證（W1-031）：偵測 .gitignore 漏列 local-only 名稱
+    # gitignore↔manifest 交叉驗證：偵測 .gitignore 漏列 local-only 名稱
     try:
         gitignore_drift = find_gitignore_drift(project_root / ".gitignore")
     except Exception as e:  # noqa: BLE001 — 交叉驗證失敗降級不阻塞 session

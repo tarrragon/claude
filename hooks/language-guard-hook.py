@@ -15,7 +15,7 @@ Language Guard Hook - 偵測前一輪 assistant 回應的語言/格式違規
   3. 隱含表達 6 句型（document-writing-style v1.2.0 反模式表）
 - 觸發後以 additionalContext 輸出（模型可見）+ 日誌；內部錯誤仍寫 stderr（規則 4）
 
-設計原則（W17-068 / W17-066 ginger P1 + linux L-C1）：
+設計原則：
 - L1 同步阻擋層由 askuserquestion-charset-guard-hook.py 處理（exit 2 阻擋）
 - 本 hook 為 L1 警告層，避免 false positive 阻擋合法引用
 - 隱含表達為語意問題，需 basil 兜底；hook 僅標記疑似位置
@@ -40,7 +40,7 @@ from lib import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
-    get_project_root,
+    get_hook_log_dir,
     emit_model_reminder,
 )
 from lib.transcript_tail_reader import read_last_assistant_text
@@ -50,8 +50,8 @@ from lib.transcript_tail_reader import read_last_assistant_text
 # 常數定義
 # ============================================================================
 
-# W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook，候選 3）
-# 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+# 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook）
+# 依據：Hook 觸發後 0% 產生 Action 的比例實測
 SAMPLING_N = 10
 
 
@@ -65,7 +65,7 @@ def _get_sampling_counter_file() -> Path:
     感知 > CLAUDE_PROJECT_DIR > git toplevel > cwd 搜尋）於每次呼叫時動態解析，
     測試以 CLAUDE_PROJECT_DIR 指向 tmp_path 即可完全隔離。
     """
-    return get_project_root() / "hook-logs" / "_sampling" / "language-guard-hook.count"
+    return get_hook_log_dir("_sampling") / "language-guard-hook.count"
 
 
 def should_sample_run(logger) -> bool:
@@ -101,7 +101,7 @@ HIRAGANA_RANGE_END = 0x309F
 KATAKANA_RANGE_START = 0x30A0
 KATAKANA_RANGE_END = 0x30FF
 
-# Emoji unicode 範圍（W17-068 新增；命中即警告）
+# Emoji unicode 範圍（命中即警告）
 # 下游副本：建立端為 .claude/skills/ticket/ticket_system/constants.py 的
 # EMOJI_RANGES（canonical，見該檔註解與 tool-output-trust-rules.md 規則 6）。
 # 一致性由 canonical-schema-consistency-check-hook.py（SessionStart）程式
@@ -115,7 +115,7 @@ EMOJI_RANGES = (
     (0x1FA00, 0x1FAFF),  # Symbols and Pictographs Extended-A
 )
 
-# 隱含表達 6 句型（W17-068 新增；對應 document-writing-style v1.2.0 反模式表）
+# 隱含表達 6 句型（對應 document-writing-style v1.2.0 反模式表）
 # 來源：.claude/references/document-writing-style-details.md「反模式：人性化/隱含表達」章節（6 句型表）
 # 設計原則：警告非阻擋（語意需 basil 兜底，避免阻擋合法引用 / 規範描述本身）
 # 每組（pattern, hint）→ pattern 為偵測字串、hint 為修正方向
@@ -167,7 +167,7 @@ def contains_non_expected_language(text: str) -> bool:
 
 def find_emoji_chars(text: str) -> List[Tuple[str, int]]:
     """
-    掃描文字中的 emoji 字元（W17-068 新增）。
+    掃描文字中的 emoji 字元。
 
     Returns:
         [(char, codepoint), ...] — 命中的 emoji 字元清單；空 list = 無命中
@@ -188,7 +188,7 @@ def find_emoji_chars(text: str) -> List[Tuple[str, int]]:
 
 def find_implicit_expressions(text: str) -> List[Tuple[str, str]]:
     """
-    掃描文字中的隱含表達 6 句型（W17-068 新增）。
+    掃描文字中的隱含表達 6 句型。
 
     Returns:
         [(pattern, hint), ...] — 命中的句型 + 修正方向；空 list = 無命中
@@ -245,7 +245,7 @@ def build_language_warning() -> str:
 
 
 def build_emoji_warning(hits: List[Tuple[str, int]]) -> str:
-    """Emoji 違規警告訊息（W17-068 新增）。"""
+    """Emoji 違規警告訊息。"""
     char_list = ", ".join(f"'{ch}' (U+{cp:04X})" for ch, cp in hits[:10])
     suffix = f"（共 {len(hits)} 處）" if len(hits) > 10 else ""
     return (
@@ -257,7 +257,7 @@ def build_emoji_warning(hits: List[Tuple[str, int]]) -> str:
 
 
 def build_implicit_expression_warning(hits: List[Tuple[str, str]]) -> str:
-    """隱含表達句型警告訊息（W17-068 新增；警告非阻擋）。"""
+    """隱含表達句型警告訊息（警告非阻擋）。"""
     lines = [f"\n{WARNING_PREFIX} 警告：前一輪輸出含隱含表達句型（共 {len(hits)} 處）"]
     for pattern, hint in hits:
         lines.append(f"{WARNING_PREFIX}   - 「{pattern}」→ {hint}")
@@ -285,7 +285,7 @@ def main() -> int:
             logger.debug("無 Hook 輸入（empty stdin），靜默通過")
             return 0
 
-        # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查
+        # 抽樣降級：每 N 次觸發 1 次完整檢查
         if not should_sample_run(logger):
             return 0
 
@@ -308,7 +308,7 @@ def main() -> int:
             warnings.append(build_language_warning())
             logger.warning("偵測到韓文或日文假名字元在 assistant 回應中")
 
-        # 偵測 2：Emoji（W17-068 新增）
+        # 偵測 2：Emoji
         emoji_hits = find_emoji_chars(previous_message)
         if emoji_hits:
             warnings.append(build_emoji_warning(emoji_hits))
@@ -318,7 +318,7 @@ def main() -> int:
                 [(ch, f"U+{cp:04X}") for ch, cp in emoji_hits[:5]],
             )
 
-        # 偵測 3：隱含表達 6 句型（W17-068 新增；警告非阻擋）
+        # 偵測 3：隱含表達 6 句型（警告非阻擋）
         implicit_hits = find_implicit_expressions(previous_message)
         if implicit_hits:
             warnings.append(build_implicit_expression_warning(implicit_hits))

@@ -1,24 +1,27 @@
 # Hook 語言分類配置
 #
-# 定義每個 Hook 的語言屬性，供 project-init onboard 使用
-# 用途：新專案導入框架後，自動建議停用非適用語言的 Hook
+# 定義每個 Hook 的語言屬性，供 project-init onboard 顯示
+# 用途：讓新導入框架的專案知道哪些 Hook 含語言專屬檢查
 #
 # 分類說明：
-#   universal:         所有專案都需要（預設值，不需要列出）
-#   flutter:           只有 Flutter/Dart 專案需要
-#   project-specific:  綁定特定專案邏輯，需根據專案調整
+#   universal:         所有專案都適用（預設值，不需要列出）
+#   flutter:           含 Flutter/Dart 專屬檢查；遇到非 Flutter 的輸入時自動略過
+#   project-specific:  含專案慣例（如路徑樣式）；只掃對應語言的檔案，其他檔案自動略過
+#
+# 不需要停用：下列 Hook 都由輸入決定是否動作（.arb 檔、flutter test 命令、.dart 檔），
+# 非 Flutter 專案不會觸發其 Flutter 專屬檢查。專案層也沒有逐支停用 Hook 的機制。
 #
 # 未列出的 Hook 預設為 universal
 #
-# Last Updated: 2026-03-04
-# Version: 1.0.0
+# Last Updated: 2026-11-13
+# Version: 1.1.0 — 移除「非 Flutter 專案應停用」建議，改寫為自動略過語意（原建議與 onboard 的「保留」互相矛盾，且停用機制不存在）
 
 hooks:
-  # --- Flutter 特定（非 Flutter 專案應停用） ---
+  # --- 含 Flutter 專屬檢查（非 Flutter 輸入自動略過，不需停用） ---
+  # test-timeout-pre.py、pre-test-hook.py 另處理 pytest／npm test，不限 Flutter 專案
   test-timeout-pre.py: flutter
   pre-test-hook.py: flutter
-  mcp-run-tests-validator.py: flutter
   l10n-sync-verification-hook.py: flutter
 
-  # --- 專案特定（需根據專案調整） ---
+  # --- 含專案慣例（只掃 .dart 檔，必要時依專案調整樣式） ---
   dart-style-guardian-hook.py: project-specific

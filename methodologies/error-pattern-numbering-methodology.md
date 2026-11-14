@@ -54,11 +54,11 @@
 | PC-030 | agent-slash-command-unreachable | phase4-unused-code-incomplete-grep |
 | PC-105 | feature-implemented-without-doc-integration | pm-cli-syntax-autopilot |
 
-> **PC-018 已移除（0.2.1-W3-111 查證）**：舊版登記表列有 PC-018，但 `.claude/error-patterns/` 實測僅有 1 個 `PC-018-*.md` 檔案，非重號，已從登記表移除。
+> **PC-018 已移除（經查證）**：舊版登記表列有 PC-018，但 `.claude/error-patterns/` 實測僅有 1 個 `PC-018-*.md` 檔案，非重號，已從登記表移除。
 
 > **ARCH-010 已移除（2026-08 查證）**：舊版登記表列有 ARCH-010（module-assembly-omission / overengineered-state-management），但查證發現 module-assembly-omission 側並非真正的碰撞方，而是已於 2026-05-04 在上游重編號為 `ARCH-021`、但舊檔隨初次匯入 commit `f375ae67` 一併殘留的孤兒重複檔（非本專案並行建檔產生）。孤兒檔已刪除，`architecture` category 不再有凍結重號項；ARCH-010 現僅存 overengineered-state-management 一份，非碰撞。
 
-> **PC-165 狀態為專案相對事實，非全域已完成聲明（0.2.1-W3-111 查證）**：舊版文字以完成式「auq-dispatch 已本地重編為 `PC-171`……上游遺留孤兒檔已刪除」陳述 PC-165 重號已解決。此為單一來源專案的歷史事件，經 full-overlay sync 帶入其他專案後即失真——sync 只複製文件敘述本身，不複製「已完成」的執行結果（重編後的檔案），讀者因此無從分辨陳述是否適用自己所在的專案。
+> **PC-165 狀態為專案相對事實，非全域已完成聲明（經查證）**：舊版文字以完成式「auq-dispatch 已本地重編為 `PC-171`……上游遺留孤兒檔已刪除」陳述 PC-165 重號已解決。此為單一來源專案的歷史事件，經 full-overlay sync 帶入其他專案後即失真——sync 只複製文件敘述本身，不複製「已完成」的執行結果（重編後的檔案），讀者因此無從分辨陳述是否適用自己所在的專案。
 >
 > 本專案（flutter_balance）查證：`.claude/error-patterns/process-compliance/` 目前僅有單一 `PC-165-false-positive-fix-chain.md`，PC-165 在本專案並非重號。`git log --all --diff-filter=A -- '*PC-171*'` 與本檔案自身的 `git log --follow` 歷史，皆確認本專案自初次匯入（commit `f375ae6`）起從未出現任何 `PC-171-*` 或 `PC-165-auq-dispatch-*` 檔案。框架共用 `CHANGELOG.md`（跨專案同步內容）第 1716 行記有「新增 PC-171（上游 PC-165 重編號避免本地撞號）」，顯示此重編動作曾在框架歷史某處發生，但對應檔案從未隨 sync 抵達本專案（編號序列亦見缺口：`PC-170` 之後直接是 `PC-172`）。
 >
@@ -137,7 +137,7 @@ flat base 碰撞已存在於所有同步專案（發散狀態，63~309 檔）。
 
 1. 跑 `.claude/scripts/detect_pc_collision.py` 取得本專案碰撞清單
 2. **共同 base 碰撞（見上「已知 legacy intra-dir 重號」表，現 6 組）**：凍結保留，不重編，引用以 slug 區辨
-3. **本專案獨有未處理碰撞**：依 detect 結果逐一決定新編號並套用 canonical 重編，刪上游遺留孤兒檔，grep 更新引用。**不可直接沿用本文件過去列過的範例 ID**——舊版曾列 auq-dispatch→PC-171、defensive-rule→PC-181、ui-test-green→PC-182，經 0.2.1-W3-111 查證，三者皆非 flutter_balance 實際碰撞，`PC-171`/`PC-181`/`PC-182` 三檔本專案自匯入起從未存在（見上方 PC-165 查證註記）。每個專案的獨有碰撞集合不同，須以自身 detect 輸出為準，不得沿用其他專案的歷史範例
+3. **本專案獨有未處理碰撞**：依 detect 結果逐一決定新編號並套用 canonical 重編，刪上游遺留孤兒檔，grep 更新引用。**不可直接沿用本文件過去列過的範例 ID**——舊版曾列 auq-dispatch→PC-171、defensive-rule→PC-181、ui-test-green→PC-182，經查證，三者皆非 flutter_balance 實際碰撞，`PC-171`/`PC-181`/`PC-182` 三檔本專案自匯入起從未存在（見上方 PC-165 查證註記）。每個專案的獨有碰撞集合不同，須以自身 detect 輸出為準，不得沿用其他專案的歷史範例
 4. 重編後再跑 detect 確認獨有碰撞歸零（共同 base 仍在屬正常）
 
 **部署序列 gate**：

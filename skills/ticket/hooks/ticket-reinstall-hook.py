@@ -50,6 +50,7 @@ from lib.uv_tool_utils import (
     find_installed_module_dir,
     compare_hash_sets,
     is_shimmed_cli,
+    reinstall_skip_reason,
     DEFAULT_EXCLUDE_DIRS,
 )
 
@@ -323,6 +324,18 @@ def main() -> int:
     summary = format_difference_summary(differences)
     logger.info(f"Differences detected ({summary})")
     print(f"[TicketSync] Differences detected ({summary})", file=sys.stdout)
+
+    # 只從主 checkout 重裝：linked worktree 或判定失敗時改為提醒，
+    # 不以未確認來源的源碼覆蓋全域 CLI。SessionStart 的 stdout 會進入模型 context。
+    skip_reason = reinstall_skip_reason(project_root, logger)
+    if skip_reason is not None:
+        print(
+            f"[TicketSync] 未自動重裝 ticket CLI：{skip_reason}。"
+            "需要對齊時，請在主 checkout 的 .claude/skills/ticket "
+            "執行 uv tool install . --reinstall",
+            file=sys.stdout,
+        )
+        return 0
 
     # Attempt reinstall
     logger.info("Reinstalling ticket CLI...")

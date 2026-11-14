@@ -12,7 +12,7 @@ Dispatch Identity Bind Hook - PostToolUse (Agent)
   subagent_type。取代原本掛在 PreToolUse（dispatch-record-hook.py）的
   無條件寫入。
 
-  背景（0.2.1-W3-302，承接 issue 47 / 0.2.1-W3-226）：
+  背景（承接 issue 47）：
   PreToolUse(Agent) matcher 下所有 hook 皆會執行、deny 為彙總結果——
   worktree-commit-before-dispatch-hook.py（PC-019）只檢查
   isolation == "worktree" 的派發並可能回傳 exit 2 阻擋，但
@@ -24,7 +24,7 @@ Dispatch Identity Bind Hook - PostToolUse (Agent)
 
   PostToolUse 只在 Agent 工具實際執行（未被任何 PreToolUse hook deny）
   後才觸發，天然具備「派發已成功」語意，不需在寫入端重建交易回滾。
-  worktree 隔離派發維持 0.2.1-W3-226 的跳過行為——worktree 尚未建立、
+  worktree 隔離派發維持既有的跳過行為——worktree 尚未建立、
   寫入必落在主 repo，由 worktree 代理人自行執行 `claim --as` 完成綁定。
 
 觸發時機: Agent 工具呼叫完成後 (PostToolUse, matcher: Agent)
@@ -32,8 +32,8 @@ Dispatch Identity Bind Hook - PostToolUse (Agent)
 
 來源:
   - framework issue 47（混合批次自我阻塞殘留缺口）
-  - 0.2.1-W3-226（worktree 隔離派發跳過綁定的既有判斷邏輯，原封不動保留）
-  - 1.5.0-W5-005.2（派發身份前移的原始設計；本次僅搬遷觸發時機）
+  - worktree 隔離派發跳過綁定的既有判斷邏輯（原封不動保留）
+  - 派發身份前移的原始設計（本次僅搬遷觸發時機）
 """
 
 import logging
@@ -84,7 +84,7 @@ TICKET_CLI_TIMEOUT = 15
 
 
 # ============================================================================
-# 派發身份綁定（原 dispatch-record-hook.py 1.5.0-W5-005.2，0.2.1-W3-302 遷移）
+# 派發身份綁定（原 dispatch-record-hook.py 遷移而來）
 # ============================================================================
 
 
@@ -146,8 +146,8 @@ def bind_dispatch_identity(
 ) -> bool:
     """無主態時將 who.current 綁定為派發的 subagent_type；回傳是否實際綁定。
 
-    讀寫皆走 ticket CLI 而非直接 parse/Edit ticket md——維持寫入路徑收斂
-    （W5-005 F3），避免 hook 成為另一個繞過驗證閘的寫入者。
+    讀寫皆走 ticket CLI 而非直接 parse/Edit ticket md——維持寫入路徑收斂，
+    避免 hook 成為另一個繞過驗證閘的寫入者。
     """
     who_stdout = _run_ticket_cli(["who", ticket_id], project_root, logger)
     if who_stdout is None:
@@ -198,7 +198,7 @@ def main() -> int:
     ticket_id = extract_ticket_id(tool_input.get("prompt", ""))
     subagent_type = (tool_input.get("subagent_type") or "").strip()
 
-    # 0.2.1-W3-226（原封不動延用）：worktree 隔離派發時跳過。本 hook 已在
+    # 原封不動延用既有邏輯：worktree 隔離派發時跳過。本 hook 已在
     # PostToolUse 觸發，Agent 呼叫已實際執行，但 worktree 建立與 cwd 切換
     # 是 worktree 代理人自身流程的一部分，get_project_root() 此處仍解析到
     # 主 repo（PostToolUse 觸發當下呼叫端 cwd 未變）。worktree 代理人依
@@ -210,7 +210,7 @@ def main() -> int:
     if isolation == "worktree":
         if ticket_id and subagent_type:
             logger.info(
-                "worktree 隔離派發，跳過主 repo 端身份綁定（0.2.1-W3-226），"
+                "worktree 隔離派發，跳過主 repo 端身份綁定，"
                 "交由 worktree 內 claim --as 處理: %s",
                 ticket_id,
             )

@@ -15,9 +15,9 @@ created: 2026-01-01
 - 無 hook / 安全網接住側門（驗證未綁在所有寫入路徑的共同瓶頸）
 - 不變量升級（如必填欄位擴充）時只改主入口，側門靜默失守
 
-典型表現（本專案案例，1.0.0-W1-027 對抗性複審發現）：
+典型表現（本專案案例，對抗性複審發現）：
 
-- `validate_create_checklist`（5W1H 必填驗證）原僅在 `create.py` 命令層執行（W11-003.5 升級為阻擋）
+- `validate_create_checklist`（5W1H 必填驗證）原僅在 `create.py` 命令層執行（其後升級為阻擋）
 - `bulk_create.py`（batch-create）與 `ticket_generator.py`（generate）直接 `save_ticket`，零驗證
 - 兩條側門的 config 預設值（`who="pending"` / `why=""` / `where_files=[]`）本身即殘缺，卻能建票成功
 
@@ -69,15 +69,15 @@ missing = validate_create_checklist(config, config["ticket_type"])
 |------|------|
 | 驗證下沉 SSOT | 不變量驗證放在所有寫入路徑的共同上游，禁止綁單一入口 |
 | 新增寫入路徑檢查清單 | 新增「直接 save」的路徑時，必須確認是否複用共用驗證 |
-| 提前退出 vs 匯總列全一致性 | 多欄位缺失應一次列全（避免跨階段分批試錯），見 1.0.0-W1-029 |
-| 空字串 vs 哨兵值判定 | 驗證「未填」應涵蓋 falsy（`""` / `None`）與哨兵值（「待定義」），見 1.0.0-W1-043 |
+| 提前退出 vs 匯總列全一致性 | 多欄位缺失應一次列全（避免跨階段分批試錯），見下方 decision-tree 提前退出併入 checklist 的案例 |
+| 空字串 vs 哨兵值判定 | 驗證「未填」應涵蓋 falsy（`""` / `None`）與哨兵值（「待定義」），見下方空字串漏判案例 |
 
 ## 相關 Ticket
 
-- 1.0.0-W1-027（驗證下沉 + batch-create/generate warning 接線，本模式主案例）
-- 1.0.0-W1-043（空字串 why/how_strategy 漏判，判定完整性缺口）
-- 1.0.0-W1-029（decision-tree 提前退出併入 checklist，匯總列全一致性）
-- source ANA 1.0.0-W1-024（對抗性複審挑戰 4 發現側門繞過）
+- 驗證下沉 + batch-create/generate warning 接線（本模式主案例）
+- 空字串 why/how_strategy 漏判（判定完整性缺口）
+- decision-tree 提前退出併入 checklist（匯總列全一致性）
+- source ANA：對抗性複審挑戰 4 發現側門繞過
 
 ## 相關模式
 

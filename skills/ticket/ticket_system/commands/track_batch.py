@@ -13,10 +13,10 @@ if __name__ == "__main__":
     print()
     print("正確使用方式：")
     print("  ticket track summary")
-    print("  ticket track claim 0.31.0-W4-001")
+    print("  ticket track claim <ticket-id>")
     print()
-    print("如尚未安裝，請執行：")
-    print("  cd .claude/skills/ticket && uv tool install .")
+    print("如尚未安裝，請在專案根目錄執行：")
+    print("  python3 .claude/scripts/install-skill-clis.py")
     print()
     print("詳見 SKILL.md")
     print(SEPARATOR_PRIMARY)
@@ -428,7 +428,7 @@ def execute_batch_complete(args: argparse.Namespace, version: str) -> int:
     支援三種模式：
     1. 逗號分隔 ID：ticket track batch-complete "id1,id2"
     2. 按 Wave：ticket track batch-complete --wave 28
-    3. 按 Parent：ticket track batch-complete --parent 0.31.0-W28-001
+    3. 按 Parent：ticket track batch-complete --parent <ticket-id>
     4. Dry-run：ticket track batch-complete --wave 28 --dry-run
     """
     # 解析 Ticket ID（支援 --wave, --parent, 或逗號分隔）

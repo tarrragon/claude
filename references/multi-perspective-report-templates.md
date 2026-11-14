@@ -150,4 +150,4 @@
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 - 從 multi-perspective-analysis-methodology.md L89-212 外移（1.0.0-W8-020.7 方案 A 合併）
+**Version**: 1.0.0 - 從 multi-perspective-analysis-methodology.md L89-212 外移（方案 A 合併）

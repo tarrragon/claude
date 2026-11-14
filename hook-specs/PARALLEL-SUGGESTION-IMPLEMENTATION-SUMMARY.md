@@ -1,7 +1,6 @@
 # Parallel Suggestion Hook 實作摘要
 
 **專案**: book_overview_app
-**Ticket**: 0.31.0-W4-039
 **狀態**: ✅ 完成
 
 ---

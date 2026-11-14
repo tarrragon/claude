@@ -14,10 +14,14 @@ from unittest.mock import MagicMock, patch
 HOOK_PATH = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "handoff-reminder-hook.py"
 
 
-def load_hook_module():
+def load_hook_module(isolate_orphan: bool = True):
+    """載入 hook。fixture 的票號在 tmp 專案下都查不到，預設把孤兒判定隔離為「非孤兒」；
+    要驗孤兒行為的測試傳 isolate_orphan=False 走真實 orphan_reason。"""
     spec = importlib.util.spec_from_file_location("handoff_reminder_hook", HOOK_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if isolate_orphan:
+        module._lib_orphan_reason = lambda record, ticket_id, project_root=None: ""
     return module
 
 
@@ -187,3 +191,46 @@ def test_reminder_message_includes_filtered_count():
     # stale_count=0 時不顯示過濾訊息（避免噪音）
     msg_zero = hook.generate_reminder_message(pending, MagicMock(), stale_count=0)
     assert "已過濾" not in msg_zero
+
+
+# ===== 孤兒 handoff：判準與 handoff GC 共用 orphan_reason =====
+
+
+def _scan_with_lookup(find_ticket_file):
+    """兩筆非 stale handoff（T-500、T-600），以真實 orphan_reason 掃描。
+
+    find_ticket_file 取代 handoff_utils._find_ticket_file；傳入 None 代表票查詢模組載不到。
+    """
+    import sys
+    hook = load_hook_module(isolate_orphan=False)
+    lib = sys.modules[hook._lib_orphan_reason.__module__]
+    with TemporaryDirectory() as tmp:
+        project_root = Path(tmp)
+        handoff_dir = project_root / ".claude" / "handoff" / "pending"
+        _write_handoff(handoff_dir, "T-500", _make_record("T-500", direction="auto"))
+        _write_handoff(handoff_dir, "T-600", _make_record("T-600", direction="auto"))
+        with patch.object(lib, "_find_ticket_file", find_ticket_file):
+            return _scan(hook, project_root, {})
+
+
+def test_orphan_handoff_filtered():
+    """正向對照：T-500 查無 → 不列入提醒，計入過濾數；T-600 存在 → 照常列入。"""
+    pending, stale_count = _scan_with_lookup(
+        lambda tid, root: None if tid == "T-500" else root / f"{tid}.md"
+    )
+    assert [t["ticket_id"] for t in pending] == ["T-600"]
+    assert stale_count == 1
+
+
+def test_all_tickets_exist_nothing_filtered():
+    """對照組：兩張票都存在 → 兩筆都列入，過濾數 0。"""
+    pending, stale_count = _scan_with_lookup(lambda tid, root: root / f"{tid}.md")
+    assert {t["ticket_id"] for t in pending} == {"T-500", "T-600"}
+    assert stale_count == 0
+
+
+def test_lookup_module_unavailable_keeps_reminders():
+    """票查詢模組載不到 → 不判孤兒，兩筆照常列入（is_handoff_active 在此條件會全濾掉）。"""
+    pending, stale_count = _scan_with_lookup(None)
+    assert {t["ticket_id"] for t in pending} == {"T-500", "T-600"}
+    assert stale_count == 0

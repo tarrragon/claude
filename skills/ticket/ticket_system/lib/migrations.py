@@ -61,7 +61,7 @@ def migrate_ticket(ticket_data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Di
         - 防護環形遷移路徑（超過 10 步上限）
 
     範例：
-        >>> ticket = {"id": "0.1.0-W1-001", "title": "Test"}
+        >>> ticket = {"id": "<ticket-id>", "title": "Test"}
         >>> migrated, history = migrate_ticket(ticket)
         >>> migrated["protocol_version"]
         '2.0'
@@ -150,12 +150,12 @@ def migrate_v1_to_v2(ticket_data: Dict[str, Any]) -> Dict[str, Any]:
           - tdd_stage: []（尚無進度記錄）
 
     範例：
-        >>> v1_data = {"id": "0.1.0-W1-001", "title": "Old Ticket", "status": "pending"}
+        >>> v1_data = {"id": "<ticket-id>", "title": "Old Ticket", "status": "pending"}
         >>> v2_data = migrate_v1_to_v2(v1_data)
         >>> v2_data["creation_accepted"]
         False
         >>> v2_data["id"]
-        '0.1.0-W1-001'
+        '<ticket-id>'
     """
     # 保留所有原有欄位（100% 無資訊遺失）
     migrated_data = ticket_data.copy()

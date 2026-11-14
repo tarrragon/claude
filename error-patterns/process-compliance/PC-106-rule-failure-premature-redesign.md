@@ -49,7 +49,7 @@ PM 遭 hook 阻擋時，按順序檢查：
 3. 豁免條件需擴充（新情境）
 4. Hook 規則設計錯誤（最罕見）
 
-### 案例（W17-018）
+### 案例
 
 - 症狀：派 thyme 得「必須使用 worktree」阻擋
 - 誤診：PM 認為 `agent-dispatch-validation-hook` 與 ARCH-015 衝突，要修 hook 新增「全 .claude/ 豁免分支」
@@ -62,7 +62,7 @@ PM 遭 hook 阻擋時，按順序檢查：
 
 | PC | 關係 |
 |----|------|
-| PC-040 | 要求 context 存 ticket，W17-018 修法正好讓 hook 讀 ticket 補分類，符合 PC-040 精神 |
+| PC-040 | 要求 context 存 ticket，該案例的修法正好讓 hook 讀 ticket 補分類，符合 PC-040 精神 |
 | PC-066 | WRAP 決策框架要求「考慮對立面」，本 PC 的防護順序是 WRAP 在規則修改情境的特化 |
 | PC-088 | LLM tool selection bias——PM 從症狀直覺推論也是單步推理偏誤 |
 
@@ -81,4 +81,4 @@ PM 修規則前必自問：
 
 **Last Updated**: 2026-04-20
 **Version**: 1.0.0
-**Source**: W17-018 session 發現（diagnostic偏誤導致先建 hook 豁免 ticket，讀 code 後發現 hook 已豁免，真因是 prompt 線索不足）
+**Source**: 某 session 發現（diagnostic偏誤導致先建 hook 豁免 ticket，讀 code 後發現 hook 已豁免，真因是 prompt 線索不足）

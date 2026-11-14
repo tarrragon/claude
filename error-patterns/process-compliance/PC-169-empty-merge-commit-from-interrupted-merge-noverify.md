@@ -46,21 +46,21 @@ PM 為避免 pre-commit hook 再次失敗用了 `--no-verify`，繞過了 lint-s
 
 ## 案例
 
-**情境**：0.19.0-W4-024 三並行子任務（W4-024.1/.2/.3）派發 3 個 isolation:worktree agent 完成後 PM 依序 merge 回 main。
+**情境**：某 Coordinator 票的三並行子任務（子任務 A/B/C）派發 3 個 isolation:worktree agent 完成後 PM 依序 merge 回 main。
 
 **事件鏈**：
-1. W4-024.1 merge 成功（ort strategy，正常合併）
-2. W4-024.2 merge 成功（ort，src 4 個檔合併無 conflict）
-3. W4-024.3 merge 報「Unable to write index. Automatic merge failed」
-4. PM `git status` 看到「All conflicts fixed but you are still merging」+ unstaged W4-024.2.md（殘留物，與 W4-024.3 無關）
+1. 子任務 A merge 成功（ort strategy，正常合併）
+2. 子任務 B merge 成功（ort，src 4 個檔合併無 conflict）
+3. 子任務 C merge 報「Unable to write index. Automatic merge failed」
+4. PM `git status` 看到「All conflicts fixed but you are still merging」+ unstaged 子任務 B 的 ticket md（殘留物，與子任務 C 無關）
 5. PM `git commit -F .git/MERGE_MSG --no-verify` → 產生 commit 6086caab
-6. PM 後續 `npm run lint` 暴露 W4-024.3 應刪除的 3 處 unused vars 仍在
-7. 診斷：`git diff <merge>~..<merge> -- tests/e2e/browser/` 為空（採 ours 版本），W4-024.3 整個工作丟失
-8. 修復：`git cherry-pick a555d751 5e7c3317`（W4-024.3 worktree 兩個 commit）補回變更
+6. PM 後續 `npm run lint` 暴露子任務 C 應刪除的 3 處 unused vars 仍在
+7. 診斷：`git diff <merge>~..<merge> -- tests/e2e/browser/` 為空（採 ours 版本），子任務 C 整個工作丟失
+8. 修復：`git cherry-pick a555d751 5e7c3317`（子任務 C worktree 兩個 commit）補回變更
 
 ## Why
 
-並行派發 worktree 是高頻 PM 操作（W17-203 模式 / askuserquestion-rules 規則 7），merge 中斷時 PM 沒有快速可信指標識別 index 是否完整。`--no-verify` 預防性使用是常見反模式（W17-XXX feedback memory），與 merge state 結合會產生靜默工作丟失。
+並行派發 worktree 是高頻 PM 操作（askuserquestion-rules 規則 7），merge 中斷時 PM 沒有快速可信指標識別 index 是否完整。`--no-verify` 預防性使用是常見反模式（feedback memory 有記錄），與 merge state 結合會產生靜默工作丟失。
 
 ## Consequence
 
@@ -68,7 +68,7 @@ PM 為避免 pre-commit hook 再次失敗用了 `--no-verify`，繞過了 lint-s
 |------|-------|
 | Agent 工作丟失（src/tests 修改 + ticket md frontmatter 狀態） | 高 |
 | Acceptance 通過但 main 上 lint 失敗 | 高 — false positive 完成狀態 |
-| 發現困難 — 只有額外驗證才能察覺 | 高 — PM 容易誤判 W4-024 Coordinator 已可 complete |
+| 發現困難 — 只有額外驗證才能察覺 | 高 — PM 容易誤判 Coordinator 已可 complete |
 | 補救成本 — cherry-pick 帶來重複 commit 鏈 | 中 |
 
 ## Action
@@ -131,4 +131,4 @@ done
 
 ---
 
-**Source**: 0.19.0-W4-024 多任務並行派發 W4-024.3 worktree merge bug 事件（2026-06-01）。
+**Source**: 多任務並行派發 worktree merge bug 事件（2026-06-01）。

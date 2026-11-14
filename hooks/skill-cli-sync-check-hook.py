@@ -11,9 +11,9 @@ Skill CLI Sync-Check Hook - PostToolUse Bash Matcher
       src 行為變更（feat / refactor 性質）但未同步該 skill 的決策層文件時，
       輸出 INFO 級別提示。
 
-背景（0.2.1-W3-136 ANA）: 舊版 ticket-skill-sync-check-hook.py 僅硬編碼
+背景: 舊版 ticket-skill-sync-check-hook.py 僅硬編碼
       保護 ticket 一個 skill（TICKET_SKILL_SRC_PREFIX），但「CLI 行為變更
-      須同步 SKILL.md」語意對任何具 CLI 的 skill 皆成立。0.2.1-W3-131 修改
+      須同步 SKILL.md」語意對任何具 CLI 的 skill 皆成立。曾有一次修改
       skill_sync/cli.py 行為後 SKILL.md 描述過期、全程無 hook 提示，缺口
       已實證。本 hook 改採顯式 registry（SKILL_CLI_REGISTRY），泛化涵蓋
       專案內全部 7 個 CLI skill（ticket / doc / skill-sync / worktree /
@@ -33,7 +33,7 @@ Skill CLI Sync-Check Hook - PostToolUse Bash Matcher
   6. 對每個「有變更但未同步」的 skill 輸出 INFO 提示（不阻擋 commit）
 
 設計骨架參考: doc-sync-check-hook.py / commit-handoff-hook.py（前身：
-      舊版 ticket-skill-sync-check-hook.py，0.2.1-W3-239 泛化並搬遷）
+      舊版 ticket-skill-sync-check-hook.py，後泛化並搬遷至此）
 
 行為: 不阻擋（exit 0），僅在 additionalContext 輸出提醒訊息
 """
@@ -76,7 +76,7 @@ COMMIT_SUCCESS_MARKERS = [
 # 觸發提示的 commit type（行為變更性質）
 TRIGGER_COMMIT_TYPES = frozenset({"feat", "refactor"})
 
-# 具 CLI 入口點的 skill registry（0.2.1-W3-136 ANA Option B，顯式定義）
+# 具 CLI 入口點的 skill registry（顯式定義，不做自動掃描）
 # 每條: name（skill 名稱）/ src_prefix（CLI 行為程式碼路徑前綴）/
 #       sync_targets（描述該行為的決策層文件，同 commit 含其中之一即視為已同步）
 SKILL_CLI_REGISTRY = [
@@ -118,7 +118,7 @@ SKILL_CLI_REGISTRY = [
 ]
 
 # 本 hook 自身路徑（meta 自我引用豁免，PC-099 教訓）
-META_SELF_PATH = ".claude/hooks/skill-cli-sync-check-hook.py"  # 0.2.1-W3-239: 由 skills/ticket/hooks/ 搬遷並泛化
+META_SELF_PATH = ".claude/hooks/skill-cli-sync-check-hook.py"  # 由 skills/ticket/hooks/ 搬遷並泛化
 
 # PostToolUse 預設輸出
 DEFAULT_OUTPUT = {
@@ -249,6 +249,17 @@ def find_unsynced_skills(files: List[str]) -> Dict[str, List[str]]:
     }
 
 
+def _caller_hint_lines(skill_name: str) -> List[str]:
+    """子程序呼叫點提示：其他 skill／hook／scripts 以子程序呼叫本 CLI 時，
+    結束碼語意變更不會出現在 SKILL.md 或 pm-rules，只能從呼叫端的非 0 分支看出影響。
+    以命令名作為 list 形式 subprocess 參數的字面（'ticket'、"ticket"）grep。"""
+    return [
+        "  子程序呼叫點（結束碼或輸出語意有變時必查）：",
+        f"    grep -rnE \"['\\\"]{skill_name}['\\\"]\" .claude/hooks .claude/skills .claude/scripts --include='*.py'",
+        "    逐一確認呼叫端（含本 skill 內以子程序呼叫者）對非 0 結束碼的分支仍符合新語意",
+    ]
+
+
 def build_reminder(unsynced: Dict[str, List[str]]) -> str:
     """組裝 INFO 提示訊息（依觸發的 skill 動態生成）"""
     lines = [
@@ -270,6 +281,7 @@ def build_reminder(unsynced: Dict[str, List[str]]) -> str:
             lines.append("  建議同步目標：")
             for target in entry["sync_targets"]:
                 lines.append(f"    - {target}")
+        lines.extend(_caller_hint_lines(skill_name))
         lines.append("")
     lines.extend([
         "若行為變更影響該 skill 的對外契約或 PM 決策路徑，請建立 follow-up ticket 同步更新。",
@@ -297,7 +309,7 @@ def main() -> int:
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
-    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（PC-V1-004 入口污染防護）
     # 建 follow-up ticket / 掃描 pm-rules 等動作性提示屬 PM 決策，不注入 subagent context
     if is_subagent_environment(input_data):
         logger.info(

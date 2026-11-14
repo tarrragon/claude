@@ -27,7 +27,7 @@ related:
 - **Pattern ID**: IMP-079
 - **分類**: 實作（implementation）
 - **來源版本**: v0.19.1
-- **發現日期**: 2026-06-04（W1-005.3 執行期，ANA W1-007 固化）
+- **發現日期**: 2026-06-04（emoji 清理執行期發現，後由 ANA 固化）
 - **風險等級**: 中
 - **標籤**: `batch-replace` `regex` `meta-test` `detection-target` `false-positive` `tests-corruption` `remove-emoji`
 
@@ -66,9 +66,9 @@ related:
 
 ## 動機案例
 
-### W1-005.3（2026-06-03，v0.19.1）
+### 殘餘 emoji 清理（2026-06-03，v0.19.1）
 
-`scripts/remove-emoji.js` 最初設計為對 `src/` 執行，W1-005.3 中為清理殘餘 emoji 擴大為對 `tests/` 執行。執行 `node scripts/remove-emoji.js tests/` 後，`tests/unit/background/background-local-dict.test.js` L508-518 的 antiPatterns 陣列被誤傷：
+`scripts/remove-emoji.js` 最初設計為對 `src/` 執行，該次清理中為清理殘餘 emoji 擴大為對 `tests/` 執行。執行 `node scripts/remove-emoji.js tests/` 後，`tests/unit/background/background-local-dict.test.js` L508-518 的 antiPatterns 陣列被誤傷：
 
 **受影響的 regex 結構（以 codepoint 描述，不使用 emoji 字元）**：
 
@@ -100,7 +100,7 @@ const antiPatterns = [
 ```javascript
 // 此測試以「原始 emoji 字面」為偵測對象，驗證 dict 重構後 src 不再殘留 emoji 前綴
 // log（應改用 log.X('MESSAGE_KEY') 形式）。emoji 字面為偵測目標，禁止經
-// scripts/remove-emoji.js 轉換為 [KEYWORD]（會破壞 regex 語意，見 0.19.1-W1-005.3）。
+// scripts/remove-emoji.js 轉換為 [KEYWORD]（會破壞 regex 語意）。
 ```
 
 **代價**：已手動還原並加警示註解。工具本身無防護，後續若再對 `tests/` 執行仍會重複觸發。
@@ -153,7 +153,7 @@ git diff tests/unit/background/background-local-dict.test.js
 const antiPatterns = [...]
 ```
 
-`background-local-dict.test.js` L499-500 已有此警示（W1-005.3 手動還原後加入）。此為最低成本防護，但依賴工具使用者主動閱讀並配合，不如防護一可靠。
+`background-local-dict.test.js` L499-500 已有此警示（手動還原後加入）。此為最低成本防護，但依賴工具使用者主動閱讀並配合，不如防護一可靠。
 
 ---
 
@@ -182,14 +182,12 @@ const antiPatterns = [...]
 
 ## 相關資源
 
-- `tests/unit/background/background-local-dict.test.js` L499-500 — 現有警示註解（W1-005.3 手動還原後加入）
+- `tests/unit/background/background-local-dict.test.js` L499-500 — 現有警示註解（手動還原後加入）
 - `scripts/remove-emoji.js` — 動機案例工具（全量替換，無排除機制，`walk()` 函式遞歸所有子目錄）
-- `docs/work-logs/v0/v0.19/v0.19.1/tickets/0.19.1-W1-005.3.md` — 觸發案例（誤傷過程與手動還原記錄）
-- `docs/work-logs/v0/v0.19/v0.19.1/tickets/0.19.1-W1-007.md` — ANA 固化來源（三流程教訓 retrospective）
 - `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md` — 上位 pattern（工具誤傷後 tests 仍通過的 false positive 修復鏈機制）
 - `.claude/error-patterns/process-compliance/PC-158-mint-format-specialist-emoji-in-visual-markers.md` — 弱相關（emoji 合規，不同觸發層）
 
 ---
 
 **Last Updated**: 2026-06-04
-**Version**: 1.0.0 — 初始建立（W1-007 ANA 教訓 3 固化；W1-005.3 動機案例）
+**Version**: 1.0.0 — 初始建立（三流程教訓 retrospective 之教訓 3 固化；emoji 清理誤傷為動機案例）

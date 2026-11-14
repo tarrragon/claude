@@ -3,7 +3,7 @@
 # 定義 ANA 類型 Ticket 在 complete 前 Solution 區段必須包含的 multi_view_status 標註規格。
 # 由 acceptance-gate-hook 讀取此檔進行驗證，避免硬編碼散落（DRY）。
 #
-# 相關 Ticket：0.18.0-W10-051（治本方案 D — ANA 設計時強制 multi-view）
+# 治本方案 D：ANA 設計時強制 multi-view
 # 源起：PC-066 + PC-067（ANA 規劃未質疑設計品質 / 多視角審查能識破過度設計）
 
 multi_view_status:
@@ -44,7 +44,7 @@ multi_view_status:
     multi_view_status: n_a
     reason: 純文件調查，無程式碼或架構影響
 
-  # 禁用格式（PC-117 / W17-111）
+  # 禁用格式（PC-117）
   # PM 易誤用 nested YAML 結構導致 hook regex 跨行誤判：
   forbidden_format: |
     # 錯誤：nested YAML 結構
@@ -56,5 +56,5 @@ multi_view_status:
     multi_view_status: skipped
     reason: ...
 
-  # 案例：W17-095 收尾踩坑 → PC-117 落地 → W17-111 ANA 評估改善方向
+  # 案例：某次 ANA 收尾使用 nested YAML 踩坑 → PC-117 落地
   # 詳見：.claude/error-patterns/process-compliance/PC-117-ana-solution-multi-view-status-nested-yaml-misparse.md

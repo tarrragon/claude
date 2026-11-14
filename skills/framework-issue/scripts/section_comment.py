@@ -75,9 +75,9 @@ CLI 參數覆蓋。
 
 `todo` 子命令為此表格的讀取路徑：跨 open issue 聚合全部「待辦與來源*」
 區段表格列。範圍預設本 consumer 擁有的 open issue（讀本地擁有登記檔
-`owned_issues_registry`，缺失時退回 owner 前綴推導，與
-`session-start-issue-check-hook.py` 的 heuristic 同源但獨立實作——該檔
-案為 hook 腳本，不供其他模組 import），`--all` 改掃 `FRAMEWORK_REPO` 全部
+`owned_issues_registry`，缺失時退回 owner 前綴推導；`todo` 是使用者
+明示執行的命令，前綴搜尋由使用者的動作觸發，SessionStart hook 則不做
+這個退路），`--all` 改掃 `FRAMEWORK_REPO` 全部
 open issue，`--issue N` 只掃單一 issue（明確指定即略過範圍解析）。支援
 `--status`／`--stage`／`--priority`／`--consumer` 篩選與 `--json` 輸出；
 依優先級排序（P0 最前）；表頭不符的區段印警告並跳過，不中止其餘 issue 或
@@ -118,6 +118,7 @@ if str(_CLAUDE_ROOT) not in sys.path:
     sys.path.insert(0, str(_CLAUDE_ROOT))
 
 from lib import resolve_session_id  # noqa: E402
+from lib.hook_base import get_shared_state_root  # noqa: E402
 
 # 區段 comment 首行標記：抓 "section:" 與 "owner:" 之間、"owner:" 之後至
 # " -->" 為止的內容。非貪婪比對，不限制字元集合（owner 常含連字號，如
@@ -1145,7 +1146,8 @@ def cmd_init(
         if not rows:
             continue
         added, removed = sync_section_rows(
-            int(issue_ref), owner, rows, written_at, _CLAUDE_ROOT.parent
+            int(issue_ref), owner, rows, written_at,
+            get_shared_state_root(_CLAUDE_ROOT.parent),
         )
         sys.stderr.write(
             f"[framework-issue] todo pending 已同步：+{added} -{removed}"
@@ -1209,7 +1211,8 @@ def cmd_add(issue_ref: str, owner: Optional[str], name: str, content_file: str) 
     rows = _todo_rows_from_content(name, content)
     if rows:
         added, removed = sync_section_rows(
-            int(issue_ref), owner, rows, written_at, _CLAUDE_ROOT.parent
+            int(issue_ref), owner, rows, written_at,
+            get_shared_state_root(_CLAUDE_ROOT.parent),
         )
         sys.stderr.write(
             f"[framework-issue] todo pending 已同步：+{added} -{removed}"
@@ -1291,7 +1294,8 @@ def cmd_update(comment_id: str, content_file: str) -> int:
     if issue_number is not None and marker["name"].startswith(TODO_SECTION_NAME_PREFIX):
         rows = _todo_rows_from_content(marker["name"], content)
         added, removed = sync_section_rows(
-            issue_number, marker["owner"], rows, written_at, _CLAUDE_ROOT.parent
+            issue_number, marker["owner"], rows, written_at,
+            get_shared_state_root(_CLAUDE_ROOT.parent),
         )
         if added or removed:
             sys.stderr.write(
@@ -1609,10 +1613,8 @@ def list_open_issue_numbers(limit: int = 500) -> List[int]:
 def _project_owner_prefix() -> str:
     """本專案 owner 慣例前綴：git 主 repo 目錄名稱 kebab-case 化。
 
-    與 `session-start-issue-check-hook.py` 的 `_project_owner_prefix` 同一
-    heuristic（見該檔案頭「owner 識別」說明），本檔獨立實作一份精簡版本
-    ——該檔案為 hook 腳本（獨立 PEP 723 shebang），不供其他模組 import；
-    重複的是判斷邏輯，非可抽取的共用模組。
+    與 `rebuild_owned.default_prefix` 同一規則（主 repo 目錄名，底線改
+    連字號）；SessionStart hook 已不推導前綴。
     """
     try:
         result = subprocess.run(

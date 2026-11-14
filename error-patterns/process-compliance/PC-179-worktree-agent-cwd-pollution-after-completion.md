@@ -23,9 +23,9 @@ worktree agent 在自己的 worktree 工作目錄執行所有操作。agent 結�
 
 PM 預設「派發前 cwd 在主 repo root，派發後仍在」，但 worktree 隔離機制在 agent 結束後將主線程 cwd 留在 worktree。此假設失準與 `git merge` 對「當前分支 = 被 merge 分支」回報 already up to date 的正常行為共振，產生「工作已合併」的假象。
 
-## 案例：W8-035.1 移除孤兒 widget 後 merge 誤判（2026-06-08）
+## 案例：移除孤兒 widget 後 merge 誤判（2026-06-08）
 
-PM 派發 parsley（isolation:worktree）執行 W8-035.1（移除 12 孤兒 widget 檔）。agent 完成後 PM 在主線程執行 `git merge worktree-agent-<id> --no-edit`，回報 `Already up to date`。但稍早 `git log main..worktree-agent-<id>` 明確顯示 worktree branch 領先 main 2 個 commit，`git branch --contains` 也確認 main 不含這些 commit——矛盾。
+PM 派發 parsley（isolation:worktree）執行移除 12 孤兒 widget 檔的任務。agent 完成後 PM 在主線程執行 `git merge worktree-agent-<id> --no-edit`，回報 `Already up to date`。但稍早 `git log main..worktree-agent-<id>` 明確顯示 worktree branch 領先 main 2 個 commit，`git branch --contains` 也確認 main 不含這些 commit——矛盾。
 
 逐步診斷揭露 cwd 污染：
 
@@ -67,4 +67,4 @@ cd /絕對/repo/root && git merge worktree-agent-<id> --no-edit
 
 ---
 
-**Last Updated**: 2026-06-08 | **Source**: 0.31.1-W8-035.1 worktree merge near-miss
+**Last Updated**: 2026-06-08 | **Source**: 移除孤兒 widget 的 worktree merge near-miss

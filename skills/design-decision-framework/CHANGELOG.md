@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.3.3（2026-11-15）— 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；行為不變
+
 **Version**: 1.3.2 — 概述加框架依賴說明：五階段評估流程可單獨使用，/ticket create、/5w1h-decision、/pre-fix-eval 屬另一套工作流框架，未安裝時改用專案自己的記錄方式
 
 **Version**: 1.3.1 — 〈與其他 Skill 的關係〉補 system-design 一列：它是上游，決定這一版要做哪些決定，需要多方案評估的那些交給本 Skill

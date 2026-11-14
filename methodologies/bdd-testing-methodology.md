@@ -1,6 +1,6 @@
 # BDD 測試方法論
 
-> **本檔已瘦身（W8-018.2）**：通用 GWT 設計（場景設計原則、場景類型覆蓋、行為鏈式設計、邊界條件識別）已在 `/tdd` skill 的 `.claude/skills/tdd/references/phase2-test-design.md`「BDD / Given-When-Then 設計」與「測試案例設計」章節。本檔僅保留核心摘要 + 本方法論的 distinct 內容（前置條件驗證強制規則）。需要完整 GWT 設計與行為分支窮舉時直接讀 phase2-test-design.md。
+> **本檔已瘦身**：通用 GWT 設計（場景設計原則、場景類型覆蓋、行為鏈式設計、邊界條件識別）已在 `/tdd` skill 的 `.claude/skills/tdd/references/phase2-test-design.md`「BDD / Given-When-Then 設計」與「測試案例設計」章節。本檔僅保留核心摘要 + 本方法論的 distinct 內容（前置條件驗證強制規則）。需要完整 GWT 設計與行為分支窮舉時直接讀 phase2-test-design.md。
 
 BDD 測試行為而非實作：從使用者視角描述系統行為，用 Given-When-Then 結構。核心價值是重構時測試保持穩定——測試只關心可觀察的行為結果，不耦合內部實作。
 
@@ -63,4 +63,4 @@ Then: 驗證表單已提交
 ---
 
 **Last Updated**: 2026-06-13
-**Version**: 2.0.0 — W8-018.2 整併瘦身：通用 GWT 設計（場景設計、行為鏈、邊界條件）路由至 `/tdd` skill phase2-test-design.md，保留 30 秒核心 + distinct 的前置條件驗證強制規則。歷史 1.2.0 完整版（含行為鏈式推演框架、測試設計完成標準、邊界條件系統化方法）見 git log。
+**Version**: 2.0.0 — 整併瘦身：通用 GWT 設計（場景設計、行為鏈、邊界條件）路由至 `/tdd` skill phase2-test-design.md，保留 30 秒核心 + distinct 的前置條件驗證強制規則。歷史 1.2.0 完整版（含行為鏈式推演框架、測試設計完成標準、邊界條件系統化方法）見 git log。

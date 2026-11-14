@@ -63,7 +63,7 @@
 | 專案 repo | `.claude/`、`CLAUDE.md`；`project-init onboard` 會建立 `docs/work-logs/` 與 `docs/todolist.yaml` |
 | git 行為 | 票的寫入與 Claude 回應結束時會自動 commit；SessionStart 在 `.git/hooks/` 安裝兩個 git 原生 hook，你自己在終端機的 git 操作也會經過。各項見表下〈git 行為的細節〉 |
 | 本機 | `~/.local/bin` 下的 CLI shim，所有使用這套框架的專案共用（見〈首次安裝〉第 1 步）；`~/.cache/claude-slot`（測試名額）與 `~/.cache/claude-proc-registry`（行程登記），同樣由所有專案共用 |
-| 對外連線 | `/sync-pull` 從 GitHub clone 框架，收尾時再讀取 `tarrragon/claude-skills` 的版本清單（`versions.json`），比對本地 skill。`gh` 可用且已登入時，SessionStart（startup、resume）會以「owner <專案目錄名>」搜尋 `tarrragon/claude` 的 issue，專案目錄名因此送到 GitHub。例外是本機已有 owned-issues 登記檔：它在你以 `section_comment.py` 的 init 或 update 寫過 framework issue 的區段之後才會建立，一般 consumer 沒有，所以這項搜尋對一般 consumer 會執行。這個檢查沒有關閉開關，沒有 `gh` 時不執行。回報框架 issue 時，內文與查重關鍵字也會送到 GitHub |
+| 對外連線 | `/sync-pull` 從 GitHub clone 框架，收尾時再讀取 `tarrragon/claude-skills` 的版本清單（`versions.json`），比對本地 skill。SessionStart（startup、resume）的 framework issue 檢查只查 owned-issues 登記檔列出的 issue 編號，不送專案名；沒有登記檔時不發任何 `gh` 命令，一般 consumer 沒有登記檔，所以這項檢查不連線。登記檔在你以 `section_comment.py` 的 init 或 update 寫過 framework issue 的區段後建立，位於主 repo 的 `.claude/state/framework-issue-owned.json`（在 worktree 內執行也寫到主 repo）。新 clone 或要補登既有區段時，執行 `framework-issue` 的 `rebuild-owned`：它以「owner <專案目錄名>」搜尋 `tarrragon/claude` 的 issue，專案目錄名因此送到 GitHub；送出前會列出將送出的資料，`--dry-run` 只列不送。回報框架 issue 時，內文與查重關鍵字也會送到 GitHub |
 | 對話規則 | 自動載入的規則要求繁體中文，並禁止 emoji 與一組禁用詞（[rules/core/language-constraints.md](./rules/core/language-constraints.md)）。這是框架的通用規則，專案不能修改 |
 | context | 每個 session 開始時自動載入 `CLAUDE.md` 與 `rules/` 下的規則，這一層有 token 預算，由 SessionStart 量測，預算見 [references/auto-load-stub-conventions.md](./references/auto-load-stub-conventions.md) |
 
@@ -122,7 +122,7 @@ rm -rf .claude/.github
 2. **檢查環境**：`project-init check` 檢查 Python、uv、ripgrep 等項目，git 與 gh 要自己確認。
 3. **建立 `CLAUDE.md`**：複製 `.claude/templates/CLAUDE-template.md` 到專案根目錄，填入專案身份、技術選型與 Phase 3b 的實作代理人。有備份時，把舊 `CLAUDE.md` 的內容併進來。
 4. **建立 `settings.local.json`**：複製 `.claude/templates/settings-local-template.json` 為 `.claude/settings.local.json`，依檔內說明刪除註解：`_README`、`_INSTRUCTIONS` 兩個鍵，以及 `permissions.allow` 清單內以 `_COMMENT` 開頭的字串；再移除不適用的語言權限。有備份時，把舊 `settings.local.json` 的權限與 MCP 設定併進來。接著執行 `project-init onboard`：它檢查設定是否完整，檢查的項目由前面幾步建立，所以排在這裡；並列出 Flutter 專屬與專案專屬的 Hook 清單（分類見 `.claude/config/hook-language-classification.yaml`）。
-5. **提交**：先把框架要求的條目加進專案根目錄的 `.gitignore`，讓 `settings.local.json`、`hook-logs/` 等本機狀態與本機設定不進版控。下面的命令印出 `.claude/` 內的條目，把每一行加進 `.gitignore`；另外加上 `coverage/` 與 `docs/work-logs/**/*.md.lock`（票檔的鎖）。SessionStart 的 `.gitignore` 檢查以同一份清單比對。
+5. **提交**：先把框架要求的條目加進專案根目錄的 `.gitignore`，讓 `settings.local.json`、`hook-logs/` 等本機狀態與本機設定不進版控。下面的命令印出 `.claude/` 內的條目，把每一行加進 `.gitignore`；另外加上 `coverage/` 與 `docs/work-logs/**/*.md.lock`（票檔的鎖）。SessionStart 的 `.gitignore` 檢查以同一份清單比對。名稱層級的條目寫成 `.claude/**/<名稱>`：`.claude/<名稱>` 只忽略 `.claude/` 根層，`.claude/hooks/hook-logs/` 這類巢狀位置不會被忽略。舊的 `.gitignore` 若用根層寫法，檢查會列為缺項，改成命令印出的寫法即可。`.claude/plans/`、`.claude/analyses/`、`.claude/migration-backups/` 與 `.claude/.version-release.yaml` 不在清單內：它們不會隨 sync 推到框架 repo，但可以進專案的版控，要不要忽略由專案決定（分類見 [references/sync-exclusion-guide.md](./references/sync-exclusion-guide.md)〈類型 E〉）。
 
    ```bash
    python3 -c 'import sys; sys.path.insert(0, ".claude/lib"); import sync_exclude_manifest as m; print("\n".join(sorted(m.required_gitignore_entry(n) for n in m.GITIGNORE_EXPECTED)))'
@@ -239,9 +239,9 @@ commit 之後再拉取。
 | 檔案 | 內容 | 維護者 | 拉取時 | 進 git |
 |------|------|-------|-------|-------|
 | `.claude/settings.json` | Hook 註冊、框架權限、狀態列 | 框架 | 隨 `/sync-pull` 更新，不在專案修改 | 是 |
-| `.claude/settings.local.json` | 回應格式（`outputStyle`）、MCP server、環境變數、專案專屬權限 | 專案 | 不同步 | 否，每台機器各自從範本建立 |
+| `.claude/settings.local.json` | 回應格式（`outputStyle`）、MCP server、環境變數、專案專屬權限；`hooks` 區段由框架依專案 hook 清冊產生，不手寫 | 專案 | 不同步 | 否，每台機器各自從範本建立 |
 | `CLAUDE.md`（專案根目錄） | 專案身份、技術選型、實作代理人 | 專案 | 不同步 | 是 |
-| `.claude/project-integration/` | 專案對框架的宣告，例如合併閘門要跑哪些測試 | 專案 | 不同步 | 是 |
+| `.claude/project-integration/` | 專案對框架的宣告，例如合併閘門要跑哪些測試、專案自有 hook 的清冊 `hook-registry.yaml`（格式見 [references/project-hook-registry-format.md](./references/project-hook-registry-format.md)） | 專案 | 不同步 | 是 |
 | `.claude/sync-preserve.yaml` | 本地特化的清單：拉取時要原地保留的檔案 | 專案 | 本身不同步；列入的檔案不被覆蓋或刪除 | 否 |
 
 `.claude/.sync-state.json`（同步基準點）、`.claude/sync-skills.yaml` 與 `hook-logs/` 等本機狀態與本機設定也不進 git。`.gitignore` 要加的條目以〈首次安裝〉第 5 步的命令輸出為準，分類見 [references/sync-exclusion-guide.md](./references/sync-exclusion-guide.md)〈五類分類定義〉。
@@ -527,14 +527,15 @@ python3 $FI/create_issue.py --title "<標題>" --body "$(cat <內文的檔案>)"
 
 skill 發佈庫 `tarrragon/claude-skills` 收錄可以單獨安裝的 skill。使用前先取得 `skill-sync`，依機器的狀況擇一：
 - 機器上有已安裝框架的專案：SessionStart 會自動安裝 `skill-sync` shim，直接用，或以 `uv run --project <那個專案>/.claude/skills/skill-sync skill-sync <子命令>` 呼叫。
-- 機器上沒有框架專案：先把 `tarrragon/claude` clone 到任一目錄，再執行 `uv tool install --from <clone 的目錄>/skills/skill-sync skill-sync`。這會裝到 `~/.local/bin`，之後若在同一台機器開了框架專案，那個專案的 SessionStart 會蓋掉這支（見下）。
+- 機器上沒有框架專案：先把 `tarrragon/claude` clone 到任一目錄，再執行 `uv tool install --from <clone 的目錄>/skills/skill-sync skill-sync`。這會裝到 `~/.local/bin`，之後在同一台機器開框架專案時，SessionStart 會保留這支，不改成 shim（見下）。
 
 | 情境 | 做法 |
 |------|------|
 | 只想用某些 skill，不同步整個框架 | `skill-sync list` 查看可用的 skill，`skill-sync pull <名稱>` 裝進 `.claude/skills/<名稱>/` |
 | 你的專案在 `CLAUDE.md` 宣告為某個 skill 的開發上游 | 在本地修改該 skill，以 `skill-sync push <名稱>` 送進發佈庫；主控方發版前收入框架。推送前先跑不帶名稱的 `skill-sync pull`，確認本地與發佈庫哪一邊領先。發佈庫領先時先 `skill-sync pull <名稱>`：它會整份覆蓋本地，拉完要把尚未推送的本地修改補回，再推送 |
 
-- 同一台機器上有框架專案時，那個專案的 SessionStart 會把 `~/.local/bin/skill-sync` 改成框架的 shim，蓋掉非框架專案用 `uv tool install` 裝的版本。非框架專案改以 `uv run --project <clone 的目錄>/skills/skill-sync skill-sync <子命令>` 直接呼叫，不依賴 `~/.local/bin` 的那一支。
+- 同一台機器上有框架專案時，SessionStart 安裝 shim 前會先看 `~/.local/bin/<CLI>`：既有檔是 symlink（`uv tool install` 的安裝方式）或不是框架產生的 shim，就保留原檔並發出警告，不寫入。代價是框架專案內執行的也是 `uv tool install` 的那一版；要改用 shim，先 `uv tool uninstall skill-sync` 再重開 session。
+- 較舊的框架版本會順著 symlink 把 shim 寫進 uv tool 的環境，之後非框架專案執行 `skill-sync` 會出現「找不到當前專案的 .claude/skills/skill-sync」，`uv tool list` 卻仍顯示已安裝，一般重裝也修不好。以 `uv tool install --force --from <clone 的目錄>/skills/skill-sync skill-sync` 復原。
 - 以整個框架同步為前提的 skill（如 line-board、framework-update-adaptation）不收錄。
 - 開發上游要有 `tarrragon/claude-skills` 的推送權限：`skill-sync push` 會 clone 發佈庫後直接 `git push`，沒有權限時推送失敗。
 - 宣告開發上游的例外只涵蓋宣告的 skill，同一專案對其他 `.claude/` 內容仍只回報 issue。

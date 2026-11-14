@@ -5,7 +5,7 @@ blockedBy 所引用的 ticket 是否存在且未完成、source_ticket 是否存
 decision_tree 三參數是否齊備並可組成 decision_tree_path。這些檢查共通的性質是
 **在任何持久化動作之前執行**——驗證失敗即中止建票，不留下半成品。
 
-自 commands/create.py 抽出（0.2.1-W3-834 分群結論第 C+D 群）：where 驗證與關聯欄位
+自 commands/create.py 抽出（分群結論第 C+D 群）：where 驗證與關聯欄位
 驗證合併為單一模組，因兩者皆為「建票前的欄位合法性檢查」，分成兩個模組會讓呼叫端
 import 兩次同性質函式。
 """
@@ -212,7 +212,7 @@ def build_decision_tree_path(
     3. 豁免時有完整參數 → 返回字典（驗證後）
     4. 豁免時部分參數 → raise ValueError（拒絕）
     5. 非豁免時無參數 → 返回 None（不提前退出，交 _validate_create_checklist
-       與其他必填欄位一次列全，W1-029 A2 同手法）
+       與其他必填欄位一次列全）
     6. 非豁免時有完整參數 → 返回字典（驗證後）
     7. 非豁免時部分參數 → raise ValueError（拒絕，保留參數級精確 hint）
 
@@ -242,7 +242,7 @@ def build_decision_tree_path(
         # 無參數：豁免或非豁免皆 return None，不在此提前退出。
         # 非豁免全缺交給 _validate_create_checklist 的 decision_tree_path
         # 完整性檢查，與 when/who/how_strategy 等必填一次列全，避免跨階段
-        # 分批報錯造成多輪試錯（W1-029，A2 同手法，對齊本檔 why 修復 796-799）。
+        # 分批報錯造成多輪試錯（對齊本檔 why 修復）。
         # PARTIAL（provided_count 1-2）與 EMPTY_VALUE 仍即時精確報錯，不退化。
         return None
 

@@ -1,6 +1,6 @@
 # TDD-Ticket 整合方法論
 
-> **本檔已瘦身（W8-018.2）**：3b 拆分評估（檔案數 / 認知負擔 / 跨層級觸發條件）已在 `/tdd` skill 的 `.claude/skills/tdd/references/phase3-implementation.md`「3b 拆分評估」；單一職責四大檢查的完整定義在 `.claude/methodologies/atomic-ticket-methodology.md`。本檔僅保留 distinct 核心：Phase 3a 是唯一 Ticket 決策點，以單一職責四大檢查作為唯一拆分標準。
+> **本檔已瘦身**：3b 拆分評估（檔案數 / 認知負擔 / 跨層級觸發條件）已在 `/tdd` skill 的 `.claude/skills/tdd/references/phase3-implementation.md`「3b 拆分評估」；單一職責四大檢查的完整定義在 `.claude/methodologies/atomic-ticket-methodology.md`。本檔僅保留 distinct 核心：Phase 3a 是唯一 Ticket 決策點，以單一職責四大檢查作為唯一拆分標準。
 
 本方法論定義 Ticket 系統與 TDD 流程的整合機制：在 Phase 3a 設立強制單一職責評估，確保每個功能開發都經過適當的拆分評估。
 
@@ -49,4 +49,4 @@ Ticket 設計決策只在 Phase 3a 進行：
 ---
 
 **Last Updated**: 2026-06-13
-**Version**: 2.0.0 — W8-018.2 整併瘦身：3b 拆分評估路由至 `/tdd` skill phase3-implementation.md，四大檢查完整定義路由至 atomic-ticket-methodology.md，保留 distinct 核心「Phase 3a 唯一決策點 + 四大檢查唯一標準」為 30 秒核心 + 路由。歷史 1.0.0 完整版（含決策流程圖、四大檢查執行細節、Phase 4 經驗捕獲、常見問題）見 git log。
+**Version**: 2.0.0 — 整併瘦身：3b 拆分評估路由至 `/tdd` skill phase3-implementation.md，四大檢查完整定義路由至 atomic-ticket-methodology.md，保留 distinct 核心「Phase 3a 唯一決策點 + 四大檢查唯一標準」為 30 秒核心 + 路由。歷史 1.0.0 完整版（含決策流程圖、四大檢查執行細節、Phase 4 經驗捕獲、常見問題）見 git log。

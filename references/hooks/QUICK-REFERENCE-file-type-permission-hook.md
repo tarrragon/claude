@@ -87,11 +87,11 @@ tail -f .claude/hook-logs/file-type-permission/file-type-permission-*.log
 ```bash
 # Ticket 檔案測試
 echo '{"tool_name":"Edit","tool_input":{"file_path":".claude/tickets/test.md"}}' | \
-  python3 .claude/hooks/file-type-permission-hook.py
+  uv run --quiet .claude/hooks/file-type-permission-hook.py
 
 # 程式碼檔案測試（應無輸出）
 echo '{"tool_name":"Edit","tool_input":{"file_path":"lib/main.dart"}}' | \
-  python3 .claude/hooks/file-type-permission-hook.py
+  uv run --quiet .claude/hooks/file-type-permission-hook.py
 ```
 
 ## 常見問題

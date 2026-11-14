@@ -101,4 +101,4 @@
 ---
 
 **Last Updated**: 2026-09-09 | **Version**: 2.1.0 — §3 依賴方向 DAG 規則補一條邊界：本節的 DAG 只描述資料方向，互不 import 的兩個 domain 仍可能競爭同一稀缺通道，該關係在 DAG 上查不到；判準路由至事件流負載仲裁方法論〈通道與仲裁器〉、結構載體路由至 `domain-map-template.md` 的通道與協調圖節。動機：跨章一致性審查發現該正交關係只活在下游範本，產出依賴圖的權威本身零感知。
-**Version**: 2.0.0 — 延伸支援多 aggregate（by-id 互參、交易一致性邊界）+ command-side 形態（domain service / policy / saga），0.1.0-W2-021（source: W2-018 ANA）。**Source**: 0.1.0-W2-016.4（v1.0.0 初建）。動機案例：flutter_balance W2-014 domain map；W2-016 Round 3 steelman S1/S3 findings。
+**Version**: 2.0.0 — 延伸支援多 aggregate（by-id 互參、交易一致性邊界）+ command-side 形態（domain service / policy / saga）。動機案例：某 consumer 專案的 domain map 與一次多輪審查中 steelman 提出的兩項 finding。

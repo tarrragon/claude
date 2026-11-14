@@ -4,7 +4,6 @@ title: Flaky Baseline 少量 sample 推導 stable 錯覺
 type: process-compliance
 severity: high
 status: active
-source: 0.19.0-W4-005.1 二分定位實證
 related:
   - PC-165
   - PC-BAL-050
@@ -38,9 +37,9 @@ related:
 
 三層共振讓 baseline 假設成為決策鏈的隱性前提，後續每一步推導都建在沙地上。
 
-## 案例：W4-005.1 二分定位推翻三次 PM 決策
+## 案例：二分定位推翻三次 PM 決策
 
-**情境**：W4-005「E2E timeout 常數化 + reExtract helper 抽取」純可讀性重構 ticket。
+**情境**：某「E2E timeout 常數化 + reExtract helper 抽取」純可讀性重構 ticket。
 
 **前次 thyme 觀察**：
 
@@ -57,25 +56,25 @@ related:
 
 | 決策序 | 內容 | 假設基礎 |
 |------|------|---------|
-| 1 | 放寬 W4-005 AC#3 為「8/9 等價」 | 前次 thyme 觀察 baseline 8/9 為 pre-existing |
-| 2 | 建立 W4-021 ANA ticket 追蹤「G4-1 pre-existing fail」 | 同上 |
+| 1 | 放寬該重構票 AC#3 為「8/9 等價」 | 前次 thyme 觀察 baseline 8/9 為 pre-existing |
+| 2 | 建立 ANA ticket 追蹤「G4-1 pre-existing fail」 | 同上 |
 | 3 | 後續再校正為「baseline 9/9 stable, 重構引入 regression」 | 本次 thyme 觀察 pristine 4 次 9/9 |
 
-**W4-005.1 二分定位實證（N = 10 取樣）**：
+**二分定位實證（N = 10 取樣）**：
 
 | 階段 | 結果 |
 |-----|------|
-| pristine baseline（未含 W4-005 重構） | 33-40% flaky（同樣狀態既有 9/9 也有 1/9） |
-| W4-005 重構後 | 33-40% flaky（同樣分佈） |
-| W4-005.1 三層修復後 | 100% GREEN（10/10，其中 2 次觸發 retry 自動恢復） |
+| pristine baseline（未含該重構） | 33-40% flaky（同樣狀態既有 9/9 也有 1/9） |
+| 重構後 | 33-40% flaky（同樣分佈） |
+| 三層修復後 | 100% GREEN（10/10，其中 2 次觸發 retry 自動恢復） |
 
 **反轉結論**：
 - pristine 「兩次 9/9」是幸運連勝，**非** stable baseline
-- W4-005 重構**不是** regression 元兇，與 race condition 無關
+- 該重構**不是** regression 元兇，與 race condition 無關
 - 真實根因：SW launch timing 10s hardcoded 不足 + chrome.storage.local 初始化 race（兩個 pre-existing race）
 
 **PM 三次決策成本**：
-- 建 W4-021 ANA（基於錯前提）→ 撤回（rm 未進 git）
+- 建 ANA（基於錯前提）→ 撤回（rm 未進 git）
 - 改 AC#3 為 8/9 等價 → 還原為 9/9
 - 額外 1 輪 thyme 派發（重派確認 regression）
 
@@ -135,11 +134,11 @@ PM 接 task-notification 時，若 agent 回報「N 次 baseline GREEN 確認 st
 
 ## 案例文件來源
 
-- `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W4-005.md` — Problem Analysis 段落含三次 PM 決策誤判記錄
-- `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W4-005.1.md` — Solution + Test Results 段含 10/10 取樣實證
+- 重構票 ticket md — Problem Analysis 段落含三次 PM 決策誤判記錄
+- 修復票 ticket md — Solution + Test Results 段含 10/10 取樣實證
 
 ---
 
 **Last Updated**: 2026-05-31
-**Version**: 1.0.0 — 從 0.19.0-W4-005.1 二分定位實證 + W4-021 升級流程落地
-**Source**: W4-005.1 二分定位推翻三次 PM 決策（W4-021 / pm-quality-baseline-rule-7 四問升級）
+**Version**: 1.0.0 — 從二分定位實證 + 升級流程落地
+**Source**: 二分定位推翻三次 PM 決策（pm-quality-baseline-rule-7 四問升級）

@@ -1,14 +1,14 @@
-"""Blocker 解除狀態判定共用 predicate（W8-043）。
+"""Blocker 解除狀態判定共用 predicate。
 
 抽出原 `commands/lifecycle.py._is_fully_unblocked`，使 lifecycle（cascade
 unblock / 建議列表）與 track_runqueue（list 視圖可執行判定）共用同一 AND 語義，
-避免 commands 模組互相 import 形成耦合（對齊 W10-121「抽共用 lib」方向）。
+避免 commands 模組互相 import 形成耦合（對齊「抽共用 lib」方向）。
 
 語義（AND）：ticket 的所有 blocker 皆已解除才視為可執行。
 
-設計背景（W8-042 ANA）：
+設計背景：
     runqueue list 視圖原以字面 `len(blockedBy)==0` 判定可執行，遺漏 blocker
-    已完成但 blockedBy 欄位未清理的 ticket（W8-001.5 / W8-027 實證），導致 PM
+    已完成但 blockedBy 欄位未清理的 ticket（實證），導致 PM
     在 runqueue 看不到實際可接手的 ticket，排程判斷失準。
 """
 
@@ -18,7 +18,8 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_CLOSED
-from ticket_system.lib.ticket_loader import get_project_root, load_ticket
+from ticket_system.lib.paths import get_ticket_state_root
+from ticket_system.lib.ticket_loader import load_ticket
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 
 VERSION_STATUS_COMPLETED = "completed"
@@ -53,7 +54,7 @@ def list_open_versions() -> List[str]:
 
     todolist 不存在或解析失敗回傳空清單（僅退化為同版本掃描）。
     """
-    path = get_project_root() / "docs" / "todolist.yaml"
+    path = get_ticket_state_root() / "docs" / "todolist.yaml"
     if not path.exists():
         return []
     try:

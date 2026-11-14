@@ -23,7 +23,8 @@ Isolated Subagent Main-Write Guard Hook - PreToolUse (Edit|Write|NotebookEdit|Ba
        （實測：payload cwd 反映代理人基準目錄，不反映命令內 cd）
 
 fail-open: agent_id / 映射 / 目標路徑 / cwd 缺失或狀態檔讀取失敗 -> 放行並記 info。
-hook 自身例外 -> 放行，stderr 與日誌皆留紀錄。
+hook 自身例外 -> 能確認是隔離代理人的檔案寫入時擋下（整檔覆寫主 checkout 無法回復），
+其餘放行；兩者皆寫 stderr 與日誌。deny 經 emit_hook_output 輸出，輸出失敗兜底為 exit 2。
 
 已知缺口（不涵蓋）: Bash 重導向 / sed -i / python 等寫檔；git -C <主 repo>；
 PM（無 agent_id）；映射過期（entry 已被 TTL 清除）。
@@ -31,7 +32,6 @@ PM（無 agent_id）；映射過期（entry 已被 TTL 清除）。
 排除: ticket CLI（刻意寫主 checkout 的票）。
 """
 
-import json
 import os
 import re
 import sys
@@ -46,7 +46,8 @@ from lib import (
     read_json_from_stdin,
     run_hook_safely,
     get_project_root,
-    generate_hook_output,
+    get_main_checkout_root,
+    emit_hook_output,
 )
 from lib import dispatch_tracker
 
@@ -70,16 +71,30 @@ WARN_MESSAGE = (
     "與目前已做的變更，然後交回 PM 重新派發。"
 )
 
+EXCEPTION_DENY_MESSAGE = (
+    "[隔離守衛判定失敗] 你是 isolation: worktree 派發的代理人，守衛在判定這次寫入時發生例外（{error}），"
+    "無法確認目標是否落在主 repo 的共用 working tree，因此擋下。"
+    "請停手：於 ticket 的 NeedsContext 章節記錄此訊息與目前已做的變更，交回 PM。"
+)
+
 
 def main_root_from(root: Path) -> Path:
-    """若 root 位於 <main>/.claude/worktrees/<name>，回傳 <main>，否則原樣回傳。"""
+    """回傳 root 所屬 repo 的主 checkout 根（MR，不論 worktree 開在哪）。
+
+    MR 解析失敗（非 git 路徑）時退回舊判定：root 位於 <main>/.claude/worktrees/<name>
+    則回傳 <main>，否則原樣回傳。
+    """
+    mr = get_main_checkout_root(root)
+    if mr is not None:
+        return mr
     s = str(root)
     idx = s.find(WORKTREES_SEGMENT)
     return Path(s[:idx]) if idx >= 0 else root
 
 
-def resolve_main_root() -> Path:
-    return main_root_from(Path(get_project_root()))
+def resolve_main_root(cwd: Optional[str] = None) -> Path:
+    """cwd（payload cwd，即 AR）為起點；缺 cwd 時用 get_project_root()。"""
+    return main_root_from(Path(cwd) if cwd else Path(get_project_root()))
 
 
 def _norm(p: str) -> str:
@@ -162,17 +177,44 @@ def main() -> int:
     if not input_data:
         return EXIT_SUCCESS
     try:
-        message = evaluate(input_data, resolve_main_root(), logger)
-    except Exception as e:  # fail-open：hook 自身例外不得阻擋工具，stderr 與日誌皆留紀錄
-        logger.critical("hook 例外，fail-open 放行: %s", e, exc_info=True)
+        message = evaluate(input_data, resolve_main_root(input_data.get("cwd")), logger)
+    except Exception as e:  # 例外不吞：stderr 與日誌皆留紀錄，再依是否確認為隔離代理人決定落點
+        logger.critical("hook 例外: %s", e, exc_info=True)
+        if _confirmed_isolated_file_write(input_data, logger):
+            # 已確認是 worktree 隔離代理人的檔案寫入：整檔覆寫可能蓋掉其他 session
+            # 未提交的內容，放行後無法回復，判定失敗時擋下
+            sys.stderr.write("[%s] 例外，隔離代理人的檔案寫入已擋下: %s\n" % (HOOK_NAME, e))
+            emit_hook_output(
+                "PreToolUse",
+                permission_decision="deny",
+                permission_decision_reason=EXCEPTION_DENY_MESSAGE.format(error=e),
+            )
+            return EXIT_SUCCESS
+        # 無法確認為隔離代理人（PM、一般代理人、映射查詢本身失敗）：放行，
+        # 避免守衛故障擋下所有代理人的寫入
         sys.stderr.write("[%s] 例外，已放行: %s\n" % (HOOK_NAME, e))
         return EXIT_SUCCESS
+    # deny 經 emit_hook_output 輸出：輸出失敗時兜底為 exit 2，不退化為放行
     if message and input_data.get("tool_name") in FILE_TOOL_KEYS:
-        print(json.dumps(generate_hook_output(
-            "PreToolUse", permission_decision="deny", permission_decision_reason=message), ensure_ascii=False))
+        emit_hook_output("PreToolUse", permission_decision="deny", permission_decision_reason=message)
     elif message:
-        print(json.dumps(generate_hook_output("PreToolUse", additional_context=message), ensure_ascii=False))
+        emit_hook_output("PreToolUse", additional_context=message)
     return EXIT_SUCCESS
+
+
+def _confirmed_isolated_file_write(input_data: dict, logger) -> bool:
+    """例外路徑專用：只有能確認「worktree 隔離代理人 + 檔案工具」時回 True。
+
+    確認過程本身失敗時回 False（放行），讓收緊只落在可確認的範圍內。
+    """
+    agent_id = input_data.get("agent_id")
+    if not agent_id or input_data.get("tool_name") not in FILE_TOOL_KEYS:
+        return False
+    try:
+        return find_isolated_entry(agent_id, resolve_main_root(input_data.get("cwd")), logger) is not None
+    except Exception as e:  # 確認失敗：記錄後放行
+        logger.error("例外路徑的隔離映射確認失敗，放行: %s", e, exc_info=True)
+        return False
 
 
 if __name__ == "__main__":

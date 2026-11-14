@@ -42,7 +42,10 @@ CLAUDE_COMM_MARK = "claude"
 # ps -o lstart 須以 UTC、C locale 輸出，才能與 session 檔的 procStart 逐字比對（line-board sessions.ts 同一判準）
 PS_ENV = {"TZ": "UTC", "LC_ALL": "C", "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
 CONTINUITY_DOC = ".claude/skills/multi-session-orchestration/references/line-continuity.md"
-LOG_DIR_PARTS = (".claude", "hook-logs", "master-resume-hint")
+FEEDBACK_SCRIPT = ".claude/skills/framework-issue/scripts/feedback.py"
+LOG_HOOK_NAME = "master-resume-hint"
+# 本檔位於 .claude/skills/multi-session-orchestration/scripts/，parents[3] 即 .claude/（lib package 所在）
+CLAUDE_DIR = Path(__file__).resolve().parents[3]
 
 
 def sessions_dir() -> Path:
@@ -162,8 +165,13 @@ def none_step(has_active: bool) -> str:
         if has_active
         else "todolist 沒有 active 版本（上一版已完成、下一版尚未轉 active）"
     )
+    feedback = "" if has_active else (
+        f"版本空窗時先做發版後回饋檢查：執行 `python3 {FEEDBACK_SCRIPT}` 列出上一版發版後的回饋，"
+        "依 .claude/pm-rules/version-progression.md〈版本生命週期〉「發版後回饋檢查」分診，"
+        "有承諾未達成的回報就先發 patch，沒有才以 `version-release start --version <下一版>` 轉 active。"
+    )
     return (
-        f"2. 找不到協調票，成因：{cause}。不自行判定單一線，先以 AskUserQuestion 問用戶開工作線或單一線："
+        f"2. 找不到協調票，成因：{cause}。{feedback}不自行判定單一線，先以 AskUserQuestion 問用戶開工作線或單一線："
         f"開工作線時{'' if has_active else '先把版本轉 active，再'}建協調票並列開線計畫表；"
         f"單一線時把〈主控接續〉段與裁定寫進當前處理的票，下次接續先讀該票（{CONTINUITY_DOC} §3）"
     )
@@ -183,15 +191,29 @@ def ticket_step(resolved: dict) -> str:
     return f"2. 協調票解析失敗（{resolved['reason']}）：先請用戶確認協調票，再繼續"
 
 
+def record_step(source: str, resolved: dict) -> str:
+    """提示第 3 步：寫〈主控接續〉段的位置。
+
+    none 時沒有協調票可寫，位置跟著第 2 步問到的答案走；其餘情況沿用協調票。
+    """
+    section = f"〈主控接續（{source}，<日期 時間>）〉段"
+    tail = "推送，並先向用戶回報各線狀態與下一步"
+    if resolved["kind"] == "none":
+        return (
+            f"3. 依第 2 步用戶的答案寫 {section}（{CONTINUITY_DOC} §4）："
+            f"開工作線時寫進新建的協調票，單一線時寫進當前處理的票；{tail}"
+        )
+    return f"3. 依 {CONTINUITY_DOC} §4 在協調票追加{section}、{tail}"
+
+
 def hint_text(source: str, resolved: dict) -> str:
     """提示模型的文字：要求先呼叫 line_status 完成自我接續，再處理訊息。"""
-    ticket_line = ticket_step(resolved)
     return "\n".join(
         [
             f"[主控接續提示] 本 session 名為「{MASTER_NAME}」，剛經過 /{source}。處理任何訊息之前，先完成自我接續：",
             "1. 以 ToolSearch 搜尋 line_status，呼叫 mcp__line-board__line_status，取得各線接續狀態與過期項",
-            ticket_line,
-            f"3. 依 {CONTINUITY_DOC} §4 在協調票追加〈主控接續（{source}，<日期 時間>）〉段、推送，並先向用戶回報各線狀態與下一步",
+            ticket_step(resolved),
+            record_step(source, resolved),
             "line_status 不可用時，改依同檔 §3 的備援步驟判讀。",
         ]
     )
@@ -216,10 +238,36 @@ def project_dir() -> Path:
     return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
 
+def state_dir() -> Path:
+    """共用狀態根（todolist、協調設定、票面）：linked worktree 內解析到主 checkout。
+
+    `.claude/lib` 不可達時退回 project_dir()。
+    """
+    sys.path.insert(0, str(CLAUDE_DIR))
+    try:
+        from lib.hook_base import get_shared_state_root
+    except ImportError:
+        return project_dir()
+    return get_shared_state_root(project_dir())
+
+
+def log_dir_path() -> Path:
+    """日誌目錄：優先經 hook_logging.get_hook_log_dir（linked worktree 內解析到主 repo）。
+
+    `.claude/lib` 不可達時退回 project_dir() 下的相對位置。
+    """
+    sys.path.insert(0, str(CLAUDE_DIR))
+    try:
+        from lib.hook_logging import get_hook_log_dir
+    except ImportError:
+        return project_dir() / ".claude" / "hook-logs" / LOG_HOOK_NAME
+    return get_hook_log_dir(LOG_HOOK_NAME)
+
+
 def log_line(message: str) -> None:
     """寫日誌檔；寫不進去時只能放棄（錯誤路徑已另寫 stderr）。"""
     try:
-        log_dir = project_dir().joinpath(*LOG_DIR_PARTS)
+        log_dir = log_dir_path()
         log_dir.mkdir(parents=True, exist_ok=True)
         with (log_dir / "hook.log").open("a", encoding="utf-8") as f:
             f.write(f"[{datetime.now().isoformat(timespec='seconds')}] {message}\n")
@@ -230,7 +278,7 @@ def log_line(message: str) -> None:
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
-        output = build_output(payload if isinstance(payload, dict) else {}, project_dir())
+        output = build_output(payload if isinstance(payload, dict) else {}, state_dir())
         if output is not None:
             print(json.dumps(output, ensure_ascii=False))
     except Exception as exc:  # 任何失敗都不阻擋 session 啟動；雙通道記錄

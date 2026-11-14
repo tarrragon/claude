@@ -252,6 +252,6 @@
 
 **Last Updated**: 2026-08-17
 **Version**: 1.3.0 — 新增「跨情境必問：防護類標的的驗收覆蓋」節（四問模板，附加於任一視角 prompt 尾部，不佔額外 agent 名額）；情境代號補語意半邊避免裸字母指涉；暴露點宣稱由「唯一可能」收窄為「該票流程內唯一設計性暴露點」（PC-BAL-035 措施 3）
-**Version**: 1.2.0 — 套用 compositional-writing 改寫（W17-135）：本檔開頭補意圖陳述與佔位符說明（intent-revealing / grep-friendly）
+**Version**: 1.2.0 — 套用 compositional-writing 改寫：本檔開頭補意圖陳述與佔位符說明（intent-revealing / grep-friendly）
 
-**Version**: 1.1.0 - 情境 C/D/F/G 各新增 basil 視角 prompt 模板（W17-057，basil-writing-critic 常駐委員整合）
+**Version**: 1.1.0 - 情境 C/D/F/G 各新增 basil 視角 prompt 模板（basil-writing-critic 常駐委員整合）

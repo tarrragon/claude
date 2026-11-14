@@ -9,8 +9,8 @@
 提供統一的命令入口，整合 create、track、handoff、resume、migrate 五個子命令。
 
 支援兩種使用方式：
-1. 全局安裝（推薦）:
-    uv tool install .claude/skills/ticket
+1. shim（推薦；SessionStart 自動安裝，亦可在專案根目錄手動執行）:
+    python3 .claude/scripts/install-skill-clis.py
     ticket create --version X --wave Y --action Z --target T
     ticket track summary
     ticket track query <id>
@@ -70,10 +70,9 @@ except ModuleNotFoundError:
     print("[ERROR] 套件未正確安裝")
     print(SEPARATOR_PRIMARY)
     print()
-    print("推薦方式：全局安裝（只需執行一次）")
-    print("  cd .claude/skills/ticket")
-    print("  uv tool install .")
-    print("  # 之後在任何目錄執行：")
+    print("推薦方式：在專案根目錄安裝 shim（只需執行一次）")
+    print("  python3 .claude/scripts/install-skill-clis.py")
+    print("  # 之後在專案內任何目錄執行：")
     print("  ticket track summary")
     print()
     print("替代方式：局部執行（不安裝）")
@@ -126,17 +125,16 @@ def check_installation() -> None:
     except ValueError:
         # 不在 ticket 目錄中，提示全局安裝
         print(SEPARATOR_PRIMARY)
-        print("[INFO] 為了在任何目錄執行 ticket 指令，建議全局安裝")
+        print("[INFO] 為了在專案內任何目錄執行 ticket 指令，建議安裝 shim")
         print(SEPARATOR_PRIMARY)
         print()
-        print("執行以下命令進行全局安裝（只需執行一次）：")
+        print("在專案根目錄執行以下命令安裝 shim（只需執行一次）：")
         print()
-        print("  cd .claude/skills/ticket")
-        print("  uv tool install .")
+        print("  python3 .claude/scripts/install-skill-clis.py")
         print()
         print("安裝完成後可在任何目錄執行：")
         print("  ticket track summary")
-        print("  ticket track query 0.31.0-W4-001")
+        print("  ticket track query <ticket-id>")
         print()
         print(SEPARATOR_PRIMARY)
         print()
@@ -184,7 +182,7 @@ def main() -> int:
         parser.print_help()
         return 1
 
-    # CLI 安全收尾：非阻塞收割殘留 stale *.md.lock（W8-017）
+    # CLI 安全收尾：非阻塞收割殘留 stale *.md.lock
     # active lock 永不被誤刪（reap_stale_locks 用 LOCK_NB 試鎖判定 stale）。
     _reap_stale_locks_quietly()
     return rc

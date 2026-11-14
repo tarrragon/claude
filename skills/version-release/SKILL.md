@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 2.12.0
+  version: 3.0.0
 ---
 
 # Version Release Skill
@@ -38,6 +38,9 @@ metadata:
 # 發版收尾：前移非阻擋 pending Ticket 後執行發布流程
 /version-release finish --version 0.19
 
+# 發版時直接推進下一個 planned 版本（預設維持 planned，見〈發版後的下一版〉）
+/version-release finish --version 0.19 --activate-next
+
 # 只更新文件
 /version-release update-docs
 ```
@@ -45,7 +48,7 @@ metadata:
 | 子命令 | 說明 |
 |--------|------|
 | `start` | 啟動新版本（Options: `--version`(必填)、`--from`、`--description`、`--dry-run`） |
-| `release` | 完整發布流程（Options: `--version`、`--dry-run`、`--force`、`--defer-td`） |
+| `release` | 完整發布流程（Options: `--version`、`--dry-run`、`--force`、`--defer-td`、`--activate-next`） |
 | `check` | 只執行 Pre-flight 檢查（發版判準見下方〈發版判準：blocker 阻擋、其餘前移〉） |
 | `finish` | 發版收尾：對前移清單逐張 `ticket migrate` 至目標版本，成功後接續 `release` 同一套流程（Options 同 `release`）。前移目標撞號時 `--dry-run` 以 rc=0 預覽改號並續行，finish 結尾列出「原目標 -> 實際目標」對照表 |
 | `update-docs` | 只更新文件 |
@@ -120,6 +123,12 @@ metadata:
 [OK] Worklog 目標達成
 ```
 
+### 發版後的下一版：預設維持 planned
+
+`release`／`finish` 把本版標為 `completed` 後，預設不推進下一版：下一個 `planned` 版本維持 `planned`，todolist 進入版本空窗（沒有 `active` 版本）。發版後回饋檢查完成、決定下一版是 patch 還是下一個 minor 之後，以 `start --version <下一版>` 轉 `active`（既有 `planned` 版本走下方的冪等補齊路徑）。加 `--activate-next` 時沿用舊行為，發版當下推進最小的 `planned` 版本。
+
+**Why**：下一版要等回饋檢查決定。發版當下就推進最小的 `planned` 版本，等於在檢查前選定下一個 minor；檢查判定要先發 patch 時，還得把 minor 退回 `planned`。**Consequence**：沿用舊預設時，框架規則寫的空窗不會出現，回饋檢查的時點不成立。**Action**：一般發版不帶旗標；確定不做回饋檢查、下一版已定時才加 `--activate-next`。空窗定義與空窗期間的建票規則見 `.claude/pm-rules/version-progression.md`〈版本生命週期〉。
+
 ### start 子命令
 
 程式化版本啟動流程，完整生命週期：`start` -> `check` -> `release`。
@@ -135,7 +144,7 @@ metadata:
 6. 全新版本：Bump 版本檔案（依專案類型選擇對應的版本源 + sync targets）
 7. 輸出摘要報告和下一步建議
 
-**`ensure_version_activated` 冪等補齊**（既有版本走此路徑，`finish` 自動推進下一版本時亦共用同一常式）：逐項檢查 todolist status、worklog 主檔、版本檔版號、CHANGELOG In Development 段落，只補缺的項目並逐項印出 `[OK]`／`[補]`；全部就位時印「無缺漏」且不改動任何檔案（含 mtime）。version status 為 `completed` 時視為不可逆錯誤，不會被本路徑復原。
+**`ensure_version_activated` 冪等補齊**（既有版本走此路徑，`release`／`finish` 帶 `--activate-next` 推進下一版本時亦共用同一常式）：逐項檢查 todolist status、worklog 主檔、版本檔版號、CHANGELOG In Development 段落，只補缺的項目並逐項印出 `[OK]`／`[補]`；全部就位時印「無缺漏」且不改動任何檔案（含 mtime）。version status 為 `completed` 時視為不可逆錯誤，不會被本路徑復原。
 
 ## 多專案類型支援
 

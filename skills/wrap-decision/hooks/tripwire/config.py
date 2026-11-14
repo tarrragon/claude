@@ -22,6 +22,19 @@ EXPECTED_VERSION = "1.0.0"
 HOOK_NAME = "wrap-decision-tripwire"
 
 
+def _major(version: str) -> str:
+    return version.split(".", 1)[0].strip()
+
+
+def is_compatible_version(version: str) -> bool:
+    """設定檔與程式碼的主版號相同即視為相容。
+
+    設定檔的次版號會隨 signal 調整而升（如 1.2.0），解析邏輯只在主版號變更時
+    才可能不相容；逐字比對完整版號會讓每次次版號升級都在每個事件寫一行 stderr。
+    """
+    return bool(version) and _major(version) == _major(EXPECTED_VERSION)
+
+
 # ============================================================================
 # Dataclass
 # ============================================================================
@@ -189,13 +202,16 @@ def load_config(config_path: Path, logger) -> Optional[Config]:
 
     cfg = Config()
     cfg.version = str(raw.get("version", ""))
-    if cfg.version != EXPECTED_VERSION:
+    if not is_compatible_version(cfg.version):
+        # 主版號不同：解析可能不相容，用戶與日誌都要看得到
         sys.stderr.write(
-            "[WRAP Tripwire] version mismatch (expected={}, got={}); best-effort parsing\n".format(
-                EXPECTED_VERSION, cfg.version
+            "[WRAP Tripwire] version mismatch (expected major={}, got={}); best-effort parsing\n".format(
+                _major(EXPECTED_VERSION), cfg.version
             )
         )
-        logger.info("version mismatch expected=%s got=%s", EXPECTED_VERSION, cfg.version)
+        logger.warning("version mismatch expected=%s got=%s", EXPECTED_VERSION, cfg.version)
+    elif cfg.version != EXPECTED_VERSION:
+        logger.debug("compatible version expected=%s got=%s", EXPECTED_VERSION, cfg.version)
 
     _parse_settings(raw, cfg)
     cfg.signals = _parse_signals(raw.get("signals") or [], logger)

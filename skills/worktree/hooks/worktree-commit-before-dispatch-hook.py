@@ -35,10 +35,11 @@ from lib import (
     emit_hook_output,
     get_project_root,
 )
+from lib.hook_base import get_shared_state_root
 from lib.ticket_id_pattern import extract_ticket_id_anchored
 
 
-# W4-008：origin/main 落後 local main 達此門檻視為高風險，改走 deny（非僅警告）
+# origin/main 落後 local main 達此門檻視為高風險，改走 deny（非僅警告）
 LAG_DENY_THRESHOLD = 10
 
 WARN_MESSAGE = """[PC-019 提醒] 主 repo 上有未 commit 的 tracked 變更
@@ -52,24 +53,24 @@ WARN_MESSAGE = """[PC-019 提醒] 主 repo 上有未 commit 的 tracked 變更
 
 詳見: .claude/pm-rules/worktree-operations.md（階段 1：派發前）"""
 
-# W3-007 方案 A：origin/main 落後 local main 警告訊息（非阻擋，走 additionalContext）
-ORIGIN_BEHIND_WARNING = """[W3-007 警告] origin/main 落後 local main {count} 個 commit
+# origin/main 落後 local main 警告訊息（非阻擋，走 additionalContext）
+ORIGIN_BEHIND_WARNING = """[origin 落後警告] origin/main 落後 local main {count} 個 commit
 
 CC runtime 的 worktree 隔離以 origin/main（remote-tracking ref）為 base，
 而非 local main HEAD。origin/main 落後時，worktree 會建在 stale 基底上，
-缺少最新本地 commit（W2-013 實證需 agent 手動 recovery）。
+缺少最新本地 commit（曾實證需 agent 手動 recovery）。
 
 建議：派發前先 push local main
   git push origin main
 
 詳見: .claude/pm-rules/parallel-dispatch.md（worktree base 與 push-first 紀律）"""
 
-# W4-008：origin/main 落後達 LAG_DENY_THRESHOLD 以上，改為阻擋派發（stderr，非 JSON）
-ORIGIN_BEHIND_DENY_MESSAGE = """[W4-008 防護] origin/main 落後 local main {count} 個 commit，超過門檻 {threshold}，禁止派發 worktree agent
+# origin/main 落後達 LAG_DENY_THRESHOLD 以上，改為阻擋派發（stderr，非 JSON）
+ORIGIN_BEHIND_DENY_MESSAGE = """[origin 落後防護] origin/main 落後 local main {count} 個 commit，超過門檻 {threshold}，禁止派發 worktree agent
 
 CC runtime 的 worktree 隔離以 origin/main（remote-tracking ref）為 base，
 而非 local main HEAD。落後過多時 worktree 會建在嚴重過時的基底上，
-代理人可能重建已存在檔案並產生無法直接合併的產出（0.2.0-W4-006 事故實證）。
+代理人可能重建已存在檔案並產生無法直接合併的產出（曾有事故實證）。
 
 修復方式：
   git push origin main
@@ -85,6 +86,9 @@ CC runtime 的 worktree 隔離以 origin/main（remote-tracking ref）為 base�
 worktree 代理人讀到的目標票內容會落後於 local main 上剛寫入的版本（例如
 claim 後以 append-log 寫入的 Context Bundle 章節），代理人可能漏做該內容
 所含的收尾要求且全程零錯誤訊號。
+
+常見來源：ticket track dispatch 寫入的派發日誌 commit。先推送再 dispatch 時，
+dispatch 寫入的這筆尚未推送，需在 dispatch 之後再推送一次。
 
 修復方式：
   git push origin main
@@ -159,7 +163,7 @@ def _check_target_ticket_synced(md_path: Path, project_root: Path, logger) -> bo
 
 
 def _check_origin_behind(logger) -> int:
-    """純計算 origin/main 落後 local main 的 commit 數，不做任何輸出（W4-009）。
+    """純計算 origin/main 落後 local main 的 commit 數，不做任何輸出。
 
     輸出決策（deny / emit additionalContext）全部移至 main()。PC-019 髒污
     判定已改為 exit 0（不再丟棄 stdout JSON），此函式維持純計算職責僅為
@@ -228,12 +232,14 @@ def main() -> int:
     # 行為，避免對非票務派發誤擋），僅由上述兩函式記錄可觀測性日誌
     ticket_id = _extract_target_ticket_id(tool_input.get("prompt", ""))
     if ticket_id:
-        project_root = get_project_root()
-        md_path = _locate_ticket_md(ticket_id, project_root, logger)
+        # 票與其 git 歷史同根：找票、git diff cwd、訊息相對路徑都用共用狀態根
+        # （linked worktree 內為主倉庫根）；落後與髒污檢查仍留行程 cwd
+        state_root = get_shared_state_root(get_project_root())
+        md_path = _locate_ticket_md(ticket_id, state_root, logger)
         if md_path is not None and not _check_target_ticket_synced(
-            md_path, project_root, logger
+            md_path, state_root, logger
         ):
-            rel_path = md_path.relative_to(project_root)
+            rel_path = md_path.relative_to(state_root)
             message = TICKET_UNSYNCED_DENY_MESSAGE.format(
                 ticket_id=ticket_id, path=rel_path
             )
@@ -243,7 +249,7 @@ def main() -> int:
             )
             return 2
 
-    # W4-008：origin/main 落後量先計算（純計算，不輸出）
+    # origin/main 落後量先計算（純計算，不輸出）
     behind_count = _check_origin_behind(logger)
 
     # lag >= LAG_DENY_THRESHOLD：直接阻擋（stderr，不 emit JSON），與 PC-019 無關
@@ -258,7 +264,7 @@ def main() -> int:
         )
         return 2
 
-    # 0 < lag < 閾值：emit additionalContext 警告。原 W4-009 修復要求延後 emit
+    # 0 < lag < 閾值：emit additionalContext 警告。原先要求延後 emit
     # 至確認不會走 PC-019 block（exit 2）之後才發出，避免 stdout JSON 被丟棄；
     # 本 hook 髒污路徑已改為 exit 0（見下方），全路徑不再有 exit 2 丟棄 JSON 的
     # 風險，故移至此處單點發出，不需依 changed_files 是否為空分道處理。

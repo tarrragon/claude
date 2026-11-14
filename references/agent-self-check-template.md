@@ -117,7 +117,7 @@
 |------------|---------|
 | IMP | Problem Analysis / Solution / Test Results |
 | ANA | Problem Analysis / Analysis Result（或 Solution） |
-| DOC | Solution（文件變更摘要） |
+| DOC | Completion Info（變更摘要）；Solution 免填 |
 
 **掃描重點**：
 
@@ -127,7 +127,7 @@
 | 章節存在但僅有「待填寫：...」文字 | 違規（佔位符未替換） | 填入實際內容 |
 | 必填章節存在且有實質內容 | 通過 | 無需調整 |
 
-### C2 自定義 H2 禁令（W17-072）
+### C2 自定義 H2 禁令
 
 **禁止**：在 ticket body 使用非 Schema 定義的 H2 標題（`## 自訂標題`）。
 
@@ -146,6 +146,18 @@
 |---------|------|
 | 測試執行指令（或標明不適用） | 如 `npm test`、`npx jest tests/x.test.js` 或「本 ticket 為文件類，無測試指令」 |
 | 通過數或結論（或 commit SHA） | 如「全通過」、「35/35 pass」 或「N/A - 純文件修改」 |
+
+### C4 防護類 hook 票的證據與標記
+
+**適用**：`where.files` 觸及 `.claude/hooks/` 或 `.claude/skills/<skill>/hooks/` 的 IMP ticket。
+
+| 檢查項 | 合格寫法 |
+|-------|---------|
+| 實地觸發、liveness 有證據 | `hook-logs/` 日誌行引文、`ticket track hook-liveness` 輸出，或含本票 hook 名的日誌行 |
+| 失敗語意有宣告 | fail-open 或 fail-closed 加「觸發條件：」；或同一行寫「放行」或「阻擋」並附「觸發條件：」 |
+| 拿不到證據時已寫標記 | `證據不適用（實地觸發）：<理由>`、`延後取證（liveness）：<ticket-id>`；代理人在 worktree 內拿不到本 session 證據時寫 `待主線程補證（實地觸發）：<要做的取證動作>` 並在回報列出 |
+
+**Why**：缺證據時 complete 會被擋；「待主線程補證」只是交接，不抵任何類別，失敗語意也不接受標記。**Action**：自檢時逐項對照；寫法、抵扣範圍與 checker 處置的正本見 `.claude/pm-rules/ticket-body-schema.md`〈證據寫法與三種標記〉。
 
 ---
 
@@ -223,8 +235,10 @@
 
 ---
 
-**Last Updated**: 2026-11-09
+**Last Updated**: 2026-11-13
+**Version**: 1.3.0 — 類別 C 新增 C4「防護類 hook 票的證據與標記」：證據寫法、失敗語意宣告與「證據不適用」「延後取證」「待主線程補證」三種標記的自檢項，正本路由 ticket-body-schema〈證據寫法與三種標記〉。
+**Version**: 1.2.1 — C1 表 DOC 列由「Solution（文件變更摘要）」改為「Completion Info（變更摘要）；Solution 免填」，對齊建立端 `ticket_builder` 對 DOC Solution 寫入的免填佔位文字。
 **Version**: 1.2.0 — `### 自檢結果` 改為 IMP／ANA 必填（對齊 complete 閘門 `validate_self_check_subsection` 與 `_SELF_CHECK_GATE_TYPES`），DOC 選填；移除「無發現可省略」，新增無發現時的寫法範例（寫「無發現」並列出已檢查項）。觸發時機表同步。
 **Version**: 1.1.0 — 自檢結果寫入範本新增「掃描手段」欄（列出實際執行的指令或檢查項），結論措辭由無限定的「通過」改為「已掃描範圍內通過（未涵蓋：…）」；新增「為何掃描手段是必要欄位」章節（零 finding 有「真的沒問題」與「該維度沒掃」兩種成因，只寫通過無法區分，實證見 PC-BAL-030）
-**Version**: 1.0.0 — 初始建立（W17-061）：三大類自檢清單（A 文字品質 / B 禁用字字元集 / C Schema 結構）+ 自檢結果寫入範本 + Layer 1 / Layer 2 介面分工
-**Source**: W17-051 WRAP 選項 B 階段二 + document-writing-style v1.2.0「二次審查強制執行」原則
+**Version**: 1.0.0 — 初始建立：三大類自檢清單（A 文字品質 / B 禁用字字元集 / C Schema 結構）+ 自檢結果寫入範本 + Layer 1 / Layer 2 介面分工
+**Source**: WRAP 選項 B 階段二 + document-writing-style v1.2.0「二次審查強制執行」原則

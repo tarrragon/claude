@@ -77,7 +77,7 @@ def get_project_root() -> Path:
 - 其他專案 sync-pull 取得 skill 後，第一次 `uv tool install` 即失敗（變體 A）
 - 或 install 成功但 CLI 啟動後找不到專案資源（變體 B）
 - 跨專案 sync 信任崩壞：使用者不確定哪些 skill 真的可用
-- 阻擋依賴此 skill 的下游 ticket（如 W1-072 → W1-073 → W3-042 連鎖）
+- 阻擋依賴此 skill 的下游 ticket（如 ANA 結論派出的 version bump 實作票被此 bug 擋住）
 
 ---
 
@@ -172,8 +172,8 @@ def get_project_root() -> Path:
 
 ## 來源
 
-- 0.19.0-W3-042（version-release skill 兩個 bug 同時暴露）
+- version-release skill 兩個 bug 同時暴露的事件
   - pyproject.toml setuptools auto-discover 撞 templates/references
   - scripts/version_release.py:184 `get_project_root()` installed mode 失效
 - IMP-074（scripts.* package 入口 + sys.path-mode 測試衝突；同家族不同根因）
-- W1-072 → W1-073 → W3-042 連鎖：W1-072 ANA 結論派 W1-073 執行 version bump，撞此 framework bug 阻擋
+- 連鎖：ANA 結論派出 version bump 實作票，執行時撞此 framework bug 而被阻擋

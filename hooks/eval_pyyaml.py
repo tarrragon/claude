@@ -242,7 +242,7 @@ def generate_report(samples: list[str], equiv_pass: bool, equiv_diffs: list[str]
 def main():
     """主流程"""
     print("=" * 60)
-    print("PyYAML 替代評估 — W39-002")
+    print("PyYAML 替代評估")
     print("=" * 60)
 
     # Step 1: 蒐集樣本

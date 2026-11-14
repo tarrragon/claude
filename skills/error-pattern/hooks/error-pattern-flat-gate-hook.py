@@ -11,7 +11,7 @@ Error-Pattern Flat-ID Negative Gate - PreToolUse Hook
 （<CAT>-<PROJ>-NNN，如 PC-V1-001）新建與既有 flat 檔編輯。
 
 Why: flat base 是 V1/APP 共享凍結核心，獨立累加會再撞號（process-compliance/ 已有
-     PC-010 x2、PC-018 x2 碰撞實證）。W1-019.3 的 allocator + skill.md 只能引導正確
+     PC-010 x2、PC-018 x2 碰撞實證）。allocator + skill.md 只能引導正確
      路徑，無法阻擋手動建檔——E1 linux F2：凍結 flat base 需 hook 強制非文件自律。
 
 判定（依序）:
@@ -22,7 +22,6 @@ Why: flat base 是 V1/APP 共享凍結核心，獨立累加會再撞號（proces
 
 SSOT: 複用 .claude/lib/pattern_id.py 的 extract_pattern_id，禁再造 regex（ARCH-020）。
 對應規則: quality-baseline 規則 4（deny 訊息寫 stderr + 引導 /error-pattern add）。
-來源 ticket: 1.0.0-W1-021（source 1.0.0-W1-019.3）。
 """
 
 import sys
@@ -71,7 +70,7 @@ def is_flat_id(pattern_id) -> bool:
 
     例：PC-099 -> 2 段 flat；PC-V1-001 / PC-C2C-001 -> 3 段前綴。
 
-    W1-036：extract_pattern_id 的 SSOT regex 允許前綴段含數字（V1/C2C 等專案碼
+    extract_pattern_id 的 SSOT regex 允許前綴段含數字（V1/C2C 等專案碼
     本身含數字），故 `PC-099-3-layer-defense.md` 會被過度匹配為 `PC-099-3`（3 段），
     若僅以段數判定會誤判為前綴號而繞過凍結 gate。但 _project-registry.yaml 規定
     專案碼為「短大寫英數，語意可辨識」，實務上所有已註冊碼（V1/APP/SCLK/CCS/C2C）
@@ -100,7 +99,7 @@ def build_deny_message(file_path: str, pattern_id: str) -> str:
     return (
         f"[DENY] 拒絕手動新建 flat 號 error-pattern：{pattern_id}（{file_path}）\n"
         f"flat base（<CAT>-NNN）是 V1/APP 共享凍結核心，獨立新增會再撞號。\n"
-        f"請改用 /error-pattern add，自動分配 <CAT>-<PROJ>-NNN 前綴號（ARCH-020 / W1-019）。\n"
+        f"請改用 /error-pattern add，自動分配 <CAT>-<PROJ>-NNN 前綴號。\n"
         f"（編輯既有 flat 檔與前綴號檔不受此限。）"
     )
 
@@ -130,12 +129,8 @@ def main() -> int:
 
     input_data = read_json_from_stdin(logger)
     if not input_data:
-        logger.debug("輸入為空或解析失敗，預設允許")
-        emit_hook_output(
-            "PreToolUse",
-            permission_decision="allow",
-            permission_decision_reason="輸入為空，預設允許",
-        )
+        # fail-open：不輸出 decision，交回平台權限流程（不代為核可）
+        logger.debug("輸入為空或解析失敗，不輸出決策")
         return EXIT_ALLOW
 
     tool_name = input_data.get("tool_name", "")
@@ -143,12 +138,13 @@ def main() -> int:
 
     decision, reason, exit_code = decide(tool_name, tool_input)
 
-    if decision == "deny":
-        logger.info(f"DENY 新建 flat 號 error-pattern：{reason.splitlines()[0]}")
-        sys.stderr.write(reason + "\n")
-    else:
+    if decision != "deny":
+        # 放行不輸出 decision：allow 會略過平台的權限提示，等於代用戶核可
         logger.debug(f"ALLOW：{reason}")
+        return exit_code
 
+    logger.info(f"DENY 新建 flat 號 error-pattern：{reason.splitlines()[0]}")
+    sys.stderr.write(reason + "\n")
     emit_hook_output(
         "PreToolUse",
         permission_decision=decision,

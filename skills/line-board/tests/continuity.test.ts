@@ -201,6 +201,14 @@ describe('過期偵測：佇列無票號', () => {
     expect(report({ lanes: [lane(7, 'a', '等主控通知')], sessions, log }).stale.map(s => s.kind)).toEqual(['no-ticket'])
   })
 
+  test('E2 正向對照：空票序（空白、只有分隔符）列為佇列無票號，不再沒有任何警示', () => {
+    for (const queue of ['', '→', '→ ∥']) {
+      const result = report({ lanes: [lane(9, 'a', queue)], sessions, log })
+      expect(result.lanes[0]?.state).toBe('startup')
+      expect(result.stale.map(s => [s.lane, s.kind])).toEqual([[9, 'no-ticket']])
+    }
+  })
+
   test('E1 對照：（無）與（結束）視為收線，不列此過期項', () => {
     for (const queue of ['（無）', '（結束）']) {
       const result = report({ lanes: [lane(1, 'a', queue)], sessions, log })

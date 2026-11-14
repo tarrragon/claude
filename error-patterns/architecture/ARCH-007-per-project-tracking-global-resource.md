@@ -81,7 +81,7 @@ for pkg, info in desired.items():
 
 ## 觸發時機（採用全域資源前的審查閘門）
 
-> 補強動機（0.37.0-W7-003 retrospective）：本 pattern 記錄了「作用域不匹配」的抽象模式，但**模式存在 ≠ 模式被應用**。ARCH-APP-002（uv tool install 全域 namespace 跨 consumer 碰撞）的根因可由本 pattern 直接推論，卻因無觸發機制綁到決策點而未被前置攔截。以下補執行層觸發時機。
+> 補強動機（某次 retrospective）：本 pattern 記錄了「作用域不匹配」的抽象模式，但**模式存在 ≠ 模式被應用**。ARCH-APP-002（uv tool install 全域 namespace 跨 consumer 碰撞）的根因可由本 pattern 直接推論，卻因無觸發機制綁到決策點而未被前置攔截。以下補執行層觸發時機。
 
 **何時必須套用本 pattern 審查**：採用任何「全域唯一 key」的資源時，包括但不限於：
 
@@ -109,5 +109,5 @@ for pkg, info in desired.items():
 
 ---
 
-**Last Updated**: 2026-06-25（補觸發時機章節，0.37.0-W7-003）
+**Last Updated**: 2026-06-25（補觸發時機章節）
 **原始版本**: 2026-03-05

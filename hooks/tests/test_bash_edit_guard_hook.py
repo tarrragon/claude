@@ -152,6 +152,34 @@ class TestBareCdAbsolutePathNarrowing:
         assert _detect_bare_cd(f"cd {_REPO_ROOT} && git status") is True
 
 
+class TestRepoRootRestoreWithAttachedConnector:
+    """專案根還原：target 緊接連接符時不把連接符算進 target（3.3.0-W1-098.10）。"""
+
+    @pytest.mark.parametrize("suffix", ["; git status", ";git status", "&&git status",
+                                        "||true", "/; ls", ")"])
+    def test_root_restore_with_attached_connector_not_hit(self, monkeypatch, suffix):
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", _REPO_ROOT)
+        assert _detect_bare_cd(f"cd {_REPO_ROOT}{suffix}") is False
+
+    @pytest.mark.parametrize("cmd", ["cd /tmp/other; ls", "cd /tmp/other&&ls", "cd sub;ls"])
+    def test_other_dir_with_attached_connector_still_hits(self, monkeypatch, cmd):
+        """正向對照：非專案根的 cd 緊接連接符仍命中。"""
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", _REPO_ROOT)
+        assert _detect_bare_cd(cmd) is True
+
+    @pytest.mark.parametrize("sep", ["; ", ";", "&&", " && "])
+    def test_root_restore_does_not_release_following_bare_cd(self, monkeypatch, sep):
+        """正向對照：還原到專案根之後再接的裸 cd 仍命中（排除不得延伸到後續命令）。"""
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", _REPO_ROOT)
+        assert _detect_bare_cd(f"cd {_REPO_ROOT}{sep}cd /tmp/x") is True
+        assert hook_module._find_bare_cd_target(f"cd {_REPO_ROOT}{sep}cd /tmp/x") == "/tmp/x"
+
+    def test_target_excludes_connector(self, monkeypatch):
+        """回報的 target 不含連接符。"""
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", _REPO_ROOT)
+        assert hook_module._find_bare_cd_target("cd /tmp/other;ls") == "/tmp/other"
+
+
 # ============================================================================
 # 裸 cd 偵測：newline 多行命令（W1-035 修復）
 # connector 集補 \n，多行命令第二行行首裸 cd 應命中。
@@ -233,6 +261,35 @@ class TestSubshellConsistency:
     def test_outer_cd_before_subshell_hits(self):
         """子 shell 前的外層裸 cd 命中。"""
         assert _detect_bare_cd("cd outer && (cd inner && ls)") is True
+
+
+class TestParenDepthIgnoresLiterals:
+    """括號深度計算跳過字面區段（3.3.0-W1-094）：引號與 heredoc 內的括號不是子 shell 邊界。"""
+
+    def test_quoted_close_paren_before_subshell_not_hit(self):
+        """原重現：echo 字串內的 1) 不把後續子 shell 內的 cd 判為裸 cd。"""
+        cmd = 'echo "1) check" && (cd $R/x && ls)'
+        assert _detect_bare_cd(cmd) is False
+
+    def test_single_quoted_close_paren_not_hit(self):
+        """單引號內的右括號同樣不影響深度。"""
+        cmd = "echo 'a) b)' ; (cd sub && ls)"
+        assert _detect_bare_cd(cmd) is False
+
+    def test_heredoc_close_paren_not_hit(self):
+        """heredoc 正文內的右括號不影響深度。"""
+        cmd = "cat <<EOF\nitem 1)\nEOF\n(cd sub && ls)"
+        assert _detect_bare_cd(cmd) is False
+
+    def test_quoted_open_paren_does_not_hide_bare_cd(self):
+        """正向對照：引號內的左括號不得把其後真正的裸 cd 藏進子 shell。"""
+        cmd = 'echo "(note" && cd /tmp/x'
+        assert _detect_bare_cd(cmd) is True
+
+    def test_real_bare_cd_after_quoted_paren_still_hits(self):
+        """正向對照：引號內有右括號、其後是真正的裸 cd，仍命中。"""
+        cmd = 'echo "1) check" && cd /tmp/x'
+        assert _detect_bare_cd(cmd) is True
 
 
 # ============================================================================
@@ -406,15 +463,17 @@ class TestBareCdDenyBehavior:
 
 
 class TestSedPerlStillWarn:
-    """sed/perl 原地編輯維持 warn（allow），未被 deny 波及。"""
+    """sed/perl 原地編輯維持 warn（只帶 additionalContext），未被 deny 波及。"""
 
     def test_sed_inplace_allow(self, monkeypatch, capsys):
         _, out = _run_main_local(monkeypatch, capsys, "sed -i 's/a/b/' f.txt")
-        assert _decision(out) == "allow"
+        assert _decision(out) is None
+        assert "additionalContext" in out
 
     def test_perl_pi_allow(self, monkeypatch, capsys):
         _, out = _run_main_local(monkeypatch, capsys, "perl -pi -e 's/a/b/' f.txt")
-        assert _decision(out) == "allow"
+        assert _decision(out) is None
+        assert "additionalContext" in out
 
     def test_cd_plus_edit_deny_wins(self, monkeypatch, capsys):
         """cd + sed 同時命中 → 以 deny 為準。"""
@@ -665,6 +724,161 @@ class TestObservedButUnguardedCombinations:
         ranges = _literal_offset_ranges(cmd)
         assert _offset_in_literal(cmd.index("cd /x"), ranges) is True
         assert _detect_bare_cd(cmd) is False
+
+
+# ============================================================================
+# 受管路徑分級：ticket md 擋下；其餘受管路徑只送 additionalContext；
+# 非受管路徑維持現行（只對 sed -i／perl -pi 警告並帶 allow）
+# ============================================================================
+
+_TICKET_MD = "docs/work-logs/v0/v0.0/v0.0.1/tickets/0.0.1-W1-001.md"
+
+
+@pytest.fixture
+def checkout(tmp_path):
+    """假 checkout 根目錄（含 .git 目錄），作為 payload cwd。"""
+    (tmp_path / ".git").mkdir()
+    return tmp_path.resolve()
+
+
+def _run_in(monkeypatch, capsys, command, cwd):
+    import io
+    import json
+
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(cwd)}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    exit_code = hook_module.main()
+    out = capsys.readouterr().out
+    hso = json.loads(out).get("hookSpecificOutput", {}) if out.strip() else None
+    return exit_code, hso
+
+
+_WRITE_FORMS = {
+    "python_inline": "python3 -c \"open('{t}', 'w').write('x')\"",
+    "heredoc": "cat > {t} <<'EOF'\nx\nEOF",
+    "redirect": "echo x > {t}",
+    "redirect_append": "echo x >> {t}",
+    "awk_inplace": "awk -i inplace '{{print}}' {t}",
+    "ed": "ed -s {t} <<'EOF'\n1d\nw\nq\nEOF",
+    "sed_inplace": "sed -i '' 's/a/b/' {t}",
+    "perl_inplace": "perl -pi -e 's/a/b/' {t}",
+}
+
+
+class TestTicketMdDenied:
+    """正向對照（E2）：寫入 ticket md 的各型 Bash 寫入一律 deny。"""
+
+    @pytest.mark.parametrize("form", sorted(_WRITE_FORMS))
+    def test_write_form_denied(self, form, checkout, monkeypatch, capsys):
+        cmd = _WRITE_FORMS[form].format(t=_TICKET_MD)
+        code, hso = _run_in(monkeypatch, capsys, cmd, checkout)
+        assert code == 0
+        assert hso is not None and hso.get("permissionDecision") == "deny"
+
+    def test_deny_reason_points_to_ticket_cli_and_edit(self, checkout, monkeypatch, capsys):
+        _, hso = _run_in(monkeypatch, capsys, "echo x >> " + _TICKET_MD, checkout)
+        reason = hso.get("permissionDecisionReason", "")
+        assert _TICKET_MD in reason
+        assert "ticket track" in reason
+        assert "Edit" in reason
+        assert "停手" in reason
+
+    def test_absolute_path_inside_checkout_denied(self, checkout, monkeypatch, capsys):
+        cmd = "echo x > %s/%s" % (checkout, _TICKET_MD)
+        _, hso = _run_in(monkeypatch, capsys, cmd, checkout)
+        assert hso.get("permissionDecision") == "deny"
+
+
+_OTHER_MANAGED = ["docs/x.md", "docs/work-logs/v0/notes.md", "CLAUDE.md", "CHANGELOG.md"]
+
+
+class TestOtherManagedPathsWarnOnly:
+    """其餘受管路徑命中：放行並送模型可見警告，不帶 permission_decision。"""
+
+    @pytest.mark.parametrize("target", _OTHER_MANAGED)
+    @pytest.mark.parametrize("form", sorted(_WRITE_FORMS))
+    def test_warn_without_decision(self, form, target, checkout, monkeypatch, capsys):
+        cmd = _WRITE_FORMS[form].format(t=target)
+        _, hso = _run_in(monkeypatch, capsys, cmd, checkout)
+        assert hso is not None
+        assert "permissionDecision" not in hso
+        assert target in hso.get("additionalContext", "")
+        assert "Edit" in hso.get("additionalContext", "")
+
+
+class TestUnmanagedPathsUnchanged:
+    """非受管路徑維持現行：sed -i／perl -pi 警告並帶 allow，其他寫入無輸出。"""
+
+    def test_sed_inplace_unmanaged_allow(self, checkout, monkeypatch, capsys):
+        _, hso = _run_in(monkeypatch, capsys, "sed -i '' 's/a/b/' src/a.txt", checkout)
+        assert "permissionDecision" not in hso
+        assert hso.get("additionalContext")
+
+    @pytest.mark.parametrize("cmd", [
+        "echo x > /tmp/out.txt",
+        "cat > /tmp/a.md <<'EOF'\nx\nEOF",
+        "echo x > build/out.txt",
+        "python3 -c \"print(open('docs/x.md').read())\"",
+        "python3 -c \"import sys; print(open('%s').read())\"" % _TICKET_MD,
+        "cat " + _TICKET_MD,
+        "grep -n x docs/x.md > /tmp/hits.txt",
+        "echo 'echo x > docs/x.md'",
+    ])
+    def test_reverse_controls_silent(self, cmd, checkout, monkeypatch, capsys):
+        _, hso = _run_in(monkeypatch, capsys, cmd, checkout)
+        assert hso is None
+
+    _MENTION_BODY = (
+        "改動見 docs/work-logs/v3/v3.3/v3.3.0/tickets/0.0.1-W1-222.md 與 " + _TICKET_MD
+        + "\n> " + _TICKET_MD + "\necho x >> " + _TICKET_MD
+    )
+
+    @pytest.mark.parametrize("prefix", [
+        "ticket track append-log 0.0.1-W1-001 --section Solution",
+        "git commit -m",
+    ])
+    def test_heredoc_text_mentioning_ticket_md_allowed(self, prefix, checkout, monkeypatch, capsys):
+        """例行記錄寫法：heredoc 內文提及 ticket md 路徑（含重導向字樣）不是寫入，必須放行。"""
+        cmd = "%s \"$(cat <<'EOF'\n%s\nEOF\n)\"" % (prefix, self._MENTION_BODY)
+        _, hso = _run_in(monkeypatch, capsys, cmd, checkout)
+        assert hso is None or hso.get("permissionDecision") != "deny"
+        assert hso is None
+
+
+class TestTierPrecedence:
+    """多種命中並存時的處置。"""
+
+    def test_ticket_md_and_other_managed_deny(self, checkout, monkeypatch, capsys):
+        cmd = "echo x > docs/x.md && echo y >> " + _TICKET_MD
+        _, hso = _run_in(monkeypatch, capsys, cmd, checkout)
+        assert hso.get("permissionDecision") == "deny"
+
+    def test_managed_and_unmanaged_sed_drops_allow(self, checkout, monkeypatch, capsys):
+        """受管與非受管 sed -i 並存：以受管路徑的處置為準，不帶 allow。"""
+        cmd = "sed -i '' 's/a/b/' src/a.txt docs/x.md"
+        _, hso = _run_in(monkeypatch, capsys, cmd, checkout)
+        assert "permissionDecision" not in hso
+        assert "docs/x.md" in hso.get("additionalContext", "")
+
+    def test_bare_cd_with_managed_write_deny(self, checkout, monkeypatch, capsys):
+        _, hso = _run_in(monkeypatch, capsys, "cd sub && echo x > docs/x.md", checkout)
+        assert hso.get("permissionDecision") == "deny"
+
+
+class TestSharedExtractorUnavailable:
+    """共用抽取模組載入失敗時退回現行行為（fail-open），並寫入日誌。"""
+
+    def test_fallback_to_legacy(self, checkout, monkeypatch, capsys, caplog):
+        import logging
+
+        monkeypatch.setattr(hook_module, "_load_boundary_guard", lambda: None)
+        with caplog.at_level(logging.INFO):
+            _, hso = _run_in(monkeypatch, capsys, "sed -i '' 's/a/b/' " + _TICKET_MD, checkout)
+        assert "permissionDecision" not in hso
+        assert hso.get("additionalContext")
+        _, hso2 = _run_in(monkeypatch, capsys, "echo x > " + _TICKET_MD, checkout)
+        assert hso2 is None
+        assert any("共用寫入目標抽取不可用" in r.getMessage() for r in caplog.records)
 
 
 if __name__ == "__main__":

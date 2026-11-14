@@ -133,6 +133,36 @@ def test_a6_legal_linear_chain(hook_module):
     assert hook_module.check_condition_2_acyclic(c, smap) is None
 
 
+def test_a6b_cycle_among_predecessors_not_containing_target_passes(hook_module):
+    """3.3.0-W1-213.10：前驅 A、B 互為前驅成環，目標 T 不在環上 → 條件 2 不擋。"""
+    a = _make("A", blocked_by=["B"], status="completed")
+    b = _make("B", blocked_by=["A"], status="completed")
+    t = _make("T", blocked_by=["A"])
+    smap = {"A": a, "B": b, "T": t}
+    assert hook_module.check_condition_2_acyclic(t, smap) is None
+
+
+def test_a6c_target_on_cycle_through_predecessors_still_blocks(hook_module):
+    """正向對照：同形態但 B 再以 T 為前驅，T 在環上 → 仍 BLOCK。"""
+    a = _make("A", blocked_by=["B"], status="completed")
+    b = _make("B", blocked_by=["A", "T"], status="completed")
+    t = _make("T", blocked_by=["A"])
+    smap = {"A": a, "B": b, "T": t}
+    v = hook_module.check_condition_2_acyclic(t, smap)
+    assert v is not None and v["condition"] == 2 and v["severity"] == "BLOCK"
+
+
+def test_c7_run_check_predecessor_cycle_without_target_passes(
+        hook_module, project_with_tickets, logger, capsys):
+    """3.3.0-W1-213.10 整合：真實票檔，前驅間有環且皆終態、目標不在環上 → rc=0。"""
+    root, td = project_with_tickets
+    _write_ticket(td, "T-A", type="ANA", blocked_by=["T-B"], status="completed")
+    _write_ticket(td, "T-B", type="ANA", blocked_by=["T-A"], status="completed")
+    _write_ticket(td, "T-T", type="IMP", blocked_by=["T-A"], status="pending")
+    assert hook_module.run_check(root, "T-T", ack="已評估", logger=logger) == 0
+    assert "條件 2" not in capsys.readouterr().err
+
+
 # 條件 3：規格→實作時序
 
 def test_a7_violation_imp_to_imp(hook_module):
@@ -202,6 +232,8 @@ def _write_ticket(dir_path: Path, ticket_id: str, **kwargs):
         "parent_id": kwargs.get("parent_id", "P"),
         "blockedBy": kwargs.get("blocked_by", kwargs.get("blockedBy", [])),
     }
+    if "status" in kwargs:  # 不給則 frontmatter 不含 status 欄位（缺欄位情境）
+        fm["status"] = kwargs["status"]
     lines = ["---"]
     for k, v in fm.items():
         if isinstance(v, list):
@@ -266,6 +298,62 @@ def test_c1_skip_when_no_parent(hook_module, project_with_tickets, logger, capsy
     captured = capsys.readouterr()
     assert code == 0
     assert "違反" not in captured.err
+
+
+def _multi_predecessor(td, status_a, status_c):
+    """T-B 以兩張兄弟票為前驅（條件 1 的多前驅形態）；前驅 status 為 None 時不寫該欄位。"""
+    for tid, status in (("T-A", status_a), ("T-C", status_c)):
+        kwargs = {"type": "ANA"}
+        if status is not None:
+            kwargs["status"] = status
+        _write_ticket(td, tid, **kwargs)
+    _write_ticket(td, "T-B", type="IMP", blocked_by=["T-A", "T-C"], status="pending")
+
+
+def test_c3_run_check_terminal_predecessors_pass_vs_nonterminal_block(
+        hook_module, project_with_tickets, logger, capsys):
+    """C3（E1）：真實票檔走 run_check，前驅皆終態 rc=0，任一非終態 rc=2，同批對照結果不同。"""
+    root, td = project_with_tickets
+    _multi_predecessor(td, "completed", "closed")
+    done = hook_module.run_check(root, "T-B", ack="已評估", logger=logger)
+    _multi_predecessor(td, "completed", "in_progress")
+    mixed = hook_module.run_check(root, "T-B", ack="已評估", logger=logger)
+    assert (done, mixed) == (0, 2)
+    assert "條件 1" in capsys.readouterr().err
+
+
+def test_c4_predecessor_missing_status_blocks(hook_module, project_with_tickets, logger, capsys):
+    """C4：前驅缺 status 欄位時不視為終態，多前驅形態判 BLOCK。"""
+    root, td = project_with_tickets
+    _multi_predecessor(td, "completed", None)
+    assert "status" not in (td / "T-C.md").read_text(encoding="utf-8")
+    assert hook_module.run_check(root, "T-B", ack="已評估", logger=logger) == 2
+    assert "條件 1" in capsys.readouterr().err
+
+
+def _skip_messages(logger):
+    return [str(c.args[0]) for c in logger.debug.call_args_list if c.args]
+
+
+def test_c5_skip_no_parent_even_with_violating_blockedby(hook_module, project_with_tickets, logger):
+    """C5：無 parent_id 時略過；blockedBy 構成雙向依賴（有 parent 時會 BLOCK）仍 rc=0，且走無 parent 分支。"""
+    root, td = project_with_tickets
+    _write_ticket(td, "T-X", parent_id=None, blocked_by=["T-Y"])
+    _write_ticket(td, "T-Y", parent_id=None, blocked_by=["T-X"])
+    assert hook_module.run_check(root, "T-X", ack=None, logger=logger) == 0
+    messages = _skip_messages(logger)
+    assert any("無 parent_id" in m for m in messages)
+    assert not any("無 blockedBy" in m for m in messages)
+
+
+def test_c6_skip_parent_without_blockedby(hook_module, project_with_tickets, logger):
+    """C6：有 parent 而無 blockedBy 時略過，走無 blockedBy 分支（與 C5 分辨是哪個條件生效）。"""
+    root, td = project_with_tickets
+    _write_ticket(td, "T-Z", parent_id="P", blocked_by=[])
+    assert hook_module.run_check(root, "T-Z", ack=None, logger=logger) == 0
+    messages = _skip_messages(logger)
+    assert any("無 blockedBy" in m for m in messages)
+    assert not any("無 parent_id" in m for m in messages)
 
 
 def test_c2_fallback_on_corrupt_yaml(hook_module, project_with_tickets, logger, capsys):
@@ -430,3 +518,112 @@ def test_e2_bidirectional_still_blocks_with_ack(hook_module, project_with_ticket
     code = hook_module.run_check(root, "T-A", "理由", logger)
     assert code == 2
     assert "條件 1" in capsys.readouterr().err
+
+
+# ============================================================================
+# 命令作用範圍：作用在其他 repo 時不讀 session repo 的同 ID 票
+# ============================================================================
+
+
+def _git_repo(path):
+    import subprocess
+
+    path.mkdir()
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    return path.resolve()
+
+
+def _run_main_scope(hook_module, monkeypatch, session, command):
+    import io
+    import json
+
+    calls = []
+    monkeypatch.setattr(hook_module, "run_check", lambda root, tid, *a, **k: calls.append(tid) or 2)
+    payload = {"tool_name": "Bash", "cwd": str(session), "tool_input": {"command": command}}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    return hook_module.main(), calls
+
+
+def test_scope_direct_claim_checked(hook_module, monkeypatch, tmp_path):
+    """正向對照：直接 claim 會讀票判定。"""
+    session = _git_repo(tmp_path / "s")
+    rc, calls = _run_main_scope(hook_module, monkeypatch, session, "ticket track claim 0.0.0-W1-001")
+    assert calls == ["0.0.0-W1-001"] and rc == 2
+
+
+def test_scope_other_repo_skipped(hook_module, monkeypatch, tmp_path):
+    """子 shell cd 到其他 repo：不讀 session repo 的同 ID 票，放行。"""
+    session = _git_repo(tmp_path / "s")
+    other = _git_repo(tmp_path / "o")
+    rc, calls = _run_main_scope(
+        hook_module, monkeypatch, session, f"(cd {other} && ticket track claim 0.0.0-W1-001)"
+    )
+    assert calls == [] and rc == 0
+
+
+def test_scope_unknown_dir_keeps_previous_behavior(hook_module, monkeypatch, tmp_path):
+    """目錄無法靜態解析：沿用修改前的判定（仍讀票）。"""
+    session = _git_repo(tmp_path / "s")
+    rc, calls = _run_main_scope(
+        hook_module, monkeypatch, session, 'cd "$X" && ticket track claim 0.0.0-W1-001'
+    )
+    assert calls == ["0.0.0-W1-001"]
+
+
+# ============================================================================
+# 共用狀態根：linked worktree 內讀主 repo 票面（204.1.2 O1）
+# ============================================================================
+
+
+@pytest.fixture
+def linked_worktree(tmp_path, monkeypatch):
+    """tmp 主 repo + linked worktree；關閉 HOOK_TEST_ISOLATION。回 (main, wt)。"""
+    import subprocess
+
+    monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+    main_repo = _git_repo(tmp_path / "main")
+    git = ["git", "-C", str(main_repo), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "init"], check=True)
+    wt = tmp_path / "wt"
+    subprocess.run(git + ["worktree", "add", "-q", "-b", "feat/x", str(wt)], check=True)
+    return main_repo, wt.resolve()
+
+
+def _capture_root(hook_module, monkeypatch, cwd, command="ticket track claim 0.0.0-W1-001"):
+    import io
+    import json
+
+    monkeypatch.chdir(cwd)
+    captured = []
+    monkeypatch.setattr(hook_module, "run_check", lambda root, *a, **k: captured.append(root) or 0)
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: Path(cwd).resolve())
+    payload = {"tool_name": "Bash", "cwd": str(cwd), "tool_input": {"command": command}}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    hook_module.main()
+    return captured
+
+
+def test_shared_root_in_linked_worktree_reads_main_repo(hook_module, monkeypatch, linked_worktree):
+    main_repo, wt = linked_worktree
+    assert _capture_root(hook_module, monkeypatch, wt) == [main_repo]
+
+
+def test_shared_root_in_main_repo_unchanged(hook_module, monkeypatch, linked_worktree):
+    main_repo, _ = linked_worktree
+    assert _capture_root(hook_module, monkeypatch, main_repo) == [main_repo]
+
+
+def test_shared_root_identity_old_behavior_gets_wt_root(hook_module, monkeypatch, linked_worktree):
+    """E1 對照：get_shared_state_root 換成恆等函式（舊碼語意）時收到 WT 根。"""
+    _, wt = linked_worktree
+    monkeypatch.setattr(
+        hook_module, "get_shared_state_root", lambda default_root=None: default_root, raising=False
+    )
+    assert _capture_root(hook_module, monkeypatch, wt) == [wt]
+
+
+def test_shared_root_scope_other_skips_run_check(hook_module, monkeypatch, linked_worktree, tmp_path):
+    other = _git_repo(tmp_path / "o")
+    _, wt = linked_worktree
+    cmd = f"(cd {other} && ticket track claim 0.0.0-W1-001)"
+    assert _capture_root(hook_module, monkeypatch, wt, cmd) == []

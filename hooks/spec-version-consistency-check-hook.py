@@ -9,7 +9,7 @@ Spec 版本標示一致性檢查 Hook
 觸發時機: SessionStart
 模式: 提醒為主（不阻擋操作），一致時靜默
 
-動機: 0.4.1-W1-001 摩擦 F2 — SPEC-014 frontmatter version 與版本歷史表
+動機: SPEC-014 frontmatter version 與版本歷史表
 各改一半造成雙軌漂移，需人工於 commit 624e077 手動對齊。本 hook 在
 session 啟動時自動掃描 docs/spec/**/*.md，偵測 frontmatter version
 與「## 變更歷史」表格最大版號是否一致，漂移時輸出警告（含兩處版號），

@@ -133,11 +133,11 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 
 ---
 
-## Ticket 創建位置決策樹（W17-008.15）
+## Ticket 創建位置決策樹
 
-> **背景**：W17-004 / W17-008 系列暴露的問題 — ANA 結論的多項修復條目散落為兄弟 ticket 失去層次感。決策樹協助 PM 在「兄弟」「子任務」「衍生」三種關係間快速定位。
+> **背景**：某系列任務暴露的問題 — ANA 結論的多項修復條目散落為兄弟 ticket 失去層次感。決策樹協助 PM 在「兄弟」「子任務」「衍生」三種關係間快速定位。
 >
-> **2026-06-13 W8-025 Option A 修正**：本決策樹原編碼舊 PC-073 模型（ANA 落地走 spawned、「ANA 自身的 child = PC-073 衝突」），在 PC-091 升格（2026-05-03，ANA 落地唯一權威＝children）時未同步，造成與 PC-091/ticket-lifecycle 矛盾。下方已對齊 PC-091：**ANA 落地 = children of ANA（`--parent <ANA-id>`）**，spawned 僅給「執行中意外發現、與當前 ticket 無因果」的工作。
+> **2026-06-13 Option A 修正**：本決策樹原編碼舊 PC-073 模型（ANA 落地走 spawned、「ANA 自身的 child = PC-073 衝突」），在 PC-091 升格（2026-05-03，ANA 落地唯一權威＝children）時未同步，造成與 PC-091/ticket-lifecycle 矛盾。下方已對齊 PC-091：**ANA 落地 = children of ANA（`--parent <ANA-id>`）**，spawned 僅給「執行中意外發現、與當前 ticket 無因果」的工作。
 >
 > **版本維度**：上述「ANA 落地 = children」限本版範圍的落地；依〈兩期〉排入後續版本的落地，在目標版本以 `--source-ticket <ANA-id>` 建根票（子票必與父票同版本）。完整路線以 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉為準。
 
@@ -159,7 +159,7 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
                 │       是──▶ --parent {current_ticket_id}（子任務）
                 │       │
                 │       否──▶ --source-ticket {current_ticket_id}（衍生 / spawned）
-                │              （執行中意外發現的獨立工作，如 W8-013 審查中發現 W8-015/016）
+                │              （執行中意外發現的獨立工作，如某審查中發現另外兩項獨立工作）
                 │
                 否──▶ 獨立 ticket（不帶 --parent / --source-ticket）
 ```
@@ -174,9 +174,9 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 
 ### 創建後輔助提示
 
-- `ticket create` 不帶 `--parent` 時若偵測到當前 wave 內 in_progress group，會自動印出提示行（W17-008.15 第 3 項）
-- `ticket track stuck-anas` 列出「in_progress 但 spawned 全 completed」的 ANA，協助識別卡住情境（W17-008.15 第 1 項）
-- IMP complete 後若 source ANA 的 spawned 全 completed，會自動印出 complete 建議（W17-008.15 第 2 項）
+- `ticket create` 不帶 `--parent` 時若偵測到當前 wave 內 in_progress group，會自動印出提示行
+- `ticket track stuck-anas` 列出「in_progress 但 spawned 全 completed」的 ANA，協助識別卡住情境
+- IMP complete 後若 source ANA 的 spawned 全 completed，會自動印出 complete 建議
 
 ### 禁止項
 
@@ -185,7 +185,7 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 | 建為已知 group ticket 的「父任務的兄弟」（破壞層次感） | `--parent {group_id}` |
 | 本版範圍的 ANA 落地用 `--source-ticket`/spawned 或無關聯兄弟編號（PC-091 血緣斷裂 + L115 children 終局） | `--parent {ANA_id}`（本版範圍的 ANA 落地走 children） |
 | 排入後續版本的 ANA 落地用 `--parent`（子票被迫留在已凍結的本版） | 在目標版本以 `--source-ticket {ANA_id}` 建根票 |
-| 把盤點/規劃型 ANA 的清理誤當衍生副產品用 spawned（W8-025 Option A） | `--parent {ANA_id}`（清理＝落地，走 children；ANA 維持 in_progress 至清理完成） |
+| 把盤點/規劃型 ANA 的清理誤當衍生副產品用 spawned（Option A） | `--parent {ANA_id}`（清理＝落地，走 children；ANA 維持 in_progress 至清理完成） |
 | 用 `--parent` 串接無因果的 ticket | 改用 `blockedBy` 或保持兄弟 |
 
 ---
@@ -202,5 +202,5 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 
 **Last Updated**: 2026-11-11
 **Version**: 3.5.0 — 「Ticket 創建位置決策樹」加版本維度：ANA 落地分本版範圍（children）與排入後續版本（目標版本根票 + `--source-ticket`），三種關係速查與禁止項同步，路由 ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉。
-**Version**: 3.4.0 — 新增「Ticket 創建位置決策樹」（W17-008.15 方案 D）：三種關係（children / spawned / siblings）速查、CLI 輔助提示、禁止項
+**Version**: 3.4.0 — 新增「Ticket 創建位置決策樹」（方案 D）：三種關係（children / spawned / siblings）速查、CLI 輔助提示、禁止項
 **Version**: 3.3.0 - 執行中額外發現流程新增子任務 vs 獨立 Ticket 判斷標準

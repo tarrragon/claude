@@ -58,7 +58,7 @@ def _prime_sampling_counter(project_root: Path):
     使 prime 對象與 subprocess 內 CLAUDE_PROJECT_DIR 指向的隔離目錄一致。
     """
     sampling_n = hook_module.SAMPLING_N
-    counter_file = project_root / "hook-logs" / "_sampling" / "language-guard-hook.count"
+    counter_file = project_root / ".claude" / "hook-logs" / "_sampling" / "language-guard-hook.count"
     counter_file.parent.mkdir(parents=True, exist_ok=True)
     counter_file.write_text(str(sampling_n - 1))
 

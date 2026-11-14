@@ -4,6 +4,7 @@ Pytest 測試配置
 提供共用的 fixture 和測試工具
 """
 
+import os
 import pytest
 import json
 import tempfile
@@ -28,6 +29,9 @@ def pytest_configure(config):
 
     root = Path(tempfile.mkdtemp(prefix="hook_project_root_"))
     (root / "CLAUDE.md").write_text("# isolated test project root\n", encoding="utf-8")
+    # 前後快照：在覆寫 session id 之前記下呼叫者的真實 id 與真實 hook-logs 快照
+    _ISOLATED["real_session_id"] = os.environ.get(_liveness_iso.ENV_SESSION_ID)
+    _ISOLATED["snapshot"] = _liveness_iso.take_snapshot(Path(__file__).resolve().parents[3])
     mp = pytest.MonkeyPatch()
     mp.setenv("CLAUDE_PROJECT_DIR", str(root))
     mp.setenv("HOOK_TEST_ISOLATION", "1")
@@ -38,7 +42,12 @@ def pytest_configure(config):
 
 def pytest_sessionfinish(session, exitstatus):
     """洩漏哨兵：真實 _liveness 出現 pytest- 前綴檔即令套件失敗（fail-closed）。"""
-    _liveness_iso.apply_leak_sentinel(session, Path(__file__).resolve().parents[3])
+    real_root = Path(__file__).resolve().parents[3]
+    _liveness_iso.apply_leak_sentinel(session, real_root)
+    if _ISOLATED.get("snapshot") is not None:
+        _liveness_iso.apply_snapshot_sentinel(
+            session, real_root, _ISOLATED["snapshot"], _ISOLATED.get("real_session_id")
+        )
 
 
 def pytest_unconfigure(config):

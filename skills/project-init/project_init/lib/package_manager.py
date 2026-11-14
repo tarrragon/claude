@@ -23,7 +23,7 @@ except ImportError:
 
 
 # ============================================================================
-# Inlined pyproject_scanner API (W3-051)
+# Inlined pyproject_scanner API
 #
 # 從 .claude/lib/pyproject_scanner.py inline 進來，消除 CLI sys.path hack。
 # uv tool install 後 __file__ 路徑無法解析至專案 .claude/lib/，故 inline

@@ -16,7 +16,7 @@
 
 ## 症狀
 
-PM 建立或更新 `.claude/rules/` `.claude/references/` `.claude/skills/` 等 framework 檔案時，在檔案結尾的 `**Version**` 或 `**Source**` 或 changelog 行寫入專案特定的 Wave / Patch 識別符（`W14-012`、`0.18.0-W14` 等）作為追蹤標記。
+PM 建立或更新 `.claude/rules/` `.claude/references/` `.claude/skills/` 等 framework 檔案時，在檔案結尾的 `**Version**` 或 `**Source**` 或 changelog 行寫入專案特定的 Wave / Patch 識別符（形如「W + 波次 + 序號」或「版本 + W + 波次」的字串）作為追蹤標記。
 
 典型觸發：
 1. PM 剛用 Ticket 流程建立新規則檔
@@ -31,7 +31,7 @@ PM 建立或更新 `.claude/rules/` `.claude/references/` `.claude/skills/` 等 
 **原本寫法**（被 Hook 攔）：
 
 ```markdown
-**Version**: 1.0.0 — 從 compositional-writing/writing-prompts.md 提煉通用對話規範（0.18.0-W14-012）
+**Version**: 1.0.0 — 從 compositional-writing/writing-prompts.md 提煉通用對話規範
 ```
 
 **Hook 警告**：
@@ -69,7 +69,7 @@ PM 建立或更新 `.claude/rules/` `.claude/references/` `.claude/skills/` 等 
 
 3. **既有規則覆蓋盲區**：
    - `DOC-010` 強調「不引用 ticket ID」
-   - 但焦點在「內文引用」（`see 0.17.0-W5-003` 這類）
+   - 但焦點在「內文引用」（`see <ticket-id>` 這類）
    - Footer 的「版本變更摘要附 ticket」是額外習慣場景
 
 ### 為何容易發生

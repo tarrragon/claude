@@ -26,7 +26,7 @@ _spec.loader.exec_module(hook)
 def _run(monkeypatch, command, version_check=(True, "1.0.0"), via_script=False):
     payload = {"tool_name": "Bash", "tool_input": {"command": command}}
     monkeypatch.setattr(hook, "read_hook_input", lambda: payload)
-    monkeypatch.setattr(hook, "check_pubspec_version", lambda logger: version_check)
+    monkeypatch.setattr(hook, "check_pubspec_version", lambda logger, payload=None: version_check)
     monkeypatch.setattr(hook, "is_via_version_release_script", lambda logger: via_script)
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):

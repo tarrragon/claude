@@ -3,7 +3,7 @@
 **版本**: v1.0.0
 **建立日期**: 2026-04-28
 **對應方法論**: `.claude/methodologies/pm-judgment-interference-map.md`（13 因子 × 6 層）
-**對應 Ticket**: 0.18.0-W17-077（W17-075 IMP-D 落地）
+**來源**: PM session 自檢 ANA 的 IMP-D 落地
 
 ---
 
@@ -106,7 +106,7 @@ session_self_check:
 | Memory feedback 累積 | 發現新干擾因子或防護失效 | 完整版步驟 3 第 2 題 |
 | Wave 結束回顧 | 多 session 累積後 | 完整版（多 session 合併分析） |
 
-**未來擴充**（W17-077 範圍外）：建立 hook（如 `pm-session-end-checklist-reminder-hook.py`）在 session 結束 / `/clear` 前自動提示執行本 checklist；目前依 PM 自律觸發。
+**未來擴充**（本檔範圍外）：建立 hook（如 `pm-session-end-checklist-reminder-hook.py`）在 session 結束 / `/clear` 前自動提示執行本 checklist；目前依 PM 自律觸發。
 
 ---
 
@@ -119,7 +119,7 @@ session_self_check:
 
 ---
 
-## 自測案例：本 session（2026-04-28 W17-077 落地 session）
+## 自測案例：本 session（2026-04-28 落地 session）
 
 採用本 checklist 完整版自測：
 
@@ -127,7 +127,7 @@ session_self_check:
 |---------------|-----|---------|---------|
 | AUQ payload `遗漏` 簡體被攔 × 2 | 4.1 簡繁 charset | 是（hook） | 第 2 次後（替代為 ASCII 構字） |
 | AUQ payload `独立` 簡體被攔 | 4.1 簡繁 charset | 是（hook） | 是（改詞） |
-| Claim W17-075 後未讀 body 即重做 W 階段 | 1.1 + 5.x（記憶引用未驗證當下條件） | 否 | 用戶糾正後才察覺 |
+| Claim 該 ANA 後未讀 body 即重做 W 階段 | 1.1 + 5.x（記憶引用未驗證當下條件） | 否 | 用戶糾正後才察覺 |
 
 **步驟 2 連鎖**：層 4 charset 連鎖長度 3 環（同類錯誤重複）→ 絆腳索（hook）有效但 PM 替代行為延遲
 
@@ -154,5 +154,5 @@ session_self_check:
 ---
 
 **Last Updated**: 2026-04-28
-**Source**: 0.18.0-W17-075 ANA Solution § Spawned IMP-D
+**Source**: PM session 自檢 ANA Solution 的 Spawned IMP-D
 **Related**: `.claude/methodologies/pm-judgment-interference-map.md`、`.claude/error-patterns/process-compliance/PC-111-pm-narrative-fabrication-and-shallow-attribution.md`

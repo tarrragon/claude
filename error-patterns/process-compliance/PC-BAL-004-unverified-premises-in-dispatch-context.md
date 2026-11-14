@@ -34,13 +34,13 @@
 
 flutter_balance 專案 v0.0.1，同一 session 內四次由執行者更正派發者的前提：
 
-| Ticket | 派發者寫入 | 執行者查證結果 |
+| 更正事件 | 派發者寫入 | 執行者查證結果 |
 |--------|-----------|---------------|
-| `0.0.1-W1-006` | `ticket-body-schema.md` 缺 1 項（`Spawn Requests`） | 實缺 4 項（另缺 `Context Bundle` / `NeedsContext` / `Exit Status`） |
-| `0.0.1-W1-012` | 「該目錄下無既有 README」 | README 自初始 commit `f375ae6` 即存在，3779 bytes，且已載 `--with pyyaml` 用法 |
-| `0.0.1-W1-012` | 「評估能否以依賴宣告取代手動旗標」 | `pyproject.toml` 已宣告 `pyyaml>=6.0` 兩處並有 `uv.lock`；真正根因是執行位置（repo 根無 `pyproject.toml`，`uv run` 建臨時環境忽略既有宣告） |
-| `0.0.1-W1-015` | 「4 個檔含 PEP 723」 | 實為 3 個。第 4 個來自 `test_wrap_decision_tripwire_hook.py:204` 的 `assert "# /// script" in text`，為斷言字串非 metadata 區塊 |
-| `0.0.1-W1-015` | 判準為「dev group 子集」 | 應為 `[project].dependencies` 與 dev group 的聯集——`uv run --directory` 安裝專案本身並預設啟用 dev group；實測 `pytest` 僅在 dev group 而環境中可用 |
+| schema 缺項盤點 | `ticket-body-schema.md` 缺 1 項（`Spawn Requests`） | 實缺 4 項（另缺 `Context Bundle` / `NeedsContext` / `Exit Status`） |
+| README 盤點（一） | 「該目錄下無既有 README」 | README 自初始 commit `f375ae6` 即存在，3779 bytes，且已載 `--with pyyaml` 用法 |
+| README 盤點（二） | 「評估能否以依賴宣告取代手動旗標」 | `pyproject.toml` 已宣告 `pyyaml>=6.0` 兩處並有 `uv.lock`；真正根因是執行位置（repo 根無 `pyproject.toml`，`uv run` 建臨時環境忽略既有宣告） |
+| PEP 723 偵測（一） | 「4 個檔含 PEP 723」 | 實為 3 個。第 4 個來自 `test_wrap_decision_tripwire_hook.py:204` 的 `assert "# /// script" in text`，為斷言字串非 metadata 區塊 |
+| PEP 723 偵測（二） | 判準為「dev group 子集」 | 應為 `[project].dependencies` 與 dev group 的聯集——`uv run --directory` 安裝專案本身並預設啟用 dev group；實測 `pytest` 僅在 dev group 而環境中可用 |
 
 第 4 例的後果具體：若偵測器採子字串比對，`test_wrap_decision_tripwire_hook.py` 會被當成 PEP 723 檔案送去解析，成為恆定假陽性。執行者改用 PEP 723 規範的行錨定正規式並將該情境固化為回歸測試。
 
@@ -71,16 +71,16 @@ flutter_balance 專案 v0.0.1，同一 session 內四次由執行者更正派發
 
 ### 案例二：把刻意設計的約束當成工具缺口（flutter_balance v0.2.1）
 
-PM 於建立 `0.2.1-W3-871` 時，把自己遭遇的摩擦（error-pattern README 索引列的風險等級停在佔位符，`readme_index sync` 回報「已與現況一致」，最終人工改 README）寫入 `why` 並描述為工具缺口。執行者依該前提把 `merge_category_table` 改為欄位級 upsert，造成三項既有測試紅燈。
+PM 於建立一張修復票時，把自己遭遇的摩擦（error-pattern README 索引列的風險等級停在佔位符，`readme_index sync` 回報「已與現況一致」，最終人工改 README）寫入 `why` 並描述為工具缺口。執行者依該前提把 `merge_category_table` 改為欄位級 upsert，造成三項既有測試紅燈。
 
-該行為並非缺口，而是 `0.2.1-W3-105` 裁定的「保守 upsert 核心約束」，且由兩項通過中的測試明文保證：
+該行為並非缺口，而是先前一次裁定的「保守 upsert 核心約束」，且由兩項通過中的測試明文保證：
 
 | 測試 | docstring 所載理由 |
 |------|-------------------|
 | `test_sync_preserves_existing_row_verbatim_even_if_scan_differs` | 「既有列的 ID 若在掃描結果中仍存在，逐字保留原內容，不以掃描結果覆寫（保守 upsert 核心約束）」 |
 | `test_merge_category_table_does_not_overwrite_existing_row_placeholder` | 「既有列即使欄位是佔位符也不補齊——佔位符列本身可能是索引獨有一級資料的鄰居列」 |
 
-後續 ANA（`0.2.1-W3-878`）以全量普查驗證該理由成立：444 筆索引列中約 46% 的風險等級與約 36% 的來源版本只存在於 README，檔案內無對應欄位。約束有效，`0.2.1-W3-871` 關閉，實作還原至基線。
+後續 ANA 以全量普查驗證該理由成立：444 筆索引列中約 46% 的風險等級與約 36% 的來源版本只存在於 README，檔案內無對應欄位。約束有效，該修復票關閉，實作還原至基線。
 
 **此形態與其餘各例的分別**：其餘各例的前提是「查了但查得不夠準」（pattern 不精確、路徑打錯、讀到已修的碼）；本例的前提是「沒想到需要查」——摩擦被直接歸因為缺陷，而「這個行為是否有人刻意這樣設計」這一問從未被提出。反證的成本極低：該行為由測試保證，`grep` 測試名或讀 docstring 即可命中。
 
@@ -144,4 +144,4 @@ PM 為一條排序規則的缺口提出選項，其中一個是「欄位值無�
 ---
 
 Last Updated: 2026-10-08 | 補「決策選項的後果說明」形態、案例三與對應防護（收件者為決策者時無執行期揭露，查證強度須更高）
-Source: flutter_balance v0.0.1 W1-006 / W1-012 / W1-015 四次前提更正
+Source: flutter_balance v0.0.1 四次前提更正

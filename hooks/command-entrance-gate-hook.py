@@ -44,7 +44,7 @@ Hook 類型: UserPromptSubmit
 1. 只對「開發/測試/調整命令」進行驗證（包含 DEVELOPMENT_KEYWORDS）
    分析/探索類命令不阻攔（與決策樹第二層一致）
 2. 如果是開發命令，必須存在 pending 或 in_progress 的 Ticket
-3. 如果 Ticket 狀態為 pending，必須先認領（claim）
+3. 如果 Ticket 狀態為 pending，放行並注入認領引導（不阻擋）
 4. 如果 Ticket 已認領，必須包含決策樹欄位（decision_tree_path 或 ## 決策樹）
 5. 所有驗證通過才允許執行
 
@@ -64,6 +64,7 @@ from typing import Dict, Any, Optional, Tuple, List
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from lib.hook_base import get_shared_state_root
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -76,7 +77,7 @@ from lib import (
     validate_hook_input,
 )
 from lib.hook_messages import GateMessages, CoreMessages, format_message
-from lib.ticket_id_pattern import SEARCH_BOUNDED_RE
+from lib.ticket_id_pattern import SEARCH_WITH_SUFFIX_RE
 
 # ============================================================================
 # 常數定義
@@ -167,7 +168,7 @@ MANAGEMENT_PATTERNS = [
     "提交",    # 中文 commit（git 提交）
     "git",     # Git 操作前綴（push, pull, status 等）
     "push",    # git push
-    "合併",    # git merge（合併分支，非開發命令；W1-036 補白名單）
+    "合併",    # git merge（合併分支，非開發命令；補白名單）
     "merge",   # git merge（英文）
     "pull",    # git pull
     "rebase",  # git rebase
@@ -245,7 +246,7 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-# 引導式互動訊息（W1-036）：開發命令無對應 Ticket 時，改為放行 + 注入此 context，
+# 引導式互動訊息：開發命令無對應 Ticket 時，改為放行 + 注入此 context，
 # 指示主線程用 AskUserQuestion 詢問下一步，取代硬阻擋（exit 2）。
 # Why: UserPromptSubmit hook 無法直接呼叫 AskUserQuestion tool（hook 只能 exit / 注入 context），
 #      故以「放行 + 注入引導指令」間接達成「引導式閘門」效果。
@@ -260,6 +261,17 @@ GUIDANCE_NO_TICKET = (
     "- 此為描述 / 討論而非開發命令，直接繼續\n"
     "\n"
     "（引導式閘門 v3.6.0：無 Ticket 時放行並引導，取代硬阻擋）"
+)
+
+# pending 票與 prompt 相關時：放行並注入認領引導（不在 UserPromptSubmit 階段擋下）。
+# 硬擋會丟棄用戶 prompt；且並行派發骨架由代理人以 claim --as 認領，
+# 要求 PM 在送出 prompt 前先 claim 與該流程不一致。
+GUIDANCE_PENDING_CLAIM = (
+    "[command-entrance-gate] 本次命令對應的 Ticket {ticket_id} 仍為 pending（尚未認領）。\n"
+    "開始實作前先認領：\n"
+    "- 派發代理人執行：由代理人執行 `ticket track claim {ticket_id} --as <代理人名稱>`\n"
+    "- 主線程自己執行：`ticket track claim {ticket_id} --as rosemary-project-manager`\n"
+    "（本提醒不阻擋；若本次只是討論或查詢，可直接繼續）"
 )
 
 # validate_input 已遷移至 hook_utils.validate_hook_input
@@ -395,7 +407,7 @@ def is_development_command(prompt: str, logger) -> bool:
     prompt_stripped_lower = prompt_stripped.lower()
 
     # 檢查是否包含開發命令關鍵字
-    # W4-027 L1：加 word-boundary / 語境判斷，避免描述性開發詞誤判。
+    # L1：加 word-boundary / 語境判斷，避免描述性開發詞誤判。
     # 例：「更新 v0.20.0-main.md 反映新增的監測波次」中的「新增」屬名詞性
     # 描述（「新增的監測波次」），非命令意圖，不應觸發 Ticket 閘門。
     for keyword in DEVELOPMENT_KEYWORDS:
@@ -420,7 +432,7 @@ _DESCRIPTIVE_SUFFIXES = ("的", "過", "了的")
 
 # 描述性前綴標記：開發詞緊接於以下過去式 / 完成態標記之後視為狀態陳述（非命令意圖）
 # 例：「已經修復」「現在已修復」「剛剛重構」中的開發詞描述「已完成的狀態」，不是「去做」的命令
-# W1-036：補 _DESCRIPTIVE_SUFFIXES 漏掉的「描述性前綴」維度，與後綴規則對稱。
+# 補 _DESCRIPTIVE_SUFFIXES 漏掉的「描述性前綴」維度，與後綴規則對稱。
 _DESCRIPTIVE_PREFIXES = ("已經", "已", "現已", "剛剛", "剛", "都已")
 
 
@@ -668,8 +680,10 @@ def check_ticket_relevance(prompt: str, ticket_id: str, ticket_content: str, log
     logger.warning(f"Ticket {ticket_id} 與 prompt 無關聯")
     return False, warning
 
-# Ticket ID 格式（SSOT：lib.ticket_id_pattern.SEARCH_BOUNDED_RE）
-_TICKET_ID_PATTERN = SEARCH_BOUNDED_RE
+# Ticket ID 格式（SSOT：lib.ticket_id_pattern.SEARCH_WITH_SUFFIX_RE）。
+# 含多層後綴：原用的 SEARCH_BOUNDED_RE 以 \b 收尾，「186.2」在 6 與 . 之間即成立邊界，
+# 子票號被截成父票號；後接中文字時 \b 又不成立，回溯後同樣落在父票號。
+_TICKET_ID_PATTERN = SEARCH_WITH_SUFFIX_RE
 
 
 def extract_ticket_id_from_prompt(prompt: Optional[str]) -> Optional[str]:
@@ -684,7 +698,7 @@ def extract_ticket_id_from_prompt(prompt: Optional[str]) -> Optional[str]:
     if not prompt:
         return None
     match = _TICKET_ID_PATTERN.search(prompt)
-    return match.group(0) if match else None
+    return match.group(1) if match else None
 
 
 def get_latest_pending_ticket(
@@ -693,7 +707,7 @@ def get_latest_pending_ticket(
     """
     取得用於閘門的待處理 Ticket
 
-    W4-027 L2：觸發限縮。不再盲選「全版本 mtime 最新 pending」，
+    L2：觸發限縮。不再盲選「全版本 mtime 最新 pending」，
     避免無關 ticket（如剛遷移者）誤觸閘門。新觸發規則：
 
     1. prompt 顯式引用某 Ticket ID → 回傳該 Ticket（精準匹配）。
@@ -711,7 +725,7 @@ def get_latest_pending_ticket(
     Returns:
         tuple - (ticket_id, status, content) 或 None
     """
-    project_root = get_project_root()
+    project_root = get_shared_state_root(get_project_root())
     tickets = find_ticket_files(project_root, logger=logger)
 
     # 按修改時間排序（最新優先）
@@ -752,9 +766,12 @@ def check_ticket_status(prompt: Optional[str] = None, logger=None) -> Tuple[bool
     檢查 Ticket 狀態（阻塞式）
 
     此函式執行三層驗證：
-    1. Ticket 是否存在且已認領（阻塞式）
-    2. Ticket 是否包含必要的決策樹欄位（阻塞式）
+    1. Ticket 是否存在；pending 且與 prompt 相關時放行並回傳認領引導（不阻擋）
+    2. in_progress Ticket 是否包含必要的決策樹欄位（缺欄時放行並以第 4 欄提醒）
     3. Ticket 與 prompt 是否相關（soft warning，不阻塊）
+
+    第 4 個回傳值為不阻擋的提醒：關聯性警告或 pending 認領引導，
+    由 generate_hook_output 注入 additionalContext。
 
     Args:
         prompt: 用戶的命令提示文本（可選，用於關聯性檢查）
@@ -767,7 +784,7 @@ def check_ticket_status(prompt: Optional[str] = None, logger=None) -> Tuple[bool
             - ticket_id: Ticket ID（如果找到）
             - relevance_warning: 關聯性檢查警告訊息（soft check，不阻塊執行）
     """
-    # W4-027 L2：傳入 prompt 使閘門觸發限縮（顯式 ID 或 in_progress 才 gate）
+    # L2：傳入 prompt 使閘門觸發限縮（顯式 ID 或 in_progress 才 gate）
     ticket_info = get_latest_pending_ticket(logger, prompt=prompt)
 
     # 驗證 1：Ticket 是否存在且已認領
@@ -780,7 +797,7 @@ def check_ticket_status(prompt: Optional[str] = None, logger=None) -> Tuple[bool
     ticket_id, status, content = ticket_info
 
     if status == "pending":
-        # W4-027 L3：pending 阻擋前加 relevance 閘門（mirror in_progress 路徑）。
+        # L3：pending 阻擋前加 relevance 閘門（mirror in_progress 路徑）。
         # 若 pending Ticket 與 prompt 無關，放行而非要求認領無關 Ticket；
         # 與 prompt 相關時才阻擋並要求 claim（防護不喪失）。
         if prompt:
@@ -791,18 +808,19 @@ def check_ticket_status(prompt: Optional[str] = None, logger=None) -> Tuple[bool
                 )
                 return True, None, None, None
 
-        msg = format_message(GateMessages.TICKET_NOT_CLAIMED_ERROR, ticket_id=ticket_id)
-
-        logger.warning(f"Ticket {ticket_id} 未被認領 - 阻止執行")
-        return False, msg, ticket_id, None
+        # 相關的 pending 票：放行並以第 4 欄（不阻擋的提醒）注入認領引導
+        guidance = GUIDANCE_PENDING_CLAIM.format(ticket_id=ticket_id)
+        logger.info(f"Ticket {ticket_id} 為 pending 且與 prompt 相關 - 放行並注入認領引導")
+        return True, None, ticket_id, guidance
 
     # 驗證 2：Ticket 是否包含決策樹欄位
     if status == "in_progress":
         if not validate_ticket_has_decision_tree(content, logger):
-            msg = format_message(GateMessages.DECISION_TREE_MISSING_ERROR, ticket_id=ticket_id)
-
-            logger.warning(f"Ticket {ticket_id} 缺少決策樹欄位 - 阻止執行")
-            return False, msg, ticket_id, None
+            # 提醒而非阻擋：UserPromptSubmit exit 2 會丟棄整則 prompt，分不出用戶輸入
+            # 與跨 session 訊息；缺欄的阻擋留給 claim／complete 等寫入點。
+            msg = format_message(GateMessages.DECISION_TREE_MISSING_REMINDER, ticket_id=ticket_id)
+            logger.warning(f"Ticket {ticket_id} 缺少決策樹欄位 - 放行並注入提醒")
+            return True, None, ticket_id, msg
 
         # 驗證 3：Ticket 與 prompt 的關聯性（soft check，不阻塊）
         relevance_warning = None
@@ -846,7 +864,7 @@ def generate_hook_output(
         error_msg: 如果驗證失敗，提供的錯誤訊息
         ticket_id: Ticket ID
         relevance_warning: 關聯性檢查警告（soft check，不阻塊）
-        is_guidance: 是否為引導式情境（無 Ticket → 放行 + 注入引導 context，不阻擋；W1-036）
+        is_guidance: 是否為引導式情境（無 Ticket → 放行 + 注入引導 context，不阻擋）
         guidance_msg: 引導訊息（is_guidance=True 時注入 additionalContext，取代 error_msg）
 
     Returns:
@@ -958,7 +976,7 @@ def main() -> int:
             is_valid, error_msg, ticket_id, relevance_warning = check_ticket_status(prompt, logger)
             logger.info(f"Ticket 驗證結果: is_valid={is_valid}, ticket_id={ticket_id}, has_warning={relevance_warning is not None}")
 
-        # 步驟 5.5: 判別引導式情境（W1-036）
+        # 步驟 5.5: 判別引導式情境
         # 無對應 Ticket（驗證失敗且 ticket_id 為 None）→ 引導式放行；
         # Ticket 存在但畸形 / 未認領（ticket_id 非 None）→ 維持硬阻擋。
         is_guidance = is_dev_cmd and not is_valid and ticket_id is None

@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from lib.hook_base import get_shared_state_root
 from lib import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
 from lib.test_command_parse import find_test_invocations
 from lib.test_monitor_path import monitor_key, keyed_monitor_file, legacy_monitor_file, prune_stale_keyed_files
@@ -56,7 +57,7 @@ def main():
         return 0
 
     # 記錄測試開始時間
-    project_dir = get_project_root()
+    project_dir = get_shared_state_root(get_project_root())
     key = monitor_key(input_data)
     monitor_file = (keyed_monitor_file(project_dir, key) if key
                     else legacy_monitor_file(project_dir))
@@ -76,15 +77,8 @@ def main():
     with open(monitor_file, "w") as f:
         json.dump(monitor_data, f, indent=2, ensure_ascii=False)
 
-    # 輸出符合官方規範的 JSON 格式
-    result = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "permissionDecisionReason": "測試超時監控已啟動 (5/15/30 分鐘閾值)"
-        }
-    }
-    print(json.dumps(result, ensure_ascii=False))
+    # 監控型 hook 不輸出 permissionDecision：allow 會略過平台的權限提示，等於代用戶核可
+    logger.info("測試超時監控已啟動 (5/15/30 分鐘閾值): %s", monitor_file)
     return 0
 
 

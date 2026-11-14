@@ -9,17 +9,17 @@
 | 編號 | PC-074 |
 | 類別 | process-compliance |
 | 風險等級 | 低（偵測錯誤不是安全漏洞） |
-| 首發時間 | 2026-04-17（W12-002.1 首次啟用 Hook session） |
+| 首發時間 | 2026-04-17（首次啟用 Hook 的 session） |
 | 姊妹模式 | PC-072（AUQ payload 字元集污染，本 Hook 的主目標） |
-| 升級狀態 | 已升級至 `.claude/rules/core/language-constraints.md` 規則 5「字元集子集清單必須動態驗證」（2026-05-26 by W3-014 / W3-014.1） |
+| 升級狀態 | 已升級至 `.claude/rules/core/language-constraints.md` 規則 5「字元集子集清單必須動態驗證」（2026-05-26） |
 
 ---
 
 ## 升級備註
 
-本 PC 的「動態驗證取代靜態維護」防護原則已於 2026-05-26 升級為自動載入規則 `.claude/rules/core/language-constraints.md` 規則 5（W3-014 ANA 分析、W3-014.1 規則落地）。
+本 PC 的「動態驗證取代靜態維護」防護原則已於 2026-05-26 升級為自動載入規則 `.claude/rules/core/language-constraints.md` 規則 5（ANA 分析後規則落地）。
 
-**Why**：原 PC-074 屬「行為準則」層級（讀者需主動查 error-pattern 才能套用），W17-144.1 二度自證證實依賴主動讀取的防護在維護者 token 生成壓力下會反覆失效。升級至 `rules/core/` 自動載入層級後，所有角色 session 啟動即內化規則，覆蓋面從「Hook 設計者」擴大至「任何字元集子集清單維護者」。
+**Why**：原 PC-074 屬「行為準則」層級（讀者需主動查 error-pattern 才能套用），codepoint-aware detector 落地時的二度自證證實依賴主動讀取的防護在維護者 token 生成壓力下會反覆失效。升級至 `rules/core/` 自動載入層級後，所有角色 session 啟動即內化規則，覆蓋面從「Hook 設計者」擴大至「任何字元集子集清單維護者」。
 
 **Consequence**：後續維護者新增字元集子集清單（簡體字、日漢字、異體字等）時應**優先參照規則 5**而非本 PC；本 PC 保留作為案例庫與動機脈絡，但「該做什麼」的權威來源已轉移。
 
@@ -81,7 +81,7 @@
 
 | 層級 | 措施 | 狀態 |
 |------|------|------|
-| 清單驗證 | 擴充 SIMPLIFIED_CHARS 前，每個候選字查《繁簡對照字典》或實測繁體字典確認不共用 | 已升級至 `.claude/rules/core/language-constraints.md` 規則 5（2026-05-26 / W3-014.1） |
+| 清單驗證 | 擴充 SIMPLIFIED_CHARS 前，每個候選字查《繁簡對照字典》或實測繁體字典確認不共用 | 已升級至 `.claude/rules/core/language-constraints.md` 規則 5（2026-05-26） |
 | 測試強化 | Hook 測試新增「繁體中含繁簡共用字」類別（「出/入/口/人/大/小/年/月/日」等） | 建議實施 |
 | 程式註解 | SIMPLIFIED_CHARS 清單旁註明「每字須通過繁簡不共用驗證」 | 建議實施 |
 | 文件 | Hook docstring 加入已知 false positive 清單與加字時的檢查步驟 | 建議實施 |
@@ -134,7 +134,7 @@
 
 ## 動態驗證取代靜態維護（根本性解法）
 
-> **來源**：W17-144.1（codepoint-aware detector 落地過程）。本 ticket 在實作 KNOWN_SIMPLIFIED_ANCHORS 黑名單時**二度自證 PC-074**：第一輪自製 SIMPLIFIED_SET 含「件/本/保/言/系/明」共用字，第三輪 ANCHORS 又從中文詞抽字（「资本」「证件」「语言」）再次混入相同共用字。Self-test 揪出後 PM 才意識到問題本質。
+> **來源**：codepoint-aware detector 落地過程。該任務在實作 KNOWN_SIMPLIFIED_ANCHORS 黑名單時**二度自證 PC-074**：第一輪自製 SIMPLIFIED_SET 含「件/本/保/言/系/明」共用字，第三輪 ANCHORS 又從中文詞抽字（「资本」「证件」「语言」）再次混入相同共用字。Self-test 揪出後 PM 才意識到問題本質。
 
 ### 現象
 
@@ -201,9 +201,9 @@ assert not invalid_anchors, f"非簡體字混入: {invalid_anchors}"
 ---
 
 **Last Updated**: 2026-05-26
-**Version**: 1.3.0 — 新增「升級備註」章節 + 防護措施表「清單驗證」列狀態更新：動態驗證原則已升級至 `.claude/rules/core/language-constraints.md` 規則 5（W3-014 / W3-014.1）；本 PC 轉為案例庫定位，規範性權威轉移至 rules/core/
+**Version**: 1.3.0 — 新增「升級備註」章節 + 防護措施表「清單驗證」列狀態更新：動態驗證原則已升級至 `.claude/rules/core/language-constraints.md` 規則 5；本 PC 轉為案例庫定位，規範性權威轉移至 rules/core/
 
-**Version**: 1.2.0 — W17-144.1 二度自證後新增「動態驗證取代靜態維護（根本性解法）」章節：人工維護黑名單會反覆混入共用字，須交給 OpenCC 自動過濾 + self-test 雙層機制；推廣原則覆蓋簡體字 / 日漢字 / 異體字 / 任何字元集子集場景
+**Version**: 1.2.0 — 二度自證後新增「動態驗證取代靜態維護（根本性解法）」章節：人工維護黑名單會反覆混入共用字，須交給 OpenCC 自動過濾 + self-test 雙層機制；推廣原則覆蓋簡體字 / 日漢字 / 異體字 / 任何字元集子集場景
 
-**Version**: 1.1.0 — 新增姊妹模式 PC-084 交叉引用（W14-014 落地）
+**Version**: 1.1.0 — 新增姊妹模式 PC-084 交叉引用
 **Source**: AUQ payload「產出」含「出」被誤判為簡體，Hook 啟用後 2 分鐘內暴露

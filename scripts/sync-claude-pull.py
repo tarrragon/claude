@@ -25,6 +25,7 @@ Safety net:
 """
 
 import argparse
+import copy
 import filecmp
 import json
 import os
@@ -41,7 +42,7 @@ try:
 except ImportError:
     yaml = None
 
-# 排除分類與 should_exclude 由 SSOT manifest 統一提供（ARCH-020，W1-027）。
+# 排除分類與 should_exclude 由 SSOT manifest 統一提供（ARCH-020）。
 # pull 端的三方合併用 should_exclude 過濾 LOCAL_ONLY / 憑證檔，避免本地 runtime
 # state 被遠端 delta 蓋掉，與 push/status 端共用同一判定避免漂移。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -70,6 +71,8 @@ from lib.skill_version_diff import (  # noqa: E402
     report_skill_repo_drift,
 )
 from lib.executable_bits import restore_shebang_exec_bits  # noqa: E402
+from lib.hook_registry import COMMAND_TEMPLATE, merge_dispatch_registry  # noqa: E402
+from lib.project_hook_registry import manifest_commands  # noqa: E402
 
 # skill-sync 是零框架依賴的獨立 uv 套件，未安裝為本腳本的 import 路徑；以 sys.path
 # 取用其 public API（與 sync-claude-push.py 對稱）。report_skill_repo_drift 內部
@@ -92,18 +95,20 @@ GIT_CLONE_TIMEOUT_SECONDS = 300
 
 # sync-pull 完成後的 hook import 煙霧測試（issue #10 斷裂 4）。
 # py_compile 只檢查語法不執行 import，無法偵測上游 lib 重構 / 新增 dependency
-# 導致的 runtime import 斷裂；本驗證複用 W2-007 產出的 test-hook-imports.sh。
+# 導致的 runtime import 斷裂；本驗證複用 test-hook-imports.sh。
 HOOK_IMPORT_TEST_RELPATH = "scripts/test-hook-imports.sh"
 HOOK_IMPORT_TEST_TIMEOUT_SECONDS = 120
+# test-hook-imports.sh 在有 hook 無法判定（依賴環境不可用）時印出的摘要行開頭
+HOOK_IMPORT_INCOMPLETE_MARKER = "Hook import check incomplete:"
 
-# 同步狀態檔與 base SHA 欄位（與 status 端 SSOT 一致，W1-025 schema）。
+# 同步狀態檔與 base SHA 欄位（與 status 端 SSOT 一致）。
 SYNC_STATE_FILENAME = ".sync-state.json"
 BASE_SHA_FIELD = "last_synced_base_sha"
 
 # 三方合併衝突暫存目錄（M3：local-only，不推送）：SYNC_CONFLICTS_DIR 定義在
 # lib/sync_conflict_residue.py，頂部匯入。
 
-# 版本檔衝突自動採 upstream 的白名單（相對 .claude/ 的路徑，1.0.0-W1-084）。
+# 版本檔衝突自動採 upstream 的白名單（相對 .claude/ 的路徑）。
 # 背景：push 腳本只 bump 遠端 repo 的 VERSION / CHANGELOG.md，本地副本永遠 stale，
 # 屬每次 pull 必重演的系統性衝突，無人工判斷價值。自動採 upstream 時仍寫
 # .sync-conflicts/ 對照副本（含衝突標記），保留人工事後檢視的依據。
@@ -121,18 +126,18 @@ _LARGE_FILE_THRESHOLD = 1_048_576  # 1MB
 
 # 本地專有：只存在於本地，同步時不刪除也不覆蓋
 #
-# 名稱集改由 manifest 的 LOCAL_ONLY_PATTERNS 推導（0.2.1-W3-240），不再本檔獨立
+# 名稱集改由 manifest 的 LOCAL_ONLY_PATTERNS 推導，不再本檔獨立
 # 維護第二份清單——原 SKIP_DURING_SYNC（O(1) 名稱早退，效能層）與 should_exclude
 # 消費的 LOCAL_ONLY_PATTERNS（完整路徑比對，正確性層）為雙 SOT，曾漂移 6 項
 # （.sync-conflicts / .version-release.yaml / TASK_AVOIDANCE_FIX_MODE /
-# dispatch-active.lock / scheduled_tasks.lock / sync-skills.yaml，0.2.1-W3-152）。
+# dispatch-active.lock / scheduled_tasks.lock / sync-skills.yaml）。
 # 推導後兩者結構上不可能再漂移；LOCAL_ONLY_PATTERNS 本身即名稱集，故 SKIP_DURING_SYNC
 # 仍保有 O(1) 名稱早退特性，未退化為逐項 should_exclude 路徑比對。
 # 分類定義（A - Runtime state / B - Local-only settings / C - Session-bound log）
 # 見 .claude/lib/sync_exclude_manifest.py 與 .claude/references/sync-exclusion-guide.md。
 SKIP_DURING_SYNC = REMOTE_ONLY | LOCAL_ONLY_PATTERNS
 
-# Q（0.19.1-W1-021）：備份 .claude 時排除的工具產物，避免備份 bloat / 變慢
+# Q：備份 .claude 時排除的工具產物，避免備份 bloat / 變慢
 # / 遇 broken symlink 拋例外。主同步本身已排除這些，備份須一致。
 BACKUP_IGNORE_PATTERNS = ("__pycache__", ".pytest_cache", ".venv")
 
@@ -144,7 +149,7 @@ BACKUP_IGNORE_PATTERNS = ("__pycache__", ".pytest_cache", ".venv")
 
 # extract_skill_versions / format_skill_version_diff / report_skill_repo_drift /
 # SKILL_DRIFT_PREVIEW_LIMIT 已提升至 .claude/lib/skill_version_diff.py，由本檔
-# 頂部 import（0.2.1-W3-356：消除與 sync-claude-push.py 的逐字重複）。
+# 頂部 import（消除與 sync-claude-push.py 的逐字重複）。
 
 
 class PreserveParseError(ValueError):
@@ -157,7 +162,7 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
     若檔案不存在，回傳空集合（合法情境：專案未定義 preserve 清單）。
     若檔案存在但解析失敗，fail-loud（stderr 警告 + raise），不靜默回空集合。
 
-    H（0.19.1-W1-021）：靜默回空集合會關閉全部 preserve 保護，導致本地
+    H：靜默回空集合會關閉全部 preserve 保護，導致本地
     特化檔案（settings.local.json 等）被遠端覆蓋。違反 quality-baseline
     規則 4（禁止靜默失敗），故 malformed preserve 改為 fail-loud。
 
@@ -386,7 +391,7 @@ def clone_repo(temp_dir: Path) -> None:
 
 
 def read_base_sha(claude_dir: Path) -> str | None:
-    """讀取 .sync-state.json 中的 last_synced_base_sha（W1-025 schema）。
+    """讀取 .sync-state.json 中的 last_synced_base_sha。
 
     無檔案 / 無欄位 / 解析失敗皆回傳 None（向後相容：觸發全量 overlay fallback）。
 
@@ -785,7 +790,7 @@ def three_way_merge_file(
       - conflict True 表示 local 與 upstream 各自修改同一處，需人工處理
 
     合併規則：
-      - 本地已刪除（local_deleted）：保留刪除，回 (None, False)（W10-092 遷移天然保留）
+      - 本地已刪除（local_deleted）：保留刪除，回 (None, False)（遷移天然保留）
       - upstream 新增（base 無、local 無）：直接採 upstream
       - 三方齊備：用 git merge-file 做標準三方合併，衝突回 (..., True)
       - 純二進位差異無法 merge 時退化為衝突標記
@@ -1075,7 +1080,7 @@ def _should_skip_sync_item(item: Path, rel: Path) -> bool:
 
 
 def _make_should_exclude_ignore(src_root: Path, base_prefix: Path):
-    """建構 shutil.copytree 用的 ignore callback，逐層套用 should_exclude（0.2.1-W3-148）。
+    """建構 shutil.copytree 用的 ignore callback，逐層套用 should_exclude。
 
     shutil.copytree 走訪來源樹每一層時會呼叫 ignore(dir_path, names)，
     dir_path 為當前層絕對路徑。本函式在每次呼叫時重建該層相對 .claude 的路徑
@@ -1167,7 +1172,7 @@ def sync_directory(
             if dest_item.exists():
                 count += sync_directory(item, dest_item, preserve, rel, project_root, skills_config)
             else:
-                # 0.2.1-W3-148：shutil.copytree 為新目錄樹的整批複製捷徑，
+                # shutil.copytree 為新目錄樹的整批複製捷徑，
                 # shutil.ignore_patterns 只按純名稱比對 SKIP_DURING_SYNC，不會
                 # 逐層呼叫 should_exclude——若新目錄樹內巢狀含 project-integration/
                 # 等 per-project 落地層，會被整批帶入（繞過上方逐項 should_exclude
@@ -1616,32 +1621,99 @@ def warn_conflict_residue(claude_dir: Path) -> list[str]:
 # （tarrragon/claude#88：只掃 pull 同步範圍，非同步範圍檔案含標記字樣不計入）。
 
 
-def warn_upstream_deleted_residue(residue: list[str]) -> None:
-    """pull 結尾通報「上游已刪除但本地分歧而保留」之檔（缺口 1，W8-037）。
+def detect_upstream_renames(temp_dir: Path, base_sha: str) -> dict[str, tuple[str, int]]:
+    """base..HEAD 之間上游的改名配對，只供回報使用：{舊路徑: (新路徑, 相似度%)}。
+
+    compute_upstream_delta 刻意以 --no-renames 套用（rename 退化為 D + A），
+    此處另以 -M 取配對，讓「上游已刪除但本地已修改而保留」的提示能標明改名後繼，
+    不影響任何套用行為。路徑為相對 .claude/。git 失敗時回空 dict 並寫 stderr。
+    """
+    try:
+        result = run_git(
+            ["diff", "-M", "--name-status", "--diff-filter=R", "-z", base_sha, "HEAD"],
+            cwd=str(temp_dir),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        sys.stderr.write(f"[sync-pull] 改名偵測失敗，提示不含改名後繼: {exc}\n")
+        return {}
+    if result.returncode != 0:
+        sys.stderr.write(
+            f"[sync-pull] 改名偵測失敗，提示不含改名後繼: {result.stderr.strip()}\n"
+        )
+        return {}
+    # -z 格式："R<相似度>\0<舊路徑>\0<新路徑>\0"
+    fields = result.stdout.split("\0")
+    renames: dict[str, tuple[str, int]] = {}
+    for i in range(0, len(fields) - 2, 3):
+        status, old, new = fields[i], fields[i + 1], fields[i + 2]
+        if not status.startswith("R"):
+            continue
+        old_rel, new_rel = _rel_under_claude(old), _rel_under_claude(new)
+        if old_rel is None or new_rel is None:
+            continue
+        similarity = int(status[1:]) if status[1:].isdigit() else 0
+        renames[old_rel] = (new_rel, similarity)
+    return renames
+
+
+def _settings_registered_scripts(claude_dir: Path) -> set[str] | None:
+    """settings.json 目前註冊的腳本路徑；讀不到或不是合法 JSON 時回 None。"""
+    try:
+        data = json.loads((claude_dir / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return _collect_registered_hook_script_paths(data) if isinstance(data, dict) else None
+
+
+def warn_upstream_deleted_residue(
+    residue: list[str],
+    renames: dict[str, tuple[str, int]] | None = None,
+    registered_scripts: set[str] | None = None,
+) -> None:
+    """pull 結尾通報「上游已刪除但本地分歧而保留」之檔（缺口 1）。
 
     背景：上游 delta 標記某框架檔為刪除，但本地已修改過該檔，three_way_merge_file
     保留本地（conflict=False），不進 .sync-conflicts/，pull 原本完全無通報——客製過
     框架檔後被上游刪除的孤兒於是靜默殘留。此處於 pull 結尾把這些案例列出（stdout
     可見），鏡像 warn_conflict_residue 模式。
 
-    措辭刻意非阻擋（W8-037 Premortem R1）：保留的檔可能是應清理的孤兒，也可能是
+    措辭刻意非阻擋（Premortem R1）：保留的檔可能是應清理的孤兒，也可能是
     刻意客製，腳本無法自動判別，故僅提醒不自動刪、不阻擋、不視為失敗。
+
+    改名前身（tarrragon/claude#68）：上游其實是改名移位時，單列路徑讀起來像本地
+    客製。有改名配對的檔逐行標明新路徑與相似度，舊路徑仍在 settings.json 註冊時
+    一併標明（新舊兩支會同時執行）。
 
     參數:
         residue: apply_upstream_delta 回傳的上游已刪保留檔清單（相對 .claude/）
+        renames: detect_upstream_renames 的配對；None 表示未偵測
+        registered_scripts: settings.json 已註冊的腳本路徑；None 表示未知
     """
     if not residue:
         return
+    renames = renames or {}
     print_color(
         f"提醒: {len(residue)} 個檔案上游已刪除，但本地版本已修改而保留:",
         "yellow",
     )
     for rel in sorted(residue):
-        print_color(f"   ! {rel}")
+        line = f"   ! {rel}"
+        if rel in renames:
+            new_rel, similarity = renames[rel]
+            line += f"（上游已改名為 {new_rel}，相似度 {similarity}%）"
+            if registered_scripts and rel in registered_scripts:
+                line += "；settings.json 仍註冊舊路徑，新舊兩支會同時執行"
+        print_color(line)
     print_color(
         "   若為應清理的孤兒請手動移除；若為刻意客製可忽略此提醒。",
         "yellow",
     )
+    if any(rel in renames for rel in residue):
+        print_color(
+            "   標明改名者是上游改名的前身：把本地修改移到新路徑後刪除舊檔；"
+            "settings.json 仍註冊舊路徑時，同時刪除該筆註冊。",
+            "yellow",
+        )
 
 
 def _rel_under_claude(repo_rel_path: str) -> str | None:
@@ -1663,12 +1735,12 @@ def _rel_under_claude(repo_rel_path: str) -> str | None:
 # 背景：上游框架 repo 與本專案各自獨立累積 error-pattern PC 編號。pull 把上游
 # PC 檔帶入時，同一 PC 號可能已被本地不同 pattern 佔用（如上游 PC-165 auq-dispatch
 # vs 本地 PC-165 false-positive-fix-chain）。本 session 手動以 PC-171 重編號處置，
-# 此處將該流程自動化為 import-time 強制層（W1-014 瑕疵 D）。
+# 此處將該流程自動化為 import-time 強制層。
 # ============================================================================
 
 import re as _re  # noqa: E402
 
-# 刻意只認 flat 凍結核心格式（PC-NNN），不拓寬至前綴格式（1.0.0-W1-019.2 決策）。
+# 刻意只認 flat 凍結核心格式（PC-NNN），不拓寬至前綴格式（決策）。
 # 本子系統是 flat 整數撞號解析（int(group(1)) + numbers: dict[int,str] +
 # _next_available_pc_number 整數遞增）。Model 1 前綴格式（PC-V1-001）天生不參與
 # flat 撞號——各專案在自己前綴空間累加，零協調防碰撞。現值 regex 對前綴檔匹配失敗
@@ -1889,12 +1961,12 @@ def apply_upstream_delta(
         tuple[int, list[str], list[str]]: (套用成功檔數, 衝突檔清單,
             上游已刪除但本地分歧而保留之檔清單)
 
-    上游刪除但本地分歧保留（缺口 1，W8-037）：
+    上游刪除但本地分歧保留（缺口 1）：
         上游 delta 標記某檔為 D（刪除），但本地已修改過該檔（local != base），
         three_way_merge_file 回 (local_content, False)——保留本地、不視為衝突、
         不進 .sync-conflicts/。此路徑使「客製過框架檔後被上游刪除」的孤兒靜默殘留，
         pull 無任何通報。此處收集這些案例於第三個回傳值，由呼叫端 pull 結尾通報，
-        鏡像 W1-084 .sync-conflicts 殘留警告模式（非阻擋、非自動刪，僅提醒人工判斷）。
+        鏡像 .sync-conflicts 殘留警告模式（非阻擋、非自動刪，僅提醒人工判斷）。
     """
     if preserve is None:
         preserve = set()
@@ -1908,7 +1980,7 @@ def apply_upstream_delta(
 
     applied = 0
     conflicts: list[str] = []
-    # 上游已刪除但本地分歧而保留（缺口 1，W8-037）：靜默殘留候選清單
+    # 上游已刪除但本地分歧而保留（缺口 1）：靜默殘留候選清單
     upstream_deleted_residue: list[str] = []
     # 回滾記錄：(目標路徑, 備份路徑 or None 表原本不存在)
     rollback_log: list[tuple[Path, Path | None]] = []
@@ -2008,7 +2080,7 @@ def apply_upstream_delta(
                 conflict_target.parent.mkdir(parents=True, exist_ok=True)
                 conflict_target.write_bytes(merged_bytes)
 
-                # 版本檔系統性衝突自動採 upstream（1.0.0-W1-084）：
+                # 版本檔系統性衝突自動採 upstream：
                 # 本地版本檔必 stale（push 只 bump 遠端），自動以 upstream 覆蓋，
                 # .sync-conflicts/ 仍留對照副本。非版本檔走下方寫回工作區路徑。
                 if (
@@ -2072,7 +2144,7 @@ def apply_upstream_delta(
                     applied += 1
                 continue
 
-            # 缺口 1（W8-037）：上游刪除（status==D → upstream_path is None）但本地
+            # 缺口 1：上游刪除（status==D → upstream_path is None）但本地
             # 分歧而保留——three_way_merge_file 回 (local_content, False)，merged 即
             # 本地原內容。收集為靜默殘留候選，於 pull 結尾通報供人工判斷孤兒/客製。
             # 排除 local_deleted（本地已刪走 merged is None 路徑）與本地未改（已跟刪）。
@@ -2192,7 +2264,7 @@ def detect_changed_packages(project_root: Path) -> None:
 
 
 def backup_claude_dir(claude_dir: Path, dest: Path) -> None:
-    """備份 .claude 目錄至 dest，排除工具產物（Q，0.19.1-W1-021）。
+    """備份 .claude 目錄至 dest，排除工具產物（Q）。
 
     使用 shutil.ignore_patterns 排除 __pycache__/.pytest_cache/.venv，
     避免備份 bloat / 變慢 / 遇 broken symlink 拋例外。symlinks=False
@@ -2319,7 +2391,7 @@ def _sync_with_backup(
             )
             sys.exit(1)
 
-    # 快照同步前 skill 版本（W2-001：pull 尾端輸出 skill 版本 diff 摘要）
+    # 快照同步前 skill 版本（pull 尾端輸出 skill 版本 diff 摘要）
     skill_versions_before = extract_skill_versions(claude_dir / "skills")
 
     # 決定同步策略：三方合併（有可達 base）或全量 overlay（向後相容 fallback）
@@ -2329,7 +2401,7 @@ def _sync_with_backup(
     )
     use_full_overlay = should_use_full_overlay(claude_dir, base_reachable)
 
-    # W3-165：base SHA 是否可推進的判定旗標。full overlay 路徑無三方合併衝突
+    # base SHA 是否可推進的判定旗標。full overlay 路徑無三方合併衝突
     # 概念（其 preserved_conflicts 是本地獨有檔轉存，非上游內容遺失），維持
     # 空清單即代表「無阻擋理由」；三方合併路徑於下方賦予實際衝突清單。
     conflicts: list[str] = []
@@ -2372,7 +2444,7 @@ def _sync_with_backup(
             for r in will_skip_resurrection[:50]:
                 print_color(f"     x skip-resurrection: {r}")
 
-        # 0.3.4-W2-006: overlay 有本地變更時需確認才執行
+        # overlay 有本地變更時需確認才執行
         if will_overwrite or will_delete:
             _confirm_full_overlay(backup_dir, confirm_overlay)
 
@@ -2435,16 +2507,21 @@ def _sync_with_backup(
             )
         else:
             print_color("   無衝突", "green")
-        # 缺口 1（W8-037）：上游已刪但本地分歧保留之檔，pull 結尾通報（非阻擋）
-        warn_upstream_deleted_residue(upstream_deleted_residue)
+        # 缺口 1：上游已刪但本地分歧保留之檔，pull 結尾通報（非阻擋）
+        if upstream_deleted_residue:
+            warn_upstream_deleted_residue(
+                upstream_deleted_residue,
+                renames=detect_upstream_renames(temp_dir, base_sha),
+                registered_scripts=_settings_registered_scripts(claude_dir),
+            )
 
-    # 全量反向比對：列出上游有但本地無的遺漏檔案（W1-001）
+    # 全量反向比對：列出上游有但本地無的遺漏檔案
     reverse_orphans = compute_reverse_orphan_candidates(
         claude_dir, temp_dir, preserve
     )
     _print_reverse_orphans(claude_dir, reverse_orphans)
 
-    # W3-165（IMP-BAL-002 根本修復第二項）：有未解衝突時不推進 base SHA，
+    # IMP-BAL-002 根本修復第二項：有未解衝突時不推進 base SHA，
     # 對齊 git merge 語意——衝突未解則 HEAD 不動。base 停留舊點使下次 pull
     # 從舊 base 重算 delta：已套用的檔此時本地已等於 upstream，三方合併對它們
     # 為 no-op；未解的衝突會被重新提出，直到人工處理（.sync-conflicts/ 解完後
@@ -2490,7 +2567,7 @@ def _sync_with_backup(
     print_color("檢查套件版本變更...")  # i18n-exempt
     detect_changed_packages(project_root)
 
-    # Skill 版本 diff 摘要（W2-001）
+    # Skill 版本 diff 摘要
     skill_versions_after = extract_skill_versions(claude_dir / "skills")
     skill_diff = format_skill_version_diff(skill_versions_before, skill_versions_after)
     if skill_diff:
@@ -2508,7 +2585,7 @@ def _sync_with_backup(
             )
         print_color(skill_diff, "green")
 
-    # Skill 庫內容漂移檢查（0.2.1-W3-356：與 push 端對稱恢復）。pull 是本地
+    # Skill 庫內容漂移檢查（與 push 端對稱恢復）。pull 是本地
     # skills 被遠端覆寫的時刻，漂移在 pull 之後產生的機率高於 push 之後，
     # 原本只在 push 端呼叫使收尾區塊失去對稱性。比對邏輯與呈現格式與 push 端
     # 共用同一份 .claude/lib/skill_version_diff.py::report_skill_repo_drift。
@@ -2698,7 +2775,7 @@ def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None
     cleanup_legacy_github_dir(project_root / ".claude", temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
 
-    # 清理超期 backup_dir（W3-076）
+    # 清理超期 backup_dir
     print_color("清理超期備份目錄...")
     removed = cleanup_old_backups(DEFAULT_BACKUP_RETENTION_DAYS)
     if removed > 0:
@@ -2714,7 +2791,7 @@ def compute_orphan_candidates(
     upstream_dir: Path,
     preserve: set[str] | None = None,
 ) -> list[str]:
-    """列出本地 .claude/ 有但上游 HEAD 無之檔（孤兒候選，缺口 2，W8-037.3）。
+    """列出本地 .claude/ 有但上游 HEAD 無之檔（孤兒候選，缺口 2）。
 
     主動孤兒稽核：delta 路徑（base..HEAD）只看上次同步後的窗，看不到早於 base
     即已分歧的孤兒。本函式以「上游 HEAD 全檔集」對比「本地全檔集」做全量差集，
@@ -2724,7 +2801,7 @@ def compute_orphan_candidates(
     symlink；再排除 preserve 清單與 should_exclude（LOCAL_ONLY / 憑證），
     避免本地特化 / runtime state 被誤列為孤兒。
 
-    措辭刻意非阻擋（W8-037 Premortem R1）：列出之檔可能是應清理的孤兒，也可能是
+    措辭刻意非阻擋（Premortem R1）：列出之檔可能是應清理的孤兒，也可能是
     刻意本地特化，腳本無法自動判別，僅供人工判斷，不自動刪、不阻擋。
 
     參數:
@@ -2879,7 +2956,7 @@ def _list_base_files(temp_dir: Path, base_sha: str) -> set[str] | None:
     base_sha 不可達（force-push / GC / partial clone 未抓到）時回傳 None。
     呼叫端必須將 None 視為「無法預測」並明示降級，不可誤用為空集合——
     空集合會使所有正向孤兒被判定為「從未存在於 base」，產生「0 個將被
-    刪除」的假預覽，與本函式要修的缺陷同形（0.2.1-W3-146）。
+    刪除」的假預覽，與本函式要修的缺陷同形。
 
     參數:
         temp_dir: 上游 repo clone 路徑
@@ -2906,7 +2983,7 @@ def classify_orphans_by_base(
 
     三方合併的刪除判定依 base：base 有、上游已刪、本地未改的檔案會套用
     刪除 delta。故曾存在於 base 的正向孤兒會被下次 pull 刪除；從未進入
-    base 者屬本地特化，pull 不會動它（0.2.1-W3-146）。
+    base 者屬本地特化，pull 不會動它。
 
     參數:
         orphans: compute_orphan_candidates 產出的正向孤兒相對路徑清單
@@ -2978,7 +3055,7 @@ def _print_orphan_fallback(orphans: list[str], base_sha: str | None) -> None:
     """base sha 缺失或不可達：明示無法預測刪除，降級為現行單一清單。
 
     禁止靜默降級——不得省略「無法預測」措辭，避免使用者誤讀為「已確認
-    不會被刪除」（0.2.1-W3-146 acceptance 2）。
+    不會被刪除」（驗收條件之一）。
     """
     reason = (
         "base sha 缺失（無 .sync-state.json 或 last_synced_base_sha 欄位）"  # i18n-exempt
@@ -3031,7 +3108,7 @@ def _print_orphan_audit(
     base_sha: str | None,
     base_files: set[str] | None,
 ) -> None:
-    """輸出正向孤兒稽核結果：先依大小寫分類，真孤兒分組措辭不變（0.2.1-W3-146），
+    """輸出正向孤兒稽核結果：先依大小寫分類，真孤兒分組措辭不變，
     大小寫變體改獨立區塊並明述不建議手動移除。
 
     大小寫變體判準與呈現對稱於 _print_reverse_orphans /
@@ -3114,7 +3191,7 @@ def run_audit() -> None:  # i18n-exempt
     clone 上游 → 計算正向孤兒（本地有上游無）與反向孤兒（上游有本地無）
     → 若 base sha 可達，依三方合併規則將正向孤兒分為「將被刪除」與
     「將保留」；base sha 缺失或不可達則明示無法預測刪除，降級為現行
-    單一清單（0.2.1-W3-146：不可讓空集合靜默通過造成假預覽）。另列出
+    單一清單（不可讓空集合靜默通過造成假預覽）。另列出
     base..HEAD 之間待套用的純大小寫改名（資訊性，見
     detect_pending_case_renames 涵蓋範圍說明）。
     stdout 列出（非阻擋提醒）。不寫入任何本地檔，不更新 base SHA，純唯讀分支。
@@ -3171,7 +3248,7 @@ def verify_hook_imports(project_root: Path) -> int:
     py_compile 只檢查語法不執行 import，consumer sync-pull 後若上游 lib 重構或
     新增 dependency 導致 runtime import 斷裂（ModuleNotFoundError），同步主流程
     全綠卻在 hook 實際觸發時才崩潰。本函式呼叫 scripts/test-hook-imports.sh
-    （W2-007 產出）對所有 hook 做 import-level 煙霧測試。
+    對所有 hook 做 import-level 煙霧測試。
 
     腳本的失敗清單原本輸出至 stdout；本函式於非零 returncode 時將其轉發到
     stderr，使 sync-pull 的失敗訊號集中於 stderr 並回傳非零 exit code。
@@ -3203,6 +3280,13 @@ def verify_hook_imports(project_root: Path) -> int:
         return 0
 
     if result.returncode == 0:
+        if HOOK_IMPORT_INCOMPLETE_MARKER in (result.stdout or ""):
+            # 依賴環境建不起來（uv 不存在、離線）的 hook 無法判定：示警但不阻擋，
+            # 且不可印「全數通過」，否則與真的通過同形
+            sys.stderr.write("\n[sync-pull] hook import 煙霧測試未完整：部分 hook 無法判定\n")  # i18n-exempt
+            sys.stderr.write(result.stdout)
+            print_color("   hook import 煙霧測試未完整（見上方無法判定清單），未阻擋同步", "yellow")  # i18n-exempt
+            return 0
         print_color("   hook import 煙霧測試全數通過", "green")  # i18n-exempt
         return 0
 
@@ -3219,9 +3303,12 @@ def verify_hook_imports(project_root: Path) -> int:
 def verify_local_settings_no_hooks(project_root: Path) -> None:
     """Post-sync 告警：settings.local.json 不該含 hook 註冊（framework issue #11）。
 
-    框架 hook 一律註冊於 settings.json；settings.local.json 為 sync 排除檔
-    （local-only），框架版本遷移 / relocate 無法觸及，殘留註冊 relocate 後成幽靈
-    （ARCH-TUNL-001、PC-148 單一註冊來源原則）。本檢查於 sync-pull 完成後告警，
+    註冊分流（與 sync-pull.md〈幽靈註冊處置〉一致）：框架 hook 由上游註冊於
+    settings.json；專案自有 hook 寫進專案 hook 清冊（.claude/project-integration/
+    hook-registry.yaml），由框架產生 settings.local.json 的註冊，清冊產生的條目
+    不告警。其餘 local 註冊：settings.local.json 為 sync 排除檔（local-only），
+    框架版本遷移 / relocate 無法觸及，殘留註冊 relocate 後成幽靈
+    （ARCH-TUNL-001、PC-148）。本檢查於 sync-pull 完成後告警，
     warn-only 不阻擋同步——同步本體已完成，此為後置安全網，對齊 SessionStart
     find_local_hook_registrations 的偵測，補上「sync 端」的告警時機。
 
@@ -3237,16 +3324,32 @@ def verify_local_settings_no_hooks(project_root: Path) -> None:
     hooks = data.get("hooks") if isinstance(data, dict) else None
     if not isinstance(hooks, dict) or not hooks:
         return
-    events = ", ".join(sorted(hooks.keys()))
+    # 專案 hook 清冊產生的條目合法，不示警；與 coverage check 用同一判定（lib.project_hook_registry）。
+    # 清冊無法判定（無 pyyaml、格式錯誤）時回傳 None，照舊對全部條目示警並註明。
+    legitimate = manifest_commands(project_root)
+    unlisted_events = sorted({
+        event
+        for event, groups in hooks.items()
+        if isinstance(groups, list)
+        for group in groups
+        if isinstance(group, dict)
+        for hook in group.get("hooks", [])
+        if isinstance(hook, dict) and hook.get("command") not in (legitimate or set())
+    })
+    if not unlisted_events:
+        return
+    events = ", ".join(unlisted_events)
+    undetermined = "（專案 hook 清冊無法判定，全部列入）" if legitimate is None else ""  # i18n-exempt
     sys.stderr.write(
-        f"\n[sync-pull] 警告：settings.local.json 含 hook 註冊（事件: {events}）。\n"  # i18n-exempt
+        f"\n[sync-pull] 警告：settings.local.json 含不在專案 hook 清冊的 hook 註冊{undetermined}（事件: {events}）。\n"  # i18n-exempt
     )
     advice = (
         "   框架 hook 應只註冊於 settings.json（PC-148 單一註冊來源）；"  # i18n-exempt
         "settings.local.json 為 sync 排除檔，殘留註冊 relocate 後會成幽靈。"  # i18n-exempt
         "處置：幽靈註冊執行 hook-registration-coverage-check.py --fix 清理；"  # i18n-exempt
         "框架 hook 上游已註冊者刪除 settings.local.json 的重複；"  # i18n-exempt
-        "上游未註冊或專案自有 hook 回報 framework issue（見 sync-pull.md〈幽靈註冊處置〉）。"  # i18n-exempt
+        "上游未註冊的框架 hook 回報 framework issue；"  # i18n-exempt
+        "專案自有 hook 寫進 .claude/project-integration/hook-registry.yaml（見 sync-pull.md〈幽靈註冊處置〉）。"  # i18n-exempt
     )
     print_color(advice, "yellow")
 
@@ -3337,9 +3440,29 @@ def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
         except (OSError, ValueError):
             pass
 
-    registered_scripts = _collect_registered_hook_script_paths(settings_data)
+    listed_scripts = _listed_registry_scripts(registry_data, claude_dir, excluded)
+    dispatch_scripts = _collect_registered_hook_script_paths(
+        merge_dispatch_registry({}, project_root)
+    )
+    recorded = _load_auto_registered(claude_dir)
+
+    # 收回在新增之前做：上游改名時舊註冊先移除，新路徑才不會與舊路徑並存。
+    reclaimed = _reclaim_auto_registered(
+        settings_data, recorded, listed_scripts, dispatch_scripts
+    )
+    kept_recorded = recorded - set(reclaimed)
+
+    # 已登記 = settings.json 的註冊 + hook-dispatch-registry 的成員。
+    # dispatch registry 的 hook 由 hook-dispatcher 以 --group 執行；再以獨立項目寫進
+    # settings.json 時兩者 command 字串不同，Claude Code 不去重，每次事件執行兩次。
+    # 併入只作判斷用，寫回的仍是未併入的 settings_data。registry 讀取失敗時
+    # merge_dispatch_registry 已寫 stderr，此處退回只看 settings.json。
+    registered_scripts = _collect_registered_hook_script_paths(
+        merge_dispatch_registry(copy.deepcopy(settings_data), project_root)
+    )
 
     added = 0
+    added_commands: list[str] = []
 
     for filename, meta in (registry_data.get("hooks") or {}).items():
         if filename in excluded:
@@ -3348,13 +3471,16 @@ def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
             continue
         if f"hooks/{filename}" in registered_scripts:
             continue
-        cmd = f"$CLAUDE_PROJECT_DIR/.claude/hooks/{filename}"
+        # 一律帶 uv run --quiet 前綴（與 dispatch registry 併入時同一模板）：
+        # 裸路徑由 OS 依可執行位元與 shebang 執行，可執行位遺失即不執行且無訊號
+        cmd = COMMAND_TEMPLATE.format(path=f".claude/hooks/{filename}")
         event = meta.get("event", "")
         matcher = meta.get("matcher", "")
         timeout = meta.get("timeout")
         if not event:
             continue
         _insert_hook_into_settings(settings_data, event, matcher, cmd, timeout)
+        added_commands.append(cmd)
         added += 1
 
     for key, meta in (registry_data.get("skill_hooks") or {}).items():
@@ -3366,25 +3492,200 @@ def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
             continue
         if f"skills/{skill_name}/hooks/{filename}" in registered_scripts:
             continue
-        cmd = f"$CLAUDE_PROJECT_DIR/.claude/skills/{skill_name}/hooks/{filename}"
+        cmd = COMMAND_TEMPLATE.format(
+            path=f".claude/skills/{skill_name}/hooks/{filename}"
+        )
         event = meta.get("event", "")
         matcher = meta.get("matcher", "")
         timeout = meta.get("timeout")
         if not event:
             continue
         _insert_hook_into_settings(settings_data, event, matcher, cmd, timeout)
+        added_commands.append(cmd)
         added += 1
 
-    if added > 0:
+    if added > 0 or reclaimed:
         settings_path.write_text(
             json.dumps(settings_data, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
+    if reclaimed:
+        print_color(
+            f"   收回 {len(reclaimed)} 筆先前自動登記、清冊已不列或已改由他處註冊的 hook:",  # i18n-exempt
+            "yellow",
+        )
+        for cmd in reclaimed:
+            print_color(f"     - {cmd}", "yellow")
+    if added > 0:
         print_color(f"   auto-registered {added} hooks into settings.json", "green")  # i18n-exempt
-    else:
+    elif not reclaimed:
         print_color("   all hooks already registered", "green")  # i18n-exempt
 
+    # 紀錄只留仍在 settings.json 的項目：使用者手動刪掉的 command 不再追蹤
+    present = {
+        hook.get("command", "")
+        for entries in settings_data.get("hooks", {}).values()
+        for entry in entries
+        for hook in entry.get("hooks", [])
+    }
+    final_recorded = (kept_recorded | set(added_commands)) & present
+    _save_auto_registered(claude_dir, final_recorded)
+    _warn_unrecorded_dispatch_duplicates(settings_data, final_recorded, dispatch_scripts)
+
     return added
+
+
+# .sync-state.json 中記錄 auto_register_hooks 寫進 settings.json 的 command 字串。
+# 收回只對這份紀錄內的項目做：沒有紀錄的項目無法證明是本工具產生（可能是上游
+# settings.json 原有或使用者手寫），一律不移除。
+AUTO_REGISTERED_FIELD = "auto_registered_hook_commands"
+
+
+def _load_auto_registered(claude_dir: Path) -> set[str]:
+    """讀取先前 auto_register 寫入的 command 紀錄；無紀錄或格式不符回空集合。"""
+    value = _load_sync_state(claude_dir).get(AUTO_REGISTERED_FIELD)
+    if not isinstance(value, list):
+        return set()
+    return {item for item in value if isinstance(item, str)}
+
+
+def _save_auto_registered(claude_dir: Path, commands: set[str]) -> None:
+    """寫回 command 紀錄，保留 .sync-state.json 其他欄位。
+
+    狀態檔存在但無法解析成 dict 時不寫入：_load_sync_state 對損毀檔回空 dict，
+    此時寫回會把損毀檔整個覆寫，原有欄位（基準點等）無從人工救回。
+    """
+    state_file = claude_dir / SYNC_STATE_FILENAME
+    if state_file.exists():
+        try:
+            parsed = json.loads(state_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            parsed = exc
+        if not isinstance(parsed, dict):
+            sys.stderr.write(
+                f"[sync-pull] {state_file} 無法解析，未寫入 hook 自動登記紀錄"
+                "（保留原檔供人工檢查；本次寫入的註冊下次 pull 不會被收回）\n"
+            )
+            return
+    data = _load_sync_state(claude_dir)
+    data[AUTO_REGISTERED_FIELD] = sorted(commands)
+    _save_sync_state(claude_dir, data)
+
+
+def _listed_registry_scripts(
+    registry_data: dict, claude_dir: Path, excluded: set[str]
+) -> set[str]:
+    """hook-registry.yaml 目前列出、檔案存在、未被排除的腳本路徑（與新增判準同一組條件）。"""
+    scripts: set[str] = set()
+    for filename in (registry_data.get("hooks") or {}):
+        if filename in excluded:
+            continue
+        if (claude_dir / "hooks" / filename).is_file():
+            scripts.add(f"hooks/{filename}")
+    for key in (registry_data.get("skill_hooks") or {}):
+        parts = key.split("/", 1)
+        if len(parts) != 2:
+            continue
+        rel = f"skills/{parts[0]}/hooks/{parts[1]}"
+        if (claude_dir / rel).is_file():
+            scripts.add(rel)
+    return scripts
+
+
+def _script_of(command: str) -> str | None:
+    match = _HOOK_CMD_SCRIPT_RE.search(command)
+    return match.group(1) if match else None
+
+
+def _reclaim_auto_registered(
+    settings_data: dict,
+    recorded: set[str],
+    listed_scripts: set[str],
+    dispatch_scripts: set[str],
+) -> list[str]:
+    """從 settings_data 移除該收回的紀錄項，回傳被移除的 command（就地修改）。
+
+    該收回：腳本已不在清冊（上游改名或移除），或已由 dispatch registry 執行，
+    或 settings.json 另有不在紀錄內的項目註冊同一腳本（再留著會跑兩次）。
+    """
+    if not recorded:
+        return []
+    others: set[str] = set()
+    for entries in settings_data.get("hooks", {}).values():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                command = hook.get("command", "")
+                if command not in recorded:
+                    script = _script_of(command)
+                    if script:
+                        others.add(script)
+
+    def should_reclaim(command: str) -> bool:
+        script = _script_of(command)
+        if script is None:
+            return False
+        return (
+            script not in listed_scripts
+            or script in dispatch_scripts
+            or script in others
+        )
+
+    reclaimed: list[str] = []
+    hooks_section = settings_data.get("hooks", {})
+    for event in list(hooks_section):
+        kept_entries = []
+        for entry in hooks_section[event]:
+            kept_hooks = []
+            for hook in entry.get("hooks", []):
+                command = hook.get("command", "")
+                if command in recorded and should_reclaim(command):
+                    reclaimed.append(command)
+                else:
+                    kept_hooks.append(hook)
+            if kept_hooks or not entry.get("hooks"):
+                entry["hooks"] = kept_hooks
+                kept_entries.append(entry)
+        if kept_entries:
+            hooks_section[event] = kept_entries
+        else:
+            del hooks_section[event]
+    return reclaimed
+
+
+def _warn_unrecorded_dispatch_duplicates(
+    settings_data: dict, recorded: set[str], dispatch_scripts: set[str]
+) -> None:
+    """沒有紀錄、但腳本已由 dispatch registry 執行的 settings.json 項目：只警告不移除。
+
+    典型來源是 dispatch registry 成員在去重修正前被自動登記進 settings.json，
+    當時沒有寫入紀錄，無法證明是本工具產生，故列出移除方法交 consumer 自行處理。
+    """
+    duplicates: list[tuple[str, str, str]] = []
+    for event, entries in settings_data.get("hooks", {}).items():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                command = hook.get("command", "")
+                if command in recorded:
+                    continue
+                if _script_of(command) in dispatch_scripts:
+                    duplicates.append((event, entry.get("matcher", ""), command))
+    if not duplicates:
+        return
+    print_color(
+        f"   警告: settings.json 有 {len(duplicates)} 筆 hook 也由 hook-dispatch-registry 執行，"  # i18n-exempt
+        "每次事件會執行兩次（未自動移除：沒有自動登記紀錄，無法確認不是手動加入）:",  # i18n-exempt
+        "yellow",
+    )
+    for event, matcher, command in duplicates:
+        print_color(
+            f"     - .claude/settings.json → hooks.{event}（matcher: {matcher or '（無）'}）: {command}",  # i18n-exempt
+            "yellow",
+        )
+    print_color(
+        "   處置：確認不是刻意保留後，從上列區段的 hooks 陣列刪除該筆 command 物件；"  # i18n-exempt
+        "該 hook 仍會由 hook-dispatcher 執行。",  # i18n-exempt
+        "yellow",
+    )
 
 
 def _insert_hook_into_settings(  # i18n-exempt
@@ -3417,7 +3718,7 @@ _BUMP_NOT_SET = object()
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    """以 argparse 解析命令列參數（0.2.1-W3-164，PC-V1-001 / IMP-BAL-002 同家族防護）。
+    """以 argparse 解析命令列參數（PC-V1-001 / IMP-BAL-002 同家族防護）。
 
     Why：舊版手動 argv 比對（`if "--audit" in argv` / `if "--bump" in argv`）
     對 `--help` 與未知旗標 fail-open，兩者皆會落入正常同步主流程，觸發真實
@@ -3495,7 +3796,7 @@ def main() -> None:
         --resolve-done  衝突解完後確認：同步範圍內無殘留標記才把 pending base
                         升為 base；有殘留即拒絕（exit 1）並列出檔名。
 
-    參數解析改用 argparse（0.2.1-W3-164）：--help 印用法後 exit 0、未知旗標
+    參數解析改用 argparse：--help 印用法後 exit 0、未知旗標
     exit 2，兩者皆在解析階段中止，不落入下方同步主流程（PC-V1-001 /
     IMP-BAL-002 同家族防護，詳見 parse_args docstring）。
     """

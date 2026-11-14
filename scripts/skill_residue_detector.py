@@ -48,6 +48,13 @@ from lib.skill_case_guard import warn_skill_md_case_mismatch
 
 EXEMPT_MARKER = "skill-residue-exempt"
 
+# 三個入口（SessionStart、skill-sync push gate、sync-claude-push）共用的豁免說明。
+# 報告的行號是命中的實體行；續行命令的標記要加在最後一個實體行。
+EXEMPT_HINT = (
+    "確屬示意路徑時，於該行加 `skill-residue-exempt: <理由>` 標記"
+    "（反斜線續行命令加在 shell 區塊內該命令的最後一個實體行），或改寫為獨立命令"
+)
+
 # 文件慣用的示意路徑：這些本來就不該存在於任何專案，命中不代表殘留。
 PLACEHOLDER_SIGNALS = (
     "path/to",
@@ -96,6 +103,43 @@ def _is_placeholder(text: str) -> bool:
 
 def _line_is_exempt(line: str) -> bool:
     return EXEMPT_MARKER in line
+
+
+# 只在 shell fenced block 內合併續行：區塊外的行尾反斜線多是 markdown 硬換行、
+# Windows 路徑或 regex，合併會把無關的兩行綁成一條。
+_FENCE_RE = re.compile(r"^(`{3,}|~{3,})\s*([\w+-]*)")
+_SHELL_LANGS = frozenset({"bash", "sh", "shell"})
+
+
+def _exempt_line_numbers(lines: list[str]) -> set[int]:
+    """回傳應豁免的行號（1 起算）。
+
+    每行含標記即豁免該行。shell fenced block 內，以 `\\` 結尾的連續行合併為一條
+    邏輯命令；標記在最後一個實體行時豁免整條——中間行加 `#` 會吃掉行尾的 `\\`，
+    命令就斷了，所以最後一行是唯一合法位置。
+    """
+    exempt = {n for n, line in enumerate(lines, 1) if _line_is_exempt(line)}
+    fence: str | None = None
+    in_shell = False
+    command: list[int] = []
+    for lineno, line in enumerate(lines, 1):
+        stripped = line.strip()
+        match = _FENCE_RE.match(stripped)
+        if fence is None and match:
+            fence, in_shell = match.group(1), match.group(2).lower() in _SHELL_LANGS
+            continue
+        if fence is not None and stripped.startswith(fence) and not stripped.strip(fence[0]):
+            fence, in_shell, command = None, False, []
+            continue
+        if not in_shell:
+            continue
+        command.append(lineno)
+        if line.rstrip().endswith("\\"):
+            continue
+        if lineno in exempt:
+            exempt.update(command)
+        command = []
+    return exempt
 
 
 def known_versions(project_root: Path) -> set[str]:
@@ -158,9 +202,11 @@ def scan_file(
     except (OSError, UnicodeDecodeError):
         return []
 
+    lines = content.split("\n")
+    exempt = _exempt_line_numbers(lines)
     found: list[Residue] = []
-    for lineno, line in enumerate(content.split("\n"), 1):
-        if _line_is_exempt(line):
+    for lineno, line in enumerate(lines, 1):
+        if lineno in exempt:
             continue
 
         for match in _PATH_RE.finditer(line):

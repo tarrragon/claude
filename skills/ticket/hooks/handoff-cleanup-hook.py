@@ -28,7 +28,7 @@ Handoff 交接檔案自動清理 Hook
 
 使用方式:
     PostToolUse Hook 自動觸發，或手動測試:
-    echo '{"tool_name":"Bash","tool_input":{"command":"ticket track complete 0.31.0-W7-012"},"tool_response":{"stdout":"[OK] 已完成 Ticket 0.31.0-W7-012"}}' | python3 .claude/skills/ticket/hooks/handoff-cleanup-hook.py
+    echo '{"tool_name":"Bash","tool_input":{"command":"ticket track complete <ticket-id>"},"tool_response":{"stdout":"[OK] 已完成 Ticket <ticket-id>"}}' | python3 .claude/skills/ticket/hooks/handoff-cleanup-hook.py
 """
 
 import sys
@@ -39,7 +39,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root, is_subagent_environment
+from lib import get_hook_log_dir, setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root, is_subagent_environment
+from lib.hook_base import get_shared_state_root
 from lib.ticket_command_parse import has_complete_command
 from lib.bash_tool_response import is_bash_success, is_failure_event, auto_commit_failure_as_success
 from lib.ticket_completed_verifier import make_completed_verifier
@@ -52,7 +53,7 @@ from typing import Dict, Any, Optional, List, Tuple
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 
-# Ticket ID 格式正則 (支援子任務格式：0.31.0-W7-012.1.2)
+# Ticket ID 格式正則 (支援子任務格式：<ticket-id>)
 TICKET_ID_PATTERN = r'\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*'
 
 # ticket CLI 寫入命令「動作已完成、僅 auto-commit 失敗」的專用退出碼（sysexits EX_TEMPFAIL）
@@ -65,9 +66,9 @@ def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     PostToolUse Hook 會提供的結構:
     {
         "tool_name": "Bash",
-        "tool_input": {"command": "ticket track complete 0.31.0-W7-012"},
+        "tool_input": {"command": "ticket track complete <ticket-id>"},
         "tool_response": {
-            "stdout": "[OK] 已完成 Ticket 0.31.0-W7-012",
+            "stdout": "[OK] 已完成 Ticket <ticket-id>",
             "stderr": "",
             "exit_code": 0
         }
@@ -174,7 +175,7 @@ def cleanup_handoff_files(project_root: Path, ticket_id: str, logger) -> Tuple[b
 
     Args:
         project_root: 專案根目錄
-        ticket_id: Ticket ID (e.g., "0.31.0-W7-012")
+        ticket_id: Ticket ID (e.g., "<ticket-id>")
 
     Returns:
         tuple - (成功標誌, 清理結果字典)
@@ -266,7 +267,7 @@ def generate_summary_log(project_root: Path, cleanup_results: List[Dict[str, Any
         project_root: 專案根目錄
         cleanup_results: 清理結果列表
     """
-    log_dir = project_root / ".claude" / "hook-logs" / "handoff-cleanup"
+    log_dir = get_hook_log_dir("handoff-cleanup")
 
     # 產生詳細報告檔案
     report_file = log_dir / f"cleanup-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
@@ -329,7 +330,7 @@ def main() -> int:
             return EXIT_SUCCESS  # 靜默返回
 
         # 步驟 4: 取得專案根目錄
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
         logger.info(f"專案根目錄: {project_root}")
 
         # 步驟 5: 提取 Ticket ID

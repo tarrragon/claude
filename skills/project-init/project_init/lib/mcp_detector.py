@@ -2,7 +2,7 @@
 
 本模組偵測兩個 user-level MCP server binary 的可用性與本專案索引狀態，
 配合 project-init check 與 SessionStart hook 在新環境/換電腦時提早暴露
-MCP binary 缺失或索引未建立的問題（W6-001.2 / PC-159 防護）。
+MCP binary 缺失或索引未建立的問題（PC-159 防護）。
 """
 
 import shutil

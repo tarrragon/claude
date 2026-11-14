@@ -14,11 +14,11 @@ Hook 類型：PreToolUse
 退出碼：0 = 放行，2 = 阻擋（stderr 回饋給 Claude）
 
 背景：
-- W12-002 ANA 調查確認污染源（Hook stdout emoji + language-constraints 範例 emoji）
+- ANA 調查確認污染源（Hook stdout emoji + language-constraints 範例 emoji）
 - 根本解法需清洗所有污染源，但周期長
 - 本 Hook 是立即止血方案：偵測並攔截污染的 AUQ payload 送達用戶前
 
-W17-068 增補（PC-085 字形混淆防護）：
+增補（PC-085 字形混淆防護）：
 - 新增 PC-085 相鄰 codepoint 對照表（CONFUSABLE_PAIRS），記錄繁/簡/日新字體
   在同義對應字 codepoint 高度相鄰的清單
 - 啟動時 self-check：驗證 SIMPLIFIED_CHARS / JAPANESE_ONLY 與對照表一致性，
@@ -45,16 +45,16 @@ HOOK_NAME = "askuserquestion-charset-guard"
 # 常見 zh-CN 字元清單（繁體不會出現，命中即確認污染）
 # 來源：PC-072 檢查清單 + 姊妹簡體字
 # 每字須通過繁簡不共用驗證（PC-074）+ 非繁中異體字（PC-084）
-# W14-007 移除：U+4F53（繁中異體字，PC-084 §候選字驗證範例禁入）
+# 已移除：U+4F53（繁中異體字，PC-084 §候選字驗證範例禁入）
 SIMPLIFIED_CHARS = frozenset(
     "独违决关为与实发这应该简认识运动说话听读写买卖进见闻"
     "间问时来国让组长会义书产众们电门经济纪价东华"
     "补没务觉个灵响"
-    "隶遗"  # W13-003: 2026-04-17 session 再現補強（隸/遺 位本應繁體）
+    "隶遗"  # 2026-04-17 session 再現補強（隸/遺 位本應繁體）
 )
 
 # 日文新字體專屬漢字清單（繁中不收此字形，命中即確認污染）
-# 來源：PC-084 §候選字驗證範例「日專 → 可入」列；W14-007 首版
+# 來源：PC-084 §候選字驗證範例「日專 → 可入」列（首版）
 # 禁入字（PC-084 明文記錄，僅註解保留以防後人誤加）：
 #   - 鑑 U+9451（繁日共用；繁中「鑑別 / 借鑑 / 鑑於」正統字）
 #   - 体 U+4F53、誉 U+8A89、豊 U+8C4A、拝 U+62DD（繁中異體字，保守不入）
@@ -63,7 +63,7 @@ JAPANESE_ONLY = frozenset(
     "\u8aad"  # 読 U+8AAD  繁中用「讀」U+8B80
     "\u8a33"  # 訳 U+8A33  繁中用「譯」U+8B6F
     "\u99c5"  # 駅 U+99C5  繁中用「驛」U+9A5B
-    "\u4e21"  # 両 U+4E21  繁中用「兩」U+5169（W14-013 實證污染字）
+    "\u4e21"  # 両 U+4E21  繁中用「兩」U+5169（實證污染字）
     "\u767a"  # 発 U+767A  繁中用「發」U+767C
     "\u56f3"  # 図 U+56F3  繁中用「圖」U+5716
     "\u5e83"  # 広 U+5E83  繁中用「廣」U+5EE3
@@ -96,7 +96,7 @@ EMOJI_RANGES = (
 
 def _build_category_map() -> dict:
     """
-    建構 char -> category 統一 lookup 表（W3-019.1 重構）。
+    建構 char -> category 統一 lookup 表（重構自三分支 flag pattern）。
 
     建表順序：簡體字 → 日文漢字 → emoji。先入者贏（dict 內 key collision
     時保留先寫入的 value），優先序由建表順序決定。
@@ -133,7 +133,7 @@ def _build_category_map() -> dict:
 CATEGORY_MAP = _build_category_map()
 
 # ============================================================================
-# PC-085：CJK 相鄰 codepoint 字形混淆防護（W17-068）
+# PC-085：CJK 相鄰 codepoint 字形混淆防護
 # ============================================================================
 # 對照表記錄繁體 / 簡體 / 日文新字體三胞胎中 codepoint 高度相鄰的清單。
 # 用途：啟動 self-check 驗證 SIMPLIFIED_CHARS / JAPANESE_ONLY 設計一致性，
@@ -238,8 +238,8 @@ BLOCK_MESSAGE_TEMPLATE = """錯誤：AskUserQuestion payload 含字元集污染�
 
 為什麼阻止：
   AUQ payload 會渲染給用戶，含簡體字、日文漢字或 emoji 違反 language-constraints 規則 1/3。
-  常見污染源：Hook stdout emoji 累積污染 PM token pool（見 W12-002 調查結論）。
-  新增日文漢字類別（W14-007 / PC-084）：PM token pool 偶爾混入日文新字體近鄰字（如「読」U+8AAD 近鄰繁中「讀」U+8B80）。
+  常見污染源：Hook stdout emoji 累積污染 PM token pool（依 ANA 調查結論）。
+  新增日文漢字類別（PC-084）：PM token pool 偶爾混入日文新字體近鄰字（如「読」U+8AAD 近鄰繁中「讀」U+8B80）。
 
 修復方式：
   1. 逐項替換簡體字為繁體（例：独→獨、违→違、决→決、为→為、与→與）
@@ -255,7 +255,7 @@ def find_violations(text: str, field_path: str) -> list:
     """
     掃描字串偵測違規字元（簡體字 / 日文漢字 / emoji）。
 
-    W3-019.1 重構：從三分支 flag pattern 改為 CATEGORY_MAP 單一 dict.get lookup，
+    重構：從三分支 flag pattern 改為 CATEGORY_MAP 單一 dict.get lookup，
     TD-4/TD-5 擴充新類別只需擴充 _build_category_map。
 
     Args:
@@ -266,7 +266,7 @@ def find_violations(text: str, field_path: str) -> list:
         [(field_path, char, code_point, category), ...]
     """
     violations = []
-    # W3-019.1 重構：原三分支 flag pattern → 單一 CATEGORY_MAP.get lookup
+    # 重構：原三分支 flag pattern → 單一 CATEGORY_MAP.get lookup
     for char in text:
         category = CATEGORY_MAP.get(char)
         if category:
@@ -341,7 +341,7 @@ def main() -> int:
     """Hook 主邏輯。"""
     logger = setup_hook_logging(HOOK_NAME)
 
-    # W17-068：啟動時 PC-085 self-check（驗證清單設計一致性）
+    # 啟動時 PC-085 self-check（驗證清單設計一致性）
     # 規則 4：失敗必須可見（stderr + 日誌雙通道）
     # critical（誤入）→ stderr + logger.error（清單設計筆誤需修正）
     # info（漏網）→ 僅 logger.info（清單漸進擴充屬預期）
@@ -378,7 +378,7 @@ def main() -> int:
     if not input_data:
         return 0
 
-    # Effort 感知（v2.1.133+，W14-037）：
+    # Effort 感知（v2.1.133+）：
     # PC-074/PC-131 防護不可削弱 — 字元集偵測（scan_payload）為事實判斷，
     # 必擋邏輯與 effort 無關。此處僅記錄 effort 供後續觀測。
     effort = get_effort_level(input_data)
@@ -409,7 +409,7 @@ def main() -> int:
         logger.info("通過：AUQ payload 無簡體字與 emoji")
         return 0
 
-    # 命中違規 → 阻擋（W13-006.2 方案 C：雙通道分離）
+    # 命中違規 → 阻擋（雙通道分離）
     # - stdout JSON: permissionDecisionReason 承載完整修復指引（給 Claude）
     # - stderr: 極簡摘要（給用戶 terminal，保留規則 4 可觀測性）
     # - exit 0: 讓 JSON 生效（exit 2 會忽略 JSON）

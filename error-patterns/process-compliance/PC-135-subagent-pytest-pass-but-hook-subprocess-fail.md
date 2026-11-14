@@ -2,8 +2,8 @@
 
 **類別**: process-compliance
 **嚴重度**: High
-**首次發現**: 2026-05-10（W17-181.1 → 即時補丁 c87e0aee）
-**相關**: ARCH-020、PC-115、PC-110、W17-182（retrospective ANA 收斂中）
+**首次發現**: 2026-05-10（SSOT delegate 變更 → 即時補丁 c87e0aee）
+**相關**: ARCH-020、PC-115、PC-110
 
 ---
 
@@ -42,18 +42,18 @@ caller 端 `try: from lib import X; except: def X(...): return False` 的設計�
 
 ## 案例
 
-### 案例 1：W17-181.1 lib SSOT regression
+### 案例 1：lib SSOT regression
 
-W17-181.1 將 `handoff_utils.is_ticket_completed` delegate 至 `find_ticket_file`。新引入 import chain：`handoff_utils → ticket_system.lib.constants → lib/__init__.py eager-import ticket_loader → parser → yaml`。
+該次變更將 `handoff_utils.is_ticket_completed` delegate 至 `find_ticket_file`。新引入 import chain：`handoff_utils → ticket_system.lib.constants → lib/__init__.py eager-import ticket_loader → parser → yaml`。
 
 - Saffron 子代理人於 pytest 環境驗證通過（pyproject.toml 含 yaml）
 - Saffron 手動執行 `python3 -c "from handoff_utils import ..."` 通過（因執行於專案 cwd）
 - **三個 handoff hook（`handoff-auto-resume-stop-hook.py` / `handoff-prompt-reminder-hook.py` / `handoff-reminder-hook.py`）的 pep723 `dependencies = []` 缺 yaml**
 - Hook 運行時：import handoff_utils → 觸發 yaml ImportError → silent fallback to L94 stub → 永遠回 `(False, "")`
-- 症狀：W17-174 / W17-178.1 stale handoff 持續未被 GC，反覆 fire 提醒
+- 症狀：stale handoff 持續未被 GC，反覆 fire 提醒
 
 時間軸：
-- 23:00 W17-181.1 commit（pytest 11+ 測試綠）
+- 23:00 SSOT delegate commit（pytest 11+ 測試綠）
 - 23:03 PM 實機觸發 stop hook → 仍未 GC（log: 「非 stale，保留」）
 - 23:06 PM 直接於 subprocess 呼叫 → `ModuleNotFoundError: No module named 'yaml'`
 - 23:14 PM 補丁三 hook script header 加 pyyaml dep（commit c87e0aee）
@@ -92,7 +92,7 @@ except ImportError as e:
 
 ### Lib 層（正本清源）
 
-handoff_utils 應改用 `ticket_system.constants`（top-level package，無 yaml 鏈）取代 `ticket_system.lib.constants`，徹底斷開 lib 對 yaml 的傳遞性依賴。已開 W17-181.4 追蹤。
+handoff_utils 應改用 `ticket_system.constants`（top-level package，無 yaml 鏈）取代 `ticket_system.lib.constants`，徹底斷開 lib 對 yaml 的傳遞性依賴。已開後續 ticket 追蹤。
 
 ---
 
@@ -103,15 +103,15 @@ handoff_utils 應改用 `ticket_system.constants`（top-level package，無 yaml
 | ARCH-020 | 跨進程同構邏輯反模式；本案是 ARCH-020 修復過程的子症狀（環境異質） |
 | PC-115 | subagent claude-dir edit 真因待調查；本案展示「subagent 完成回報不可全信」的另一種失準路徑 |
 | PC-110 | subagent 自定義 H2 切斷 schema；本案展示「subagent 自我驗證範圍不足」的不同表現 |
-| W17-182 | retrospective ANA 收斂「結構性修復未掃 callers」反模式；本案是該模式的當下重現案例 |
+| PC-136 | 「結構性修復未掃 callers」反模式；本案是該模式的當下重現案例 |
 
 ---
 
 ## 後續觀測
 
-- 若 W17-181.4 未落地（lib 改用 top-level constants），本案會在其他 hook 加新 dep 時重現
+- 若後續 ticket 未落地（lib 改用 top-level constants），本案會在其他 hook 加新 dep 時重現
 - 應觀測 hook script 是否陸續出現「補 dep」commit；若達 3+ 次同類補丁，需強化派發 prompt 規範
-- 重啟調查鏈累積閾值：W17-179 → W17-181 → W17-181.1 commit → c87e0aee 補丁，本鏈累 2 次重啟，第 3 次需考慮升級為強制 hook 檢查
+- 重啟調查鏈累積閾值：兩次先行調查 → SSOT delegate commit → c87e0aee 補丁，本鏈累 2 次重啟，第 3 次需考慮升級為強制 hook 檢查
 
 ---
 
@@ -119,7 +119,7 @@ handoff_utils 應改用 `ticket_system.constants`（top-level package，無 yaml
 
 ### 重現
 
-W17-127.1（commit 20041166）抽出 `.claude/hooks/lib/framework_paths.py` 共用模組（含 `import yaml`，案例敘事：抽出當時路徑）<!-- broken-link-exempt: 本行為更正說明，案例本文保留原始路徑以忠實記錄事發當時狀態 -->。
+某次重構（commit 20041166）抽出 `.claude/hooks/lib/framework_paths.py` 共用模組（含 `import yaml`，案例敘事：抽出當時路徑）<!-- broken-link-exempt: 本行為更正說明，案例本文保留原始路徑以忠實記錄事發當時狀態 -->。
 
 現搬遷至 `.claude/lib/framework_paths.py`，2026-08-22 文件複查更正。4 個 caller 中：
 
@@ -132,7 +132,7 @@ W17-127.1（commit 20041166）抽出 `.claude/hooks/lib/framework_paths.py` 共�
 
 ### 隱患期間
 
-從 W17-127.1（2026-05-XX）到 2026-05-14 commit 1bc42b70，每次 PreToolUse:Agent 觸發都 import 階段 `ModuleNotFoundError: No module named 'yaml'`，因 hook 失敗 non-blocking，traceback 只在 UI 一閃，dispatch 仍放行。
+從該次重構（2026-05-XX）到 2026-05-14 commit 1bc42b70，每次 PreToolUse:Agent 觸發都 import 階段 `ModuleNotFoundError: No module named 'yaml'`，因 hook 失敗 non-blocking，traceback 只在 UI 一閃，dispatch 仍放行。
 
 期間所有 Agent 派發都缺：
 - ARCH-015 worktree 強制檢查
@@ -141,7 +141,7 @@ W17-127.1（commit 20041166）抽出 `.claude/hooks/lib/framework_paths.py` 共�
 
 ### 為何抽 lib 時漏掉 1/4
 
-W17-127.1 修改清單可能依「grep import framework_paths」找出 caller，但 caller 的 shebang/PEP723 deps 修改是**獨立的另一個動作**——若用「修改 import statement」作為清單，會自動覆蓋；若用「修改 dep 宣告」作為清單，需另開 grep。兩個動作的 checklist 不對齊就會漏。
+該次重構的修改清單可能依「grep import framework_paths」找出 caller，但 caller 的 shebang/PEP723 deps 修改是**獨立的另一個動作**——若用「修改 import statement」作為清單，會自動覆蓋；若用「修改 dep 宣告」作為清單，需另開 grep。兩個動作的 checklist 不對齊就會漏。
 
 ### 閾值升級訊號
 
@@ -160,4 +160,4 @@ PC-135 觀測閾值「3+ 次同類補丁」已達標：
 
 ---
 
-**Last Updated**: 2026-05-14 | **Version**: 1.1.0 — 追加案例 #2（agent-dispatch-validation-hook 漏 sync）+ 強制檢查設計待 ticket | **Source**: W17-181.1 c87e0aee + W14 post-revert commit 1bc42b70
+**Last Updated**: 2026-05-14 | **Version**: 1.1.0 — 追加案例 #2（agent-dispatch-validation-hook 漏 sync）+ 強制檢查設計待 ticket | **Source**: SSOT delegate 補丁 c87e0aee + post-revert commit 1bc42b70

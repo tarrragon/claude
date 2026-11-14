@@ -2,7 +2,7 @@
 """
 Presence-Detection Language Profiles（language-pluggable presence hook 的設定來源）
 
-背景（1.2.0-W1-036）：presence-detection 的三類偵測（user-facing 字串 / 裸 Color /
+背景：presence-detection 的三類偵測（user-facing 字串 / 裸 Color /
 魔術數字）偵測模式通用，但原 dart-presence hook 的實作把 .dart 專屬的 pattern 寫死，
 裸推上游會洩漏 Flutter 假設給非 Flutter 消費端。本檔把「語言專屬規則」抽成 profile，
 通用引擎依副檔名選 profile；無對應副檔名 profile 時引擎 no-op（exit 0），
@@ -28,7 +28,8 @@ profile schema（PresenceProfile）：
 """
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Dict, List, Pattern, Tuple
 
 
@@ -177,7 +178,7 @@ _DART = PresenceProfile(
 #     該行實際位於 docstring 內部。此限制的行為快照見
 #     test_python_profile_multiline_docstring_middle_line_with_quotes_known_limitation。
 #
-# 重要（1.2.0-W1-036 dogfooding 發現）：framework 自身的 .py（hooks / skills / config）
+# 重要（dogfooding 發現）：framework 自身的 .py（hooks / skills / config）
 # 內含大量開發者面 CJK 字串字面（block 訊息組裝、log 文案），這些非 user-facing i18n
 # 候選。若 stub profile 對其生效會在編輯框架 hook 時誤觸 deny（88+ 檔受影響），癱瘓
 # 框架開發。故將框架 Python 來源目錄納入 skip_patterns——stub 仍由 unit test 直接驗證
@@ -266,3 +267,79 @@ def get_profile_for_path(file_path: str):
         if file_path.endswith(ext):
             return profile
     return None
+
+
+# ---------------------------------------------------------------------------
+# 專案級覆寫層（2026-11-13 新增）
+# ---------------------------------------------------------------------------
+#
+# consumer 專案專屬的集中常數檔路徑不能寫進本檔：本檔隨 sync 散佈，寫進來會套用
+# 到所有 consumer。覆寫檔放在 .claude/project-integration/presence-overrides.yaml，
+# 該目錄在 sync 排除清單的 PER_PROJECT_PATTERNS 內，git 追蹤且 sync 雙向不覆蓋。
+#
+# 覆寫檔格式（依 profile 名列出要新增的 skip_patterns）：
+#
+#   dart:
+#     skip_patterns:
+#       - 'my_constants\.dart$'
+#
+# 合併規則是只加不減：覆寫只能附加 skip_patterns，框架既有 pattern 一律保留，
+# 因此 consumer 無法放寬框架的偵測範圍。
+
+PRESENCE_OVERRIDES_RELATIVE = Path(".claude") / "project-integration" / "presence-overrides.yaml"
+
+
+def merge_project_overrides(profile, project_root) -> Tuple[PresenceProfile, List[str]]:
+    """把專案覆寫檔的 skip_patterns 附加到 profile。
+
+    Returns:
+        (合併後的 profile, 錯誤訊息清單)。覆寫檔不存在時回傳原 profile 與空清單；
+        任何錯誤（缺 pyyaml、yaml 解析失敗、格式不符、regex 編譯失敗）都回傳原
+        profile 與錯誤訊息，由呼叫端寫 stderr 與日誌（品質基線規則 4）。
+    """
+    overrides_path = Path(project_root) / PRESENCE_OVERRIDES_RELATIVE
+    if not overrides_path.is_file():
+        return profile, []
+
+    location = str(PRESENCE_OVERRIDES_RELATIVE)
+    try:
+        import yaml  # 延遲匯入：覆寫檔不存在時不需要 pyyaml
+    except ImportError:
+        return profile, [f"{location} 存在但執行環境沒有 pyyaml，忽略覆寫"]
+
+    try:
+        data = yaml.safe_load(overrides_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        return profile, [f"{location} 讀取或解析失敗，忽略覆寫：{exc}"]
+
+    if data is None:
+        return profile, []
+    if not isinstance(data, dict):
+        return profile, [f"{location} 頂層須為「profile 名 → 設定」的 mapping，忽略覆寫"]
+
+    known_names = {p.name for p in PROFILES}
+    errors = [
+        f"{location} 指定的 profile「{name}」不存在（可用：{', '.join(sorted(known_names))}）"
+        for name in data
+        if name not in known_names
+    ]
+
+    entry = data.get(profile.name)
+    if entry is None:
+        return profile, errors
+
+    raw_patterns = entry.get("skip_patterns") if isinstance(entry, dict) else None
+    if not isinstance(raw_patterns, list) or not all(isinstance(p, str) for p in raw_patterns):
+        return profile, errors + [
+            f"{location} 的 {profile.name}.skip_patterns 須為字串清單，忽略此 profile 的覆寫"
+        ]
+
+    try:
+        extra = _compile(raw_patterns)
+    except re.error as exc:
+        return profile, errors + [
+            f"{location} 的 {profile.name}.skip_patterns 有無法編譯的 regex，忽略此 profile 的覆寫：{exc}"
+        ]
+
+    merged = replace(profile, skip_patterns=list(profile.skip_patterns) + extra)
+    return merged, errors

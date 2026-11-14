@@ -79,7 +79,7 @@ INDEX_TRIPWIRE_LOG_NAME = "index-tripwire"
 # 不致讓呼叫端無限等待。與 worktree-auto-commit-hook / ticket git_ops 兩份私有複本一致。
 TERMINATE_GRACE_SECONDS = 5
 
-# 跨專案豁免清單（W17-149 建立於 branch-verify-hook.py，0.2.1-W3-151 移至此處作 SSOT）：
+# 跨專案豁免清單（原建立於 branch-verify-hook.py，已移至此處作 SSOT）：
 # 當目標檔案/檔案不在本專案 repo 時，使用通用清單，不套用 .claude/、docs/ 等本專案約定。
 # 供 branch-verify-hook.py（Edit/Write 路徑）與 bash-git-protected-branch-guard-hook.py
 # （Bash git commit 路徑）共用，避免兩條路徑各自維護清單而語意漂移。
@@ -187,8 +187,9 @@ def _log_bare_index_operation(args: list[str], cwd: Optional[str]) -> None:
         )
         print(f"[WARNING] {message}", file=sys.stderr)
 
-        root = get_project_root(cwd=cwd)
-        log_dir = root / ".claude" / "hook-logs" / INDEX_TRIPWIRE_LOG_NAME
+        # 延遲 import 避免 git_utils <-> hook_logging 循環依賴；linked worktree 內解析為主 repo
+        from lib.hook_logging import get_hook_log_dir
+        log_dir = get_hook_log_dir(INDEX_TRIPWIRE_LOG_NAME)
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"{INDEX_TRIPWIRE_LOG_NAME}-{datetime.now().strftime('%Y%m%d')}.log"
         with open(log_file, "a", encoding="utf-8") as f:
@@ -236,7 +237,7 @@ def run_git_command(
         if result.returncode == 0:
             # 只移除尾端換行，保留行首空白（porcelain 格式 X 位置可能為空白，
             # 整體 strip() 會剝除首行前導空白，使 get_uncommitted_files 解析
-            # 偏移一格，見 IMP-BAL-007 / 0.2.1-W3-284）
+            # 偏移一格，見 IMP-BAL-007）
             return True, result.stdout.rstrip("\n")
         else:
             return False, result.stderr.strip()
@@ -260,10 +261,29 @@ def _signal_process_group(proc, sig) -> None:
         print(f"[Warning] killpg {proc.pid} {sig.name} failed: {e}", file=sys.stderr)
 
 
+class _SigtermForwarder:
+    """持有子程序參照與「子程序建立前收到的 TERM」。"""
+
+    def __init__(self):
+        self.proc = None
+        self.pending = None  # (signum, frame, finish)：子程序建立前收到的 TERM
+
+    def attach(self, proc):
+        """子程序建立後呼叫；補送建立前收到的 TERM 並交還原 handler。"""
+        self.proc = proc
+        if self.pending is not None:
+            signum, frame, finish = self.pending
+            self.pending = None
+            finish(signum, frame)
+
+
 @contextmanager
-def _forward_sigterm_to_group(proc):
+def _forward_sigterm_to_group():
     """子程序執行期間，hook 自身收到 SIGTERM 時先轉送給子群組。
 
+    須在啟動子程序「之前」進入，yield 的 forwarder 於 Popen 後以 attach(proc) 綁定；
+    子程序建立前收到的 TERM 先記下，attach 時補送給子群組（避免 Popen 與安裝 handler
+    之間的空窗讓 TERM 由原 handler 接走而未轉送）。
     子程序以 start_new_session 自成群組，harness 對 hook 後代送 TERM 時可能漏掉它
     （hook 快速退出的輪次實測 1/5）。轉送後交還原 handler：SIG_DFL 則還原後對自身
     重送 TERM 使 hook 照常結束，SIG_IGN 維持忽略，可呼叫物件則呼叫之。
@@ -271,29 +291,44 @@ def _forward_sigterm_to_group(proc):
     原 handler 非由 Python 安裝（getsignal 回傳 None）時 signal.signal 無法還原，
     故不安裝轉送，略過並寫 stderr。
     """
+    forwarder = _SigtermForwarder()
     if threading.current_thread() is not threading.main_thread():
         print("[Warning] SIGTERM forwarding skipped: not in main thread", file=sys.stderr)
-        yield
+        yield forwarder
         return
     previous = signal.getsignal(signal.SIGTERM)
     if previous is None:
         print("[Warning] SIGTERM forwarding skipped: previous handler not installed by Python", file=sys.stderr)
-        yield
+        yield forwarder
         return
 
-    def _forward(signum, frame):
-        _signal_process_group(proc, signal.SIGTERM)
+    def _hand_back(signum, frame):
         signal.signal(signal.SIGTERM, previous)
         if callable(previous):
             previous(signum, frame)
         elif previous == signal.SIG_DFL:
             os.kill(os.getpid(), signal.SIGTERM)
 
+    def _finish(signum, frame):
+        _signal_process_group(forwarder.proc, signal.SIGTERM)
+        _hand_back(signum, frame)
+
+    def _forward(signum, frame):
+        if forwarder.proc is None:
+            forwarder.pending = (signum, frame, _finish)
+            return
+        _finish(signum, frame)
+
     signal.signal(signal.SIGTERM, _forward)
     try:
-        yield
+        yield forwarder
     finally:
         signal.signal(signal.SIGTERM, previous)
+        if forwarder.pending is not None:
+            # Popen 失敗而離開：無子群組可轉送，TERM 交還原 handler，不吞掉
+            signum, frame, _ = forwarder.pending
+            forwarder.pending = None
+            _hand_back(signum, frame)
 
 
 def run_with_graceful_timeout(args, timeout, grace=None, **popen_kwargs):
@@ -315,9 +350,10 @@ def run_with_graceful_timeout(args, timeout, grace=None, **popen_kwargs):
     input_text = popen_kwargs.pop("input", None)
     stdin = subprocess.PIPE if input_text is not None else None
     popen_kwargs["start_new_session"] = True
-    with subprocess.Popen(
+    with _forward_sigterm_to_group() as forwarder, subprocess.Popen(
         args, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **popen_kwargs
-    ) as proc, _forward_sigterm_to_group(proc):
+    ) as proc:
+        forwarder.attach(proc)
         try:
             out, err = proc.communicate(input_text, timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -464,6 +500,63 @@ def get_project_root(cwd: Optional[str] = None) -> Path:
     return Path(cwd) if cwd else Path.cwd()
 
 
+def get_action_root(payload: Optional[dict], fallback_root: Optional[Path] = None) -> Path:
+    """
+    取得 payload.cwd 所屬 checkout 的根目錄（作用根）
+
+    與 get_project_root 的差異：get_project_root 優先採 CLAUDE_PROJECT_DIR，
+    恆指主 repo；本函式依 payload.cwd 解析，情境 C（env 指向 MAIN、cwd 在
+    linked worktree）下回傳該 worktree 根。解析基礎為
+    lib.checkout_identity.owning_checkout_root，不另寫第二份解析。
+
+    payload 缺 cwd，或 cwd 不在任何 checkout 內時，退回 get_project_root()
+    並寫 stderr。cwd 缺漏或解析不到 checkout 時，退回 get_project_root，不拋例外；
+    lib.checkout_identity 匯入失敗時會拋出，交由呼叫端的 run_hook_safely 處理
+    （fail_closed 的守衛會因此阻擋）。回傳 Path。
+
+    Args:
+        payload: hook payload（讀 cwd 欄位）
+        fallback_root: 退回時採用的根（呼叫端已解析 get_project_root 時傳入，
+            避免重複解析）；None 時呼叫 get_project_root()
+    """
+    from lib.checkout_identity import owning_checkout_root
+
+    cwd = payload.get("cwd") if isinstance(payload, dict) else None
+    if not cwd or not isinstance(cwd, str):
+        sys.stderr.write("[get_action_root] payload 缺 cwd，退回 get_project_root\n")
+        return fallback_root if fallback_root is not None else get_project_root()
+    root = owning_checkout_root(os.path.join(os.path.abspath(cwd), "."))
+    if root is None:
+        sys.stderr.write(
+            f"[get_action_root] cwd={cwd} 不在任何 checkout 內，退回 get_project_root\n"
+        )
+        return fallback_root if fallback_root is not None else get_project_root()
+    return Path(root)
+
+
+def get_target_root(
+    file_path: Optional[str], payload: Optional[dict], original_root: Optional[Path] = None
+) -> Optional[Path]:
+    """
+    取得編輯目標檔所屬 checkout 的根（權限守衛的路徑相對化作用根）
+
+    順序：目標為絕對路徑且在 checkout 內 → owning_checkout_root(file_path)；
+    否則 payload 有 cwd → get_action_root(payload, original_root)；
+    payload 缺 cwd → 回傳 original_root（呼叫端沿用原根，不呼叫 get_action_root，
+    不新增 stderr）。
+    """
+    from lib.checkout_identity import is_absolute_path, owning_checkout_root
+
+    if file_path and is_absolute_path(file_path):
+        root = owning_checkout_root(file_path)
+        if root is not None:
+            return Path(root)
+    cwd = payload.get("cwd") if isinstance(payload, dict) else None
+    if cwd and isinstance(cwd, str):
+        return get_action_root(payload, original_root)
+    return original_root
+
+
 def get_uncommitted_files(cwd: Optional[str] = None) -> list[FileStatus]:
     """
     獲取未提交變更的結構化資訊（高階 API）
@@ -474,7 +567,7 @@ def get_uncommitted_files(cwd: Optional[str] = None) -> list[FileStatus]:
     FileStatus docstring 的特殊限制說明），供各呼叫端統一沿用。
 
     Args:
-        cwd: 執行 git status 的工作目錄，預設為當前目錄（0.2.1-W3-286：
+        cwd: 執行 git status 的工作目錄，預設為當前目錄（
              支援指定 worktree 路徑，取代各 hook 各自 `git -C <path> status`
              的重複實作）
 
@@ -570,7 +663,7 @@ def get_worktree_list(
     獲取所有 worktree 列表
 
     Args:
-        cwd: 執行 git worktree list 的工作目錄，預設為當前目錄（0.2.1-W3-286：
+        cwd: 執行 git worktree list 的工作目錄，預設為當前目錄（
              支援指定路徑查詢，取代各 hook 各自解析 `git worktree list
              --porcelain` 的重複實作）
         exclude_main: True 時排除 branch 為 main/master 的項目（收斂三個

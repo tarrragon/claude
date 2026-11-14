@@ -4,7 +4,7 @@
 **Severity**: High
 **Status**: Active
 **Created**: 2026-04-22
-**Source**: W17-045 事件 — book_overview_v1 sync-push 將 `dispatch-active.json` 和 `hook-state/wrap-tripwire-state.json` 推送到共享 repo，ccsession 專案 sync-pull 後本地 session runtime state 被覆蓋汙染。
+**Source**: 某次事件 — book_overview_v1 sync-push 將 `dispatch-active.json` 和 `hook-state/wrap-tripwire-state.json` 推送到共享 repo，ccsession 專案 sync-pull 後本地 session runtime state 被覆蓋汙染。
 
 ---
 
@@ -56,7 +56,7 @@
 
 ## 觸發案例
 
-### W17-045（2026-04-22）
+### 事件（2026-04-22）
 
 book_overview_v1 執行 sync-push 時，將以下檔案推送到共享 repo：
 
@@ -80,7 +80,7 @@ ccsession 專案 sync-pull 後，本地 `dispatch-active.json` 被覆蓋為 book
 
 ## 防護措施
 
-### 1. 建立 Sync 排除分類規範（W17-045.1）
+### 1. 建立 Sync 排除分類規範
 
 於 `.claude/references/sync-exclusion-guide.md` 建立以下規範：
 
@@ -88,7 +88,7 @@ ccsession 專案 sync-pull 後，本地 `dispatch-active.json` 被覆蓋為 book
 - 為排除清單每條目加上分類標籤與註解，維護者可快速判斷新檔應歸入哪類
 - 提供新增 `.claude/` 機制時的 sync 評估 checklist（5 問：專案本地？頻繁變動？覆蓋有害？需跨專案共享？加入哪類排除？）
 
-### 2. SessionStart Hook 自動偵測未排除檔案（W17-045.3）
+### 2. SessionStart Hook 自動偵測未排除檔案
 
 新增 Hook 於 SessionStart 時掃描 `.claude/` 底下：
 
@@ -98,7 +98,7 @@ ccsession 專案 sync-pull 後，本地 `dispatch-active.json` 被覆蓋為 book
 
 ### 3. 本 Error Pattern 作為記憶體
 
-本 pattern 記錄 W17-045 事件與三類型定義，作為未來 PM / 設計者審查新增 `.claude/` 機制時的對照表。遇到類似症狀（sync 後 runtime 異常、派發狀態詭異）先查本 pattern，確認是否屬同一根因。
+本 pattern 記錄該事件與三類型定義，作為未來 PM / 設計者審查新增 `.claude/` 機制時的對照表。遇到類似症狀（sync 後 runtime 異常、派發狀態詭異）先查本 pattern，確認是否屬同一根因。
 
 ### 4. 新增機制時的 Ticket Checklist
 

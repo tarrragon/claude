@@ -2,7 +2,7 @@
 
 > **錯誤類別**：流程合規（IMP 完成標準不含 fresh shell 驗證）
 > **嚴重度**：高（換電腦/clone/CI 全部失敗，阻塞用戶工作流）
-> **發現案例**：0.19.0-W3-050（換新電腦後依 W6-001.1 development-setup.md 安裝 codegraph 失敗，發現 `npm install -g codegraph` 安裝的是 469B placeholder 而非實際 CLI）
+> **發現案例**：換新電腦事件（依原 IMP 票寫成的 development-setup.md 安裝 codegraph 失敗，發現 `npm install -g codegraph` 安裝的是 469B placeholder 而非實際 CLI）
 
 ---
 
@@ -23,22 +23,22 @@ IMP ticket 寫安裝指令時的驗證點與「fresh shell」之間有兩道落�
 
 1. **PM/agent 環境污染**：撰寫 ticket 時，作者環境已存在所需 binary（從先前手動安裝、apt/brew、其他專案安裝等），執行 `which <binary>` 看似 OK，但 *為什麼 OK* 未被檢驗。文件據此推測「應該是 `npm install -g X`」，實際對 fresh shell 無效。
 
-2. **acceptance 條件粒度太粗**：W6-001.1 acceptance #3「本專案執行 mcp__codegraph__codegraph_status 回報正常」依賴 binary 已在 PATH 的既有環境，未觸及「fresh shell 從零安裝是否能達到該狀態」。
+2. **acceptance 條件粒度太粗**：該 IMP 票的第 3 項 acceptance「本專案執行 mcp__codegraph__codegraph_status 回報正常」依賴 binary 已在 PATH 的既有環境，未觸及「fresh shell 從零安裝是否能達到該狀態」。
 
 3. **package name squat / namespace 混淆**：npm/PyPI 等 registry 上熱門短名常被 placeholder package 佔據（如 `codegraph@1.0.0` 469B 無 bin 入口），實際工具發布在 scoped name（`@astudioplus/codegraph-mcp`）。文件指令未驗證即假設短名 = 真實 package。
 
 4. **文件指令含「依官方文件」模糊指引**：development-setup.md「依官方文件安裝」「從 release 下載」等模糊段落迴避了驗證責任，誰來填具體指令未明示。
 
-## 案例：W6-001.1 → W3-050
+## 案例：development-setup 安裝指令 → 換新電腦失敗
 
 | 階段 | 觀察 |
 |------|------|
-| W6-001.1 完成 | development-setup.md 寫「`npm install -g codegraph`」+ acceptance 通過（PM mac-eric 環境已有 codegraph binary `~/.nvm/.../bin/codegraph`） |
+| 原 IMP 票完成 | development-setup.md 寫「`npm install -g codegraph`」+ acceptance 通過（PM mac-eric 環境已有 codegraph binary `~/.nvm/.../bin/codegraph`） |
 | 換新電腦 tarragon | `npm install -g codegraph` → 安裝 npm registry 上的 codegraph@1.0.0（469B placeholder package，無 bin 入口）→ `which codegraph` not found |
 | 真實安裝路徑 | 實際 codegraph MCP server 為 `@astudioplus/codegraph-mcp@0.16.6`（bin: `codegraph-mcp`，CLI 格式：`-w .` 而非 `serve --mcp --path .`） |
-| 修正路徑 | W3-050 修 `.mcp.json` 配置對齊新 CLI + 文件待更新 |
+| 修正路徑 | 修 `.mcp.json` 配置對齊新 CLI + 文件待更新 |
 
-> 完整時間軸與根因鏈見 W3-050 ticket md 與 commit `c9fc6bcd`。
+> 完整時間軸與根因鏈見修正該問題的 ticket md 與 commit `c9fc6bcd`。
 
 ## 防護要點
 
@@ -74,10 +74,10 @@ PostToolUse:Edit / PostToolUse:Write 偵測對 `docs/development-setup.md` / `do
 
 | Ticket | 關係 |
 |--------|------|
-| 0.19.0-W6-001.1 | source：development-setup.md 寫入未驗證指令 |
-| 0.19.0-W3-050 | 揭露案例：換電腦觸發失敗 + 修正 .mcp.json |
-| 待建 IMP | 更新 W6-001.1 development-setup.md 用 scoped package name |
-| 0.19.0-W3-049（ANA） | 共振分析：mint commit 後未 complete + 本案 W6-001.1 安裝指令未驗證，皆屬「文件 vs 實機驗證不一致」根因家族 |
+| 原 IMP 票 | source：development-setup.md 寫入未驗證指令 |
+| 修正票 | 揭露案例：換電腦觸發失敗 + 修正 .mcp.json |
+| 待建 IMP | 更新 development-setup.md 用 scoped package name |
+| 共振分析 ANA | 共振分析：mint commit 後未 complete + 本案安裝指令未驗證，皆屬「文件 vs 實機驗證不一致」根因家族 |
 
 ## 相關規則
 
@@ -87,4 +87,4 @@ PostToolUse:Edit / PostToolUse:Write 偵測對 `docs/development-setup.md` / `do
 ---
 
 **Last Updated**: 2026-05-25
-**Source**: 0.19.0-W3-050 commit c9fc6bcd
+**Source**: 換新電腦事件 commit c9fc6bcd

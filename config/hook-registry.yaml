@@ -92,8 +92,6 @@ hooks:
   homoglyph-guard-hook.py:
     event: PreToolUse
     matcher: Bash
-  hook-completeness-check.py:
-    event: SessionStart
   hook-health-monitor.py:
     event: SessionStart
   install-guide-edit-reminder-hook.py:
@@ -113,15 +111,9 @@ hooks:
     matcher: Write
   malformed-tool-call-detector-hook.py:
     event: Stop
-  mcp-run-tests-validator.py:
-    event: PreToolUse
-    matcher: mcp__dart__run_tests
   mcp-write-tool-on-text-file-guard-hook.py:
     event: PreToolUse
-    matcher: mcp__serena__replace_content|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol|mcp__serena__safe_delete_symbol
-  memory-upgrade-reminder-hook.py:
-    event: PostToolUse
-    matcher: Write
+    matcher: mcp__serena__replace_content|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol|mcp__serena__safe_delete_symbol|mcp__plugin_serena_serena__replace_content|mcp__plugin_serena_serena__replace_symbol_body|mcp__plugin_serena_serena__insert_after_symbol|mcp__plugin_serena_serena__insert_before_symbol|mcp__plugin_serena_serena__safe_delete_symbol
   output-style-check.py:
     event: SessionStart
   package-version-sync-hook.py:
@@ -166,6 +158,8 @@ hooks:
     event: UserPromptSubmit
     timeout: 5000
   project-init-env-check-hook.py:
+    event: SessionStart
+  project-hook-registry-sync-hook.py:
     event: SessionStart
   prompt-submit-hook.py:
     event: UserPromptSubmit
@@ -234,12 +228,6 @@ hooks:
   zhtw-mcp-availability-check-hook.py:
     event: SessionStart
 skill_hooks:
-  compositional-writing/comment-qa-hook.py:
-    event: PostToolUse
-    matcher: Write
-  compositional-writing/worklog-format-check.py:
-    event: PostToolUse
-    matcher: Write
   error-pattern/error-pattern-flat-gate-hook.py:
     event: PreToolUse
     matcher: Write
@@ -298,15 +286,8 @@ skill_hooks:
   ticket/ticket-path-guard-hook.py:
     event: PreToolUse
     matcher: Write
-  ticket/ticket-quality-gate-hook.py:
-    event: PostToolUse
-    matcher: Write
   ticket/ticket-reinstall-hook.py:
     event: SessionStart
-  ticket/ticket-skill-sync-check-hook.py:
-    event: PostToolUse
-    matcher: Bash
-    timeout: 5000
   version-release/version-release-guard-hook.py:
     event: PreToolUse
     matcher: Bash

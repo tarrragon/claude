@@ -4,192 +4,36 @@
 # dependencies = ["pyyaml"]
 # ///
 """
-代理人分派正確性檢查 Hook
-PreToolUse Hook: 在使用 Task 工具前檢查代理人分派是否正確
+代理人派發前置檢查 Hook
+PreToolUse Hook（Agent/Task 工具）：派發缺少 prompt 時擋下。
 
-確保任務類型與代理人匹配（例如 Hook 開發 → basil-hook-architect）。
-任務需求完整性檢查已由 Ticket 系統（command-entrance-gate-hook）負責。
+另在 prompt 引用 handoff 指向的票時輸出可見訊號（不影響放行）。
 
 重構紀錄:
+- 移除代理人分派對應比對：設定檔 known_agents 全數列在 agent_to_task_map 內、
+  名單外代理人不算錯，比對永遠判定為正確，deny 分支實際走不到；連帶移除
+  HOOK_MODE（strict/warning）與 agent-dispatch-warnings.jsonl 記錄。
 - v0.31.0: 移除 check_task_requirements（已被 Ticket 檢查機制取代）
-- v0.28.0: 使用共用模組和配置檔案
 """
 
-import json
 import sys
-import re
-import os
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 # 加入共用模組路徑
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-from lib import setup_hook_logging, get_project_root, prompt_references_handoff_ticket, emit_handoff_recovery_signal, run_hook_safely
+from lib import setup_hook_logging, prompt_references_handoff_ticket, emit_handoff_recovery_signal, run_hook_safely
 from lib.hook_io import read_hook_input, write_hook_output, create_pretooluse_output
-from lib.config_loader import load_agents_config
-
-# Hook 模式常數
-HOOK_MODE_STRICT = "strict"
-HOOK_MODE_WARNING = "warning"
-DEFAULT_HOOK_MODE = HOOK_MODE_STRICT
-
-
-def get_hook_mode(logger) -> str:
-    """取得當前 Hook 運作模式"""
-    env_mode = os.environ.get("HOOK_MODE", "").lower()
-    if env_mode in [HOOK_MODE_STRICT, HOOK_MODE_WARNING]:
-        return env_mode
-
-    try:
-        project_root = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
-        config_file = Path(project_root) / ".claude" / "hook-config.json"
-        if config_file.exists():
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                mode = config.get("agent_dispatch_check", {}).get("mode", "").lower()
-                if mode in [HOOK_MODE_STRICT, HOOK_MODE_WARNING]:
-                    return mode
-    except Exception as e:
-        logger.warning(f"讀取配置檔案失敗: {e}")
-
-    return DEFAULT_HOOK_MODE
-
-
-def log_warning_to_file(warning_data: Dict, logger) -> None:
-    """記錄警告到 JSONL 檔案"""
-    try:
-        project_root = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
-        log_dir = Path(project_root) / ".claude" / "hook-logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        warning_file = log_dir / "agent-dispatch-warnings.jsonl"
-        warning_data["timestamp"] = datetime.now().isoformat()
-        with open(warning_file, 'a', encoding='utf-8') as f:
-            json.dump(warning_data, f, ensure_ascii=False)
-            f.write('\n')
-    except Exception as e:
-        logger.error(f"記錄警告失敗: {e}")
-
-
-def detect_task_type(prompt: str, config: Dict, logger) -> str:
-    """偵測任務類型"""
-    # 優先級 1: 明確 Phase 標記檢測
-    explicit_phase_patterns = [
-        (r'\[Phase 1[^\]]*\]', "Phase 1 設計"),
-        (r'\[Phase 2[^\]]*\]', "Phase 2 測試設計"),
-        (r'\[Phase 3a[^\]]*\]', "Phase 3a 策略規劃"),
-        (r'\[Phase 3b[^\]]*\]', "Phase 3b 實作"),
-        (r'\[Phase 4[^\]]*\]', "Phase 4 重構"),
-    ]
-
-    # W10-043.3 P1 修復：僅掃 prompt 第一行（意圖宣告行），避免誤命中 Context Bundle 引用的上游 Phase 標記
-    # 觸發劇本：派發 cinnamon Phase 4，prompt 第一行為 Phase 4，但 Context Bundle 含上游 [Phase 3b] 文字
-    prompt_first_line = prompt.split('\n', 1)[0]
-    for pattern, task_type in explicit_phase_patterns:
-        if re.search(pattern, prompt_first_line, re.IGNORECASE):
-            logger.info(f"檢測到明確 Phase 標記：{task_type}")
-            return task_type
-
-    # 優先級 2: 關鍵字權重評估
-    weight_map = config.get("weight_map", {"high": 3, "medium": 2, "low": 1})
-    exclude_keywords = config.get("exclude_keywords", {})
-    task_type_priorities = config.get("task_type_priorities", [])
-
-    task_weights: Dict[str, int] = {}
-
-    for task_config in task_type_priorities:
-        task_type = task_config["type"]
-        positive_weight = 0
-        exclude_penalty = 0
-
-        # 檢查排除關鍵字
-        if task_type in exclude_keywords:
-            for exclude_keyword in exclude_keywords[task_type]:
-                if exclude_keyword in prompt:
-                    exclude_penalty += 5
-
-        # 掃描正面關鍵字
-        keywords = task_config.get("keywords", {})
-        for level, kw_list in keywords.items():
-            for keyword in kw_list:
-                if keyword in prompt:
-                    positive_weight += weight_map.get(level, 1)
-
-        final_weight = positive_weight - exclude_penalty
-        if final_weight > 0:
-            task_weights[task_type] = final_weight
-
-    if task_weights:
-        best_task = max(task_weights, key=task_weights.get)
-        logger.info(f"任務類型識別：{best_task} (權重: {task_weights[best_task]})")
-        return best_task
-
-    return "未知"
-
-
-def check_agent_dispatch(prompt: str, current_agent: str, config: Dict, logger) -> Dict:
-    """檢查代理人分派是否正確"""
-    known_agents = set(config.get("known_agents", []))
-    agent_to_task_map = config.get("agent_to_task_map", {})
-    agent_dispatch_rules = config.get("agent_dispatch_rules", {})
-    dispatch_error_reasons = config.get("dispatch_error_reasons", {})
-
-    if not current_agent:
-        return {"is_error": False}
-
-    if current_agent not in known_agents:
-        logger.warning(f"未知代理人: {current_agent}")
-        return {"is_error": False}
-
-    # 代理人名稱優先判定
-    if current_agent in agent_to_task_map:
-        expected_task_type = agent_to_task_map[current_agent]
-        return {
-            "is_error": False,
-            "detected_task_type": expected_task_type,
-            "correct_agent": current_agent
-        }
-
-    # 任務類型關鍵字判定
-    task_type = detect_task_type(prompt, config, logger)
-    if task_type == "未知":
-        return {"is_error": False}
-
-    correct_agent = agent_dispatch_rules.get(task_type, "")
-    if current_agent == correct_agent:
-        return {
-            "is_error": False,
-            "detected_task_type": task_type,
-            "correct_agent": correct_agent
-        }
-
-    # 代理人分派錯誤
-    reason = dispatch_error_reasons.get(task_type, "任務類型不匹配")
-    error_msg = f"""代理人分派錯誤
-
-任務類型：{task_type}
-當前代理人：{current_agent}
-正確代理人：{correct_agent}
-
-原因：{reason}
-"""
-    return {
-        "is_error": True,
-        "error_message": error_msg,
-        "detected_task_type": task_type,
-        "correct_agent": correct_agent
-    }
 
 
 def write_deny_or_exit2(output: dict, logger) -> None:
     """輸出 deny 決定；stdout 寫入失敗時以 exit 2 阻擋。
 
-    不改用 emit_hook_output：其輸出為單行 JSON，本守衛既有輸出為 indent=2
-    （且 strict 模式附 systemMessage），改用會改變輸出位元組。
-    故自行兜底：寫入失敗若沿用原行為會經 run_hook_safely 回 exit 1（放行）。
+    不改用 emit_hook_output：其輸出為單行 JSON，本守衛既有輸出為 indent=2，
+    改用會改變輸出位元組。故自行兜底：寫入失敗若沿用原行為會經
+    run_hook_safely 回 exit 1（放行）。
     """
     try:
         write_hook_output(output)
@@ -219,7 +63,7 @@ def main() -> None:
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}
 
-    # 只處理 Task/Agent 工具（CC subagent 工具已由 Task 改名 Agent，見 1.5.0-W5-002 分析）
+    # 只處理 Task/Agent 工具（CC subagent 工具已由 Task 改名 Agent）
     if tool_name not in ("Agent", "Task"):
         sys.exit(0)
 
@@ -229,39 +73,10 @@ def main() -> None:
         write_deny_or_exit2(output, logger)
         sys.exit(0)
 
-    # Handoff 恢復模式：僅 prompt 引用 handoff 指向的票時略過檢查
+    # Handoff 恢復：prompt 引用 handoff 指向的票時輸出可見訊號（不影響放行）
     if prompt_references_handoff_ticket(prompt, logger):
-        emit_handoff_recovery_signal(prompt, logger)  # 只加可見訊號，不影響放行判定
-        logger.info("檢測到 Handoff 恢復模式，略過代理人分派檢查")
-        sys.exit(0)
-
-    # 載入配置
-    config = load_agents_config()
-
-    # 代理人分派檢查
-    subagent_type = tool_input.get("subagent_type", "")
-    if subagent_type:
-        hook_mode = get_hook_mode(logger)
-        agent_check_result = check_agent_dispatch(prompt, subagent_type, config, logger)
-
-        if agent_check_result.get("is_error"):
-            if hook_mode == HOOK_MODE_STRICT:
-                output = create_pretooluse_output(
-                    "deny",
-                    agent_check_result["error_message"],
-                    system_message="代理人分派錯誤，請根據任務類型重新分派"
-                )
-                write_deny_or_exit2(output, logger)
-                sys.exit(0)
-            else:
-                log_warning_to_file({
-                    "mode": "warning",
-                    "task_type": agent_check_result.get("detected_task_type", "未知"),
-                    "wrong_agent": subagent_type,
-                    "correct_agent": agent_check_result.get("correct_agent", "未知"),
-                    "prompt_preview": prompt[:200]
-                }, logger)
-                print(f"[WARNING] {agent_check_result['error_message']}", file=sys.stderr)
+        emit_handoff_recovery_signal(prompt, logger)
+        logger.info("檢測到 Handoff 恢復模式")
 
     logger.info("所有檢查通過")
     sys.exit(0)

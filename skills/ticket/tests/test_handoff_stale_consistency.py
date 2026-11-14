@@ -212,6 +212,9 @@ def _call_reminder_hook(reminder_hook, utils_module, tmp_path: Path, record):
     project_root 結構：tmp_path/.claude/handoff/pending/<ticket_id>.json
     """
     reminder_hook.is_handoff_stale = utils_module.is_handoff_stale
+    # 本檔只驗 stale 一致性；fixture 票在 tmp 專案下查無，會被孤兒判定濾掉，
+    # 故把孤兒判定隔離為「非孤兒」。孤兒行為由 hooks/tests/test_handoff_reminder_hook.py 覆蓋。
+    reminder_hook._lib_orphan_reason = lambda record, ticket_id, project_root=None: ""
 
     pending_dir = tmp_path / ".claude" / "handoff" / "pending"
     pending_dir.mkdir(parents=True, exist_ok=True)

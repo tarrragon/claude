@@ -1,0 +1,414 @@
+[
+  {
+    "case": "G1-01",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "bash-write-boundary-guard-hook",
+      "bash-write-boundary-guard",
+      "branch-verify-hook",
+      "branch-verify",
+      "test_bash_write_boundary_guard_hook",
+      "test_branch_verify_cross_repo"
+    ],
+    "acceptance": "[x] 專案根為含反斜線的 Windows 路徑時，bash-write-boundary-guard 不得因路徑字串拋例外而崩潰\n[x] bash-write-boundary-guard 對 Windows 專案根的替換結果與原路徑逐字相同，以此為輸入的測試在修正前為紅\n[x] Windows 形式路徑（反斜線、磁碟機代號大小寫不一）在保護分支上對 .claude/、docs/ 等豁免路徑不得被擋\n[x] 保護分支上專案內的非豁免 Windows 路徑仍被擋下（正向對照，test-assertion-design E2）\n[x] 兩支 hook 既有的 POSIX 路徑測試全綠，行為不變\n[x] 同型寫法（re.sub 以路徑為替換字串、startswith 比對未正規化路徑）的掃描結論逐項寫入 Solution\n[x] 當次執行環境下的觸發驗證結果（macOS，以修正後腳本餵 payload）：branch-verify 在 main 上 .claude/ 放行、lib/ 擋下；bash-write-boundary 對反斜線專案根由崩潰改為正常判定，lib/ 仍 deny。日誌行引文見 Test Results\n[x] 載入與執行的確認方式：直接以 python3 執行 worktree 內 hook 腳本，讀 hook-logs/branch-verify/branch-verify-20261111.log 與 worktree 的 hook-logs/bash-write-boundary-guard/bash-write-boundary-guard-20261111.log 引文（見 Test Results）；兩支 hook 的 settings.json 註冊未變\n[x] 異常時的放行或阻擋行為：阻擋。觸發條件：branch-verify 判定拋例外時走既有 fail-closed（test_branch_verify_fail_closed.py 全綠）；bash-write-boundary 未捕捉例外以 exit 2 擋下\n[x] 產生路徑盤點表已寫入 how.strategy：四列（_resolve_candidate re.sub、is_exempt 分隔符、磁碟機代號大小寫、其他 hook 同型寫法）；第四列逐項結論見 Solution，延伸項轉 <ticket-id>",
+    "solution": "與 issue #132 修法差異：consumer 版以 `host_root + \"/\"` 作前綴（加目錄邊界），會改變 POSIX 上 `/a/proj2/x` 相對 `/a/proj` 的判定（擋→放行）。本版不納入，記入 <ticket-id> 第 (4) 項。\n- 放寬範圍：只有 Windows 形式路徑（反斜線或磁碟機代號大小寫不一）原本被誤擋的豁免路徑，改為放行；bash-write-boundary 原本崩潰（擋）的命令改為正常判定\n- 判定失敗落點：branch-verify 例外路徑為 fail-closed（既有 `test_branch_verify_fail_closed.py` 全綠）；bash-write-boundary 未捕捉例外以 exit 2 擋下（修正前的崩潰即走此路徑）。兩者失敗皆落在阻擋側\n| `bash-write-boundary-guard-hook.py` `_relative_to_roots`（root + \"/\"） | 疑似 Windows 上全數判為 out_of_scope（守衛放行，非誤擋），轉 <ticket-id> |\n依 <ticket-id> Solution〈主控裁定（2026-11-11，L13 合併前回報）〉。先前在 macOS 上用反斜線根做的實測不代表 Windows 語意：realpath 把反斜線字串當成相對檔名。實際在 Windows 上，`_relative_to_roots` 的比對不會命中，範圍內寫入因此被放行。",
+    "test_results": "- branch-verify，cwd=主 checkout（main）：`.claude/x-probe.md` → allow；`lib/x-probe.py` → deny。hook-logs/branch-verify/branch-verify-20261111.log：\n  - `[2026-11-11 21:19:35] INFO - 在保護分支 'main' 上編輯豁免路徑 ~/project/llm-dev/.claude/x-probe.md，允許`\n  - `[2026-11-11 21:19:35] INFO - 在保護分支 'main' 上嘗試編輯非豁免檔案 ~/project/llm-dev/lib/x-probe.py，操作已阻止 (cross_repo=False)`\n  - 主 checkout（修正前）版本：stderr `re.PatternError: bad escape \\s at position 15`、`[Hook Error] bash-write-boundary-guard failed unexpectedly`，rc=2\n  - worktree（修正後）版本：`permissionDecision: deny`（path=lib/x-probe.py），rc=2；改寫 `out-probe.txt` → `permissionDecision: allow`，rc=0\n  - 此組 root 為虛構 Windows 路徑，日誌目錄依該 root 推導，未落到可讀的 hook-logs；另以 worktree 真實根執行同型命令取日誌：hook-logs/bash-write-boundary-guard/bash-write-boundary-guard-20261111.log（worktree）`[2026-11-11 21:21:20] INFO - decision=deny source=main reason=scope_violation targets=['lib/w001-probe.py']`\n- 紅燈（修正前）：`-k TestWindowsPathSemantics` 得 `4 failed, 4 passed`。範圍內寫入 `lib/a.py`、`.claude/hooks/a.py`、`c:/proj/test/a_test.py`、worktree 內的 `lib/a.py` 都回傳 None，也就是放行\n- 綠燈：`8 passed`。上述 4 項都被擋（正向對照）；`out.txt`、`docs/a.md`、`.claude/tool-results/a.txt`、`D:/other/lib/a.py` 仍放行",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-02",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "hooks"
+    ],
+    "acceptance": "[x] 引號內的右括號不影響子 shell 判定，有測試鎖定（含正向對照：真正的裸 cd 仍被擋）\n[x] 當次執行環境下的觸發驗證結果：已在 worktree 以合成 payload 實地觸發，hook-logs 落檔（引文見 Test Results）\n[x] 載入與執行的確認方式：以 uv run --script 執行 worktree 內修正後的 hook，比對 bash-edit-guard hook-logs 新增的判定行\n[x] 異常時的放行或阻擋行為：異常時 fail-open（run_hook_safely 預設 fail_closed=False，放行並記錄），觸發條件：main 拋出未捕捉例外\n[x] 產生路徑盤點表已寫入 how.strategy（6 條路徑，涵蓋 4 條，未涵蓋 2 條另建後續票）",
+    "solution": "放寬：原本被誤擋的「引號內有括號 + 子 shell 內 cd」改為放行。另有一處收緊：引號內的左括號原本會把其後真正的裸 cd 藏起來，現在照常擋下。兩者都有測試鎖定，合併前回報主控。",
+    "test_results": "| `echo \"1) check\" && (cd $R/x && ls)`（原重現） | 放行，無輸出，rc=0 |\nhook-logs 引文（`.claude/hook-logs/bash-edit-guard/bash-edit-guard-20261112.log`，worktree）：\n\n```\n[2026-11-12 02:29:30] INFO - 允許: 正常 Bash 命令\n[2026-11-12 02:29:31] INFO - 提示: 偵測到裸 cd/pushd（target=/tmp/x）- echo \"1) check\" && cd /tmp/x",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-03",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "bash-edit-guard-hook",
+      "bash-edit-guard"
+    ],
+    "acceptance": "[x] cd <root>; cmd 與 cd <root>&&cmd 放行\n[x] cd <其他目錄>; cmd 仍被擋（正向對照）\n[x] 當次執行環境下的觸發驗證結果：已在 worktree 以合成 payload 實地觸發，hook-logs 落檔（引文見 Test Results）\n[x] 載入與執行的確認方式：以 uv run --script 執行 worktree 內修正後的 hook，比對 bash-edit-guard hook-logs 新增的判定行\n[x] 異常時的放行或阻擋行為：異常時 fail-open（run_hook_safely 預設 fail_closed=False，放行並記錄），觸發條件：main 拋出未捕捉例外\n[x] 產生路徑盤點表已寫入 how.strategy（6 條路徑，涵蓋 4 條，未涵蓋 2 條另建後續票）",
+    "solution": "只有放寬：`cd <root>;cmd`、`cd <root>&&cmd` 等原本被誤擋的專案根還原，改為放行。非專案根的 cd 緊接連接符仍被擋，有測試鎖定。合併前回報主控。",
+    "test_results": "| `cd <root>; git status` | 放行，無輸出 |\n| `cd <root>&&git status` | 放行，無輸出 |\nhook-logs 引文（worktree 的 `.claude/hook-logs/bash-edit-guard/bash-edit-guard-20261112.log`）：\n\n```\n[2026-11-12 03:11:20] INFO - 提示: 偵測到裸 cd/pushd（target=/tmp/other）- cd /tmp/other; ls\n`test_root_restore_does_not_release_following_bare_cd`（4 種分隔寫法）：`cd <root>; cd /tmp/x` 等命中，target 為 `/tmp/x`。同檔 104 passed。實地觸發 `cd <root>; cd /tmp/x` 為 `permissionDecision: deny`，hook-logs：`提示: 偵測到裸 cd/pushd（target=/tmp/x）`。",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-04",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "hook-registration-coverage-check",
+      "test_registration_advice_triage"
+    ],
+    "acceptance": "[x] 兩處 docstring 與分流說法一致\n[x] 建議句為具名常數，測試不再依賴 AST 掃描\n[x] 當次執行環境下的觸發驗證結果：worktree 內以 uv run 執行 hook-registration-coverage-check.py，hook-logs 寫出新建議句（引文見 Test Results）\n[x] 載入與執行的確認方式：SessionStart 註冊不變（settings.json 原有項目），worktree 實跑寫入 .claude/hook-logs/hook-registration-coverage-check/ 日誌，引文見 Test Results\n[x] 異常時的放行或阻擋行為：放行（fail-open，本 hook 只輸出警告不阻擋）。觸發條件：settings 或清冊讀取失敗時沿用既有降級路徑，本票只改字串常數與 docstring，不改判定\n[x] 產生路徑盤點表已寫入 how.strategy",
+    "solution": "",
+    "test_results": "- 觸發驗證（worktree 內 `CLAUDE_PROJECT_DIR=<wt> uv run --quiet <wt>/.claude/hooks/hook-registration-coverage-check.py`），日誌 `.claude/hook-logs/hook-registration-coverage-check/hook-registration-coverage-check-20261112.log` 第 23 行引文：",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-05",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "ana_spawn_consistency_checker",
+      "__init__",
+      "acceptance-gate-hook",
+      "acceptance-gate",
+      "test_ana_spawn_consistency_checker",
+      "test_acceptance_gate_hook"
+    ],
+    "acceptance": "[x] <ticket-id> 列出的三件雙區段票型，規劃數等於規劃區段列數（回歸測試）\n[x] 0 < 落地 < 規劃時阻擋，訊息列出未落地數；正反對照測試\n[x] DOC 票套用同一檢查；以 discovered_during／source_ticket 回指本票的票計入落地\n[x] 以現存已完成的 ANA／DOC 重跑，誤擋 0 件（結果寫入 Test Results）\n[x] 當次執行環境下的觸發驗證結果：同一輸入（PreToolUse Bash「ticket track complete <ticket-id>」）跑 main 與 worktree 兩版 gate，輸出不同。舊版帶「spawn 規劃部分漏建 … 待落地 spawn 規劃數: 20」警告；新版無 spawn 訊息，hook-logs/acceptance-gate/acceptance-gate-20261112.log 記「ANA <ticket-id> spawn 一致性通過：規劃=10，落地=10（具名 ticket 去重後=10，其中反向血緣=6，無 ID 已判定=0）」，該行只有修改後分支會產生（引文見 Test Results）\n[x] 載入與執行的確認方式：以 CLAUDE_PROJECT_DIR=<worktree> uv run --script <worktree>/.claude/skills/ticket/hooks/acceptance-gate-hook.py 直接執行，日誌寫入 <worktree>/.claude/hook-logs/acceptance-gate/acceptance-gate-20261112.log（實測位置，非主 repo），該行含新增欄位「其中反向血緣=6」，證明載入的是修改後的 checker\n[x] 異常時的放行或阻擋行為：反向血緣查詢失敗時 fail-open（不加嚴）：只保留修訂前的阻擋（ANA 落地為 0），其餘降為警告並寫 stderr 與 hook 日誌。觸發條件：collect_reverse_lineage_ids 讀檔拋例外（OSError 等）。測試 test_lookup_failure_downgrades_partial_to_warning、test_lookup_failure_keeps_legacy_ana_zero_landing_block、test_lookup_failure_does_not_block_doc_zero_landing\n[x] 產生路徑盤點表已寫入 how.strategy：complete、finish、batch-complete、complete --force 四條覆蓋；close 與直接改 status 兩條不經 spawn 檢查，屬既有範圍、本票未改",
+    "solution": "**等用戶**：022 動工授權（票面 why：屬 <ticket-id> C 類，動工前須由用戶在執行線 session 授權；內容含加嚴：去重後部分落地由警告改為阻擋、檢查範圍擴及 DOC）\n  - 部分落地改為阻擋，訊息列出未落地數。\n  - 原本斷言「部分落地只警告」的 4 個案例，改為斷言阻擋。\n| 範圍 | 規則文字同步（ANA、DOC 部分落地阻擋） | 屬 <ticket-id>（DOC，blockedBy 本票），本票不改規則文件 |",
+    "test_results": "| repo | 已完成 ANA | 已完成 DOC | 阻擋 | 警告 |\n- 舊版（main 上的 gate）：輸出帶「spawn 規劃部分漏建 … 待落地 spawn 規劃數: 20」警告；主 repo 的 `hook-logs` 記 `WARNING - ANA <ticket-id> Solution 規劃 20 項 spawn，但落地只有 4 項`。\n  - 日誌位置：`<worktree>/.claude/hook-logs/acceptance-gate/acceptance-gate-20261112.log`。\n  - 日誌行：`[2026-11-12 22:38:50] INFO - ANA <ticket-id> spawn 一致性通過：規劃=10，落地=10（具名 ticket 去重後=10，其中反向血緣=6，無 ID 已判定=0）`",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-06",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "main-thread-edit-restriction-hook",
+      "main-thread-edit-restriction",
+      "test_main_thread_branch_allow_linked_worktree"
+    ],
+    "acceptance": "[x] 主 checkout 在 feat 分支上編輯 lib/ 仍被擋\n[x] linked worktree 內編輯照常放行（正向對照）\n[x] 當次執行環境下的觸發驗證結果：worktree 版 hook 以 stdin 餵 linked worktree 內 lib/x.dart（目錄不存在），permissionDecision=allow，日誌行見 Test Results\n[x] 載入與執行的確認方式：uv run --script 直接執行 worktree 版 hook，hook-logs/main-thread-edit-restriction 出現「linked worktree 的開發分支」日誌行（引文見 Test Results）\n[x] 異常時的放行或阻擋行為：linked worktree 判定失敗（.git 解析 OSError、無 commondir、相對路徑）一律不套用分支放行，交由 path_permission（阻擋側）；main() 例外維持既有 fail-open 放行。觸發條件：common_dir 回 None 或 owning_checkout_root 回 None\n[x] 產生路徑盤點表已寫入 how.strategy（6 列，1 列未覆蓋附原因）",
+    "solution": "- 開發分支放行改為：`_linked_worktree_root` 有值，且以該根查得的分支符合 `is_allowed_branch`。主 checkout 開 feat/fix 分支不再放行，交由 path_permission 判定。\n自檢結論：收緊方向成立且有正向對照；worktree 內放行（含新目錄）無回歸。\n- 收緊：主 checkout 開 feat/fix 分支不再放行，改由 path_permission 判定。\n- 小放寬：linked worktree 內 Write 到尚未建立的目錄，main 版以檔案所在目錄執行 git，目錄不存在時 git 失敗 → 不放行；本版以 worktree 根查分支 → 放行。相對 main 屬放寬。正向對照：主 checkout 新目錄仍擋（test_main_checkout_new_dir_blocked）、submodule 形態與相對路徑不視為 linked worktree。失敗落點：_linked_worktree_root 與 get_current_branch 失敗皆交由 path_permission（保守側）。\n- 放行 reason 字串改為「linked worktree 的開發分支 'X' 不受主線程編輯限制」，主控查證無程式或文件依賴。",
+    "test_results": "- 實地觸發：`echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"<worktree>/lib/x.dart\"}}' | CLAUDE_PROJECT_DIR=<worktree> uv run --quiet --script <worktree>/.claude/hooks/main-thread-edit-restriction-hook.py` → `\"permissionDecision\": \"allow\", \"permissionDecisionReason\": \"linked worktree 的開發分支 'feat/<ticket-id>' 不受主線程編輯限制\"`，rc=0\n- hook-logs 引文（worktree 的 .claude/hook-logs/main-thread-edit-restriction/main-thread-edit-restriction-20261113.log）：`[2026-11-13 01:58:12] INFO - linked worktree 的開發分支 'feat/<ticket-id>' 上，跳過主線程編輯限制`",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-07",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "session-start-issue-check-hook",
+      "session-start-issue-check"
+    ],
+    "acceptance": "[x] 沒有登記檔時 hook 不呼叫任何 gh 命令；測試含有、無登記檔的對照（E1）\n[x] 新增重建命令，執行時才搜尋並寫入登記檔，輸出寫明送出的資料\n[x] SKILL.md 命令表同步\n[x] 合併前已回報主控並取得放行\n[x] 當次執行環境下的觸發驗證結果：worktree 內以 source=startup 執行 hook（清除 HOOK_TEST_ISOLATION），無登記檔時 hook-logs 記「owned-issues 登記檔缺失或無法讀取，略過（不發 gh 命令）」，耗時 0.16s；有登記檔時記「owned-issues 登記檔命中，issues=[124]」與「無警訊 B 命中」（引文見 Test Results）\n[x] 載入與執行的確認方式：hook 由 worktree 路徑直接執行，rc=0，兩組對照各自留下新版日誌行（無登記檔的略過訊息為本次新增字串，舊版不存在），證明執行的是修改後的程式（引文見 Test Results）\n[x] 異常時的放行或阻擋行為：放行（fail-open），且不送出。觸發條件：登記檔缺失、損毀、schema 不符或模組載入失敗時，hook 輸出 suppressOutput 並結束，不呼叫 gh；gh 不可用或未登入、check 逾時或失敗時沿用原有略過或失敗標記，不阻擋 session 啟動\n[x] 產生路徑盤點表已寫入 how.strategy：SessionStart 發出 gh 命令的 6 條路徑，唯一保留的是有擁有登記時的既定檢查",
+    "solution": "- 格式：acceptance 1–3 與 5–8 有測試或實機證據；第 4 條（主控放行）待回報。\n### 合併放行",
+    "test_results": "- 實機對照（2026-11-12，worktree，未設 HOOK_TEST_ISOLATION，量測環境：本機 macOS）\n  - 對照 1，無登記檔（主 repo 與 worktree 皆無）：rc=0，輸出 `{\"suppressOutput\": true}`，hook-logs/session-start-issue-check/session-start-issue-check-20261112.log：`[2026-11-12 16:00:45] INFO - owned-issues 登記檔缺失或無法讀取，略過（不發 gh 命令）；要啟用檢查請執行 framework-issue rebuild-owned`，Hook execution time 0.16s\n  - 對照 2，有登記檔（暫存於 worktree 的 gitignored .claude/state，由非 git 目錄執行使共用根落在 worktree，驗後已刪除）：`[2026-11-12 16:01:19] INFO - owned-issues 登記檔命中，issues=[124]`、`[2026-11-12 16:01:24] INFO - 無警訊 B 命中`",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-08",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "error_pattern_checker",
+      "acceptance-gate-hook",
+      "acceptance-gate",
+      "test_error_pattern_checker"
+    ],
+    "acceptance": "[x] where.files 只含單一 hook 檔時，列出筆數由 395 降至可讀範圍，量測前後筆數寫入 Test Results\n[x] 清單依相關度排序並設上限，訊息附總命中數\n[x] 正向對照：檔名與 error-pattern 內文直接相關者仍列在前段\n[x] 當次執行環境下的觸發驗證結果：同一輸入（PreToolUse Bash「ticket track complete <ticket-id>」，讀主 repo 票面）跑兩版 gate。舊版 additionalContext 40727 bytes，列 402 個 error-pattern 路徑，標頭為「與以下 error-pattern 相關」；新版 3167 bytes，列 10 個，標頭「與 47 個 error-pattern 相關，依相關度列出前 10 個」。該標頭只有修改後分支會產生（引文見 Test Results）\n[x] 載入與執行的確認方式：以 CLAUDE_PROJECT_DIR=主 repo uv run --script <worktree>/.claude/skills/ticket/hooks/acceptance-gate-hook.py 執行，輸出含新標頭，證明載入的是修改後的 checker 與 gate；hook-logs/acceptance-gate/ 寫入「發現 N 個 error-pattern 衝突（已依相關度排序）」行\n[x] 異常時的放行或阻擋行為：fail-open（不變）。觸發條件：任一關鍵詞的 grep 逾時或失敗時回傳空清單、不阻擋，寫 INFO 日誌；衝突提醒本身是 WARNING，不阻擋 complete\n[x] 產生路徑盤點表已寫入 how.strategy：Step 2.7 提醒與清單第 3 項覆蓋；claim 時列候選由 <ticket-id> 承接",
+    "solution": "",
+    "test_results": "  - ana_spawned_checker：PC-075、PC-076、IMP-058\n- hook-logs/acceptance-gate/acceptance-gate-20261112.log：`[2026-11-12 23:11:06] INFO - 發現 47 個 error-pattern 衝突（已依相關度排序）`",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-09",
+    "group": "G1",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "handoff-auto-resume-stop-hook",
+      "handoff-auto-resume-stop"
+    ],
+    "acceptance": "[ ] 同一 Claude 行程（含 /clear 後）仍被阻擋（E2 正向對照）\n[ ] 其他 Claude 行程不被阻擋（E1 對照：同一交接檔、不同行程）\n[ ] 舊格式交接檔（無建立者欄位）維持現行阻擋\n[ ] 當次執行環境下的觸發驗證結果：隔離專案根實際執行 hook，同行程建立的交接檔 decision=block、他行程建立者不阻擋（引文見 Test Results）\n[ ] 載入與執行的確認方式：hook 以 uv --script 實際執行，hook-logs/handoff-auto-resume-stop 記錄「交接檔由其他 Claude 行程建立，本 session 不阻擋」；模組載入的是 handoff_utils 實作而非退化實作（__module__ 查證）\n[ ] 異常時的放行或阻擋行為：阻擋（fail-closed），觸發條件：建立者欄位缺漏或損毀、ps 失敗或逾時、找不到 claude 祖先、handoff_utils 載入失敗 → is_other_claude_process 為 False，照現行阻擋\n[ ] 產生路徑盤點表已寫入 how.strategy：六條路徑（三條本票判定、退化實作、未改的既有分支、subagent）\n[ ] 判定失敗一律阻擋：ps 失敗或逾時、交接檔建立者欄位缺漏或損毀時照擋（追到實際比對函式附對照）\n[ ] pid 重用：pid 相同、lstart 不同判為不同行程",
+    "solution": "- Stop hook：目前行程於迴圈外取一次；只在最後的阻擋分支前插入比對，確定是其他行程才改列建議性任務。lib 載入失敗時的退化實作回 None／False，照擋。\n守衛行為變更（放寬）：同一 repo 的其他 Claude 行程不再被交接檔阻擋。合併前回報主控（正向對照、判定失敗落點、pid 重用三項，見 Test Results）。",
+    "test_results": "- Stop hook 實際執行（HOOK_TEST_ISOLATION=1、CLAUDE_PROJECT_DIR 指向 scratchpad 隔離專案，未碰主 repo pending）：兩份兩小時前的交接檔，001 建立者 pid 777、002 建立者為本行程 → 輸出 `decision: block`，reason 只列 `<ticket-id>`。hook-logs 引文：\n  `[2026-11-12 19:33:40] INFO - 交接檔由其他 Claude 行程建立，本 session 不阻擋: <ticket-id>`",
+    "expect_pass": true
+  },
+  {
+    "case": "G1-10",
+    "group": "G1",
+    "category": "liveness 驗證方式",
+    "hook_names": [
+      "bash-git-protected-branch-guard-hook",
+      "bash-git-protected-branch-guard",
+      "hook-dispatcher",
+      "test_hook_dispatcher_fail_closed"
+    ],
+    "acceptance": "[x] 漂移測試以 run_hook_safely 引數為準\n[x] 內部欄位名為 fail_closed 的 hook 不被誤判（正向對照）\n[x] 當次執行環境下的觸發驗證結果：同一輸入下 main 版 dispatcher 對保護分支守衛 _failure_code=2 且在 FALLBACK，204.4.4 版為 1 且不在；兩支基準守衛兩版皆為 2，見 Test Results\n[x] 載入與執行的確認方式：ticket track hook-liveness bash-git-protected-branch-guard 輸出「解析名稱: bash-git-protected-branch-guard (來源: literal)」，最近一筆 2026-11-13T03:58:39\n[x] 異常時的放行或阻擋行為：放行（dispatcher 回 1，可見）。觸發條件：本 hook 單支逾時、載入期例外或 registry 不可讀時；保護分支 commit 的檔案集合無法列舉或 staged 讀取失敗時，hook 內部仍阻擋\n[x] 產生路徑盤點表已寫入 how.strategy：_failure_code、FALLBACK 名單、引數含括號三列",
+    "solution": "- 檔案集合無法靜態列舉時阻擋。\n- staged 清單讀取失敗時阻擋。\n- 本 hook 自身的放行或阻擋判定。",
+    "test_results": "- 載入確認：見下方 hook-liveness。",
+    "expect_pass": false
+  },
+  {
+    "case": "G2-11",
+    "group": "G2",
+    "category": "liveness 驗證方式",
+    "hook_names": [
+      "ticket-path-guard-hook",
+      "ticket-path-guard",
+      "agent-ticket-validation-hook",
+      "agent-ticket-validation",
+      "agent-dispatch-validation-hook",
+      "agent-dispatch-validation"
+    ],
+    "acceptance": "[x] 三支 hook 在範圍外、通過、提醒、輸入空、例外路徑皆不輸出 permissionDecision allow\n[x] stdin 實測一般輸入不含 permissionDecision；三組 deny 正向對照仍 deny\n[x] 既有測試更新並全綠；新增斷言對照改前 allow、改後不輸出（E1/E2）\n[x] 本 repo 無權限提示變化（settings 已放行 Edit/Write；Agent 預設不經權限提示，文件未載明者於 Solution 註明）；合併前回報主控\n[x] 當次執行環境下的觸發驗證結果：worktree stdin 實測 7 組，hook-logs 引文 ticket-path-guard-20261112.log:9「Hook 檢查完成，exit code: 0」與 :16「exit code: 2」，見 Test Results\n[x] 載入與執行的確認方式：ticket track hook-liveness 查詢，解析名稱: ticket-path-guard；agent-ticket-validation 日誌行「Task 派發驗證: is_valid=False」，見 Test Results\n[x] 異常時的放行或阻擋行為：放行（fail-open，不輸出 decision）；觸發條件：stdin 為空或非 JSON、main 內例外。阻擋路徑維持 exit 2，見 Solution〈失敗語意〉\n[x] 產生路徑盤點表已寫入 how.strategy：8 列，全數覆蓋（deny 路徑標示不變）",
+    "solution": "- ticket-path-guard：只在阻擋時輸出 deny；通過、範圍外、輸入空、例外不輸出 decision，例外加 stderr。移除本地 generate_hook_output：範圍外分支以 2 個參數呼叫 3 參數的該函式，拋 TypeError 後落入例外分支輸出 allow，屬既有潛在錯誤，本次一併消除。\n**失敗語意**：fail-open；觸發條件：stdin 為空或非 JSON、main 內拋出例外時 exit 0 且不輸出 permissionDecision，交回平台權限流程（ticket-path-guard 另寫 stderr 與 hook-logs）。阻擋路徑（禁止路徑、無效派發、未隔離的實作派發）維持 exit 2。\n**權限提示影響**：本 repo 無。Edit/Write 已由 settings allow 放行；Agent 預設是否經權限提示官方文件未載明，本 session 實際派發 Agent 未出現提示。\n**掃描手段**: grep 三支 hook 的 `\"allow\"` 字面 → 0；相關測試 ticket skill 32 passed、hooks 344 passed（含 2 個改寫、1 個新檔）、lib 13 passed；換回 main 版 hook 重跑 → 17 failed（鑑別力）；stdin 實測 7 組 + docs 目標票阻擋對照\n- 結論：放行分支收斂為不輸出，移除無用函式後 main 分支變少，無需另外重構",
+    "test_results": "| dispatch-validation 目標票 where 在 docs/、未帶 worktree（對照；新舊版皆同） | 2 | 阻擋 |\nhook-logs 引文（worktree `.claude/hook-logs/`）：\n- `ticket-path-guard-20261112.log:9` `[2026-11-12 19:10:11] INFO - Hook 檢查完成，exit code: 0`\n- `ticket-path-guard-20261112.log:16` `[2026-11-12 19:10:12] INFO - Hook 檢查完成，exit code: 2`\n- `agent-ticket-validation/...log:16` `[2026-11-12 19:10:20] INFO - Task 派發驗證: is_valid=False, ticket_id=None`",
+    "expect_pass": true
+  },
+  {
+    "case": "G2-12",
+    "group": "G2",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "hook-dependency-isolation-check-hook",
+      "hook-dependency-isolation-check"
+    ],
+    "acceptance": "[x] 經 lib 遞移匯入 ticket_system／doc_system 不報（修正前為紅）\n[x] 正向對照：真正未宣告的第三方套件仍報\n[x] 當次執行環境下的觸發驗證結果：同一輸入（{\"hook_event_name\":\"SessionStart\"}，CLAUDE_PROJECT_DIR 指向 worktree）跑修改前（main）與修改後（worktree）的 hook：修改前 additionalContext 列 130 筆、全為 ticket_system／doc_system，日誌「SessionStart 全量盤點發現 130 筆問題」；修改後無輸出，日誌「SessionStart 全量盤點：0 筆問題」。引文見 Test Results\n[x] 載入與執行的確認方式：settings.json 註冊不變（SessionStart 與 PostToolUse 兩筆）；以 hook-logs/hook-dependency-isolation-check 的「SessionStart 全量盤點」日誌行確認兩個版本都執行完 scan_all，引文見 Test Results\n[x] 異常時的放行或阻擋行為：放行（本 hook 只輸出 additionalContext 提醒，從不阻擋）。觸發條件：.claude/lib 不存在或 lib 模組解析失敗時遞移集合為空、照常掃描；其他例外由 run_hook_safely 攔截並記日誌\n[x] 產生路徑盤點表已寫入 how.strategy：6 條路徑全數標「是否覆蓋：是」",
+    "solution": "",
+    "test_results": "- 實機（同一輸入，修改前後各跑一次）：\n  - main 版：additionalContext 列 130 筆，全為 ticket_system／doc_system；日誌 `[2026-11-13 06:55:31] WARNING - hook-dependency-isolation-check SessionStart 全量盤點發現 130 筆問題`\n  - worktree 版：無輸出；日誌 `[2026-11-13 06:55:32] INFO - hook-dependency-isolation-check SessionStart 全量盤點：0 筆問題`",
+    "expect_pass": true
+  },
+  {
+    "case": "G2-13",
+    "group": "G2",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "session-start-sync-exclusion-check-hook",
+      "session-start-sync-exclusion-check",
+      "session-start-gitignore-check-hook",
+      "session-start-gitignore-check",
+      "test_sync_exclude_manifest",
+      "test_session_start_sync_exclusion_check_hook"
+    ],
+    "acceptance": "[x] .claude/**/.skill-sync-base 不再被判為 drift，且有對應測試\n[x] 只寫 .claude/.skill-sync-base（僅根層）時仍判為 drift（正向對照輸入，test-assertion-design E2）\n[x] drift 建議文字對 NESTED_LOCAL_ONLY_NAMES 內的名稱給出 .claude/**/<名稱>，條目字串取自 lib\n[x] hooks 測試套件全綠\n[x] 當次執行環境下的觸發驗證結果：合併後於主 checkout 以註冊形式觸發，兩個 hook 皆輸出 suppressOutput；hook-logs 記 sync-exclusion gitignore_drift 由 1（13:24:18，修正前）變 0（14:58:48，合併後），引文見 Test Results\n[x] 載入與執行的確認方式：ticket track hook-liveness 前後差值，解析名稱: session-start-gitignore-check 與 session-start-sync-exclusion-check 總筆數各 4 → 5，輸出見 Test Results\n[x] 異常時的放行或阻擋行為：fail-open，不阻擋 session 啟動。觸發條件：.gitignore 不存在或不可讀時 sync-exclusion 回報全部缺項（保守警告）；交叉驗證拋例外時記 warning 並視為無 drift\n[x] 產生路徑盤點表已寫入 how.strategy：盤點 4 條、覆蓋 2 條，未覆蓋為否定行順序語意（<ticket-id>）與日後另寫判定\n[x] 巢狀名稱的必要條目與涵蓋判定只在 lib/sync_exclude_manifest.py 實作一份，兩個 hook 都呼叫它，hook 內不留副本\n[x] session-start-gitignore-check-hook 的既有測試不改斷言仍全綠（除真值表列為涵蓋的寫法改判涵蓋外，判定不變）\n[x] 裸名 .skill-sync-base 不再被 gitignore-check 判為缺項，且有對應測試\n[x] 涵蓋判定的測試以 git check-ignore 實測為對照（oracle），涵蓋 Problem Analysis 真值表列出的每種寫法",
+    "solution": "- 失敗語意：sync-exclusion 讀取 `.gitignore` 遇 OSError 時回傳全部缺項（保守警告）；main 在交叉驗證例外時記 warning 並視為無 drift，屬 fail-open，不阻擋 session 啟動。觸發條件：`.gitignore` 不存在或不可讀。",
+    "test_results": "- `ticket track hook-liveness` 前後差值：session-start-gitignore-check 總筆數 4 → 5（最近一筆 2026-11-09T14:58:48.247033）；session-start-sync-exclusion-check 4 → 5（最近一筆 2026-11-09T14:58:48.462448）。解析名稱分別為 session-start-gitignore-check、session-start-sync-exclusion-check（來源 run_hook_safely_literal）。\n- hook-logs 引文（同一份 `.gitignore`，含 `.claude/**/.skill-sync-base`）：\n  - `[2026-11-09 13:24:18] INFO - sync-exclusion-check hook 完成（unexcluded_count=0, gitignore_drift=1）`（本 session 啟動，修正前）\n  - `[2026-11-09 14:58:48] INFO - sync-exclusion-check hook 完成（unexcluded_count=0, gitignore_drift=0）`（合併後觸發）",
+    "expect_pass": false
+  },
+  {
+    "case": "G2-14",
+    "group": "G2",
+    "category": "liveness 驗證方式",
+    "hook_names": [
+      "session-start-sync-exclusion-check-hook",
+      "session-start-sync-exclusion-check",
+      "session-start-gitignore-check-hook",
+      "session-start-gitignore-check",
+      "test_sync_exclude_manifest",
+      "test_session_start_sync_exclusion_check_hook"
+    ],
+    "acceptance": "[x] .claude/**/.skill-sync-base 不再被判為 drift，且有對應測試\n[x] 只寫 .claude/.skill-sync-base（僅根層）時仍判為 drift（正向對照輸入，test-assertion-design E2）\n[x] drift 建議文字對 NESTED_LOCAL_ONLY_NAMES 內的名稱給出 .claude/**/<名稱>，條目字串取自 lib\n[x] hooks 測試套件全綠\n[x] 當次執行環境下的觸發驗證結果：合併後於主 checkout 以註冊形式觸發，兩個 hook 皆輸出 suppressOutput；hook-logs 記 sync-exclusion gitignore_drift 由 1（13:24:18，修正前）變 0（14:58:48，合併後），引文見 Test Results\n[x] 載入與執行的確認方式：ticket track hook-liveness 前後差值，解析名稱: session-start-gitignore-check 與 session-start-sync-exclusion-check 總筆數各 4 → 5，輸出見 Test Results\n[x] 異常時的放行或阻擋行為：fail-open，不阻擋 session 啟動。觸發條件：.gitignore 不存在或不可讀時 sync-exclusion 回報全部缺項（保守警告）；交叉驗證拋例外時記 warning 並視為無 drift\n[x] 產生路徑盤點表已寫入 how.strategy：盤點 4 條、覆蓋 2 條，未覆蓋為否定行順序語意（<ticket-id>）與日後另寫判定\n[x] 巢狀名稱的必要條目與涵蓋判定只在 lib/sync_exclude_manifest.py 實作一份，兩個 hook 都呼叫它，hook 內不留副本\n[x] session-start-gitignore-check-hook 的既有測試不改斷言仍全綠（除真值表列為涵蓋的寫法改判涵蓋外，判定不變）\n[x] 裸名 .skill-sync-base 不再被 gitignore-check 判為缺項，且有對應測試\n[x] 涵蓋判定的測試以 git check-ignore 實測為對照（oracle），涵蓋 Problem Analysis 真值表列出的每種寫法",
+    "solution": "- 失敗語意：sync-exclusion 讀取 `.gitignore` 遇 OSError 時回傳全部缺項（保守警告）；main 在交叉驗證例外時記 warning 並視為無 drift，屬 fail-open，不阻擋 session 啟動。觸發條件：`.gitignore` 不存在或不可讀。",
+    "test_results": "- `ticket track hook-liveness` 前後差值：session-start-gitignore-check 總筆數 4 → 5（最近一筆 2026-11-09T14:58:48.247033）；session-start-sync-exclusion-check 4 → 5（最近一筆 2026-11-09T14:58:48.462448）。解析名稱分別為 session-start-gitignore-check、session-start-sync-exclusion-check（來源 run_hook_safely_literal）。\n- hook-logs 引文（同一份 `.gitignore`，含 `.claude/**/.skill-sync-base`）：\n  - `[2026-11-09 13:24:18] INFO - sync-exclusion-check hook 完成（unexcluded_count=0, gitignore_drift=1）`（本 session 啟動，修正前）\n  - `[2026-11-09 14:58:48] INFO - sync-exclusion-check hook 完成（unexcluded_count=0, gitignore_drift=0）`（合併後觸發）",
+    "expect_pass": false
+  },
+  {
+    "case": "G2-15",
+    "group": "G2",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "bash-write-boundary-guard-hook",
+      "bash-write-boundary-guard"
+    ],
+    "acceptance": "[ ] WB-02、WB-07、WB-15、WB-17 四型（見 <ticket-id> 重現實驗結果）改為 deny 或模型可見警告，有測試鎖定\n[ ] 反向對照仍放行：唯讀 open、printf 參數描述文字、寫入 /tmp 的動態路徑，有測試鎖定\n[ ] 正向對照（WB-08 字面 open 寫入 lib/）仍為 deny，有測試鎖定（E2）\n[ ] 合併前已回報主控收緊範圍與誤擋面評估\n[ ] 當次執行環境下的觸發驗證結果：已在 worktree 以合成 payload 實地觸發 7 種形態，hook-logs 落檔（引文見 Test Results）\n[ ] 載入與執行的確認方式：以 uv run --script 執行 worktree 內修正後的 hook，比對 bash-write-boundary-guard hook-logs 新增的 decision 行與 opaque_write_warning 行\n[ ] 異常時的放行或阻擋行為：異常時阻擋（run_hook_safely fail_closed=True，既有行為未改），觸發條件：解析例外或分派層逾時\n[ ] 產生路徑盤點表已寫入 how.strategy（8 條路徑，涵蓋 6 條，未涵蓋 2 條：1 條改為警告、1 條屬 209.2）",
+    "solution": "- 新增的警告路徑沿用本 hook 既有放行輸出（allow + additionalContext）；allow 欄位去留屬 <ticket-id>。\n1. 警告路徑只送 additionalContext，不帶 permission_decision（commit 見 worktree 第二筆）；測試改斷言 `permissionDecision` 不存在。既有放行路徑的 allow 交 <ticket-id>。",
+    "test_results": "worktree 內 `tests/test_bash_write_boundary_guard_hook.py`：`464 passed, 26 deselected`。新增 `TestOpaquePythonWriteTargets`：4 型有線索 deny、f-string 全常數、正向對照字面 open、無線索列入警告、5 筆反向對照（唯讀 open、printf 描述文字、tempfile、/tmp 動態路徑、無寫入呼叫）放行且不警告、warning 經 additionalContext 送達。過程中既有測試 `sys.argv[2]` 超出引數個數（執行期 IndexError）一度被判 deny，已改為不算寫入。\nhook-logs 引文（worktree）：\n\n```\n[2026-11-12 03:41:21] INFO - opaque_write_warning count=1 first=python3 -c \"import pathlib\\nfor n in ['x']: pathlib.Path('li'+'b/'+n+'.dart').wri\n[2026-11-12 03:41:22] INFO - decision=deny source=agent:a-probe-2091 reason=scope_violation targets=['lib/a.dart'] skipped=[] cmd=python3 - <<'EOF'\\nopen('lib/a.dart','w').write('x')\\nEOF\n[2026-11-12 03:41:25] INFO - decision=allow source=agent:a-probe-2091 reason=subagent_no_scope_hit targets=['/tmp/out/x'] skipped=['/tmp/out/x:out_of_scope'] cmd=python3 - /tmp/out <<'EOF'\\n",
+    "expect_pass": false
+  },
+  {
+    "case": "G2-16",
+    "group": "G2",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "handoff-auto-resume-stop-hook",
+      "handoff-auto-resume-stop"
+    ],
+    "acceptance": "[ ] 同一 Claude 行程（含 /clear 後）仍被阻擋（E2 正向對照）\n[ ] 其他 Claude 行程不被阻擋（E1 對照：同一交接檔、不同行程）\n[ ] 舊格式交接檔（無建立者欄位）維持現行阻擋\n[ ] 當次執行環境下的觸發驗證結果：隔離專案根實際執行 hook，同行程建立的交接檔 decision=block、他行程建立者不阻擋（引文見 Test Results）\n[ ] 載入與執行的確認方式：hook 以 uv --script 實際執行，hook-logs/handoff-auto-resume-stop 記錄「交接檔由其他 Claude 行程建立，本 session 不阻擋」；模組載入的是 handoff_utils 實作而非退化實作（__module__ 查證）\n[ ] 異常時的放行或阻擋行為：阻擋（fail-closed），觸發條件：建立者欄位缺漏或損毀、ps 失敗或逾時、找不到 claude 祖先、handoff_utils 載入失敗 → is_other_claude_process 為 False，照現行阻擋\n[ ] 產生路徑盤點表已寫入 how.strategy：六條路徑（三條本票判定、退化實作、未改的既有分支、subagent）\n[ ] 判定失敗一律阻擋：ps 失敗或逾時、交接檔建立者欄位缺漏或損毀時照擋（追到實際比對函式附對照）\n[ ] pid 重用：pid 相同、lstart 不同判為不同行程",
+    "solution": "- Stop hook：目前行程於迴圈外取一次；只在最後的阻擋分支前插入比對，確定是其他行程才改列建議性任務。lib 載入失敗時的退化實作回 None／False，照擋。\n守衛行為變更（放寬）：同一 repo 的其他 Claude 行程不再被交接檔阻擋。合併前回報主控（正向對照、判定失敗落點、pid 重用三項，見 Test Results）。",
+    "test_results": "- Stop hook 實際執行（HOOK_TEST_ISOLATION=1、CLAUDE_PROJECT_DIR 指向 scratchpad 隔離專案，未碰主 repo pending）：兩份兩小時前的交接檔，001 建立者 pid 777、002 建立者為本行程 → 輸出 `decision: block`，reason 只列 `<ticket-id>`。hook-logs 引文：\n  `[2026-11-12 19:33:40] INFO - 交接檔由其他 Claude 行程建立，本 session 不阻擋: <ticket-id>`",
+    "expect_pass": false
+  },
+  {
+    "case": "G3-17",
+    "group": "G3",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "hook-exclude-list"
+    ],
+    "acceptance": "[x] settings.json 不存在時 completeness_ok 回 False，輸出說明原因\n[x] ana-ticket-metadata-validation-hook 不再註冊，檔頭與 settings.json 一致\n[x] hook 註冊涵蓋率檢查在 session 啟動時不報該 hook 未註冊\n[x] 測試含正向對照：缺 settings.json 斷言回 False（E2）\n[x] project-init 與 hooks 相關測試全綠\n[x] 載入與執行的確認方式：在 worktree 以 CLAUDE_PROJECT_DIR 實跑 hook-registration-coverage-check.py，輸出「未出現在 settings.json: 0 個」「所有掃描到的 Hook 檔案都已出現在 settings.json 中」，Skill Hook 清單不含 ana-ticket-metadata-validation-hook；合併後下一個 session 的 SessionStart 輸出再確認一次\n[x] 異常時的放行或阻擋行為：不適用阻擋。completeness_ok 只影響 project-init onboard 的報告與待辦，不阻擋任何操作。觸發條件：settings.json 不存在或無法解析時回 False 並附 failure_reason；移除註冊後 ana-ticket-metadata-validation-hook 不再執行，ticket create 內部的 ana_ticket_metadata_validator 不受影響\n[x] 產生路徑盤點表已寫入 how.strategy：註冊來源有兩條——settings.json 直接註冊、hook-registry.yaml 經 sync-pull auto_register_hooks 補齊。兩條都移除；只移除前者的話，consumer pull 時會被補回",
+    "solution": "",
+    "test_results": "",
+    "expect_pass": false
+  },
+  {
+    "case": "G3-18",
+    "group": "G3",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "hook-registration-coverage-check"
+    ],
+    "acceptance": "[x] 清冊內的專案 hook 在 local 註冊時不示警（正向對照：框架 hook 在 local 註冊仍示警，E2）\n[x] sync-pull 端的 local 檢查與 checker 判準一致\n[x] sync-pull.md〈6. 幽靈註冊處置〉第三列改為寫入清冊，移除本版暫用的回報 framework issue 寫法\n[x] 當次執行環境下的觸發驗證結果：scratchpad 專案以 SessionStart payload 實跑 coverage check，WARNING 只列框架 hook，不列清冊條目（見 Solution〈執行驗證〉）\n[x] 載入與執行的確認方式：同上實跑輸出；另以 hook-logs 之外的 stdout 為證據（coverage check 以 print 輸出報告）\n[x] 異常時的放行或阻擋行為：放行（fail-open，SessionStart 不阻擋）。觸發條件：清冊無法判定時 manifest_commands 回傳 None，checker 與 sync-pull 照舊對全部 local 條目示警；main 例外由 run_hook_safely 記錄後 exit 1\n[x] 產生路徑盤點表已寫入 how.strategy",
+    "solution": "失敗語意：fail-open；觸發條件：main 例外時 run_hook_safely 記錄後 exit 1；清冊無法判定時不放寬，照舊全部示警。",
+    "test_results": "",
+    "expect_pass": false
+  },
+  {
+    "case": "G3-19",
+    "group": "G3",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "hook-health-monitor",
+      "ana_spawned_checker"
+    ],
+    "acceptance": "[x] hook-health-monitor.py 建議訊息改為 ticket create\n[x] ana_spawned_checker.py docstring 改為 ticket create 並寫兩條落地路線\n[x] grep 非測試 .py 不再以 ticket track create 作為建議命令（post-test-hook.py 的歷史註解除外）\n[x] 當次執行環境下的觸發驗證結果：同一輸入（主 repo .claude/hook-logs，當下有 39 個 hook flagged）跑兩版。舊版 hook-health-monitor.py 印「建議：手動建 ANA 排查（ticket track create --type ANA …）」；worktree 版 run_frequency_scan(logs_root=主 repo hook-logs) 印「建議：手動建 ANA 排查（ticket create --type ANA …）」，差異即修改點（引文見 Test Results）\n[x] 載入與執行的確認方式：以 importlib 由 worktree 路徑載入 hook-health-monitor.py 並呼叫 run_frequency_scan；舊版以 CLAUDE_PROJECT_DIR=主 repo uv run --script 主 repo 路徑執行。worktree 版直接以 uv run --script 執行時 scan_logs 預設讀 worktree 自身 hook-logs（空），故改用 logs_root 注入點\n[x] 異常時的放行或阻擋行為：放行（不變）。本票只改 stderr 建議文字，hook 仍為提醒、不阻擋。觸發條件：頻率掃描有 hook 被判為 warning／critical 時才印建議行\n[x] 產生路徑盤點表已寫入 how.strategy：SessionStart 頻率掃描、ticket track hook-health CLI、ana_spawned_checker docstring 三條皆覆蓋",
+    "solution": "",
+    "test_results": "- 實機比對：兩版都讀主 repo 的 .claude/hook-logs（當下有 39 個 hook flagged）。\n  - 舊版（主 repo 的 hook-health-monitor.py）stderr：`建議：手動建 ANA 排查（ticket track create --type ANA --who basil-hook-architect ...）`\n  - 新版（worktree 的 run_frequency_scan）stderr：`建議：手動建 ANA 排查（ticket create --type ANA --who basil-hook-architect ...）`",
+    "expect_pass": false
+  },
+  {
+    "case": "G4-20",
+    "group": "G4",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "bash-write-boundary-guard-hook",
+      "bash-write-boundary-guard",
+      "test_bash_write_boundary_guard_hook"
+    ],
+    "acceptance": "[x] 小寫代號 Windows 路徑寫入 test/、lib/ 被攔下（以 186.1 合併前的 main 執行為紅）\n[x] 同一路徑寫入 .claude/、docs/ 不被攔（對照）\n[x] 既有 POSIX 測試全綠\n[x] 當次執行環境下的觸發驗證結果：2026-11-12 以合併後 main（9375561d）的 hook 實地觸發，c:/ 寫入 test/ 為 deny、docs/ 為 allow，hook-logs 引文見 Test Results\n[x] 載入與執行的確認方式：以 uv run --script 執行 main checkout 的 hook，stdin 送 PreToolUse payload（帶 cwd）；ticket track hook-liveness 輸出「解析名稱: bash-write-boundary-guard (來源: literal)」，最近一筆 2026-11-12T19:53:50\n[x] 異常時的放行或阻擋行為：阻擋（fail-closed）。hook 本體未改，入口為 run_hook_safely(main, \"bash-write-boundary-guard\", fail_closed=True)，例外時記 traceback 並回 EXIT_DENY（2）。觸發條件：main 執行中拋出 KeyboardInterrupt、SystemExit 以外的例外\n[x] 產生路徑盤點表已寫入 how.strategy：四種帶磁碟機代號的路徑形態與本票覆蓋範圍",
+    "solution": "- 行為：守衛的放行與阻擋結果沒有改變，只鎖住 186.1 已有的收緊。",
+    "test_results": "- 實地觸發（合併後 main 的 hook，`CLAUDE_PROJECT_DIR='C:\\Users\\u\\proj'`，payload 帶 cwd）。log 根跟著 CLAUDE_PROJECT_DIR 走，在 cwd 下建出名為 `C:\\Users\\u\\proj` 的相對目錄；取完引文後已刪除。hook-logs 引文：\n  - `[2026-11-12 19:52:38] INFO - decision=deny source=main reason=boundary_violation targets=['test/a_test.py'] skipped=[] cmd=echo x > c:~/proj/test/a_test.py`\n  - `[2026-11-12 19:52:38] INFO - decision=allow source=main reason=no_boundary_violation targets=['c:~/proj/docs/a.md'] skipped=['c:~/proj/docs/a.md:out_of_scope']`\n- 存活查詢：`ticket track hook-liveness bash-write-boundary-guard` 輸出「解析名稱: bash-write-boundary-guard (來源: literal)」。\n- 異常處置：入口 `run_hook_safely(..., fail_closed=True)`，例外時回 EXIT_DENY。觸發條件：main 拋出 KeyboardInterrupt、SystemExit 以外的例外。",
+    "expect_pass": true
+  },
+  {
+    "case": "G4-21",
+    "group": "G4",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "active-dispatch-tracker-hook",
+      "active-dispatch-tracker",
+      "domain-import-lint-hook",
+      "domain-import-lint",
+      "uc-reference-validation-hook",
+      "uc-reference-validation",
+      "git-index-lock-cleanup-hook",
+      "git-index-lock-cleanup"
+    ],
+    "acceptance": "[x] 判定表 B 組 AR 不一致列逐列遷移或標註不遷理由\n[x] 情境 C（env=MAIN、cwd=WT）下各支以 WT 判定，各附正向對照（應擋輸入被擋）與舊碼對照\n[x] payload 缺 cwd 時不呼叫 get_action_root，輸出無新增 stderr\n[x] 相關測試全綠（以 hook 名稱 grep 出的全部測試檔）\n[x] 當次執行環境下的觸發驗證結果：情境 C 同一輸入新舊版對照，舊版 WARNING 含未定義 UC token：['UC-77']、新版 INFO 通過，hook-logs 引文見 Test Results〈觸發驗證：runtime 新舊對照〉\n[x] 載入與執行的確認方式：ticket track hook-liveness 查詢，解析名稱: uc-reference-validation，今日 266 筆，見 Test Results〈載入與執行確認〉\n[x] 異常時的放行或阻擋行為：放行（fail-open，觸發條件：main 內例外，含 get_action_root 匯入失敗或拋出，run_hook_safely exit 0 加 stderr）；缺 cwd 時不呼叫 helper、判定不變，見 Test Results〈異常時的放行或阻擋〉\n[x] 產生路徑盤點表已寫入 how.strategy：12 列，WT 判定路徑全數覆蓋；SR／LR 列、呼叫端已傳根、git-index-lock 缺 cwd fallback 標示不變並附理由",
+    "solution": "共通寫法：payload 缺 cwd 時不呼叫 helper，沿用原根，無新增 stderr。\n- 缺 cwd 不呼叫 helper：各支皆有測試斷言 stderr 無 [get_action_root]。",
+    "test_results": "`ticket track hook-liveness .claude/hooks/uc-reference-validation-hook.py --since 2026-11-13`：\n### 異常時的放行或阻擋\n- 放行。觸發條件：main 內發生例外，含 `from lib.git_utils import get_action_root` 匯入失敗、get_action_root 拋出。run_hook_safely 寫 stderr 與日誌後，以 exit 0 結束。\n- 差異：舊版 stdout 輸出 additionalContext「偵測到未定義的 UC 編號：UC-77」；新版 stdout 為空。\nhook-logs 引文（`.claude/hook-logs/uc-reference-validation/uc-reference-validation-20261113.log`）：\n```\n（舊版）[2026-11-13 06:13:56] WARNING - WARNING：…/wt-probe/probe/probe_target.py 含未定義 UC token：['UC-77']\n（新版）[2026-11-13 06:13:56] INFO - 通過：…/wt-probe/probe/probe_target.py 新增內容 UC token 皆合法或豁免\n- 收尾：wt-probe 已移除；主 repo 的 `git status` 與開始前相同；hook-logs 沒有 pytest- 前綴檔。",
+    "expect_pass": true
+  },
+  {
+    "case": "G4-22",
+    "group": "G4",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "bash-edit-guard-hook",
+      "bash-edit-guard",
+      "build-staleness-check-hook",
+      "build-staleness-check",
+      "framework-rule-edit-skill-trigger-hook",
+      "framework-rule-edit-skill-trigger",
+      "lsp-environment-check"
+    ],
+    "acceptance": "[x] 判定表 C 組 AR 不一致列逐列遷移或標註不遷理由\n[x] 情境 C（env=MAIN、cwd=WT）下各支以 WT 判定，各附正向對照與舊碼對照\n[x] payload 缺 cwd 時不呼叫 get_action_root，輸出無新增 stderr\n[x] 相關測試全綠（以 hook 名稱 grep 出的全部測試檔）\n[x] 當次執行環境下的觸發驗證結果：情境 C 同一輸入新舊版對照，cd WT 根舊 deny／新放行、cd MAIN 根舊放行／新 deny，hook-logs「偵測到裸 cd/pushd」引文見 Test Results〈觸發驗證：runtime 新舊對照〉\n[x] 載入與執行的確認方式：ticket track hook-liveness 查詢，解析名稱: bash-edit-guard，今日 1545 筆，見 Test Results〈載入與執行確認〉\n[x] 異常時的放行或阻擋行為：三支放行（fail-open，觸發條件：main 內例外含 get_action_root 匯入失敗，run_hook_safely exit 0 加 stderr）；lsp-environment-check 例外時行程結束 exit 非 0，SessionStart 不阻擋（觸發條件：main 內例外），見 Test Results〈異常時的放行或阻擋〉\n[x] 產生路徑盤點表已寫入 how.strategy：12 列，WT 判定路徑全數覆蓋，bash-edit-guard 兩向 deny 翻轉逐列標放寬／收緊；CR／session cache 列與 013.1 段落標示不變並附理由",
+    "solution": "- 缺 cwd：各支皆有測試斷言 stderr 無 [get_action_root]。",
+    "test_results": "- 舊版：`6986e292^1` 的 hook，旁邊的依賴以 symlink 指向 main；`git diff 6986e292^1 main` 確認這些依賴沒有變動。新版：main 上的 hook。exit code 全為 0，stderr 全為空。\n| `cd <wt-probe> && ls` | deny（裸 cd） | 放行 |\n| `cd <主 repo> && ls` | 放行 | deny（裸 cd） |\nhook-logs 引文（`.claude/hook-logs/bash-edit-guard/bash-edit-guard-20261113.log`）：\n```\n[2026-11-13 07:19:33] INFO - 提示: 偵測到裸 cd/pushd（target=<wt-probe>）- cd <wt-probe> && ls          ← 舊版 命令 1\n[2026-11-13 07:19:37] INFO - 提示: 偵測到裸 cd/pushd（target=~/project/llm-dev）- cd ~/project/llm-dev && ls   ← 新版 命令 2\n- 收尾：wt-probe 已移除，主 repo 的 git status 與開始前相同，hook-logs 沒有 pytest- 前綴的檔案。\n`ticket track hook-liveness .claude/hooks/bash-edit-guard-hook.py --since 2026-11-13`：\n### 異常時的放行或阻擋\n- bash-edit-guard、build-staleness-check、framework-rule-edit-skill-trigger 三支以 `run_hook_safely` 執行，沒有 fail_closed。發生例外時放行，觸發條件：main 內例外，含 get_action_root 匯入失敗或拋出；處理方式是 exit 0 並寫 stderr。\n- lsp-environment-check 沒有包 run_hook_safely（`sys.exit(main())`），本票不改。觸發條件：main 內例外。例外會直接結束行程、exit 不為 0；它是 SessionStart 事件，不阻擋 session。",
+    "expect_pass": true
+  },
+  {
+    "case": "G4-23",
+    "group": "G4",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "confabulation-audit-hook",
+      "confabulation-audit",
+      "skill-body-size-check-hook",
+      "skill-body-size-check",
+      "uv-tool-ownership-guard-hook",
+      "uv-tool-ownership-guard",
+      "python-environment-guard-hook",
+      "python-environment-guard"
+    ],
+    "acceptance": "[x] 每支 hook 有受眾宣告\n[x] 受眾含模型者的提醒出現在 additionalContext（修正前不出現）\n[x] 當次執行環境下的觸發驗證結果：同一輸入跑改前改後版本，改後 stdout 出現 additionalContext、改前無輸出；uv-tool 日誌「送出模型提醒 1 則」只有修改後分支會產生，見 Test Results\n[x] 載入與執行的確認方式：hook-liveness 查詢，解析名稱: skill-body-size-check-hook／uv-tool-ownership-guard／confabulation-audit 皆有今日記錄，見 Test Results\n[x] 異常時的放行或阻擋行為：放行，不阻擋 session 與命令；觸發條件：hook 拋未處理例外，由 run_hook_safely 包裝並寫 stderr 與日誌，見 Solution〈失敗語意〉\n[x] 產生路徑盤點表已寫入 how.strategy（四支共 6 列，含事件、受眾、改前改後）",
+    "solution": "- **skill-body-size-check**：報告同時寫 stderr 與 emit_model_reminder(\"SessionStart\")；檔頭補受眾宣告。\n- **uv-tool-ownership-guard**：新增 `_notify`（stderr ＋ 收集），五處 stderr 輸出改呼叫它；main 末端依事件以 emit_model_reminder 送出，無提醒不輸出；模組層級補受眾宣告。\n觸發條件：skill-body-size-check、uv-tool-ownership-guard 拋未處理例外，或 emit_model_reminder 收到非法事件名。兩支皆由 run_hook_safely 包裝，放行（exit 0 系列，不阻擋 session 與命令），例外寫 stderr 與日誌。事件名為程式內寫死的 SessionStart／PreToolUse，皆在 MODEL_REMINDER_EVENTS 內。\n重構需要：否。技術債務：python-environment-guard 未經 run_hook_safely 包裝、無 liveness 記錄（存活查詢無記錄），不在本票範圍，屬既有狀態。程式碼品質：A。",
+    "test_results": "| skill-body-size-check | stdout 無輸出 | `{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"[SkillBodySize] SKILL.md 體量超標（第 2 層預算）\\n  行數超標（門檻 500）: 1 支\\n    - big-skill: 620 行…\"}}` |\n| uv-tool-ownership-guard | stdout 無輸出 | `{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"…[uv-tool Ownership Guard] SKILLS 清單漂移…\"}}` |\nhook-logs 引文（proj-213-13/.claude/hook-logs/）：\n- skill-body-size-check-hook/skill-body-size-check-hook-20261113.log：`[2026-11-13 04:10:16] INFO - 掃描完成: 0 支 token 超標, 1 支行數超標`（兩版本同行，差異在 stdout）\n- uv-tool-ownership-guard/uv-tool-ownership-guard-20261113.log：`[2026-11-13 04:10:25] INFO - 送出模型提醒 1 則（event=SessionStart）`（只有修改後分支會產生）\n`ticket track hook-liveness <path> --since 2026-11-13`：",
+    "expect_pass": true
+  },
+  {
+    "case": "G4-24",
+    "group": "G4",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "acceptance-gate-hook",
+      "acceptance-gate",
+      "bash-write-boundary-guard-hook",
+      "bash-write-boundary-guard",
+      "test-timeout-pre",
+      "bash-edit-guard-hook",
+      "bash-edit-guard"
+    ],
+    "acceptance": "[x] 四支 hook 在一般輸入、通過、提醒、例外路徑皆不輸出 permissionDecision allow，提醒以 additionalContext 保留\n[x] dispatcher 合併實測：ls /etc、測試命令、sed -i 三種輸入的輸出不含 permissionDecision；裸 cd 與 ticket md 寫入仍 deny（正向對照）\n[x] 各支既有測試更新並全綠；新增斷言對照：改前版本輸出 allow、改後不輸出（E1/E2）\n[x] 屬權限提示重新出現的變更：合併前回報主控，附用戶裁定出處（<ticket-id> Solution）\n[x] 當次執行環境下的觸發驗證結果：dispatcher stdin 實測與 hook-logs 引文見 Test Results（2026-11-13，主 repo .claude/hook-logs/）\n[x] 載入與執行的確認方式：hook-liveness 查詢四支皆有今日記錄，解析名稱: test-timeout-pre／bash-write-boundary-guard／bash-edit-guard／acceptance-gate，見 Test Results\n[x] 異常時的放行或阻擋行為：放行，不輸出 decision，交回平台權限流程；觸發條件：hook 拋出未處理例外，見 Solution〈失敗語意〉\n[x] 產生路徑盤點表已寫入 how.strategy（四支共 11 列，改前改後對照）\n[x] 合併回報附清單：框架文件（SKILL、references、pm-rules）內的例行 Bash 命令（ticket、worktree、uv run pytest、git push 等）逐項標示是否在 settings allow 規則內；不在者合併後重新走權限流程。不自行補 allow 規則，由用戶裁定（主控 2026-11-12）\n[x] 開工前提：L18 批次（含 098.13.2 對 acceptance-gate-hook.py 的修改）合入 main 後，從 main 開工；開工前比對其他線未合併分支是否動到四支 hook",
+    "solution": "四支 hook 的放行與提醒路徑不再輸出 permissionDecision allow，deny 路徑不動。逐點見 how.strategy 盤點表。\n- acceptance-gate：generate_hook_output 只在 should_block 時設 deny；`_output_allow_json` 改名 `_pass_without_decision` 且不輸出；例外分支只帶 additionalContext，另寫 stderr。\n- bash-write-boundary-guard：`_allow_and_exit` 一般放行改為只寫日誌。\n觸發條件：四支 hook 任一拋出未處理例外。acceptance-gate 放行（不輸出 decision，交回平台權限流程），寫 stderr 與日誌；bash-write-boundary-guard 維持 run_hook_safely 既有包裝；test-timeout-pre、bash-edit-guard 放行並寫日誌。",
+    "test_results": "鑑別力對照：四支 hook 換回 main 版本跑 test_bash_group_hooks_no_allow.py，5 failed（四支放行路徑各自輸出 allow）、3 passed（bash-write-boundary 寫入 lib/ deny、bash-edit-guard 裸 cd deny、acceptance-gate should_block deny）。\n### hook-logs 引文（主 repo .claude/hook-logs/，2026-11-13）\n\n- bash-write-boundary-guard：`[2026-11-13 00:56:51] INFO - decision=allow source=main reason=no_boundary_violation targets=[] skipped=[] cmd=python3 .claude/scripts/run-with-timeout.py 60 -- uv run --quiet python -m pytest -q tests/test_a.py`（日誌標籤 allow 為內部放行分類，輸出端已不帶 decision）\n- bash-edit-guard：`[2026-11-13 00:56:51] INFO - 允許: 正常 Bash 命令`\n`ticket track hook-liveness <path> --since 2026-11-13`：",
+    "expect_pass": true
+  },
+  {
+    "case": "G5-25",
+    "group": "G5",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "session-start-issue-check-hook",
+      "session-start-issue-check"
+    ],
+    "acceptance": "[x] 登記檔讀寫兩端都經 get_shared_state_root，linked worktree 內解析到主 repo\n[x] 測試含正向對照：在真實 linked worktree 內寫入，主 repo 讀得到（清除 HOOK_TEST_ISOLATION）\n[x] owned_issues_registry 沒有新增根目錄解析實作\n[x] 當次執行環境下的觸發驗證結果：在 linked worktree（llm-dev-<ticket-id>）以 source=startup 執行 session-start-issue-check-hook，清除 HOOK_TEST_ISOLATION，hook-logs 記「owned-issues 登記檔缺失或無法讀取，fail-open 退回 gh search heuristic 路徑」，查的是主 repo 路徑（證據見 Test Results）\n[x] 載入與執行的確認方式：hook 由 worktree 的 scripts 目錄 import 新版 owned_issues_registry，日誌無「模組載入失敗」行；同環境以 python 呼叫 registry_path，worktree cwd 與主 repo cwd 都解析為 主 repo/.claude/state/framework-issue-owned.json（證據見 Test Results）\n[x] 異常時的放行或阻擋行為：放行（fail-open）。觸發條件：登記檔缺失、JSON 損毀、schema 不符或模組載入失敗時回 None，hook 退回 gh search 舊路徑；get_shared_state_root 在 git-common-dir 查詢失敗時退回呼叫端的根並寫 stderr 加 log；寫入失敗吞掉 OSError，不影響已完成的 GitHub 寫入\n[x] 產生路徑盤點表已寫入 how.strategy：登記檔的 6 個讀寫點與繞過路徑各列一行",
+    "solution": "",
+    "test_results": "  - `registry_path(Path.cwd())`：worktree cwd → `~/project/llm-dev/.claude/state/framework-issue-owned.json`；主 repo cwd → 同一路徑（量測環境：本機 macOS）\n  - worktree 內執行 `session-start-issue-check-hook.py`（source=startup）rc=0，hook-logs/session-start-issue-check/session-start-issue-check-20261112.log：`[2026-11-12 14:11:07] INFO - owned-issues 登記檔缺失或無法讀取，fail-open 退回 gh search heuristic 路徑`；無「owned_issues_registry 模組載入失敗」行。主 repo 與 worktree 都沒有登記檔，故走 fail-open；未在真實狀態根寫入登記檔，避免改變其他 session 的 SessionStart 行為",
+    "expect_pass": true
+  },
+  {
+    "case": "G5-26",
+    "group": "G5",
+    "category": "失敗語意（fail-open/fail-closed）",
+    "hook_names": [
+      "hooks"
+    ],
+    "acceptance": "[x] 停滯派發有提醒、非停滯不輸出（E1 對照）\n[x] 舊標題字面在 .claude/ 零殘留\n[x] 當次執行環境下的觸發驗證結果：合併後 23 次 UserPromptSubmit 觸發、0 筆 WARNING/ERROR，當下無停滯條目故無提醒（見 Test Results 引文）\n[x] 載入與執行的確認方式：ticket track hook-liveness dispatch-stall-reminder（解析名稱: dispatch-stall-reminder，23 筆，7 個 session），見 Test Results\n[x] 異常時的放行或阻擋行為：放行（fail-open，不輸出提醒，寫 hook-logs warning 與 stderr）。觸發條件：讀派發登記、票檔或 git log 任一失敗或逾時\n[x] 產生路徑盤點表已寫入 how.strategy：寫入、turn_ended_at、刪除各路徑已列，本 hook 只讀",
+    "solution": "commit 669bad01（worktree feat/<ticket-id>）。變更：新增 .claude/hooks/dispatch-stall-reminder-hook.py（UserPromptSubmit，已註冊 settings.json）；新增 hooks/tests/test_dispatch_stall_reminder_hook.py；bash-tool-usage-details.md 標題改「隔離索引提交的完整性要件」並同步內文與版本記錄中的「三要件」；parallel-dispatch.md 一處「完整性三要件」同步改字。偏離：parallel-dispatch.md 為設計外檔案（零殘留所需）；該檔另有兩處「三要件」未帶「完整性」字樣，未動。fail-open：讀取或 git 失敗記 warning 並寫 stderr，exit 0。\n- 判定邏輯與設計相符：只看本 session、有票號、回合已結束的條目，三項停滯條件都成立才提醒；失敗時放行。輸出走 `emit_hook_output` 的 additionalContext，受眾是 PM。\n- 驗收 3、4（觸發驗證、載入確認）要等合併後在真實 session 補上 hook-logs 引文。",
+    "test_results": "測試：25 passed（新測試 + test_active_dispatch_tracker_hook.py）。grep 完整性三要件 於 .claude（排除 hook-logs、migration-backups）：0 命中。commit 669bad01\n- `ticket track hook-liveness dispatch-stall-reminder`：解析名稱: dispatch-stall-reminder (來源: literal)；總筆數 23，跨 7 個 session（含本 session fc8bcbc1），最近一筆 2026-11-12T04:50:52。\n- hook-logs/dispatch-stall-reminder：23 筆 `Hook execution time`，WARNING／ERROR 0 筆，例如 `[2026-11-12 04:50:53] DEBUG - Hook execution time: 0.39s`。",
+    "expect_pass": true
+  },
+  {
+    "case": "G6-27",
+    "group": "G6",
+    "category": "本 session 實地觸發確認",
+    "hook_names": [
+      "workspace-wipe-guard-hook",
+      "workspace-wipe-guard",
+      "process-skip-guard-hook",
+      "process-skip-guard"
+    ],
+    "acceptance": "[x] orphan_confirmed 條目於 housekeeping 被刪除，orphan_suspected／unknown_owner／registry_unavailable 保留，有測試\n[x] workspace-wipe 與 process-skip 守衛排除 orphan_confirmed；正向對照：存活 session 的條目仍使守衛進入並行期（E2）\n[x] 合併前依〈行為變更的判準與分級〉向主控回報（放寬，附正向對照）\n[x] 載入與執行的確認方式：合併後首次 Agent 派發觸發 active-dispatch-tracker，以 ticket track hook-liveness 查 active-dispatch-tracker 與 workspace-wipe-guard、process-skip-guard 的存活紀錄，並以 hook-logs 中「已回收擁有者 session 已結束的派發條目」引文佐證，貼入 Test Results\n[x] 異常時的放行或阻擋行為：fail-closed（保守計入佔用、不刪除）。觸發條件：pm-registry 讀取失敗或降級、prune 拋例外（housekeeping 記 warning、不影響派發記錄）、條目非 dict\n[x] 產生路徑盤點表已寫入 how.strategy：寫入、標記、刪除、排除四類路徑已列",
+    "solution": "主控指出：SessionEnd（包含 /clear）時，session-registry-end-hook 會移除 registry entry，而且 /clear 之後 session_id 會改變。所以 /clear 之前派出的背景代理人，它們的條目會被判成 orphan_confirmed。如果這些代理人在 /clear 之後仍在寫檔，本票的放寬會刪掉它們的條目，workspace-wipe 守衛也會放行。\n**歷史日誌查證（不足以定案）**：交叉比對 SessionEnd 釋放時刻（20 次）與該 session 派出的代理人（106 個）在任何 hook-logs 中最後一次出現 agent_id 的時刻，沒有一筆晚於擁有者的 SessionEnd。但日誌只保留 4 天，也不記 SessionEnd 的 reason，分不出 /clear 和關窗；/clear 時剛好有代理人在跑的樣本可能是 0，所以只算沒有反證，不算證據。\n**用戶待辦**（/clear 實測）：在另一個 llm-dev session 派出前景執行 `sleep 90` 後寫檔的背景代理人，立刻 /clear，再由 L15 觀察檔案是否寫出、dispatch-active.json 與 hook-logs。步驟已傳給主控轉達。\n- 失敗語意：workspace-wipe 回到 fail-closed。觸發條件：派發登記內只要有條目（不論擁有者是否已結束），就判定進入並行期。",
+    "test_results": "",
+    "expect_pass": false
+  },
+  {
+    "case": "G6-28",
+    "group": "G6",
+    "category": "liveness 驗證方式",
+    "hook_names": [
+      "workspace-wipe-guard-hook",
+      "workspace-wipe-guard",
+      "process-skip-guard-hook",
+      "process-skip-guard"
+    ],
+    "acceptance": "[x] orphan_confirmed 條目於 housekeeping 被刪除，orphan_suspected／unknown_owner／registry_unavailable 保留，有測試\n[x] workspace-wipe 與 process-skip 守衛排除 orphan_confirmed；正向對照：存活 session 的條目仍使守衛進入並行期（E2）\n[x] 合併前依〈行為變更的判準與分級〉向主控回報（放寬，附正向對照）\n[x] 載入與執行的確認方式：合併後首次 Agent 派發觸發 active-dispatch-tracker，以 ticket track hook-liveness 查 active-dispatch-tracker 與 workspace-wipe-guard、process-skip-guard 的存活紀錄，並以 hook-logs 中「已回收擁有者 session 已結束的派發條目」引文佐證，貼入 Test Results\n[x] 異常時的放行或阻擋行為：fail-closed（保守計入佔用、不刪除）。觸發條件：pm-registry 讀取失敗或降級、prune 拋例外（housekeeping 記 warning、不影響派發記錄）、條目非 dict\n[x] 產生路徑盤點表已寫入 how.strategy：寫入、標記、刪除、排除四類路徑已列",
+    "solution": "主控指出：SessionEnd（包含 /clear）時，session-registry-end-hook 會移除 registry entry，而且 /clear 之後 session_id 會改變。所以 /clear 之前派出的背景代理人，它們的條目會被判成 orphan_confirmed。如果這些代理人在 /clear 之後仍在寫檔，本票的放寬會刪掉它們的條目，workspace-wipe 守衛也會放行。\n**歷史日誌查證（不足以定案）**：交叉比對 SessionEnd 釋放時刻（20 次）與該 session 派出的代理人（106 個）在任何 hook-logs 中最後一次出現 agent_id 的時刻，沒有一筆晚於擁有者的 SessionEnd。但日誌只保留 4 天，也不記 SessionEnd 的 reason，分不出 /clear 和關窗；/clear 時剛好有代理人在跑的樣本可能是 0，所以只算沒有反證，不算證據。\n**用戶待辦**（/clear 實測）：在另一個 llm-dev session 派出前景執行 `sleep 90` 後寫檔的背景代理人，立刻 /clear，再由 L15 觀察檔案是否寫出、dispatch-active.json 與 hook-logs。步驟已傳給主控轉達。\n- 失敗語意：workspace-wipe 回到 fail-closed。觸發條件：派發登記內只要有條目（不論擁有者是否已結束），就判定進入並行期。",
+    "test_results": "",
+    "expect_pass": false
+  }
+]

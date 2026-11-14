@@ -562,6 +562,72 @@ class TestCollectMergedUserWorktreesUndetermined:
         assert result is None
 
 
+# ---------------------------------------------------------------------------
+# 3.3.0-W1-068：ahead=0 但進行中的 worktree 不列入已合併（真實 tmp git repo）
+# ---------------------------------------------------------------------------
+
+import subprocess  # noqa: E402
+
+
+def _git(repo, *args):
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
+
+
+@pytest.fixture
+def audit_repo(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    (repo / "base.txt").write_text("base\n")
+    _git(repo, "add", "base.txt")
+    _git(repo, "commit", "-q", "-m", "base")
+    monkeypatch.chdir(repo)
+    return repo
+
+
+def _add_wt(repo, name):
+    wt = repo.parent / ("wt-" + name)
+    _git(repo, "worktree", "add", "-q", "-b", "feat/" + name, str(wt), "main")
+    return wt
+
+
+class TestMergedWorktreeExcludesInProgress:
+    def test_fresh_worktree_with_untracked_file_not_listed(self, audit_repo, logger):
+        wt = _add_wt(audit_repo, "fresh")
+        (wt / "draft.txt").write_text("wip\n")
+        merged = hook.collect_merged_user_worktrees(logger)
+        assert all(branch != "feat/fresh" for _, branch in merged)
+
+    def test_fresh_worktree_clean_not_listed(self, audit_repo, logger):
+        """沒有自有提交即不列入，即使工作區乾淨。"""
+        _add_wt(audit_repo, "fresh-clean")
+        merged = hook.collect_merged_user_worktrees(logger)
+        assert all(branch != "feat/fresh-clean" for _, branch in merged)
+
+    def test_merged_clean_worktree_still_listed(self, audit_repo, logger):
+        """E2 正向對照：有自有提交、以 merge commit 合入 main、工作區乾淨 → 仍列入。"""
+        wt = _add_wt(audit_repo, "done")
+        (wt / "deliv.txt").write_text("x\n")
+        _git(wt, "add", "deliv.txt")
+        _git(wt, "commit", "-q", "-m", "deliverable")
+        _git(audit_repo, "merge", "-q", "--no-ff", "-m", "merge done", "feat/done")
+        merged = hook.collect_merged_user_worktrees(logger)
+        assert ("feat/done" in [branch for _, branch in merged])
+
+    def test_status_query_failure_not_listed(self, audit_repo, logger, monkeypatch):
+        """判定失敗不列為已合併。"""
+        wt = _add_wt(audit_repo, "done2")
+        (wt / "d.txt").write_text("x\n")
+        _git(wt, "add", "d.txt")
+        _git(wt, "commit", "-q", "-m", "d")
+        _git(audit_repo, "merge", "-q", "--no-ff", "-m", "merge done2", "feat/done2")
+        monkeypatch.setattr(hook, "_worktree_dirty", lambda path, logger: None)
+        merged = hook.collect_merged_user_worktrees(logger)
+        assert all(branch != "feat/done2" for _, branch in merged)
+
+
 class TestCollectModifiedTicketPathsFailurePaths:
     """collect_modified_ticket_paths 判定失敗須回傳 None，不得等同無 modified 檔案。"""
 

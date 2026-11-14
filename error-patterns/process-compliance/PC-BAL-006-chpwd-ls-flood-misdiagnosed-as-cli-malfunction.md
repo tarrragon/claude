@@ -36,4 +36,4 @@ Agent 缺「輸出前綴雜訊 ≠ 命令故障」的判讀錨點：診斷依據
 
 - IMP-008 / IMP-056：裸 cd 的 chpwd 污染與 ls 淹沒（本模式是其子 shell 變體：cwd 不污染但輸出仍淹沒）
 - PC-166：confabulation 觸發鏈——輸出邊界模糊是誤判起點；本模式為「誤判方向相反」案例（把真實正常輸出判為故障，而非把虛構輸出判為真實）
-- 實證：book_overview_app 0.38.1-W10-002（2026-07-25），`doc query SPEC-014` 被誤診為 shim 故障，PM 重現確認 exit 0 輸出正常
+- 實證：book_overview_app（2026-07-25），`doc query SPEC-014` 被誤診為 shim 故障，PM 重現確認 exit 0 輸出正常

@@ -14,7 +14,7 @@ from project_init.lib import (
     check_docs_structure,
     check_gitignore_completeness,
     check_hook_configurations,
-    check_hook_completeness,
+    check_hook_registration_coverage,
     check_language_standards,
     check_language_template,
     check_readme_md,
@@ -76,10 +76,10 @@ def _run_detection_checks(project_root: Path) -> tuple:
     # 檢查 CLAUDE.md 技術選型 section（已取代獨立語言模板）
     tech_stack_info = check_tech_stack_section(project_root)
     settings_info = check_settings_local_json(project_root)
-    hook_completeness = check_hook_completeness(project_root)
+    hook_coverage = check_hook_registration_coverage(project_root)
 
     return (language_info, hook_classification, claude_md_info, tech_stack_info,
-            settings_info, hook_completeness, language)
+            settings_info, hook_coverage, language)
 
 
 def _run_structure_checks(project_root: Path) -> tuple:
@@ -247,15 +247,15 @@ def _collect_core_file_items(
     return items
 
 
-def _collect_hook_completeness_items(hook_completeness) -> list[TodoItem]:
-    """彙整 Hook 完整性相關待辦項目."""
+def _collect_hook_coverage_items(hook_coverage) -> list[TodoItem]:
+    """彙整 Hook 註冊涵蓋率相關待辦項目."""
     items = []
-    if hook_completeness.failure_reason:
-        items.append(TodoItem(description="Hook 完整性無法驗證", hint=hook_completeness.failure_reason))
-    elif not hook_completeness.completeness_ok:
-        unregistered_list = ", ".join(sorted(hook_completeness.unregistered_hooks)[:3])
-        hint = f"未登記: {unregistered_list}{'...' if len(hook_completeness.unregistered_hooks) > 3 else ''} — 檢查是否需要在 settings.json 註冊或新增到 hook-exclude-list.json"
-        items.append(TodoItem(description=f"有 {len(hook_completeness.unregistered_hooks)} 個未登記的 Hook", hint=hint))
+    if hook_coverage.failure_reason:
+        items.append(TodoItem(description="Hook 註冊涵蓋率無法驗證", hint=hook_coverage.failure_reason))
+    elif not hook_coverage.coverage_ok:
+        unregistered_list = ", ".join(sorted(hook_coverage.unregistered_hooks)[:3])
+        hint = f"未登記: {unregistered_list}{'...' if len(hook_coverage.unregistered_hooks) > 3 else ''} — 檢查是否需要在 settings.json 註冊或新增到 hook-exclude-list.json"
+        items.append(TodoItem(description=f"有 {len(hook_coverage.unregistered_hooks)} 個未登記的 Hook", hint=hint))
     return items
 
 
@@ -264,7 +264,7 @@ def _collect_must_items(
     claude_md_info,
     tech_stack_info,
     settings_info,
-    hook_completeness,
+    hook_coverage,
     gitignore_info,
     claude_dir_info,
     hook_config_info,
@@ -277,7 +277,7 @@ def _collect_must_items(
     items.extend(_collect_hook_config_items(hook_config_info))
     items.extend(_collect_core_file_items(
         claude_md_info, tech_stack_info, settings_info, config_dir_info, language))
-    items.extend(_collect_hook_completeness_items(hook_completeness))
+    items.extend(_collect_hook_coverage_items(hook_coverage))
     return items
 
 
@@ -317,7 +317,7 @@ def _collect_todo_items(
     claude_md_info,
     tech_stack_info,
     settings_info,
-    hook_completeness,
+    hook_coverage,
     docs_structure,
     gitignore_info,
     claude_dir_info,
@@ -329,7 +329,7 @@ def _collect_todo_items(
     """彙整待辦項目（MUST + SHOULD）."""
     must_items = _collect_must_items(
         language, claude_md_info, tech_stack_info, settings_info,
-        hook_completeness, gitignore_info, claude_dir_info,
+        hook_coverage, gitignore_info, claude_dir_info,
         hook_config_info, config_dir_info)
 
     should_items = _collect_should_items(readme_info, language_standards_info)
@@ -337,14 +337,14 @@ def _collect_todo_items(
 
 
 def _print_core_sections(result: OnboardResult, language_info, hook_classification,
-                         hook_completeness) -> None:
+                         hook_coverage) -> None:
     """輸出核心區段."""
     print()
     _print_header()
     print()
     _print_language_section(language_info)
     _print_hook_classification_section(hook_classification)
-    _print_hook_completeness_section(hook_completeness)
+    _print_hook_coverage_section(hook_coverage)
 
 
 def _print_framework_sections(result: OnboardResult, claude_md_info,
@@ -372,7 +372,7 @@ def _print_onboard_result(
     result: OnboardResult,
     language_info,
     hook_classification,
-    hook_completeness,
+    hook_coverage,
     claude_md_info,
     docs_structure,
     gitignore_info,
@@ -383,7 +383,7 @@ def _print_onboard_result(
     language_standards_info,
 ) -> None:
     """輸出格式化的 onboard 結果到 stdout."""
-    _print_core_sections(result, language_info, hook_classification, hook_completeness)
+    _print_core_sections(result, language_info, hook_classification, hook_coverage)
     _print_framework_sections(result, claude_md_info, docs_structure, gitignore_info, claude_dir_info)
     _print_config_sections(hook_config_info, config_dir_info, readme_info, language_standards_info)
     _print_todolist_section(result)
@@ -458,32 +458,33 @@ def _print_hook_classification_section(hook_classification) -> None:
     print()
 
 
-def _print_hook_completeness_section(hook_completeness) -> None:
-    """輸出 Hook 完整性驗證部分."""
-    print(f"[{OnboardMessages.HOOK_COMPLETENESS_SECTION}]")
-    print(f"  {OnboardMessages.HOOK_REGISTERED_COUNT.format(count=len(hook_completeness.registered_hooks))}")
-    print(f"  {OnboardMessages.HOOK_UNREGISTERED_COUNT.format(count=len(hook_completeness.unregistered_hooks))}")
-    print(f"  {OnboardMessages.HOOK_EXCLUDED_COUNT.format(count=hook_completeness.excluded_count)}")
+def _print_hook_coverage_section(hook_coverage) -> None:
+    """輸出 Hook 註冊涵蓋率部分."""
+    print(f"[{OnboardMessages.HOOK_COVERAGE_SECTION}]")
+    print(f"  {OnboardMessages.HOOK_COVERAGE_SCOPE}")
+    print(f"  {OnboardMessages.HOOK_REGISTERED_COUNT.format(count=len(hook_coverage.registered_hooks))}")
+    print(f"  {OnboardMessages.HOOK_UNREGISTERED_COUNT.format(count=len(hook_coverage.unregistered_hooks))}")
+    print(f"  {OnboardMessages.HOOK_EXCLUDED_COUNT.format(count=hook_coverage.excluded_count)}")
     print()
 
-    if hook_completeness.failure_reason:
-        print(f"  {OnboardMessages.HOOK_COMPLETENESS_TODO}")
-        print(f"  {hook_completeness.failure_reason}")
-    elif hook_completeness.completeness_ok:
-        print(f"  {OnboardMessages.HOOK_COMPLETENESS_OK}")
+    if hook_coverage.failure_reason:
+        print(f"  {OnboardMessages.HOOK_COVERAGE_TODO}")
+        print(f"  {hook_coverage.failure_reason}")
+    elif hook_coverage.coverage_ok:
+        print(f"  {OnboardMessages.HOOK_COVERAGE_OK}")
     else:
-        print(f"  {OnboardMessages.HOOK_COMPLETENESS_TODO}")
+        print(f"  {OnboardMessages.HOOK_COVERAGE_TODO}")
         print(f"  {OnboardMessages.HOOK_UNREGISTERED_LIST}")
-        for hook in sorted(hook_completeness.unregistered_hooks)[:15]:
+        for hook in sorted(hook_coverage.unregistered_hooks)[:15]:
             print(f"    - {hook}")
 
-        if len(hook_completeness.unregistered_hooks) > 15:
-            remaining = len(hook_completeness.unregistered_hooks) - 15
+        if len(hook_coverage.unregistered_hooks) > 15:
+            remaining = len(hook_coverage.unregistered_hooks) - 15
             print(
                 f"  {OnboardMessages.HOOK_UNREGISTERED_MORE.format(count=remaining)}"
             )
 
-        print(f"  {OnboardMessages.HOOK_COMPLETENESS_HINT}")
+        print(f"  {OnboardMessages.HOOK_COVERAGE_HINT}")
 
     print()
 

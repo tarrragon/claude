@@ -27,7 +27,7 @@ Why soft check:
     會在英文專案造成假警報。輸出到 stderr 確保訊息可見（quality-baseline 規則 4），
     不影響 session 啟動。
 
-Why file-based MCP probe (W17-143 / ARCH-022):
+Why file-based MCP probe (ARCH-022):
     依 ARCH-022「framework hook 不應對 user-scope 設定產生隱性副作用」，採直讀
     三層 scope 設定 JSON 檔（user / project / local），任一含 zhtw-mcp 即視為
     已註冊。早期版本曾用 `claude mcp list` spawn CLI 探測，平均耗 8-10s 且
@@ -63,8 +63,8 @@ USER_HOME = Path.home()
 def _check_binary():
     """Locate zhtw-mcp on PATH.
 
-    Note (W17-143 user decision): 不嘗試版本探測。zhtw-mcp 0.1.0 不支援
-    `--version` flag；待上游發布 release 後再用標準探測（追蹤 ticket: W17-140）。
+    Note (user decision): 不嘗試版本探測。zhtw-mcp 0.1.0 不支援
+    `--version` flag；上游發布支援版本探測的 release 後，改用標準探測。
     當前版本欄位固定顯示 "unknown"，避免每次 spawn 子 process 抓不到結果浪費 IO。
 
     Returns:

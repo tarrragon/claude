@@ -6,7 +6,7 @@
 """
 Worktree Remove Deliverable-On-Main Check Hook - PreToolUse (Bash)
 
-Guard A（來源 1.2.0-W1-028 事故一）：偵測 `git worktree remove`，在移除前檢查
+Guard A（來源：未提交產品碼遭 force-remove 遺失事故）：偵測 `git worktree remove`，在移除前檢查
 該 worktree 分支是否仍有未 merge 進 main 的 commit（即未落地的交付物）。
 
 事故重現：parsley 在 worktree 建檔+測試通過但只 ticket CLI auto-commit metadata，
@@ -17,7 +17,7 @@ Guard A（來源 1.2.0-W1-028 事故一）：偵測 `git worktree remove`，在�
 阻擋（exit 2），要求 PM 先 merge/cherry-pick 或顯式確認。
 `--force` 不繞過本檢查（檢查在 CC runtime hook 層，先於 git 執行）。
 
-Guard C（來源 0.2.1-W3-280，issue 46 症狀四；0.2.1-W3-285 由 Guard B 改名，避免
+Guard C（來源 issue 46 症狀四；由 Guard B 改名，避免
 與 worktree-pre-dispatch-branch-drift-hook 的 Guard B 撞號，見 worktree-operations.md
 第 32 行代號分配說明）：merge 完成後 Guard A 即放行，但 worktree working tree 內
 未提交的修改（已追蹤或未追蹤）無人把關，`remove --force` 會使其永久遺失。本
@@ -46,9 +46,22 @@ from lib import (
     read_json_from_stdin,
     run_git,
     get_worktree_list,
-    get_uncommitted_files,
-    FileStatus,
 )
+
+
+STATUS_UNKNOWN_BLOCK_MESSAGE = """[Guard C] 無法查詢 worktree 狀態，禁止 remove
+
+worktree: {path}
+分支: {branch}
+
+git status 在該路徑執行失敗，無法確認有沒有未提交的修改。remove（尤其 --force）
+會刪除未提交的修改且不可逆，因此查不到狀態時一律阻擋。
+
+處置（擇一）：
+  1. 相對路徑可能解析到別處：改用絕對路徑重試 git worktree remove。
+  2. 先確認狀態：git -C {path} status
+     能正常列出時，依結果處理未提交變更後再 remove。
+  3. 目錄確實已不存在：不需要 remove，改用 git worktree prune 清掉登記。"""
 
 
 # 僅用於 find_git_invocations 回傳 None（命令無法解析）時的退路；
@@ -57,7 +70,7 @@ _REMOVE_PATTERN = re.compile(
     r"git\s+worktree\s+remove\b(?P<rest>[^\n;&|]*)",
 )
 
-BLOCK_MESSAGE ="""[1.2.0-W1-028 Guard A] worktree 分支有未 merge 進 main 的交付物，禁止 remove
+BLOCK_MESSAGE ="""[Guard A] worktree 分支有未 merge 進 main 的交付物，禁止 remove
 
 worktree: {path}
 分支: {branch}
@@ -65,7 +78,7 @@ worktree: {path}
 {files}
 
 事故背景：worktree 建好+測試通過但產品碼未進 main 時 remove，會永久遺失
-（git fsck 無 unreachable）。這正是 1.2.0-W1-028 事故一的根因。
+（git fsck 無 unreachable）。這正是未提交產品碼遭 force-remove 遺失事故的根因。
 
 修復方式（擇一）：
   1. 先 merge（走合併閘門，隔離索引一步完成，不留 MERGE_HEAD 殘局）：
@@ -93,7 +106,7 @@ def _split_dirty_lines(dirty_lines: List[str]) -> Tuple[List[str], List[str]]:
     """依 porcelain 狀態碼分組：未追蹤（``??``）vs 已追蹤但未提交（其餘）。
 
     比照 worktree-merge-reminder-hook.py 的 ``get_dirty_files`` 分組邏輯
-    （0.2.1-W3-285），讓 Guard C 阻擋訊息呈現與清理提醒訊息一致，避免同一
+    ，讓 Guard C 阻擋訊息呈現與清理提醒訊息一致，避免同一
     worktree 在兩個 hook 的訊息中出現不同分類。
     """
     untracked = [line[3:] for line in dirty_lines if line[:2] == "??"]
@@ -123,7 +136,7 @@ def _format_dirty_block_message(
 ) -> str:
     """組出 Guard C（未提交變更）阻擋訊息。
 
-    0.2.1-W3-285 三項修正：(a) 依未追蹤/已追蹤分組列出檔案，比照
+    三項修正：(a) 依未追蹤/已追蹤分組列出檔案，比照
     worktree-merge-reminder-hook 的清理提醒呈現；(b) restore 與 clean 拆為
     可逐字執行的獨立命令並標明作用對象（原「restore/clean」非合法命令
     語法），commit 選項補上後續的 merge 步驟（否則 commit 後分支仍未合併，
@@ -134,7 +147,7 @@ def _format_dirty_block_message(
     untracked, tracked_modified = _split_dirty_lines(dirty_lines)
 
     lines: List[str] = [
-        "[0.2.1-W3-280 Guard C] worktree 有未提交的變更，禁止 remove",
+        "[Guard C] worktree 有未提交的變更，禁止 remove",
         "",
         "worktree: {}".format(path),
     ]
@@ -148,8 +161,8 @@ def _format_dirty_block_message(
     lines.extend([
         "",
         "背景：merge 完成後 Guard A 即放行，但 working tree 內未提交的修改（已追蹤或",
-        "未追蹤）不在 commit 歷史中，`remove --force` 會使其永久遺失。這是 1.2.0-W1-028",
-        "事故一在「merge 已完成」路徑下的變體（issue 46 症狀四）。",
+        "未追蹤）不在 commit 歷史中，`remove --force` 會使其永久遺失。這是",
+        "未提交產品碼遺失事故在「merge 已完成」路徑下的變體（issue 46 症狀四）。",
         "",
         "修復方式（擇一，完成後執行下方「驗證」步驟確認）：",
         "  1. 保留變更並落地 main：",
@@ -243,7 +256,7 @@ def _branch_of_worktree(
 ) -> Optional[str]:
     """查 worktree 路徑對應的分支名。
 
-    0.2.1-W3-286：改用共用層 lib.git_utils.get_worktree_list，路徑比對鍵
+    改用共用層 lib.git_utils.get_worktree_list，路徑比對鍵
     採正規化後的絕對路徑（Context Bundle 分歧表結論）——原本以 `Path(...).
     name` 末段比對，同名不同層的兩個 worktree（如
     `.claude/worktrees/agent-abc` 與另一 repo 下同名目錄）會誤配；絕對路徑
@@ -302,21 +315,21 @@ def _all_patches_on_main(branch: str, logger, repo_dir: Optional[str] = None) ->
     return bool(lines) and all(ln.startswith("-") for ln in lines)
 
 
-def _dirty_status(worktree_path: str, logger) -> List[str]:
-    """查 target worktree 的未提交變更清單（0.2.1-W3-286 改用共用層）。
+def _dirty_status(worktree_path: str, logger) -> Optional[List[str]]:
+    """查 target worktree 的未提交變更清單；查詢失敗回傳 None。
 
-    改用 lib.git_utils.get_uncommitted_files(cwd=...)，回傳與原 porcelain
-    行格式相容的字串清單（FileStatus.__str__ 輸出 "XY filename"）。
-
-    行為變更（收斂取捨，記入 Solution）：共用層不區分「git 查詢失敗」與
-    「無變更」，兩者皆回傳空清單。對主呼叫端 main() 而言結果一致——
-    兩者都落在 `if not dirty_lines` 分支（不阻擋 remove，Guard C 放行），
-    差異僅在無法輸出「git 查詢失敗」的獨立 debug 訊息。
+    2026-11-12 收緊：原本經 get_uncommitted_files，共用層把「git 查詢失敗」
+    與「無變更」都回傳空清單，Guard C 因此在查詢失敗時放行，而 remove --force
+    會刪除未提交的修改且不可逆。改用 run_git 直接取 porcelain，兩者分開回傳。
+    路徑不存在（cwd 無效）同樣回傳 None。
 
     Returns:
-        `"XY filename"` 格式的行清單（可能空 = clean 或查詢失敗）
+        `"XY filename"` 格式的行清單（空 = 無變更），或 None（查詢失敗）
     """
-    return [str(fs) for fs in get_uncommitted_files(cwd=worktree_path)]
+    out = run_git(["git", "status", "--porcelain"], cwd=worktree_path, timeout=10, logger=logger)
+    if out is None:
+        return None
+    return [ln for ln in out.splitlines() if ln.strip()]
 
 
 def _guard_a(
@@ -355,15 +368,15 @@ def _guard_a(
 def _guard_c(
     path: str, branch: Optional[str], logger, repo_dir: Optional[str] = None
 ) -> Optional[str]:
-    """Guard C（0.2.1-W3-280，0.2.1-W3-285 由 Guard B 改名避免撞號）：檢查
+    """Guard C（由 Guard B 改名避免撞號）：檢查
     target working tree 本身是否有未提交變更。不依賴 Guard A 的分支查找是否
     成功——即使找不到分支，working tree 仍可能有需要保留的未提交內容。
     repo_dir 僅為與 Guard A 統一簽章，Guard C 以 path 本身為查詢目錄。
     """
     dirty_lines = _dirty_status(path, logger)
     if dirty_lines is None:
-        logger.warning("worktree %s 狀態查詢失敗（git 錯誤），放行 Guard C", path)
-        return None
+        logger.warning("阻擋 remove：worktree %s 狀態查詢失敗，無法確認有無未提交變更", path)
+        return STATUS_UNKNOWN_BLOCK_MESSAGE.format(path=path, branch=branch or "(未知)")
     if not dirty_lines:
         logger.info("worktree %s 無未提交變更，Guard C 放行", path)
         return None
@@ -423,4 +436,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run_hook_safely(main, "worktree-remove-deliverable-check"))
+    sys.exit(run_hook_safely(main, "worktree-remove-deliverable-check", fail_closed=True))

@@ -3,7 +3,6 @@ id: PC-147
 title: Reference doc 自寫自引導致 confabulation cascade
 category: process-compliance
 severity: high
-source_case: 0.18.0-W14-031
 created: 2026-05-14
 ---
 
@@ -35,7 +34,7 @@ LLM 的訓練分布與工具邊界互動產生三層放大：
 
 ## 案例
 
-**0.18.0-W14-031（2026-05-14）**：
+**hook 設定 args 形式遷移事件（2026-05-14）**：
 
 - reference `.claude/references/hook-architect-technical-reference.md` 加入 `args` exec form 範例，但範例**漏寫必填的 `command` 欄位**
 - ticket why 引用該 reference 作為「v2.1.139+ 推薦形式」依據
@@ -87,10 +86,10 @@ LLM 的訓練分布與工具邊界互動產生三層放大：
 
 ## 相關
 
-- PC-079: backtick command substitution in CLI args（被 W14-031 誤引為遷移理由）
+- PC-079: backtick command substitution in CLI args（被該遷移事件誤引為遷移理由）
 - PC-088: LLM 工具選擇偏誤（單步敏感總步驟盲）—同源於 LLM 對外部系統認知的內推偏誤
 - PC-098: PM 寫規則本能引用 ticket ID（self-reference 反模式同源）
 
 ---
 
-**Last Updated**: 2026-05-14 | **Source**: 0.18.0-W14-031 4 分鐘完成 123 條錯誤遷移 + 同日 `/doctor` 報 schema 違規後 revert
+**Last Updated**: 2026-05-14 | **Source**: hook args 遷移事件 4 分鐘完成 123 條錯誤遷移 + 同日 `/doctor` 報 schema 違規後 revert

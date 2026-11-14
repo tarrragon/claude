@@ -2,7 +2,7 @@
 title: 三階段深度反思方法論（Three-Phase Reflection Methodology）
 version: 2.0.0
 created: 2026-04-18
-source: 0.18.0-W15-005 / 0.18.0-W15-008
+source: 兩次 PM 反思 ANA
 ---
 
 # 三階段深度反思方法論
@@ -22,7 +22,7 @@ source: 0.18.0-W15-005 / 0.18.0-W15-008
 
 這些答案**無法解釋「為何不是 B/C/D」**，只解釋「為何是 A」。防護方向因此錯誤。
 
-### W15-005 實證
+### 「3 獨立 Ticket」提議實證
 
 案例：PM 選 `cat /tmp/x.md | append-log` 而非 heredoc。
 
@@ -66,7 +66,7 @@ source: 0.18.0-W15-005 / 0.18.0-W15-008
 
 對高度匹配的假設，繼續問「為什麼會這樣想？」至少挖 2 層。
 
-| 層級 | W15-005 範例 |
+| 層級 | 「3 獨立 Ticket」提議範例 |
 |------|-------------|
 | 表層 | shell 習慣 |
 | 第一層深因 | 檔案感物化（長文字視為檔案）|
@@ -117,7 +117,7 @@ Phase 1 產出的「真實根因」仍可能是**第一直覺的延伸**——�
 ### Consider the Opposite
 
 問：「如果我相信的真實根因正好相反，會怎樣？」
-- W15-005 案例：「如果根本不是認知負擔規避，而是主動最佳化呢？」→ 結論改變，但用戶未質疑，故保留
+- 「3 獨立 Ticket」案例：「如果根本不是認知負擔規避，而是主動最佳化呢？」→ 結論改變，但用戶未質疑，故保留
 - 若反面論述有力 → 回 Phase 1 補假設重挖
 
 ### 防護方向驗證
@@ -127,14 +127,14 @@ Phase 1 產出的「真實根因」仍可能是**第一直覺的延伸**——�
 - 機會成本？
 - Premortem：3 大失敗原因？
 
-**W15-005 實證**：原「3 獨立 Ticket」提議經 WRAP 後發現：
+**「3 獨立 Ticket」實證**：原「3 獨立 Ticket」提議經 WRAP 後發現：
 - 框架概括測試失敗（全在「建文字規則」）
 - 高 bulk-ignored 風險
 - 修正為 D+E 組合（WRAP skill 整合 + bash 規則五）
 
 ## Phase 3：權威方法論對照檢查
 
-> 新增背景：W15-008 產出 PC-088 v1 框架後，用戶指出與 `.claude/methodologies/friction-management-methodology.md` 衝突。Phase 1+2 未捕捉此衝突，顯示 Phase 3 必要性。
+> 新增背景：PC-088 v1 框架產出後，用戶指出與 `.claude/methodologies/friction-management-methodology.md` 衝突。Phase 1+2 未捕捉此衝突，顯示 Phase 3 必要性。
 
 ### 核心問句
 
@@ -216,14 +216,14 @@ Phase 1 產出的「真實根因」仍可能是**第一直覺的延伸**——�
 
 ## Case Studies
 
-### Case 1：PM /tmp 中介檔繞路（W15-005）
+### Case 1：PM /tmp 中介檔繞路
 
 | 階段 | 產出 |
 |------|------|
 | 表層（PC-087 原版）| shell 習慣 |
 | Phase 1 深度 | 檔案感物化 + 認知負擔規避 + 主動認知策略 |
 | Phase 2 WRAP | 方案從 A（3 獨立 Ticket）修正為 D+E（WRAP 整合 + bash 規則五）|
-| 結果 | PC-087 重寫 + PC-088 抽象層提煉 + W15-006/007 spawn |
+| 結果 | PC-087 重寫 + PC-088 抽象層提煉 + 兩張後續 ticket spawn |
 
 ### Case 2：（待後續案例補充）
 
@@ -234,7 +234,7 @@ Phase 1 產出的「真實根因」仍可能是**第一直覺的延伸**——�
 - `.claude/skills/wrap-decision/SKILL.md` — Phase 2 依賴
 - `.claude/skills/continuous-learning/SKILL.md` — 根因型 memory 觸發
 - `.claude/methodologies/5w1h-self-awareness-methodology.md` — 相關自我覺察方法論
-- 0.18.0-W15-005 — 方法論來源 ANA ticket
+- 方法論來源 ANA ticket（專案內部，未附連結）
 
 ## 維護原則
 

@@ -27,7 +27,7 @@ Hook 輸出透過 additionalContext / systemMessage 注入 LLM context，但未�
 
 ## 案例
 
-- 五委員審查輪 5/5 報告本體被 Stop hook 訊息擠掉（出口方向；1.0.0-W1-060 證據鏈）
+- 五委員審查輪 5/5 報告本體被 Stop hook 訊息擠掉（出口方向）
 - Explore 唯讀委員被注入「git merge」建議後實際執行 merge（入口方向；transcript WRITE-CMD 證據）
 
 ## 防護

@@ -24,6 +24,8 @@ Skill Body Size Check Hook
 
 事件：SessionStart
 退出碼：0（純提醒，不阻擋）
+受眾：模型與用戶。模型要據此判斷是否外移內容或建票，故經 emit_model_reminder
+      走 additionalContext（exit 0 的 stderr 模型看不到）；stderr 保留給用戶。
 """
 
 import sys
@@ -32,7 +34,7 @@ from typing import List, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root
+from lib import setup_hook_logging, run_hook_safely, get_code_root, emit_model_reminder
 
 # 第 2 層預算門檻（skill-design-guide/SKILL.md〈Progressive Disclosure — 三層載入〉）
 TOKEN_THRESHOLD = 5_000
@@ -106,7 +108,7 @@ def scan_skills(
 
 
 def _print_report(over_token: List[Tuple[str, int]], over_lines: List[Tuple[str, int]]) -> None:
-    """輸出警告到 stderr（純提醒，不阻擋）。"""
+    """輸出警告：additionalContext 給模型、stderr 給用戶（純提醒，不阻擋）。"""
     if not over_token and not over_lines:
         return
 
@@ -123,14 +125,16 @@ def _print_report(over_token: List[Tuple[str, int]], over_lines: List[Tuple[str,
             lines_out.append(f"    - {name}: {count} 行")
 
     lines_out.append("  建議：見 skill-design-guide/SKILL.md〈Progressive Disclosure〉外移判準")
-    sys.stderr.write("\n".join(lines_out) + "\n")
+    report = "\n".join(lines_out)
+    sys.stderr.write(report + "\n")
+    emit_model_reminder("SessionStart", report)
 
 
 def main() -> int:
     """Hook 主邏輯：掃描所有 Skill 的 SKILL.md 體量。"""
     logger = setup_hook_logging("skill-body-size-check-hook")
 
-    project_root = get_project_root()
+    project_root = get_code_root()
     if not project_root:
         return 0
 

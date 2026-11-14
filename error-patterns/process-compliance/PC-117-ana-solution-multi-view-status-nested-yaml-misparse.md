@@ -2,11 +2,9 @@
 
 **Category**: process-compliance
 **Severity**: Medium
-**Status**: Tracked（W17-111 ANA 評估 hook UX 改善方向；過渡期靠本 PC 防護）
+**Status**: Tracked（已有 ANA 評估 hook UX 改善方向；過渡期靠本 PC 防護）
 **Created**: 2026-05-02
-**Source**: W17-095 ANA 收尾事件 — PM 寫 `multi_view_status:` 換行接 `  status: skipped` 的 nested YAML 結構，hook regex 跨行抓到 `status: skipped` 字串並判定值非法。
-
-**Related Ticket**: `0.18.0-W17-111`（ANA，評估 multi_view_status hook UX 改善方向）
+**Source**: 某 ANA 收尾事件 — PM 寫 `multi_view_status:` 換行接 `  status: skipped` 的 nested YAML 結構，hook regex 跨行抓到 `status: skipped` 字串並判定值非法。
 
 ---
 
@@ -17,7 +15,7 @@ ANA Ticket complete 時 acceptance-gate-hook 警告 multi_view_status 值非法�
 ```
 [WARNING] Acceptance Gate: ANA Ticket multi_view_status 值非法
 
-Ticket: 0.18.0-W17-095
+Ticket: <ticket-id>
 目前值: status: skipped
 合法值: reviewed, skipped, n_a
 ```
@@ -82,9 +80,9 @@ example_skipped: |
 
 ---
 
-## 防護（系統側 — W17-111 ANA 待評估）
+## 防護（系統側 — 對應 ANA 待評估）
 
-W17-111 將評估三方案：
+該 ANA 將評估三方案：
 
 | 方案 | 改動 | 成本 |
 |------|------|------|
@@ -92,19 +90,19 @@ W17-111 將評估三方案：
 | B. 改 schema 範例 | examples 加 `# 禁止 nested 結構` 註解 | 極低 |
 | C. 改 hook 邏輯 | 自動扁平化 nested YAML | 中（需測試覆蓋） |
 
-過渡期（W17-111 落地前）：本 PC 條目為唯一防護，依靠 PM 在寫 multi_view_status 時先讀本檔案。
+過渡期（該 ANA 落地前）：本 PC 條目為唯一防護，依靠 PM 在寫 multi_view_status 時先讀本檔案。
 
 ---
 
 ## 暫時應變（complete 已成功但格式錯）
 
-W17-095 案例：complete 已成功（hook 為 warning 不阻擋），但 ticket body 留 nested YAML 對未來閱讀者誤導。
+本案例：complete 已成功（hook 為 warning 不阻擋），但 ticket body 留 nested YAML 對未來閱讀者誤導。
 
 | 動作 | 方法 |
 |------|------|
 | 修正 ticket body | `Edit` 工具改 nested 為 flat |
 | 不可重 complete | ticket 已 status=completed，frontmatter 不可回退（規則 6 失敗案例學習：不回退既成工作） |
-| commit | `fix(W17-XXX): multi_view_status flat 格式` |
+| commit | `fix(<ticket-id>): multi_view_status flat 格式` |
 
 ---
 

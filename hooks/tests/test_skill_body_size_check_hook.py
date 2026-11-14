@@ -42,7 +42,7 @@ def hook_module():
 def skills_dir(tmp_path, monkeypatch, hook_module):
     root = tmp_path / "proj"
     (root / ".claude" / "skills").mkdir(parents=True)
-    monkeypatch.setattr(hook_module, "get_project_root", lambda: root)
+    monkeypatch.setattr(hook_module, "get_code_root", lambda: root)
     return root / ".claude" / "skills"
 
 
@@ -163,7 +163,7 @@ class TestMain:
     def test_main_handles_missing_skills_dir(self, tmp_path, monkeypatch, hook_module):
         root = tmp_path / "empty-proj"
         root.mkdir()
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: root)
+        monkeypatch.setattr(hook_module, "get_code_root", lambda: root)
 
         exit_code = hook_module.main()
 

@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from ticket_system.lib.paths import get_cli_code_root
+
 _MODULE_CACHE: Dict[Tuple[str, str], Any] = {}
 
 DEFAULT_MARKER = "pm_registry.py"
@@ -35,8 +37,10 @@ DEFAULT_MARKER = "pm_registry.py"
 def find_claude_dir(marker: str = DEFAULT_MARKER) -> Optional[Path]:
     """依優先序定位 .claude/ 目錄：
 
-    1. `CLAUDE_PROJECT_DIR` 環境變數
-    2. cwd 向上搜尋
+    0. CLI 程式碼所在 checkout（`paths.get_cli_code_root()`；程式碼與設定
+       同源。無對應 checkout 的安裝形態退回 cwd git 頂層，限制見該函式）
+    1. `CLAUDE_PROJECT_DIR` 環境變數（後備）
+    2. cwd 向上搜尋（後備）
     3. 開發環境 fallback（本檔位於
        `.claude/skills/ticket/ticket_system/lib/claude_lib_loader.py`，
        `parents[4]` 回推至 `.claude/`；`commands/` 下的呼叫端與 `lib/`
@@ -49,6 +53,10 @@ def find_claude_dir(marker: str = DEFAULT_MARKER) -> Optional[Path]:
             要求與後續實際載入的模組同名（`load_claude_lib` 預設會傳入
             `f"{module_name}.py"`，兩者通常一致）。
     """
+    code_candidate = get_cli_code_root() / ".claude"
+    if (code_candidate / "lib" / marker).is_file():
+        return code_candidate
+
     env_root = os.environ.get("CLAUDE_PROJECT_DIR")
     if env_root:
         candidate = Path(env_root) / ".claude"

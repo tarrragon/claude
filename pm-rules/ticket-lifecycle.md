@@ -59,7 +59,7 @@ pending → claim → in_progress → complete → completed
 
 | 步驟 | 動作 | 說明 |
 |------|------|------|
-| 0 | 建立 FR↔Ticket 覆蓋矩陣（有 source spec 時） | 列出 source spec 所有 FR 及驗收標準數，逐一標記「覆蓋 ticket ID」或「本版不覆蓋（附理由）」，確認每個 FR 驗收標準有對應 ticket AC（W1-004） |
+| 0 | 建立 FR↔Ticket 覆蓋矩陣（有 source spec 時） | 列出 source spec 所有 FR 及驗收標準數，逐一標記「覆蓋 ticket ID」或「本版不覆蓋（附理由）」，確認每個 FR 驗收標準有對應 ticket AC |
 | 1 | 列出 ANA Solution 所有修改項 | 逐項列出，不遺漏 |
 | 2 | 合併背景代理人分析結果 | 等待通知或查閱 output |
 | 3 | 建立執行 Ticket 的 AC | 每個修改項對應一條 AC |
@@ -212,7 +212,7 @@ acceptance-gate-hook 事後驗證（最後防線）
 
 Acceptance 欄位表達的是 **complete 時的驗收條件**，而非 claim 時的早期回饋。
 
-**為何**：W3-046 實作 L3-b 策略 B 後，claim 階段移除 AC verification，所有驗收測試延遲到 complete。若 acceptance 寫「npm test 100%」，應理解為「complete 時驗收 npm test 100% 通過」，而非「claim 時驗證」。
+**為何**：實作 L3-b 策略 B 後，claim 階段移除 AC verification，所有驗收測試延遲到 complete。若 acceptance 寫「npm test 100%」，應理解為「complete 時驗收 npm test 100% 通過」，而非「claim 時驗證」。
 
 **邊界**：
 - **包含測試驗收的 acceptance**（如「npm test 全綠」「pytest 通過」）→ **complete-time** 驗收條件，應明示驗收時機
@@ -228,11 +228,11 @@ Acceptance 欄位表達的是 **complete 時的驗收條件**，而非 claim 時
 3. **明示範圍**：避免「全套件」字面（PC-078 並行衝突）；改用「相關檔案測試 (X.test.js)」或「complete 時驗收 npm test」
 4. **對照反模式與有效範例**：執行前 Read `.claude/pm-rules/ticket-body-schema.md` `## Acceptance 欄位設計指引`（含完整反模式對照表 + IMP/DOC/ANA 三類有效範例，單一權威源）
 
-> **DRY 分工**：本檔保留語義原則與 Action 步驟；具體反模式對照表與範例集中於 `ticket-body-schema.md` 避免雙處維護漂移（W3-057 整併）
+> **DRY 分工**：本檔保留語義原則與 Action 步驟；具體反模式對照表與範例集中於 `ticket-body-schema.md` 避免雙處維護漂移
 
 ### 歷史遷移
 
-- **L3-b 前（舊 acceptance）**：「npm test 100%」表達「claim 時驗證全套件」 → 於 W3-047 DOC ticket 清理，改為 complete-time 語義
+- **L3-b 前（舊 acceptance）**：「npm test 100%」表達「claim 時驗證全套件」 → 經 DOC ticket 清理，改為 complete-time 語義
 - **L3-b 後（新 acceptance）**：所有新建 ticket 遵循 complete-time 語義；既有 completed 的 ticket 作為歷史紀錄保留
 
 ---
@@ -241,11 +241,11 @@ Acceptance 欄位表達的是 **complete 時的驗收條件**，而非 claim 時
 
 > **來源**：PC-055 — Ticket AC 與實況漂移未被系統偵測。PROP-010 Phase 1 MVP 透過兩項自動機制防護。
 >
-> **W3-046 變更（重要）**：原 claim 自動執行 AC verification（含 npm_test_pass 模板跑全套件 npm test）會在同 wave 並行 claim 時造成 PC-078 衝突。依 W3-045 ANA 共識（linux + basil + bay 三視角），claim 預設**不執行** AC verification；需明示 `--verify` 旗標才啟用（保留除錯場景）。Stale 警告（>= 7 天）不受影響仍預設啟用。
+> **claim 預設變更（重要）**：原 claim 自動執行 AC verification（含 npm_test_pass 模板跑全套件 npm test）會在同 wave 並行 claim 時造成 PC-078 衝突。依 ANA 共識（linux + basil + bay 三視角），claim 預設**不執行** AC verification；需明示 `--verify` 旗標才啟用（保留除錯場景）。Stale 警告（>= 7 天）不受影響仍預設啟用。
 >
 > **Why**：claim 是狀態切換動作，不應綁全域測試副作用；同 wave 並行 claim 必然撞 Jest 暫存 / git stash 中間狀態。
 >
-> **Consequence**：原預設行為已造成多次 false test failure。新預設改為「不執行 verification」+「明示 --verify 啟用」，將決策權交回 PM。如需單獨執行 AC 驗證（不 claim），W4-019 拆出 `ticket track verify <id>` 子命令補足查詢缺口。
+> **Consequence**：原預設行為已造成多次 false test failure。新預設改為「不執行 verification」+「明示 --verify 啟用」，將決策權交回 PM。如需單獨執行 AC 驗證（不 claim），另拆出 `ticket track verify <id>` 子命令補足查詢缺口。
 >
 > **Action**：日常 claim 直接 `ticket track claim <id>`；除錯/AC 漂移巡檢場景才用 `ticket track claim <id> --verify`。
 >
@@ -255,8 +255,8 @@ Acceptance 欄位表達的是 **complete 時的驗收條件**，而非 claim 時
 
 | 機制 | 實作位置 | 觸發條件 | 來源 Ticket |
 |------|---------|---------|------------|
-| AC 自動驗證（opt-in） | `lifecycle.py` / `claim_verification.py` | `--verify` 旗標明示啟用後執行可機器驗證項 | W11-001.1 / W3-046 |
-| Stale 年齡警告（預設啟用） | `lib/staleness.py` | Ticket 建立距今 >= 7/14/30 天 | W11-001.2 |
+| AC 自動驗證（opt-in） | `lifecycle.py` / `claim_verification.py` | `--verify` 旗標明示啟用後執行可機器驗證項 | claim 預設變更 |
+| Stale 年齡警告（預設啟用） | `lib/staleness.py` | Ticket 建立距今 >= 7/14/30 天 | Stale 警告 |
 
 ### Claim 時三決策路徑
 
@@ -284,10 +284,10 @@ claim 命令整合上述兩機制後，PM 面對的決策空間為：
 **範例 A：Ticket 已達成（外溢）**
 
 ```
-# 情境：W5-020 pending 18 天，PC-055 觸發案例。
-# 上游 W5-015 的重構已順帶修復 AC[0]「測試全綠」和 AC[1]「lint 0 warning」。
+# 情境：某 ticket pending 18 天，PC-055 觸發案例。
+# 上游某 ticket 的重構已順帶修復 AC[0]「測試全綠」和 AC[1]「lint 0 warning」。
 
-$ ticket track claim 0.18.0-W5-020 --verify   # W3-046：須 opt-in
+$ ticket track claim {ticket_id} --verify   # 須 opt-in
 [WARNING] Ticket 建立已 18 天，超過 14 天警告閾值
 [AC 驗證] 解析 4 條 AC，執行 2 條可機器驗證：
   [x] AC[0] 測試全綠（npm test 0 failure）— 已達成（外溢）
@@ -297,17 +297,17 @@ $ ticket track claim 0.18.0-W5-020 --verify   # W3-046：須 opt-in
 [S3] 部分 AC 已達成。繼續 claim (y) / 取消 (n)? n
 
 # PM 選擇 n → 改用 complete：
-$ ticket track append-log 0.18.0-W5-020 "AC[0-1] 由 W5-015 外溢達成，AC[2-3] 手動確認"
-$ ticket track check-acceptance 0.18.0-W5-020 --all
-$ ticket track complete 0.18.0-W5-020
+$ ticket track append-log {ticket_id} "AC[0-1] 由上游 ticket 外溢達成，AC[2-3] 手動確認"
+$ ticket track check-acceptance {ticket_id} --all
+$ ticket track complete {ticket_id}
 ```
 
 **範例 B：Ticket 尚未達成（正常 claim）**
 
 ```
-# 情境：W10-042 昨天建立，AC 要求實作新功能。
+# 情境：某 ticket 昨天建立，AC 要求實作新功能。
 
-$ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
+$ ticket track claim {ticket_id} --verify   # 須 opt-in
 [AC 驗證] 解析 3 條 AC，執行 1 條可機器驗證：
   [ ] AC[0] 新指令 `track snapshot` 可執行 — 未達成
   [-] AC[1] 整合測試通過 — 待實作後驗證
@@ -329,9 +329,9 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 
 | 條件 | 處理 |
 |------|------|
-| 預設（無 `--verify`） | 跳過 AC 驗證直接 claim，避免 PC-078 並行衝突（W3-046 後新預設） |
-| `--verify` 旗標 | 明示啟用 AC 驗證，保留除錯/AC 漂移巡檢場景（W3-046 新增） |
-| `ticket track verify <id>` 子命令 | W4-019：單獨執行 AC 驗證，不變更 ticket 狀態（與 claim 解耦，補足查詢缺口） |
+| 預設（無 `--verify`） | 跳過 AC 驗證直接 claim，避免 PC-078 並行衝突（新預設） |
+| `--verify` 旗標 | 明示啟用 AC 驗證，保留除錯/AC 漂移巡檢場景（新增） |
+| `ticket track verify <id>` 子命令 | 單獨執行 AC 驗證，不變更 ticket 狀態（與 claim 解耦，補足查詢缺口） |
 | `--yes` 旗標 | 配合 `--verify` 使用，自動選 y 繼續；S4 仍拒絕（S4 優先於 --yes） |
 | 無可機器驗證 AC 的 Ticket | `--verify` 啟用時 CLI 輸出「無可驗證項」，不阻擋 claim |
 
@@ -357,9 +357,9 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 
 ---
 
-## Complete 後 cleanup checklist（W11-033 / W11-035 / PC-149）
+## Complete 後 cleanup checklist（PC-149）
 
-> **Why**：`ticket track complete` 呼叫當下即以隔離索引**自動提交**本票 md / worklog index（精準路徑，不夾帶 WIP，不觸碰共用 index，成功時 stdout 印出 commit SHA），不需 PM 手動執行 commit；但**仍不會清理已合併的 worktree**（見 `.claude/skills/ticket/references/track-command.md`〈complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit〉）。session 邊界處長期累積會造成 worktree 殘留缺口（W11-018 審計發現 8 個 worktree 殘留，最久 35 天）。
+> **Why**：`ticket track complete` 呼叫當下即以隔離索引**自動提交**本票 md / worklog index（精準路徑，不夾帶 WIP，不觸碰共用 index，成功時 stdout 印出 commit SHA），不需 PM 手動執行 commit；但**仍不會清理已合併的 worktree**（見 `.claude/skills/ticket/references/track-command.md`〈complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit〉）。session 邊界處長期累積會造成 worktree 殘留缺口（一次審計發現 8 個 worktree 殘留，最久 35 天）。
 >
 > **範圍含本次被解鎖的票**：auto-commit 涵蓋本票 md、worklog index，以及本次 complete 以 cascade 或反向 blockedBy 解鎖、且 save 成功的票檔（可跨版本），commit body 列出被解鎖的票 ID。**Why**：解鎖寫入屬於 complete 的連帶寫入；若只寫磁碟不提交，被解鎖的票會一直留在工作區，可能被他人的提交吸入，或被 restore 回 blocked，使歷史留下半套關係。**邊界**：只收本次寫入的票檔；未被本次寫入的 children 與 siblings 不進入提交範圍。被解鎖票整檔提交時，若該票有他人未提交的修改，會一併帶入；所有 CLI 寫入都會自動提交，且直接 Edit 票檔被 hook 擋下，這種殘留只會來自提交失敗的票，風險低。
 >
@@ -370,8 +370,8 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 | 步驟 | 動作 | Hook 對應提醒 |
 |------|------|--------------|
 | 1 | 核對 complete 後 stdout 印出的 commit SHA，確認隔離索引已自動提交（無需手動 `git commit`） | complete CLI stdout 直接輸出 `[Auto-commit] 已隔離提交 ... (<SHA>)` |
-| 2 | 想讓 ticket metadata 與程式碼變更合併成單一 commit：改用 `ticket track complete <id> --no-stage` 完整跳過本次 auto-commit，票 md 留在 working tree 未提交，再與程式碼變更一併 `git add` 後裸 commit（無 pathspec） | `--no-stage` flag 保留 W11-035 前的純 frontmatter 更新行為 |
-| 3 | 若 ticket 用 worktree 開發：合併後執行 `git worktree remove <path>` 清理目錄 | `worktree-merge-reminder-hook.py` PostToolUse 階段（W11-033 擴充）會輸出 cleanup 建議 |
+| 2 | 想讓 ticket metadata 與程式碼變更合併成單一 commit：改用 `ticket track complete <id> --no-stage` 完整跳過本次 auto-commit，票 md 留在 working tree 未提交，再與程式碼變更一併 `git add` 後裸 commit（無 pathspec） | `--no-stage` flag 保留 auto-commit 導入前的純 frontmatter 更新行為 |
+| 3 | 若 ticket 用 worktree 開發：合併後執行 `git worktree remove <path>` 清理目錄 | `worktree-merge-reminder-hook.py` PostToolUse 階段（擴充後）會輸出 cleanup 建議 |
 | 4 | dirty worktree（含未提交變更）先處理變更再移除（或 `--force` 強制移除已備份檔案） | 同 #3 hook 會額外提示 `dirty` 狀態 |
 | 5 | 確認 metadata commit 已落地（避免 orphan ticket md） | `session-start-merged-worktree-audit-hook.py` 下次 session 啟動會列出 orphan ticket |
 
@@ -416,13 +416,13 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 
 ### CLI 層強制
 
-acceptance-gate-hook 將於 0.18.0-W10-036.2 實作根任務 complete 前的遞迴子狀態檢查（exit 2 block）。在該 Hook 落地前，本規則由 PM 自律 + 方法論文件約束。
+acceptance-gate-hook 將於後續實作根任務 complete 前的遞迴子狀態檢查（exit 2 block）。在該 Hook 落地前，本規則由 PM 自律 + 方法論文件約束。
 
 ---
 
 ## ANA 子分類：研究性 vs 防護性
 
-> **來源**：W10-072 ANA Reality Test 事實 4 + W17-120.2 / PC-091 路線。
+> **來源**：ANA Reality Test 事實 4 + 多視角審查 / PC-091 路線。
 
 ANA Ticket 分為兩類，差異在於「分析結論是否需要後續實作才算解決」。兩類的 complete 觸發時機不同，混淆會導致 PM 誤認「分析報告寫完就可 complete」。
 
@@ -433,7 +433,7 @@ ANA Ticket 分為兩類，差異在於「分析結論是否需要後續實作才
 | **定義** | 分析結論本身即為產出（文件/規則/error-pattern/方法論），無需後續實作驗證 | 分析結論需要後續 IMP/DOC 落地執行才算解決，建立 children 追蹤 |
 | **判別問題** | 分析報告寫完後，問題是否已被解決？ | 分析報告寫完後，仍有具體實作/修復需要執行？ |
 | **children 使用** | 不建 children（或無 children） | 必須建落地票：本版範圍用 children（`--parent <ANA-id>`）；依〈兩期〉排入後續版本者在目標版本以 `--source-ticket <ANA-id>` 建根票（見〈ANA Ticket 落地下游血緣選擇〉） |
-| **complete 觸發時機** | 分析結論寫入文件/規則後即可 complete | 本版範圍的 children 全部 completed/closed；排入後續版本的落地票建立後即可 complete（步驟 2.5.2 以 `spawned_tickets` 計入落地數） |
+| **complete 觸發時機** | 分析結論寫入文件/規則後即可 complete | 本版範圍的 children 全部 completed/closed；排入後續版本的落地票建立後即可 complete（步驟 2.5.2 以 `spawned_tickets` 與回指本票的 `source_ticket` 計入落地數） |
 | **典型產出** | error-pattern 新增、方法論補強、規則釐清 | hook 實作修復、系統重構、多個 IMP 落地 |
 
 **判別準則**（建立 ANA 時自問）：
@@ -442,32 +442,32 @@ ANA Ticket 分為兩類，差異在於「分析結論是否需要後續實作才
 > - 是 → 研究性 ANA，分析本身即為解法
 > - 否，還需要有人去改程式/改 hook → 防護性 ANA，建 children 追蹤落地
 
-> **盤點/規劃型 ANA 屬防護性（W8-025 Option A 釐清）**：盤點型 ANA（產出分類處置計畫，如載體盤點 W8-009/010/015）的交付物雖是「計畫」，但**問題（如載體錯置）需後續清理才算解決** → 屬**防護性**，清理落地用 children，ANA 保持 in_progress 直到清理 children 完成。
+> **盤點/規劃型 ANA 屬防護性（Option A 釐清）**：盤點型 ANA（產出分類處置計畫，如載體盤點）的交付物雖是「計畫」，但**問題（如載體錯置）需後續清理才算解決** → 屬**防護性**，清理落地用 children，ANA 保持 in_progress 直到清理 children 完成。
 >
 > **陷阱（實測案例）**：勿因「交付物是計畫」誤判為研究性而用 spawned + --yes-spawned 強制完成——「產出計畫」不等於「問題已解決」。判別關鍵是**問題是否已解決**，非「是否產出了文件」。盤點計畫只是解法藍圖，清理執行才解決問題。清理延後時 ANA 跨 round 維持 in_progress（由 `stuck-anas` 追蹤），不強制本輪 complete。詳見 PC-091 v1.2.0。
 
 ### 各類範例
 
-**研究性 ANA 範例（W10-035 類型）**：
+**研究性 ANA 範例**：
 
 分析「ANA 路線釐清」（如本 ticket 的 context）——結論是補強方法論文件，分析結論本身即為文件修改。無需建 children，文件更新完成後直接 complete。
 
 ```
-W10-072.3（DOC，本 ticket）
+{ticket_id}（DOC，本 ticket）
   └─ 目的：方法論補強（研究性 ANA 結論落地為文件）
   └─ complete 觸發：文件章節新增完成 + AC 全勾
 ```
 
-**防護性 ANA 範例（W10-072 類型）**：
+**防護性 ANA 範例**：
 
 分析「hook 誤觸發」——結論需要修改 hook 程式碼（IMP），建立 4 個 children 追蹤。ANA 本身保持 in_progress，等 4 個 children 全部 completed/closed 後才 complete。
 
 ```
-W10-072（ANA，防護性）
-  ├─ W10-072.1（IMP）phase-completion-gate 路徑黑名單擴展
-  ├─ W10-072.2（IMP）acceptance-gate 純文件 IMP 訊息差異化
-  ├─ W10-072.3（DOC）ANA 路線釐清方法論補強
-  └─ W10-072.4（ANA）ticket-quality-gate 觸發來源驗證
+{ticket_id}（ANA，防護性）
+  ├─ {ticket_id}.1（IMP）phase-completion-gate 路徑黑名單擴展
+  ├─ {ticket_id}.2（IMP）acceptance-gate 純文件 IMP 訊息差異化
+  ├─ {ticket_id}.3（DOC）ANA 路線釐清方法論補強
+  └─ {ticket_id}.4（ANA）ticket-quality-gate 觸發來源驗證
      └─ complete 觸發：上述 4 個子 ticket 全部 completed/closed
 ```
 
@@ -479,11 +479,11 @@ W10-072（ANA，防護性）
 | 研究性 | 有 children（全 completed/closed） | AC 全勾 + children 全完成 | 不阻擋 |
 | 防護性 | children 有 pending/in_progress | **禁止 complete** | **阻擋**（acceptance-gate-hook 父 complete 前置規則） |
 | 防護性 | children 全 completed/closed | AC 全勾 | 不阻擋 |
-| 防護性 | 落地全數排入後續版本（已在目標版本以 `--source-ticket` 建根票，本版無 children） | AC 全勾 + 落地票已建 | 不阻擋（步驟 2.5.2 的落地數計入 `spawned_tickets`） |
+| 防護性 | 落地全數排入後續版本（已在目標版本以 `--source-ticket` 建根票，本版無 children） | AC 全勾 + 落地票已建 | 不阻擋（步驟 2.5.2 的落地數計入 `spawned_tickets` 與回指本票的 `source_ticket`） |
 
 **Why**：acceptance-gate-hook 對所有 type 一視同仁要求 children 進入 TERMINAL_STATUSES。研究性 ANA 因無 children 自然不受此規則影響；防護性 ANA 的阻擋是設計正確——分析結論若未落地即 complete，等同「只診斷不開藥」。
 
-**Consequence**：混淆兩類 ANA 會導致 PM 誤以為「完成分析報告就能 complete 防護性 ANA」，被 hook 阻擋時誤判為 hook bug（W10-072 Problem Analysis 初版即屬此誤解）。
+**Consequence**：混淆兩類 ANA 會導致 PM 誤以為「完成分析報告就能 complete 防護性 ANA」，被 hook 阻擋時誤判為 hook bug（該 ANA 的 Problem Analysis 初版即屬此誤解）。
 
 **Action**：建立 ANA ticket 時依判別問題自問並在 how.strategy 標注類型（「研究性」或「防護性」）；若為防護性，在 Solution 完成後立即依〈ANA Ticket 落地下游血緣選擇〉的版本維度建落地票再繼續。
 
@@ -502,7 +502,7 @@ W10-072（ANA，防護性）
 | 下游確實依賴全部落地 | 維持 blockedBy ANA（等待全部落地是預期效果） |
 | `complete --force` | 只在 children 屬「非前置的後續工作」（不影響結論成立、下游不依賴）時使用；並在 Completion Info 記錄理由（哪些 children 未終態、為何非前置）。hook 會留下稽核紀錄 |
 
-> **權威來源**：W17-120.2 多視角審查共識；PC-091 ANA 落地血緣選擇。
+> **權威來源**：多視角審查共識；PC-091 ANA 落地血緣選擇。
 
 ---
 
@@ -510,7 +510,7 @@ W10-072（ANA，防護性）
 
 > **來源**：PC-091 — PM 將 ANA Solution 的「落地行動」建立為兄弟 Ticket（同 Wave 獨立編號），導致血緣斷裂、`tree`/`chain` 看不到延伸鏈。
 >
-> **2026-05-03 升格**：W17-120 多視角審查共識——本規則為 ANA 落地唯一指引。PC-073 對 ANA 衍生 IMP 用 spawned 的舊指引已 deprecated。權威語意彙總：`.claude/skills/ticket/references/field-semantics.md`。
+> **2026-05-03 升格**：多視角審查共識——本規則為 ANA 落地唯一指引。PC-073 對 ANA 衍生 IMP 用 spawned 的舊指引已 deprecated。權威語意彙總：`.claude/skills/ticket/references/field-semantics.md`。
 
 ANA 結論要求的落地，不可建立為無血緣的兄弟票；血緣怎麼表達，由落地票所屬的版本決定。
 
@@ -612,34 +612,34 @@ ANA 結論要求的落地，不可建立為無血緣的兄弟票；血緣怎麼�
 
 ## ANA Solution Spawn 規劃落地（強制）
 
-> **來源**：W17-167 ANA L3 結論 — 現行檢查只看 `spawned_tickets`/`children` 是否為空，不檢查 Solution 章節 spawn 規劃表格 vs 實際 ticket 數量的一致性。W17-162 觸發案例 + W11-003.6 等歷史漏建證實此漏洞需正式規則化。
+> **來源**：ANA L3 結論 — 現行檢查只看 `spawned_tickets`/`children` 是否為空，不檢查 Solution 章節 spawn 規劃表格 vs 實際 ticket 數量的一致性。歷史觸發案例與漏建事件證實此漏洞需正式規則化。
 
 ANA complete 前置條件追加：若 Solution 章節含 IMP/DOC/ANA spawn 規劃表格，**規劃項目必須全部轉為實際 ticket，或在 Solution 顯性標註豁免理由**。本規則是規則 5（所有發現必須追蹤）在 ANA Solution 場景的延伸。
 
 **Why**：acceptance 勾選「產出 spawned IMP/DOC 清單」只檢查文字產出（表格寫了沒），不檢查 ticket 是否實際建立。Solution 寫了規劃但未建 ticket 等同無 trigger 延後決策（PC-093 模式），分析結論會在 complete 後永久遺忘。
 
-**Consequence**：未強制此前置條件，ANA 由分析代理人（saffron 等）執行時 frontmatter 必然為空（分析代理人無 ticket create 權限），PM 若未察覺則 spawn 規劃靜默丟失。W17-167 自身即重現此反模式（saffron 在分析此問題時自身 spawned_tickets=[] 即 complete）。
+**Consequence**：未強制此前置條件，ANA 由分析代理人（saffron 等）執行時 frontmatter 必然為空（分析代理人無 ticket create 權限），PM 若未察覺則 spawn 規劃靜默丟失。該 ANA 自身即重現此反模式（saffron 在分析此問題時自身 spawned_tickets=[] 即 complete）。
 
 **Action**：
 
 | 情境 | PM 必要動作 |
 |------|-----------|
-| Solution 含 spawn 規劃表格，全部已建 ticket | 確認 `spawned_tickets + children` 數量 ≥ 規劃數量，正常 complete |
+| Solution 含 spawn 規劃表格，全部已建 ticket | 確認落地數（`spawned_tickets` + `children` + 已判定 spawn request + 回指本票的票）≥ 規劃數量，正常 complete |
 | Solution 含 spawn 規劃表格，部分或全部未建 | complete 前先建 ticket（PM 接手 ticket create 職責），回填欄位 |
 | 經評估後不需建立 ticket | 在 Solution 顯性標註「無需建 ticket：[具體理由]」 |
 | 分析代理人 complete 時 frontmatter 為空 | PM 驗收時立即比對 Solution 表格，缺漏立即補建（事後補建可，但不可遺忘） |
 
-**強制層**：acceptance-gate-hook Step 2.5.2（W17-168 落地）將自動掃描 Solution spawn 規劃語意（正則匹配 `| IMP/DOC/ANA |` + `P[0-3]` 表格行），與 `spawned_tickets + children` 數量比對，缺漏阻擋 complete。豁免條件：Solution 含「無需建 ticket」或「不 spawn」等顯性否定標記。
+**強制層**：acceptance-gate-hook Step 2.5.2 對 ANA 與 DOC 掃描 Solution spawn 規劃表格（三策略取最大值：含優先級的型別列、標題含 Spawn 與型別、spawn 區段內的型別欄），有規劃區段時不計落地確認區段。落地數為 `spawned_tickets` + `children` + 已判定 spawn request，不足時再計入以 `source_ticket`／`discovered_during`／`parent_id` 回指本票、或 `previous_ids` 含本票子號的票。落地少於規劃即阻擋 complete，部分落地亦同。豁免：Solution 每則「無需建 ticket」「不 spawn」等顯性否定宣告扣抵一項。
 
 **Schema 層**：ticket-body-schema.md ANA Solution 章節新增「Spawn 落地確認」子節 checklist（與本條款互補）。
 
-**規則層**：本條款是 quality-baseline.md 規則 5「適用場景：ANA Solution 內 spawn 規劃」的執行細則，引用同一來源（W17-167）。
+**規則層**：本條款是 quality-baseline.md 規則 5「適用場景：ANA Solution 內 spawn 規劃」的執行細則，引用同一來源。
 
 ---
 
 ## Close 條件規則
 
-> **來源**：W15-024 ANA — W15-015 決策中 PM 提議「閘門未觸發時 close ticket」，被用戶指正：ticket 只能「做任務」或「收狀（completed/closed）」，不可有「留待之後判斷」。本章節固化 close 合法條件，防止推延性 close 反模式重犯。
+> **來源**：某 ANA — 一次決策中 PM 提議「閘門未觸發時 close ticket」，被用戶指正：ticket 只能「做任務」或「收狀（completed/closed）」，不可有「留待之後判斷」。本章節固化 close 合法條件，防止推延性 close 反模式重犯。
 
 ---
 
@@ -651,7 +651,7 @@ ANA complete 前置條件追加：若 Solution 章節含 IMP/DOC/ANA spawn 規�
 |-------------|------|---------|
 | `goal_achieved` | 目標已達成 | 正常完成路徑（一般用 `complete` 取代） |
 | `requirement_vanished` | 需求消失（環境變更使 ticket 無意義） | 需在執行日誌說明外部變更事由 |
-| `superseded_by` | 被上游 ticket 取代 | 必須附 ticket ID（如 `superseded_by: 0.18.0-W15-020`） |
+| `superseded_by` | 被上游 ticket 取代 | 必須附 ticket ID（如 `superseded_by: {ticket_id}`） |
 | `not_executable_knowledge_captured` | 無法執行且知識已轉移至 error-pattern | 必須附 error-pattern 檔案路徑 |
 | `duplicate` | 與既有 ticket 重複 | 必須附重複 ticket ID |
 | `cancelled_by_user` | 用戶明示取消 | 必須在執行日誌附理由（一句即可） |
@@ -696,15 +696,15 @@ how:
 |------|------|
 | 未預定義 → 條件未觸發時 PM 不知道如何處置 | 推延性 close（或假 close）風險極高 |
 | 未預定義 → 沒有 error-pattern 落地路徑 | 知識損失 |
-| 建立時預定義 → PM 執行時有明確路徑 | 防止 W15-015 類型重犯 |
+| 建立時預定義 → PM 執行時有明確路徑 | 防止同類重犯 |
 
 ---
 
 ### C4. CLI 驗證規範
 
-> **實作 Ticket**：W15-027（ticket CLI close command 加 `--reason` 必填枚舉驗證）
+> **實作 Ticket**：ticket CLI close command 加 `--reason` 必填枚舉驗證
 
-`ticket track close` 指令的驗證行為（W15-027 落地後生效）：
+`ticket track close` 指令的驗證行為（CLI 驗證落地後生效）：
 
 | 驗證項目 | CLI 行為 |
 |---------|---------|
@@ -715,7 +715,7 @@ how:
 | `duplicate` 未附 ticket ID | 拒絕執行，提示補填 `--ref <ticket_id>` |
 | `unknown`（retrospective） | 允許，自動加 `retrospective: true` 標記 |
 
-**W15-027 落地前過渡期**：PM 自律補填 `close_reason` 至 frontmatter，CLI 不阻擋但 acceptance-gate-hook 輸出 WARNING。
+**CLI 驗證落地前過渡期**：PM 自律補填 `close_reason` 至 frontmatter，CLI 不阻擋但 acceptance-gate-hook 輸出 WARNING。
 
 ---
 
@@ -729,15 +729,16 @@ how:
 
 ---
 
-**Last Updated**: 2026-11-11
+**Last Updated**: 2026-11-12
+**Version**: 6.7.1 — 〈ANA Solution Spawn 規劃落地〉強制層段與兩處步驟 2.5.2 引用對齊 checker 現行判定：適用 ANA 與 DOC、落地確認區段不計入規劃數、回指本票的票計入落地、部分落地亦阻擋、豁免逐項扣抵。
 **Version**: 6.7.0 — 〈ANA Ticket 落地下游血緣選擇〉加版本維度：本版範圍的落地用 `--parent`（children 全部終態才 complete）；依〈兩期〉排入後續版本的落地在目標版本以 `--source-ticket` 建根票（建好即可 complete，目標版本未登記先登記）；規劃波建的本版執行期票為本版根票，規劃票於凍結時結案；後續版本落地票被放棄時，關票理由寫明對來源 ANA 結論的處置並回寫來源 ANA。〈ANA 子分類〉兩表與 Action、〈建立後審核流程〉觸發條件同步。來源：用戶裁定（2026-11-09）。
 **Version**: 6.6.0 — 「建立後審核流程」：移除 creation_accepted 認領閘門（該閘門註冊於 UserPromptSubmit，從未檢查到真實 claim），建票通過硬閘門即寫 true；審核由「強制」改為依觸發條件必審（P0/P1、跨模組、框架資產、ANA 落地 IMP），其餘由 PM 判斷，並補 Why／Consequence／Action（用戶經 WRAP 裁決）。
 **Version**: 6.5.0 — 「Complete 後 cleanup checklist」的範圍說明改為「含本次被解鎖的票」：complete 的 auto-commit 併入本次 cascade 與反向 blockedBy 解鎖、且 save 成功的票檔（可跨版本），未被本次寫入的 children／siblings 仍不進入提交範圍；與 ticket skill 2.44.15 的行為變更同步。
 **Version**: 6.4.0 — 「ANA 子分類」節新增「防護性 ANA 與 blockedBy 下游的耦合，以及 --force 使用條件」子節（三明示）。
-**Version**: 6.3.0 — 新增「ANA Solution Spawn 規劃落地（強制）」章節（W17-167 L3 落地，含 Why/Consequence/Action 三明示 + 強制/Schema/規則層交叉引用，配合 W17-168 hook + W17-169 quality-baseline 規則 5 / ticket-body-schema 同步修訂）
+**Version**: 6.3.0 — 新增「ANA Solution Spawn 規劃落地（強制）」章節（L3 落地，含 Why/Consequence/Action 三明示 + 強制/Schema/規則層交叉引用，配合 hook + quality-baseline 規則 5 / ticket-body-schema 同步修訂）
 
-**Version**: 6.2.0 — 新增「ANA 子分類：研究性 vs 防護性」章節（兩類定義 + 判別準則 + 各 1 個範例 + complete 觸發時機對照表 + Why/Consequence/Action），來源 W10-072 ANA 事實 4 + W17-120.2 / PC-091
+**Version**: 6.2.0 — 新增「ANA 子分類：研究性 vs 防護性」章節（兩類定義 + 判別準則 + 各 1 個範例 + complete 觸發時機對照表 + Why/Consequence/Action），來源 ANA 事實 4 + 多視角審查 / PC-091
 
 **Version**: 6.1.0 — 新增「ANA 衍生 Ticket Priority 繼承」章節（預設繼承 + 三種降級情境 + 降級明示要求 + 檢查清單），來源 PC-075 下游傳播路徑軸 B
 
-**Version**: 6.0.0 - 新增「Close 條件規則」章節（C1 close_reason 6 枚舉、C2 禁止假 close 案例、C3 條件型 ticket 三後果模板、C4 CLI 驗證規範），來源 W15-024 ANA + W15-025
+**Version**: 6.0.0 - 新增「Close 條件規則」章節（C1 close_reason 6 枚舉、C2 禁止假 close 案例、C3 條件型 ticket 三後果模板、C4 CLI 驗證規範），來源 ANA

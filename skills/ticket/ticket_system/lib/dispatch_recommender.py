@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Tuple
 import yaml
 
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_cli_code_root
 from ticket_system.lib.registry_loader import load_registry
 from ticket_system.lib.tdd_phase_inference import REGISTRY_RELATIVE_PATH
 
@@ -30,15 +30,15 @@ class DispatchRecommender:
     def __init__(self, registry_path: Path = None):
         """
         Args:
-            registry_path: registry.yaml 路徑。未指定時以 get_project_root()
-                （worktree 感知，見 paths.get_project_root）解析真實
+            registry_path: registry.yaml 路徑。未指定時以 get_cli_code_root()
+                （CLI 程式碼所在 checkout，見 paths.get_cli_code_root）解析真實
                 `.claude/agents/registry.yaml`，取代舊有以 __file__ 相對推算
                 的死路徑（該路徑解到 skill 目錄下不存在的 agents/registry.yaml）。
         """
         resolved_path = (
             registry_path
             if registry_path is not None
-            else get_project_root() / REGISTRY_RELATIVE_PATH
+            else get_cli_code_root() / REGISTRY_RELATIVE_PATH
         )
         self.registry = load_registry(resolved_path)
         self.agents = self.registry.get("agents", {}) if self.registry else {}

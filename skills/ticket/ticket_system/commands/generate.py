@@ -73,7 +73,7 @@ def execute(args: argparse.Namespace) -> int:
     # 顯示生成摘要
     _print_generation_summary(gen_result, plan_file)
 
-    # 顯示 checklist 缺欄位警告（1.0.0-W1-027：warning 級，不阻擋）
+    # 顯示 checklist 缺欄位警告
     _print_checklist_warnings(gen_result)
 
     # 若非預演模式，保存 Tickets
@@ -123,7 +123,7 @@ def _print_generation_summary(gen_result, plan_file: Path) -> None:
 
 
 def _print_checklist_warnings(gen_result) -> None:
-    """印出缺必填欄位的 Ticket 警告（1.0.0-W1-027，warning 級不阻擋）。
+    """印出缺必填欄位的 Ticket 警告。
 
     與 create / batch-create 共用 validate_create_checklist 的結果
     （lib 層已寫入 GeneratedTicket.missing_fields）。generate 路徑

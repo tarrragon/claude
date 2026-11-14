@@ -41,7 +41,7 @@ Phase 4: 4 視角審查發現 baseline 已達標
 
 ---
 
-## W10-017.8 案例
+## 觸發案例
 
 ### TD1: use_cache 參數
 
@@ -109,4 +109,4 @@ PC-090 是 close 時機判斷錯誤（「閘門未達」當「任務完成」）
 
 **Last Updated**: 2026-04-19
 **Version**: 1.0.0
-**Source**: W10-017.8 Phase 4 parallel-evaluation 4 視角共識（linux + cinnamon + bay + ginger）
+**Source**: Phase 4 parallel-evaluation 4 視角共識（linux + cinnamon + bay + ginger）

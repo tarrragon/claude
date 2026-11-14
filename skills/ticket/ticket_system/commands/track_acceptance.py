@@ -13,10 +13,10 @@ if __name__ == "__main__":
     print()
     print("正確使用方式：")
     print("  ticket track summary")
-    print("  ticket track claim 0.31.0-W4-001")
+    print("  ticket track claim <ticket-id>")
     print()
-    print("如尚未安裝，請執行：")
-    print("  cd .claude/skills/ticket && uv tool install .")
+    print("如尚未安裝，請在專案根目錄執行：")
+    print("  python3 .claude/scripts/install-skill-clis.py")
     print()
     print("詳見 SKILL.md")
     print(SEPARATOR_PRIMARY)
@@ -293,8 +293,8 @@ def execute_check_acceptance(args: argparse.Namespace, version: str) -> int:
     - 0-based 整數："0", "1", "2"（自動換算為 1-based）
     - 文字搜尋："任務實作完成"（模糊比對驗收條件文字）
     """
-    # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
-    # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因
+    # --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
+    # 傳入 command 名稱，使 telemetry 可做 per-command 歸因
     from ticket_system.lib.identity_guard import check_identity
     deny = check_identity(
         version,
@@ -318,7 +318,7 @@ def execute_check_acceptance(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.CHECK_ACCEPTANCE_MISSING_INDEX))
         return 2
 
-    # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
+    # file_lock 包圍 load → modify → save，消除 logical race。
     # Lock 範圍涵蓋 _execute_single_check_acceptance / _execute_batch_check_acceptance
     # 內部的 save_ticket 呼叫。
     lock_target = Path(get_ticket_path(version, args.ticket_id))
@@ -507,9 +507,9 @@ def _execute_batch_check_acceptance(
     return git_utils.EXIT_AUTO_COMMIT_FAILED if commit_failed else 0
 
 
-# ticket create 寫入的 H3 子節（非人寫）。與 track_dispatch.CLI_MANAGED_H3_HEADINGS
-# 同語意，差別在產生者是 create 而非 dispatch；append-log --replace 一併保留。
-CREATE_GENERATED_H3_HEADINGS = ("查重紀錄",)
+# ticket create 寫入的 H3 子節（非人寫）；append-log --replace 一併保留。
+# 單一定義在 ticket_system.lib.managed_subsections（hooks 亦從該處匯入）。
+from ticket_system.lib.managed_subsections import CREATE_GENERATED_H3_HEADINGS  # noqa: E402
 
 
 def _split_generated_content(section_content: str) -> tuple:
@@ -606,7 +606,7 @@ def _replace_or_append_section_content(
     section_content: str,
     new_entry: str,
 ) -> str:
-    """W3-035: Schema 章節含 placeholder 時替換，否則正常 append。
+    """Schema 章節含 placeholder 時替換，否則正常 append。
 
     Why: 4/9 W3 ANA saffron 都遇到 append-log 不替換 placeholder 導致
     body-schema-checker false positive 阻擋 complete，被迫用 --skip-body-check。
@@ -693,7 +693,7 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
     if not _resolve_content_file(args):
         return 1
 
-    # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
+    # file_lock 包圍 load → modify → save，消除 logical race。
     # append-log 為高頻並發 caller（PM/agent 持續寫入），race 風險最高。
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
@@ -741,18 +741,18 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
 
-    # W1-025: 前置檢核聚合 —— status / section 白名單 / 章節存在性三項一次評估、
+    # 前置檢核聚合 —— status / section 白名單 / 章節存在性三項一次評估、
     # 一次列全失敗原因（取代逐項 fail-fast 的三輪往返）。
     # 動機：append-log 為高頻命令，fail-fast 時呼叫端需修一項重跑一次才看到
-    # 下一項失敗；聚合後單次呼叫即得完整修復清單（W1-024 adversarial 複審發現）。
+    # 下一項失敗；聚合後單次呼叫即得完整修復清單。
     # 各失敗訊息維持既有輸出通道（status → stderr；section 類 → stdout），
     # exit code 維持既有契約（status 失敗 = 2，其餘 = 1）。
 
-    # W3-044: body-op precondition 檢查（status 必須 in_progress 或 completed-allow）
-    # W1-058: 派發前章節（Problem Analysis / Context Bundle）額外允許 pending
+    # body-op precondition 檢查（status 必須 in_progress 或 completed-allow）
+    # 派發前章節（Problem Analysis / Context Bundle）額外允許 pending
     # 直寫——PM 依 PC-040 / PC-100 於 create 後立即寫入派發 context 屬合法
     # bookkeeping，不應消耗 --force 逃生閥（保留其警示價值）。其餘章節維持
-    # in_progress 限制（W3-044 協議防護不變）。
+    # in_progress 限制。
     force = bool(getattr(args, "force", False))
     status_ok, status_error = require_in_progress(
         ticket,
@@ -773,8 +773,8 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.INVALID_SECTION, section=section))
         print(f"{TrackAcceptanceMessages.VALID_VALUES_PREFIX} {', '.join(valid_sections)}")
 
-    # 章節存在性（W17-117.1: 統一 section_locator helper）。
-    # W1-025: 白名單章節缺失走寫入階段的自動補建，不構成錯誤。白名單與
+    # 章節存在性（統一 section_locator helper）。
+    # 白名單章節缺失走寫入階段的自動補建，不構成錯誤。白名單與
     # SCHEMA_H2_SECTIONS 現完全等價，故通過白名單檢查的 section 必屬 Schema
     # 章節，缺失時一律可補建；此處只需定位，不需缺失判定。
     body = ticket.get("_body", "")
@@ -786,27 +786,27 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     # 取得內容
     content = args.content
 
-    # W17-208 + W1-068: 偵測寫入 Schema 章節時內容含 ## H2 標題
-    # W17-208 (stderr warning) + W1-068 方案 B（自動降級 H2 → H3 源頭阻斷）
-    # 動機：append-log 寫入應為既有章節 H3 子節；H2 會切斷 Schema 章節範圍（W17-072）
-    # W1-038 ANA 結論：source code 規範化（re.sub）比事後偵測更可靠，
-    # 避免 W1-037 三 agent 連續違規 + PM 批次降級連帶 H4 false negative 鏈
-    # 修改注意：移除 re.sub 自動降級前須評估 W17-072 complete 層是否獨立足夠，
+    # 偵測寫入 Schema 章節時內容含 ## H2 標題
+    # (stderr warning) + 方案 B（自動降級 H2 → H3 源頭阻斷）
+    # 動機：append-log 寫入應為既有章節 H3 子節；H2 會切斷 Schema 章節範圍
+    # ANA 結論：source code 規範化（re.sub）比事後偵測更可靠，
+    # 避免多個 agent 連續違規 + PM 批次降級連帶 H4 false negative 鏈
+    # 修改注意：移除 re.sub 自動降級前須評估 complete 層是否獨立足夠，
     # 並更新 .claude/pm-rules/context-bundle-spec.md 條款 2「雙層防護」表格。
     schema_sections_for_h2_check = {
         "Solution", "Test Results", "Problem Analysis",
         "Context Bundle", "NeedsContext", "Exit Status", "Completion Info",
     }
     if section in schema_sections_for_h2_check and content:
-        # W1-068（W1-038 方案 B）: 自動降級 H2 → H3 規範化（只匹配行首 H2，不影響 H3+）。
+        # 自動降級 H2 → H3 規範化（只匹配行首 H2，不影響 H3+）。
         # code fence 內的 `## ` 是範例文字，與 find_section 共用同一個 fence 判定而保留原樣。
         content, demoted = demote_h2_outside_fences(content)
         if demoted:
             import sys as _sys
             _sys.stderr.write(
                 "[append-log] WARNING: 偵測到內容含 H2 標題；append-log 寫入應為既有章節的 "
-                "H3 子節，避免切斷 Schema 章節範圍（W17-072）。"
-                "已自動降級 H2 → H3（W1-068 方案 B：源頭阻斷）。\n"
+                "H3 子節，避免切斷 Schema 章節範圍。"
+                "已自動降級 H2 → H3。\n"
             )
 
     # 獲取 Ticket 內容（body 已於前置檢核載入）
@@ -820,7 +820,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     new_entry = f"\n{content}"
 
     if match is None or not match.found:
-        # W1-025: 白名單合法但 body 缺失的 Schema 章節 → 於 canonical 順序位置
+        # 白名單合法但 body 缺失的 Schema 章節 → 於 canonical 順序位置
         # 自動補建（含首筆內容一次寫入）。動機：IMP create 模板未預生成
         # Context Bundle 等章節，append-log 原回報 SECTION_NOT_FOUND，呼叫端
         # 被迫繞道手動 Edit。白名單與 Schema 章節等價，故通過白名單檢查的
@@ -841,7 +841,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         section_text = match.text
         section_content = match.content
 
-        # W3-005: replace=True（set-exit-status / set-completion-info 等固定
+        # replace=True（set-exit-status / set-completion-info 等固定
         # schema 章節）採冪等取代語意——不論既有內容是 placeholder 或前次
         # 已寫入的實質內容，一律用本次內容整段覆寫，維持 header 不變、章節
         # 在 body 中的原位置不動。
@@ -875,7 +875,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
                 f"\n{old_summary}\n"
             )
         else:
-            # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 +
+            # 若 section_content 為 placeholder-only（含 Schema 註解 +
             # 待填寫文字），改用 new_entry 替換 placeholder 而非 append，避免
             # placeholder 殘留導致 body-schema-checker false positive 阻擋 complete。
             updated_section = _replace_or_append_section_content(
@@ -887,7 +887,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         # 更新 body
         new_body = body[:section_start] + updated_section + body[section_end:]
 
-    # W11-003.3 Layer 2：寫回前 idempotent dedupe 重複 Schema H2，避免歷史殘留 placeholder
+    # Layer 2：寫回前 idempotent dedupe 重複 Schema H2，避免歷史殘留 placeholder
     # 與當前內容並存造成 acceptance-auditor 誤報（PC-110 同源防護）
     try:
         from ticket_system.lib.ticket_builder import dedupe_schema_sections
@@ -904,9 +904,9 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
     save_ticket(ticket, ticket_path)
 
-    # W7-001: append-log 寫入後 auto-commit ticket md（根因解）。
+    # append-log 寫入後 auto-commit ticket md（根因解）。
     # body 即時進 commit 歷史，使三種 git 還原（checkout -- / reset --hard / stash）
-    # 全失效，避免未 commit working tree 被覆蓋回 placeholder（W1-017 ANA）。
+    # 全失效，避免未 commit working tree 被覆蓋回 placeholder。
     # graceful degrade：非 git repo / index.lock 競爭 / commit 失敗 → append-log
     # 仍 exit 0 + stderr 警告，body 保留 working tree（下次操作或手動 commit 持久化）。
     # 函式內 import（非循環依賴規避——git_utils 僅 import subprocess+pathlib，
@@ -925,7 +925,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     print(f"{TrackAcceptanceMessages.TIMESTAMP_PREFIX} {timestamp}")
     print(f"{TrackAcceptanceMessages.CONTENT_PREFIX} {content}")
 
-    # W5-014.2: self-verify — 讀回寫入後的檔案行數（opinionated-default）
+    # self-verify — 讀回寫入後的檔案行數（opinionated-default）
     try:
         with open(ticket_path, "r", encoding="utf-8") as _vf:
             line_count = sum(1 for _ in _vf)
@@ -970,7 +970,7 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
         print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
 
-    # 前置檢核聚合（W1-025 同模式）：status / 枚舉值一次評估完整回報
+    # 前置檢核聚合：status / 枚舉值一次評估完整回報
     force = bool(getattr(args, "force", False))
     status_ok, status_error = require_in_progress(
         ticket,
@@ -1056,7 +1056,7 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     save_ticket(ticket, ticket_path)
 
     # auto-commit（與 append-log 同機制；graceful degrade）
-    # 0.2.1-W3-257：傳入 operation="add-spawn-request"，commit 訊息不再誤標為 append-log
+    # 傳入 operation="add-spawn-request"，commit 訊息不再誤標為 append-log
     from ticket_system.lib import git_utils
     commit_failed = git_utils.commit_ticket_md_reporting(
         "add-spawn-request", str(ticket_path), args.ticket_id, section,
@@ -1217,7 +1217,7 @@ def _execute_resolve_spawn_request_locked(args: argparse.Namespace, version: str
     save_ticket(ticket, ticket_path)
 
     # auto-commit（與 append-log / add-spawn-request 同機制；graceful degrade；path-limited）
-    # 0.2.1-W3-257：傳入 operation="resolve-spawn-request"，commit 訊息不再誤標為 append-log
+    # 傳入 operation="resolve-spawn-request"，commit 訊息不再誤標為 append-log
     from ticket_system.lib import git_utils
     commit_failed = git_utils.commit_ticket_md_reporting(
         "resolve-spawn-request", str(ticket_path), args.ticket_id, section,

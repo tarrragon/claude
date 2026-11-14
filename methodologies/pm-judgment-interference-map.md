@@ -287,8 +287,8 @@ WRAP 框架自身的失效（元層級）。
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
-| v1.0.0 | 2026-04-24 | 初版；從 W17-075 ANA（WRAP 深度分析）落地；13 因子 × 6 層地圖 |
-| v1.1.0 | 2026-04-24 | 層 1 新增因子 1.4「素材錯置抽象層級」（觸發訊號 + 絆腳索 + 替代行為）；情境 B 四層挖因新增第 5 層「素材來源層」；相關 PC/memory 索引補 PC-092 + feedback_parallel_agent_arbitration + agent-team SKILL；自測案例新增「working memory 混淆」推理鏈範例；W17-075 素材溯源落地 |
+| v1.0.0 | 2026-04-24 | 初版；從 ANA（WRAP 深度分析）落地；13 因子 × 6 層地圖 |
+| v1.1.0 | 2026-04-24 | 層 1 新增因子 1.4「素材錯置抽象層級」（觸發訊號 + 絆腳索 + 替代行為）；情境 B 四層挖因新增第 5 層「素材來源層」；相關 PC/memory 索引補 PC-092 + feedback_parallel_agent_arbitration + agent-team SKILL；自測案例新增「working memory 混淆」推理鏈範例；素材溯源落地 |
 
 ---
 
@@ -299,5 +299,4 @@ WRAP 框架自身的失效（元層級）。
 - `.claude/rules/core/document-writing-style.md`（二次審查強制執行）
 - `.claude/skills/wrap-decision/SKILL.md`（WRAP 框架）
 - `.claude/error-patterns/process-compliance/PC-111-pm-narrative-fabrication-and-shallow-attribution.md`（本方法論的觸發事件）
-- `.claude/references/pm-session-self-check-checklist.md`（本方法論的 session 結束實踐入口；W17-077 落地）
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-075.md`（WRAP 深度分析產出的 ANA ticket）
+- `.claude/references/pm-session-self-check-checklist.md`（本方法論的 session 結束實踐入口）

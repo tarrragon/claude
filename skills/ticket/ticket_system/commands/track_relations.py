@@ -12,10 +12,10 @@ if __name__ == "__main__":
     print()
     print("正確使用方式：")
     print("  ticket track summary")
-    print("  ticket track claim 0.31.0-W4-001")
+    print("  ticket track claim <ticket-id>")
     print()
-    print("如尚未安裝，請執行：")
-    print("  cd .claude/skills/ticket && uv tool install .")
+    print("如尚未安裝，請在專案根目錄執行：")
+    print("  python3 .claude/scripts/install-skill-clis.py")
     print()
     print("詳見 SKILL.md")
     print(SEPARATOR_PRIMARY)
@@ -38,6 +38,8 @@ from ticket_system.lib.constants import (
 )
 from ticket_system.lib.field_validators import resolve_reference_version
 from ticket_system.lib.file_lock import file_lock
+from ticket_system.lib.terminal_parent_guard import terminal_parent_hint
+from ticket_system.lib.sibling_predecessor_guard import check_sibling_predecessors
 from ticket_system.lib.ticket_loader import (
     get_ticket_path,
     list_tickets,
@@ -195,6 +197,33 @@ def _find_blocked_by_cycle(version: str, target_id: str, new_value: list[str]):
     return cycle_path if has_cycle else None
 
 
+def _reject_multi_sibling(
+    version: str,
+    target_id: str,
+    blocked_by: list[str],
+    parent_id: str | None,
+    component: str,
+    unchanged_note: str,
+) -> bool:
+    """寫入後兄弟前驅達 2 個時印出錯誤並回傳 True（ARCH-017）。"""
+    hint = check_sibling_predecessors(
+        target_id,
+        blocked_by,
+        parent_id,
+        lambda tid: load_ticket(resolve_reference_version(version, tid), tid),
+        unchanged_note=unchanged_note,
+    )
+    if not hint:
+        return False
+    print(format_error(ErrorEnvelope(
+        component=component,
+        action="validate_sibling_predecessors",
+        errno="BLOCKED_BY_MULTI_SIBLING",
+        hint=hint,
+    )))
+    return True
+
+
 def _execute_set_relation_field(
     args: argparse.Namespace,
     version: str,
@@ -222,7 +251,7 @@ def _execute_set_relation_field(
     """
     target_id = args.ticket_id
 
-    # W14-045: file_lock 包圍 target ticket 的 load → modify → save。
+    # file_lock 包圍 target ticket 的 load → modify → save。
     # 被引用 ticket 的 validate_ticket_exists 為 read-only（只 load 檢查存在），
     # 但為簡化邏輯統一在 lock 內執行（同一 lock 內 read 其他 ticket 安全）。
     lock_target = Path(get_ticket_path(version, target_id))
@@ -286,6 +315,11 @@ def _execute_set_relation_field(
                         f"{target_id} 的 blockedBy 未修改"
                     ),
                 )))
+                return 1
+            if _reject_multi_sibling(
+                version, target_id, new_value, target_ticket.get("parent_id"),
+                "set-blocked-by", f"{target_id} 的 blockedBy 未修改",
+            ):
                 return 1
 
         # Step 5：更新 Ticket 並保存
@@ -363,7 +397,7 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
     parent_id = args.parent_id
     child_id = args.child_id
 
-    # W14-045: file_lock 包圍 parent + child 的 load → modify → save。
+    # file_lock 包圍 parent + child 的 load → modify → save。
     # 兩個不同 ticket file 採用嵌套順序 (parent first → child second)；
     # 由於 path 不同不會 self-block。固定順序避免將來其他 caller 反向加鎖
     # 導致 deadlock。
@@ -373,6 +407,17 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
         # Step 1：驗證父 Ticket
         parent_ticket, success = validate_ticket_exists(version, parent_id)
         if not success:
+            return 1
+
+        # Step 1.5：父票已結案時拒絕，兩張票皆不寫入
+        terminal_hint = terminal_parent_hint(parent_id, parent_ticket)
+        if terminal_hint:
+            print(format_error(ErrorEnvelope(
+                component="track",
+                action="add-child",
+                errno="PARENT_TERMINAL",
+                hint=terminal_hint,
+            )))
             return 1
 
         # Step 2：驗證子 Ticket
@@ -385,6 +430,13 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
         if child_id in children:
             print(format_msg(TrackRelationsMessages.CHILD_ALREADY_EXISTS_FORMAT, child_id=child_id, parent_id=parent_id))
             return 0
+
+        # Step 3.5：移入後的兄弟前驅數（ARCH-017），違規時兩張票皆不寫入
+        if _reject_multi_sibling(
+            version, child_id, child_ticket.get("blockedBy") or [], parent_id,
+            "add-child", "兩張票皆未修改",
+        ):
+            return 1
 
         # Step 4：更新父 Ticket 的 children 陣列
         if "children" not in parent_ticket:
@@ -511,10 +563,26 @@ def execute_set_parent(args: argparse.Namespace, version: str) -> int:
             new_parent_ticket, success = validate_ticket_exists(version, new_parent_id)
             if not success:
                 return 1
+            terminal_hint = terminal_parent_hint(new_parent_id, new_parent_ticket)
+            if terminal_hint:
+                print(format_error(ErrorEnvelope(
+                    component="track",
+                    action="set-parent",
+                    errno="PARENT_TERMINAL",
+                    hint=terminal_hint,
+                )))
+                return 1
 
         if old_parent_id == new_parent_id:
             print(format_info(InfoMessages.PARENT_RELATION_NOOP, child_id=child_id))
             return 0
+
+        # Step 2.5：移入新 parent 後的兄弟前驅數（ARCH-017）；--clear 不檢查
+        if new_parent_id and _reject_multi_sibling(
+            version, child_id, child_ticket.get("blockedBy") or [], new_parent_id,
+            "set-parent", "所有票皆未修改",
+        ):
+            return 1
 
         # 三張以內的寫入路徑，結尾以單一 commit 提交
         written_paths: list[str] = []
@@ -598,7 +666,7 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
     # 有效的 Phase 值
     VALID_PHASES = TrackRelationsMessages.VALID_PHASES
 
-    # W14-045: file_lock 包圍 load → modify → save
+    # file_lock 包圍 load → modify → save
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         # 驗證 Ticket 存在
@@ -618,7 +686,7 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
         ticket["current_phase"] = phase
         ticket["assignee"] = args.agent
 
-        # W2-009：同步寫入 tdd_phase（緊湊格式，與 tdd_stage/claim 推導共用）
+        # 同步寫入 tdd_phase（緊湊格式，與 tdd_stage/claim 推導共用）
         # 並標記為手動來源，使後續 claim --as 的自動推導不覆蓋此值。
         ticket["tdd_phase"] = phase.lower().replace(" ", "")
         ticket["tdd_phase_source"] = TDD_PHASE_SOURCE_MANUAL

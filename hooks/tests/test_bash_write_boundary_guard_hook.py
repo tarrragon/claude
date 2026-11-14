@@ -193,6 +193,39 @@ class TestLegitimateUsageNotBlocked:
 
 
 # ============================================================================
+# 3.3.0-W1-186.4：磁碟機代號大小寫與專案根不一致時，test/、lib/ 寫入仍須攔下
+# ============================================================================
+
+_WINDOWS_ROOT = r"C:\Users\u\proj"
+
+
+class TestDriveLetterCaseMismatch:
+    """專案根為大寫 C:，命令寫小寫 c:。186.1 之前 normalize_path 未折疊代號，
+    絕對路徑轉不成專案相對路徑，test/、lib/ 寫入漏判。"""
+
+    @pytest.mark.parametrize("target, expected", [
+        ("c:/Users/u/proj/test/a_test.py", "test/a_test.py"),
+        ("c:/Users/u/proj/lib/a.dart", "lib/a.dart"),
+    ])
+    def test_lowercase_drive_write_to_restricted_is_violation(
+        self, monkeypatch, logger, target, expected
+    ):
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", _WINDOWS_ROOT)
+        cmd = f"echo x > {target}"
+        assert _find_boundary_violation(cmd, logger) == expected
+
+    @pytest.mark.parametrize("target", [
+        "c:/Users/u/proj/.claude/hooks/a.py",
+        "c:/Users/u/proj/docs/a.md",
+    ])
+    def test_lowercase_drive_write_to_allowed_not_blocked(
+        self, monkeypatch, logger, target
+    ):
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", _WINDOWS_ROOT)
+        assert _find_boundary_violation(f"echo x > {target}", logger) is None
+
+
+# ============================================================================
 # main() 整合：工具過濾 / subagent / 開發分支
 # ============================================================================
 
@@ -1300,6 +1333,10 @@ class TestExtraCommandWriteTargets:
         ("ruby -e 'File.write(\"lib/a\", \"x\")'", "lib/a"),
         ("perl -e 'File.write(\"lib/a\", 1)'", "lib/a"),
         ("ruby -e 'File.open(\"lib/a\", \"w\") { }'", "lib/a"),
+        ("ed -s lib/a <<'EOF'\n1d\nw\nq\nEOF", "lib/a"),
+        ("printf '1d\\nw\\n' | ed -s lib/a", "lib/a"),
+        ("ed -p '*' lib/a < /tmp/script", "lib/a"),
+        ("ex -s -c '%s/a/b/g|x' lib/a", "lib/a"),
     ])
     def test_denied(self, cmd, expected, checkout, logger):
         assert _scope(cmd, checkout, logger) == expected
@@ -1323,6 +1360,9 @@ class TestExtraCommandWriteTargets:
         "install -m 644 lib/a /tmp/b",
         "ruby -e 'puts File.read(\"lib/a\")'",
         "ruby -e 'File.write(\"/tmp/a\", 1)'",
+        "ed -s /tmp/a <<'EOF'\nw\nEOF",
+        "ex -s -c 'x' /tmp/a",
+        "echo ed lib/a",
         "ticket track move-lines 0.5.0-W1-362 --src .claude/skills/ticket/ticket_system/tests/test_track_move_lines.py --lines 1-1 --dst .claude/skills/ticket/references/track-command-update.md --at 1 2>/tmp/ml.err",
     ])
     def test_allowed(self, cmd, checkout, logger):
@@ -1563,3 +1603,224 @@ class TestWindowsPathSemantics:
     ])
     def test_out_of_scope_write_allowed(self, win_os, logger, cmd):
         assert hook_module._find_scope_violation(cmd, self._ROOT, logger) is None
+
+
+class TestOpaquePythonWriteTargets:
+    """3.3.0-W1-209.1：python 寫入呼叫的目標無法常數化時，以路徑線索補判；無線索則警告放行。"""
+
+    # 有受限路徑線索 → 擋下（tarrragon/claude#103 實測形態）
+    _DENIED = {
+        "shellvar_argv": (
+            "for f in lib/a.dart lib/b.dart; do\npython3 - \"$f\" <<'PY'\nimport sys\n"
+            "open(sys.argv[1],'w').write('')\nPY\ndone"
+        ),
+        "fstring_dynamic": (
+            "python3 - .claude/hooks <<'EOF'\nimport sys\nd=sys.argv[1]\nn='x'\n"
+            "open(f'{d}/{n}.py','w').write('')\nEOF"
+        ),
+        "mode_variable": "python3 - <<'EOF'\nm='w'\nopen('lib/a.dart',m).write('')\nEOF",
+        "write_text_unknown_target": (
+            "python3 - <<'EOF'\nimport pathlib, os\nbase='test/unit/'\n"
+            "for p in os.listdir(base): pathlib.Path(base, p).write_text('')\nEOF"
+        ),
+    }
+
+    @pytest.mark.parametrize("name", sorted(_DENIED))
+    def test_opaque_write_with_scope_clue_denied(self, name, logger):
+        assert _scope(self._DENIED[name], _REPO_ROOT, logger) is not None
+
+    def test_fstring_all_constant_resolved(self, logger):
+        cmd = "python3 - <<'EOF'\nd='lib'\nn='x'\nopen(f'{d}/{n}.dart','w').write('')\nEOF"
+        assert _scope(cmd, _REPO_ROOT, logger) == "lib/x.dart"
+
+    def test_positive_control_literal_open_denied(self, logger):
+        """E2 正向對照：字面 open 寫入 lib/ 仍擋下。"""
+        cmd = "python3 - <<'EOF'\nopen('lib/a.dart','w').write('x')\nEOF"
+        assert _scope(cmd, _REPO_ROOT, logger) == "lib/a.dart"
+
+    def test_no_clue_collected_as_opaque(self, logger):
+        """無受限路徑線索（拼接切開目錄名）→ 不擋，但列入警告。"""
+        cmd = ("python3 -c \"import pathlib\nfor n in ['x']: "
+               "pathlib.Path('li'+'b/'+n+'.dart').write_text('')\"")
+        opaque = []
+        assert hook_module._find_scope_violation(cmd, str(_REPO_ROOT), logger, None, opaque) is None
+        assert len(opaque) == 1
+
+    @pytest.mark.parametrize("cmd", [
+        "python3 -c \"print(open('lib/a.dart').read())\"",
+        "printf '%s' \"open('lib/a.dart','w')\" | wc -c",
+        "python3 - <<'EOF'\nimport tempfile, os\nd=tempfile.mkdtemp()\n"
+        "open(os.path.join(d,'x'),'w').write('')\nEOF",
+        "python3 - /tmp/out <<'EOF'\nimport sys\nopen(sys.argv[1]+'/x','w').write('')\nEOF",
+        "python3 - <<'EOF'\nimport json\nprint(json.dumps({'a': 1}))\nEOF",
+    ])
+    def test_negative_controls_allowed_without_warning(self, cmd, logger):
+        """反向對照：唯讀、描述文字、暫存區寫入、無寫入呼叫皆放行且不警告。"""
+        opaque = []
+        assert hook_module._find_scope_violation(cmd, str(_REPO_ROOT), logger, None, opaque) is None
+        assert opaque == []
+
+    def test_warning_reaches_model_via_additional_context(self, monkeypatch, capsys):
+        """無線索的目標不明寫入：放行並以 additionalContext 送出警告。"""
+        import io
+        import json as json_mod
+        cmd = ("python3 -c \"import pathlib\nfor n in ['x']: "
+               "pathlib.Path('li'+'b/'+n+'.dart').write_text('')\"")
+        payload = {"tool_name": "Bash", "tool_input": {"command": cmd},
+                   "cwd": str(_REPO_ROOT), "agent_id": "a-1"}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json_mod.dumps(payload)))
+        with patch.object(hook_module, "is_subagent_environment", return_value=True):
+            code = main()
+        out = json_mod.loads(capsys.readouterr().out.strip().splitlines()[-1])
+        hso = out["hookSpecificOutput"]
+        assert code == 0
+        # 警告路徑不帶 permission_decision（主控裁定：不擴大略過權限提示的範圍）
+        assert "permissionDecision" not in hso
+        assert "無法靜態判定" in hso["additionalContext"]
+
+
+# ============================================================================
+# 腳本檔形態 python3 <script> <args> 與 node -e 的寫入目標
+# ============================================================================
+
+
+_WRITE_SCRIPT = "import sys\nopen(sys.argv[1], 'w').write('x')\n"
+_READ_SCRIPT = "import sys\nprint(open(sys.argv[1]).read())\n"
+
+
+class TestPythonScriptFileTargets:
+    """腳本檔讀得到時以 ast 分析（argv 以命令列展開）；讀不到時 argv 受限字面納入候選。"""
+
+    def _script(self, checkout, name, body):
+        path = checkout / "tool" / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(body)
+        return path
+
+    @pytest.mark.parametrize("cmd", [
+        "python3 -I tool/fix.py lib/a.dart",          # WB-03
+        "python3 tool/fix.py lib/a.dart",
+        "python3 -u -B tool/fix.py lib/a.dart",
+        "python3 -W ignore tool/fix.py lib/a.dart",
+        "(cd tool && python3 fix.py ../lib/a.dart)",
+    ])
+    def test_readable_write_script_denied(self, cmd, checkout, logger):
+        self._script(checkout, "fix.py", _WRITE_SCRIPT)
+        assert _scope(cmd, checkout, logger) == "lib/a.dart"
+
+    def test_absolute_script_path_denied(self, checkout, logger):
+        script = self._script(checkout, "fix.py", _WRITE_SCRIPT)
+        assert _scope("python3 %s lib/a.dart" % script, checkout, logger) == "lib/a.dart"
+
+    @pytest.mark.parametrize("cmd", [
+        "python3 tool/read.py lib/a.dart",            # 只讀腳本帶受限路徑 argv
+        "python3 tool/fix.py /tmp/a.dart",            # 寫入腳本、目標在範圍外
+        "python3 -m pytest lib/a_test.py",            # -m 模組形態不讀檔
+    ])
+    def test_reverse_controls_allowed(self, cmd, checkout, logger):
+        self._script(checkout, "fix.py", _WRITE_SCRIPT)
+        self._script(checkout, "read.py", _READ_SCRIPT)
+        assert _scope(cmd, checkout, logger) is None
+
+    def test_script_with_opaque_write_and_scope_argv_allowed(self, checkout, logger):
+        """腳本內目標不明的寫入（狀態檔原子替換）不因參數含 .claude/ 路徑而擋下。"""
+        self._script(checkout, "wrap.py", (
+            "import os, sys, tempfile\n"
+            "path = os.path.join(tempfile.gettempdir(), 'state')\n"
+            "tmp = path + '.tmp'\n"
+            "os.replace(tmp, path)\n"))
+        cmd = "python3 tool/wrap.py 600 -- uv run pytest .claude/hooks/tests"
+        assert _scope(cmd, checkout, logger) is None
+
+    def test_unreadable_script_takes_scope_argv(self, checkout, logger):
+        """腳本讀不到（不存在）時，argv 中受限範圍的字面路徑納入候選。"""
+        assert _scope("python3 tool/missing.py lib/a.dart", checkout, logger) == "lib/a.dart"
+
+    @pytest.mark.parametrize("prefix", ["$CLAUDE_PROJECT_DIR", "${CLAUDE_PROJECT_DIR}"])
+    def test_project_dir_prefixed_script_is_read(self, prefix, checkout, logger, monkeypatch):
+        """腳本路徑以專案目錄變數開頭時展開後讀入：只讀腳本放行、寫入腳本擋下。"""
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(checkout))
+        self._script(checkout, "read.py", _READ_SCRIPT)
+        self._script(checkout, "fix.py", _WRITE_SCRIPT)
+        assert _scope("python3 %s/tool/read.py lib/a.dart" % prefix, checkout, logger) is None
+        assert _scope("python3 %s/tool/fix.py lib/a.dart" % prefix, checkout, logger) == "lib/a.dart"
+
+    def test_extract_without_cwd_skips_script_branch(self):
+        """未給 cwd 的抽取（日誌、第二層）不把腳本參數當候選。"""
+        assert hook_module._extract_candidate_paths("python3 tool/wrap.py lib/a.dart") == []
+
+    def test_unreadable_script_out_of_scope_argv_allowed(self, checkout, logger):
+        assert _scope("python3 tool/missing.py /tmp/a.dart", checkout, logger) is None
+
+    def test_heredoc_python_still_denied(self, checkout, logger):
+        """WB-08 正向對照維持 deny。"""
+        cmd = "python3 - <<'EOF'\nopen('lib/a.dart','w').write('x')\nEOF"
+        assert _scope(cmd, checkout, logger) == "lib/a.dart"
+
+
+class TestMoveSourceAndRemoveTargets:
+    """mv 的來源與 rm／unlink 的引數：移出與刪除同樣改變受限路徑。"""
+
+    @pytest.mark.parametrize("cmd,expected", [
+        ("mv .claude/skills/x/SKILL.md /tmp/x.bak", ".claude/skills/x/SKILL.md"),   # WB-06
+        ("rm .claude/skills/x/SKILL.md", ".claude/skills/x/SKILL.md"),             # WB-18
+        ("rm -f lib/a.dart", "lib/a.dart"),
+        ("rm -rf test/unit", "test/unit"),
+        ("unlink .claude/hooks/a.py", ".claude/hooks/a.py"),
+        ("mv -t /tmp lib/a.dart", "lib/a.dart"),
+        ("mv /tmp/a .claude/x.md", ".claude/x.md"),                                 # 正向對照：目的地
+        ("sudo rm lib/a.dart", "lib/a.dart"),
+    ])
+    def test_denied(self, cmd, expected, checkout, logger):
+        assert _scope(cmd, checkout, logger) == expected
+
+    @pytest.mark.parametrize("cmd", [
+        "git mv .claude/a.md .claude/b.md",
+        "git rm .claude/a.md",
+        "cp .claude/skills/x/SKILL.md /tmp/x.bak",
+        "rm -rf .claude/hooks/__pycache__",
+        "rm -rf .claude/hooks/tests/.pytest_cache",
+        "rm .claude/hook-logs/bash-edit-guard/x.log",
+        "rm -rf lib/.dart_tool",
+        "rm -rf .claude/worktrees/feat-x",
+        "rm -rf .claude/.git",
+        "rm -rf .claude/.github",
+        "rm .claude/hook-logs/_sampling/x.count",
+        "rm -rf .claude/.sync-conflicts/",
+        "rm /tmp/a lib.txt",
+        "rm -rf /tmp/build",
+        "echo rm lib/a.dart",
+        "mv /tmp/a /tmp/b",
+    ])
+    def test_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+    def test_deny_reason_mentions_git_rm(self, checkout, monkeypatch, capsys):
+        import io
+        import json
+
+        payload = {"tool_name": "Bash", "tool_input": {"command": "rm lib/a.dart"}, "cwd": str(checkout)}
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+        hook_module.main()
+        reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "git rm" in reason
+
+
+class TestNodeEvalTargets:
+    """node -e／--eval 的 fs 寫入字面目標。"""
+
+    @pytest.mark.parametrize("cmd", [
+        "node -e \"require('fs').writeFileSync('lib/a.dart','')\"",     # WB-14
+        "node --eval \"require('fs').appendFileSync('lib/a.dart','x')\"",
+        "node -e \"const fs=require('fs'); fs.writeFile('test/a', 'x', ()=>{})\"",
+    ])
+    def test_denied(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is not None
+
+    @pytest.mark.parametrize("cmd", [
+        "node -e \"console.log(require('fs').readFileSync('lib/a.dart','utf8'))\"",
+        "node -e \"require('fs').writeFileSync('/tmp/a','')\"",
+        "echo \"writeFileSync('lib/a.dart')\"",
+    ])
+    def test_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None

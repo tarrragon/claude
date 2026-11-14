@@ -8,7 +8,7 @@ Worktree Merge Reminder Hook - PostToolUse (Bash)
 
 功能：當偵測到 ticket track complete 命令時，檢查所有 worktree：
 1. 未合併（ahead>0）→ 推送 merge 警告（既有功能）
-2. 已合併（ahead=0，含 user worktree）→ 推送 cleanup reminder（W11-033 / PC-149 新增）
+2. 已合併（ahead=0，含 user worktree）→ 推送 cleanup reminder（PC-149 新增）
    - dirty worktree 額外提示先處理變更
 
 Hook 類型：PostToolUse
@@ -75,7 +75,7 @@ def cleanup_command(branch: str, logger) -> str:
 def parse_worktree_list(logger) -> List[Tuple[str, str]]:
     """取得 (路徑, 分支名) 列表（排除 main）。
 
-    0.2.1-W3-286：改用共用層 lib.git_utils.get_worktree_list(exclude_main
+    改用共用層 lib.git_utils.get_worktree_list(exclude_main
     =True)，取代自行 subprocess + porcelain 解析。detached worktree（無
     branch 值）依共用層慣例保留於原始清單，此處以 `wt.get("branch")` 真值
     過濾排除——與原行為一致（detached 無分支可供 `git log main..branch`
@@ -192,7 +192,7 @@ def classify_worktrees(worktrees: List[Tuple[str, str]], logger):
 def get_dirty_files(path: str, logger) -> List[Tuple[str, str]]:
     """取得 worktree 未提交變更的檔案清單（含未追蹤檔案）。
 
-    0.2.1-W3-273：由布林 dirty 判定升級為檔案清單，供呼叫端區分「未追蹤」
+    由布林 dirty 判定升級為檔案清單，供呼叫端區分「未追蹤」
     （`git worktree remove --force` 會靜默丟棄，issue 46 症狀三）與「已追蹤
     但未 commit」（至少仍有 base 版本留在分支歷史，遺失風險較低）。
 
@@ -205,7 +205,7 @@ def get_dirty_files(path: str, logger) -> List[Tuple[str, str]]:
         兩字元狀態碼（如 ``"??"``、``" M"``、``"A "``）與檔名。無法判斷或無
         變更時回傳空列表。
 
-    0.2.1-W3-286：改用共用層 lib.git_utils.get_uncommitted_files(cwd=...)，
+    改用共用層 lib.git_utils.get_uncommitted_files(cwd=...)，
     取代自行 subprocess + porcelain 解析；FileStatus 已封裝相同的
     (status, file_path) 結構，取捨與 worktree-remove-deliverable-check-hook
     的 _dirty_status 一致（不再區分 git 失敗與無變更，皆回傳空清單）。
@@ -308,7 +308,7 @@ def main() -> int:
         if merged:
             lines.append("")
 
-    # Section 2: 已合併 cleanup reminder（W11-033 / PC-149 新增）
+    # Section 2: 已合併 cleanup reminder（PC-149 新增）
     if merged:
         lines.append("[Worktree 清理提醒] 以下 worktree 已完全合併回 main，建議清理：")
         lines.append("")
@@ -319,7 +319,7 @@ def main() -> int:
                 untracked = [f for code, f in dirty_files if code == "??"]
                 tracked_modified = [f for code, f in dirty_files if code != "??"]
                 lines.append("  狀態: 未提交變更（dirty）— 請先處理未提交/未追蹤檔案再移除")
-                # 0.2.1-W3-273（issue 46 症狀三）：未追蹤檔案在 `worktree remove
+                # （issue 46 症狀三）：未追蹤檔案在 `worktree remove
                 # --force` 下不進 git 追蹤，直接隨 worktree 目錄靜默丟棄（非
                 # 「保留在分支歷史但需另行清理」——merge 只作用於已 commit 物件，
                 # 未追蹤檔案從未進入該分支的任何 commit）。明確列出檔名而非僅
@@ -330,7 +330,7 @@ def main() -> int:
                         lines.append(f"    - {f}")
                     if len(untracked) > 10:
                         lines.append(f"    ... 還有 {len(untracked) - 10} 個")
-                # 0.2.1-W3-280（issue 46 症狀四）：已追蹤但未 commit 的檔案，
+                # （issue 46 症狀四）：已追蹤但未 commit 的檔案，
                 # base 版本雖留在分支歷史，但代理人寫入的「修改內容」本身從未
                 # 進入任何 commit，強制移除仍會遺失該內容（與未追蹤檔同級風險，
                 # 差別僅在遺失對象是「修改」而非「整檔」）。
@@ -342,7 +342,7 @@ def main() -> int:
                         lines.append(f"    - {f}")
                     if len(tracked_modified) > 10:
                         lines.append(f"    ... 還有 {len(tracked_modified) - 10} 個")
-                # 0.2.1-W3-285：先前建議直接 `remove --force`，但 dirty worktree
+                # 先前建議直接 `remove --force`，但 dirty worktree
                 # 必然被 worktree-remove-deliverable-check-hook 的 Guard C 阻擋
                 # （--force 不繞過該檢查），與本行建議互斥。改為導向「commit
                 # 後 merge 再 remove」；--force 僅在確認可捨棄變更並清除後才

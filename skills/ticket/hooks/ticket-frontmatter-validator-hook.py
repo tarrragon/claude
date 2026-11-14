@@ -19,7 +19,7 @@ hook-logs 記錄，不阻擋 Edit。
   （詳見 .claude/skills/ticket/ticket_system/validators/frontmatter_validator.py）
 
 設計依據:
-- Ticket 0.18.0-W14-028 (源於 W14-024 IMP-1)
+- (源於先前 IMP 項目)
 - IMP-013 雙通道 observability (stderr + hook-logs)
 - IMP-048 避免誤觸 hook error：本 hook 違規視為「已預期的品質警示」，
   使用 logger.info 寫日誌、用 stderr 寫警告（Claude Code 會顯示 hook error

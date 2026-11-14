@@ -60,7 +60,7 @@ ANA 結論落地為 IMP 派發前，若任一條件成立，必須執行假設�
 驗證失敗或結論修正 → 在 IMP ticket Problem Analysis 補「主線程驗證後的範圍調整」段。
 
 > 完整案例集 + Tripwire 設計：`.claude/references/dispatch-pre-validation-cases.md`
-> 設計來源：W10-140 第四輪 4 視角分析（W10-137 為首例案例）
+> 設計來源：第四輪 4 視角分析（首例案例已併入）
 
 ---
 
@@ -153,6 +153,6 @@ ticket track dispatch-check
 ---
 
 **Last Updated**: 2026-04-22
-**Version**: 1.1.0 - Context Bundle gate 補 PC-065 第一行 Ticket ID 與 dispatch-plan 檢查（W17-044）
+**Version**: 1.1.0 - Context Bundle gate 補 PC-065 第一行 Ticket ID 與 dispatch-plan 檢查
 
 **Version**: 1.0.0 - 從 decision-tree.md 拆分（決策樹二元化拆分）

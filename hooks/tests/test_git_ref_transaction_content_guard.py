@@ -241,6 +241,24 @@ class TestMainIntegration:
         assert result.returncode == 0
         assert "framework-rule-edit-skill-trigger" in result.stderr
 
+    def test_same_skill_dir_multi_files_single_warn_with_count(self, scratch_repo):
+        """3.3.0-W1-048：同一 skill 目錄多檔變更只出一則 skill-trigger 提醒並附檔數。"""
+        head = _capture(["rev-parse", "HEAD"], cwd=scratch_repo)
+        for i in range(3):
+            target = scratch_repo / f".claude/skills/demo-skill/references/r{i}.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"內容 {i}\n", encoding="utf-8")
+        _run_git(["add", "."], cwd=scratch_repo)
+        tree = _capture(["write-tree"], cwd=scratch_repo)
+        new_sha = _capture(["commit-tree", tree, "-p", head, "-m", "multi"], cwd=scratch_repo)
+        _run_git(["reset", "-q", "--hard", head], cwd=scratch_repo)
+
+        result = _run_guard(scratch_repo, "prepared", f"{head} {new_sha} refs/heads/main\n")
+
+        assert result.returncode == 0
+        assert result.stderr.count("[skill-trigger]") == 1, result.stderr
+        assert ".claude/skills/demo-skill/ 下 3 個檔案" in result.stderr
+
 
 def _prepare_merge_commit(repo, feature_path, feature_content):
     """在 `repo` 建一個 feature 分支（`feature/x`）並 commit 一個非豁免路徑
@@ -729,6 +747,50 @@ class TestCheckRule8PerProject:
         """E2 正向對照：同字面在非整段相等路徑仍 deny。"""
         findings = self._findings(rel_path)
         assert any(f.severity == "deny" for f in findings)
+
+
+_EVT_PATH = "docs/events/EVT-DEMO-001-demo.md"
+_EVT_HEAD = "---\nid: EVT-DEMO-001\nname: demo\ncanonical_name: Demo\ncategory: domain_event\n"
+_EVT_OK = _EVT_HEAD + "producers: [a]\nconsumers: [b]\n---\n# demo\n"
+_EVT_NO_CONSUMER = _EVT_HEAD + "producers: [a]\n---\n# demo\n"
+
+
+class TestDocValidateOnRefTransaction:
+    """3.3.0-W1-018：reference-transaction 路徑以 commit tree 為提交內容跑 doc validate。
+
+    工作區保留提交內容（同 ticket track commit 的隔離索引提交後狀態）；寫入非保護分支，
+    避免 branch-verify 介入。
+    """
+
+    @staticmethod
+    def _commit_keep_worktree(repo, text):
+        head = _capture(["rev-parse", "HEAD"], cwd=repo)
+        target = repo / _EVT_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+        _run_git(["add", _EVT_PATH], cwd=repo)
+        tree = _capture(["write-tree"], cwd=repo)
+        new_sha = _capture(["commit-tree", tree, "-p", head, "-m", "doc"], cwd=repo)
+        return f"{head} {new_sha} refs/heads/feat-x\n"
+
+    def test_new_doc_error_denied(self, scratch_repo):
+        result = _run_guard(scratch_repo, "prepared", self._commit_keep_worktree(scratch_repo, _EVT_NO_CONSUMER))
+        assert result.returncode == 87
+        assert "[doc-validate]" in result.stderr
+        assert "缺少 consumer" in result.stderr
+
+    def test_clean_doc_allowed(self, scratch_repo):
+        result = _run_guard(scratch_repo, "prepared", self._commit_keep_worktree(scratch_repo, _EVT_OK))
+        assert result.returncode == 0, result.stderr
+        assert "[doc-validate]" not in result.stderr
+
+    def test_worktree_differs_from_commit_tree_downgrades_to_warn(self, scratch_repo):
+        stdin_text = self._commit_keep_worktree(scratch_repo, _EVT_NO_CONSUMER)
+        (scratch_repo / _EVT_PATH).write_text(_EVT_NO_CONSUMER + "未提交的修改。\n", encoding="utf-8")
+        result = _run_guard(scratch_repo, "prepared", stdin_text)
+        assert result.returncode == 0
+        assert "[doc-validate]" in result.stderr
+        assert "不一致" in result.stderr
 
 
 if __name__ == "__main__":

@@ -45,6 +45,15 @@ def _stub_owned_issues_registry(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _stub_todo_pending_registry(monkeypatch):
+    """比照 owned：todo pending 登記檔寫入非本檔驗證焦點，stub 為 no-op，
+    避免測試寫入被測 checkout 的 .claude/state。專屬測試另行覆蓋。"""
+    monkeypatch.setattr(section_comment, "sync_section_rows", lambda *a, **k: (0, 0))
+    # 共用根解析會呼叫 git rev-parse，會被各測試的 subprocess.run side_effect 攔截
+    monkeypatch.setattr(section_comment, "get_shared_state_root", lambda root=None: root)
+
+
+@pytest.fixture(autouse=True)
 def _stub_project_owner_prefix(monkeypatch):
     """owner 驗證錨定本專案推導前綴，本檔既有測試的 owner 字面值非驗證器
     焦點——固定回傳 "test-session"，使既有 "test-session-<8 碼十六進位>"

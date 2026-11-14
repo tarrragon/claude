@@ -15,7 +15,7 @@ severity: high
 | 編號 | PC-SCLK-007 |
 | 類別 | process-compliance |
 | 風險等級 | 高 |
-| 首發時間 | 2026-07-31（screen_clock 1.4.0-W2-029 執行 hook 重複註冊比對時附帶發現） |
+| 首發時間 | 2026-07-31（screen_clock 專案執行 hook 重複註冊比對時附帶發現） |
 | 姊妹模式 | PC-165（測試綠燈不等於 runtime 正確）、PC-SCLK-006（規格散文與形式定義矛盾） |
 
 ---
@@ -104,4 +104,4 @@ payload 必要欄位缺失時，不得與「條件不滿足」共用同一條 re
 
 ---
 
-**Last Updated**: 2026-07-31 | **Version**: 1.0.0 — 初始建立（screen_clock 1.4.0-W2-029 執行 hook 重複註冊比對時附帶發現）
+**Last Updated**: 2026-07-31 | **Version**: 1.0.0 — 初始建立（screen_clock 專案執行 hook 重複註冊比對時附帶發現）

@@ -83,5 +83,4 @@ for py_file in (temp_dir / "hooks").rglob("*.py"):
 
 ## 來源
 
-- W16-004 Ticket 根因分析（`docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W16-004.md`）
 - v1.36.2 事件實證（remote mode 分布統計）

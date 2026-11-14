@@ -187,13 +187,13 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 | 禁止 | 原因 |
 |------|------|
-| 以手工列舉部分 Unicode 區段代替全字元集掃描 | 遺漏的區段導致後續 IMP acceptance 建立在錯誤覆蓋假設（W1-005 根因） |
+| 以手工列舉部分 Unicode 區段代替全字元集掃描 | 遺漏的區段導致後續 IMP acceptance 建立在錯誤覆蓋假設（某次 ANA 二度誤判的根因） |
 | 以單一關鍵字 rg 驗證「依賴 = 0」斷言 | 單一關鍵字不等於全量掃描，不同字串字面或模式會被遺漏 |
 | AC 設計不回鏈 ANA 驗證指令 | IMP 驗收應能重現 ANA 聲明的範圍，而非僅驗 build/lint |
 
 **Why**：單一視角 ANA 若未明示驗證方法完整性，後人（含 PM 和後續 IMP 執行者）無法判斷「覆蓋 N 處」這個結論是否可信，AC 設計會繼承不完整的假設。
 
-**Consequence**：W1-005 ANA AC-4 遺漏 48+ 處斷言依賴，引發 W1-005.2 隱性回歸（12 檔）+ 範圍二度誤判，最終需兩個 patch ticket 修復（W1-007 ANA 教訓 1）。
+**Consequence**：某次 ANA 的 AC 遺漏 48+ 處斷言依賴，引發隱性回歸（12 檔）+ 範圍二度誤判，最終需兩個 patch ticket 修復。
 
 **Action**：每次撰寫 ANA Solution 前，執行以上觸發句型自檢；發現觸發句型時，先完善驗證指令再撰寫結論。
 
@@ -338,8 +338,8 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 **Last Updated**: 2026-08-23
 **Version**: 1.4.0 — 禁止行為第 7 項補「邊界（不在本項禁止範圍）」與「為何需要明寫此邊界」兩段：建立掛自身 `source_ticket` / `parent` 的新票不受本項限制（對象是尚不存在的 ticket，非修改他人既有 ticket），與第 6 項互為表裡；補 `add-spawn-request` + `resolve-spawn-request` 通道與判準路由。禁令內容與適用對象未變，僅劃出既有列舉未涵蓋的邊界。Source: 一次 ANA 執行以第 7 項為由認定不得建票而停手上報的實際誤讀。
-**Version**: 1.3.0 — Domain Map 覆蓋檢查新增兩列：§3 bundle「實作狀態」欄消費規則 + `ls`/`grep` 目標路徑存在性驗證；Why 段補 PC-APP-012 引用（bundle 清單含未實作概念衍生不可執行 ticket 的防護，收編自 book_overview_app，0.2.1-W1-006）
-**Version**: 1.2.0 — 核心職責新增第 6 項「ANA 全量 grep/regex 範圍判定自檢」：觸發句型自檢表 + 必填聲明格式 + 禁止行為 + 三明示（Why/Consequence/Action），引用 W1-005 AC-4 二度誤判觸發案例（0.19.1-W1-039）
+**Version**: 1.3.0 — Domain Map 覆蓋檢查新增兩列：§3 bundle「實作狀態」欄消費規則 + `ls`/`grep` 目標路徑存在性驗證；Why 段補 PC-APP-012 引用（bundle 清單含未實作概念衍生不可執行 ticket 的防護，收編自 book_overview_app）
+**Version**: 1.2.0 — 核心職責新增第 6 項「ANA 全量 grep/regex 範圍判定自檢」：觸發句型自檢表 + 必填聲明格式 + 禁止行為 + 三明示（Why/Consequence/Action），引用某次 ANA AC 二度誤判觸發案例
 **Version**: 1.1.0 — 禁止行為新增第 7 項「禁止對非自己派發範圍的 ticket 執行修改操作」（含 Why/Consequence/Action 三明示）。Source: SA 越界 close 兄弟 ticket 事件（並行 claim race condition 暴露）。
 **Specialization**: TDD Pre-Review and System Consistency
 

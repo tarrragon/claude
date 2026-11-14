@@ -1,10 +1,10 @@
-> **編號溯源（native intruder 讓位）**：本 pattern 為本專案原生（非框架 canonical）。先前不對稱 push 誤把它推上框架 PC-177 號，使上游 PC-177 同時承載框架 canonical（defensive-rule-mechanical-overapplication）與本 native intruder 兩 slug。本專案於 1.2.0-W1-039 將本 pattern 讓位重編為 PC-184（全索引對照確認 184 為 next-free canonical）。上游殘留的 `PC-177-malformed-tool-call-rendered-as-text.md` 為應清除的孤兒（canonical 是 defensive，PC-177 不該由本 native 佔用）；上游 PC-177-defensive 由本地 PC-181（lineage 認領）保護，不受本讓位影響。
+> **編號溯源（native intruder 讓位）**：本 pattern 為本專案原生（非框架 canonical）。先前不對稱 push 誤把它推上框架 PC-177 號，使上游 PC-177 同時承載框架 canonical（defensive-rule-mechanical-overapplication）與本 native intruder 兩 slug。本專案將本 pattern 讓位重編為 PC-184（全索引對照確認 184 為 next-free canonical）。上游殘留的 `PC-177-malformed-tool-call-rendered-as-text.md` 為應清除的孤兒（canonical 是 defensive，PC-177 不該由本 native 佔用）；上游 PC-177-defensive 由本地 PC-181（lineage 認領）保護，不受本讓位影響。
 
 # PC-184: malformed tool-call 被當文字渲染而未執行
 
 ## 症狀
 
-工具呼叫標記寫壞被當純文字渲染，工具靜默未執行——使用者只看到一段標記文字，需手動喊重送。成因為模型於 invoke 標記前混入游離 token（本案反覆為字面 count）或漏 antml 命名空間前綴，harness 無法解析成 tool call。重發常二次失敗，使單步反覆卡住。0.20.0 W2 session 重現 15 次以上。
+工具呼叫標記寫壞被當純文字渲染，工具靜默未執行——使用者只看到一段標記文字，需手動喊重送。成因為模型於 invoke 標記前混入游離 token（本案反覆為字面 count）或漏 antml 命名空間前綴，harness 無法解析成 tool call。重發常二次失敗，使單步反覆卡住。某次 Tag model 開發 session 重現 15 次以上。
 
 ## 根因
 
@@ -14,7 +14,7 @@
 
 ## 案例
 
-0.20.0-W2-011：Tag model TDD 途中反覆於 invoke 標記前混入游離 token，使用者要求先修；嘗試 PreToolUse 被否決，改 Stop hook 成功。
+某次 Tag model TDD 途中反覆於 invoke 標記前混入游離 token，使用者要求先修；嘗試 PreToolUse 被否決，改 Stop hook 成功。
 
 ## 防護
 
@@ -28,4 +28,4 @@
 
 ---
 
-Last Updated: 2026-06-06 | Source: 0.20.0-W2-011
+Last Updated: 2026-06-06

@@ -2,7 +2,6 @@
 
 **類別**: process-compliance
 **發現日期**: 2026-07-02
-**相關 Ticket**: 0.3.3-W1-002（根因 ANA）、0.3.5 追蹤校準稽核
 **嚴重度**: 中（追蹤資料漂移，不損壞產品程式碼，但使進度判斷失準）
 
 ---
@@ -21,7 +20,7 @@
 
 **防護放在可選流程內，等於防護不存在。**
 
-0.3.3-W1-002（2026-06-25）已診斷此問題並落地防護：version-release pre-flight 加入 stale active 版本掃描。但防護的執行點是 `version-release check`——一個「建議執行」的可選 CLI 流程。0.3.4 / 0.3.5 收尾時走手動路徑（手動打 tag、手動改文件），pre-flight 從未被觸發，防護零次執行，漂移復發。
+先前的根因分析（2026-06-25）已診斷此問題並落地防護：version-release pre-flight 加入 stale active 版本掃描。但防護的執行點是 `version-release check`——一個「建議執行」的可選 CLI 流程。0.3.4 / 0.3.5 收尾時走手動路徑（手動打 tag、手動改文件），pre-flight 從未被觸發，防護零次執行，漂移復發。
 
 行為模式：發布收尾是低頻操作，操作者（PM / AI agent）傾向就地手動完成而非回想「應該走哪個 CLI」；`ticket track summary` 的「建議執行 version-release」屬文字提醒層，無強制力（對照 opinionated-default-design：每個「寫文件提醒遵守」都是工具預設行為的改善信號）。
 
@@ -32,7 +31,7 @@
 1. todolist.yaml 校準：0.3.4 / 0.3.5 → `completed`、0.5.0 → `pending`，僅留一個 `active`
 2. CHANGELOG 回補 0.2.0–0.3.5 全部條目
 3. 補打 v0.3.5 annotated tag
-4. 結案 stale in_progress 的根因 ANA（0.3.3-W1-002）
+4. 結案 stale in_progress 的根因 ANA
 
 ## 預防措施
 
@@ -54,7 +53,7 @@
 
 **判別基準延伸**：原表僅涵蓋「CLI 流程」與「hook 時機」兩維，本案例補一維——**工具選擇型可繞過**（同一份邏輯掛在多個工具入口，只覆蓋部分入口）。判別方式：盤點所有能達成同一持久化效果的工具/路徑，逐一確認是否都掛了防護；只覆蓋部分工具入口的防護，效果等同 PC-MON-001 原文「防護不存在」。
 
-**解法方向**：與原案例的「移到 session-start」思路一致——移防到「不可繞過的執行點」，本案例對應 commit-time（`git commit` 前）內容掃描，與寫入手段（Edit/Write/Bash 皆可）解耦。落地追蹤：Bash 寫入路徑旁路缺口評估分析票（見版本 W3 系列）。
+**解法方向**：與原案例的「移到 session-start」思路一致——移防到「不可繞過的執行點」，本案例對應 commit-time（`git commit` 前）內容掃描，與寫入手段（Edit/Write/Bash 皆可）解耦。落地追蹤：Bash 寫入路徑旁路缺口評估分析票。
 
 ## 後續實例（第三次觀測）：shell 函式間接呼叫繞過命令文字解析型守衛
 
@@ -69,5 +68,5 @@
 ## 關聯
 
 - `.claude/rules/core/opinionated-default-design.md` — 主張 1「預設行為 > 文件規範」的復發實證
-- 0.3.3-W1-002 — 首次根因分析（防護落地但執行點錯誤）
+- 首次根因分析（防護落地但執行點錯誤）
 - Bash 寫入路徑旁路缺口評估分析票 — 第二次觀測：工具選擇型可繞過（rule8-guard 的 Edit/Write/MultiEdit matcher 未覆蓋 Bash 寫入）

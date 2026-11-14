@@ -181,7 +181,6 @@ class TestValidationMessages:
     def test_all_validation_messages_exist(self):
         """測試關鍵的 ValidationMessages 常數都已定義"""
         assert hasattr(ValidationMessages, "WORKLOG_FORMAT_CHECK_PASSED")
-        assert hasattr(ValidationMessages, "MCP_TESTS_VALIDATION_PASSED")
         assert hasattr(ValidationMessages, "TIMEOUT_CHECK_STARTED")
 
     def test_validation_messages_not_empty(self):

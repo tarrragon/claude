@@ -4,8 +4,8 @@
 
 撰寫「禁止 X」「推崇 Y」類規範性文字時，作者自身使用 X 語氣或未體現 Y 語氣，造成內容主張與形式表現的元層矛盾。典型表現：
 
-1. **規則 6 教推崇機會成本語氣，自身用「必須 / 一律 / 嚴禁」絕對命令詞**：W17-060 案例
-2. **三層防護章節主張 dogfooding，Solution 自身違反所提出的 dogfooding**：W17-122 ANA 案例
+1. **規則 6 教推崇機會成本語氣，自身用「必須 / 一律 / 嚴禁」絕對命令詞**：案例 1
+2. **三層防護章節主張 dogfooding，Solution 自身違反所提出的 dogfooding**：案例 2（某 ANA）
 3. **PC error-pattern 的「防護」段使用絕對主義禁令，未對照其推崇的價值/容量/邊界語言**：常見於壓力下撰寫的 PC
 4. **Methodology 文件的「強制規則」章節未交代邊界與例外**：讓讀者誤解為適用所有情境
 
@@ -23,43 +23,43 @@
 
 ### 第三層原因：與 PC-066 共振——壓力下偏向限制性反應
 
-Context 沉重時規範性文字撰寫尤其易違規，這是 PC-066「限制性反應在書面文字場域的延伸」。**Why**: PC-066 描述 PM 在壓力下偏向「禁止 X / 規避 X」的限制性解法；規範性文字撰寫本身即「定義禁令」，與限制性反應同向。**Consequence**: 兩個機制疊加放大絕對主義輸出傾向；高 context session 中的規則撰寫風險最高。**Action**: framework 路徑的 Edit 觸發 SKILL trigger（W17-125）讓 compositional-writing 原則在 claim 階段就進入 PM 工作記憶；事中 Layer 2 委員審查（W17-124）作為形式自審外包機制。
+Context 沉重時規範性文字撰寫尤其易違規，這是 PC-066「限制性反應在書面文字場域的延伸」。**Why**: PC-066 描述 PM 在壓力下偏向「禁止 X / 規避 X」的限制性解法；規範性文字撰寫本身即「定義禁令」，與限制性反應同向。**Consequence**: 兩個機制疊加放大絕對主義輸出傾向；高 context session 中的規則撰寫風險最高。**Action**: framework 路徑的 Edit 觸發 SKILL trigger 讓 compositional-writing 原則在 claim 階段就進入 PM 工作記憶；事中 Layer 2 委員審查作為形式自審外包機制。
 
 ## 案例庫
 
-| 案例 | Ticket | 違規 | 修復成本 |
+| 案例 | 對象 | 違規 | 修復成本 |
 |------|--------|------|---------|
-| 1 | W17-060（`ai-communication-rules.md` 規則 6） | basil 審查 P0 1 + P1 6（規則內容禁止絕對主義，形式多處「必須 / 禁止」） | W17-124 v1.2.1 + W17-128 兩輪修正 |
-| 2 | W17-122 ANA Solution（三層防護章節） | basil 審查 P0 1 + P1 6（Solution 主張 dogfooding，自身違反 dogfooding） | W17-124 / W17-128 / W17-129 三 ticket 結案 |
+| 1 | 規則 6 撰寫（`ai-communication-rules.md` 規則 6） | basil 審查 P0 1 + P1 6（規則內容禁止絕對主義，形式多處「必須 / 禁止」） | 兩輪修正（v1.2.1 與 hotpath 對照表語氣對齊） |
+| 2 | 某 ANA Solution（三層防護章節） | basil 審查 P0 1 + P1 6（Solution 主張 dogfooding，自身違反 dogfooding） | 三 ticket 結案 |
 
 兩案例 P0 各 1 條暗示存在系統性閾值（非偶發單次失誤）；修復成本平均 2-3 個 follow-up ticket，事後補做累積成本顯著高於事前一次定義防護。
 
-### 案例 1：W17-060 規則 6 文字 dogfooding 違規
+### 案例 1：規則 6 文字 dogfooding 違規
 
 PM 撰寫「禁止以估時為決策依據」規則，主張改用「價值 / 容量 / 優先級」語言。
 
 - 違規模式：規則內文使用「必須」「一律」「嚴禁」絕對命令詞共 6 處
 - **Consequence**: basil-writing-critic Layer 2 審查標 P0 1 條 + P1 6 條；讀者複製形式（絕對語氣）會抵消內容主張的機會成本框架
-- **Action**（已落地）: W17-124 v1.2.1 將首段命令式改為條件式描述；W17-128 補完 hotpath 對照表的語氣對齊
+- **Action**（已落地）: v1.2.1 將首段命令式改為條件式描述；後續補完 hotpath 對照表的語氣對齊
 
-### 案例 2：W17-122 ANA Solution dogfooding 違規
+### 案例 2：某 ANA Solution dogfooding 違規
 
 PM 撰寫三層防護方案，主張「framework 編輯觸發 compositional-writing skill」以防止規範性文字 dogfooding。
 
 - 違規模式：Solution 自身採用絕對主義句型（「PM 必須 / 一律執行 / 嚴禁跳過」），與所提出的 dogfooding 防護自相矛盾
 - **Consequence**: 元層悖論——分析「為何規則語氣失準」的 Solution 自己語氣也失準；三層防護方案落地前就被自身的形式違規證實「事前防護不足」假設
-- **Action**（已落地）: W17-124 / W17-128 / W17-129 三 ticket 修正 Solution 文字 + 落地三層防護機制
+- **Action**（已落地）: 三 ticket 修正 Solution 文字 + 落地三層防護機制
 
 ## 防護措施（已分散落地，本 PC 為統合錨點）
 
-| 層 | 機制 | 落地 ticket |
+| 層 | 機制 | 落地狀態 |
 |----|------|-----------|
-| 事前 | claim 時若 ticket where.files 含 framework 路徑 + type=IMP，提示 Read compositional-writing SKILL | W17-125 |
-| 事中 | PM 自做 framework 規則編輯 6 步驟流程（含 Layer 2 委員審查） | W17-124 |
-| 事後 | commit msg 標 `Layer 2 by [agent-name]` 或 `N/A by [理由]` | W17-126（待落地） |
-| 偵測 | framework-rule-edit-skill-trigger-hook 偵測 Edit framework 路徑時若無 SKILL Read 即提醒 | W17-127 |
+| 事前 | claim 時若 ticket where.files 含 framework 路徑 + type=IMP，提示 Read compositional-writing SKILL | 已落地 |
+| 事中 | PM 自做 framework 規則編輯 6 步驟流程（含 Layer 2 委員審查） | 已落地 |
+| 事後 | commit msg 標 `Layer 2 by [agent-name]` 或 `N/A by [理由]` | 待落地 |
+| 偵測 | framework-rule-edit-skill-trigger-hook 偵測 Edit framework 路徑時若無 SKILL Read 即提醒 | 已落地 |
 
-四層機制非並聯複述，分別覆蓋不同節點：claim（事前）/ 編輯流程（事中）/ commit（事後）/ Hook 訊號（偵測）。Single source of truth 為 compositional-writing SKILL；本 PC 與四個 ticket 引用 SKILL，不複述其原則。
+四層機制非並聯複述，分別覆蓋不同節點：claim（事前）/ 編輯流程（事中）/ commit（事後）/ Hook 訊號（偵測）。Single source of truth 為 compositional-writing SKILL；本 PC 與四個落地 ticket 引用 SKILL，不複述其原則。
 
 ## 與 PC-066 邊界對照
 
@@ -70,7 +70,7 @@ PC-130 是 PC-066 在「書面規範性文字產出」場域的延伸，兩者�
 | 場景 | 決策框架選擇（限制性 vs 探索性） | 書面規範性文字撰寫（規則 / methodology / PC / SKILL 主文） |
 | 觸發條件 | context 沉重時 PM 主動決策 | Edit framework 路徑 + 撰寫規範性段落 |
 | 違規形式 | 採限制性解法（禁止 X / 規避 X）而非探索性解法（找正確工具做 X） | 內容主張機會成本，形式採絕對主義（內容形式不對齊） |
-| 防護機制 | Hook 偵測「無法 / 禁止」關鍵字 → 觸發 WRAP；CLI claim 三問 | claim 時 SKILL trigger（W17-125）+ Layer 2 委員（W17-124）+ commit 標記（W17-126） |
+| 防護機制 | Hook 偵測「無法 / 禁止」關鍵字 → 觸發 WRAP；CLI claim 三問 | claim 時 SKILL trigger + Layer 2 委員 + commit 標記 |
 | 上下位關係 | **上位機制**（壓力下偏限制性反應的根本機制） | **下位延伸**（書面文字場域的具體表現） |
 | 互補關係 | PC-066 防止決策語氣失準 | PC-130 防止規範性文字語氣失準（同根因，不同產出層） |
 
@@ -99,7 +99,7 @@ PC-130 是 PC-066 在「書面規範性文字產出」場域的延伸，兩者�
 - **相關規則**：`.claude/rules/core/document-writing-style.md`（二次審查原則）
 - **相關規則**：`.claude/rules/core/ai-communication-rules.md` 規則 6（價值 / 容量 / 優先級語言，本 PC 案例 1 來源）
 - **相關 Agent**：`.claude/agents/basil-writing-critic.md`（Layer 2 委員審查角色）
-- **相關 Hook**：framework-rule-edit-skill-trigger-hook（W17-127 待實作）
+- **相關 Hook**：framework-rule-edit-skill-trigger-hook
 
 ---
 

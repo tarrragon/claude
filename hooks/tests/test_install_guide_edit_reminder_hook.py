@@ -40,7 +40,7 @@ def test_get_throttle_file_resolves_under_claude_project_dir(monkeypatch, tmp_pa
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
     resolved = hook._get_throttle_file()
-    assert resolved == tmp_path / "hook-logs" / "install-guide-edit-reminder-throttle.json"
+    assert resolved == tmp_path / ".claude" / "hook-logs" / "install-guide-edit-reminder-throttle.json"
 
 
 # === is_install_guide_path ===

@@ -2,7 +2,7 @@
 name: cc-release-impact-review
 description: "Claude Code release notes 框架影響評估工具。比對 last-reviewed 版本篩出新版本，逐項分類（對框架有幫助 / 需評估 / 無影響 / 不適用），對採用項引導建 ANA + WRAP + spawn 落地。Use when: 執行 /release-notes 看到新版本、定期檢查 CC 更新、評估新功能對專案框架的影響時。Triggers: release notes, release-notes, CC 更新, claude code 更新, 版本更新評估, 新功能評估, 框架影響評估。"
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # CC Release Impact Review Skill
@@ -11,7 +11,7 @@ metadata:
 
 **核心理念**：CC 平台持續更新，新功能可能改善本專案的派發 / 互動 / 可觀測性規範，也可能與既有規則產生張力。每次更新都應被評估，但只評估「未評估過的新版本」，避免重複勞動。
 
-> **首要原則：去重先於評估**。先讀狀態檔確認 last-reviewed 版本，只評估其後的新版本。重複評估已落地版本是浪費（本 skill 因 W4-028 重複評估 2.1.157 的教訓而生）。
+> **首要原則：去重先於評估**。先讀狀態檔確認 last-reviewed 版本，只評估其後的新版本。重複評估已落地版本是浪費（本 skill 因某次評估重複評估已落地的 2.1.157 而生）。
 
 ---
 
@@ -57,7 +57,7 @@ metadata:
 3. children：以 `--parent` 建立落地 IMP/DOC/ANA（PC-091：ANA 落地用 children 不用 spawned_tickets）
 4. 框架文字變更後派 `basil-writing-critic` 審查（三明示 / 禁用詞 / 簡體字）
 
-**範本**：W4-028（worktree/agent/OTEL/plugin 評估）、W4-029（本 skill 的 source ANA）為標準範例，新評估比照其結構。
+**範本**：`state/last-reviewed.md` 評估歷史表中的既有評估（如 worktree/agent/OTEL/plugin 評估）為標準範例，新評估比照其結構。
 
 ### Step 5：更新狀態檔
 
@@ -72,7 +72,7 @@ metadata:
 - **last-reviewed**：已評估的最新版本號（去重依據）
 - **評估歷史表**：版本區間 / 評估 ticket ID / 主要結論
 
-下次觸發時讀此檔，從 last-reviewed 之後開始，避免重複（如 W4-029 跳過 W4-028 已評估的 2.1.157）。
+下次觸發時讀此檔，從 last-reviewed 之後開始，避免重複（如跳過已評估過的 2.1.157）。
 
 ---
 
@@ -90,7 +90,7 @@ skill 產出：
 
 | 反模式 | 為何有害 | 正確做法 |
 |-------|---------|---------|
-| 不讀狀態檔直接評估全部版本 | 重複評估已落地版本（W4-028 重評 2.1.157 的教訓） | Step 1 先讀 last-reviewed，只評估新版本 |
+| 不讀狀態檔直接評估全部版本 | 重複評估已落地版本（曾重評已落地的 2.1.157） | Step 1 先讀 last-reviewed，只評估新版本 |
 | 只列「有幫助」項，跳過無影響項 | 看似評估完整實則漏項，後人無法判斷是否真評估過 | 四類全標，無影響 / 不適用須附理由 |
 | 敏感規則（與平台行為衝突）擅自改 | 影響整個專案互動模式，越權 | 歸「需評估」高價值，方向交用戶決策 |
 | 評估後不更新狀態檔 | 下次重複評估同一批版本 | Step 5 必更新 last-reviewed |
@@ -102,7 +102,7 @@ skill 產出：
 - `.claude/rules/core/quality-baseline.md` — 規則 5（所有發現必須追蹤）
 - wrap-decision skill（若已安裝）— Step 4 的 WRAP 框架完整方法論；未安裝時仍可依 Step 4 內文已列出的四階段摘要（W 擴增採用粒度 / R 現實檢驗 / A 機會成本 / P 絆腳索）執行，只是不會有該 skill 的完整深度可查
 - `.claude/pm-rules/askuserquestion-rules.md` — 敏感項交用戶決策時的提問規範
-- W4-028 / W4-029 ticket — 標準評估範例
+- `state/last-reviewed.md` — 評估歷史表，標準評估範例
 
 ---
 

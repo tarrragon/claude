@@ -1277,7 +1277,9 @@ class TestPrevalidateGuardEnv:
     @pytest.mark.parametrize("bad", [(1, "", "uv 解析失敗"), (127, "", "not found"),
                                      (0, "", "[x] 內部錯誤（已放行，未阻擋本次 ref 寫入）：boom"),
                                      OSError("uv 不存在"), subprocess.TimeoutExpired("uv", 1)])
-    def test_load_failure_is_visible_on_stderr_and_log_and_returns_none(self, stub, capsys, bad):
+    def test_load_failure_is_visible_on_stderr_and_log_and_returns_none(self, stub, capsys, bad, monkeypatch):
+        # 預驗證日誌經 hook_logging 取目錄（conftest 已設 HOOK_TEST_ISOLATION=1，採 CLAUDE_PROJECT_DIR）
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", stub["root"])
         stub["guard"] = bad
         assert self._call(stub) is None
         assert "[WARNING]" in capsys.readouterr().err

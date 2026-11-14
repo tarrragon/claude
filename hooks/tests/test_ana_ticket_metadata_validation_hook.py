@@ -276,7 +276,7 @@ class TestProjectRootResolution:
             captured["project_root"] = project_root
             return None
 
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: sentinel_root)
+        monkeypatch.setattr(hook_module, "get_code_root", lambda: sentinel_root)
         monkeypatch.setattr(
             hook_module, "get_project_implementation_agent", fake_get_agent
         )
@@ -310,7 +310,7 @@ class TestProjectRootResolution:
             captured["project_root"] = project_root
             return None
 
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: real_root)
+        monkeypatch.setattr(hook_module, "get_code_root", lambda: real_root)
         monkeypatch.setattr(
             hook_module, "get_project_implementation_agent", fake_get_agent
         )

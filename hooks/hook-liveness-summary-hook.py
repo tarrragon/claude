@@ -39,13 +39,16 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.hook_base import get_code_root
 from lib.hook_logging import (
     setup_hook_logging,
     run_hook_safely,
     get_project_root,
+    get_shared_state_root,
     ENV_SESSION_ID,
     ENV_PROJECT_DIR,
     LIVENESS_SUBDIR,
@@ -230,7 +233,7 @@ def _most_recent_completed_liveness_file(root: Path, exclude_session_id: str):
     pytest- 前綴為測試 session 專屬 id（見 liveness_session_isolation.py）；
     該類檔案不代表真實 session 的 hook 載入狀態，即使 mtime 最新也不可選。
     """
-    liveness_dir = root / ".claude" / "hook-logs" / LIVENESS_SUBDIR
+    liveness_dir = _liveness_dir(root)
     if not liveness_dir.is_dir():
         return None
     candidates = [
@@ -316,8 +319,13 @@ def _smoke_test_candidates(root: Path, settings: dict) -> set:
     return candidates
 
 
+def _liveness_dir(root: Path) -> Path:
+    """liveness 索引目錄：與 hook_logging 寫入端同根（共用狀態根）。"""
+    return get_shared_state_root(root) / ".claude" / "hook-logs" / LIVENESS_SUBDIR
+
+
 def _smoke_test_cache_path(root: Path) -> Path:
-    return root / ".claude" / "hook-logs" / LIVENESS_SUBDIR / SMOKE_TEST_CACHE_FILENAME
+    return _liveness_dir(root) / SMOKE_TEST_CACHE_FILENAME
 
 
 def _load_smoke_test_cache(root: Path) -> dict:
@@ -339,7 +347,7 @@ def _save_smoke_test_cache(root: Path, cache: dict, logger) -> None:
 
 
 def _smoke_test_lock_path(root: Path) -> Path:
-    return root / ".claude" / "hook-logs" / LIVENESS_SUBDIR / SMOKE_TEST_LOCK_FILENAME
+    return _liveness_dir(root) / SMOKE_TEST_LOCK_FILENAME
 
 
 def _acquire_smoke_test_lock(root: Path) -> bool:
@@ -467,7 +475,9 @@ def _run_single_smoke_test(root: Path, hook_name: str, sentinel_liveness_file: P
     return "crashed", " | ".join(lines[:3])
 
 
-def _smoke_test_registered_hooks(root: Path, settings: dict, logger) -> list:
+def _smoke_test_registered_hooks(
+    root: Path, settings: dict, logger, state_root: Optional[Path] = None
+) -> list:
     """SessionStart 主動崩潰偵測本體（方案 A）。
 
     對 settings.json 以 uv run 登記且宣告非空 PEP 723 dependencies 的 hook
@@ -512,7 +522,8 @@ def _smoke_test_registered_hooks(root: Path, settings: dict, logger) -> list:
     if not candidates:
         return []
 
-    cache = _load_smoke_test_cache(root)
+    state_root = state_root or root  # SR：快取／鎖檔／sentinel 的根；CR 的 root 只管 hook 檔
+    cache = _load_smoke_test_cache(state_root)
     hooks_dir = root / ".claude" / "hooks"
 
     to_test = []
@@ -527,7 +538,7 @@ def _smoke_test_registered_hooks(root: Path, settings: dict, logger) -> list:
             to_test.append((name, mtime))
 
     sentinel_liveness_file = (
-        root / ".claude" / "hook-logs" / LIVENESS_SUBDIR
+        _liveness_dir(state_root)
         / "{}.jsonl".format(SMOKE_TEST_SENTINEL_SESSION_ID)
     )
     if to_test:
@@ -571,7 +582,7 @@ def _smoke_test_registered_hooks(root: Path, settings: dict, logger) -> list:
     for stale_name in set(cache.keys()) - candidates:
         del cache[stale_name]
 
-    _save_smoke_test_cache(root, cache, logger)
+    _save_smoke_test_cache(state_root, cache, logger)
 
     if tested_count or timeout_count:
         logger.info(
@@ -588,23 +599,92 @@ def _smoke_test_registered_hooks(root: Path, settings: dict, logger) -> list:
     return sorted(crashed_entries)
 
 
-def _report_smoke_test_crashes(root: Path, settings: dict, logger, input_data) -> None:
+# 裸路徑：command 以專案根變數或絕對路徑開頭，前面沒有直譯器宣告
+_BARE_PATH_PREFIXES = ('$CLAUDE_PROJECT_DIR', '"$CLAUDE_PROJECT_DIR', "${CLAUDE_PROJECT_DIR", "/")
+
+
+def _bare_path_registrations(settings: dict) -> list:
+    """回傳 settings.json 中指向 `.claude/` 且沒有直譯器前綴的 hook command。
+
+    裸路徑由 OS 依可執行位元與 shebang 決定如何執行：可執行位遺失時 hook 不執行，
+    且 Claude Code 端沒有可見訊號。只掃 settings.json 本身（呼叫端須在併入
+    dispatch registry 之前呼叫；registry 併入時一律為 uv run 形式）。
+    """
+    found = set()
+    for event_entries in settings.get("hooks", {}).values():
+        if not isinstance(event_entries, list):
+            continue
+        for group in event_entries:
+            if not isinstance(group, dict):
+                continue
+            for entry in group.get("hooks", []):
+                if not isinstance(entry, dict):
+                    continue
+                command = entry.get("command", "").strip()
+                if ".claude/" in command and command.startswith(_BARE_PATH_PREFIXES):
+                    found.add(command)
+    return sorted(found)
+
+
+def _bare_path_warning_sections(settings: dict) -> list:
+    """把裸路徑註冊組成 additionalContext 段落；沒有裸路徑時回傳空 list。"""
+    bare = _bare_path_registrations(settings)
+    if not bare:
+        return []
+    lines = [
+        "[hook-liveness-summary] settings.json 有 {} 筆 hook 註冊沒有直譯器前綴"
+        "（裸路徑）。裸路徑依可執行位元與 shebang 執行，可執行位遺失時 hook "
+        "不執行且沒有訊號：".format(len(bare))
+    ]
+    lines.extend("  - {}".format(c) for c in bare)
+    lines.append(
+        "處置：框架 hook 的註冊屬上游 settings.json，回報 framework issue 由主控方"
+        "改為 `uv run --quiet $CLAUDE_PROJECT_DIR/<path>` 形式；consumer 不修改 settings.json。"
+    )
+    return ["\n".join(lines)]
+
+
+def _report_smoke_test_crashes(
+    root: Path, settings: dict, logger, input_data, extra_sections=(),
+    state_root: Optional[Path] = None,
+) -> None:
     """取得鎖檔後執行 smoke test，偵測到崩潰時透過 SessionStart
     additionalContext 回報（PM-only：崩潰是框架維運訊號，非任務執行
-    內容，不需下發給 subagent）。鎖檔取得失敗時靜默跳過（下次
+    內容，不需下發給 subagent）。鎖檔取得失敗時跳過 smoke test（下次
     SessionStart 重試），不影響本 hook 既有的三類清單彙整邏輯。
+
+    extra_sections：其他維運警告段落（如裸路徑註冊），與崩潰報告合併為
+    同一次輸出——SessionStart 只接受一個 JSON 物件，分次輸出會互相破壞。
     """
-    if not _acquire_smoke_test_lock(root):
+    crashed = []
+    state_root = state_root or root
+    if _acquire_smoke_test_lock(state_root):
+        try:
+            # 兩根相同時不帶 state_root（維持原呼叫形狀）
+            extra = {} if state_root == root else {"state_root": state_root}
+            crashed = _smoke_test_registered_hooks(root, settings, logger, **extra)
+        finally:
+            _release_smoke_test_lock(state_root)
+    else:
         logger.debug("smoke test 鎖檔已被佔用，跳過本次（下次 SessionStart 重試）")
-        return
-    try:
-        crashed = _smoke_test_registered_hooks(root, settings, logger)
-    finally:
-        _release_smoke_test_lock(root)
 
-    if not crashed:
+    sections = list(extra_sections)
+    if crashed:
+        sections.insert(0, _crash_report(crashed))
+    if not sections:
         return
 
+    report = "\n\n".join(sections)
+    logger.warning(report)
+    emit_hook_output(
+        "SessionStart",
+        additional_context=report,
+        audience="pm_only",
+        input_data=input_data,
+    )
+
+
+def _crash_report(crashed) -> str:
     lines = [
         "[hook-liveness-summary] 偵測到 {} 個 hook 疑似 import 階段崩潰"
         "（module-level import 失敗，run_hook_safely 從未執行，一般的 "
@@ -617,21 +697,15 @@ def _report_smoke_test_crashes(root: Path, settings: dict, logger, input_data) -
         "非主 repo 路徑（如 worktree）執行時的觀測面/作用面錯位不在此"
         "機制涵蓋範圍。"
     )
-    report = "\n".join(lines)
-    logger.warning(report)
-    emit_hook_output(
-        "SessionStart",
-        additional_context=report,
-        audience="pm_only",
-        input_data=input_data,
-    )
+    return "\n".join(lines)
 
 
 def main() -> int:
     logger = setup_hook_logging(HOOK_NAME)
     input_data = read_json_from_stdin(logger)  # SessionStart 常無 stdin，僅統一入口消費
 
-    root = get_project_root()
+    root = get_code_root()  # CR：settings.json、hook 檔、registry
+    state_root = get_project_root()  # SR：liveness 目錄、smoke 快取／鎖檔
     settings_path = root / ".claude" / "settings.json"
     try:
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -639,13 +713,18 @@ def main() -> int:
         logger.info("讀取 settings.json 失敗，跳過本次彙整: {}".format(e))
         return 0
 
+    # 裸路徑掃描須在併入 dispatch registry 之前：併入的條目一律為 uv run 形式，
+    # 掃描對象是 settings.json 實際寫的註冊
+    bare_path_sections = _bare_path_warning_sections(settings)
     merge_dispatch_registry(settings, root, logger)
     registered = _registered_hook_names(settings)
     covered = _covered_by_run_hook_safely(root, registered)
     uncovered = registered - covered
 
     current_session_id = os.environ.get(ENV_SESSION_ID, "").strip()
-    liveness_file = _most_recent_completed_liveness_file(root, current_session_id)
+    liveness_file = _most_recent_completed_liveness_file(
+        state_root, current_session_id
+    )
     if liveness_file is None:
         logger.info(
             "尚無可比對的 liveness 索引（首次啟用或前一 session 無任何 hook "
@@ -674,7 +753,10 @@ def main() -> int:
                 "未涵蓋（無 liveness 探針，需另評估）: {}".format(sorted(uncovered))
             )
 
-    _report_smoke_test_crashes(root, settings, logger, input_data)
+    _report_smoke_test_crashes(
+        root, settings, logger, input_data, extra_sections=bare_path_sections,
+        state_root=state_root,
+    )
 
     return 0
 

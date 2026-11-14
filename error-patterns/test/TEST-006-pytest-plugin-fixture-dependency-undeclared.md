@@ -53,7 +53,7 @@ pytest 只內建有限 fixture（`tmp_path`、`capsys`、`monkeypatch`…）。�
 
 ### 案例：test_create_duplicate_detection.py 26 errors
 
-**發生情境**：0.18.0-W12-005 實作期間產出 `test_create_duplicate_detection.py`，使用 `mocker` fixture 54 處。`.claude/skills/ticket/pyproject.toml` 的 `[project.optional-dependencies].test` 只宣告 `pytest`、`pytest-cov`，**未宣告 `pytest-mock`**。
+**發生情境**：某次實作期間產出 `test_create_duplicate_detection.py`，使用 `mocker` fixture 54 處。`.claude/skills/ticket/pyproject.toml` 的 `[project.optional-dependencies].test` 只宣告 `pytest`、`pytest-cov`，**未宣告 `pytest-mock`**。
 
 結果：
 
@@ -121,10 +121,9 @@ grep -l "pytest-mock\|pytest-asyncio" pyproject.toml setup.cfg requirements*.txt
 - TEST-004（Mock Path Invalidation After Wrapper Refactor）— 同屬「測試環境與實作脫節」類別
 - TEST-005（Mock Import Path Binding）— 同屬 mock 相關錯誤但根因不同（binding vs 依賴）
 - IMP-017（Global CLI Stale After Source Fix）— 同屬「環境宣告與實際執行不一致」模式
-- 相關 Ticket：0.18.0-W14-003（本案例）、0.18.0-W14-008（已作為重複被 close）
 
 ---
 
 **建立日期**: 2026-04-17
-**來源**: 0.18.0-W14-003 修復執行中 PM 前台根因分析
+**來源**: 修復執行中 PM 前台根因分析
 **Version**: 1.0.0

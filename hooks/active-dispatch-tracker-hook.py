@@ -8,10 +8,14 @@ Active Dispatch Tracker Hook - PostToolUse (Agent)
 
 功能: PostToolUse(Agent) 觸發時記錄派發到 dispatch-active.json（含 agent_id）+
       housekeeping（超時清理/orphan 偵測）。
-      dispatch 記錄清理和完成廣播已遷移至 SubagentStop handler（W10-066）。
+      dispatch 記錄清理和完成廣播已遷移至 SubagentStop handler。
 
-觸發時機: Agent 工具完成後 (PostToolUse, matcher: Agent)
-行為: 不阻擋（exit 0），在 additionalContext 輸出 housekeeping 訊息
+      SendMessage 送往已由 `dispatch-check --release` 釋放的本 session 代理人時，
+      把派發條目放回（restore_released），使恢復後的寫檔仍在守衛視野內。
+
+觸發時機: Agent 工具完成後 (PostToolUse, matcher: Agent)；
+          SendMessage 完成後 (PostToolUse, matcher: SendMessage)
+行為: 不阻擋（exit 0），在 additionalContext 輸出 housekeeping 或恢復訊息
 
 背景（幽靈派發記錄修復票，承接 who.current 綁定遷移票 / issue 47）：
   記錄派發資訊的職責原本掛在 dispatch-record-hook.py（PreToolUse:Agent）。
@@ -67,17 +71,19 @@ from lib import (
 # dispatch-active.json 為跨 worktree 全域狀態，用 git_utils 版
 # get_project_root（CLAUDE_PROJECT_DIR 導向，恆指主 repo），而非
 # lib.hook_base 的 worktree 感知版本（見 ARCH-BAL-020）
-from lib.git_utils import get_project_root
+from lib.git_utils import get_action_root, get_project_root
 
 from lib.dispatch_tracker import (
     record_dispatch,
     cleanup_expired,
     detect_orphan_branches,
+    restore_released,
 )
 from lib.hook_ticket import extract_where_files
 from lib.ticket_id_pattern import SEARCH_WITH_SUFFIX_RE, extract_ticket_id_anchored
 
 HOOK_NAME = "active-dispatch-tracker"
+SEND_MESSAGE_TOOL = "SendMessage"
 
 
 def extract_ticket_id(prompt: str, description: str) -> Optional[str]:
@@ -101,8 +107,50 @@ def extract_ticket_id(prompt: str, description: str) -> Optional[str]:
     return None
 
 
+def handle_send_message(input_data: dict, tool_input: dict, logger) -> int:
+    """PostToolUse(SendMessage)：目標是本 session 已釋放的代理人時，把派發條目放回。
+
+    `ticket track dispatch-check --release` 移除條目後，代理人仍可能被
+    SendMessage 恢復並寫檔；放回條目讓守衛在恢復期間看得到它。
+    不做 housekeeping（cleanup_expired／orphan 偵測），避免每次 SendMessage
+    都多跑一次 git worktree list。
+    """
+    target = tool_input.get("to", "") or ""
+    if not isinstance(target, str) or not target:
+        logger.info("SendMessage 無 to 欄位，略過恢復比對")
+        return 0
+    session_id = resolve_session_id(input_data)
+    try:
+        entry = restore_released(get_project_root(), target, session_id)
+    except Exception as e:
+        # 恢復失敗時條目維持缺席，守衛看不到恢復中的代理人，需可見
+        logger.warning("restore_released failed (to=%s): %s", target, e)
+        sys.stderr.write(
+            f"[{HOOK_NAME}] SendMessage 目標 {target} 的派發條目恢復失敗: {e}\n"
+        )
+        return 0
+    if entry is None:
+        logger.info("SendMessage 目標 %s 無本 session 釋放紀錄，不恢復", target)
+        return 0
+    logger.info(
+        "SendMessage 目標 %s 為已釋放代理人，派發條目已恢復 (agent_handle=%s, agent_id=%s)",
+        target,
+        entry.get("agent_handle") or "none",
+        entry.get("agent_id") or "none",
+    )
+    emit_hook_output(
+        "PostToolUse",
+        additional_context=(
+            f"已釋放的代理人 {target} 被 SendMessage 恢復，派發條目已重新登記"
+        ),
+        audience="pm_only",
+        input_data=input_data,
+    )
+    return 0
+
+
 def main() -> int:
-    """Hook 主邏輯：記錄派發（含 agent_id）+ housekeeping。"""
+    """Hook 主邏輯：記錄派發（含 agent_id）+ housekeeping；SendMessage 走恢復路徑。"""
     logger = setup_hook_logging(HOOK_NAME)
 
     try:
@@ -121,6 +169,10 @@ def main() -> int:
         return 0
 
     tool_input = extract_tool_input(input_data, logger)
+
+    if input_data.get("tool_name") == SEND_MESSAGE_TOOL:
+        return handle_send_message(input_data, tool_input, logger)
+
     tool_use_id = input_data.get("tool_use_id", "")
     tool_response = input_data.get("tool_response", {})
     if isinstance(tool_response, str):
@@ -148,7 +200,12 @@ def main() -> int:
     if isolation == "worktree":
         work_checkout = str(tool_response.get("worktreePath") or "")
     else:
-        work_checkout = str(project_root)
+        # 作用根：派發者所在 checkout（情境 C 取 worktree）；缺 cwd 不呼叫 helper
+        work_checkout = str(
+            get_action_root(input_data, project_root)
+            if input_data.get("cwd")
+            else project_root
+        )
 
     files = []
     if ticket_id:

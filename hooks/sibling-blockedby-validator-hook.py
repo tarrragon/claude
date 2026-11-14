@@ -21,8 +21,9 @@ Sibling blockedBy Validator Hook
   - 條件 1-2 違反 → BLOCK（exit 2）
   - 條件 3-4 違反 → WARN（exit 0，stderr 提示）
   - frontmatter 解析失敗 → fallback warn-only（exit 0）
+  - ticket_system 無法匯入 → 阻擋 claim／complete（exit 2，stderr 說明）；其他命令不受影響
+  - 未預期例外 → fail-closed（exit 2）
 
-對應 Ticket: 0.18.0-W10-040
 對應 Error Pattern: ARCH-017 v1.1.0 / PC-066
 """
 
@@ -38,15 +39,36 @@ from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
     get_effort_level, get_project_root,
 )
+from lib.hook_base import get_shared_state_root
+from lib.ticket_command_parse import (
+    SCOPE_MIXED,
+    SCOPE_OTHER,
+    SCOPE_UNKNOWN,
+    classify_ticket_command_scope,
+)
 
 try:
     import yaml
 except ImportError:
     yaml = None
 
-# 終態常數取自 ticket 系統權威定義，不在 hook 內另寫字面清單
-sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "ticket"))
-from ticket_system.constants import TERMINAL_STATUSES
+# 終態常數取自 ticket 系統權威定義，不在 hook 內另寫字面清單。
+# 延遲到確認是 claim／complete 命令後才匯入：模組層匯入失敗會在 run_hook_safely
+# 之外中止（等同放行），且會讓一般 Bash 命令也受影響。
+_TICKET_SKILL_DIR = Path(__file__).parent.parent / "skills" / "ticket"
+TICKET_SYSTEM_UNAVAILABLE_MESSAGE = (
+    "[sibling-blockedby-validator] 無法載入 ticket_system（{error}），"
+    "無法驗證兄弟票 blockedBy 結構，阻擋本次 claim／complete。"
+    "ticket CLI 依賴同一套件，請先修復 .claude/skills/ticket 的環境再重試。"
+)
+
+
+def terminal_statuses():
+    """ticket 系統的終態集合；匯入失敗時拋 ImportError，由 main 轉為阻擋。"""
+    if str(_TICKET_SKILL_DIR) not in sys.path:
+        sys.path.insert(0, str(_TICKET_SKILL_DIR))
+    from ticket_system.constants import TERMINAL_STATUSES
+    return TERMINAL_STATUSES
 
 
 # ============================================================================
@@ -77,8 +99,9 @@ def check_condition_1_unidirectional(target: Dict, siblings_map: Dict[str, Dict]
             return _violation(1, SEVERITY_BLOCK, "雙向依賴", "移除其中一向依賴")
 
     # 前驅皆終態：結構已不影響排程，阻擋只讓既成票無法收尾，放行
+    terminal = terminal_statuses()
     all_terminal = all(
-        siblings_map[d].get("status") in TERMINAL_STATUSES for d in sibling_deps
+        siblings_map[d].get("status") in terminal for d in sibling_deps
     )
     if len(sibling_deps) >= 2 and not all_terminal:
         return _violation(1, SEVERITY_BLOCK,
@@ -88,26 +111,22 @@ def check_condition_1_unidirectional(target: Dict, siblings_map: Dict[str, Dict]
 
 
 def check_condition_2_acyclic(target: Dict, siblings_map: Dict[str, Dict]) -> Optional[Dict]:
-    """條件 2：siblings 子圖無環（A4, A5, A6）。"""
-    visited = set()
+    """條件 2：目標票不在 blockedBy 環上（A4, A5, A6）。
 
-    def dfs(node_id: str, stack: set) -> bool:
-        if node_id in stack:
-            return True
-        if node_id in visited:
-            return False
-        visited.add(node_id)
-        stack.add(node_id)
-        node = siblings_map.get(node_id)
-        if node:
-            for dep in (node.get("blockedBy") or []):
-                if dep in siblings_map and dfs(dep, stack):
-                    return True
-        stack.discard(node_id)
-        return False
-
-    if dfs(target.get("id"), set()):
-        return _violation(2, SEVERITY_BLOCK, "循環依賴", "打破環，重新梳理依賴方向")
+    只判含目標的環：沿 blockedBy 從目標往前驅走，能回到目標才算違規。前驅之間
+    自成的環不經過目標，不是本次 claim／complete 的結構問題，不擋。
+    """
+    target_id = target.get("id")
+    seen = set()
+    pending = list(target.get("blockedBy") or [])
+    while pending:
+        node_id = pending.pop()
+        if node_id == target_id:
+            return _violation(2, SEVERITY_BLOCK, "循環依賴", "打破環，重新梳理依賴方向")
+        if node_id in seen or node_id not in siblings_map:
+            continue
+        seen.add(node_id)
+        pending.extend(siblings_map[node_id].get("blockedBy") or [])
     return None
 
 
@@ -232,7 +251,7 @@ def load_siblings(project_root: Path, parent_id: str, exclude_id: str) -> Dict[s
 # L3：Hook 入口 — 命令解析、行為分級、輸出
 # ============================================================================
 
-# 形如：ticket track claim 0.18.0-W10-040 [--acknowledge "..."]
+# 形如：ticket track claim <ticket-id> [--acknowledge "..."]
 # 或：ticket track complete <id>
 _CMD_RE = re.compile(
     r"\bticket\s+track\s+(claim|complete)\s+(\S+)"
@@ -337,12 +356,38 @@ def main() -> int:
     if not parsed:
         return 0
 
+    # 命令作用在其他 repo（子 shell cd）時不讀 session repo 的同 ID 票：
+    # 其他 repo 的票由該 repo 自己的 session 與 hook 管（2026-11-13 起）。
+    # 目錄無法靜態解析或混合時沿用修改前的判定。
+    scope = classify_ticket_command_scope(
+        command, ("claim", "complete"), input_data.get("cwd") or None
+    )
+    if scope == SCOPE_OTHER:
+        logger.info("ticket 命令作用在其他 repo，略過判定：%s", command[:200])
+        return 0
+    if scope in (SCOPE_UNKNOWN, SCOPE_MIXED):
+        logger.info("ticket 命令作用範圍為 %s，沿用修改前的判定", scope)
+
+    try:
+        terminal_statuses()
+    except ImportError as exc:
+        message = TICKET_SYSTEM_UNAVAILABLE_MESSAGE.format(error=exc)
+        sys.stderr.write(message + "\n")
+        logger.error(message)
+        return 2
+
     # get_project_root()：worktree 感知 + git toplevel 等多層 fallback，
     # 不受呼叫端 cwd 影響（原 CLAUDE_PROJECT_DIR-or-cwd fallback 未設環境變數
     # 時退回 cwd，會使讀取 docs/work-logs/ 靜默失敗，驗證邏輯無聲 no-op）。
-    project_root = get_project_root()
+    # 讀票面（本票與兄弟票）改走共用狀態根：cwd 在 linked worktree 時，
+    # ticket CLI 把最新票面寫在主 repo，WT 內只有舊副本（ARCH-BAL-020）。
+    # 傳入的是依 cwd 推出的專案根，被覆蓋屬預期；他 repo 命令已由 scope=other 放行。
+    project_root = get_shared_state_root(get_project_root())
     return run_check(project_root, parsed["ticket_id"], parsed["acknowledge"], logger)
 
 
 if __name__ == "__main__":
+    # 不整支宣告 fail_closed：本 hook 對每個 Bash 命令執行，dispatcher 對 fail_closed
+    # 守衛的逾時與載入期例外一律回 2，會擋下全部 Bash 命令；claim／complete 可回復，
+    # 不屬不可逆守衛。ticket_system 無法匯入的阻擋由 main() 在辨識命令後處理。
     sys.exit(run_hook_safely(main, "sibling-blockedby-validator"))

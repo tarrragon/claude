@@ -418,6 +418,30 @@ class TestScanOnlyDisposition:
         assert self._run(monkeypatch, tmp_path, _SCAN_ONLY, True) == 0
 
 
+class TestNoDomainDirAllows:
+    """專案沒有 lib/domain：沒有可保護的對象，連並行期的「無法解析」阻擋也略過。
+
+    正向對照為上方並行期測試（_make_domain_project 建立 lib/domain，仍回 2）。
+    """
+
+    def _run(self, monkeypatch, tmp_path, command, parallel):
+        monkeypatch.setattr(hook_module, "has_parallel_dispatch", lambda root: parallel)
+        return _run_hook(monkeypatch, command, project_root=tmp_path)
+
+    def test_unparseable_in_parallel_allowed_without_domain(self, monkeypatch, tmp_path, capsys):
+        assert self._run(monkeypatch, tmp_path, "git commit -m 'unclosed", True) == 0
+        assert capsys.readouterr().err == ""
+
+    def test_commit_allowed_without_domain(self, monkeypatch, tmp_path):
+        assert self._run(monkeypatch, tmp_path, "git commit -m x", True) == 0
+
+    def test_unparseable_in_parallel_still_blocks_with_domain(self, monkeypatch, tmp_path):
+        """正向對照：有 lib/domain 時，並行期無法解析仍阻擋。"""
+        project_root = _make_domain_project(tmp_path)
+        monkeypatch.setattr(hook_module, "has_parallel_dispatch", lambda root: True)
+        assert _run_hook(monkeypatch, "git commit -m 'unclosed", project_root=project_root) == 2
+
+
 class TestParseCauseMessages:
     def _run(self, monkeypatch, tmp_path, command, parallel):
         project_root = _make_domain_project(

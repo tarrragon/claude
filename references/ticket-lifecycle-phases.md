@@ -99,7 +99,7 @@ claim 完成
 
 ### 簡化 WRAP 三問（強制）
 
-> **來源**：0.18.0-W10-027 ANA 分析。claim 是品質 checkpoint，但全部強制完整 WRAP 會稀釋價值（小 ticket 3-10 hr 儀式時間 / 版本）。業界基本率（code review gate、aviation checklist）顯示分級為主流。分級原則：所有 ticket 簡化三問強制；ANA 額外完整 WRAP。
+> **來源**：claim 品質檢查 ANA 分析。claim 是品質 checkpoint，但全部強制完整 WRAP 會稀釋價值（小 ticket 3-10 hr 儀式時間 / 版本）。業界基本率（code review gate、aviation checklist）顯示分級為主流。分級原則：所有 ticket 簡化三問強制；ANA 額外完整 WRAP。
 
 claim 完成後（或「5W1H 補全」完成後），PM 或代理人必須回答以下三問，寫入 ticket Problem Analysis 區段或 commit message：
 
@@ -111,7 +111,7 @@ claim 完成後（或「5W1H 補全」完成後），PM 或代理人必須回答
 
 **ANA 類型額外要求**：簡化三問不足以保證分析品質，必須額外執行完整 `/wrap-decision` 框架（W/R/A/P 四階段 + 絆腳索）。
 
-**CLI 層自動提示**：`ticket track claim` 命令輸出會自動附加此三問區段，類型為 ANA 時額外輸出完整 WRAP 引導（來源：W10-028 實作）。
+**CLI 層自動提示**：`ticket track claim` 命令輸出會自動附加此三問區段，類型為 ANA 時額外輸出完整 WRAP 引導。
 
 **禁止行為**：
 

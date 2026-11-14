@@ -27,11 +27,11 @@ Subagent 完成任務並執行 `git commit` 時，commit message 描述的檔案
 
 ---
 
-## W10-106 案例
+## td-status 同步案例
 
 ### 時序
 
-1. thyme-documentation-integrator 派發處理 W10-106（td-status 同步到 SKILL.md + tech-debt.md + tdd-flow.md）
+1. thyme-documentation-integrator 派發處理某 DOC ticket（td-status 同步到 SKILL.md + tech-debt.md + tdd-flow.md）
 2. agent 修改 3 個檔案
 3. agent 執行 commit（`d93877d7`），commit message 提及 3 檔案變更
 4. PM session 結束驗收時發現 `.claude/skills/ticket/SKILL.md` 仍有未 stage 變更
@@ -83,4 +83,4 @@ Subagent 完成任務並執行 `git commit` 時，commit message 描述的檔案
 
 **Last Updated**: 2026-05-12
 **Version**: 1.0.0
-**Source**: W10-106 thyme-documentation-integrator commit `d93877d7` message 提及 SKILL.md 但實際漏 stage（PM 補 `a292a5bd` 修補）
+**Source**: td-status 同步 DOC 的 thyme-documentation-integrator commit `d93877d7` message 提及 SKILL.md 但實際漏 stage（PM 補 `a292a5bd` 修補）

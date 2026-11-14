@@ -150,8 +150,8 @@ def get_chain_index(version: str) -> TicketChainIndex:
 
     Examples:
         >>> index = get_chain_index("0.31.0")
-        >>> index.get_children("0.31.0-W4-001")
-        ['0.31.0-W4-001.1', '0.31.0-W4-001.2']
+        >>> index.get_children("<ticket-id>")
+        ['<ticket-id>.1', '<ticket-id>.2']
     """
     # Guard Clause：快取中不存在此版本
     if version not in _chain_index_cache:

@@ -189,9 +189,12 @@ def _pca_run(monkeypatch, root, response):
         "tool_response": response,
     }
     monkeypatch.setattr(_PCA, "get_project_root", lambda: root)
+    monkeypatch.setattr(
+        _PCA, "get_hook_log_dir", lambda name: root / ".claude" / "hook-logs" / name
+    )
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     assert _PCA.main() == 0
-    audit = root / ".claude" / "hook-logs" / "parallel-claim-audit.log"
+    audit = root / ".claude" / "hook-logs" / "parallel-claim-audit-hook" / "parallel-claim-audit.log"
     if not audit.exists():
         return []
     return [json.loads(x) for x in audit.read_text(encoding="utf-8").splitlines() if x.strip()]

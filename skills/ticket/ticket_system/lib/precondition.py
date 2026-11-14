@@ -1,4 +1,4 @@
-"""Body-op precondition checks (W3-044 / W3-043).
+"""Body-op precondition checks.
 
 提供 CLI body 操作（append-log / set-acceptance / complete 等）的 status
 precondition 檢查，從根本阻斷「status=pending 期間執行 body 操作」的協議違反路徑。
@@ -39,12 +39,12 @@ FORCE_BYPASS_WARNING = (
     "[Warning] --force 旁路 status precondition 檢查；使用已記入 hook-logs"
 )
 
-# W1-058: PM bookkeeping（派發前）章節 —— pending 狀態允許 append-log 直寫。
+# PM bookkeeping（派發前）章節 —— pending 狀態允許 append-log 直寫。
 # Why: PC-040 / PC-100 要求 PM 於 create 後（status=pending）立即將派發 context
 # 寫入 Problem Analysis / Context Bundle；原 in_progress 限制迫使 PM 常態化
 # --force（2026-06-11 單日 4 次），稀釋逃生閥警示價值並累積審計噪音。
 # 其餘章節（Solution / Test Results / Completion Info 等執行產出）維持
-# in_progress 限制，保留「未認領不得寫執行紀錄」的協議防護（W3-044 原意）。
+# in_progress 限制，保留「未認領不得寫執行紀錄」的協議防護（原意）。
 PRE_DISPATCH_SECTIONS = frozenset({"Problem Analysis", "Context Bundle"})
 
 
@@ -94,7 +94,11 @@ def _resolve_hook_logs_dir() -> Path:
     env_value = os.environ.get(_HOOK_LOGS_DIR_ENV)
     if env_value:
         return Path(env_value)
-    return get_project_root() / _DEFAULT_HOOK_LOGS_DIR
+    # 經 hook_logging 取目錄：linked worktree 內解析到主 repo（tarrragon/claude#97）；
+    # 不再用 get_project_root()（worktree 內是 worktree 根，與 hook 日誌分處兩地）
+    from .git_ops import hook_logs_root
+
+    return Path(hook_logs_root())
 
 
 def write_force_usage_log(
@@ -146,7 +150,7 @@ def require_in_progress(
         operation: 呼叫端操作名稱（"append-log" / "set-acceptance" / "complete"）
         allow_completed: 是否允許 status=completed（True 用於 append-log 補 review）
         allow_pending: 是否允許 status=pending（True 用於 append-log 寫入
-            PRE_DISPATCH_SECTIONS 派發前章節，W1-058 PM bookkeeping 路徑）
+            PRE_DISPATCH_SECTIONS 派發前章節，PM bookkeeping 路徑）
         force: 是否旁路檢查（記錄到 hook-logs，returns (True, None)）
 
     Returns:
@@ -188,7 +192,7 @@ def require_in_progress(
             return (True, None)
         return (False, _build_error_msg(ticket_id, operation, status, "reopen"))
     if status == STATUS_PENDING:
-        # W1-058: 派發前章節（PRE_DISPATCH_SECTIONS）允許 pending 直寫，
+        # 派發前章節（PRE_DISPATCH_SECTIONS）允許 pending 直寫，
         # 屬合法 PM bookkeeping 路徑，不記 hook-logs、不發警示。
         if allow_pending:
             return (True, None)

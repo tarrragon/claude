@@ -2,7 +2,7 @@
 
 > **錯誤類別**：流程合規（ANA 用 grep 結果支撐強論證但 grep 範圍 / 方法有誤）
 > **嚴重度**：高（ANA 結論被 PM 採信後若無 PC-007 獨立驗證，會直接導致錯誤決策落地；本案靠 PM 驗收抓到，但若 saffron ANA 直接 spawn IMP 走豁免，後續若真有需求才會曝光）
-> **發現案例**：0.19.0-W3-063（saffron ANA 聲稱 `emit_hook_output / generate_hook_output` 0 個呼叫者作為「前車之鑑」核心論證，PM 驗收 `rg -n` 發現 8+ hook 直接呼叫，論證崩塌）
+> **發現案例**：某次 saffron ANA（聲稱 `emit_hook_output / generate_hook_output` 0 個呼叫者作為「前車之鑑」核心論證，PM 驗收 `rg -n` 發現 8+ hook 直接呼叫，論證崩塌）
 
 ---
 
@@ -29,7 +29,7 @@ ANA 用 grep 結果支撐強論證時，至少四道落差會放大誤判：
 
 4. **未做次級驗證**：「0 採用率」這類絕對結論若為真，邏輯上會有附隨現象（helper 應被建議刪除、historical commits 應有 deprecation 訊號、相關 ticket 應有討論記錄）。ANA 未交叉檢驗附隨現象就直接結論，是強論證的脆弱點。
 
-## 案例：W3-063 saffron ANA 0 採用率論證崩塌
+## 案例：saffron ANA 0 採用率論證崩塌
 
 | 階段 | 觀察 |
 |------|------|
@@ -38,9 +38,9 @@ ANA 用 grep 結果支撐強論證時，至少四道落差會放大誤判：
 | PM 驗收（PC-007） | 執行 `rg -n 'emit_hook_output\(\|generate_hook_output\(' .claude/hooks/ --type py` 過濾掉 `hook_utils/` 與 `tests/`，得 30+ 行 call 分布於 8+ hook |
 | 事實 | emit_hook_output 廣泛採用（bash-edit / main-thread / mcp-write / askuserquestion / phase4 / utf8-integrity 等），是穩定基礎設施 |
 | 論證影響 | 「前車之鑑」論點崩塌；「terminalSequence 語意不匹配 AI 通訊」論點仍成立 |
-| 結論調整 | W3-031.1 仍走豁免，但主因從「前車之鑑」改為「YAGNI 主因 + 語意層差異次因」 |
+| 結論調整 | 該 helper 子票仍走豁免，但主因從「前車之鑑」改為「YAGNI 主因 + 語意層差異次因」 |
 
-> 完整 grep 對照與重評見 W3-063 Solution 章節「PM 驗收修正（2026-05-26）」區塊。
+> 完整 grep 對照與重評見該 ANA ticket 的 Solution 章節「PM 驗收修正（2026-05-26）」區塊。
 
 ## 防護要點
 
@@ -87,15 +87,6 @@ PostToolUse:Agent 或 ANA ticket complete 時，掃描 ticket body / Solution �
 | PC-068 | ANA 規劃新建資產前必須 grep 既有同職責 | 互補：PC-068 要求做 grep；本 PC 要求 grep 結果為「無」時必須次級驗證 |
 | PC-113 / PC-138 / PC-144 | validator regex 短英文標記 / 表格 N/A / TODO 字面誤判 | 同家族：grep / regex 工具本身的精度問題；本 PC 強調 ANA 用 grep 結果做決策時的二次驗證義務 |
 
-## 相關 Ticket
-
-| Ticket | 關係 |
-|--------|------|
-| 0.19.0-W3-063 | 觸發案例：saffron ANA 0 採用率論證 + PM 驗收修正 |
-| 0.19.0-W3-064 | 本 PC 撰寫 ticket（DOC） |
-| 0.19.0-W3-031.1 | 受影響子 ticket：依 W3-063 修正後結論 closed（not_executable_knowledge_captured） |
-| 0.19.0-W3-031 | source ANA：spawn W3-031.1 規劃 helper 實作 |
-
 ## 相關規則
 
 - `.claude/rules/core/quality-baseline.md` 規則 1（測試通過率 = ANA 結論正確率）+ 規則 5（所有發現必須追蹤）+ 規則 6（失敗案例學習原則）
@@ -106,4 +97,4 @@ PostToolUse:Agent 或 ANA ticket complete 時，掃描 ticket body / Solution �
 ---
 
 **Last Updated**: 2026-05-26
-**Source**: 0.19.0-W3-063 saffron ANA 0 採用率論證崩塌案例
+**Source**: saffron ANA 0 採用率論證崩塌案例

@@ -1,7 +1,7 @@
-"""ticket track dispatch-validate 命令（0.18.0-W17-003）。
+"""ticket track dispatch-validate 命令。
 
 對 target ticket 的 Context Bundle 自動填料結果做合理性檢查，作為 C 方案
-（context_bundle_extractor 自動抽取）的第二道防線。與 W10-017.2 的
+（context_bundle_extractor 自動抽取）的第二道防線。與
 `dispatch-check`（活躍派發狀態查詢）職責正交，獨立子命令不互相干擾。
 
 合理性檢查規則（5 項，規則 4 內部再分 4a/4b 兩個子檢查）：
@@ -14,7 +14,7 @@
    - 4b 樣板偵測 — 任一條目含大括號佔位符 token（如 `{feature_name}`）或與
      建立端 `DEFAULT_ACCEPTANCE_CRITERIA`（`ticket_system.lib.ticket_builder`）
      逐字相同，視為未填（確定性，硬性）
-5. UC 對齊 — acceptance 中 UC 引用的 SSOT 存在性與指紋漂移（0.38.1-W1-066.3，fail-open）
+5. UC 對齊 — acceptance 中 UC 引用的 SSOT 存在性與指紋漂移
 
 **4a/4b 分軟硬理由**：4a 是啟發式門檻，會有合理誤報空間，故軟；4b 判準是
 「與建立端樣板逐字相同」，沒有中間地帶——命中即代表這張票沒有可驗收的目標，
@@ -33,7 +33,7 @@ exit 2 = IO 錯誤。呼叫端必須以命令名稱判別語意，禁止以 exit
 跨命令解讀。
 
 邊界：本 CLI **不** 修改 ticket、**不** 取代 hook / scheduler；僅輸出結構化
-診斷供 PM / agent 派發前自檢使用（W17-209 ANA 方案 A）。
+診斷供 PM / agent 派發前自檢使用。
 """
 
 from __future__ import annotations
@@ -268,7 +268,7 @@ def execute_dispatch_validate(args: argparse.Namespace, version: str) -> int:
     print(_format_result("規則 4b 樣板偵測", r4b_ok, r4b_msg))
     print(_format_result("規則 5 UC 對齊", r5_ok, r5_msg))
 
-    # where.files 空時補 INFO 提示（避免靜默通過遮蔽 W17-002 抽取漏掉）
+    # where.files 空時補 INFO 提示（避免靜默通過遮蔽 context bundle 抽取漏掉）
     if not (where_files or []):
         print(
             "  [INFO] where.files 為空：規則 3 自動通過。若本 ticket 應修改檔案，"

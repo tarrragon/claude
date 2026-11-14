@@ -39,12 +39,11 @@ def generate_token() -> str:
 
 def save_token(token: str) -> Path:
     """Save token to session file."""
-    # Determine project root
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent.parent.parent.parent
+    # Resolve token directory (linked worktree -> main repo hook-logs)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from lib import get_hook_log_dir
 
-    # Create token directory
-    token_dir = project_root / ".claude" / "hook-logs" / "5w1h-tokens"
+    token_dir = get_hook_log_dir("5w1h-tokens")
     token_dir.mkdir(parents=True, exist_ok=True)
 
     # Save token file

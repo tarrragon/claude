@@ -16,7 +16,20 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from ticket_system import constants as _enum_constants
+from .claude_lib_loader import load_claude_lib
 from .paths import get_ticket_path, get_ticket_state_root
+
+
+def _hook_logs_root() -> Path:
+    """hook-logs 根目錄：優先經 hook_logging.get_hook_log_dir（linked worktree 內為主 repo）。
+
+    載不到 .claude/lib 時改用 get_ticket_state_root()（同為共用狀態根），
+    因 ticket CLI 可能在無 .claude/lib 的環境執行。
+    """
+    mod = load_claude_lib("hook_logging")
+    if mod is not None:
+        return mod.get_hook_log_dir("")
+    return get_ticket_state_root() / ".claude" / "hook-logs"
 
 
 # ============================================================================
@@ -389,8 +402,7 @@ def _log_charset_violations(
 ) -> None:
     """違規寫入 hook-logs/charset-gate.log（quality-baseline 規則 4：業務邏輯拒絕日誌必須）。"""
     try:
-        from .paths import get_project_root
-        log_dir = get_project_root() / ".claude" / "hook-logs"
+        log_dir = _hook_logs_root()
         log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         entry_id = ticket.get("id", ticket_path.stem)
@@ -514,8 +526,7 @@ def _log_enum_violations(
 ) -> None:
     """違規寫入 hook-logs/enum-gate.log（warn 期誤報率量測資料源）。"""
     try:
-        from .paths import get_project_root
-        log_dir = get_project_root() / ".claude" / "hook-logs"
+        log_dir = _hook_logs_root()
         log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         entry_id = ticket.get("id", ticket_path.stem)
@@ -569,10 +580,10 @@ def _backup_special_fields(existing_data: Dict[str, Any]) -> Dict[str, Any]:
         Dict[str, Any]: 包含所有特殊欄位的備份字典（只含在 existing_data 中存在的欄位）
 
     Examples:
-        >>> data = {"chain": "0.31.0-W4-001", "id": "test"}
+        >>> data = {"chain": "<ticket-id>", "id": "test"}
         >>> backup = _backup_special_fields(data)
         >>> backup
-        {'chain': '0.31.0-W4-001'}
+        {'chain': '<ticket-id>'}
     """
     return {
         field: existing_data[field]
@@ -600,10 +611,10 @@ def _restore_special_fields(
 
     Examples:
         >>> new_data = {"id": "test"}
-        >>> backup = {"chain": "0.31.0-W4-001"}
+        >>> backup = {"chain": "<ticket-id>"}
         >>> result = _restore_special_fields(new_data, backup)
         >>> result
-        {'id': 'test', 'chain': '0.31.0-W4-001'}
+        {'id': 'test', 'chain': '<ticket-id>'}
     """
     result = new_data.copy()
     for field, value in backup.items():
@@ -699,7 +710,7 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
 
     Args:
         version: 版本號（如 "0.31.0" 或 "v0.31.0"）
-        ticket_id: Ticket ID（如 "0.31.0-W4-001"）
+        ticket_id: Ticket ID（如 "<ticket-id>"）
 
     Returns:
         Optional[Dict]: 完整的 Ticket 資料字典。
@@ -710,8 +721,8 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
         無，所有異常都安全處理
 
     Examples:
-        >>> ticket = load_ticket("0.31.0", "0.31.0-W4-001")
-        >>> ticket is not None and ticket['id'] == '0.31.0-W4-001'
+        >>> ticket = load_ticket("0.31.0", "<ticket-id>")
+        >>> ticket is not None and ticket['id'] == '<ticket-id>'
         True
         >>> load_ticket("0.31.0", "nonexistent")
         None
@@ -961,7 +972,7 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
                 width=1000,
             )
 
-        # 保留檔尾單一換行（W9-005 / issue #1 問題5）：load 不保證 body 帶
+        # 保留檔尾單一換行（issue #1 問題5）：load 不保證 body 帶
         # 檔尾換行，直接寫回會讓 claim/release roundtrip 吃掉檔尾換行，產生
         # 「No newline at end of file」git diff 雜訊。僅在缺換行時補一個，
         # 不動既有換行（避免改動帶尾換行的 body）。

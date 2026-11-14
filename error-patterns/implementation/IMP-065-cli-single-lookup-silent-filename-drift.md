@@ -3,8 +3,6 @@ id: IMP-065
 title: CLI 單檔查詢依賴檔名約定，批量掃描用 field 比對，導致 naming-drift 時靜默失敗
 category: implementation
 severity: medium
-related_tickets:
-  - 0.18.0-W15-013
 created: 2026-04-18
 ---
 
@@ -39,7 +37,7 @@ created: 2026-04-18
 2. **Fallback-1**：業務反查（如 direction 指向目標）
 3. **Fallback-2**：掃描所有檔案讀取 ID 欄位比對（兼容 legacy 命名）
 
-範例：`.claude/skills/ticket/ticket_system/commands/resume.py:_find_handoff_file` W15-013 修復。
+範例：`.claude/skills/ticket/ticket_system/commands/resume.py:_find_handoff_file` 的修復。
 
 ## 預防措施
 

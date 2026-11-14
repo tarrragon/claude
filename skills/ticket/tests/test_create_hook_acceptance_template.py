@@ -29,6 +29,15 @@ def test_templates_carry_placeholder_and_no_gate_keywords():
     assert len(checker._missing_categories("\n".join(TEMPLATES))) == 3
 
 
+def test_trigger_template_requires_evidence_that_modified_branch_ran():
+    """觸發驗證模板須寫明兩種合格證據與不算證據的行（只貼日誌行無法分辨修改點是否執行）"""
+    trigger = TEMPLATES[0]
+    assert trigger.startswith("[ ] 當次執行環境下的觸發驗證結果：")
+    assert "只有修改後分支才會產生的日誌行或輸出" in trigger
+    assert "同一輸入跑修改前與修改後版本、兩者輸出不同" in trigger
+    assert "修改點之前提前回傳的判定行，不算證據" in trigger
+
+
 def test_create_touching_hook_appends_four_templates():
     result, touched = apply_hook_acceptance_template(HOOK_FILES, list(BASE))
     assert touched is True

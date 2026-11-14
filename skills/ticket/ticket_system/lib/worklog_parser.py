@@ -1,10 +1,10 @@
 """
-Worklog 交接段落解析模組（W17-083 雙軌同步偵測共用模組）
+Worklog 交接段落解析模組（雙軌同步偵測共用模組）
 
 提供 worklog 中 handoff 意圖偵測 + ticket ID 提取 + worklog 路徑解析等功能，
 供 S2 (CLI handoff --from-worklog) 和 S3 (Stop hook) 共用，避免 DRY 違反。
 
-API 契約（依 W17-083 Phase 3a / Phase 2 sage 規格）：
+API 契約（依 Phase 3a / Phase 2 sage 規格）：
 - HANDOFF_KEYWORDS: tuple[str, ...]
 - detect_handoff_keywords(content) -> bool
 - extract_ticket_ids(content, active_version=None) -> list[str]
@@ -28,15 +28,15 @@ from .worklog_appender import _build_worklog_path
 # 模組級常數（SOT — Single Source of Truth）
 # ---------------------------------------------------------------------------
 
-#: Handoff 意圖關鍵字清單（W17-083 Phase 1 §2 設計；0.2.1-W3-218 補「下一站」）
+#: Handoff 意圖關鍵字清單（Phase 1 §2 設計；後來補「下一站」）
 #:
 #: 任一關鍵字命中 worklog content 即視為「交接意圖」。涵蓋：
 #: - 標題式（章節標題）：「下個 Session 接手 Context」等
 #: - 建議式（句中）：「下 session 優先建議」等
 #: - 續行式（ANA complete 強制欄位）：「未完成清單」等
-#: - 本專案書寫慣例（0.2.1-W3-218）：「下一站」——0.2.1-W3-178 實測 HANDOFF_KEYWORDS
+#: - 本專案書寫慣例：「下一站」——實測 HANDOFF_KEYWORDS
 #:   對本專案 8 份 main worklog 命中總數為 0，本專案實際慣用「下一站」（5 次皆為
-#:   交接語境）。0.2.1-W3-218 同時實測「結構判定」（粗體標題行 + 同行含 ticket ID）
+#:   交接語境）。同時實測「結構判定」（粗體標題行 + 同行含 ticket ID）
 #:   對同語料的誤報率達 76%（17 命中僅 4 為真交接段），故採清單擴充而非結構判定。
 HANDOFF_KEYWORDS: tuple[str, ...] = (
     # 標題式
@@ -60,13 +60,13 @@ HANDOFF_KEYWORDS: tuple[str, ...] = (
 )
 
 #: 完整 ticket ID regex：<version>-W<wave>-<seq>[.<sub>]
-#: 例：0.18.0-W17-079、0.18.0-W17-083.1
+#: 例：<完整 ID>、<完整 ID>.1
 TICKET_ID_FULL_PATTERN: re.Pattern = re.compile(
     r"\b(\d+\.\d+\.\d+)-(W\d+-[\d\w]+(?:\.\d+)?)\b"
 )
 
 #: 短 ticket ID regex：W<wave>-<seq>[.<sub>]（不含版本前綴）
-#: 例：W17-079、W17-083.1
+#: 例：<短 ID>、<短 ID>.1
 TICKET_ID_SHORT_PATTERN: re.Pattern = re.compile(
     r"\b(W\d+-[\d\w]+(?:\.\d+)?)\b"
 )
@@ -108,7 +108,7 @@ def extract_ticket_ids(
     1. 先掃 TICKET_ID_FULL_PATTERN（完整 ID），結果加入清單並標記已見
     2. 若 active_version 提供，再掃 TICKET_ID_SHORT_PATTERN，用 active_version 補全為完整 ID
        （已見的 ID 不重複加入）
-    3. 不過濾 code block（W17-083 方案 D 接受此誤報邊界）
+    3. 不過濾 code block（方案 D 接受此誤報邊界）
 
     Args:
         content: 內容字串
@@ -118,8 +118,8 @@ def extract_ticket_ids(
         list[str]: 完整 ticket ID 清單，順序為首次出現順序，已去重
 
     Examples:
-        >>> extract_ticket_ids("待處理：0.18.0-W17-079 與 W17-080", active_version="0.18.0")
-        ['0.18.0-W17-079', '0.18.0-W17-080']
+        >>> extract_ticket_ids("待處理：<完整 ID> 與 <短 ID>", active_version="0.18.0")
+        ['<完整 ID>', '<補全為完整 ID 的短 ID>']
         >>> extract_ticket_ids("純文字無 ID")
         []
     """
@@ -140,7 +140,7 @@ def extract_ticket_ids(
 
     # Step 2: 短 ID 補全（僅當提供 active_version）
     if active_version:
-        # 為避免短 pattern 命中完整 ID 中的 W 部分（如 0.18.0-W17-079 內的 W17-079），
+        # 為避免短 pattern 命中完整 ID 中的 W 部分（如完整 ID 內的 W 部分），
         # 先用 finditer 並檢查 match 起點是否緊接在「<version>-」之後
         for match in TICKET_ID_SHORT_PATTERN.finditer(content):
             short_id = match.group(1)
@@ -211,7 +211,7 @@ def extract_recent_content(worklog_path: Path, since_mtime: float) -> str:
 
 
 #: 行首錨定容許前綴：關鍵字前只能有 '#' / '*' / 空白，排除句中出現
-#: （0.2.1-W3-294 根因 1：rfind 未錨定行首，命中自指語料的歷史分析行）
+#: （根因 1：rfind 未錨定行首，命中自指語料的歷史分析行）
 _ANCHOR_PREFIX_PATTERN: re.Pattern = re.compile(r"^[#*\s]*$")
 
 #: 標題式關鍵字行判定：符合 Markdown H1-H6 標題格式
@@ -259,7 +259,7 @@ def extract_handoff_section(content: str) -> str:
     """
     從 worklog 內容切出 handoff 相關段落（最新一筆，行首錨定命中）。
 
-    策略（0.2.1-W3-294 重設計）：
+    策略（重設計）：
     1. 只採「行首錨定」的關鍵字命中（關鍵字前僅允許 '#' / '*' / 空白），
        排除句中出現（本專案 worklog 大量記載 handoff 機制本身的分析，
        關鍵字會出現在描述偵測器的歷史行中，此類命中須被排除）。
@@ -279,7 +279,7 @@ def extract_handoff_section(content: str) -> str:
 
     使用行首錨定 + rfind 最後命中的理由：
     worklog 累積多 session 的歷史 handoff 段落，且大量記載 handoff 機制
-    本身的分析（W3-178 / W3-218 / W3-221 / W3-222 皆在改 HANDOFF_KEYWORDS），
+    本身的分析（多次改動 HANDOFF_KEYWORDS），
     這些歷史行內含關鍵字但非交接段落。行首錨定過濾句中出現；取最後一個
     對應「當前 session 寫入的 handoff」，符合本函式「找出本 session 寫了
     什麼 handoff」的呼叫意圖。
@@ -299,8 +299,8 @@ def extract_handoff_section(content: str) -> str:
         str: handoff 段落內容；若無行首錨定關鍵字命中回 ""
 
     Examples:
-        >>> content = "## 一般\\n\\n## 下個 Session 接手 Context\\n\\nW17-079\\n"
-        >>> "W17-079" in extract_handoff_section(content)
+        >>> content = "## 一般\\n\\n## 下個 Session 接手 Context\\n\\n<短 ID>\\n"
+        >>> "<短 ID>" in extract_handoff_section(content)
         True
     """
     if not content:

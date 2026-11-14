@@ -127,10 +127,11 @@ ticket create ... --acceptance "a \|\| b 兩種寫法都被擋"
 ticket create ... --where "file1.py,file2.py"
 
 #   --blocked-by / --related-to：逗號分隔
-ticket create ... --blocked-by "<id>.1,<id>.2"
+#   （搭配 --parent 時，blockedBy 至多含一個同父兄弟票，超過即拒絕，見 ARCH-017）
+ticket create ... --blocked-by "<id-a>,<id-b>"
 ```
 
-`--where` 建立階段僅接受上述逗號分隔語法，不含 `::read`／`::write` 讀寫意圖後綴；後綴標記須於 frontmatter 直接編輯或後續 `set-where` 系操作附加。後綴語法、type 預設意圖與目錄型宣告展開規則見 `field-semantics.md`〈where.files 宣告語意〉。
+`--where` 建立階段僅接受上述逗號分隔語法，不含 `::read`／`::write` 讀寫意圖後綴；後綴標記須於建票後以 `set-where` 附加（直接 Edit frontmatter 會被 ticket-file-access-guard 擋下）。後綴語法、type 預設意圖與目錄型宣告展開規則見 `field-semantics.md`〈where.files 宣告語意〉。
 
 ## 類型說明
 
@@ -366,8 +367,8 @@ ANA 掛著非終態 children 時不能 complete，被 blockedBy 的 ANA 不 comp
 |------|-----------|-------------------|
 | 語意 | 血緣關係（直系子任務） | 衍生關係（副產品 / 延伸） |
 | 關係欄位 | `parent_id` + `<parent>.children[]` | `source_ticket` + `<source>.spawned_tickets[]` |
-| Complete 阻擋 | 父 Ticket 被未完成 children 阻擋（永遠） | 非 ANA source：不被 spawned 阻擋（獨立排程）；ANA source：仍阻擋——`lifecycle.py` 的 `_handle_ana_spawned_confirmation` 確認關卡與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`（W15-003）稽核 FAIL 皆為現行已定案設計（hook 層 `ana_spawned_checker` 已退場為 warn-only，但阻擋機制本身未隨之移除，詳見 `field-semantics.md`〈阻擋語意對照表〉現況分層說明） |
-| 序號規則 | 自動子序號（如 `W17-001.1`） | 獨立 Ticket ID（不繼承序號） |
+| Complete 阻擋 | 父 Ticket 被未完成 children 阻擋（永遠） | 非 ANA source：不被 spawned 阻擋（獨立排程）；ANA source：仍阻擋——`lifecycle.py` 的 `_handle_ana_spawned_confirmation` 確認關卡與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`稽核 FAIL 皆為現行已定案設計（hook 層 `ana_spawned_checker` 已退場為 warn-only，但阻擋機制本身未隨之移除，詳見 `field-semantics.md`〈阻擋語意對照表〉現況分層說明） |
+| 序號規則 | 自動子序號（如 `<id>.1`） | 獨立 Ticket ID（不繼承序號） |
 | 版本歸屬 | 必然與父票同版本（子票 ID 含父票 ID） | 由 `--version` 決定，可建在後續版本 |
 | 使用時機 | 功能拆分、ANA 結論要求且屬本版範圍的落地（PC-091 路線） | ANA 結論要求、依〈兩期〉排入後續版本的落地（在目標版本建根票）；規劃波建的本版執行期票（可附規劃票血緣）；執行中發現獨立 bug / 技術債（PC-073 殘存範圍） |
 | 典型場景 | ANA Solution 落地為本版的 IMP/DOC | ANA 落地排入下一個 minor；執行 IMP/DOC 中發現 bug/技術債另開單獨追蹤 |

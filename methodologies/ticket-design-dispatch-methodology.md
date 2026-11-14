@@ -177,4 +177,4 @@ Ticket 機制下的三層文件結構：
 
 **版本歷史**：
 
-- v3.0.0：W8-019.2 整併瘦身（1168 → 30 秒核心 + 路由）。移除 emoji；通用 Clean Architecture 教學、Ticket/主版本日誌完整模板、生命週期 7 狀態詳述、即時 Review 16 項清單、文件更新流程逐步說明等去重至各權威方法論（lifecycle / instant-review / acceptance-criteria / doc-flow）；保留 distinct 核心：Ticket vs worklog 定位、三大目標、Clean Architecture 設計哲學、TDD 對應、積極派發原則（服務精神權威處）。歷史 v1.0.0（48,438 tokens）~v2.1.0 完整版見 git log。
+- v3.0.0：整併瘦身（1168 → 30 秒核心 + 路由）。移除 emoji；通用 Clean Architecture 教學、Ticket/主版本日誌完整模板、生命週期 7 狀態詳述、即時 Review 16 項清單、文件更新流程逐步說明等去重至各權威方法論（lifecycle / instant-review / acceptance-criteria / doc-flow）；保留 distinct 核心：Ticket vs worklog 定位、三大目標、Clean Architecture 設計哲學、TDD 對應、積極派發原則（服務精神權威處）。歷史 v1.0.0（48,438 tokens）~v2.1.0 完整版見 git log。

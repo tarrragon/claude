@@ -56,8 +56,39 @@ def test_warns_when_local_has_hooks(tmp_path, capsys):
     result = pull.verify_local_settings_no_hooks(tmp_path)
     assert result is None  # warn-only，不回傳 exit code
     err = capsys.readouterr().err
-    assert "settings.local.json 含 hook" in err
+    assert "settings.local.json 含不在專案 hook 清冊的 hook 註冊" in err
     assert "Stop" in err
+
+
+def _write_manifest(project_root: Path, text: str) -> None:
+    p = project_root / ".claude" / "project-integration" / "hook-registry.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def test_no_warn_when_all_local_hooks_from_manifest(tmp_path, capsys):
+    """3.3.0-W1-036.3：清冊產生的條目合法，不示警。"""
+    _write_manifest(tmp_path, (
+        "version: 1\nhooks:\n  api.py:\n"
+        "    script: .claude/project-integration/hooks/api.py\n    event: Stop\n"
+    ))
+    _write_local(tmp_path, {"hooks": {"Stop": [{"hooks": [{
+        "type": "command",
+        "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/project-integration/hooks/api.py",
+    }]}]}})
+    pull.verify_local_settings_no_hooks(tmp_path)
+    assert "含不在專案 hook 清冊" not in capsys.readouterr().err
+
+
+def test_warns_for_entry_outside_manifest_even_when_manifest_exists(tmp_path, capsys):
+    """正向對照：清冊存在時，清冊外的條目仍示警。"""
+    _write_manifest(tmp_path, (
+        "version: 1\nhooks:\n  api.py:\n"
+        "    script: .claude/project-integration/hooks/api.py\n    event: Stop\n"
+    ))
+    _write_local(tmp_path, {"hooks": _hooks_block()})
+    pull.verify_local_settings_no_hooks(tmp_path)
+    assert "含不在專案 hook 清冊的 hook 註冊（事件: Stop）" in capsys.readouterr().err
 
 
 def test_no_warn_when_no_hooks_key(tmp_path, capsys):

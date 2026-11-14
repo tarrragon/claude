@@ -171,7 +171,7 @@ Hook 系統自動處理：工作日誌更新提醒、版本進度分析、合規
 
 **Change Log**:
 
-- v3.0.0 (2026-03-02): 精簡重寫（W28-007）
+- v3.0.0 (2026-03-02): 精簡重寫
   - 移除 frontmatter 非標準欄位（tools, color, model）
   - 決策樹內容改為引用 decision-tree.md（去除 85% 重複）
   - 查詢 vs 研究詳細情境移至 references/rosemary-query-research-details.md

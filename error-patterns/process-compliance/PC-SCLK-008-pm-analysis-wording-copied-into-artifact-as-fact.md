@@ -3,7 +3,6 @@ id: PC-SCLK-008
 title: PM 前置分析的斷言措辭被執行者照抄進產出，成為錯誤的事實來源
 severity: medium
 category: process-compliance
-source_ticket: 1.4.0-W3-007
 related:
  - ARCH-BAL-004
  - PC-040
@@ -20,7 +19,7 @@ related:
 | 編號 | PC-SCLK-008 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-08-03（screen_clock 1.4.0-W3-007 Phase 4 審查，文字與架構兩視角獨立指向同一措辭源頭） |
+| 首發時間 | 2026-08-03（screen_clock 專案 Swift 重構的 Phase 4 審查，文字與架構兩視角獨立指向同一措辭源頭） |
 | 姊妹模式 | ARCH-BAL-004（文件範例成為缺陷散播源）、PC-040（派發前寫 Context Bundle） |
 
 ---
@@ -31,7 +30,7 @@ PM 依 PC-040 在派發前把分析寫入 ticket 的 Problem Analysis / Context 
 
 該措辭若是關於程式碼性質的斷言，而 PM 的推導又不夠精確，錯誤就從 ticket（暫時性載體）沉澱進原始碼註解（長期性載體）。後續讀者把它當作關於程式行為的事實，而它從來沒有被任何測試或審查驗證過。
 
-**本案具體樣態**（1.4.0-W3-007 Swift 重構）：
+**本案具體樣態**（Swift 重構）：
 
 - PM 在 Context Bundle 標示風險點，寫成：「若 generation 隨 session 一起消失，會失去攔截在途幀的能力」。
 - 執行者採納該理由，寫進 `generation` 欄位的 doc comment。
@@ -63,7 +62,7 @@ PM 依 PC-040 在派發前把分析寫入 ticket 的 Problem Analysis / Context 
 
 ### 防護必須覆蓋 ticket 的所有欄位，不只風險提示欄
 
-本 pattern 首次記錄後，PM 於次一張票（1.4.0-W3-009）實施防護：把風險提示改為「若 X 則測試 Y 紅燈」的預測形式。文字審查查證該三條措辭確實未出現在 Solution、commit 或任何 doc comment——**該欄位的照抄路徑被結構性切斷**（沒有人會在 doc 裡寫「若…則測試會紅燈」）。
+本 pattern 首次記錄後，PM 於次一張票實施防護：把風險提示改為「若 X 則測試 Y 紅燈」的預測形式。文字審查查證該三條措辭確實未出現在 Solution、commit 或任何 doc comment——**該欄位的照抄路徑被結構性切斷**（沒有人會在 doc 裡寫「若…則測試會紅燈」）。
 
 但同一張 ticket 的 `how.strategy` 仍為斷言語態，並被逐字繼承兩次：`how.strategy` →  commit 訊息 → `scheduleDeadline` 的 doc comment。
 

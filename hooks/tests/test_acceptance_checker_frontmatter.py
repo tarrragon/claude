@@ -8,9 +8,9 @@ Acceptance Checker - frontmatter acceptance list 勾選狀態檢查測試
 測試矩陣：
   AC4 全勾選        : frontmatter 5 項全 [x]，body 無關鍵字 → True
   部分勾選          : frontmatter 4/5 [x]，body 無關鍵字     → False
-  空 list fallback  : frontmatter 空或缺欄位，body 含關鍵字  → True
-  舊 Ticket（AC6）  : 無 acceptance 欄位，body 含關鍵字       → True
-  全未勾選 + 無關鍵字: frontmatter 全未勾選，body 無關鍵字    → False
+  全未勾選          : frontmatter 全未勾選                    → False
+  body 關鍵字不計入  : frontmatter 未全勾選，body 含舊驗收關鍵字 → False
+                      （body 由被審方自由寫入，不構成驗收訊號，tarrragon/claude#70）
 """
 
 import logging
@@ -61,18 +61,33 @@ def test_partially_checked_frontmatter_returns_false(logger):
     assert has_acceptance_record(body, logger, frontmatter=frontmatter) is False
 
 
-def test_empty_acceptance_fallback_to_body_keyword(logger):
-    """空 list + body 含關鍵字 → True（fallback 既有邏輯）"""
-    frontmatter = {"acceptance": []}
-    body = "# Ticket\n\n驗收通過，紀錄完整。\n"
-    assert has_acceptance_record(body, logger, frontmatter=frontmatter) is True
+# body 由被審方自由寫入：下列舊驗收關鍵字任一出現在 body，都不得讓
+# 未全勾選的 frontmatter 判為有驗收記錄（正向對照：關鍵字確實存在於 body）。
+_LEGACY_KEYWORDS = [
+    "驗收結果: 通過",
+    "Acceptance Audit Report",
+    "驗收通過",
+    "驗收者：",
+    "Auditor:",
+    "PM 直接驗收",
+    "acceptance-auditor",
+]
 
 
-def test_missing_acceptance_field_fallback_to_body(logger):
-    """AC6：無 acceptance 欄位（舊 Ticket）+ body 含關鍵字 → True"""
-    frontmatter = {"type": "IMP"}  # 無 acceptance 欄位
+@pytest.mark.parametrize("keyword", _LEGACY_KEYWORDS)
+def test_body_keyword_with_unchecked_acceptance_returns_false(logger, keyword):
+    """frontmatter 未勾選 + body 含舊關鍵字 → False（關鍵字不構成驗收訊號）"""
+    frontmatter = {"acceptance": ["[ ] 項目一"]}
+    body = f"# Ticket\n\n{keyword} 紀錄完整。\n"
+    assert keyword in body
+    assert has_acceptance_record(body, logger, frontmatter=frontmatter) is False
+
+
+@pytest.mark.parametrize("frontmatter", [{"acceptance": []}, {"type": "IMP"}, None])
+def test_body_keyword_without_acceptance_list_returns_false(logger, frontmatter):
+    """空 list、無 acceptance 欄位、frontmatter=None + body 含關鍵字 → False"""
     body = "# Ticket\n\nPM 直接驗收，通過。\n"
-    assert has_acceptance_record(body, logger, frontmatter=frontmatter) is True
+    assert has_acceptance_record(body, logger, frontmatter=frontmatter) is False
 
 
 def test_all_unchecked_no_keyword_returns_false(logger):
@@ -87,12 +102,6 @@ def test_all_unchecked_no_keyword_returns_false(logger):
     assert has_acceptance_record(body, logger, frontmatter=frontmatter) is False
 
 
-def test_none_frontmatter_backward_compat(logger):
-    """frontmatter=None（向後相容舊 caller）+ body 含關鍵字 → True"""
-    body = "# Ticket\n\nAcceptance Audit Report: all passed.\n"
-    assert has_acceptance_record(body, logger, frontmatter=None) is True
-
-
 def test_none_frontmatter_no_keyword_returns_false(logger):
     """frontmatter=None + body 無關鍵字 → False"""
     body = "# Ticket\n\n尚未驗收。\n"
@@ -100,7 +109,7 @@ def test_none_frontmatter_no_keyword_returns_false(logger):
 
 
 def test_legacy_signature_no_frontmatter_kwarg(logger):
-    """既有 caller 未傳 frontmatter（位置參數）→ 仍可運作（body 關鍵字）"""
+    """既有 caller 未傳 frontmatter（位置參數）→ 仍可呼叫，無驗收清單即 False"""
     body = "# Ticket\n\n驗收結果: 通過\n"
     # 保留既有二參數呼叫方式
-    assert has_acceptance_record(body, logger) is True
+    assert has_acceptance_record(body, logger) is False

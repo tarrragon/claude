@@ -2,7 +2,7 @@
 name: lsp-first
 description: "LSP 優先開發策略工具。Use for: (1) 查詢 LSP 操作指令, (2) 配置新語言 LSP 插件, (3) LSP vs MCP 工具選擇決策, (4) 自建 LSP 插件指南。Use when: 需要搜尋符號/定義/引用、想知道 LSP 和 MCP Serena 各自適合什麼場景、新增語言支援需要配置 LSP 時。"
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # LSP 優先開發策略
@@ -94,7 +94,7 @@ Dart MCP 和 Serena MCP 的工具列表與使用建議：`/search-tools-guide`
 
 ## 三 MCP 工具路由（指向 search-tools-guide）
 
-> 自 W6-001 引入三 MCP（codebase-memory-mcp / codegraph / serena）後，「Serena 是唯一語意工具」的舊敘事已升級為「三刀流互補」。LSP-first 原則仍為精度錨點，但查詢入口擴展至三 MCP。
+> 自引入三 MCP（codebase-memory-mcp / codegraph / serena）後，「Serena 是唯一語意工具」的舊敘事已升級為「三刀流互補」。LSP-first 原則仍為精度錨點，但查詢入口擴展至三 MCP。
 
 ### 三 MCP 角色定位
 

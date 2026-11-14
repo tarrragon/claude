@@ -89,17 +89,8 @@ def _run_readiness(monkeypatch, capsys, root: Path, prompt: str, agent: str) -> 
     spec = importlib.util.spec_from_file_location("readiness_scope_mod", READINESS_HOOK)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    # 須在隔離環境變數生效前，以真實專案根載入設定（同 test_agent_dispatch_check 的 config fixture）
-    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(CLAUDE_DIR.parent))
-    from lib.config_loader import load_agents_config, clear_config_cache
-    clear_config_cache()
-    cfg = dict(load_agents_config())
-    assert "task_type_priorities" in cfg, "測試前提：設定檔須載入成功"
-    cfg.pop("agent_to_task_map", None)  # 強制走關鍵字偵測，才有可攔截的錯誤分派
     monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
-    monkeypatch.setenv("HOOK_MODE", "strict")
-    monkeypatch.setattr(mod, "load_agents_config", lambda: cfg)
     payload = {"tool_name": "Agent", "tool_input": {"prompt": prompt, "subagent_type": agent}}
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     with pytest.raises(SystemExit) as exc:
@@ -135,24 +126,6 @@ class TestValidationHookScope:
     def test_child_id_does_not_match_parent_handoff(self, tmp_path):
         root = _make_root(tmp_path, {"x.json": _stale_record()})
         assert _run_validation(root, "Ticket: {}.1 子票".format(TGT_ID)) == 2
-
-
-class TestReadinessHookScope:
-    def test_e2_stale_handoff_missing_ticket_line_blocked(self, tmp_path, monkeypatch, capsys):
-        root = _make_root(tmp_path, {"x.json": _stale_record()})
-        out = _run_readiness(monkeypatch, capsys, root, WRONG_AGENT_PROMPT, WRONG_AGENT)
-        assert '"permissionDecision": "deny"' in out
-
-    def test_e1_prompt_references_handoff_ticket_allowed(self, tmp_path, monkeypatch, capsys):
-        root = _make_root(tmp_path, {"x.json": _stale_record()})
-        prompt = "Ticket: {}\n{}".format(TGT_ID, WRONG_AGENT_PROMPT)
-        out = _run_readiness(monkeypatch, capsys, root, prompt, WRONG_AGENT)
-        assert "deny" not in out
-
-    def test_control_without_handoff_is_denied(self, tmp_path, monkeypatch, capsys):
-        """對照：無殘留檔時同一 payload 本就被攔，證明 E2 的 deny 來自守衛判準而非 payload 假象。"""
-        out = _run_readiness(monkeypatch, capsys, tmp_path, WRONG_AGENT_PROMPT, WRONG_AGENT)
-        assert '"permissionDecision": "deny"' in out
 
 
 class TestSharedSetFunction:
@@ -260,17 +233,19 @@ class TestOnlyActiveHandoffCounts:
         root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=NO_TICKETS)
         assert _run_validation(root, "恢復任務 {}，沒有 Ticket 行".format(TGT_ID)) == 2
 
-    def test_e2_readiness_completed_target_denied(self, tmp_path, monkeypatch, capsys):
+    # readiness 已不依代理人判定阻擋（分派對應比對移除），改以「不發 handoff 訊號」
+    # 驗證非活躍 handoff 不被計入
+    def test_e2_readiness_completed_target_no_signal(self, tmp_path, monkeypatch, capsys):
         root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=TARGET_DONE)
         prompt = "Ticket: {}\n{}".format(TGT_ID, WRONG_AGENT_PROMPT)
-        out = _run_readiness(monkeypatch, capsys, root, prompt, WRONG_AGENT)
-        assert '"permissionDecision": "deny"' in out
+        _run_readiness(monkeypatch, capsys, root, prompt, WRONG_AGENT)
+        assert SIGNAL_TAG not in _LAST_ERR[0]
 
-    def test_e2_readiness_orphan_denied(self, tmp_path, monkeypatch, capsys):
+    def test_e2_readiness_orphan_no_signal(self, tmp_path, monkeypatch, capsys):
         root = _make_root(tmp_path, {"x.json": _stale_record()}, tickets=NO_TICKETS)
         prompt = "Ticket: {}\n{}".format(TGT_ID, WRONG_AGENT_PROMPT)
-        out = _run_readiness(monkeypatch, capsys, root, prompt, WRONG_AGENT)
-        assert '"permissionDecision": "deny"' in out
+        _run_readiness(monkeypatch, capsys, root, prompt, WRONG_AGENT)
+        assert SIGNAL_TAG not in _LAST_ERR[0]
 
     def test_set_function_excludes_inactive(self, tmp_path):
         from lib.hook_io import get_handoff_recovery_ticket_ids
@@ -302,7 +277,7 @@ class TestRecoveryModeFlag:
         import lib.hook_io as hook_io
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
         monkeypatch.setattr(hook_io, "_handoff_recovery_cache", None)
-        monkeypatch.setattr(hook_io, "get_project_root", lambda: root)
+        monkeypatch.setattr(hook_io, "get_shared_state_root", lambda: root)
         return hook_io.is_handoff_recovery_mode()
 
     def test_active_handoff_is_recovery_mode(self, tmp_path, monkeypatch):

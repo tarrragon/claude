@@ -1,13 +1,13 @@
 """
-ticket track hook-health 命令（W13-018 落地，源自 W13-008 IMP-3）
+ticket track hook-health 命令
 
-提供 PM 手動觸發 Hook 觸發頻率掃描與評估的 CLI，補強 W13-017 SessionStart
-被動掃描的主動性（W13-008 方案 F：被動 + 主動雙軌）。
+提供 PM 手動觸發 Hook 觸發頻率掃描與評估的 CLI，補強 SessionStart
+被動掃描的主動性。
 
 設計約束：
 - version-agnostic（不需 active version；操作對象為 .claude/hook-logs/）
-- 復用 W13-016 lib.hook_health 純函式（scan_logs / classify_hook / evaluate）
-- 與 W13-017 hook-health-monitor.py 共用 baseline 邏輯（per_day sum / window_days）
+- 復用 lib.hook_health 純函式（scan_logs / classify_hook / evaluate）
+- 與 hook-health-monitor.py 共用 baseline 邏輯（per_day sum / window_days）
 - 預設 --since 7 天；--format table（PM 預設視圖）/ json（自動化消費）
 - --dry-run 為契約點：本命令本即不寫入 ticket / 檔案；旗標明示「禁止副作用」
 
@@ -86,7 +86,7 @@ DEFAULT_SINCE_DAYS = 7
 def _compute_baseline(per_day: Dict[str, int], window_days: int = DEFAULT_SINCE_DAYS) -> float:
     """baseline = sum(per_day) / window_days。
 
-    與 hook-health-monitor._compute_baseline 邏輯一致（W13-008 量化標準）。
+    與 hook-health-monitor._compute_baseline 邏輯一致。
     """
     if window_days <= 0:
         return 0.0
@@ -217,7 +217,7 @@ def _render_table(
     lines.append("")
     if flagged:
         lines.append(
-            f"  {len(flagged)} hook(s) flagged。建議：ticket track create --type ANA "
+            f"  {len(flagged)} hook(s) flagged。建議：ticket create --type ANA "
             "--who basil-hook-architect ..."
         )
     else:
@@ -285,7 +285,7 @@ def register_hook_health(
         "hook-health",
         help=(
             "掃描 .claude/hook-logs/ 評估 Hook 觸發頻率，"
-            "復用 W13-016 lib.hook_health（PM 手動觸發補強 W13-017 被動掃描）"
+            "復用 lib.hook_health（PM 手動觸發補強被動掃描）"
         ),
     )
     p.add_argument(

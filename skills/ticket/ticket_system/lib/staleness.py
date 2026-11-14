@@ -22,10 +22,10 @@ STALE_INFO_DAYS = 7
 STALE_WARNING_DAYS = 14
 STALE_CRITICAL_DAYS = 30
 
-# W17-031.4: stale in_progress 閾值（小時）
+#stale in_progress 閾值（小時）
 # 用於 runqueue 識別 agent 中斷 / timeout 後遺留的 in_progress ticket。
-# W17-033 已落地 agent 自律 complete 規則 + acceptance-gate-hook 安全網，
-# 此閾值僅捕捉 W17-033 機制無法覆蓋的案例（agent 已不在，無法觸發 complete）。
+# 已落地 agent 自律 complete 規則 + acceptance-gate-hook 安全網，
+# 此閾值僅捕捉該機制無法覆蓋的案例（agent 已不在，無法觸發 complete）。
 STALE_IN_PROGRESS_HOURS = 24
 
 # 等級常數
@@ -98,7 +98,7 @@ def compute_stale_minutes(
     ticket: dict, now: Optional[datetime] = None
 ) -> Optional[int]:
     """
-    計算 in_progress ticket 自 started_at 起經過的分鐘數（W10-114 dashboard）。
+    計算 in_progress ticket 自 started_at 起經過的分鐘數（dashboard）。
 
     純函式：不執行 stale 判定，僅回傳分鐘數（caller 自行套門檻）。
     解析失敗（缺 started_at / 格式錯誤）→ 回傳 None。
@@ -129,7 +129,7 @@ def is_stale_in_progress(
     ticket: dict, now: Optional[datetime] = None
 ) -> bool:
     """
-    判斷 ticket 是否為 stale in_progress（W17-031.4）。
+    判斷 ticket 是否為 stale in_progress。
 
     條件：
     - status == "in_progress"
@@ -138,7 +138,7 @@ def is_stale_in_progress(
 
     解析失敗（缺 started_at / 格式錯誤）→ False（fail-open，不誤標）。
 
-    W10-120 重構：原獨立邏輯改為呼叫 compute_stale_minutes，消除時區處理
+    重構：原獨立邏輯改為呼叫 compute_stale_minutes，消除時區處理
     與 started_at 解析的雙函式重複（DRY）。語意不變。
 
     Args:

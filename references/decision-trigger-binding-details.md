@@ -213,7 +213,7 @@
 
 ---
 
-## Hook 引用豁免機制（W10-126 補強）
+## Hook 引用豁免機制
 
 phase4-decision-enforcement-hook 對「Phase X 再決定」「延後評估」等字面強制偵測，但合法情境（規則引用、source ticket 歷史 context 引用）需用 `<!-- PC-093-exempt: <category>:<reason> -->` 標記豁免。
 
@@ -267,21 +267,21 @@ marker 必須**緊鄰命中行**：同一行行尾，或命中行上方一行（
 
 詳見 PC-146（exempt marker 位置誤用 + 三層防護）。
 
-### Frontmatter 場景：不需 exempt marker（W1-092 起）
+### Frontmatter 場景：不需 exempt marker
 
 ticket frontmatter（YAML 區塊，`when` / `why` / `strategy` 等欄位）內出現「Phase 4 評估」「Phase 5 再決定」等歷史字面時，**不需要**加 `PC-093-exempt` marker。
 
-**Why**：phase4-decision-enforcement-hook 自 W1-092（PC-142 case 5 修復）起，透過 `compute_frontmatter_lines` 將整個 frontmatter 區塊（含起訖 `---`）排除於 phrase 掃描與 marker 蒐集範圍之外。frontmatter 為結構化元資料，其欄位常含 source ticket history 引用字面，本質與 Context Bundle auto-extracted、Schema placeholder、fenced code block 同類——非人類撰寫的當下延後決策論述，故整段跳過。
+**Why**：phase4-decision-enforcement-hook 自 PC-142 case 5 修復起，透過 `compute_frontmatter_lines` 將整個 frontmatter 區塊（含起訖 `---`）排除於 phrase 掃描與 marker 蒐集範圍之外。frontmatter 為結構化元資料，其欄位常含 source ticket history 引用字面，本質與 Context Bundle auto-extracted、Schema placeholder、fenced code block 同類——非人類撰寫的當下延後決策論述，故整段跳過。
 
-**Consequence**：若仍在 frontmatter 欄位內加 `PC-093-exempt` marker，會造成兩層問題：(1) marker 對 hook 無作用（該區塊不被掃描，marker 也不被蒐集），屬冗餘標記；(2) ticket CLI complete 後的 metadata sync 會以 PyYAML round-trip 重新序列化 frontmatter，行內 markdown 註解形式的 marker 不被當 YAML 註解而是 scalar 值的一部分，序列化後可能位置漂移或被移除，產生「marker 一加就消失」的錯覺。W1-048.3（2026-05-23）即為此模式：sage 在 hook 修復前加 marker 才能 complete，complete 後 metadata sync 移除 marker——但因 W1-092 已讓 hook 不掃 frontmatter，marker 的存廢不再影響 complete。
+**Consequence**：若仍在 frontmatter 欄位內加 `PC-093-exempt` marker，會造成兩層問題：(1) marker 對 hook 無作用（該區塊不被掃描，marker 也不被蒐集），屬冗餘標記；(2) ticket CLI complete 後的 metadata sync 會以 PyYAML round-trip 重新序列化 frontmatter，行內 markdown 註解形式的 marker 不被當 YAML 註解而是 scalar 值的一部分，序列化後可能位置漂移或被移除，產生「marker 一加就消失」的錯覺。2026-05-23 的一次 sage 派發即為此模式：sage 在 hook 修復前加 marker 才能 complete，complete 後 metadata sync 移除 marker——但因 hook 已不掃 frontmatter，marker 的存廢不再影響 complete。
 
 **Action**：
 
 | 字面所在位置 | 是否需 marker | 理由 |
 |------------|-------------|------|
-| frontmatter（`---` 區塊內的 YAML 欄位） | 否 | hook 整段跳過（W1-092），加 marker 冗餘且會被 metadata sync 移除 |
+| frontmatter（`---` 區塊內的 YAML 欄位） | 否 | hook 整段跳過，加 marker 冗餘且會被 metadata sync 移除 |
 | body 一般論述（`## Solution` 等章節文字） | 是 | hook 行級掃描，命中需 marker 豁免 |
-| body 內 fenced code block / Schema placeholder / Context Bundle auto-extracted | 否 | hook 各自整段跳過（W11-018 / W10-130 / W1-120） |
+| body 內 fenced code block / Schema placeholder / Context Bundle auto-extracted | 否 | hook 各自整段跳過 |
 
 **判別準則**：marker 只在「hook 會掃描且會命中」的 body 論述行才有意義。frontmatter 與上述三類整段豁免區塊內，移除 marker 不會造成 hook 阻擋，無需保留。
 
@@ -334,4 +334,4 @@ ticket frontmatter（YAML 區塊，`when` / `why` / `strategy` 等欄位）內�
 
 ---
 
-**Last Updated**: 2026-09-16 | **Version**: 1.7.0 — 新增規則 2.6（協作射程：被操作 repo 無本框架 ticket 系統時，通過閘門的盤點工作項表編號為合法 trigger）：射程分離不改規則 2 原條文；含與規則 2.5 的差異（本案落在「決策未下完」列，非同類豁免，且管轄對象不同）、防架空閘門（射程／載體必留欄位／唯一主檔／對帳票／收件方；除收件方歸屬為分類判斷並指名既有 SOP 外皆機械可查，核對結果須寫入對帳票 acceptance）、指涉穩定與狀態權威的交付前後切換表、`quality-baseline.md` 規則 5 三種終態對應與強制層零改動接法。檢查清單增一列。**Version**: 1.6.0 — 新增規則 2.5（條件式操作規範不綁 ticket trigger）：以「決策是否已下完」單一判別問題收窄規則 2 適用範圍，解消其與 reference-stability 規則 8 在 `.claude/` 框架檔案上不可同時滿足的衝突；處置改為「決策狀態 x 有無偵測承擔者」兩軸四格表；指名偵測承擔者的要求收窄至自指維護閾值一類並加粒度相符判準；明示存量不回溯、與 `baseline-gated` 豁免的分工、以及「指名不等於會被執行」的強度邊界。規則 1.5 既有「規則 / 方法論 / 提案」列擴含 `.claude/` 框架檔案（避免同一檔案命中兩列）；規則 2 加適用範圍註；規則 3 表與檔頭適用範圍表同步；邊界表增列規則 8。**Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/decision-trigger-binding.md` 外移至本檔（W7-004.2 auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.0–1.4 版見 git log。**Source**: PC-093 / PC-146 / W11-023 / W1-092。
+**Last Updated**: 2026-09-16 | **Version**: 1.7.0 — 新增規則 2.6（協作射程：被操作 repo 無本框架 ticket 系統時，通過閘門的盤點工作項表編號為合法 trigger）：射程分離不改規則 2 原條文；含與規則 2.5 的差異（本案落在「決策未下完」列，非同類豁免，且管轄對象不同）、防架空閘門（射程／載體必留欄位／唯一主檔／對帳票／收件方；除收件方歸屬為分類判斷並指名既有 SOP 外皆機械可查，核對結果須寫入對帳票 acceptance）、指涉穩定與狀態權威的交付前後切換表、`quality-baseline.md` 規則 5 三種終態對應與強制層零改動接法。檢查清單增一列。**Version**: 1.6.0 — 新增規則 2.5（條件式操作規範不綁 ticket trigger）：以「決策是否已下完」單一判別問題收窄規則 2 適用範圍，解消其與 reference-stability 規則 8 在 `.claude/` 框架檔案上不可同時滿足的衝突；處置改為「決策狀態 x 有無偵測承擔者」兩軸四格表；指名偵測承擔者的要求收窄至自指維護閾值一類並加粒度相符判準；明示存量不回溯、與 `baseline-gated` 豁免的分工、以及「指名不等於會被執行」的強度邊界。規則 1.5 既有「規則 / 方法論 / 提案」列擴含 `.claude/` 框架檔案（避免同一檔案命中兩列）；規則 2 加適用範圍註；規則 3 表與檔頭適用範圍表同步；邊界表增列規則 8。**Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/decision-trigger-binding.md` 外移至本檔（auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.0–1.4 版見 git log。**Source**: PC-093 / PC-146。

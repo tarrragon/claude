@@ -11,7 +11,7 @@ process-compliance
 CLI 命令回傳非預期錯誤（如「版本偵測錯誤」「找不到 Ticket」），PM 直接依照錯誤提示中的建議操作（如加 `--version` 參數）繞過問題，未追問根因，未建立 Ticket。
 
 **觸發場景**：
-- `ticket handoff` 回傳「找不到 Ticket: 0.1.1-W9-002，版本偵測錯誤（當前偵測版本: v0.1.0）」
+- `ticket handoff` 回傳「找不到 Ticket: <ticket-id>，版本偵測錯誤（當前偵測版本: v0.1.0）」
 - PM 直接加 `--version 0.1.1` 重試，成功後繼續工作
 - 根因（todolist.yaml 版本配置過期）被忽略
 

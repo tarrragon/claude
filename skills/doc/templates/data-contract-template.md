@@ -179,6 +179,6 @@ schema 凍結 vs 演進的決策；seed 資料政策。
 
 ---
 
-**Template Updated**: 2026-07-26 | **Version**: 1.2.0 — 檔頭補分冊判準三條（per-domain 放置/domain 單值上限/寫入者群或錯誤語意模式分異即再分冊），供撰寫者判斷一份契約應涵蓋的範圍（0.2.1-W1-007）
-**Version**: 1.1.0 — 適用判準表新增「dormant 豁免（如適用）」列，引用 data-layer-contract-methodology 第 2.1 節（0.2.1-W1-002）
-**Version**: 1.0.0 — 初始建立（PROP-002 In Scope 1，0.2.0-W2-001）
+**Template Updated**: 2026-07-26 | **Version**: 1.2.0 — 檔頭補分冊判準三條（per-domain 放置/domain 單值上限/寫入者群或錯誤語意模式分異即再分冊），供撰寫者判斷一份契約應涵蓋的範圍
+**Version**: 1.1.0 — 適用判準表新增「dormant 豁免（如適用）」列，引用 data-layer-contract-methodology 第 2.1 節
+**Version**: 1.0.0 — 初始建立（PROP-002 In Scope 1）

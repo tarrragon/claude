@@ -6,11 +6,11 @@
 # ///
 """Charset Pollution Detector — codepoint-aware 簡體字 / emoji 靜態文件偵測工具.
 
-W17-144.1 落地：補位 zhtw-mcp 不偵測簡體字 codepoint / emoji 的場景缺口。
+補位 zhtw-mcp 不偵測簡體字 codepoint / emoji 的場景缺口。
 
 設計動機：
-- W17-144 ANA 證明 zhtw-mcp 工具對 PC-072 場景不適用（自動 S2T 而非報錯）
-- W17-144 第一輪自製 Python 腳本失敗（PC-074 共用字陷阱）
+- 分析證明 zhtw-mcp 工具對 PC-072 場景不適用（自動 S2T 而非報錯）
+- 第一輪自製 Python 腳本失敗（PC-074 共用字陷阱）
 - 本工具用 OpenCC s2twp 雙向轉換 diff，OpenCC 內建處理共用字，避開 PC-074
 
 三模式：
@@ -51,11 +51,11 @@ from typing import Iterable
 #
 # 來源：
 #   - PC-072 文件列出的常見污染字
-#   - W17-145 hook 攔截實證的「实」
+#   - 某次 hook 攔截實證的「实」
 #   - 從中文常用詞庫提取（含可能誤入的共用字，由 OpenCC 動態過濾排除）
 # 警告：禁從 OpenCC STCharacters 表全量抽取種子！
 #
-# W17-144.1.1 ANA 實證：OpenCC 對台灣現代繁體標準字有 30% 偏差，會把
+# ANA 實證：OpenCC 對台灣現代繁體標準字有 30% 偏差，會把
 # 「台/群/干」等台灣官方/教育部標準字誤判為簡體（s2t 轉「臺/羣/幹」）。
 # 種子若從 OpenCC STCharacters 全量抽取會引入這些字，導致誤報合法繁體文件。
 #
@@ -64,7 +64,7 @@ from typing import Iterable
 _ANCHORS_SEED = (
     # PC-072 已知污染字
     "独违没务实觉决个隶遗设长"
-    # W17-144.1.1.1 Method 6: Hook log 反推（PC-085 self-check 警示 12 字，明確簡體）
+    # Method 6: Hook log 反推（PC-085 self-check 警示 12 字，明確簡體）
     # 來源：.claude/hooks/askuserquestion-charset-guard-hook.py 自身 self-check 機制
     "图两译驿气乐观检权铁转广"
     # 高頻簡體字（從中文詞抽字，含部分共用字，由 OpenCC 動態過濾）
@@ -79,7 +79,7 @@ _ANCHORS_SEED = (
 )
 
 
-# 台灣現代繁體標準字反向白名單（W17-144.1.1 ANA 實證 OpenCC 對這些字誤判為簡體）
+# 台灣現代繁體標準字反向白名單（ANA 實證 OpenCC 對這些字誤判為簡體）
 #
 # 用途：self-test 驗證 KNOWN_SIMPLIFIED_ANCHORS **不可包含**這些字。
 # 來源：本 session 用 zhtw-mcp 實測 detected_script="traditional"（與 OpenCC 判斷相反）。
@@ -270,7 +270,7 @@ def report(findings: list[Finding]) -> None:
     """輸出掃描報告."""
     if not findings:
         print("\n=== Scan Result: 0 findings ===")
-        print("實證 W17-144 推論：靜態文件中無簡體字 codepoint / emoji 污染")
+        print("實證推論：靜態文件中無簡體字 codepoint / emoji 污染")
         print("PC-072 污染源確認在 AI 生成側（token 機率分佈），不在文件")
         return
 
@@ -382,7 +382,7 @@ def self_test(converter) -> int:
         f"皆為 OpenCC 認可簡體字"
     )
 
-    # 第五層測試：台灣標準字反向白名單（W17-144.1.1 ANA 實證 OpenCC 對這些字誤判）
+    # 第五層測試：台灣標準字反向白名單（ANA 實證 OpenCC 對這些字誤判）
     # 詳見 _ANCHORS_SEED 上方警告與 TAIWAN_STANDARD_WHITELIST 註解
     forbidden_taiwan_std = [
         ch for ch in TAIWAN_STANDARD_WHITELIST if ch in KNOWN_SIMPLIFIED_ANCHORS
@@ -390,7 +390,7 @@ def self_test(converter) -> int:
     if forbidden_taiwan_std:
         print(
             f"[SELF-TEST FAIL] KNOWN_SIMPLIFIED_ANCHORS 含台灣標準字"
-            f"（W17-144.1.1 違規）：{forbidden_taiwan_std}"
+            f"（違規）：{forbidden_taiwan_std}"
         )
         print(
             "  原因：OpenCC 把台灣繁體標準字（如 台/群/干）誤判為簡體；"
@@ -399,7 +399,7 @@ def self_test(converter) -> int:
         return 1
     print(
         f"[SELF-TEST PASS] KNOWN_SIMPLIFIED_ANCHORS 未含 {len(TAIWAN_STANDARD_WHITELIST)} 個"
-        f"台灣標準字（W17-144.1.1 反向白名單防護有效）"
+        f"台灣標準字（反向白名單防護有效）"
     )
 
     return 0 if not failures and not pollution_failures else 1
@@ -407,7 +407,7 @@ def self_test(converter) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Charset Pollution Detector for PC-072 / W17-144.1",
+        description="Charset Pollution Detector for PC-072",
     )
     parser.add_argument(
         "paths",

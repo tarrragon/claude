@@ -148,29 +148,21 @@ class TestUnmergedFiles:
 
 
 class TestDirtyStatus:
-    def test_parses_nonempty_lines(self, logger):
-        with patch.object(
-            hook, "get_uncommitted_files",
-            return_value=[
-                hook.FileStatus(status=" M", file_path="tickets/a.md"),
-                hook.FileStatus(status="??", file_path="tickets/b.md"),
-            ],
-        ):
+    def test_parses_nonempty_lines_keeping_leading_space(self, logger):
+        with patch.object(hook, "run_git", return_value=" M tickets/a.md\n?? tickets/b.md"):
             assert hook._dirty_status("/path/wt", logger) == [
                 " M tickets/a.md",
                 "?? tickets/b.md",
             ]
 
     def test_clean_returns_empty_list(self, logger):
-        with patch.object(hook, "get_uncommitted_files", return_value=[]):
+        with patch.object(hook, "run_git", return_value=""):
             assert hook._dirty_status("/path/wt", logger) == []
 
-    def test_git_failure_returns_empty_list(self, logger):
-        """0.2.1-W3-286：共用層不區分「git 失敗」與「無變更」，兩者皆回傳
-        空清單；main() 兩種情形皆落在同一放行分支，行為結果一致（見
-        _dirty_status docstring 的行為變更說明）。"""
-        with patch.object(hook, "get_uncommitted_files", return_value=[]):
-            assert hook._dirty_status("/path/wt", logger) == []
+    def test_git_failure_returns_none(self, logger):
+        """3.3.0-W1-204.4.2：查詢失敗與無變更分開回傳，失敗為 None。"""
+        with patch.object(hook, "run_git", return_value=None):
+            assert hook._dirty_status("/path/wt", logger) is None
 
 
 # ---------------------------------------------------------------------------
@@ -420,15 +412,19 @@ class TestMain:
         assert "diff --cached --name-only" in captured.err
         assert not RULE7_PATHSPEC_COMMIT.search(captured.err)
 
-    def test_pass_when_dirty_status_query_fails(self):
-        """git status 查詢失敗（None）不阻擋，避免誤擋。"""
+    def test_block_when_dirty_status_query_fails(self, capsys):
+        """3.3.0-W1-204.4.2：git status 查詢失敗（None）時阻擋，訊息給三種處置。"""
         data = {"tool_input": {"command": "git worktree remove some-path"}}
         with patch.object(hook, "read_json_from_stdin", return_value=data), patch.object(
             hook, "_branch_of_worktree", return_value="feat/x"
         ), patch.object(hook, "_unmerged_files", return_value=[]), patch.object(
             hook, "_dirty_status", return_value=None
         ):
-            assert hook.main() == 0
+            assert hook.main() == 2
+        err = capsys.readouterr().err
+        assert "無法查詢 worktree 狀態" in err
+        assert "絕對路徑" in err
+        assert "git worktree prune" in err
 
 
 # ---------------------------------------------------------------------------
@@ -706,6 +702,18 @@ class TestGuardABaseRepo:
         _, repo_b = two_repos
         wt = _add_worktree(repo_b, "clean", "feat/clean")
         assert _run_main("git -C {} worktree remove {}".format(repo_b, wt)) == 0
+
+    def test_status_query_failure_blocks_real_git(self, repo, capsys):
+        """3.3.0-W1-204.4.2 正向對照：路徑不存在使 git status 失敗，remove 被擋。"""
+        missing = repo.parent / (repo.name + "-missing")
+        rc = _run_main("git -C {} worktree remove --force {}".format(repo, missing))
+        assert rc == 2
+        assert "無法查詢 worktree 狀態" in capsys.readouterr().err
+
+    def test_clean_merged_worktree_passes_real_git(self, repo):
+        """3.3.0-W1-204.4.2 對照：乾淨且已合併的 worktree 照常放行。"""
+        wt = _add_worktree(repo, "clean-local", "feat/clean-local")
+        assert _run_main("git worktree remove {}".format(wt)) == 0
 
     def test_extract_targets_carries_repo_base(self, logger):
         cmd = "git -C /x/y worktree remove /x/y-wt && git worktree remove wt-b"

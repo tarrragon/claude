@@ -72,6 +72,27 @@ export function resumeNoticeDecision(input: { sessionName: string | null; lines:
   return { kind: 'send', target: { lane: line.lane, name: sessionName } }
 }
 
+/** 找不到收件主控的原因：本專案 checkout 下沒有存活的主控、或有多個同名主控。 */
+export type CoordinatorAddressSkipReason = 'coordinator-not-found' | 'coordinator-ambiguous'
+
+/** 收件主控：取得 sessionId，或不送的原因。 */
+export type CoordinatorAddress = { kind: 'ok'; sessionId: string } | { kind: 'skip'; reason: CoordinatorAddressSkipReason }
+
+/**
+ * 從本專案的存活 session（readSessions 已以 checkout 路徑過濾）找出收件主控。
+ * 以 sessionId 寄送，不以裸名稱「主控」寄：本機有多個專案各自的主控時，裸名稱可能送到別的專案。
+ * 名稱相符但缺 sessionId 的 session 不算；恰好一個才送。
+ */
+export function coordinatorAddress(sessions: readonly { name: string; sessionId: string | null }[]): CoordinatorAddress {
+  const ids = sessions
+    .filter(session => session.name === COORDINATOR_SESSION_NAME && session.sessionId !== null)
+    .map(session => session.sessionId as string)
+  const [only, ...rest] = ids
+  if (only === undefined) return { kind: 'skip', reason: 'coordinator-not-found' }
+  if (rest.length > 0) return { kind: 'skip', reason: 'coordinator-ambiguous' }
+  return { kind: 'ok', sessionId: only }
+}
+
 /** 主管道的通知文字：固定一行 `L<n>（<名稱>）已恢復開工：<時間>，來源 <compact|clear>`。 */
 export function resumeNoticeText(target: ResumeNoticeTarget, time: string, source: ResumeSource): string {
   return `L${target.lane}（${target.name}）已恢復開工：${time}，來源 ${source}`

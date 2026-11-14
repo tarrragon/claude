@@ -34,7 +34,7 @@ export function resolveTicketFile(ticketId: string, exists: (path: string) => bo
   return candidates.find(exists) ?? candidates[0] ?? null
 }
 
-/** 協調票 ID 去掉序號（含子序號）得短票號前綴，如 `1.2.0-W3-045` 得 `1.2.0-W3-`；不是票號時為 null。 */
+/** 協調票 ID 去掉序號（含子序號）得短票號前綴，如 `<版號>-W<波次>-<序號>` 得 `<版號>-W<波次>-`；不是票號時為 null。 */
 export function ticketPrefixOf(coordinatorId: string): string | null {
   const match = TICKET_ID.exec(coordinatorId)
   return match === null ? null : `${match[1]}-${match[2]}`

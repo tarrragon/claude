@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.3.2（2026-11-15）— 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；行為不變
+**Last Updated**: 2026-11-15
+
 **Version**: 1.3.1 — `references/integration-guide.md` 版本歸屬措辭同步 scope 凍結模型（2026-09-23）：「衍生問題進當前版本」改為依 `version-progression.md`〈版本生命週期〉分流
 **Last Updated**: 2026-09-23
 

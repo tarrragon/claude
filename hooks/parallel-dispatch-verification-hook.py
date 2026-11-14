@@ -25,11 +25,11 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib.* import ...`
 
-from lib.hook_base import get_project_root  # noqa: E402
+from lib.hook_base import get_project_root, get_shared_state_root  # noqa: E402
 from lib.hook_logging import setup_hook_logging, run_hook_safely  # noqa: E402
 from lib.hook_io import read_json_from_stdin, is_subagent_environment
 from lib.ticket_command_parse import has_complete_command, complete_statement_args  # noqa: E402
@@ -75,6 +75,8 @@ MSG_MISSING_FILES_TITLE = "缺失檔案"
 MSG_EXPECTED_TITLE = "預期修改"
 MSG_ACTUAL_TITLE = "實際變更"
 MSG_ADVICE_TITLE = "建議動作"
+MSG_UNCOMMITTED_TITLE = "[並行派發驗證警告：產出未 commit]"
+MSG_UNCOMMITTED_FILES_TITLE = "產出未 commit"
 
 # Git 命令超時設定（秒）
 GIT_DIFF_TIMEOUT = 10
@@ -152,14 +154,14 @@ def find_missing_files(where_files: list[str], git_changed: list[str]) -> list[s
     # 處理目錄路徑前綴匹配
     missing = where_set - git_set
 
-    # 移除被前綴匹配覆蓋的目錄路徑
+    # 移除被前綴匹配覆蓋的目錄條目：normalize_path 已去尾斜線，無法再以
+    # endswith("/") 辨識目錄；改以 entry + "/" 比對，檔案條目底下不會有子路徑，
+    # 故不需先區分檔案或目錄
     missing_filtered = set()
     for file in missing:
-        # 若此檔案是目錄路徑（以 "/" 結尾）
-        if file.endswith("/"):
-            # 檢查是否有其他 git_changed 檔案以此開頭
-            if any(g.startswith(file) for g in git_set):
-                continue  # 被前綴匹配覆蓋，跳過
+        prefix = file + "/"
+        if any(g.startswith(prefix) for g in git_set):
+            continue  # 目錄條目底下有變更，不算缺失
 
         missing_filtered.add(file)
 
@@ -170,8 +172,8 @@ def extract_ticket_id(input_data: dict) -> Optional[str]:
     """從命令或輸出中提取 Ticket ID
 
     支援格式：
-    - 從命令：ticket track complete 0.1.0-W41-002
-    - 從輸出：[OK] 已完成 Ticket 0.1.0-W41-002
+    - 從命令：ticket track complete <ticket-id>
+    - 從輸出：[OK] 已完成 Ticket <ticket-id>
 
     Args:
         input_data: PostToolUse Hook 的 stdin JSON
@@ -234,11 +236,11 @@ def read_ticket_where_files(ticket_id: str, project_root: Path,
                             logger: logging.Logger) -> list[str]:
     """讀取 Ticket 的 where.files 清單
 
-    W11-004.7.2：raw 抽取統一委派 hook_utils.extract_where_files；
+    raw 抽取統一委派 hook_utils.extract_where_files；
     本函式僅保留路徑規範化（normalize_path）與錯誤觀察（雙通道日誌）。
 
     Args:
-        ticket_id: Ticket ID（如 "0.1.0-W41-002"）
+        ticket_id: Ticket ID（格式 "<版本>-W<波次>-<序號>"）
         project_root: 專案根目錄
         logger: Logger 實例
 
@@ -313,17 +315,37 @@ def _split_paths(out: str) -> list[str]:
     return [n for n in (normalize_path(p) for p in out.split("\0")) if n]
 
 
+class TicketChangeSets(NamedTuple):
+    """該票的變更來源分兩組：含票號 commit 範圍、未提交變更（git diff HEAD）。"""
+    committed: list[str]
+    uncommitted: list[str]
+
+    @property
+    def union(self) -> list[str]:
+        return sorted(set(self.committed) | set(self.uncommitted))
+
+
 def get_git_changed_files(project_root: Path, logger: logging.Logger,
                           ticket_id: str,
                           include_descendants: bool = False) -> list[str]:
-    """取得該票的實際變更檔案：票相關 commit 範圍 + 未提交變更
+    """取得該票的實際變更檔案（兩組來源的聯集），語意見 get_ticket_change_sets。"""
+    return get_ticket_change_sets(
+        project_root, logger, ticket_id, include_descendants).union
+
+
+def get_ticket_change_sets(project_root: Path, logger: logging.Logger,
+                           ticket_id: str,
+                           include_descendants: bool = False) -> TicketChangeSets:
+    """取得該票的實際變更檔案，含票號 commit 範圍與未提交變更分開回傳
 
     比對基準：
-    1. 訊息含該票號的 commit（子任務票號不吃父票的 commit，後綴須精確相等）。
+    1. committed：訊息含該票號的 commit（子任務票號不吃父票的 commit，後綴須精確相等）。
        含 merge commit：以 first-parent diff 取得合併帶入的變更。
        理由：worktree 隔離派發下 complete 在合併提交後執行，此時
        git diff HEAD 恆為空；票號是此刻唯一與該票綁定的穩定識別。
-    2. 聯集 git diff HEAD：程式碼尚未提交即 complete 的情境仍可比對。
+    2. uncommitted：git diff HEAD 加未追蹤檔（ls-files --others --exclude-standard）。
+       程式碼尚未提交即 complete 的情境仍可比對；
+       分開回傳是為了辨識「產出只在未提交變更」（reset／stash 即遺失）。
 
     git 呼叫失敗時記錄雙通道並略過該來源（fail-open，不阻擋）。
 
@@ -333,9 +355,10 @@ def get_git_changed_files(project_root: Path, logger: logging.Logger,
         ticket_id: 完整票號（含子任務後綴）
 
     Returns:
-        list[str]: 規範化後的變更檔案清單
+        TicketChangeSets: 兩組規範化後的變更檔案清單
     """
     changed: set[str] = set()
+    uncommitted: set[str] = set()
     try:
         log_out = _run_git(project_root, [
             "log", "--fixed-strings", f"--grep={ticket_id}",
@@ -365,7 +388,16 @@ def get_git_changed_files(project_root: Path, logger: logging.Logger,
             logger.warning("git diff HEAD 失敗")
             sys.stderr.write("[Hook Error] git diff 命令失敗\n")
         else:
-            changed.update(_split_paths(head_out))
+            uncommitted.update(_split_paths(head_out))
+
+        # 未追蹤的新檔不在 git diff HEAD 內；排除 .gitignore 涵蓋者
+        untracked_out = _run_git(
+            project_root, ["ls-files", "--others", "--exclude-standard", "-z"])
+        if untracked_out is None:
+            logger.warning("git ls-files --others 失敗")
+            sys.stderr.write("[Hook Error] git ls-files 命令失敗\n")
+        else:
+            uncommitted.update(_split_paths(untracked_out))
 
     except subprocess.TimeoutExpired:
         logger.error(f"git 命令超時 ({GIT_DIFF_TIMEOUT}s)")
@@ -377,8 +409,19 @@ def get_git_changed_files(project_root: Path, logger: logging.Logger,
         logger.error(f"執行 git 失敗: {e}")
         sys.stderr.write(f"[Hook Error] git 命令執行失敗: {e}\n")
 
-    logger.debug(f"票相關變更: {len(changed)} 個檔案")
-    return sorted(changed)
+    logger.debug(f"票相關變更: commit {len(changed)} 個、未提交 {len(uncommitted)} 個檔案")
+    return TicketChangeSets(sorted(changed), sorted(uncommitted))
+
+
+def find_uncommitted_only(where_files: list[str],
+                          change_sets: TicketChangeSets) -> list[str]:
+    """where.files 中只出現在未提交變更、不在含票號 commit 範圍的檔案
+
+    = 對 committed 缺失 − 對聯集缺失（兩次比對共用 find_missing_files 的前綴規則）。
+    """
+    missing_from_commits = set(find_missing_files(where_files, change_sets.committed))
+    missing_from_all = set(find_missing_files(where_files, change_sets.union))
+    return sorted(missing_from_commits - missing_from_all)
 
 
 def format_warning_message(
@@ -432,6 +475,7 @@ def format_warning_message(
     lines.append("1. 確認代理人是否確實完成了這些檔案的修改")
     lines.append("2. 若代理人遺漏了修改，手動補完或重新派發")
     lines.append("3. 補完後執行 git diff 確認")
+    lines.append("4. 若條目只需讀取、本票不修改，在 where.files 該條目加 ::read 後綴，不列入預期修改")
     lines.append("")
 
     lines.append("注意：此驗證比對訊息含該票號的 commit（含 merge）與未提交變更。")
@@ -443,13 +487,40 @@ def format_warning_message(
     return "\n".join(lines)
 
 
+def format_uncommitted_message(ticket_id: str, uncommitted_only: list[str]) -> str:
+    """生成「產出未 commit」警告：where.files 只出現在未提交變更，不在含票號 commit 範圍"""
+    lines = [
+        MSG_WARNING_HEADER,
+        MSG_UNCOMMITTED_TITLE,
+        MSG_WARNING_HEADER,
+        "",
+        f"Ticket {ticket_id} 已完成，以下 where.files 只出現在未提交變更（git diff HEAD），",
+        "不在訊息含該票號的 commit 中；git reset --hard、git stash 未取回即遺失：",
+        "",
+        f"{MSG_UNCOMMITTED_FILES_TITLE}（{len(uncommitted_only)} 個）：",
+    ]
+    lines.extend(f"  - {f}" for f in sorted(uncommitted_only))
+    lines += [
+        "",
+        f"{MSG_ADVICE_TITLE}：",
+        "1. 確認這些變更屬於本票，以 commit 提交，訊息帶票號",
+        "2. 若變更屬於其他票或並行 session，不需處理，本警告僅供確認",
+        "",
+        "注意：本警告不阻擋 complete；判定依據為 commit 訊息是否含票號。",
+        "",
+        MSG_WARNING_HEADER,
+    ]
+    return "\n".join(lines)
+
+
 def save_analysis_log(
     logger: logging.Logger,
     ticket_id: str,
     where_files: list[str],
     git_changed: list[str],
     missing_files: list[str],
-    result: str
+    result: str,
+    uncommitted_only: Optional[list[str]] = None,
 ) -> None:
     """記錄執行摘要到日誌檔
 
@@ -462,6 +533,10 @@ def save_analysis_log(
         result: 結果（PASS/WARN/SKIP/ERROR）
     """
     logger.info(f"Verification result: {result}")
+    # INFO 級：complete 當下的「產出只在未提交變更」筆數，可由日誌直接量測漂移率
+    logger.info(f"UncommittedOnly: {len(uncommitted_only or [])} 個（{ticket_id}）")
+    for file in sorted(uncommitted_only or []):
+        logger.info(f"  Uncommitted: {file}")
     logger.debug(f"TicketID: {ticket_id}")
     logger.debug(f"WhereFiles: {len(where_files)} 個")
     logger.debug(f"GitChanged: {len(git_changed)} 個")
@@ -539,9 +614,11 @@ def main() -> int:
 
         # 獲取專案根目錄
         project_root = get_project_root()
+        # 票面（SR）讀共用狀態根；git 呼叫仍用 project_root
+        state_root = get_shared_state_root(project_root)
 
         # 讀取 Ticket 的 where.files
-        where_files = read_ticket_where_files(ticket_id, project_root, logger)
+        where_files = read_ticket_where_files(ticket_id, state_root, logger)
         if not where_files:
             logger.debug("Ticket 無 where.files，靜默結束")
             print(json.dumps(DEFAULT_OUTPUT))
@@ -549,31 +626,42 @@ def main() -> int:
 
         # ANA 的 where.files 為分析範圍：略過驗證
         ticket_type, has_children = read_ticket_type_and_children(
-            ticket_id, project_root, logger)
+            ticket_id, state_root, logger)
         if ticket_type == "ANA":
             logger.info(f"Verification result: SKIP（ANA 票 where.files 為分析範圍）: {ticket_id}")
             print(json.dumps(DEFAULT_OUTPUT))
             return 0
 
         # 執行 git diff（有子票的父票併入子孫票提交）
-        git_changed = get_git_changed_files(
+        change_sets = get_ticket_change_sets(
             project_root, logger, ticket_id, include_descendants=has_children)
+        git_changed = change_sets.union
 
-        # 比對
+        # 比對：完全缺失（聯集也沒有）與產出未 commit（只在未提交變更）
         missing_files = find_missing_files(where_files, git_changed)
+        uncommitted_only = find_uncommitted_only(where_files, change_sets)
 
-        # 記錄日誌
+        if missing_files:
+            result = "WARN"
+        elif uncommitted_only:
+            result = "UNCOMMITTED"
+        else:
+            result = "PASS"
         save_analysis_log(logger, ticket_id, where_files, git_changed,
-                          missing_files, "WARN" if missing_files else "PASS")
+                          missing_files, result, uncommitted_only)
 
         # 輸出結果
+        blocks = []
         if missing_files:
-            # 生成警告訊息
-            warning_msg = format_warning_message(
-                ticket_id, missing_files, where_files, git_changed
-            )
-
+            blocks.append(format_warning_message(
+                ticket_id, missing_files, where_files, git_changed))
             logger.warning(f"偵測到 {len(missing_files)} 個缺失檔案")
+        if uncommitted_only:
+            blocks.append(format_uncommitted_message(ticket_id, uncommitted_only))
+            logger.warning(f"偵測到 {len(uncommitted_only)} 個產出未 commit")
+
+        if blocks:
+            warning_msg = "\n\n".join(blocks)
             logger.warning(warning_msg)
 
             output = {

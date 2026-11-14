@@ -1,4 +1,4 @@
-"""Ticket 專案狀態快照命令（W10-017.1 v2 增強版）。
+"""Ticket 專案狀態快照命令。
 
 v2 變更：
 - 整合 checkpoint_state() + lib/checkpoint_view 渲染「當前建議」+「Ready Check」區塊
@@ -85,7 +85,7 @@ def _build_degraded_state(error: str) -> CheckpointState:
     """建立 degraded CheckpointState：所有資料源 fallback + pending_check 註記錯誤。
 
     用於 execute_snapshot IO_ERRORS 降級路徑，讓 render_current_suggestion +
-    render_ready_check 可直接複用（W10-017.11 AC 4 DRY）。
+    render_ready_check 可直接複用。
 
     資料源 fallback 對齊 DATA_SOURCES：
       uncommitted_files=None（資料源不可用，Ready Check 走 [?] 分支）
@@ -117,7 +117,7 @@ def _build_degraded_state(error: str) -> CheckpointState:
 def _render_degraded_snapshot(error: str) -> int:
     """fail-open 降級渲染：既有靜態區塊仍輸出，動態區塊複用 render_* 函式。
 
-    W10-017.11 AC 4：複用 render_current_suggestion + render_ready_check 避免
+    AC 4：複用 render_current_suggestion + render_ready_check 避免
     與 _render_full_snapshot 重複實作「當前建議 / Ready Check」兩區塊。
     """
     versions = _scan_all_versions()

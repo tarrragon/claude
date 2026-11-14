@@ -53,7 +53,7 @@ from typing import List, Optional, Set
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root
+from lib import setup_hook_logging, run_hook_safely, get_code_root
 
 
 # ============================================================================
@@ -185,7 +185,7 @@ def scan_skills_dir(
 
 def main() -> int:
     logger = setup_hook_logging("skill-banned-term-scan-hook")
-    project_root = get_project_root()
+    project_root = get_code_root()
     skills_dir = project_root / ".claude" / "skills"
 
     result = scan_skills_dir(skills_dir)

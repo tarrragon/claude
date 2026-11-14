@@ -118,7 +118,7 @@ basil 啟動後第一件事是依審查標的的文件類型，Read 對應的 `c
 | 二、資訊優先序檢查 | 核心原則 → 示例 → 提醒順序；偵測「示例先於原則」反模式 | `document-writing-style.md` 資訊優先序章節 + `compositional-writing/SKILL.md` 五大原則 |
 | 三、正面陳述審查 | 每個「禁止 X」必有「應改為 Z」正向錨點（PC-080 防護） | `document-writing-style.md` 二次審查清單 + `error-patterns/process-compliance/PC-080-*.md` |
 
-**Why**：三大職責皆屬語意判斷層（L3），無法 Hook 規則化；可規則化偵測（禁用字、字元集污染）已轉至 L1 Hook 主責（W17-068），basil 在審查既存檔案時可用 Grep 執行 L2 補掃，但屬輔助行為。
+**Why**：三大職責皆屬語意判斷層（L3），無法 Hook 規則化；可規則化偵測（禁用字、字元集污染）已轉至 L1 Hook 主責，basil 在審查既存檔案時可用 Grep 執行 L2 補掃，但屬輔助行為。
 
 **Consequence**：若 basil 主責處理 L1 可規則化掃描，每次派發消耗 token 執行可規則化工作（ginger 估算 +17%），且 Hook 同步阻擋的即時防護缺失。
 
@@ -128,16 +128,16 @@ basil 啟動後第一件事是依審查標的的文件類型，Read 對應的 `c
 
 | 防線 | 執行者 | 處理對象 |
 |------|--------|---------|
-| L1 同步阻擋 | charset hook / language-guard hook（W17-068） | emoji、禁用詞、簡體字、Unicode escape 等可規則化字元（即時阻擋寫入） |
-| L2 機械層審查 | basil 使用 `mcp__zhtw-mcp__zhtw`（W17-145） | 批量掃描既存檔案、草稿階段左移；涵蓋字元集 / 用語規範 / 標點 / 跨境用語 / 簡繁轉換 / 翻譯腔 / AI 寫作痕跡 |
+| L1 同步阻擋 | charset hook / language-guard hook | emoji、禁用詞、簡體字、Unicode escape 等可規則化字元（即時阻擋寫入） |
+| L2 機械層審查 | basil 使用 `mcp__zhtw-mcp__zhtw` | 批量掃描既存檔案、草稿階段左移；涵蓋字元集 / 用語規範 / 標點 / 跨境用語 / 簡繁轉換 / 翻譯腔 / AI 寫作痕跡 |
 | L2 fallback | basil 使用 Grep | zhtw-mcp 不可用時的退場機制（單純 pattern 匹配，無法覆蓋 zhtw-mcp 的綜合判定） |
 | L3 語意兜底 | basil 語意判斷（三大核心職責） | 三明示缺失、資訊優先序顛倒、正面陳述缺錨點、隱含表達句型 |
 
-### 機械層 + 邏輯層分工（W17-145）
+### 機械層 + 邏輯層分工
 
-**Why**：W17-068 的 L1 hook 處理寫入時的單字元阻擋，但既存檔案、新增字元集模式、跨境用語、翻譯腔屬於需批量檢測的問題，hook 機制不適合。zhtw-mcp 提供完整 lint 引擎覆蓋這些需求；L3 語意判斷需語意推理無法工具化（仍由 basil 自行執行），機械層屬規則化檢查可由 zhtw-mcp 完整覆蓋（從 basil Grep 升級為 mcp 機械化）。
+**Why**：L1 hook 處理寫入時的單字元阻擋，但既存檔案、新增字元集模式、跨境用語、翻譯腔屬於需批量檢測的問題，hook 機制不適合。zhtw-mcp 提供完整 lint 引擎覆蓋這些需求；L3 語意判斷需語意推理無法工具化（仍由 basil 自行執行），機械層屬規則化檢查可由 zhtw-mcp 完整覆蓋（從 basil Grep 升級為 mcp 機械化）。
 
-**Consequence**：若 basil 用 Grep 處理機械層問題，PC-072（W12-002 反覆出現的 AUQ 簡體字污染）這類系統性字元集問題仍會逐次重現——Grep 只能掃單一 pattern，無法覆蓋 zhtw-mcp 的繁簡共用字、翻譯腔語法、AI 寫作密度等綜合判定。
+**Consequence**：若 basil 用 Grep 處理機械層問題，PC-072（反覆出現的 AUQ 簡體字污染）這類系統性字元集問題仍會逐次重現——Grep 只能掃單一 pattern，無法覆蓋 zhtw-mcp 的繁簡共用字、翻譯腔語法、AI 寫作密度等綜合判定。
 
 **Action**：審查時依以下順序：
 
@@ -154,9 +154,9 @@ basil 啟動後第一件事是依審查標的的文件類型，Read 對應的 `c
 | YAML（ticket frontmatter） | `yaml` | `base` | 無（YAML 結構化欄位內容簡短，無需 AI 寫作痕跡或翻譯腔偵測）|
 | 程式碼註解 | `markdown-scan-code` | `base` | `detect_translationese=true` |
 
-**範例：PC-072 W12-002 AUQ 簡體字污染若用 zhtw-mcp 應如何被機械捕捉**
+**範例：PC-072 AUQ 簡體字污染若用 zhtw-mcp 應如何被機械捕捉**
 
-PC-072 / W12-002 反覆出現「产 / 独 / 决」等簡體字混入 AUQ payload，導致 hook 反覆阻擋。若審查 PM AUQ 草稿前先呼叫：
+PC-072 反覆出現「产 / 独 / 决」等簡體字混入 AUQ payload，導致 hook 反覆阻擋。若審查 PM AUQ 草稿前先呼叫：
 
 ```
 mcp__zhtw-mcp__zhtw(text="<草稿全文>", content_type="markdown", profile="strict")
@@ -285,15 +285,15 @@ basil 整合後在審查報告 Critical 段直接列出，PM 修正後即可繞�
 | 負向對比有正向錨點 | 通過 | 7 條禁止行為均有正向錨點；新增 v4 段落同時提供「禁全載入」與「應按需 Read」對照 |
 | 無禁用字 / 簡體字 | 通過 | 全文繁體中文；無 language-constraints.md 規則 2 禁用詞 |
 | 無拼寫 / 語法錯誤 | 通過 | 繁體中文語法正確；技術術語（Unicode / Grep / Bash / Markdown / Hook / LLM / token / @-import / progressive disclosure）大小寫符合慣例 |
-| 內容中立可重用 | 通過 | 版本說明標注「v4（W17-088）」作為設計歷史引用而非系統依賴 |
+| 內容中立可重用 | 通過 | 版本說明標注「v4」作為設計歷史引用而非系統依賴 |
 
 ---
 
 **Last Updated**: 2026-06-25
 **Version**: 5.1.0 — 對齊 compositional-writing v0.17.0：keyword bank 新增歸因語氣 grep（`承認|暴露了|證明了失敗|被迫`）+ 否定起手定義句 pattern（`不是.{0,30}而是`）；輪 8-10 描述補恐嚇式語氣 / 歸因語氣兩個新 design gap。代理人透過 @-import auto-load SKILL.md 自動獲得新規範，本次僅更新版本記錄。
-**Version**: 5.0.0 — Layer 3 升級（W17-145）：frontmatter tools 加入 `mcp__zhtw-mcp__zhtw`；L1/L2/L3 表格新增 L2 機械層審查列（zhtw-mcp 取代 Grep 為主、Grep 降為 fallback）；新增「機械層 + 邏輯層分工」章節含 Why/Consequence/Action 三明示、4 種標的類型 zhtw-mcp 呼叫參數對照表、PC-072 / W12-002 AUQ 簡體字污染機械捕捉示範
-**Version**: 4.0.0 — v4 重構（W17-088）：移除 3 份情境特化 references 的 @-import（writing-documents / writing-articles / writing-code-comments），改為 agent 啟動後依文件類型對照表按需 Read。auto-load 從 2230 行降至 ~640 行；恢復 `compositional-writing/SKILL.md` 自身的 progressive disclosure 設計。DRY 不犧牲（情境 references 仍透過 SKILL.md 索引集中管理）
-**Version**: 3.0.0 — v3 重構（W17-087）：手抄規則摘要改為 `@-import` 引用 `document-writing-style.md` / `language-constraints.md` / `compositional-writing/SKILL.md` 與三份情境特化 references；agent 主文聚焦行為邊界與輸出格式，規則細節由 auto-load 提供
-**Version**: 2.0.0 — v2 修改（W17-067，依 W17-066 多視角審查 PM 彙整 R-1）：5 職責→3 職責；補職責一隱含表達 6 句型偵測表；職責三/四改為 Hook 層化說明章節；邊界表補列 thyme-documentation-integrator / mint-format-specialist；二次審查紀錄更新
-**Version**: 1.0.0 — 初始建立文字品質常駐審查委員（三明示結構 + 資訊優先序審查）（W17-056）
-**Source**: W17-050 ANA + W17-066 多視角審查 + W17-087（@-import 全載入）+ W17-088（progressive disclosure 修正）
+**Version**: 5.0.0 — Layer 3 升級：frontmatter tools 加入 `mcp__zhtw-mcp__zhtw`；L1/L2/L3 表格新增 L2 機械層審查列（zhtw-mcp 取代 Grep 為主、Grep 降為 fallback）；新增「機械層 + 邏輯層分工」章節含 Why/Consequence/Action 三明示、4 種標的類型 zhtw-mcp 呼叫參數對照表、PC-072 AUQ 簡體字污染機械捕捉示範
+**Version**: 4.0.0 — v4 重構：移除 3 份情境特化 references 的 @-import（writing-documents / writing-articles / writing-code-comments），改為 agent 啟動後依文件類型對照表按需 Read。auto-load 從 2230 行降至 ~640 行；恢復 `compositional-writing/SKILL.md` 自身的 progressive disclosure 設計。DRY 不犧牲（情境 references 仍透過 SKILL.md 索引集中管理）
+**Version**: 3.0.0 — v3 重構：手抄規則摘要改為 `@-import` 引用 `document-writing-style.md` / `language-constraints.md` / `compositional-writing/SKILL.md` 與三份情境特化 references；agent 主文聚焦行為邊界與輸出格式，規則細節由 auto-load 提供
+**Version**: 2.0.0 — v2 修改（依多視角審查 PM 彙整 R-1）：5 職責→3 職責；補職責一隱含表達 6 句型偵測表；職責三/四改為 Hook 層化說明章節；邊界表補列 thyme-documentation-integrator / mint-format-specialist；二次審查紀錄更新
+**Version**: 1.0.0 — 初始建立文字品質常駐審查委員（三明示結構 + 資訊優先序審查）
+**Source**: 某次 ANA + 多視角審查 + @-import 全載入重構 + progressive disclosure 修正

@@ -52,11 +52,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter, get_project_root, find_ticket_file
+from lib.hook_base import get_shared_state_root
 from lib.hook_messages import WorkflowMessages, CoreMessages, format_message
 from lib.constants import HANDOFF_REMINDED_FLAG_TEMPLATE
 from lib.session_state_key import session_state_path
 
-# W17-181.2: delegate is_ticket_completed 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。
+# delegate is_ticket_completed 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。
 # 加入 ticket_system 父路徑以解析 handoff_utils 內部 `from ticket_system.lib.*` import。
 _TICKET_SKILL_PATH = Path(__file__).resolve().parents[1]
 _TICKET_LIB_PATH = _TICKET_SKILL_PATH / "ticket_system" / "lib"
@@ -138,7 +139,7 @@ def is_ticket_completed(project_root: Path, ticket_id: str, logger) -> bool:
     """
     檢查 Ticket 是否已完成（status: completed）。
 
-    W17-181.2：delegate 至 lib `handoff_utils.is_ticket_completed`（單一 SSOT），
+    delegate 至 lib `handoff_utils.is_ticket_completed`（單一 SSOT），
     消除 ARCH-020 跨進程同步遺漏。本函式保留為 thin wrapper 以維持既有
     呼叫端 (project_root, ticket_id, logger) 簽名相容。
 
@@ -161,7 +162,7 @@ def resolve_ticket_path(project_root: Path, ticket_id: str, logger) -> Optional[
     解析 ticket_id 對應的 Ticket 檔案實際路徑
 
     委派給 hook_utils.find_ticket_file，支援扁平與三層階層結構，
-    與 handoff-auto-resume-stop-hook.py 對齊（W17-165 / W17-176.2.1）。
+    與 handoff-auto-resume-stop-hook.py 對齊。
 
     Args:
         project_root: 專案根目錄
@@ -422,7 +423,7 @@ def main() -> int:
         if not input_data:
             return 0
 
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
         logger.info(f"專案根目錄: {project_root}")
 
         pending_tasks = scan_handoff_pending_directory(project_root, logger)

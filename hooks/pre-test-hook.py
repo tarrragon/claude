@@ -12,13 +12,22 @@
   1. Flutter SDK 可用性
   2. pubspec.lock 存在（依賴已安裝）
   3. .dart_tool/package_config.json 存在（pub get 已執行）
+  4. pubspec.yaml 比 pubspec.lock 新（超過 1 秒容差）時提示依賴過期；但 lock 未改動、
+     且 yaml 的依賴區段（environment、dependencies、dev_dependencies、
+     dependency_overrides）與 lock 最後一次提交時的 yaml 相同時不提示（只改 version
+     等欄位不需 pub get）。非 git、lock 未追蹤或被忽略、lock 已改動、YAML 解析失敗時照常提示。
 
 封堵（deny）:
   名額閘門只對經 run-with-timeout.py 的命令生效，本 hook 封住繞過它的兩條路徑:
   1. Bash 直接執行 heavy 命令（未指定具體測試檔的 flutter／dart／pytest 測試、
      npm test、integration_test、flutter build／drive、xcodebuild）而未經
      run-with-timeout.py 包裝 -> deny，訊息附可直接複製的包裝寫法。
-  2. mcp__dart__run_tests 未帶 paths（會跑全套件）-> deny，指向 Bash 包裝寫法；帶 paths 放行。
+  2. mcp__dart__run_tests 未限定範圍（會跑全套件）-> deny，指向 Bash 包裝寫法。限定範圍指：
+     有 roots 時每個 root 都是物件且帶非空 paths；無 roots 時頂層 paths 非空。
+     （同一 matcher 原另掛 mcp-run-tests-validator，已併入本 hook，判定取兩者 deny 的聯集。）
+  3. 自行取得名額的命令（worktree merge）經 run-with-timeout.py 包裝 -> deny，訊息附
+     不包裝的寫法。外層計時器從啟動即開始，會把閘門內部排隊算進逾時；merge 內部的套件
+     逾時從取得名額後起算，另有排隊上限，外層包裝沒有防護價值。
   light 命令（指定具體測試檔）不經包裝亦放行。
   判定失敗（命令無法解析、判定拋例外）一律 fail-open 放行並寫 stderr：
   封堵端誤判會擋掉正當命令，代價高於漏擋。
@@ -95,30 +104,68 @@ def _wrapped_form(statement: tuple, redirects: str = "") -> str:
 
 
 def _mcp_has_paths(tool_input: dict) -> bool:
-    """mcp__dart__run_tests 是否限定了測試範圍（頂層 paths 或 roots[].paths 任一非空）。"""
-    if tool_input.get("paths"):
-        return True
+    """mcp__dart__run_tests 是否限定了測試範圍。
+
+    有 roots 時每個 root 都須是帶非空 paths 的物件：缺 paths 的 root 會跑該 root 的全套件，
+    頂層 paths 不視為涵蓋它。無 roots 時以頂層 paths 非空為準。
+    """
     roots = tool_input.get("roots") or []
-    return any(isinstance(r, dict) and r.get("paths") for r in roots)
+    if not isinstance(roots, list):
+        return False
+    if roots:
+        return all(isinstance(r, dict) and r.get("paths") for r in roots)
+    return bool(tool_input.get("paths"))
 
 
-def build_block_reason(tool_name: str, tool_input: dict):
-    """回傳封堵理由；放行回 None。判定失敗由呼叫端 fail-open。"""
+def _flutter_test_rewrite(project_dir: str) -> str:
+    """deny 訊息中的 flutter test 寫法；判定失敗時退回不帶前綴的寫法。
+
+    只影響訊息內容：判定失敗不可讓 build_block_reason 拋出，否則呼叫端 fail-open
+    會把原本恆為 deny 的 mcp 全套件呼叫翻成放行。
+    """
+    try:
+        from lib.flutter_launcher import launch_argv
+        return " ".join(launch_argv(["flutter", "test"], project_dir))
+    except Exception as exc:  # 訊息組裝失敗：記錄並退回預設寫法，deny 照舊
+        sys.stderr.write("pre-test-hook FVM 判定失敗，改寫退回 flutter test: {}\n".format(exc))
+        import logging
+        logging.getLogger("pre-test-hook").error("FVM 判定失敗，改寫退回 flutter test: %s", exc)
+        return "flutter test"
+
+
+def build_block_reason(tool_name: str, tool_input: dict, project_dir: str = "."):
+    """回傳封堵理由；放行回 None。判定失敗由呼叫端 fail-open。
+
+    project_dir 決定改寫中的 flutter 命令是否帶 fvm 前綴（專案使用 FVM 時才帶）。
+    """
     if tool_name == "mcp__dart__run_tests":
         if _mcp_has_paths(tool_input):
             return None
+        flutter_test = _flutter_test_rewrite(project_dir)
         return (
-            "mcp__dart__run_tests 未帶 paths 會跑全套件，繞過本機名額閘門。"
-            "請改用 Bash 經包裝執行：python3 {} {} -- fvm flutter test"
+            "mcp__dart__run_tests 未帶 paths，或有 root 未帶 paths，會跑全套件，繞過本機名額閘門。"
+            "請改用 Bash 經包裝執行：python3 {} {} -- {}"
             "（{} 為逾時秒數，可依套件大小調整）；"
-            "或在 roots 的 paths 指定具體測試檔（指定具體測試檔的執行不需排隊）。".format(
-                WRAPPER_PATH, WRAPPER_TIMEOUT_SECONDS, WRAPPER_TIMEOUT_SECONDS)
+            "或在每個 root 的 paths 指定具體測試檔（指定具體測試檔的執行不需排隊）。".format(
+                WRAPPER_PATH, WRAPPER_TIMEOUT_SECONDS, flutter_test, WRAPPER_TIMEOUT_SECONDS)
         )
     if tool_name != "Bash":
         return None
     # 延遲匯入：匯入失敗也走呼叫端的 fail-open，不讓封堵端故障擋掉環境檢查
-    from lib.test_command_parse import find_unwrapped_heavy_with_redirects
-    unwrapped = find_unwrapped_heavy_with_redirects(tool_input.get("command", ""))
+    from lib.test_command_parse import find_unwrapped_heavy_with_redirects, find_wrapped_self_slotted
+    command = tool_input.get("command", "")
+    wrapped_self_slotted = find_wrapped_self_slotted(command)
+    if wrapped_self_slotted:  # None（無法解析）與 []（無命中）皆往下走既有判定
+        suggestions = "\n".join(
+            "  " + ("{} {}".format(shlex.join(st), rd) if rd else shlex.join(st))
+            for st, rd in wrapped_self_slotted)
+        return (
+            "偵測到以 run-with-timeout 包裝的 worktree merge。merge 會自行排隊取得名額，"
+            "外層計時器從啟動就開始計，閘門內的排隊時間會被算進逾時，排得久就會被外層中止；"
+            "merge 內部每個套件的逾時從取得名額後才起算，另有排隊上限，外層包裝沒有防護價值。"
+            "請去掉包裝直接執行（長時間等待改用背景執行並把輸出寫檔）：\n{}".format(suggestions)
+        )
+    unwrapped = find_unwrapped_heavy_with_redirects(command)
     if not unwrapped:  # None（無法解析）與 []（無 heavy）皆放行
         return None
     suggestions = "\n".join("  " + _wrapped_form(st, rd) for st, rd in unwrapped)
@@ -198,7 +245,53 @@ def check_flutter_sdk() -> tuple[bool, str]:
 PUBSPEC_MTIME_TOLERANCE_SECONDS = 1.0
 
 
-def check_dependencies(project_dir: Path) -> list[str]:
+# 影響依賴解析的 pubspec.yaml 區段；name、version、description 等不影響
+# pubspec.lock，只改這些欄位不需要 flutter pub get。
+DEPENDENCY_SECTIONS = ("environment", "dependencies", "dev_dependencies", "dependency_overrides")
+
+
+def _dependency_sections(text: str) -> dict:
+    import yaml
+    data = yaml.safe_load(text) or {}
+    return {key: data.get(key) for key in DEPENDENCY_SECTIONS}
+
+
+def _git_stdout(project_dir: Path, *args: str):
+    result = subprocess.run(
+        ["git", "-C", str(project_dir), *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def dependency_sections_match_lock_commit(project_dir: Path, logger=None) -> bool:
+    """pubspec.lock 未改動，且 yaml 依賴區段與 lock 最後一次提交時的 yaml 相同時回傳 True。
+
+    基準取 lock 最後一次改動的 commit 裡的 yaml，而非 HEAD：只提交 yaml 依賴
+    變更而沒跑 pub get 時，HEAD 的 yaml 已與 lock 脫節。lock 沒動、依賴區段也與
+    該 commit 相同，代表 yaml 只改了 version 等不影響解析的欄位。無法判定（非 git、
+    lock 未追蹤或被 .gitignore 忽略、lock 已改動、yaml 未追蹤、YAML 解析失敗）
+    一律回 False，交回 mtime 判定照常提示。
+    """
+    try:
+        lock_status = _git_stdout(project_dir, "status", "--porcelain", "--", "pubspec.lock")
+        if lock_status is None or lock_status.strip():
+            return False
+        lock_commit = (_git_stdout(project_dir, "log", "-1", "--format=%H", "--", "pubspec.lock") or "").strip()
+        if not lock_commit:
+            return False
+        base_yaml = _git_stdout(project_dir, "show", "{}:./pubspec.yaml".format(lock_commit))
+        if base_yaml is None:
+            return False
+        current_yaml = (project_dir / "pubspec.yaml").read_text(encoding="utf-8")
+        return _dependency_sections(current_yaml) == _dependency_sections(base_yaml)
+    except Exception as exc:  # 判定失敗回到 mtime 提示：多提示一次的代價低於漏提示
+        if logger:
+            logger.warning("依賴區段比對失敗，改用 mtime 判定: %s", exc)
+        return False
+
+
+def check_dependencies(project_dir: Path, logger=None) -> list[str]:
     """檢查依賴是否已安裝。"""
     warnings = []
 
@@ -218,7 +311,11 @@ def check_dependencies(project_dir: Path) -> list[str]:
         yaml_mtime = pubspec_yaml.stat().st_mtime
         lock_mtime = pubspec_lock.stat().st_mtime
         if yaml_mtime - lock_mtime > PUBSPEC_MTIME_TOLERANCE_SECONDS:
-            warnings.append(ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED)
+            if dependency_sections_match_lock_commit(project_dir, logger):
+                if logger:
+                    logger.info("pubspec.yaml 較新但依賴區段與 lock 最後提交時相同、lock 未改動，不提示依賴過期")
+            else:
+                warnings.append(ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED)
 
     return warnings
 
@@ -233,7 +330,8 @@ def main():
     tool_input = input_data.get("tool_input") or {}
 
     try:
-        block_reason = build_block_reason(tool_name, tool_input)
+        block_reason = build_block_reason(
+            tool_name, tool_input, input_data.get("cwd") or str(get_project_root()))
     except Exception as exc:  # 判定失敗 fail-open：封堵端誤判代價高於漏擋
         sys.stderr.write("pre-test-hook 封堵判定失敗，fail-open 放行: {}\n".format(exc))
         logger.error("封堵判定失敗，fail-open: %s", exc)
@@ -268,7 +366,7 @@ def main():
         issues.append(f"[ERROR] {sdk_msg}")
 
     # 2. 檢查依賴
-    dep_warnings = check_dependencies(project_dir)
+    dep_warnings = check_dependencies(project_dir, logger)
     for warning in dep_warnings:
         issues.append(f"[WARNING] {warning}")
 

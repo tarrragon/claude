@@ -3,7 +3,6 @@ id: PC-BAL-023
 title: 自我擴張集合的覆蓋率以起始快照為分母——計數相等被讀成逐項對應，得出偽全量
 severity: high
 category: process-compliance
-source_ticket: 0.2.1-W3-304
 related:
  - PC-BAL-012
  - PC-BAL-010

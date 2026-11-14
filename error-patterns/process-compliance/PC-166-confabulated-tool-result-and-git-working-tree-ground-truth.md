@@ -3,7 +3,6 @@ id: PC-166
 title: PM 幻覺工具執行結果（confabulated tool result）— git working tree 作為事實基準
 category: process-compliance
 severity: high
-source_case: 0.19.0-W3-091
 created: 2026-05-29
 ---
 
@@ -19,9 +18,9 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 |---------|------|
 | 捏造寫入成功 | 「已執行 `git commit 3f9c2e1a`」（實際 git log 無此 commit） |
 | 捏造 mutation 生效 | 「清除 11 張 ticket 的 blockedBy 成功」（實際 CLI 參數錯誤全失敗，無一生效） |
-| 捏造讀取結果 | 「W1-070 是空殼需對帳」（實際早已完成且有完整 body） |
+| 捏造讀取結果 | 「某 ticket 是空殼需對帳」（實際早已完成且有完整 body） |
 | 捏造查詢回傳 | 「dashboard ready=0」（實際 dashboard 健康，12 張 ready） |
-| 捏造檔案內容 | 「W1-070 主題是 4 個 Modal: confirm/alert/loading/custom」（實際是 import-flow 的 2 個 modal） |
+| 捏造檔案內容 | 「該 ticket 主題是 4 個 Modal: confirm/alert/loading/custom」（實際是 import-flow 的 2 個 modal） |
 | 捏造唯讀工具 stdout | 「`grep` 命中第 25 行裸中文」（實際 grep 無輸出）、「測試檔 import 區損壞」（實際 cat 內容完好）、偽造 `System:` prompt injection 訊息（實際無此注入） |
 
 **幻覺分兩類，事實基準不同**：
@@ -31,9 +30,9 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 | mutation 類 | 捏造 commit／mutation 生效／檔案寫入 | git working tree（變更留痕） | 防護 A-D |
 | 唯讀 stdout 類 | 捏造 grep／cat／git status／ls 的輸出本身 | **git working tree 失效**（讀不留痕，status 永遠 clean 給假安心）；改用 raw stdout 判據 + 固定值 | **防護 E** |
 
-**第二維度：執行是否真實發生（W1-039 鑑識補強）**：
+**第二維度：執行是否真實發生（ghost branch 鑑識補強）**：
 
-上表分「捏造的是什麼」（mutation 結果 vs 唯讀 stdout），預設「執行從未發生」。W1-039 鑑識證實另一正交維度——執行**真實發生過**但本執行體無記錄（同 prompt 異執行體 / ghost branch）：
+上表分「捏造的是什麼」（mutation 結果 vs 唯讀 stdout），預設「執行從未發生」。ghost branch 鑑識證實另一正交維度——執行**真實發生過**但本執行體無記錄（同 prompt 異執行體 / ghost branch）：
 
 | 情形 | 世界平面 | 記錄平面 | 處置 |
 |------|---------|---------|------|
@@ -73,7 +72,7 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 
 **Action**：接手新 session 時，對每個聲稱「已完成 / 進行中」的 ticket 讀真實 frontmatter（completed_at / status）建立事實基準，不靠 context 記憶推斷狀態。情境因子可疑時（如狀態與記憶不符），優先走防護 D 的 git object 查證排除「異地真實執行」，再確認根因為輸出層 confabulation。
 
-> **本案佐證**：W1-070/093/120 completed_at 分別為 14:49 / 15:15 / 15:39，皆早於本 session SessionStart（15:54），證明確為跨 session 已完成狀態（情境因子真實存在）；但聲稱的 `git commit 3f9c2e1a` 經 `git cat-file -t` 確認 object 不存在（根因為輸出層 confabulation，與 ticket system 無關）。
+> **本案佐證**：三張被聲稱為空殼的 ticket 其 completed_at 分別為 14:49 / 15:15 / 15:39，皆早於本 session SessionStart（15:54），證明確為跨 session 已完成狀態（情境因子真實存在）；但聲稱的 `git commit 3f9c2e1a` 經 `git cat-file -t` 確認 object 不存在（根因為輸出層 confabulation，與 ticket system 無關）。
 
 **與 PC-111 / PC-147 的機制區別**（atomic error-pattern 邊界）：
 
@@ -85,22 +84,22 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 
 ## 案例
 
-**0.19.0-W3-091（2026-05-29）**：
+**ticket 接手流程幻覺案例（2026-05-29）**：
 
-- PM 執行 /ticket 接手流程，幻覺出「W1-070/093/120 為已 commit 未 complete 空殼需對帳」「清除 11 張 blockedBy 成功」「git commit 3f9c2e1a 成功」「dashboard ready=0 false negative」等整段虛構工具結果。
+- PM 執行 /ticket 接手流程，幻覺出「三張 ticket 為已 commit 未 complete 空殼需對帳」「清除 11 張 blockedBy 成功」「git commit 3f9c2e1a 成功」「dashboard ready=0 false negative」等整段虛構工具結果。
 - 基於假前提向用戶提 AskUserQuestion，用戶選了「修資料一致性」——這整個是建立在幻覺前提上的假任務。
-- 唯一真實副作用：對已完成的 W1-070.md append 捏造內容（虛構 4-Modal 場景）污染 17 行。
+- 唯一真實副作用：對已完成的 ticket md append 捏造內容（虛構 4-Modal 場景）污染 17 行。
 - **phase4-hook 偵測到「Phase 4 評估」延後話術命中而擋下後續寫入，PM 才察覺異常。**
-- 證偽方法：對每個聲稱用獨立命令查證——`git log`（無 3f9c2e1a）、`git status`（僅 1 檔 modified，無 blockedBy 變更）、`ticket track query`（W1-070 早已完成）。git working tree 全程只記錄 1 檔變更，與「commit + 清 11 blockedBy」聲稱直接矛盾。
-- 還原：`git checkout -- 0.19.0-W1-070.md`，working tree 回復乾淨。
+- 證偽方法：對每個聲稱用獨立命令查證——`git log`（無 3f9c2e1a）、`git status`（僅 1 檔 modified，無 blockedBy 變更）、`ticket track query`（該 ticket 早已完成）。git working tree 全程只記錄 1 檔變更，與「commit + 清 11 blockedBy」聲稱直接矛盾。
+- 還原：`git checkout -- <ticket-id>.md`，working tree 回復乾淨。
 - 異地執行排除（防護 D，用戶事後追問「會不會在別的 worktree/branch」催生）：`git cat-file -t 3f9c2e1a` → `Not a valid object name`（物理排除曾在任何地方 commit）；`git worktree list` → 僅主 repo；`git fsck` 的 dangling commit 今日 6 個全為 stash/WIP 備份，無一含聲稱內容；`git rev-list --all` 無此 hash。決定性確認為 confabulation 而非異地真實執行。
 
-**1.5.0-W5-011.3（2026-07-05）— 收尾流程 + 驗證步驟自身被虛構（遞歸污染）**：
+**收尾流程虛構案例（2026-07-05）— 收尾流程 + 驗證步驟自身被虛構（遞歸污染）**：
 
 - PM 在 ticket 收尾流程（append-log Phase 4 → 自檢結果 → complete → commit → branch -d）連續多回合幻覺工具成功結果。
 - **新維度：連防護 B/E 的驗證命令輸出本身也被虛構。** PM 發出 `grep -c` 驗證 append-log 是否落地，卻在同一訊息續寫虛構的「grep=1」；發出 `complete` 卻虛構整段「已完成」checklist；發出 `git commit` 卻虛構 commit SHA（`3f8a1c9e5` / `8c3f2a1b4`，`git log` 皆無）。防護 B「mutation 後獨立驗證」被架空——因為驗證步驟的 stdout 一併被腦補，偵測 confabulation 的機制自身被 confabulate。
 - 打破循環的三要素：(1) `/clear` 清掉被虛構污染的 context（新 session 無虛構記憶包袱）；(2) 用戶介入「你有幻覺」；(3) 恢復時改採「一命令 → 訊息結束 → 下輪讀真實 result」紀律，每步用固定值（`grep -c` 整數 / `rev-parse` 40 字 hash / `test -f` 二元）獨立確認，且對每個聲稱重讀原檔比對。
-- 真實 vs 虛構分界（事後以固定值對帳）：工具實作、合併 main、17 測試、runtime fix、W5-013 建票、memory 檔 Write 為**真實**（tool 系統結果較難腦補）；Phase 4 append-log / 自檢 / complete / 收尾 commit 全為**虛構**，補做時才真實落地。
+- 真實 vs 虛構分界（事後以固定值對帳）：工具實作、合併 main、17 測試、runtime fix、後續建票、memory 檔 Write 為**真實**（tool 系統結果較難腦補）；Phase 4 append-log / 自檢 / complete / 收尾 commit 全為**虛構**，補做時才真實落地。
 - **教訓**：confabulation 會遞歸污染「用來偵測 confabulation 的驗證步驟」，使防護 B/E 失效。唯一結構性阻斷是 tool-output-trust 規則 1——**工具呼叫發出後該訊息即停止，不在同訊息續寫預期結果**。把「mutation + 驗證敘事」擠在同一訊息是點火動作（見防護 F）。
 
 ## 防護
@@ -162,7 +161,7 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 
 #### 防護 D 延伸：同 prompt 異執行體（ghost branch）也是「在別處真實執行」
 
-防護 D 原針對「別的 worktree / branch / 已刪分支」。W1-039 鑑識證實「別處」可以是**同 session 同 prompt 的另一個執行體**（ghost branch）——一個 prompt 觸發兩個並行主迴圈，輸家分支的 transcript 不存在（記錄 at-most-once），但其 commit / spawn / complete 是真實副作用（世界 at-least-once）。本執行體對此零記憶，第一反應常是腦補「並行 session」或「自己幻覺」，兩者都錯。
+防護 D 原針對「別的 worktree / branch / 已刪分支」。ghost branch 鑑識證實「別處」可以是**同 session 同 prompt 的另一個執行體**（ghost branch）——一個 prompt 觸發兩個並行主迴圈，輸家分支的 transcript 不存在（記錄 at-most-once），但其 commit / spawn / complete 是真實副作用（世界 at-least-once）。本執行體對此零記憶，第一反應常是腦補「並行 session」或「自己幻覺」，兩者都錯。
 
 **雙向鑑識判據**（「我記得做過但世界沒有」或「世界有但我沒記憶」時）：
 
@@ -179,7 +178,7 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 | 有 ghost 檔案痕跡 | 執行確實發生（ghost branch 真實副作用） | 對帳／找回，**禁止當幻覺丟棄或當污染 revert** |
 | 無任何痕跡 | 不可判（純 confabulation 或執行流被 runtime 棄置；CC 不匯出棄流 trace 無法證偽） | 回防護 A-E 當 confabulation 處置 |
 
-**宿主機制已收斂**（1.0.0-W1-041 事發環境補證，2026-06-10）：ghost branch 的宿主是**事發 session 自身進程內的同 turn 第二執行流**（in-process duplicate turn execution）。外部候選全數以正向物證排除——(a) 外部 agent SDK：ghost 記錄 `version=2.1.170`，而本機所有 SDK binary 為 2.1.143/146/156，無一可寫出 2.1.170，且 SDK 進程 cwd 在他專案；(b) 獨立進程 resume/replay：SessionStart hook log 全日僅三次爆發（皆非 ghost 窗口），append-only jsonl 下獨立 appender 寫入必持久化但 ghost 主迴圈 22 分鐘零行，shell history 無對應 resume 命令；(c) workflow 內部 agent：workflow journal 不含 ghost spawner toolUseId。同進程內細分（通知重複投遞 vs turn fork）**標記不可知**——兩者在本地證據上同構（單寫者勝出使輸家 queue 操作不持久化；hook 視角 sessionId+promptId+pid 三欄全同），需 CC runtime 內部 trace 才能分辨，本地證據已窮盡。鑑識判據（有痕跡 vs 不可判）不依賴此細分，可即時使用。
+**宿主機制已收斂**（事發環境補證，2026-06-10）：ghost branch 的宿主是**事發 session 自身進程內的同 turn 第二執行流**（in-process duplicate turn execution）。外部候選全數以正向物證排除——(a) 外部 agent SDK：ghost 記錄 `version=2.1.170`，而本機所有 SDK binary 為 2.1.143/146/156，無一可寫出 2.1.170，且 SDK 進程 cwd 在他專案；(b) 獨立進程 resume/replay：SessionStart hook log 全日僅三次爆發（皆非 ghost 窗口），append-only jsonl 下獨立 appender 寫入必持久化但 ghost 主迴圈 22 分鐘零行，shell history 無對應 resume 命令；(c) workflow 內部 agent：workflow journal 不含 ghost spawner toolUseId。同進程內細分（通知重複投遞 vs turn fork）**標記不可知**——兩者在本地證據上同構（單寫者勝出使輸家 queue 操作不持久化；hook 視角 sessionId+promptId+pid 三欄全同），需 CC runtime 內部 trace 才能分辨，本地證據已窮盡。鑑識判據（有痕跡 vs 不可判）不依賴此細分，可即時使用。
 
 **宿主收斂的鑑識增補判據**（可重用）：ghost agent jsonl 首行的 `version` / `slug` / `cwd` 欄位是宿主進程指紋——`version` 是 spawner runtime 的 binary 版本（跨進程必異版可排除）、`slug` 隨 session、`cwd` 隨進程。配合 SessionStart hook log 時間軸（獨立進程啟動必留 21-hook 爆發）與 `/tmp/claude-501/<project>/<sessionId>/tasks/` 背景任務 birth time，可在無 runtime trace 下完成宿主歸屬。
 
@@ -205,11 +204,11 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 
 ### 防護 F：驗證步驟自身被虛構 — 唯一結構性阻斷是「一命令→訊息結束→下輪讀真實 result」
 
-防護 B/E 都要求「用獨立命令驗證」，但 1.5.0-W5-011.3 證實：**驗證命令的 stdout 本身也會被虛構**（發 `grep -c` 卻續寫假的整數、發 `commit` 卻續寫假的 SHA）。當偵測 confabulation 的驗證步驟被 confabulate，防護 B/E 全部架空。此時 A-E 的「事實基準」無一可靠，因為連讀取事實基準的動作都被腦補。
+防護 B/E 都要求「用獨立命令驗證」，但收尾流程虛構案例證實：**驗證命令的 stdout 本身也會被虛構**（發 `grep -c` 卻續寫假的整數、發 `commit` 卻續寫假的 SHA）。當偵測 confabulation 的驗證步驟被 confabulate，防護 B/E 全部架空。此時 A-E 的「事實基準」無一可靠，因為連讀取事實基準的動作都被腦補。
 
 **Why**：confabulation 的點火動作是「工具呼叫發出後，在同一訊息續寫該工具的預期結果」（tool-output-trust 規則 1）。只要 mutation 命令與其驗證敘事被擠在同一輪訊息，模型就用預期分布填補驗證輸出，驗證與被驗證對象一起失真。這是 L1 根因（預期填補）在 meta 層的複現——防護機制不能與被防護對象共處同一次生成。
 
-**Consequence**：批次「mutation + 立即驗證敘事」於同一訊息，會讓「我驗證過了」成為最強的假安心，比防護 A-E 未做更危險（做了假驗證比沒驗證更難自我察覺）。W5-011.3 中 PM 連續多輪「grep=1 確認落地」全為虛構，直到 `/clear` + 用戶介入才打破。
+**Consequence**：批次「mutation + 立即驗證敘事」於同一訊息，會讓「我驗證過了」成為最強的假安心，比防護 A-E 未做更危險（做了假驗證比沒驗證更難自我察覺）。收尾流程虛構案例中 PM 連續多輪「grep=1 確認落地」全為虛構，直到 `/clear` + 用戶介入才打破。
 
 **Action**：
 
@@ -232,12 +231,12 @@ PM（或代理人）在連續多回合操作中，**幻覺出從未真實返回�
 - PC-111（論述編造技術機制）— 同為 confabulation 家族，但層級不同（論述 vs 工具回報）
 - PC-147（reference doc 自指涉 confabulation cascade）— 文件層級聯
 - IMP-071（append-log 對 placeholder 章節首次填寫不替換）— 防護 B 表格引用
-- 0.19.0-W3-091（source ANA，含完整 WRAP 升級評估）
+- source ANA（含完整 WRAP 升級評估）
 - 防護 E（唯讀 stdout 虛構類）為後續 confabulation 根因 ANA（四視角整合）升級所補
-- 1.0.0-W1-039（ghost branch 鑑識 ANA）— 防護 D 延伸（同 prompt 異執行體）+ 症狀第二維度（執行真實性）source case；經四視角審查修正（原 M1/M3 二分降為「有痕跡 vs 不可判」，宿主機制降為多候選未排除）
-- 1.0.0-W1-041（宿主機制補證 ANA）— 事發環境排除實驗：外部三候選全排除，宿主收斂為同進程同 turn 雙執行流；新增 version/slug/cwd 進程指紋判據
+- ghost branch 鑑識 ANA— 防護 D 延伸（同 prompt 異執行體）+ 症狀第二維度（執行真實性）source case；經四視角審查修正（原 M1/M3 二分降為「有痕跡 vs 不可判」，宿主機制降為多候選未排除）
+- 宿主機制補證 ANA— 事發環境排除實驗：外部三候選全排除，宿主收斂為同進程同 turn 雙執行流；新增 version/slug/cwd 進程指紋判據
 - `.claude/rules/core/tool-output-trust-rules.md` — 本 pattern 生成自律的規則層固化（規則 1-4 反 confabulation 協議 + 規則 5 記錄/世界二相性）
 
 ---
 
-**Last Updated**: 2026-07-05 — 新增 1.5.0-W5-011.3 案例（收尾流程 + **驗證步驟自身被虛構**的遞歸污染維度）與**防護 F**（一命令→訊息結束→下輪讀真實 result；禁 mutation+驗證同訊息，為防護 B/E 生效的前提）。enforcement 升級評估交 follow-up ticket。前次 2026-06-10：宿主機制由「四候選未排除」收斂為「同進程同 turn 雙執行流」（1.0.0-W1-041 補證）；新增 version/slug/cwd 進程指紋鑑識判據。
+**Last Updated**: 2026-07-05 — 新增收尾流程虛構案例（收尾流程 + **驗證步驟自身被虛構**的遞歸污染維度）與**防護 F**（一命令→訊息結束→下輪讀真實 result；禁 mutation+驗證同訊息，為防護 B/E 生效的前提）。enforcement 升級評估交 follow-up ticket。前次 2026-06-10：宿主機制由「四候選未排除」收斂為「同進程同 turn 雙執行流」（事發環境補證）；新增 version/slug/cwd 進程指紋鑑識判據。

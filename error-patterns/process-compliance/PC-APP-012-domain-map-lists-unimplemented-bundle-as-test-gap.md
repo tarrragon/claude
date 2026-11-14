@@ -5,25 +5,21 @@ category: process-compliance
 severity: medium
 first_seen: "2026-07-23"
 occurrences: 1
-related_tickets:
-  - 0.38.1-W8-002
-  - 0.38.1-W6-002
-  - 0.38.1-W5-002
 ---
 
 # PC-APP-012: Domain map 將未實作概念列為已實作 bundle，衍生不可執行的測試 ticket
 
 ## 事件
 
-W6-002 分析 domain-map vs 測試對齊度時，saffron 把 synchronization domain-map §3 列出的 `PassthroughMerge` 和 `TagTreeMerge` bundle 當作已實作的程式碼類別，據此建立 W8-002 IMP ticket 要求補寫 unit test。
+某張測試對齊分析票分析 domain-map vs 測試對齊度時，saffron 把 synchronization domain-map §3 列出的 `PassthroughMerge` 和 `TagTreeMerge` bundle 當作已實作的程式碼類別，據此建立 IMP ticket 要求補寫 unit test。
 
 Agent 執行時 `grep` 找不到目標類別——實際合併邏輯在 `SyncMergeService` 中，未拆為獨立策略類別。Ticket 無法執行，花費 97k tokens 後失敗回報。
 
 ## 根因
 
-**domain-map 產出階段**（W5-002）：saffron 從 spec 概念描述反推 bundle 時，把「合併策略分類」概念（PassthroughMerge / TagTreeMerge）列為 §3 bundle，未用 `grep` 驗證對應類別在程式碼中存在。方法論 §3 底線「必須用實際 import 鏈驗證」聚焦依賴方向，未覆蓋「bundle 本身是否已實作」。
+**domain-map 產出階段**：saffron 從 spec 概念描述反推 bundle 時，把「合併策略分類」概念（PassthroughMerge / TagTreeMerge）列為 §3 bundle，未用 `grep` 驗證對應類別在程式碼中存在。方法論 §3 底線「必須用實際 import 鏈驗證」聚焦依賴方向，未覆蓋「bundle 本身是否已實作」。
 
-**分析消費階段**（W6-002）：直接消費 domain-map §3 的 bundle 清單比對測試目錄，未二次驗證 bundle 對應的程式碼類別存在性。domain-map 被當作 ground truth。
+**分析消費階段**：直接消費 domain-map §3 的 bundle 清單比對測試目錄，未二次驗證 bundle 對應的程式碼類別存在性。domain-map 被當作 ground truth。
 
 **建票階段**（PM）：從分析報告的 spawn 規劃建票時，未對 `where.files` 的目標類別做存在性確認。
 
@@ -33,7 +29,7 @@ domain-map §3 bundle 界定表有兩種語意：(a) 已實作的程式碼結構
 
 ## Consequence
 
-產出不可執行的 IMP ticket（W8-002），agent 花 97k tokens 嘗試後失敗。PM 需手動診斷根因、關閉 ticket、追溯錯誤鏈。
+產出不可執行的 IMP ticket，agent 花 97k tokens 嘗試後失敗。PM 需手動診斷根因、關閉 ticket、追溯錯誤鏈。
 
 ## Action
 

@@ -9,7 +9,7 @@
 | 編號 | PC-150 |
 | 類別 | process-compliance |
 | 風險等級 | 中（靜默語意錯誤，人工抽查才能發現） |
-| 首發時間 | 2026-05-15（W11-028 commit b847d8a2） |
+| 首發時間 | 2026-05-15（commit b847d8a2） |
 | 姊妹模式 | PC-074（繁簡共用字 false positive）/ PC-085（CJK codepoint 鄰近性）/ PC-131（外部工具權威性質疑） |
 
 ---
@@ -28,7 +28,7 @@ Subagent 執行字元 normalize 任務（如「污→汙」變體字統一）時
 
 ## 案例實證
 
-### 案例 1：W11-028 mint 「污→汲」誤改（2026-05-15）
+### 案例 1：mint 「污→汲」誤改（2026-05-15）
 
 | 項目 | 值 |
 |------|------|
@@ -78,5 +78,5 @@ LLM（haiku model）在處理字形相近的水部字（污 U+6C61 / 汙 U+6C59 
 ---
 
 **Last Updated**: 2026-05-17
-**Version**: 1.0.0 — 初始建立：subagent 形似字 normalize 誤替換正常字元的防護（W17-202 ANA）
-**Source**: 0.18.0-W17-202 / 0.18.0-W11-028
+**Version**: 1.0.0 — 初始建立：subagent 形似字 normalize 誤替換正常字元的防護（ANA）
+**Source**: 2026-05-15 mint normalize 誤替換事件與其後 ANA

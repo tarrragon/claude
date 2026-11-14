@@ -28,7 +28,7 @@ _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, _FRAMEWORK_HOOKS)
 try:
-    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
+    from lib import setup_hook_logging, get_hook_log_dir, run_hook_safely, read_json_from_stdin, emit_hook_output
     from lib.hook_messages import ValidationMessages, format_message
     _LIB_AVAILABLE = True
 except ImportError:
@@ -148,7 +148,16 @@ def format_warning(file_path: str, issues: list[dict]) -> str:
 # 抽樣降級：每 N 次觸發 1 次完整檢查（高頻 Hook，候選 3）
 # 來源 ANA：Phase 3b P3 五 Hook，0% Action 比、連續 5 次無錯
 SAMPLING_N = 10
-SAMPLING_COUNTER_FILE = Path(__file__).parent.parent / "hook-logs" / "_sampling" / "worklog-format-check.count"
+
+
+def _get_sampling_counter_file() -> Path:
+    """計數器路徑：每次呼叫由 lib 的 get_hook_log_dir 動態解析。
+
+    Why：舊實作於 import 時以 Path(__file__).parent.parent 固定路徑，恆落在
+    skills/doc-flow/hook-logs/，不受 CLAUDE_PROJECT_DIR 覆寫，測試會污染真實
+    skill 目錄。比照 language-guard-hook.py _get_sampling_counter_file()。
+    """
+    return get_hook_log_dir("_sampling") / "worklog-format-check.count"
 
 
 def should_sample_run(logger) -> bool:
@@ -157,15 +166,16 @@ def should_sample_run(logger) -> bool:
     使用持久計數檔案，避免抽樣偏差；讀寫失敗時保守執行（return True）。
     """
     try:
-        SAMPLING_COUNTER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        counter_file = _get_sampling_counter_file()
+        counter_file.parent.mkdir(parents=True, exist_ok=True)
         count = 0
-        if SAMPLING_COUNTER_FILE.exists():
+        if counter_file.exists():
             try:
-                count = int(SAMPLING_COUNTER_FILE.read_text().strip() or "0")
+                count = int(counter_file.read_text().strip() or "0")
             except (ValueError, OSError):
                 count = 0
         count += 1
-        SAMPLING_COUNTER_FILE.write_text(str(count))
+        counter_file.write_text(str(count))
         run = (count % SAMPLING_N == 0)
         logger.debug("抽樣計數=%d, 本次%s", count, "執行" if run else "跳過")
         return run

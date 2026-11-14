@@ -5,7 +5,7 @@
 從 main-thread-edit-restriction-hook.py 提取。
 消除 EXCEPTION 層，改為 ALLOWED 優先檢查，每條路徑只匹配一層。
 
-0.2.1-W3-066：ALLOWED_PATTERNS 是 .claude/ 子目錄白名單的建立端（source of truth）。
+ALLOWED_PATTERNS 是 .claude/ 子目錄白名單的建立端（source of truth）。
 拒絕訊息（hook_messages.GateMessages.EDIT_BLOCKED_CLAUDE_INVALID_PATH）過去硬編碼一份
 獨立清單，兩者結構上可各自演進而漂移（tool-output-trust-rules 規則 6：驗證器/訊息清單
 與建立端定義衝突時以建立端為準）。改為訊息清單由 get_allowed_claude_subdirectory_lines()
@@ -18,6 +18,7 @@ from collections import namedtuple
 from pathlib import Path
 from typing import List, Tuple
 
+from lib.checkout_identity import strip_root_prefix
 from lib.hook_messages import GateMessages
 
 
@@ -34,7 +35,7 @@ _AllowedEntry = namedtuple("_AllowedEntry", ["pattern", "dir_label", "descriptio
 # ALLOWED_PATTERN_ENTRIES 補一行，清單與訊息會自動同步，無需手動維護第二份清單。
 ALLOWED_PATTERN_ENTRIES: List[_AllowedEntry] = [
     _AllowedEntry(r"^\.claude/[^/]+\.(json|yaml)$", None, None),  # .claude/ 根目錄配置檔
-    _AllowedEntry(r"^\.claude/[^/]+\.md$", None, None),  # .claude/ 根目錄 md 檔（README.md, CHANGELOG.md 等；W10-049）
+    _AllowedEntry(r"^\.claude/[^/]+\.md$", None, None),  # .claude/ 根目錄 md 檔（README.md, CHANGELOG.md 等）
     _AllowedEntry(r"^\.claude/plans/.*", "plans", "計畫檔案"),  # i18n-exempt
     _AllowedEntry(r"^\.claude/rules/.*", "rules", "規則"),  # i18n-exempt
     _AllowedEntry(r"^\.claude/methodologies/.*", "methodologies", "方法論"),  # i18n-exempt
@@ -47,13 +48,13 @@ ALLOWED_PATTERN_ENTRIES: List[_AllowedEntry] = [
     _AllowedEntry(r"^\.claude/hook-specs/.*", "hook-specs", "Hook 規格"),  # i18n-exempt
     _AllowedEntry(r"^\.claude/scripts/.*", "scripts", "腳本"),  # i18n-exempt
     _AllowedEntry(r"^\.claude/handoff/.*", "handoff", "交接檔案"),  # i18n-exempt
-    _AllowedEntry(r"^\.claude/analyses/.*", "analyses", "歷史分析報告歸檔（W10-049）"),  # i18n-exempt
-    _AllowedEntry(r"^\.claude/templates/.*", "templates", "通用模板檔案（W10-049.3）"),  # i18n-exempt
-    _AllowedEntry(r"^\.claude/lib/.*\.md$", "lib", "lib 目錄的 .md 文件（.py 仍由 BLOCKED_PATTERNS 阻擋）"),  # i18n-exempt
-    _AllowedEntry(r"^\.claude/output-styles/.*", "output-styles", "output-style 設計檔案（W10-050）"),  # i18n-exempt
+    _AllowedEntry(r"^\.claude/analyses/.*", "analyses", "歷史分析報告歸檔"),  # i18n-exempt
+    _AllowedEntry(r"^\.claude/templates/.*", "templates", "通用模板檔案"),  # i18n-exempt
+    _AllowedEntry(r"^\.claude/lib/.*", "lib", "Hook 與 Skill 共用模組"),  # i18n-exempt
+    _AllowedEntry(r"^\.claude/output-styles/.*", "output-styles", "output-style 設計檔案"),  # i18n-exempt
     # config 目錄含 presence_profiles.py，為 3 個 hook 的 import 目標；
     # 修改該檔後須跑 .claude/hooks/tests/test_presence_detection_hook.py
-    _AllowedEntry(r"^\.claude/config/.*", "config", "框架設定資料（0.2.1-W3-069）"),  # i18n-exempt
+    _AllowedEntry(r"^\.claude/config/.*", "config", "框架設定資料"),  # i18n-exempt
     _AllowedEntry(r"^\.claude/project-integration/.*", "project-integration", "專案整合紀錄（framework-update-adaptation Step 5）"),  # i18n-exempt
     _AllowedEntry(r"^\.claude/VERSION$", None, None),  # 框架版號檔：roadmap §5 第 3 步由主線程更新
     _AllowedEntry(r"^docs/.*", None, None),
@@ -61,8 +62,8 @@ ALLOWED_PATTERN_ENTRIES: List[_AllowedEntry] = [
     _AllowedEntry(r"^CHANGELOG\.md$", None, None),
     _AllowedEntry(r"^package\.json$", None, None),  # 版本發布 bump
     _AllowedEntry(r"^manifest\.json$", None, None),  # Chrome Extension manifest 版本發布 bump
-    _AllowedEntry(r"^\.gitignore$", None, None),  # repo 層級忽略清單（W10-033）
-    _AllowedEntry(r"^\.gitattributes$", None, None),  # repo 層級檔案屬性（W10-054.1.1）
+    _AllowedEntry(r"^\.gitignore$", None, None),  # repo 層級忽略清單
+    _AllowedEntry(r"^\.gitattributes$", None, None),  # repo 層級檔案屬性
     _AllowedEntry(r"^\.claude/\.gitattributes$", None, None),  # 框架層級檔案屬性：隨 sync 傳播到其他專案
     _AllowedEntry(r"(^|.*/)README\.md$", None, None),  # 任意層級 README.md
 ]
@@ -75,7 +76,7 @@ def get_allowed_claude_subdirectory_lines() -> List[str]:
 
     回傳格式化好的行清單（`  - .claude/xxx/  (說明)`），與 ALLOWED_PATTERNS
     結構上綁定，新增/移除子目錄規則時訊息自動同步，不需要手動維護第二份清單
-    （0.2.1-W3-066，tool-output-trust-rules 規則 6）。
+    （tool-output-trust-rules 規則 6）。
     """
     lines = []
     for entry in ALLOWED_PATTERN_ENTRIES:
@@ -85,13 +86,12 @@ def get_allowed_claude_subdirectory_lines() -> List[str]:
     return lines
 
 # 禁止的檔案路徑模式（正則）
-# 注意：.claude/hooks/ 和 .claude/skills/ 的 .py 檔案由 ALLOWED_PATTERNS 覆蓋，
-# 不在此處列出（消除三層 pattern 互相覆蓋）
+# 注意：.claude/hooks/、.claude/skills/、.claude/lib/ 的 .py 檔案由 ALLOWED_PATTERNS
+# 覆蓋，不在此處列出（消除三層 pattern 互相覆蓋）
 BLOCKED_PATTERNS = [
     r"^lib/.*",
     r"^test/.*",
     r".*\.dart$",
-    r"^\.claude/lib/.*\.py$",
     r"^backend/.*",
     r".*\.go$",
     r"^go\.mod$",
@@ -103,17 +103,19 @@ BLOCKED_PATTERNS = [
 # 路徑正規化
 # ============================================================================
 
-def normalize_path(file_path: str) -> str:
-    """正規化檔案路徑為相對於專案根目錄的路徑"""
+def normalize_path(file_path: str, root: "str | None" = None) -> str:
+    """正規化檔案路徑為相對於作用根的路徑
+
+    root 由呼叫端傳入（目標檔所屬 checkout 根）；未傳時沿用原行為
+    （CLAUDE_PROJECT_DIR，缺則 cwd）。
+    """
     normalized = file_path.replace("\\", "/")
 
-    project_dir = os.getenv("CLAUDE_PROJECT_DIR", str(Path.cwd()))
-    project_dir = project_dir.replace("\\", "/")
-
-    if normalized.startswith(project_dir):
-        normalized = normalized[len(project_dir):]
-        if normalized.startswith("/"):
-            normalized = normalized[1:]
+    project_dir = root or os.getenv("CLAUDE_PROJECT_DIR", str(Path.cwd()))
+    # 根前綴剝除含磁碟機代號大小寫與目錄邊界（同字首兄弟目錄不剝除，維持絕對路徑）
+    relative = strip_root_prefix(normalized, project_dir)
+    if relative is not None:
+        normalized = relative
 
     if normalized.startswith("./"):
         normalized = normalized[2:]
@@ -159,7 +161,7 @@ def is_blocked_path(file_path: str, logger) -> bool:
 # 權限判斷
 # ============================================================================
 
-def check_file_permission(file_path: str, logger) -> Tuple[bool, str]:
+def check_file_permission(file_path: str, logger, root: "str | None" = None) -> Tuple[bool, str]:
     """
     檢查檔案編輯權限（預設拒絕安全策略）
 
@@ -173,7 +175,7 @@ def check_file_permission(file_path: str, logger) -> Tuple[bool, str]:
         logger.warning("警告: 檔案路徑為空")
         return True, "檔案路徑為空，允許編輯"
 
-    normalized_path = normalize_path(file_path)
+    normalized_path = normalize_path(file_path, root)
     logger.debug(f"檢查檔案路徑: {normalized_path}")
 
     # 先檢查允許清單（白名單優先，避免需要 EXCEPTION 層覆蓋 BLOCKED）

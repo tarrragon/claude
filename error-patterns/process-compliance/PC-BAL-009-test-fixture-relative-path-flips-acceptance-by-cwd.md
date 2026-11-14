@@ -3,7 +3,6 @@ id: PC-BAL-009
 title: 測試 fixture 用相對路徑觸及專案根資產，同一套件在不同 cwd 給出不同顏色，兩方結果不符但皆屬實
 severity: high
 category: process-compliance
-source_ticket: 0.2.1-W3-029
 related:
  - PC-165
  - PC-V1-010
@@ -20,14 +19,14 @@ created: 2026-07-27
 - 驗收方傾向以「我跑的才是準的」為前提，直接判定執行方回報失實，並把該判定寫入 worklog / ticket
 - 真正的差異來源是執行 cwd 不同：測試 fixture 以相對路徑觸及專案根資產（`docs/work-logs/...`、`.claude/...`），路徑在專案根解析得到真實 repo，在 `pyproject.toml` 的 canonical `testpaths` 位置解析不到，斷言因此翻轉
 
-## 觸發案例（0.2.1-W3-022 驗收，2026-07-26）
+## 觸發案例（某次驗收，2026-07-26）
 
 | 執行方 | 執行 cwd | 結果 | 總數 |
 |--------|---------|------|------|
 | agent | 專案根 | 3182 passed / 1 failed | 3183 |
 | PM | `.claude/hooks/`（`pyproject.toml` 的 `testpaths = ["tests"]` 所指 canonical 位置） | 3180 passed / 3 failed | 3183 |
 
-PM 據此一度判定「agent 回報失實」並寫入 worklog；靠 pass+fail 總數相同這一點回頭對帳才更正——總數相同代表兩邊蒐集到的是同一批 case，差異只可能來自執行環境，不可能來自回報造假。相關 fixture 已於 0.2.1-W3-027 改為 cwd 無關（`conftest.py` 的 `hook_project_env`，以 `Path(__file__).resolve().parents[n]` 推導而非依賴 cwd）。
+PM 據此一度判定「agent 回報失實」並寫入 worklog；靠 pass+fail 總數相同這一點回頭對帳才更正——總數相同代表兩邊蒐集到的是同一批 case，差異只可能來自執行環境，不可能來自回報造假。相關 fixture 已改為 cwd 無關（`conftest.py` 的 `hook_project_env`，以 `Path(__file__).resolve().parents[n]` 推導而非依賴 cwd）。
 
 ## 根因
 
@@ -86,4 +85,4 @@ PM 據此一度判定「agent 回報失實」並寫入 worklog；靠 pass+fail �
 - PC-165：測試綠燈不等於 runtime 正確（顏色穩定但無效；本模式為顏色不穩定）
 - PC-V1-010：subagent 在完成摘要混淆 total 與 passed（本模式的對帳手段依賴 total 被正確回報）
 - TEST-BAL-001：理想化 fixture 使 validator 假通過（同屬 fixture 與真實環境落差，該案為恆真、本案為隨環境翻轉）
-- 實證：flutter_balance 0.2.1-W3-022 驗收（2026-07-26），fixture cwd 無關化修復於 0.2.1-W3-027
+- 實證：flutter_balance 某次驗收（2026-07-26），fixture 已改為 cwd 無關

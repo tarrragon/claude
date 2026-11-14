@@ -280,7 +280,7 @@ A: 暫時移除 settings.local.json 中的配置。**不建議永久禁用**，�
 
 - **i18n 使用指南**: `docs/i18n-guidelines.md`
 - **方案分析**: `docs/work-logs/v0.26.0/hardcoded-string-lint-analysis.md`
-- **Ticket**: `docs/work-logs/v0.26.0/tickets/0.26.0-W3-001.md`
+- **Ticket**: v0.26.0 工作日誌目錄下的對應 ticket 檔
 - **檢查日誌**: `.claude/hook-logs/hardcoded-strings/`
 
 ---

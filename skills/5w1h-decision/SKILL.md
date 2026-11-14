@@ -2,7 +2,7 @@
 name: 5w1h-decision
 description: "5W1H Decision Framework Tool. Use for: (1) Systematic decision-making before creating todos, (2) Preventing duplicate implementation, (3) Detecting avoidance behavior, (4) Ensuring agile refactor compliance with executor/dispatcher separation"
 metadata:
-  version: 1.3.2
+  version: 1.3.3
   portable: true
 
 ---

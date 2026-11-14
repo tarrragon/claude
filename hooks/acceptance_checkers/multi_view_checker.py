@@ -1,7 +1,7 @@
 """
 Multi-View Status Checker - ANA Ticket Solution multi_view_status 標註檢查
 
-對應 Ticket 0.18.0-W10-051（治本方案 D）：
+治本方案 D：
 在 ANA Ticket complete 前，強制 Solution 區段包含 multi_view_status 標註，
 讓多視角審查在 ANA 設計階段成為顯式判定，而非事後補救。
 
@@ -220,7 +220,7 @@ def _format_invalid_value_warning(
         f"\n"
         f"Schema 來源：.claude/config/ana-solution-schema.yaml"
     )
-    # nested YAML 結構誤用偵測（PC-117 / W17-111）
+    # nested YAML 結構誤用偵測（PC-117）
     # 當 value 含冒號時，極可能是 PM 寫成 nested YAML（例：multi_view_status:\n  status: skipped）
     # 而 _parse_field 將子欄位拼接為 "status: skipped" 形式回傳
     if ":" in value:

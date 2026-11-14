@@ -105,7 +105,7 @@ def format_warning_message(file_path: str) -> str:
     # 版本工作日誌（如 v0.1.0-release.md）
     if re.match(r"v\d+\.\d+\.\d+-.+\.md", filename):
         suggestion = "應放在 docs/work-logs/v{version}/ 目錄下"
-    # Ticket 檔案（如 0.1.0-W1-001.md）
+    # Ticket 檔案（如 <版本>-W<波次>-<序號>.md）
     elif re.match(r"\d+\.\d+\.\d+-W\d+-.+\.md", filename):
         suggestion = "應放在 docs/work-logs/v{version}/tickets/ 目錄下"
     else:

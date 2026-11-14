@@ -17,9 +17,9 @@
 
 「偵測 X 反模式」的 Hook 在自己的設計 / 測試 / 實作 Ticket 上會誤報大量命中 —— 因為該 ticket md 必然引用被偵測的 phrase 作為 regex 字面量、測試 fixture、虛擬碼註解、設計文件範例。
 
-### 首次案例（W10-082 PC-093 Hook）
+### 首次案例（PC-093 Hook）
 
-- Phase 3b basil 實作完成後，執行 `ticket track phase 0.18.0-W10-082 phase4` 推入 Phase 4
+- Phase 3b basil 實作完成後，執行 `ticket track phase <ticket-id> phase4` 推入 Phase 4
 - 剛註冊的 hook 阻擋自己 ticket 的 phase advance
 - Hook 偵測結果：49 項命中 / 48 項為 meta-ticket 文件自我引用 / 1 項已正確豁免
 
@@ -83,9 +83,7 @@ Hook 偵測邏輯只看「文本含特定 phrase」，不區分「實際延後�
 
 ---
 
-## 修復落地（W10-087）
-
-**修復 Ticket**: 0.18.0-W10-087
+## 修復落地
 
 **修復範圍**（acceptance-gate-hook #17 AUQ meta-ticket 誤觸發）：
 
@@ -109,5 +107,5 @@ Hook 偵測邏輯只看「文本含特定 phrase」，不區分「實際延後�
 ---
 
 **Last Updated**: 2026-04-19
-**Version**: 1.1.0（W10-087 修復落地）
-**Source**: W10-082 PC-093 Hook Phase 3b 首次運作暴露
+**Version**: 1.1.0（修復落地）
+**Source**: PC-093 Hook Phase 3b 首次運作暴露

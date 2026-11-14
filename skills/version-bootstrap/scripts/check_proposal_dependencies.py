@@ -6,8 +6,8 @@
 """version-bootstrap 跨提案依賴檢查工具。
 
 在版本規劃波 Step 1（提案確認）時，偵測「本版提案依賴的提案尚未完成或排在
-更晚版本」的排序矛盾，讓矛盾在提案確認階段被攔截，而非拖到 W1 中段才靠
-用戶手動發現（0.4.0-W1-001 PROP-010 依賴 PROP-011 卻排前的事故）。
+更晚版本」的排序矛盾，讓矛盾在提案確認階段被攔截，而非拖到版本中段才靠
+用戶手動發現（曾發生 PROP-010 依賴 PROP-011 卻排前的事故）。
 
 使用方式:
   uv run .claude/skills/version-bootstrap/scripts/check_proposal_dependencies.py --version 0.4.0
@@ -44,14 +44,14 @@ def get_version_proposals(todolist: dict, version: str) -> list[str]:
 
 
 def _find_proposal(proposals: list, prop_id: str) -> dict | None:
-    """依 id 於 list-based proposals 中線性查找（W1-016 修復）。
+    """依 id 於 list-based proposals 中線性查找。
 
     Why: proposals-tracking.yaml 的 proposals 為 list-based，非
     dict-keyed-by-id（SSOT：.claude/skills/doc/doc_system/core/tracking_schema.py
     的 PROPOSALS_TRACKING_SCHEMA["proposals_format"] == "list"，
     doc_system/commands/{status.py,batch_init.py} 皆有對應斷言）。舊實作以
     `proposals.get(prop_id)` 誤將其當 dict 處理，對真實 tracking 檔一律
-    AttributeError；此為 0.0.1-W1-013 於 batch_init.py 修復的同族缺陷
+    AttributeError；此為先前於 batch_init.py 修復的同族缺陷
     （IMP-APP-002 欄位假設家族）在 version-bootstrap 側的另一處。
 
     本腳本為獨立 PEP 723 script（僅宣告 pyyaml 依賴），不引入 doc_system

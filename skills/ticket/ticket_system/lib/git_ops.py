@@ -686,7 +686,29 @@ _GUARD_PREVALIDATE_CLEAN_TOKEN = "PREVALIDATE_CLEAN"
 _GUARD_RELPATH = ".claude/hooks/git-ref-transaction-content-guard.py"
 _GUARD_BLOCK_EXIT_CODE = 87  # 須與 guard 的 EXIT_BLOCK 一致
 _GUARD_PREVALIDATE_TIMEOUT = 300
-_PREVALIDATE_LOG_DIR = os.path.join(".claude", "hook-logs", "git-ops-prevalidate")
+_PREVALIDATE_LOG_NAME = "git-ops-prevalidate"
+
+
+def hook_log_dir(name: str) -> str:
+    """hook-logs 子目錄：經 hook_logging.get_hook_log_dir，linked worktree 內解析到主 repo。
+
+    相對路徑與 CLAUDE_PROJECT_DIR 拼接都依 cwd／env，worktree 內會與主 repo 分處兩地
+    （tarrragon/claude#97）。`.claude/lib` 不可達時（skill 單獨安裝）退回
+    get_ticket_state_root()，同為 worktree 解析到主 repo 的語意。
+    """
+    from .claude_lib_loader import load_claude_lib
+
+    hook_logging = load_claude_lib("hook_logging")
+    if hook_logging is not None:
+        return str(hook_logging.get_hook_log_dir(name))
+    from .paths import get_ticket_state_root
+
+    return os.path.join(str(get_ticket_state_root()), ".claude", "hook-logs", name)
+
+
+def hook_logs_root() -> str:
+    """hook-logs 根目錄（日誌檔直接放在根目錄下的呼叫端用）；解析規則同 hook_log_dir。"""
+    return os.path.dirname(hook_log_dir("_"))
 
 
 def _run_guard_prevalidate(repo_root: str, stdin_text: str) -> Tuple[int, str, str]:
@@ -713,7 +735,7 @@ def _report_prevalidate_failure(repo_root: str, reason: str) -> None:
     message = f"預驗證失敗，本次 update-ref 退回 hook 完整掃描：{reason}"
     print(f"[WARNING] {message}", file=sys.stderr)
     try:
-        log_dir = os.path.join(repo_root, _PREVALIDATE_LOG_DIR)
+        log_dir = hook_log_dir(_PREVALIDATE_LOG_NAME)
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, "prevalidate-" + time.strftime("%Y%m%d") + ".log")
         with open(log_path, "a", encoding="utf-8") as fh:

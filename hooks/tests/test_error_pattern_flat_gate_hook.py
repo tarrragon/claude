@@ -234,12 +234,12 @@ def test_subprocess_allow_prefix(tmp_path):
         {"tool_name": "Write", "tool_input": {"file_path": str(target)}}
     )
     assert result.returncode == hook.EXIT_ALLOW
-    hso = _parse_hook_output(result.stdout)
-    assert hso["permissionDecision"] == "allow"
+    # 放行不輸出 decision：allow 會略過平台權限提示，等於代用戶核可
+    assert result.stdout.strip() == ""
 
 
 def test_subprocess_allow_empty_stdin():
-    """空 stdin 走 fallback allow 分支（仍須完整 hookSpecificOutput）。"""
+    """空 stdin 走 fail-open：exit 0 且不輸出 decision（交回平台權限流程）。"""
     result = subprocess.run(
         [str(_HOOK_PATH)],
         input="",
@@ -247,5 +247,4 @@ def test_subprocess_allow_empty_stdin():
         text=True,
     )
     assert result.returncode == hook.EXIT_ALLOW
-    hso = _parse_hook_output(result.stdout)
-    assert hso["permissionDecision"] == "allow"
+    assert result.stdout.strip() == ""

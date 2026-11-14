@@ -1,7 +1,7 @@
 """Transcript tail-reader 共用工具。
 
 提供反向讀取 Claude Code session JSONL transcript 的工具，避免每次 hook 觸發
-都全檔掃描造成熱路徑成本（W11-004 Phase 4 ginger 視角發現：長 session 可達
+都全檔掃描造成熱路徑成本（ginger 視角發現：長 session 可達
 50-100ms/觸發）。
 
 設計重點：
@@ -12,8 +12,6 @@
   讀到陳舊資料或 transcript 被截斷時讀錯位置。
 - 失敗策略：所有 I/O 與 JSON 解析失敗都吞掉並回傳 None（呼叫端走放行路徑），
   hook 不可因 transcript 讀取失敗阻擋主流程。
-
-對應 ticket: 0.18.0-W11-004.11
 """
 
 from __future__ import annotations

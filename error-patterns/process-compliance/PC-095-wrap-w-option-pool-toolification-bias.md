@@ -9,7 +9,7 @@
 | 編號 | PC-095 |
 | 類別 | process-compliance |
 | 風險等級 | 中（影響 ANA 方向正確性，可能導致投入錯誤類型的 IMP） |
-| 首發時間 | 2026-04-18（W10-017 parallel-evaluation Plan 視角揭露） |
+| 首發時間 | 2026-04-18（parallel-evaluation Plan 視角揭露） |
 | 姊妹模式 | PC-080（WRAP A 階段框架檢查未做）、PC-066（多視角審核發現元架構過度設計） |
 
 ---
@@ -32,7 +32,7 @@
 
 ## 實際案例
 
-### 案例 1（W10-017，2026-04-18）
+### 案例 1（2026-04-18）
 
 **任務**：分析 PM 常規流程自動化（減少 handoff→/clear 流程的 token 與 tool call 耗損）
 
@@ -61,11 +61,11 @@
 | H 純文件重構（46→5 檔） | **零新工具** | Claude 視「改既有文件」比「新工具」更不確定，避開 |
 | I Memory 層自動狀態追蹤 | 改造既有 memory 系統 | Claude 視 memory 為「學習型持久化」不是「狀態追蹤」 |
 
-### 案例 2（W10-017.9，2026-04-19，本 Pattern 發現於同一主題的子任務）
+### 案例 2（2026-04-19，本 Pattern 發現於同一主題的子任務）
 
 **任務**：4 週後基於觀測數據評估 F/G/H/I 是否落地（PM 前台純理論預判）
 
-**發現**：即使 W10-017 已將「F/G/H/I」補上為 9 方案，實際評估後發現 4 選項**強相互關聯**，真實獨立選項只有 1 個（F + H.quickref 整合）：
+**發現**：即使案例 1 已將「F/G/H/I」補上為 9 方案，實際評估後發現 4 選項**強相互關聯**，真實獨立選項只有 1 個（F + H.quickref 整合）：
 
 - G 退化為 F 或等於既有 Skill → G 不獨立
 - I 退化為既有 state file → I 不獨立（被 017.8 metrics log 吸收）
@@ -142,12 +142,9 @@
 - `.claude/skills/wrap-decision/SKILL.md` — WRAP 框架定義
 - `.claude/skills/wrap-decision/references/detailed-techniques.md` — W 階段技巧詳述
 - `.claude/error-patterns/process-compliance/PC-080-wrap-a-stage-framing-check-missed.md` — 姊妹模式（A 階段框架檢查）
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W10-017.md` — Case 1 實際案例（含 parallel-evaluation Plan 視角揭露）
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W10-017.9.md` — Case 2 實際案例（F/G/H/I 強關聯發現）
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W10-017.10.md` — 本 PC 建立任務
 
 ---
 
 **Last Updated**: 2026-04-19
 **Version**: 1.0.0
-**Source**: W10-017 parallel-evaluation Plan 視角揭露 F/G/H/I 四選項遺漏；W10-017.9 PM 前台純理論評估進一步發現 4 選項強關聯（假多樣性）
+**Source**: parallel-evaluation Plan 視角揭露 F/G/H/I 四選項遺漏；PM 前台純理論評估進一步發現 4 選項強關聯（假多樣性）

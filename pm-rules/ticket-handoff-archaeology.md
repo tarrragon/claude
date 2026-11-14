@@ -33,7 +33,7 @@ PM claim Ticket 後立即自問下列 4 個問題，**任一成立**即進入 SO
 | Q3 | Ticket `created` 距今 > 30 天，且引用既有環境狀態？ |
 | Q4 | 接手第一次 `ls` / `grep` 驗證 `where.files` 發現不存在或不一致？ |
 
-**Why**：Ticket 描述被寫下時為當時環境真實狀態，但 hook 合併（如 W10-001）/ 重構 / 重新命名都會在 ticket 等待期間發生。任一訊號代表「環境可能已演進」，必須進入考古而非盲信描述。
+**Why**：Ticket 描述被寫下時為當時環境真實狀態，但 hook 合併 / 重構 / 重新命名都會在 ticket 等待期間發生。任一訊號代表「環境可能已演進」，必須進入考古而非盲信描述。
 
 **Consequence**：跳過觸發識別會在描述失準時誤派代理人或關錯 ticket，常見後果包含修改不存在的檔案、實作已被刪除的 hook、依過時 acceptance 完成不符當下需求的工作。
 
@@ -188,4 +188,4 @@ PM claim ticket 後對照：
 
 ---
 
-**Last Updated**: 2026-05-26 | **Version**: 1.0.0 — 初版建立（W3-068 落地 W3-067 ANA Solution）。**Source**: 0.19.0-W3-067（ANA：接手考古 SOP 設計）+ PC-162（錯誤模式記錄）。
+**Last Updated**: 2026-05-26 | **Version**: 1.0.0 — 初版建立（落地接手考古 SOP 設計 ANA 的 Solution）。**Source**: 接手考古 SOP 設計 ANA + PC-162（錯誤模式記錄）。

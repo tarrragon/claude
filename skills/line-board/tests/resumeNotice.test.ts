@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'claude-code/testing'
 
-import { resumeNoticeDecision, resumeNoticeText, resumePhaseOf, stepResume } from '../hooks/resumeNotice'
+import { coordinatorAddress, resumeNoticeDecision, resumeNoticeText, resumePhaseOf, stepResume } from '../hooks/resumeNotice'
 import type { PendingResume, ResumeEvent } from '../hooks/resumeNotice'
 import type { LaneLine } from '../types'
 
@@ -103,6 +103,30 @@ describe('resumeNoticeDecision：送或不送，不送時帶原因（寫入送�
     expect(resumeNoticeDecision({ sessionName: '不存在的線', lines })).toEqual({ kind: 'skip', reason: 'lane-not-found' })
     expect(resumeNoticeDecision({ sessionName: '已收線的線', lines })).toEqual({ kind: 'skip', reason: 'lane-ended' })
     expect(resumeNoticeDecision({ sessionName: '收線附說明', lines })).toEqual({ kind: 'skip', reason: 'lane-ended' })
+  })
+})
+
+describe('coordinatorAddress：收件主控以 sessionId 定址，不用裸名稱', () => {
+  const lane = { name: '看板工具', sessionId: 'lane-1' }
+
+  test('正向對照：恰好一個主控 → 回它的 sessionId', () => {
+    expect(coordinatorAddress([lane, { name: '主控', sessionId: 'coord-1' }])).toEqual({ kind: 'ok', sessionId: 'coord-1' })
+  })
+
+  test('沒有主控 → 不送（coordinator-not-found）', () => {
+    expect(coordinatorAddress([lane])).toEqual({ kind: 'skip', reason: 'coordinator-not-found' })
+    expect(coordinatorAddress([])).toEqual({ kind: 'skip', reason: 'coordinator-not-found' })
+  })
+
+  test('主控缺 sessionId → 不算，不送', () => {
+    expect(coordinatorAddress([lane, { name: '主控', sessionId: null }])).toEqual({ kind: 'skip', reason: 'coordinator-not-found' })
+  })
+
+  test('多個主控 → 不送（coordinator-ambiguous），不挑其中一個', () => {
+    expect(coordinatorAddress([{ name: '主控', sessionId: 'coord-1' }, { name: '主控', sessionId: 'coord-2' }])).toEqual({
+      kind: 'skip',
+      reason: 'coordinator-ambiguous',
+    })
   })
 })
 

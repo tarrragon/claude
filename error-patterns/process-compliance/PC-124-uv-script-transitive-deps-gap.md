@@ -55,9 +55,9 @@ done
 
 ## 觸發案例
 
-### 案例：W10-098.X 系列 PostToolUse:Write 反覆閃錯（2026-05-05）
+### 案例：某批子 ticket 期間 PostToolUse:Write 反覆閃錯（2026-05-05）
 
-W10-098 系列拆 11 子 ticket 期間，每次 Write 操作（doc-thyme-prop.yaml / memory file / PC-123 file 等）後，CC 用戶端顯示「PostToolUse:Write hook error: Failed with non-blocking status code: Traceback (most recent call last):」。
+某系列拆 11 子 ticket 期間，每次 Write 操作（doc-thyme-prop.yaml / memory file / PC-123 file 等）後，CC 用戶端顯示「PostToolUse:Write hook error: Failed with non-blocking status code: Traceback (most recent call last):」。
 
 #### 重現步驟
 

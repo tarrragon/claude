@@ -14,7 +14,7 @@ Claude Hooks 共用程式庫
     from lib.hook_io import read_hook_input, write_hook_output
 """
 
-from .hook_base import ensure_utf8_io, get_project_root
+from .hook_base import ensure_utf8_io, get_project_root, get_code_root, get_main_checkout_root
 
 from .git_utils import (
     run_git_command,
@@ -114,6 +114,8 @@ __all__ = [
     # hook_base
     "ensure_utf8_io",
     "get_project_root",
+    "get_code_root",
+    "get_main_checkout_root",
     # git_utils
     "run_git_command",
     "get_current_branch",

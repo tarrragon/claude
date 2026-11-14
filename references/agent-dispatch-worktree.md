@@ -7,7 +7,7 @@
 ---
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-## 唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）
+## 唯讀派發豁免 worktree 強制（框架 issue 36）
 
 > **用途**：派發實作代理人執行**唯讀規劃/分析階段**（如 TDD Phase 3a 只讀不寫）時，prompt 首行宣告 `Dispatch-Mode: readonly` 可豁免 worktree 強制，不需先建立/切換 worktree 即可派發。
 >
@@ -45,7 +45,7 @@ Ticket: {ticket_id}
 ---
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-## worktree 派發 base 同步指引（W1-035）
+## worktree 派發 base 同步指引
 
 > **用途**：派發 `isolation: "worktree"` agent 時，在 prompt 加入 base 同步指引，使 agent 開始工作前先將 worktree merge 至最新 main。
 >
@@ -103,7 +103,7 @@ object store，可直接 merge），確認本地檔案為最新 main 後再開�
 ```
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-### 環境前置欄位（0.2.1-W3-274，框架 issue 46）
+### 環境前置欄位（框架 issue 46）
 
 > **用途**：worktree 派發 prompt 補「環境前置」選填欄位，載明 worktree 是 git 層隔離、非 git 狀態不隨之而來的事實，並指引該狀態的具體補齊命令應寫在哪裡。
 
@@ -173,14 +173,14 @@ ticket track complete <ticket-id> --as rosemary-project-manager
 ---
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-## worktree 快照過舊防護（W2-007）
+## worktree 快照過舊防護
 
 > **用途**：session 中途新建 ticket / 檔案後才派發 `isolation: "worktree"` agent 時，prompt 第 0 步強制驗證與同步，並在阻塞回報後正確判斷是重派新 agent 還是 SendMessage 恢復舊 agent。
 >
-> **與「worktree 派發 base 同步指引（W1-035）」的差異**：W1-035 提供通用的 `git merge main` 指引；本節針對 W2-007 兩次獨立觀測補兩項更精確的防護——(1) merge 後另加 ls/grep 驗證目標檔案確實存在，不只信任 merge 指令本身成功；(2) 阻塞回報後的恢復方式判準（重派 vs SendMessage），W1-035 未涵蓋此決策點。 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
+> **與「worktree 派發 base 同步指引」的差異**：該節提供通用的 `git merge main` 指引；本節針對 W2-007 兩次獨立觀測補兩項更精確的防護——(1) merge 後另加 ls/grep 驗證目標檔案確實存在，不只信任 merge 指令本身成功；(2) 阻塞回報後的恢復方式判準（重派 vs SendMessage），W1-035 未涵蓋此決策點。 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-### 機制定性（W2-007 實證）
+### 機制定性
 
 isolation worktree 以**session 起始快照**建立，非派發當下的 main HEAD。W2-006 首派與二派兩個 worktree 皆停在 session 起始 commit，落後 main 5 個以上 commit；三派在 prompt 第 0 步加 `git merge main --no-edit` 後成功完成（13/13 測試綠）。快照過舊在該次觀測中 2/2 重現，merge main 防護 2/2 有效（含 W2-005 代理人自主採用）。 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
 
@@ -198,7 +198,7 @@ merge 後執行 ls <目標檔案路徑> 或 grep 確認本 ticket 相關檔案�
 確認無誤後再開始執行任務；若檔案仍不存在，停手回報而非猜測繼續。
 ```
 
-2. 此步驟疊加在既有「worktree 派發 base 同步指引（W1-035）」的 `git merge main` 指引之上，補的是 merge 之後的**顯性驗證**（ls / grep），不是取代 merge 本身。 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
+2. 此步驟疊加在既有「worktree 派發 base 同步指引」的 `git merge main` 指引之上，補的是 merge 之後的**顯性驗證**（ls / grep），不是取代 merge 本身。 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
 
 ### 阻塞回報後：重派新 agent 優先於 SendMessage 恢復
 

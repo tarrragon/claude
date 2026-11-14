@@ -334,3 +334,89 @@ class TestExistingFunctionsUnchanged:
         assert has_complete_command(f"git x && ticket track complete {TID}") is True
         assert has_complete_command(f"bash -c 'ticket track complete {TID}'") is False
         assert has_complete_command("ticket track complete 'abc") is None
+
+
+# ===== classify_ticket_command_scope：命令作用在 session repo 還是他 repo =====
+
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+
+from lib.ticket_command_parse import (  # noqa: E402
+    SCOPE_MIXED,
+    SCOPE_NONE,
+    SCOPE_OTHER,
+    SCOPE_SESSION,
+    SCOPE_UNKNOWN,
+    SCOPE_UNPARSEABLE,
+    classify_ticket_command_scope,
+)
+
+_V = COMPLETE_VERBS
+
+
+def _git_init(path):
+    path.mkdir()
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(["git", "-C", str(path), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+    return path.resolve()
+
+
+@pytest.fixture
+def repos(tmp_path):
+    session = _git_init(tmp_path / "session")
+    other = _git_init(tmp_path / "other")
+    wt = (tmp_path / "wt").resolve()
+    subprocess.run(["git", "-C", str(session), "worktree", "add", "-q", "-b", "f", str(wt)], check=True)
+    plain = (tmp_path / "plain").resolve()
+    plain.mkdir()
+    return session, other, wt, plain
+
+
+class TestClassifyTicketCommandScope:
+    def test_direct_is_session(self, repos):
+        session, *_ = repos
+        assert classify_ticket_command_scope(f"ticket track complete {TID}", _V, str(session)) == SCOPE_SESSION
+
+    def test_subshell_cd_other_repo(self, repos):
+        session, other, _, _ = repos
+        cmd = f"(cd {other} && ticket track complete {TID})"
+        assert classify_ticket_command_scope(cmd, _V, str(session)) == SCOPE_OTHER
+
+    def test_subdir_of_other_repo(self, repos):
+        session, other, _, _ = repos
+        (other / "docs").mkdir()
+        cmd = f"(cd {other}/docs && ticket track complete {TID})"
+        assert classify_ticket_command_scope(cmd, _V, str(session)) == SCOPE_OTHER
+
+    def test_same_repo_worktree_is_session(self, repos):
+        session, _, wt, _ = repos
+        assert classify_ticket_command_scope(f"(cd {wt} && ticket track complete {TID})", _V, str(session)) == SCOPE_SESSION
+        assert classify_ticket_command_scope(f"(cd {session} && ticket track complete {TID})", _V, str(wt)) == SCOPE_SESSION
+
+    def test_nested_shell_c(self, repos):
+        session, other, _, _ = repos
+        cmd = f"bash -c 'cd {other} && ticket track complete {TID}'"
+        assert classify_ticket_command_scope(cmd, _V, str(session)) == SCOPE_OTHER
+
+    def test_subshell_scope_ends_at_paren(self, repos):
+        session, other, _, _ = repos
+        cmd = f"(cd {other} && ticket track complete {TID}); ticket track complete {TID}"
+        assert classify_ticket_command_scope(cmd, _V, str(session)) == SCOPE_MIXED
+
+    def test_dynamic_dir_unknown(self, repos):
+        session, *_ = repos
+        assert classify_ticket_command_scope(f'cd "$X" && ticket track complete {TID}', _V, str(session)) == SCOPE_UNKNOWN
+        assert classify_ticket_command_scope(f"cd - && ticket track complete {TID}", _V, str(session)) == SCOPE_UNKNOWN
+
+    def test_non_git_dir_falls_back_to_session(self, repos):
+        session, _, _, plain = repos
+        cmd = f"(cd {plain} && ticket track complete {TID})"
+        assert classify_ticket_command_scope(cmd, _V, str(session)) == SCOPE_SESSION
+
+    def test_none_and_unparseable(self, repos):
+        session, *_ = repos
+        assert classify_ticket_command_scope("git status", _V, str(session)) == SCOPE_NONE
+        assert classify_ticket_command_scope(f"echo ticket track complete {TID}", _V, str(session)) == SCOPE_NONE
+        assert classify_ticket_command_scope("ticket track complete 'abc", _V, str(session)) == SCOPE_UNPARSEABLE

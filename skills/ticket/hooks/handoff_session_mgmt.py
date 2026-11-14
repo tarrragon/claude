@@ -1,5 +1,5 @@
 """
-handoff-auto-resume-stop-hook session 管理模組（W3-039 部分拆分）
+handoff-auto-resume-stop-hook session 管理模組
 
 從 handoff-auto-resume-stop-hook.py 抽出的 session 層級 flag 與狀態管理函式。
 
@@ -7,7 +7,7 @@ handoff-auto-resume-stop-hook session 管理模組（W3-039 部分拆分）
 - stop flag 檔案路徑解析與防重複觸發判定（過期檢查）
 - session 狀態檔案路徑解析與讀取
 
-抽出動機：來源 ANA 0.19.0-W3-038 重現實驗確認原 hook 檔承載 3 大 domain
+抽出動機：重現實驗確認原 hook 檔承載 3 大 domain
 超過 cognitive-load.md「單檔 domain 數 > 2 必須拆分」閾值。本模組為方案 2
 部分拆分產物，使原 hook 檔降至 domain 數 2。
 

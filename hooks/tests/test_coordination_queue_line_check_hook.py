@@ -81,7 +81,7 @@ def test_drift_guard_positive_control_detects_changed_note():
 def _problems(text, alive, statuses=None):
     statuses = statuses or {}
     return hook.find_problems(
-        hook.parse_lanes(text, PREFIX), alive, lambda tid: statuses.get(tid)
+        hook.lanes_for_check(text, PREFIX), alive, lambda tid: statuses.get(tid)
     )
 
 
@@ -124,6 +124,79 @@ def test_normal_forms_do_not_prompt():
     assert _problems("## Solution\n**L5 現行佇列**：100\n", set(), {}) == []
     # session 名單不可得時略過檢查 1
     assert _problems("## Solution\n**L5 現行佇列**（x）：100\n", None, {"0.5.0-W1-100": "pending"}) == []
+
+
+# ---------------------------------------------------------------- 3b 檢查 2：步驟內任一位置的票號
+# issue 回報的原佇列行：步驟以動詞或說明開頭、一步多票、範圍寫法
+ISSUE_QUEUE = "complete 063 → complete 339 → 349.1.6～.11 → 214 樹與 478 → complete 349.1"
+ISSUE_IDS = (
+    ["0.5.0-W1-063", "0.5.0-W1-339"]
+    + ["0.5.0-W1-349.1.%d" % k for k in range(6, 12)]
+    + ["0.5.0-W1-214", "0.5.0-W1-478", "0.5.0-W1-349.1"]
+)
+
+
+def test_issue_queue_line_collects_every_ticket():
+    """E2 正向對照：queue_line.parse_queue 只認步驟開頭，同一行只得 2 個票號。"""
+    assert len(hook.parse_lanes("## Solution\n**L5 現行佇列**：%s\n" % ISSUE_QUEUE, PREFIX)[0]["tickets"]) == 2
+    assert hook.queue_check_ids(ISSUE_QUEUE, PREFIX) == ISSUE_IDS
+
+
+def test_issue_queue_line_with_open_ticket_does_not_prompt_all_terminal():
+    """只有步驟開頭的票終態、步驟內的票仍在進行：不提示全終態。"""
+    st = {tid: "completed" for tid in ISSUE_IDS}
+    st["0.5.0-W1-478"] = "in_progress"
+    assert _problems("## Solution\n**L5 現行佇列**：%s\n" % ISSUE_QUEUE, set(), st) == []
+
+
+def test_issue_queue_line_all_terminal_still_prompts():
+    """正向對照：步驟內的票也全為終態時照常提示。"""
+    st = {tid: "closed" for tid in ISSUE_IDS}
+    msgs = _problems("## Solution\n**L5 現行佇列**：%s\n" % ISSUE_QUEUE, set(), st)
+    assert msgs == ["L5 佇列票皆已終態，若線已結束請寫（無），格式：%s" % (hook.LANE_FORMAT % 5)]
+
+
+def test_step_without_ticket_blocks_all_terminal_conclusion():
+    """任一步收不到票號時不下全終態結論；拿掉該步的同一行會提示（E1 對照）。"""
+    st = {"0.5.0-W1-100": "completed", "0.5.0-W1-101": "completed"}
+    assert hook.queue_check_ids("100 → 收尾 → 101", PREFIX) is None
+    assert _problems("## Solution\n**L5 現行佇列**：100 → 收尾 → 101\n", set(), st) == []
+    assert len(_problems("## Solution\n**L5 現行佇列**：100 → 101\n", set(), st)) == 1
+
+
+def test_range_expansion_bounds():
+    assert hook.queue_check_ids("100.2～.4", PREFIX) == ["0.5.0-W1-100.%d" % k for k in (2, 3, 4)]
+    # 終點不大於起點：不展開，只取兩端
+    assert hook.queue_check_ids("100.4～.2", PREFIX) == ["0.5.0-W1-100.4", "0.5.0-W1-100.2"]
+    # 短號缺前綴時無法判定
+    assert hook.queue_check_ids("100", None) is None
+
+
+# ---------------------------------------------------------------- 3c 寫入目標票號
+def _bash(cmd):
+    return {"tool_name": "Bash", "tool_input": {"command": cmd}}
+
+
+def test_written_ids_ignore_ticket_mentioned_in_content():
+    """E2 反向對照：對他票 append-log，內文提到協調票號，不算寫入協調票。"""
+    cmd = "ticket track append-log 0.5.0-W1-200 --section Solution '見 %s'" % COORD
+    assert hook.written_ticket_ids(_bash(cmd)) == ["0.5.0-W1-200"]
+
+
+def test_written_ids_take_each_track_target():
+    cmd = "ticket track append-log %s --section Solution x; uv run ticket track batch-complete 0.5.0-W1-1 0.5.0-W1-2" % COORD
+    assert hook.written_ticket_ids(_bash(cmd)) == [COORD, "0.5.0-W1-1", "0.5.0-W1-2"]
+    # echo 輸出的文字不是命令；ticket create 不是 ticket track
+    assert hook.written_ticket_ids(_bash("echo ticket track claim %s" % COORD)) == []
+    assert hook.written_ticket_ids(_bash("ticket create --why '%s' ; echo ticket track" % COORD)) == []
+
+
+def test_main_content_mention_of_coordination_ticket_is_silent(tmp_path, monkeypatch, capsys):
+    """端到端：協調票有錯誤佇列行，但本次寫入的是他票（內文提到協調票號）時不檢查。"""
+    _setup_project(tmp_path, monkeypatch, "**L5 現行佇列**（bad）：100\n")
+    other = _bash("ticket track append-log 0.5.0-W1-200 --section Solution '同步 %s'" % COORD)
+    assert _run(monkeypatch, other, capsys) == ""
+    assert "[協調票佇列行檢查]" in _run(monkeypatch, BASH, capsys)
 
 
 # ---------------------------------------------------------------- 4 main() 端到端

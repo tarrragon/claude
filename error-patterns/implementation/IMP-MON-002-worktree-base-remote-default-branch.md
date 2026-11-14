@@ -39,4 +39,4 @@ worktree base 取自 CC harness 對「main 分支」的判定 = 遠端預設分�
 
 ## 來源
 
-0.2.0 v0.2.0 GREEN wave（3 輪 worktree 失敗後定位）。專案 memory `worktree-base-is-remote-default-branch` 升級（0.2.0-W4-005）。
+0.2.0 v0.2.0 GREEN wave（3 輪 worktree 失敗後定位）。專案 memory `worktree-base-is-remote-default-branch` 升級。

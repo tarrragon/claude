@@ -28,12 +28,12 @@ class GeneratedTicket:
     """生成的 Ticket 資訊。
 
     Attributes:
-        id: Ticket ID（如 0.31.0-W5-001）
+        id: Ticket ID（如 <ticket-id>）
         title: Ticket 標題（「動詞 + 目標」格式）
         content: 完整 Ticket Markdown 內容（frontmatter + body）
         tdd_phases: TDD 階段清單（Phase 1-4）
         wave: Wave 編號
-        missing_fields: checklist 缺失必填欄位清單（1.0.0-W1-027，warning 級）
+        missing_fields: checklist 缺失必填欄位清單（warning 級）
     """
 
     id: str
@@ -221,7 +221,7 @@ def generate(
 
             # 產生 Ticket ID
             # 首次遇到此 Wave 時，從磁碟初始化起始序號；後續以前一配號 + 1 為起點。
-            # W1-051：每個配號都經 resolve_available_seq 探測檔案系統，保證可用，
+            #每個配號都經 resolve_available_seq 探測檔案系統，保證可用，
             # 消除稀疏佔用撞號（起始可用但後續 seq 已被既有票佔用，純 += 1 會撞）與
             # 降級連鎖覆寫（R1）。存解析後值——下一項起點 = 實配值 + 1。
             # ticket_generator 是 per-task 多 wave 呼叫端（wave_seq_map 多 key 並存），
@@ -256,7 +256,7 @@ def generate(
                 "acceptance": None,  # 使用預設驗收條件
             }
 
-            # checklist 驗證（1.0.0-W1-027：warning 級，不阻擋；flat config 階段）
+            # checklist 驗證（warning 級，不阻擋；flat config 階段）
             # 補 generate 側門缺口，與 create / batch-create 共用驗證邏輯。
             # lib 層只回傳缺失清單，由 command 層（generate.py）負責 print。
             missing = validate_create_checklist(config, config["ticket_type"])

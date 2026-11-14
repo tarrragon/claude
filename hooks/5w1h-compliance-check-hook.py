@@ -45,19 +45,34 @@ WHO_PATTERN_SELF = r'^(?:主線程|rosemary-project-manager)\s*[\(（](.+?)[\)�
 # How 欄位正則模式: "[Task Type: {type}] {strategy}"
 HOW_PATTERN = r'^\[Task\s+Type:\s*(\w+)\]\s*(.+)'
 
-# 允許的代理人名稱
-ALLOWED_AGENTS = {
-    "lavender-interface-designer",
-    "sage-test-architect",
-    "pepper-test-implementer",
-    "parsley-flutter-developer",
-    "cinnamon-refactor-owl",
-    "mint-format-specialist",
-    "thyme-documentation-integrator",
-    "memory-network-builder",
-    "basil-hook-architect",
-    "rosemary-project-manager",
-}
+# 允許的代理人名稱：讀 .claude/agents/ 現況，不寫死。
+# 寫死清單會隨代理人增減失準（漏列現役者被誤擋、留著已廢者照放行）。
+AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
+# agents/ 下不是代理人定義的檔案（元文件、範本、索引）
+NON_AGENT_STEMS = frozenset({"AGENT_PRELOAD", "README", "language-agent-template"})
+DEPRECATED_MARKER = "[DEPRECATED]"
+DEPRECATED_SCAN_LINES = 10
+# 主線程不一定有對應的定義檔，一律允許
+PM_AGENT = "rosemary-project-manager"
+
+
+def _is_deprecated(agent_file: Path) -> bool:
+    """定義檔前幾行（frontmatter description）標 [DEPRECATED] 即視為已廢。"""
+    with agent_file.open(encoding="utf-8") as f:
+        head = [next(f, "") for _ in range(DEPRECATED_SCAN_LINES)]
+    return any(DEPRECATED_MARKER in line for line in head)
+
+
+def load_allowed_agents(agents_dir: Path = AGENTS_DIR) -> Optional[set]:
+    """回傳現役代理人名稱集合；目錄讀不到或沒有任何代理人時回 None（無法判定）。"""
+    try:
+        files = [p for p in agents_dir.glob("*.md") if p.stem not in NON_AGENT_STEMS]
+        agents = {p.stem for p in files if not _is_deprecated(p)}
+    except OSError:
+        return None
+    if not agents:
+        return None
+    return agents | {PM_AGENT}
 
 # 允許的任務類型（小寫比對）
 ALLOWED_TASK_TYPES = {
@@ -402,20 +417,28 @@ def parse_how_field(how_field: Optional[str]) -> Dict[str, Any]:
 # 核心函式 5: check_compliance()
 # ============================================================================
 
-def check_compliance(executor: str, task_type: str) -> Dict[str, Any]:
+def check_compliance(
+    executor: str, task_type: str, allowed_agents: Optional[set] = None
+) -> Dict[str, Any]:
     """
     檢查執行者 × 任務類型組合是否違反敏捷重構原則
 
     Args:
         executor: 執行者名稱
         task_type: 任務類型
+        allowed_agents: 現役代理人集合；None 時讀 .claude/agents/
 
     Returns:
-        成功: { "compliant": True }
+        成功: { "compliant": True }（代理人清單無法判定時另帶 "warning"）
         失敗: { "compliant": False, "error": str, "details": dict, "suggestions": list }
     """
-    # 步驟 1: 檢查執行者是否在允許清單中
-    if executor not in ALLOWED_AGENTS:
+    if allowed_agents is None:
+        allowed_agents = load_allowed_agents()
+    warning = None
+    # 步驟 1: 檢查執行者是否在允許清單中（清單讀不到時跳過，只示警）
+    if allowed_agents is None:
+        warning = "代理人清單無法讀取（.claude/agents/ 不存在或為空），未檢查 Who 執行者名稱"
+    elif executor not in allowed_agents:
         return {
             "compliant": False,
             "error": "Who 欄位格式錯誤：使用了未定義的代理人名稱",
@@ -426,9 +449,8 @@ def check_compliance(executor: str, task_type: str) -> Dict[str, Any]:
                 "expected_format": "必須使用允許的代理人清單中的名稱"
             },
             "suggestions": [
-                "允許的執行代理人：lavender-interface-designer, sage-test-architect, pepper-test-implementer, parsley-flutter-developer, cinnamon-refactor-owl, mint-format-specialist",
-                "允許的文件代理人：thyme-documentation-integrator, memory-network-builder",
-                "主線程：rosemary-project-manager"
+                "允許的代理人（讀自 .claude/agents/，已排除 DEPRECATED）：" + ", ".join(sorted(allowed_agents)),
+                "主線程：" + PM_AGENT,
             ]
         }
 
@@ -469,6 +491,8 @@ def check_compliance(executor: str, task_type: str) -> Dict[str, Any]:
             }
 
     # 步驟 4: 通過合規性檢查
+    if warning:
+        return {"compliant": True, "warning": warning}
     return {"compliant": True}
 
 
@@ -549,6 +573,9 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any], logger) -> Dict[st
             }
 
         # 步驟 7: 所有檢查通過 → Allow
+        if compliance_result.get("warning"):
+            logger.warning(compliance_result["warning"])
+            sys.stderr.write("[5W1H] " + compliance_result["warning"] + "\n")
         logger.info("5W1H 格式檢查通過，符合敏捷重構原則")
         return {
             "decision": "allow",

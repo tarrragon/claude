@@ -47,6 +47,7 @@ from ticket_system.lib.ticket_loader import (
 # get_ticket_state_root()（非 get_project_root()）——linked worktree 內
 # 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
 from ticket_system.lib.paths import get_ticket_state_root
+from ticket_system.lib.handoff_utils import CREATOR_PROCESS_FIELD, current_claude_process
 from ticket_system.lib.ticket_validator import (
     validate_ticket_id,
     validate_acceptance_criteria,
@@ -366,7 +367,7 @@ def _validate_target_ticket_exists(direction: str, version: str) -> None:
     支援跨版本 handoff：從 target_id 提取版本號，而非使用來源版本號。
 
     Args:
-        direction: handoff direction（如 "to-sibling:0.1.0-W5-002"）
+        direction: handoff direction（如 "to-sibling:<ticket-id>"）
         version: 版本號（目前未使用，保留用於向後相容）
 
     Raises:
@@ -459,6 +460,8 @@ def _create_handoff_file_internal(ticket: Dict[str, Any], direction: str) -> int
         "chain": ticket.get("chain", {}),
         "resumed_at": None,  # 未接手時為 None，resume 時更新
         "exit_status": _extract_exit_status_for_handoff(ticket),
+        # 建立者的 Claude 行程（pid＋lstart）；Stop hook 只對同一行程阻擋。查不到時為 None，hook 照常阻擋
+        CREATOR_PROCESS_FIELD: current_claude_process(),
     }
 
     try:
@@ -1097,7 +1100,7 @@ def _execute_gc(args: argparse.Namespace) -> int:
 
 
 # ============================================================================
-# --from-worklog 子命令（W17-083.2 S2）
+# --from-worklog 子命令
 # ============================================================================
 
 
@@ -1185,7 +1188,7 @@ def _execute_from_worklog(args: argparse.Namespace) -> int:
     active_version = get_current_version()
     if active_version:
         active_version = active_version.lstrip("v")
-    # W3-222: 掃描範圍限縮至交接段落（與 hook 端 detect_sync_drift 語意一致，
+    # 掃描範圍限縮至交接段落（與 hook 端 detect_sync_drift 語意一致，
     # 避免從整份 worklog 抓到歷史 ticket ID 造成大量 false positive）
     handoff_section = extract_handoff_section(content)
     ticket_ids = extract_ticket_ids(handoff_section, active_version=active_version)
@@ -1206,7 +1209,7 @@ def _execute_from_worklog(args: argparse.Namespace) -> int:
             continue
 
         # 載入 ticket，檢查存在與狀態
-        # 從 ticket_id 提取版本（如 "0.18.0-W17-079" -> "0.18.0"）
+        # 從 ticket_id 提取版本（如 "<ticket-id>" -> "0.18.0"）
         ticket_version = extract_version_from_ticket_id(tid)
         if not ticket_version:
             ticket_version = active_version
@@ -1242,7 +1245,7 @@ def _execute_from_worklog(args: argparse.Namespace) -> int:
     return 0
 
 
-# W17-163 L1-B: 移除 to-source。理由：
+# L1-B: 移除 to-source。理由：
 # (1) to-source 不在 constants.TASK_CHAIN_DIRECTION_TYPES 與 NON_CHAIN_DIRECTION_TYPES 任一組
 # (2) chain_analyzer 不產生此方向，無自動化流程使用
 # (3) 語意矛盾：from_ticket 已 completed 時 source 已無可操作性，sources_declared=0 時無目標可指
@@ -1284,9 +1287,9 @@ def _extract_context_bundle_for_handoff(
     """
     為 handoff --auto 抽取 Context Bundle 並序列化為 JSON 可存的 dict。
 
-    呼叫 W17-002 既有 extract_context_bundle()，將 ExtractResult 透過
+    呼叫既有 extract_context_bundle()，將 ExtractResult 透過
     dataclasses.asdict 序列化。抽取失敗時降級為 warning（stderr），
-    回傳 None 不阻擋 handoff 主流程（W17-031 盲區 B 設計）。
+    回傳 None 不阻擋 handoff 主流程。
 
     Args:
         ticket: 已載入的 ticket dict（frontmatter）
@@ -1395,7 +1398,7 @@ _VALID_EXIT_STATUSES = {
 def _extract_exit_status_for_handoff(
     ticket: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    """為 handoff JSON 抽取 ticket body 的 Exit Status YAML（W17-031.6）。
+    """為 handoff JSON 抽取 ticket body 的 Exit Status YAML。
 
     讀 ticket _body 的 `## Exit Status` H2 section，剝除 HTML 註解（樣板）後
     解析其 YAML 區塊（fenced ```yaml 優先，否則整段視為 YAML），回傳含
@@ -1513,7 +1516,7 @@ def _execute_auto_handoff(args: argparse.Namespace) -> int:
         _print_ticket_not_found_error(from_ticket_id, version)
         return 2
 
-    # W17-163 L1-C: terminal handoff 防護
+    # L1-C: terminal handoff 防護
     # terminal status (completed/closed) 的非任務鏈 handoff 無消費者
     # （SessionStart/Stop hook 會視為孤兒，GC 會清理），直接阻擋避免產生孤兒 JSON。
     # 任務鏈方向（to-sibling/to-parent/to-child）允許，因 chain handoff 仍有任務鏈下游目標。
@@ -1535,7 +1538,7 @@ def _execute_auto_handoff(args: argparse.Namespace) -> int:
     handoff_dir.mkdir(parents=True, exist_ok=True)
     handoff_file = handoff_dir / f"{from_ticket_id}.json"
 
-    # W17-164 / L2-A: 從 direction 後綴提取 target_ticket_id 並提升為頂層欄位。
+    # 從 direction 後綴提取 target_ticket_id 並提升為頂層欄位。
     # 既有 direction 後綴語意保留（向後相容），新增絕對指向欄位讓讀取端統一解析。
     auto_target_id = direction.split(":", 1)[1] if ":" in direction else None
 
@@ -1573,7 +1576,7 @@ def _execute_auto_handoff(args: argparse.Namespace) -> int:
 
 def _execute_next_handoff(args: argparse.Namespace) -> int:
     """
-    執行 --next 模式 handoff（W17-164 / L2-A）。
+    執行 --next 模式 handoff。
 
     用途：明示指定下 session 該做的 target ticket id，繞過 direction 間接指向。
     產出的 JSON 含 target_ticket_id 欄位 + direction="context-refresh"（語意：
@@ -1658,13 +1661,13 @@ def _execute_next_handoff(args: argparse.Namespace) -> int:
 
 def execute(args: argparse.Namespace) -> int:
     """執行 handoff 命令"""
-    # --next 與 --auto 互斥檢查（W17-164 / L2-A）
+    # --next 與 --auto 互斥檢查
     next_target = getattr(args, "next", None)
     if next_target and getattr(args, "auto", False):
         print(format_error("--next 與 --auto 互斥，請擇一使用"), file=sys.stderr)
         return 1
 
-    # --next 顯式 target 模式（W17-164 / L2-A）
+    # --next 顯式 target 模式
     if next_target:
         return _execute_next_handoff(args)
 
@@ -1676,7 +1679,7 @@ def execute(args: argparse.Namespace) -> int:
     if getattr(args, "gc", False):
         return _execute_gc(args)
 
-    # --from-worklog：從 worklog 偵測批次建立 handoff（W17-083.2 S2）
+    # --from-worklog：從 worklog 偵測批次建立 handoff
     if getattr(args, "from_worklog", False):
         return _execute_from_worklog(args)
 
@@ -1780,7 +1783,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help=HandoffMessages.ARG_TICKET_ID_HELP
     )
-    # --to 攔截：撞 --to-parent/--to-child/--to-sibling（1.0.0-W1-028）
+    # --to 攔截：撞 --to-parent/--to-child/--to-sibling
     register_ambiguous_prefix(
         parser,
         "--to",
@@ -1789,7 +1792,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--to-child（交接給子 Ticket）"
         "或 --to-sibling（交接給兄弟 Ticket）",
     )
-    # --from 攔截：撞 --from-ticket-id/--from-worklog（1.0.0-W1-028）
+    # --from 攔截：撞 --from-ticket-id/--from-worklog
     register_ambiguous_prefix(
         parser,
         "--from",
@@ -1865,14 +1868,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--next",
         dest="next",
         default=None,
-        help="（W17-164 / L2-A）顯式指定下 session 該做的 target ticket id；"
+        help="顯式指定下 session 該做的 target ticket id；"
              "與 --auto 互斥；需搭配 --from-ticket-id"
     )
     parser.add_argument(
         "--from-worklog",
         dest="from_worklog",
         action="store_true",
-        help="從 worklog 偵測 handoff 段落並批次建立 pending handoff（W17-083.2 S2）"
+        help="從 worklog 偵測 handoff 段落並批次建立 pending handoff"
     )
     parser.add_argument(
         "--worklog-path",

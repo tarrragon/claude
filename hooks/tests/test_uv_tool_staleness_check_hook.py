@@ -269,8 +269,11 @@ def test_stale_skill_produces_outdated_line(
     msg = payload["hookSpecificOutput"]["additionalContext"]
     assert "[UV Tool Staleness] ticket-system [OUTDATED]" in msg
     # W9-003：免 cd 絕對路徑形式（PowerShell 5.1 無 && chain operator）
-    expected_path = fake_root / ".claude" / "skills" / "ticket"
-    assert f'uv tool install "{expected_path}" --force --reinstall' in msg
+    # 修復指令引導改用 shim，不再建議重裝 uv tool 副本
+    expected_script = fake_root / ".claude" / "scripts" / "install-skill-clis.py"
+    assert "先 uv tool uninstall ticket-system，" in msg
+    assert f'python3 "{expected_script}"' in msg
+    assert "uv tool install" not in msg
     assert "&&" not in msg
 
 
@@ -319,7 +322,9 @@ def test_missing_skill_produces_missing_line_and_exit_0(
     msg = payload["hookSpecificOutput"]["additionalContext"]
     assert "[MISSING]" in msg
     # W9-003：免 cd 絕對路徑形式（PowerShell 5.1 相容）
-    assert 'uv tool install "' in msg
+    expected_script = fake_root / ".claude" / "scripts" / "install-skill-clis.py"
+    assert f'安裝 shim: python3 "{expected_script}"' in msg
+    assert "uv tool install" not in msg
     assert "&&" not in msg
 
 
@@ -601,8 +606,10 @@ def test_single_file_skill_stale_is_outdated(
     msg = payload["hookSpecificOutput"]["additionalContext"]
     assert "version-release [OUTDATED]" in msg
     # W9-003：免 cd 絕對路徑形式（PowerShell 5.1 相容）
-    expected_path = fake_root / ".claude" / "skills" / "version-release"
-    assert f'uv tool install "{expected_path}" --force --reinstall' in msg
+    expected_script = fake_root / ".claude" / "scripts" / "install-skill-clis.py"
+    assert "先 uv tool uninstall version-release，" in msg
+    assert f'python3 "{expected_script}"' in msg
+    assert "uv tool install" not in msg
     assert "&&" not in msg
 
 

@@ -227,4 +227,4 @@ Hook 在 PreToolUse(TodoWrite)、UserPromptSubmit、發現多選項決策時觸�
 **Version**: 3.0.1 - 〈整體驗證〉兩處「測試 100% 通過」改為「全套件全綠（以合併閘門結果為準）」，對齊 quality-baseline 規則 1 的時點（tarrragon/claude#104）
 
 **Last Updated**: 2026-06-14
-**Version**: 3.0.0 - 瘦身 698 -> 核心化（W8-020.3 方法論瘦身校準）：三大原則完整正反範例 + Hook 系統整合程式碼 + 實戰案例分析外移至 `.claude/references/problem-awareness-evaluation-examples.md`，主檔保留 30 秒核心（原則定義 + 決策樹 + 執行流程 + 檢查清單），雙向 intent 路由，emoji 全數清理為純文字
+**Version**: 3.0.0 - 瘦身 698 -> 核心化（方法論瘦身校準）：三大原則完整正反範例 + Hook 系統整合程式碼 + 實戰案例分析外移至 `.claude/references/problem-awareness-evaluation-examples.md`，主檔保留 30 秒核心（原則定義 + 決策樹 + 執行流程 + 檢查清單），雙向 intent 路由，emoji 全數清理為純文字

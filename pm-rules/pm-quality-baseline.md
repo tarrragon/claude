@@ -94,7 +94,7 @@
 | 在 AskUserQuestion 用 (Recommended) 暗示用戶選未來版本 | 違反規則 5 機制 4「反討好設計」（`ai-communication-rules.md`）；規則 6 同樣禁止 |
 | 用「啟用未來版本」當建議選項規避 active 版本 | 啟用版本是版本規劃決策，不該為單一框架 ticket 變更 |
 
-**Why**: 規則 6 與 `version-progression.md` 之間缺乏交叉引用，導致 PM 設計框架 ticket 時走「規則 6 → 主題吻合度判斷」路徑，跳過「version-progression.md → active 版本強制」路徑。本 session（W14-019 ticket 設計）即為實證案例。
+**Why**: 規則 6 與 `version-progression.md` 之間缺乏交叉引用，導致 PM 設計框架 ticket 時走「規則 6 → 主題吻合度判斷」路徑，跳過「version-progression.md → active 版本強制」路徑。一次框架 ticket 設計即為實證案例。
 
 **Consequence**: 框架改善若放 planned 版本，需等 planned 版本啟用才能執行，框架債務累積；其他相關 ticket 在等待期間重複支付成本（違反規則 6 上位原則）。
 
@@ -120,7 +120,7 @@
 
 **準備記錄經驗教訓時，先分流再落筆：依內容性質分流到三個目的地之一，memory 不在其中**
 
-> **來源**：W9-003 分析發現 PM 有 5/13（約 38%）的 feedback memory 僅存 memory 未升級；後續全量實測 130 檔 feedback memory 的升級標註率僅 4%（依原規則 7 頂部標註格式計合規 0 檔）——「先寫 memory、事後再升級」的閉環經量化證明不執行。`0.2.1-W3-082` 進一步裁示排除 memory：Claude Code 原生 memory 存於使用者 home 目錄的**專案層級儲存**（`~/.claude/projects/<project>/memory/`），不納入專案 git、不隨 `.claude/` sync 到其他專案，與「經驗須跨專案複用」的框架目標根本衝突；跨專案原則若僅存 memory，會在其他專案消失並重複踩同樣的雷。本框架因此自建 `.claude/error-patterns/` 取代 memory 作為跨專案錯誤學習的載體——memory 機制本身不受影響（仍是 Claude Code 原生功能），只是本框架的知識指引不再把它列為目的地。
+> **來源**：一次分析發現 PM 有 5/13（約 38%）的 feedback memory 僅存 memory 未升級；後續全量實測 130 檔 feedback memory 的升級標註率僅 4%（依原規則 7 頂部標註格式計合規 0 檔）——「先寫 memory、事後再升級」的閉環經量化證明不執行。用戶進一步裁示排除 memory：Claude Code 原生 memory 存於使用者 home 目錄的**專案層級儲存**（`~/.claude/projects/<project>/memory/`），不納入專案 git、不隨 `.claude/` sync 到其他專案，與「經驗須跨專案複用」的框架目標根本衝突；跨專案原則若僅存 memory，會在其他專案消失並重複踩同樣的雷。本框架因此自建 `.claude/error-patterns/` 取代 memory 作為跨專案錯誤學習的載體——memory 機制本身不受影響（仍是 Claude Code 原生功能），只是本框架的知識指引不再把它列為目的地。
 
 **捕獲時分流判準**（記錄前必答；判別問句：「另一個專案的 session 讀到這段，能用嗎」）：
 
@@ -152,7 +152,7 @@
 | 此原則是流程方法論嗎？ | 升級至 `.claude/methodologies/` |
 | 此原則是 Skill 引導嗎？ | 升級至 `.claude/skills/<skill>/` |
 
-**升級目的地預算閘門**（W7-007）：升級目的地屬自動載入層（`rules/core/`、CLAUDE.md、rules/README.md、pm-role.md）時，必須先通過 `rules/README.md`「自動載入預算原則」自問——「這是否每回合都需要遵守？」答否一律改放按需層（references/ / pm-rules/ / error-patterns/），自動載入層至多加一行路由。**Why**：升級路徑若預設指向自動載入層，每次知識固化即膨脹一次，45k 預算單調耗盡（W7-004 根因「每次事故教訓傾向寫進自動載入層」的制度化版本）。寫入形態依 `document-writing-style.md`「載入層邊界」：自動載入層為禁令 + 路由，論證放按需層。
+**升級目的地預算閘門**：升級目的地屬自動載入層（`rules/core/`、CLAUDE.md、rules/README.md、pm-role.md）時，必須先通過 `rules/README.md`「自動載入預算原則」自問——「這是否每回合都需要遵守？」答否一律改放按需層（references/ / pm-rules/ / error-patterns/），自動載入層至多加一行路由。**Why**：升級路徑若預設指向自動載入層，每次知識固化即膨脹一次，45k 預算單調耗盡（根因「每次事故教訓傾向寫進自動載入層」的制度化版本）。寫入形態依 `document-writing-style.md`「載入層邊界」：自動載入層為禁令 + 路由，論證放按需層。
 
 **禁止行為**：
 
@@ -186,7 +186,7 @@
 - [ ] 發現框架可改善時，是否已在當前 Wave 建立 Ticket？finish 時框架票是否已依〈finish 時的框架票處置〉前移或阻擋？（規則 6）
 - [ ] 記錄經驗教訓前已執行捕獲時分流判準？（規則 7，PC-061 / PC-160）
 
-> **Auto-load 鏡像**：規則 7 的分流檢查項已鏡像至 `.claude/rules/core/quality-baseline.md` 通用檢查清單末端（W3-060），確保 PM auto-load context 含此檢查項。本檔為完整分流判準定義的權威來源；auto-load 層僅含指向本檔的提醒項。修改本規則時必須同步檢查 quality-baseline.md 鏡像項是否需更新。
+> **Auto-load 鏡像**：規則 7 的分流檢查項已鏡像至 `.claude/rules/core/quality-baseline.md` 通用檢查清單末端，確保 PM auto-load context 含此檢查項。本檔為完整分流判準定義的權威來源；auto-load 層僅含指向本檔的提醒項。修改本規則時必須同步檢查 quality-baseline.md 鏡像項是否需更新。
 
 ---
 
@@ -216,8 +216,8 @@
 **Version**: 2.4.0 — 規則 6.1 補「已由 scope 凍結模型部分取代」註記：scope 開放時「禁止改建未來 planned 版本」的核心主張不變，scope 凍結時框架問題改路由至 canonical framework issue，不進本地版本判斷；「當前 active 版本」定義表與〈與其他規則邊界〉表同步改引 `version-progression.md`〈版本生命週期〉，移除已由該模型取代的「.claude 工件歸活躍版本」字面引用。
 **Version**: 2.3.0 - 規則 7 三處修正（文字審查發現）：Action 層原指向不存在的發版 checklist 落點，改為指向 `version-release/SKILL.md` 使用流程檢查清單新增的對應勾選項（該勾選項同一次變更中同步新增）；memory 排除列補涵蓋邊界（PreToolUse deny 僅覆蓋 Write/Edit/MultiEdit/NotebookEdit，Bash 路徑由事後稽核承接）；Consequence 補標「400 筆樣本為本專案實測，機制主張可攜但量測值不可攜」；移除「選配資訊性掃描的處置」過去式過程紀錄段落（依 spec 與 process record 分離原則，過程細節屬 ticket/worklog 範疇），改為不含過程與識別符的一句現況陳述。
 **Version**: 2.2.0 - 規則 7「驗證方式」段落改寫：移除對不存在的 version-release 稽核項的字面宣稱，改為如實描述現況（memory 排除已 hook 化；三分流語意分類無機械稽核、依賴人工抽查），並補三明示（Why 三分流本質為語意判斷 / Consequence 400 ticket 樣本關鍵字比對偽陽性率 100% 實測 / Action 版本發布前人工抽查 checklist）；新增選配資訊性掃描（方案 C）處置說明，判定不隨本次併入並已提出 follow-up spawn request，避免無 trigger 延後。
-**Version**: 2.1.0 - 規則 7 全文改寫：以三分流（框架相關／專案相關／兩者皆非）取代原「跨專案錯誤學習 + memory 承接專案特定與 deferred 項」目的地表，memory 不再列為任何分支的合法目的地；`upgrade: deferred` frontmatter 標註與「升級後處理」三步（MEMORY.md 索引移除）隨之廢除；底線要求總結與相關規則指標同步更新（0.2.1-W3-083，承接 0.2.1-W3-082 用戶裁示）。
+**Version**: 2.1.0 - 規則 7 全文改寫：以三分流（框架相關／專案相關／兩者皆非）取代原「跨專案錯誤學習 + memory 承接專案特定與 deferred 項」目的地表，memory 不再列為任何分支的合法目的地；`upgrade: deferred` frontmatter 標註與「升級後處理」三步（MEMORY.md 索引移除）隨之廢除；底線要求總結與相關規則指標同步更新（承接用戶裁示）。
 **Version**: 2.0.0 - 規則 7 語意由「寫入後四問評估」前移為「捕獲時分流」：新增分流判準表（Two-Phase Reflection 成熟度門檻 + `upgrade: deferred` 顯式標註 + framework-issue candidate 可選 inbox），原四問表降為分流目的地路由；升級後處理綁 promote/scan 工具與發版稽核。依據：130 檔 feedback memory 實測 4% 標註率，事後補評估閉環量化證明不執行
 **Version**: 1.2.0 - 規則 7 升級路徑表補「單一代理人身份/偏好 → agents/<name>.md」分支（原六分支對偏好類教訓無目的地，fall through 誤置）+ 表前補知識載體地圖路由（W8 multi-round-review R3）
-**Version**: 1.1.0 - 規則 7 新增「升級目的地預算閘門」（自動載入層需過「每回合都需要」自問，預設按需層）；升級後處理改「升級即搬家」（MEMORY.md 索引移除條目，修正與 W7-004.6 索引修剪實務的矛盾）（W7-007）
-**Version**: 1.0.0 - 從 quality-baseline.md v1.9.0 規則 6-7 外移；auto-load 僅保留通用品質底線（規則 1-5），PM 情境專屬規則移至此處按需讀取（對應 0.18.0-W10-073.4 WRAP 選項 B）
+**Version**: 1.1.0 - 規則 7 新增「升級目的地預算閘門」（自動載入層需過「每回合都需要」自問，預設按需層）；升級後處理改「升級即搬家」（MEMORY.md 索引移除條目，修正與索引修剪實務的矛盾）
+**Version**: 1.0.0 - 從 quality-baseline.md v1.9.0 規則 6-7 外移；auto-load 僅保留通用品質底線（規則 1-5），PM 情境專屬規則移至此處按需讀取（對應 WRAP 選項 B）

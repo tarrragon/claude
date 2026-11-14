@@ -81,6 +81,19 @@ KEYWORD_TO_COUNT = {
     "dual-track": 2,
 }
 
+# 否定修飾判定（與 agent-dispatch-validation 的收尾指示判定同一語意）：
+# 以子句為單位；子句內命中前、最近一個逗號之後出現否定詞，視為否定，不計入期望數
+_CLAUSE_SPLIT = re.compile(r"[。；;\n]")
+_NEGATION_PATTERN = re.compile(
+    r"不要|不得|不可|不必|不需|不用|不派|不走|不採|不是|不做|無需|沒有|禁止|勿|避免|"
+    r"\bnever\b|\bdo not\b|\bdon't\b|\bnot\b|\bno\b|\bwithout\b",
+    re.IGNORECASE,
+)
+
+# 警告中附列的命中原句上限（避免長 prompt 灌爆警告）
+MAX_MATCHED_CLAUSES = 3
+MATCHED_CLAUSE_MAX_CHARS = 120
+
 # PostToolUse Hook 的標準輸出結構
 DEFAULT_OUTPUT = {
     "hookSpecificOutput": {
@@ -152,28 +165,52 @@ def write_batch_state(file_path: Path, state: Dict[str, Any], logger) -> bool:
 # 關鍵字偵測
 # ============================================================================
 
-def detect_dispatch_keywords(text: str, logger) -> Optional[tuple[list[str], int]]:
+def _is_negated(clause: str, start: int) -> bool:
+    """子句內位於 start 的關鍵字是否被否定修飾。
+
+    否定詞只看命中前、最近一個逗號之後的分句尾段；頓號（列舉）不切，
+    「不需要三人組、多視角」的兩個關鍵字都受否定涵蓋，
+    「不改規則，改走三人組」的三人組不受影響。
     """
-    偵測派發相關關鍵字和期望派發數量
+    head = re.split(r"[，,]", clause[:start])[-1]
+    return bool(_NEGATION_PATTERN.search(head))
+
+
+def detect_dispatch_keywords(
+    text: str, logger
+) -> Optional[tuple[list[str], int, list[str]]]:
+    """
+    偵測派發相關關鍵字和期望派發數量；被否定修飾的出現不計入
 
     Returns:
-        tuple - (detected_keywords, expected_count) 若無關鍵字則回傳 None
+        tuple - (detected_keywords, expected_count, matched_clauses)，
+        matched_clauses 為計入的命中原句（去重、保序）；若無計入的關鍵字則回傳 None
     """
     if not text:
         return None
 
     detected = []
+    clauses_hit: list[str] = []
     max_expected = 0
 
-    for keyword in DISPATCH_MULTI_KEYWORDS:
-        if keyword.lower() in text.lower():
-            detected.append(keyword)
-            expected = KEYWORD_TO_COUNT.get(keyword, 2)
-            max_expected = max(max_expected, expected)
+    for clause in _CLAUSE_SPLIT.split(text):
+        lowered = clause.lower()
+        for keyword in DISPATCH_MULTI_KEYWORDS:
+            start = lowered.find(keyword.lower())
+            if start < 0:
+                continue
+            if _is_negated(clause, start):
+                logger.debug(f"關鍵字 {keyword} 被否定修飾，不計入: {clause.strip()}")
+                continue
+            if keyword not in detected:
+                detected.append(keyword)
+            if clause.strip() not in clauses_hit:
+                clauses_hit.append(clause.strip())
+            max_expected = max(max_expected, KEYWORD_TO_COUNT.get(keyword, 2))
 
     if detected:
         logger.debug(f"偵測到派發關鍵字: {detected}, 期望派發數: {max_expected}")
-        return (detected, max_expected)
+        return (detected, max_expected, clauses_hit)
 
     return None
 
@@ -186,11 +223,11 @@ def handle_post_tool_use(input_data: Dict[str, Any], logger) -> int:
     """
     PostToolUse Hook：偵測 Agent dispatch 關鍵字，初始化或遞增計數
 
-    [W10-060 Background 模式語意備註]
+    [Background 模式語意備註]
     本 Hook 計數的語意是「PM 已派發的 Agent 數」，而非「已完成的 Agent 數」。
     PostToolUse(Agent) 對 run_in_background=true 在「啟動完成」時觸發，
     此時 agentId 已返回，等同於「派發完成」，因此計數於此時點正確無誤。
-    不需要套用 is_background_dispatch early-return（與 W10-024 / P-2 / P-3 不同）。
+    不需要套用 is_background_dispatch early-return（與其他 early-return 路徑 P-2 / P-3 不同）。
     """
     # 只處理 Agent tool
     tool_name = input_data.get("tool_name", "")
@@ -204,7 +241,8 @@ def handle_post_tool_use(input_data: Dict[str, Any], logger) -> int:
     prompt = tool_input.get("prompt", "")
     description = tool_input.get("description", "")
 
-    combined_text = f"{prompt} {description}"
+    # 換行接合：prompt 與 description 各自成句，否定判定不跨欄位
+    combined_text = f"{prompt}\n{description}"
 
     # 偵測關鍵字
     detection = detect_dispatch_keywords(combined_text, logger)
@@ -213,7 +251,7 @@ def handle_post_tool_use(input_data: Dict[str, Any], logger) -> int:
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
-    keywords, expected_count = detection
+    keywords, expected_count, matched_clauses = detection
 
     # 初始化或更新狀態檔
     state_file = get_batch_state_file(input_data, logger)
@@ -224,6 +262,7 @@ def handle_post_tool_use(input_data: Dict[str, Any], logger) -> int:
     state = read_batch_state(state_file, logger) or {
         "expected": expected_count,
         "keywords": keywords,
+        "matched_clauses": matched_clauses,
         "actual": 0,
         "batch_started_at": datetime.now().isoformat(),
         "PostToolUse_call_count": 0,
@@ -245,14 +284,28 @@ def handle_post_tool_use(input_data: Dict[str, Any], logger) -> int:
 # UserPromptSubmit 邏輯
 # ============================================================================
 
-def build_count_mismatch_warning(expected: int, actual: int, keywords: list[str]) -> str:
-    """建立派發計數不一致警告訊息"""
+def _format_matched_clauses(clauses: list[str]) -> str:
+    """命中原句區塊：最多 MAX_MATCHED_CLAUSES 句，每句截至 MATCHED_CLAUSE_MAX_CHARS 字。"""
+    if not clauses:
+        return ""
+    lines = []
+    for clause in clauses[:MAX_MATCHED_CLAUSES]:
+        text = clause if len(clause) <= MATCHED_CLAUSE_MAX_CHARS else clause[:MATCHED_CLAUSE_MAX_CHARS] + "…"
+        lines.append(f"  - {text}")
+    return "命中原句:\n" + "\n".join(lines) + "\n"
+
+
+def build_count_mismatch_warning(
+    expected: int, actual: int, keywords: list[str], matched_clauses: Optional[list[str]] = None
+) -> str:
+    """建立派發計數不一致警告訊息（附命中原句，供判斷是否為誤計）"""
     return (
         f"============================================================\n"
         f"[Dispatch Count Guard] 派發計數警告（PC-020）\n"
         f"============================================================\n"
         f"\n"
         f"敘述中提及: {', '.join(keywords)}\n"
+        f"{_format_matched_clauses(matched_clauses or [])}"
         f"期望派發數量: {expected}\n"
         f"實際派發數量: {actual}\n"
         f"\n"
@@ -297,7 +350,9 @@ def handle_user_prompt_submit(input_data: Dict[str, Any], logger) -> int:
 
     # 驗證計數
     if actual < expected:
-        warning = build_count_mismatch_warning(expected, actual, keywords)
+        warning = build_count_mismatch_warning(
+            expected, actual, keywords, state.get("matched_clauses", [])
+        )
 
         # 雙通道輸出：stderr + 日誌
         sys.stderr.write(warning + "\n")

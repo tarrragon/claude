@@ -371,7 +371,7 @@ PostToolUse Hook 中添加配置：
 
 #### 7.2 快速參考卡片
 
-`quick-ref-pre-fix-eval.md`（已於 W10-049.1 移除，內容已內化至本 skill）包含：
+`quick-ref-pre-fix-eval.md`（已移除，內容已內化至本 skill）包含：
 - [OK] 三步驟工作流
 - [OK] 錯誤分類速查表
 - [OK] 修復決策矩陣
@@ -412,7 +412,7 @@ PostToolUse Hook 中添加配置：
 | pre-fix-eval.md | Skill | 11 KB | [OK] |
 | settings.json | Config | Updated | [OK] |
 | pre-fix-evaluation-implementation.md | Tech Doc | 11 KB | [OK] |
-| quick-ref-pre-fix-eval.md | Quick Ref | 5.7 KB | [WARN]️ 已於 W10-049.1 移除 |
+| quick-ref-pre-fix-eval.md | Quick Ref | 5.7 KB | [WARN]️ 已移除 |
 
 **整體文件驗收**: [OK] PASS
 

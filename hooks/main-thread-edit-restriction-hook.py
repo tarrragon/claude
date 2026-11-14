@@ -22,7 +22,7 @@ import json
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/
 sys.path.insert(0, str(Path(__file__).parent.parent))   # .claude/       (lib.*)
@@ -32,14 +32,37 @@ from lib import setup_hook_logging, run_hook_safely, get_project_root, save_chec
 # boundary 判斷，worktree 感知是刻意設計。dispatch-active.json 為跨
 # worktree 全域狀態，語意不同，改用 git_utils 版本並顯式命名區分
 # （見 ARCH-BAL-020）
-from lib.git_utils import get_current_branch, is_allowed_branch, find_target_repo, get_project_root as get_dispatch_project_root
+from lib.git_utils import get_current_branch, is_allowed_branch, find_target_repo, get_target_root, get_project_root as get_dispatch_project_root
 from lib.hook_messages import GateMessages
 from lib.dispatch_tracker import is_file_under_dispatch
 from lib.path_permission import check_file_permission
+from lib.checkout_identity import common_dir, is_absolute_path, owning_checkout_root, strip_root_prefix
 
 # Exit Code
 EXIT_ALLOW = 0
 EXIT_BLOCK = 2
+
+# 受檢的檔案寫入工具（settings.json 對三者各有 matcher 註冊）
+WRITE_TOOLS = ("Edit", "Write", "NotebookEdit")
+
+
+def _linked_worktree_root(file_path: str) -> Optional[str]:
+    """目標檔案所屬 linked worktree 的根；非 linked worktree 回 None。
+
+    判定：所屬 checkout 根的 .git 為 gitlink 檔，且 common dir 解析到
+    另一個主 .git。主 checkout（.git 為目錄）、submodule（無 commondir）、
+    相對路徑、解析失敗一律回 None（不套用分支放行，交由 path_permission）。
+    回傳根而非檔案目錄：目標檔案的上層目錄可能尚未建立（Write 新目錄）。
+    """
+    if not is_absolute_path(file_path):
+        return None
+    root = owning_checkout_root(file_path)
+    if root is None or not Path(root, ".git").is_file():
+        return None
+    common = common_dir(root)
+    if common is None or Path(common) == Path(root, ".git").resolve():
+        return None
+    return root
 
 
 def _allow_and_exit(logger, reason: str) -> int:
@@ -48,7 +71,18 @@ def _allow_and_exit(logger, reason: str) -> int:
     return EXIT_ALLOW
 
 
-def _check_dispatch_warning(file_path: str, logger) -> str:
+def _safe_target_root(file_path: str, payload, original_root, logger):
+    """get_target_root 的失效隔離：例外時回 None（沿用原根，判定同修改前），
+    同時寫 stderr 與日誌；避免本守衛因新增的解析步驟拋例外而 fail-open。"""
+    try:
+        return get_target_root(file_path, payload, original_root)
+    except Exception as e:
+        sys.stderr.write(f"[main-thread-edit-restriction] get_target_root 失敗，沿用原根: {e}\n")
+        logger.error(f"get_target_root 失敗，沿用原根: {e}")
+        return None
+
+
+def _check_dispatch_warning(file_path: str, logger, payload: Optional[Dict[str, Any]] = None) -> str:
     """
     檢查檔案是否正在被背景代理人處理，回傳警告訊息或空字串
 
@@ -60,11 +94,12 @@ def _check_dispatch_warning(file_path: str, logger) -> str:
 
     project_root = get_dispatch_project_root()
     rel_path = file_path
-    if file_path.startswith("/"):
-        try:
-            rel_path = str(Path(file_path).relative_to(project_root))
-        except ValueError:
-            pass
+    if is_absolute_path(file_path):
+        # 相對化以目標檔所屬 checkout 為根；派發紀錄仍以 project_root 查
+        rel_root = _safe_target_root(file_path, payload, project_root, logger) or project_root
+        relative = strip_root_prefix(file_path, str(rel_root))
+        if relative is not None:
+            rel_path = relative
 
     dispatch = is_file_under_dispatch(project_root, rel_path)
     if not dispatch:
@@ -98,11 +133,11 @@ def main() -> int:
 
         logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
 
-        # 只檢查 Edit 和 Write 工具
+        # 只檢查檔案寫入工具；NotebookEdit 的路徑欄位是 notebook_path
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input") or {}
 
-        if tool_name not in ["Edit", "Write"]:
+        if tool_name not in WRITE_TOOLS:
             logger.debug(f"跳過: 工具類型 {tool_name} 不在檢查範圍內")
             return _allow_and_exit(logger, f"工具 {tool_name} 不在檢查範圍")
 
@@ -111,19 +146,22 @@ def main() -> int:
             logger.info(f"subagent 環境（agent_id={input_data.get('agent_id')}），跳過編輯限制")
             return _allow_and_exit(logger, "subagent 不受主線程編輯限制")
 
-        file_path = tool_input.get("file_path", "")
+        file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         logger.info(f"檢查工具: {tool_name}, 檔案: {file_path}")
 
-        # 開發分支跳過（feat/*, fix/* 等）
-        file_dir = str(Path(file_path).parent) if file_path and file_path.startswith("/") else None
-        current_branch = get_current_branch(cwd=file_dir)
-        if current_branch and is_allowed_branch(current_branch):
-            logger.info(f"開發分支 '{current_branch}' 上，跳過主線程編輯限制")
-            return _allow_and_exit(logger, f"開發分支 '{current_branch}' 不受主線程編輯限制")
+        # 開發分支跳過（feat/*, fix/* 等）：僅限目標檔案位於 linked worktree。
+        # 主 checkout 開分支不放行——parallel-dispatch 禁止在共用主工作樹切換
+        # 或建立分支，若主 checkout 的開發分支也放行，等於鼓勵該繞法。
+        worktree_root = _linked_worktree_root(file_path)
+        if worktree_root:
+            current_branch = get_current_branch(cwd=worktree_root)
+            if current_branch and is_allowed_branch(current_branch):
+                logger.info(f"linked worktree 的開發分支 '{current_branch}' 上，跳過主線程編輯限制")
+                return _allow_and_exit(logger, f"linked worktree 的開發分支 '{current_branch}' 不受主線程編輯限制")
 
         # 跨專案放行：path_permission 是本專案內部約定（保護 src/ 等）
         # 對外部 repo 套用語意不合理；branch-verify-hook 仍會獨立檢查目標 repo 分支
-        if file_path and file_path.startswith("/"):
+        if is_absolute_path(file_path):
             target_repo = find_target_repo(file_path)
             try:
                 current_root = str(Path(get_project_root()).resolve())
@@ -140,13 +178,16 @@ def main() -> int:
                 )
 
         # 檢查編輯權限
-        is_allowed, reason = check_file_permission(file_path, logger)
+        target_root = _safe_target_root(file_path, input_data, None, logger)
+        is_allowed, reason = check_file_permission(
+            file_path, logger, str(target_root) if target_root else None
+        )
 
         # Dispatch 衝突警告（僅在允許編輯時檢查）
         decision = "allow" if is_allowed else "deny"
         dispatch_warning = None
         if is_allowed:
-            dispatch_warning = _check_dispatch_warning(file_path, logger) or None
+            dispatch_warning = _check_dispatch_warning(file_path, logger, input_data) or None
 
         emit_hook_output(
             "PreToolUse",

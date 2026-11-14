@@ -1,8 +1,8 @@
-"""Skill 版本摘要與漂移報告 — sync-claude-push.py / sync-claude-pull.py 共用（0.2.1-W3-356）。
+"""Skill 版本摘要與漂移報告 — sync-claude-push.py / sync-claude-pull.py 共用。
 
 沿革：extract_skill_versions 與 format_skill_version_diff 原在 push、pull 兩腳本
-各自定義一份逐字重複的實作（W2-001 建立時各自複製）。report_skill_repo_drift 原
-只存在於 push（0.2.1-W3-351 建立、0.2.1-W3-353 改為呼叫 skill-sync 的 public
+各自定義一份逐字重複的實作（建立時各自複製）。report_skill_repo_drift 原
+只存在於 push（後改為呼叫 skill-sync 的 public
 `sync_status_report`），pull 端從未對稱呼叫——但 pull 才是本地 skills 被遠端覆寫
 的時刻，漂移在 pull 之後產生的機率高於 push 之後。本模組將三者提升至 .claude/lib/
 供兩端 import，消除重複並讓 pull 收尾也能輸出同格式的漂移報告（ARCH-BAL-016：
@@ -207,8 +207,8 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
     """比對本地 skill 與 skill 庫的內容雜湊，回傳給使用者閱讀的報告。
 
     整段流程（repo 解析、取遠端 manifest、分類）交給 skill-sync 的
-    `sync_status_report`，本函式只負責呈現。0.2.1-W3-134 移除的舊實作與
-    0.2.1-W3-351 的第一版恢復都只重用了中段分類器、自行重寫取檔與來源設定，
+    `sync_status_report`，本函式只負責呈現。曾被移除的舊實作與
+    其第一版恢復都只重用了中段分類器、自行重寫取檔與來源設定，
     後者因此硬編了 repo URL 而繞過 `SKILL_SYNC_REPO` 覆寫，與 skill-sync 本體
     比對不同的遠端（ARCH-BAL-016）。
 

@@ -4,7 +4,6 @@ title: Hook 豁免路徑與 Ticket 寫入範圍不一致導致 agent 派發後�
 category: process-compliance
 severity: medium
 created: 2026-04-18
-source_ticket: 0.18.0-W15-023
 related:
   - PC-019  # worktree 派發前 commit
   - ARCH-015  # worktree vs .claude/ 路徑限制
@@ -18,7 +17,7 @@ PM 派發實作 agent 前未預先驗證 ticket 的 `where.files` 是否全部�
 
 ## 具體案例
 
-W15-014 E3 audit ticket `where.files` 含 `scripts/experiments/pc088_v2_audit.py`。
+某 E3 audit ticket 的 `where.files` 含 `scripts/experiments/pc088_v2_audit.py`。
 `branch-verify-hook.py:exempt_prefixes` 僅含 `.claude/` 和 `docs/`，未含 `scripts/`。
 Agent 在 main worktree 嘗試 Write 腳本時被 hook 擋下，回報需 PM 決策（worktree / feature branch / hook exempt / 改路徑）。
 
@@ -50,13 +49,13 @@ Agent 在 main worktree 嘗試 Write 腳本時被 hook 擋下，回報需 PM 決
 |------|---------|---------|
 | 框架規則 | `.claude/` | 是 |
 | 文件產出 | `docs/` | 是 |
-| 實驗腳本 | `scripts/experiments/` | 是（W15-023 已加） |
+| 實驗腳本 | `scripts/experiments/` | 是（已加） |
 | 產品程式碼 | `src/` | 否（TDD 必經分支流程） |
 | 通用工具腳本 | `scripts/` 其他子目錄 | 視情況，預設否 |
 
 ## 對照：為何不使用 worktree
 
-W15-014 agent 以 `isolation: "worktree"` 派發，但 worktree 實際仍綁定 main 分支（未切 feature branch），故 hook 仍判定為保護分支。worktree 隔離解決 `.git/HEAD` 污染，但不自動豁免保護分支限制。
+該 audit agent 以 `isolation: "worktree"` 派發，但 worktree 實際仍綁定 main 分支（未切 feature branch），故 hook 仍判定為保護分支。worktree 隔離解決 `.git/HEAD` 污染，但不自動豁免保護分支限制。
 
 若選 feature branch 策略：agent 需先 `git checkout -b feat/...`，完成後合併；流程較長且與「實驗一次性產物」不匹配。
 

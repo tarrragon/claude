@@ -67,13 +67,13 @@ cd /path/to/worktree && git status
 git -C /path/to/worktree status
 ```
 
-## 變體：chpwd 輸出被捕獲進 redirect 致下游處理拿到假資料（W1-018 near-miss）
+## 變體：chpwd 輸出被捕獲進 redirect 致下游處理拿到假資料（near-miss）
 
 **症狀**：`(cd "$DIR" && cmd | sort) > file.txt` 後，`file.txt` 開頭混入該目錄的 `ls` 列表（chpwd 在 cd 當下印出），使檔案**非完全排序**；後續 `comm -23 file.txt other.txt` 因 comm 要求輸入嚴格排序而產生大量假差異。
 
 **根因**：即使用子 shell `()` 隔離工作目錄，chpwd hook 仍在子 shell 內的 cd 當下執行 `ls`，其 stdout 與後續命令的 stdout 一起被 `>` 重導向**捕獲進檔案**。子 shell 只隔離 cwd 變更，不抑制 chpwd 的副作用輸出。
 
-**Consequence（為何嚴重）**：這不是「輸出變吵」而是「資料被靜默污染」。W1-018 實證：孤兒比對 `comm` 得到假的 2610 筆（實為 751），PM 差點據此向用戶誤報「sync-push --clean 會災難性刪除 2610 檔」。被污染的中介檔讓錯誤結論看似有憑據。
+**Consequence（為何嚴重）**：這不是「輸出變吵」而是「資料被靜默污染」。實證：孤兒比對 `comm` 得到假的 2610 筆（實為 751），PM 差點據此向用戶誤報「sync-push --clean 會災難性刪除 2610 檔」。被污染的中介檔讓錯誤結論看似有憑據。
 
 **Action（防護）**：
 
@@ -92,8 +92,8 @@ git -C /path/to/worktree status
 
 ---
 
-**Last Updated**: 2026-06-10 — 禁用詞修正：變體標題與本 footer 共 2 處用詞改為「假資料」+ 自稱「本 PC」→「本 pattern」（IMP 類非 PC 類）（W1-032 文件交叉引用稽核）。
+**Last Updated**: 2026-06-10 — 禁用詞修正：變體標題與本 footer 共 2 處用詞改為「假資料」+ 自稱「本 PC」→「本 pattern」（IMP 類非 PC 類）（文件交叉引用稽核）。
 
-**Last Updated**: 2026-06-07 — 新增「變體：chpwd 輸出被捕獲進 redirect 致 comm 假資料」（W1-018 near-miss：假 2610 孤兒差點誤報災難性刪除，實為 751）+ `git -C` 正確做法。
+**Last Updated**: 2026-06-07 — 新增「變體：chpwd 輸出被捕獲進 redirect 致 comm 假資料」（near-miss：假 2610 孤兒差點誤報災難性刪除，實為 751）+ `git -C` 正確做法。
 
 **Last Updated**: 2026-10-07 — 方法 uv 旗標由不存在的 `-d` 改為 `--directory`（uv 0.8.13 實測）。

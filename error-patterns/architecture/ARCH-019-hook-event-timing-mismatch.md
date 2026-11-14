@@ -92,16 +92,16 @@ basil-hook-architect 設計審查時必須回答：
 
 **症狀演進**：
 
-1. **W10-024**：active-dispatch-tracker-hook 在 background 派發時提示誤導（PostToolUse 啟動時就清理派發記錄，但代理人仍在執行）。修補：訊息加三態（背景/前台/未知）區分。
-2. **W10-060**：盤點所有 PostToolUse(Agent) 類 Hook（共 7 個），發現相同問題普遍存在。修補：所有 Hook 套用「background 模式跳過邏輯」guard。
-3. **W10-061**：PM 代理人狀態查詢防護強化時，發現修補本身仍是繞道——根因是 event 選擇錯誤，PostToolUse(Agent) 從未是「代理人完成」訊號。
+1. **第一輪修補**：active-dispatch-tracker-hook 在 background 派發時提示誤導（PostToolUse 啟動時就清理派發記錄，但代理人仍在執行）。修補：訊息加三態（背景/前台/未知）區分。
+2. **第二輪修補**：盤點所有 PostToolUse(Agent) 類 Hook（共 7 個），發現相同問題普遍存在。修補：所有 Hook 套用「background 模式跳過邏輯」guard。
+3. **第三輪修補**：PM 代理人狀態查詢防護強化時，發現修補本身仍是繞道——根因是 event 選擇錯誤，PostToolUse(Agent) 從未是「代理人完成」訊號。
 
 **證據**：
 
 - `.claude/hooks/active-dispatch-tracker-hook.py:66` 註解：「背景代理人：PostToolUse 在啟動時即觸發，代理人仍在執行。」
 - 當前 session `.claude/dispatch-active.json` 殘留 7 筆未清記錄（agent_description 重複、ticket_id 空），證明清理邏輯失效
 
-**正確解法**：W10-066/067 將 active-dispatch-tracker-hook 和 agent-commit-verification-hook 改掛 `SubagentStop`，依 `agent_id` 精準清理。從根因層消除 PC-050 模式 E（Hook 訊號誤判）。
+**正確解法**：將 active-dispatch-tracker-hook 和 agent-commit-verification-hook 改掛 `SubagentStop`，依 `agent_id` 精準清理。從根因層消除 PC-050 模式 E（Hook 訊號誤判）。
 
 **教訓**：三輪修補耗費三個 Wave，根因僅是「選錯 event」。若初始設計即知 `SubagentStop` 為代理人完成訊號源，可避免全部繞道。
 
@@ -109,7 +109,7 @@ basil-hook-architect 設計審查時必須回答：
 
 - `.claude/error-patterns/process-compliance/PC-050-premature-agent-completion-judgment.md` — 模式 E（Hook 訊號誤判，本 pattern 是其架構根因）
 - `.claude/hook-specs/claude-code-hooks-official-standards.md` — CC runtime 9 種 Hook events 規範
-- `.claude/methodologies/hook-system-methodology.md` — Hook 設計方法論（待 W10-069 補 Event 選擇與識別碼章節）
+- `.claude/methodologies/hook-system-methodology.md` — Hook 設計方法論（Event 選擇與識別碼章節待補）
 
 ---
 

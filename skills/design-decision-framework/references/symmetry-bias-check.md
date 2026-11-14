@@ -125,11 +125,10 @@
 
 ---
 
-<!-- PC-093-exempt: history:W3-075/W3-076/W3-078 為歸屬評估歷史錨點，非延後決策 -->
 ## 來源
 
-- 原始洞察：W3-075（sync-push hash + commit early-exit）+ W3-076（sync-pull backup 清理）方案差異化過程
-- 歸屬評估：W3-078 ANA 結論——升級到 design-decision-framework skill reference
+- 原始洞察：sync-push（hash + commit early-exit）與 sync-pull（backup 清理）兩個方案的差異化過程
+- 歸屬評估：一次 ANA 結論——升級到 design-decision-framework skill reference
 
 ---
 

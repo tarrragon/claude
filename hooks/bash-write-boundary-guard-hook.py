@@ -30,7 +30,11 @@ matcher，禁止主線程（PM）寫入 test/、lib/、*.dart。該限制可被 
   check_file_permission，開發分支（feat/*、fix/* 等）跳過
 - 失敗語意 fail_closed：解析例外或分派層逾時時擋下
 - 殘留風險清單（靜態解析 fail-open，未偵測）：
-  直譯器內動態組成的路徑；先寫腳本到 checkout 外再執行的兩步驟；
+  直譯器內動態組成、且命令與原始碼都沒有受限路徑線索的寫入目標（不擋，以
+  additionalContext 警告放行；有線索時以線索路徑判定範圍）；腳本檔內目標無法判定的寫入
+  （不走線索、不警告：既有腳本參數常含 .claude/ 路徑，套用線索會誤擋例行包裝命令）；
+  腳本以 python -m 模組形態執行；同一命令內先寫腳本再執行（PreToolUse 時腳本尚不存在，
+  只剩 argv 的字面路徑線索）；
   值含其他變數或命令替換的 $VAR（同命令內的字面賦值、~、$HOME、$(pwd) 前綴已展開）；
   bash -c／eval 的非字面引數；
   awk -i inplace、ruby、install、truncate、patch、tar -C、dd of=、rsync、ln -s、
@@ -46,8 +50,16 @@ matcher，禁止主線程（PM）寫入 test/、lib/、*.dart。該限制可被 
 - tee path / tee -a path
 - sed -i ... path / sed --in-place ... path（原地編輯目標）
 - python -c / python3 heredoc 內嵌腳本中的 open('path', ...) 呼叫
-- cp src dst / mv src dst（目的地路徑）
+- cp src dst / mv src dst（目的地路徑；mv 的來源也算，移出等同刪除原位置）
+- rm／unlink 的引數（路徑段含快取、hook-logs、.git、.github 者略過）
 - 一般輸出重導向 > path / >> path（排除檔案描述符重導向 2>、&>）
+- ed／ex 的檔案引數（編輯指令經 stdin 或 -c 送入，w／x 寫回該檔）
+- python 腳本檔形態 python3 [選項] script.py args：腳本讀得到時以 ast 分析，
+  只採可判定的寫入目標（常數或 argv 展開）；讀不到時 argv 中受限範圍的字面路徑納入候選
+- node -e／--eval 腳本字串內 writeFileSync、appendFileSync 等 fs 寫入的字面路徑
+
+共用介面：iter_checkout_write_targets(command, cwd) 逐候選產生 checkout 相對路徑，
+bash-edit-guard-hook.py 以 importlib 載入本檔取用，兩支守衛的寫入目標判定同源。
 
 解析方式：
 命令以單趟字元走訪切成「陳述 -> token」，每個字元只看一次，整體 O(n)，
@@ -188,6 +200,19 @@ def _const_path(node: Optional[ast.AST], env) -> Optional[str]:
     if isinstance(node, ast.Name):
         vals = env.get(node.id)
         return vals[-1] if vals else None
+    if isinstance(node, ast.JoinedStr):
+        # f-string：各段（常數與無格式指定的插值）皆可常數化才組出字串
+        parts = []
+        for value in node.values:
+            if isinstance(value, ast.FormattedValue):
+                if value.conversion != -1 or value.format_spec is not None:
+                    return None
+                value = value.value
+            part = _const_path(value, env)
+            if part is None:
+                return None
+            parts.append(part)
+        return "".join(parts)
     if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Div)):
         left, right = _const_path(node.left, env), _const_path(node.right, env)
         if left is None or right is None:
@@ -216,28 +241,63 @@ def _arg(call: ast.Call, index: int, kw: str) -> Optional[ast.AST]:
     return None
 
 
-def _call_write_target(call: ast.Call, env) -> Optional[str]:
-    """單一呼叫的寫入目標字面路徑；非寫入或無法常數化則 None。"""
+def _mode_may_write(node: Optional[ast.AST]) -> bool:
+    """open 的模式引數可能是寫入：常數含 w／a／x／+，或非常數（執行期才知道）。沒給模式為唯讀。"""
+    if node is None:
+        return False
+    if isinstance(node, ast.Constant):
+        return _write_mode(node)
+    return True
+
+
+def _argv_out_of_range(node: Optional[ast.AST], env) -> bool:
+    """node 為 sys.argv[n] 且命令列引數已知、n 超出範圍：執行期 IndexError，不會寫入。"""
+    index = _argv_index(node, env)
+    argv = env.get("sys.argv")
+    return index is not None and argv is not None and not -len(argv) <= index < len(argv)
+
+
+def _call_write(call: ast.Call, env) -> tuple:
+    """單一呼叫的 (是否為寫入呼叫, 寫入目標字面路徑或 None)。
+    寫入呼叫但目標無法常數化時回 (True, None)，由呼叫端決定是否以其他線索補判。"""
     func = call.func
     name = _dotted(func)
     if name in ("open", "io.open"):
-        if _write_mode(_arg(call, 1, "mode")):
-            return _const_path(_arg(call, 0, "file"), env)
-        return None
+        file_arg = _arg(call, 0, "file")
+        if _mode_may_write(_arg(call, 1, "mode")) and not _argv_out_of_range(file_arg, env):
+            return True, _const_path(file_arg, env)
+        return False, None
     if not isinstance(func, ast.Attribute):
-        return None
+        return False, None
     if func.attr in ("write_text", "write_bytes"):
-        return _const_path(func.value, env)
-    if func.attr == "open" and _const_path(func.value, env) is not None:
-        return _const_path(func.value, env) if _write_mode(_arg(call, 0, "mode")) else None
+        return True, _const_path(func.value, env)
+    if func.attr == "open" and _mode_may_write(_arg(call, 0, "mode")):
+        # 只有接收者是路徑（可常數化，或以 Path 建構）才算檔案寫入；file.open 等其他物件不判
+        value = func.value
+        is_path = isinstance(value, ast.Call) and _dotted(value.func).split(".")[-1] in _PATH_CTORS
+        target = _const_path(value, env)
+        if target is not None or is_path:
+            return True, target
+        return False, None
     if func.attr in _COPY_FUNCS and name.split(".")[0] in _COPY_MODULES:
-        return _const_path(_arg(call, 1, "dst"), env)
-    return None
+        return True, _const_path(_arg(call, 1, "dst"), env)
+    return False, None
+
+
+def _call_write_target(call: ast.Call, env) -> Optional[str]:
+    """單一呼叫的寫入目標字面路徑；非寫入或無法常數化則 None。"""
+    return _call_write(call, env)[1]
 
 
 def _ast_write_targets(source: str, argv: Optional[List[str]] = None) -> Optional[List[str]]:
     """以 ast 追蹤常數賦值後的寫入目標；解析失敗回 None（呼叫端退回 regex）。
     argv 為 python 命令列引數（含 argv[0]），供 sys.argv[n] 展開。"""
+    result = _ast_analyze(source, argv)
+    return None if result is None else result[0]
+
+
+def _ast_analyze(source: str, argv: Optional[List[str]] = None) -> Optional[tuple]:
+    """回傳 (寫入目標清單, 目標無法常數化的寫入呼叫數, 原始碼中的字串常數)；解析失敗回 None。"""
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
@@ -256,18 +316,51 @@ def _ast_write_targets(source: str, argv: Optional[List[str]] = None) -> Optiona
             if isinstance(target, ast.Name):
                 env.setdefault(target.id, []).append(value)
     out: List[str] = []
+    opaque = 0
+    strings: List[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
-            target = _call_write_target(node, env)
+            is_write, target = _call_write(node, env)
             if target:
                 out.append(target)
+            elif is_write:
+                opaque += 1
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            strings.append(node.value)
+    return out, opaque, strings
+
+
+# 寫入目標無法常數化時，命令或原始碼中出現的路徑線索。線索含受限頂層目錄的路徑段即納入候選，
+# 交由路徑範圍檢查解析（checkout 外的同名目錄，如 /usr/lib/x，解析後不落在範圍內而放行）
+def _scope_evidence(texts: List[str]) -> List[str]:
+    """texts 中含受限頂層目錄路徑段（lib／test／integration_test／.claude）且含斜線的字串。"""
+    out = []
+    for text in texts:
+        if "/" not in text or "\n" in text or len(text) > 512:
+            continue
+        if any(part in _SCOPE_TOP_DIRS for part in text.split("/")):
+            out.append(text)
     return out
 
 
+_TEMP_HINTS = ("/tmp/", "/private/tmp/", "/var/folders/")
+
+
+def _temp_target_hint(texts: List[str], sources: List[str]) -> bool:
+    """寫入目標可判定在暫存區：路徑線索以暫存目錄開頭，或原始碼使用 tempfile。"""
+    if any(t.startswith(_TEMP_HINTS) or t in ("/tmp", "/private/tmp") for t in texts):
+        return True
+    return any(re.search(r"\btempfile\b", s) for s in sources)
+
+
+_PYTHON_OPTS_WITH_ARG = frozenset({"-W", "-X", "-Q"})
+
+
 def _python_argv_parts(tokens: List[str]) -> Optional[tuple]:
-    """python 命令列引數的 (argv[0], 其後原始 token)；非 stdin／-c 形態回 None。
+    """python 命令列引數的 (argv[0], 其後原始 token)；-m 模組形態與無引數回 None。
     python3 - a b：('-', [a, b])；python3 -c CODE a b：('-c', [a, b])；
-    其間的直譯器選項（-u、-I、-B 等）不算引數。"""
+    python3 script.py a b：('script.py', [a, b])；
+    其間的直譯器選項（-u、-I、-B 等）不算引數，-W／-X 連同其值略過。"""
     start = next((i for i, t in enumerate(tokens) if _PYTHON_NAME.fullmatch(_basename(t))), None)
     if start is None:
         return None
@@ -276,12 +369,45 @@ def _python_argv_parts(tokens: List[str]) -> Optional[tuple]:
         tok = tokens[i]
         if tok == "-":
             return "-", tokens[i + 1:]
-        if tok.startswith("-") and not tok.startswith("--") and tok.endswith("c"):
+        short = tok.startswith("-") and not tok.startswith("--")
+        if short and tok.endswith("c"):
             return "-c", tokens[i + 2:]
-        if not tok.startswith("-"):
+        if short and tok.endswith("m"):
             return None
-        i += 1
+        if not tok.startswith("-"):
+            return tok, tokens[i + 1:]
+        i += 2 if tok in _PYTHON_OPTS_WITH_ARG else 1
     return None
+
+
+_MAX_SCRIPT_BYTES = 1 << 20
+
+
+def _script_head(parts: Optional[tuple]) -> Optional[str]:
+    """腳本檔形態的腳本路徑（argv[0]）；stdin、-c 與非 python 陳述回 None。"""
+    if parts is None or parts[0] in ("-", "-c"):
+        return None
+    return parts[0]
+
+
+def _read_script(head: str, cwd: Optional[str], cd: Optional[str]) -> Optional[str]:
+    """腳本檔原文。開頭的 $CLAUDE_PROJECT_DIR、~、$HOME 以環境變數展開（與 _resolve_candidate 一致）；
+    其餘變數或命令替換、cd 位移不明、讀不到或超過大小上限時回 None。"""
+    project_dir, home = os.environ.get("CLAUDE_PROJECT_DIR"), os.environ.get("HOME")
+    if project_dir:
+        head = _PROJECT_DIR_VAR.sub(lambda _m: project_dir, head, count=1)
+    if home:
+        head = _HOME_PREFIX.sub(lambda _m: home, head, count=1)
+    if cwd is None or cd is None or "$" in head or "`" in head or head.startswith("~"):
+        return None
+    path = os.path.join(cwd, cd, head)
+    try:
+        if os.path.getsize(path) > _MAX_SCRIPT_BYTES:
+            return None
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:  # 不存在或無權限：呼叫端改以 argv 線索判定，屬預期分支不記錄
+        return None
 
 
 def _python_argvs(tokens: List[str], env: dict):
@@ -562,8 +688,9 @@ def _scan_sed(toks: List[str], j: int, out: List[str]) -> int:
     return m
 
 
-def _scan_cp_mv(toks: List[str], j: int, out: List[str]) -> int:
-    """cp / mv：略過旗標，最後一個位置參數為目的地（至少需要來源與目的地）。"""
+def _scan_cp_mv(toks: List[str], j: int, out: List[str], move: bool = False) -> int:
+    """cp / mv：略過旗標，最後一個位置參數為目的地（至少需要來源與目的地）。
+    move 為真（mv）時來源也是候選：移出等同刪除原位置的檔案。cp 與 ln 的來源不變動，不列。"""
     positionals: List[str] = []
     target_dir: Optional[str] = None
     k = j
@@ -590,8 +717,35 @@ def _scan_cp_mv(toks: List[str], j: int, out: List[str]) -> int:
             positionals.append(t)
     if target_dir is not None:
         out.append(target_dir)  # -t DIR：所有位置參數都是來源
+        sources = positionals
     elif len(positionals) >= 2:
         out.append(positionals[-1])
+        sources = positionals[:-1]
+    else:
+        sources = []
+    if move:
+        out.extend(s for s in sources if s not in ("", "-"))
+    return len(toks)
+
+
+# rm 的引數落在這些快取、日誌或版本控制資料目錄時不算刪除受限內容（.claude 底下同樣適用）。
+# .git／.github：首次安裝 clone 後刪除 .claude/.git、.claude/.github 是 README 的例行步驟
+_REMOVABLE_COMPONENTS = frozenset({
+    ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".dart_tool", "hook-logs",
+    ".git", ".github",
+})
+
+
+def _scan_rm(toks: List[str], j: int, out: List[str]) -> int:
+    """rm／unlink：位置參數皆為刪除目標；路徑段含快取或日誌目錄者略過。"""
+    end_opts = False
+    for t in toks[j:]:
+        if not end_opts and t == "--":
+            end_opts = True
+        elif not end_opts and t.startswith("-") and t != "-":
+            continue
+        elif t and not any(p in _REMOVABLE_COMPONENTS for p in t.split("/")):
+            out.append(t)
     return len(toks)
 
 
@@ -761,6 +915,13 @@ def _scan_awk(toks: List[str], j: int, out: List[str]) -> int:
     return len(toks)
 
 
+def _scan_ed_ex(toks: List[str], j: int, out: List[str]) -> int:
+    """ed／ex：編輯指令由 stdin 或 -c 送入，w／x 指令寫回檔案引數，位置參數一律視為目標。"""
+    pos, _ = _split_opts(toks, j, "pc", frozenset({"--prompt"}))
+    out.extend(pos)
+    return len(toks)
+
+
 _RUBY_WRITE_LITERAL = re.compile(
     r"""File\.(?:write|binwrite)\(\s*(['"])([^'"]+)\1"""
     r"""|File\.open\(\s*(['"])([^'"]+)\3\s*,\s*['"][wa]""")
@@ -771,6 +932,16 @@ def _scan_ruby_perl_e(toks: List[str], j: int, out: List[str]) -> None:
     for t in toks[j:]:
         for m in _RUBY_WRITE_LITERAL.finditer(t):
             out.append(m.group(2) or m.group(4))
+
+
+_NODE_WRITE_LITERAL = re.compile(
+    r"""\b(?:writeFileSync|appendFileSync|writeFile|appendFile|createWriteStream)\(\s*(['"`])([^'"`]+)\1""")
+
+
+def _scan_node_eval(toks: List[str], j: int, out: List[str]) -> None:
+    """node 的 -e／--eval 腳本字串內 fs 寫入呼叫的字面路徑。"""
+    for t in toks[j:]:
+        out.extend(m.group(2) for m in _NODE_WRITE_LITERAL.finditer(t))
 
 
 _ENV_ASSIGN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
@@ -805,9 +976,14 @@ def _scan_statement_tokens(toks: List[str], out: List[str]) -> None:
                 _scan_ruby_perl_e(toks, j + 1, out)
             j = _scan_perl(toks, j + 1, out)
         elif name in ("cp", "mv"):
-            j = _scan_cp_mv(toks, j + 1, out)
+            j = _scan_cp_mv(toks, j + 1, out, move=(name == "mv"))
+        elif at_cmd and name in ("rm", "unlink"):
+            j = _scan_rm(toks, j + 1, out)
         elif at_cmd and name == "ruby":
             _scan_ruby_perl_e(toks, j + 1, out)
+            j += 1
+        elif at_cmd and name in ("node", "nodejs"):
+            _scan_node_eval(toks, j + 1, out)
             j += 1
         elif at_cmd and name == "ln":
             j = _scan_cp_mv(toks, j + 1, out)
@@ -825,6 +1001,8 @@ def _scan_statement_tokens(toks: List[str], out: List[str]) -> None:
             j = _scan_patch(toks, j + 1, out)
         elif at_cmd and name in ("awk", "gawk"):
             j = _scan_awk(toks, j + 1, out)
+        elif at_cmd and name in ("ed", "ex"):
+            j = _scan_ed_ex(toks, j + 1, out)
         elif name == "tee":
             j = _scan_tee(toks, j + 1, out)
         else:
@@ -991,9 +1169,15 @@ def _inline_script(toks: List[str]) -> Optional[str]:
 
 
 def _collect_candidates(command: str, depth: int, dirs: Optional[List[Optional[str]]] = None,
-                        base_cd: Optional[str] = "") -> List[str]:
-    """dirs 非 None 時，與回傳清單逐項對應地記錄各候選路徑生效的 cd 位移（"" 為無位移）。"""
+                        base_cd: Optional[str] = "",
+                        opaque: Optional[List[str]] = None,
+                        cwd: Optional[str] = None) -> List[str]:
+    """dirs 非 None 時，與回傳清單逐項對應地記錄各候選路徑生效的 cd 位移（"" 為無位移）。
+    opaque 非 None 時，追加「有寫入呼叫但目標不明、也找不到受限路徑線索」的 python 陳述（截斷），
+    供呼叫端以模型可見的警告放行。cwd 非 None 時，python 腳本檔形態會讀入腳本原文分析。"""
     candidates: List[str] = []
+    statements = _parse_statements(command)
+    command_tokens = [t for s in statements for t in s.tokens]
     env: dict = {}  # 同命令內先前語句的字面賦值
     cur_cd = base_cd
     compound_depth = 0  # 目前所在的複合命令（if／while／case／{ } 等）層數
@@ -1003,7 +1187,7 @@ def _collect_candidates(command: str, depth: int, dirs: Optional[List[Optional[s
         if dirs is not None:
             dirs.extend([cur_cd] * (len(candidates) - len(dirs)))
 
-    for stmt in _parse_statements(command):
+    for stmt in statements:
         for ch in stmt.pre:
             if ch == "(":
                 cd_stack.append(cur_cd)
@@ -1027,19 +1211,53 @@ def _collect_candidates(command: str, depth: int, dirs: Optional[List[Optional[s
             argvs, overflow = _python_argvs(stmt.tokens, env)
             if overflow:
                 candidates.append(_OVERFLOW_PATH)
+            sources = _python_sources(stmt.tokens, stmt.bodies)
+            parts = _python_argv_parts(stmt.tokens)
+            head = _script_head(parts)
+            # 未給 cwd（日誌輔助、第二層檢查）時無從判斷腳本是否讀得到，不走腳本分支
+            if head is not None and cwd is not None:
+                script_text = _read_script(head, cwd, cur_cd)
+                if script_text is not None:
+                    # 腳本檔只採可判定的寫入目標（常數或 argv 展開）。目標不明的寫入
+                    # （如狀態檔的 os.replace(tmp, path)）不走命令 token 線索：既有腳本
+                    # 的參數常含 .claude/ 路徑，套用線索會誤擋 run-with-timeout 等例行包裝
+                    for argv in (argvs if argvs is not None else [None]):
+                        analysis = _ast_analyze(script_text, argv)
+                        if analysis is not None:
+                            candidates.extend(analysis[0])
+                else:
+                    # 腳本讀不到：無從分析寫入呼叫，argv 中落在受限範圍的字面路徑納入候選
+                    candidates.extend(_scope_evidence(parts[1]))
+            opaque_writes = 0
+            strings: List[str] = []
             for argv in (argvs if argvs is not None else [None]):
-                for source in _python_sources(stmt.tokens, stmt.bodies):
-                    candidates.extend(_ast_write_targets(source, argv) or [])
+                for source in sources:
+                    analysis = _ast_analyze(source, argv)
+                    if analysis is None:
+                        continue
+                    targets, n_opaque, found = analysis
+                    candidates.extend(targets)
+                    # argv 未展開的 shell 變數（$f）同樣是目標不明，路徑範圍檢查會判 unresolvable
+                    opaque_writes += n_opaque + sum(1 for t in targets if "$" in t or "`" in t)
+                    strings.extend(found)
+            if opaque_writes:
+                # 寫入呼叫的目標不明：以原始碼字串常數與整條命令的 token 找受限路徑線索
+                clues = strings + command_tokens
+                evidence = _scope_evidence(clues)
+                if evidence:
+                    candidates.extend(dict.fromkeys(evidence))
+                elif opaque is not None and not _temp_target_hint(clues, sources):
+                    opaque.append(command[stmt.start:stmt.end][:120])
         sync()
         script = _inline_script(stmt.tokens) if depth < _MAX_HEREDOC_RECURSION else None
         if script is not None:
             sub_dirs: List[Optional[str]] = []
-            candidates.extend(_collect_candidates(script, depth + 1, sub_dirs, cur_cd))
+            candidates.extend(_collect_candidates(script, depth + 1, sub_dirs, cur_cd, opaque, cwd))
             if dirs is not None:
                 dirs.extend(sub_dirs)
         if depth < _MAX_HEREDOC_RECURSION and any(name in _SHELL_NAMES for name in names):
             for body in stmt.bodies:
-                candidates.extend(_collect_candidates(body, depth + 1, None, cur_cd))
+                candidates.extend(_collect_candidates(body, depth + 1, None, cur_cd, opaque, cwd))
                 sync()
     return candidates
 
@@ -1214,8 +1432,42 @@ def _checkout_root_or_none(cwd: str) -> Optional[str]:
     return root if os.path.exists(os.path.join(root, ".git")) else None
 
 
+def iter_checkout_write_targets(command: str, cwd: str, opaque: Optional[List[str]] = None):
+    """逐候選寫入路徑產生 (raw, rel, why)。供本 hook 與 bash-edit-guard 共用。
+
+    rel 為 checkout 相對路徑（已剝 worktree 前綴）。候選相對於 cwd（含命令內 cd 位移）
+    解析，換算成所在 checkout 根目錄（worktree 另加其主 checkout）的相對路徑；
+    目標落在同 repo 的其他 worktree 時以該 checkout 為根。無法靜態判定時 rel 為 None、
+    why 為 unresolvable；落在 checkout 之外時 rel 為 None、why 為 out_of_scope。
+    cwd 不在任何 checkout 內時，以 CLAUDE_PROJECT_DIR 所屬 checkout 為比對基準。
+    """
+    dirs: List[Optional[str]] = []
+    base = os.path.realpath(cwd)
+    candidates = _collect_candidates(command, 0, dirs, opaque=opaque, cwd=base)
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    if project_dir and _checkout_root_or_none(cwd) is None:
+        roots = _scope_roots(project_dir)
+    else:
+        roots = _scope_roots(cwd)
+    for raw, cd in zip(candidates, dirs):
+        abs_path = None if cd is None else _resolve_candidate(raw, cd, base, roots[0])
+        if abs_path is None:
+            yield raw, None, "unresolvable"
+            continue
+        rel = _relative_to_roots(abs_path, roots)
+        if rel is None:
+            owner = _owning_checkout_root(abs_path)
+            if owner is None or not _same_repo(owner, roots[0]):
+                yield raw, None, "out_of_scope"
+                continue
+            owner = _slash(owner)
+            rel = abs_path[len(owner) + 1:] if abs_path != owner else ""
+        yield raw, _strip_worktree_prefix(rel), ""
+
+
 def _find_scope_violation(command: str, cwd: str, logger,
-                          skipped: Optional[List[str]] = None) -> Optional[str]:
+                          skipped: Optional[List[str]] = None,
+                          opaque: Optional[List[str]] = None) -> Optional[str]:
     """
     回傳第一個落在 lib/、test/、integration_test/、.claude/**（扣除豁免）的候選寫入路徑
     （換算成 checkout 相對路徑）；無命中回傳 None。
@@ -1231,33 +1483,10 @@ def _find_scope_violation(command: str, cwd: str, logger,
         if skipped is not None:
             skipped.append("%s:%s" % (raw, why))
 
-    dirs: List[Optional[str]] = []
-    candidates = _collect_candidates(command, 0, dirs)
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
-    if project_dir and _checkout_root_or_none(cwd) is None:
-        roots = _scope_roots(project_dir)
-    else:
-        roots = _scope_roots(cwd)
-    base = os.path.realpath(cwd)
-    for raw, cd in zip(candidates, dirs):
-        if cd is None:
-            skip(raw, "unresolvable")
-            continue
-        abs_path = _resolve_candidate(raw, cd, base, roots[0])
-        if abs_path is None:
-            skip(raw, "unresolvable")
-            continue
-        rel = _relative_to_roots(abs_path, roots)
+    for raw, rel, why in iter_checkout_write_targets(command, cwd, opaque):
         if rel is None:
-            # 目標在 cwd 所屬 checkout 之外：若屬同 repo 的其他 worktree
-            # （含主 checkout 同層的 <repo>-<ticket>），以該 checkout 為根判定
-            owner = _owning_checkout_root(abs_path)
-            if owner is None or not _same_repo(owner, roots[0]):
-                skip(raw, "out_of_scope")
-                continue
-            owner = _slash(owner)
-            rel = abs_path[len(owner) + 1:] if abs_path != owner else ""
-        rel = _strip_worktree_prefix(rel)
+            skip(raw, why)
+            continue
         if not _scope_hit(rel):
             skip(raw, "out_of_scope")
             continue
@@ -1295,11 +1524,31 @@ def _log_decision(logger, decision: str, input_data: dict, reason_code: str,
     )
 
 
+def _opaque_write_warning(opaque: List[str]) -> Optional[str]:
+    """寫入目標不明的 python 陳述的模型可見警告；無則 None。"""
+    if not opaque:
+        return None
+    return (
+        "[bash-write-boundary-guard] 放行，但偵測到 python 寫入呼叫的目標路徑無法靜態判定"
+        f"（{opaque[0]}）。本 hook 無法確認它是否寫入 lib/、test/、integration_test/、.claude/**。"
+        "若寫入對象是這些範圍或 docs/ 等受管檔案，改用 Edit／Write；"
+        "寫入暫存區請讓路徑以字面寫出（如 /tmp/...）。"
+    )
+
+
 def _allow_and_exit(logger, reason: str, input_data: Optional[dict] = None,
                     reason_code: str = "", command: str = "",
-                    skipped: Optional[List[str]] = None) -> int:
+                    skipped: Optional[List[str]] = None,
+                    opaque: Optional[List[str]] = None) -> int:
     _log_decision(logger, "allow", input_data or {}, reason_code, command, None, skipped)
-    emit_hook_output("PreToolUse", permission_decision="allow", permission_decision_reason=reason)
+    warning = _opaque_write_warning(opaque or [])
+    if warning:
+        # 警告路徑只送 additionalContext，不帶 permission_decision：不擴大略過權限提示的範圍
+        logger.info("opaque_write_warning count=%d first=%s", len(opaque), opaque[0][:80].replace("\n", "\\n"))
+        emit_hook_output("PreToolUse", additional_context=warning)
+        return EXIT_ALLOW
+    # 放行不輸出 decision：allow 會略過平台的權限提示，等於代用戶核可
+    logger.debug("放行不輸出 decision：%s", reason)
     return EXIT_ALLOW
 
 
@@ -1334,14 +1583,16 @@ def main() -> int:
     # （feat/* worktree 內若跳過，整層即失效）
     cwd = input_data.get("cwd") or os.getcwd()
     skipped: List[str] = []
-    scope_path = _find_scope_violation(command, cwd, logger, skipped)
+    opaque: List[str] = []
+    scope_path = _find_scope_violation(command, cwd, logger, skipped, opaque)
     if scope_path is not None:
         who = "代理人" if is_subagent_environment(input_data) else "主線程"
         reason = (
             f"Bash 寫入受限路徑被擋下（path={scope_path}，呼叫身份={who}）。"
             "lib/、test/、integration_test/、.claude/** 禁止透過 Bash"
             "（cat/printf/tee/sed -i/python open()/cp/mv/重導向）寫入。"
-            "請改用 Edit 或 Write 工具修改檔案；搬移已追蹤的檔案用 git mv。"
+            "請改用 Edit 或 Write 工具修改檔案；搬移已追蹤的檔案用 git mv，刪除已追蹤的檔案用 git rm"
+            "（mv 的來源與 rm／unlink 的引數同樣受限）；未追蹤的檔案需要刪除或移出時停手回報。"
             "不得改用其他 Bash 寫法（python heredoc、argv 傳路徑、腳本檔等）重試同一寫入；"
             "Edit／Write 不可用時停手，於 ticket NeedsContext 記錄並回報 PM。"
             "依行範圍搬移文字（拆檔、移段落）改用 "
@@ -1365,7 +1616,7 @@ def main() -> int:
     # 第一層決定，不套用 PM 模型
     if is_subagent_environment(input_data):
         logger.info(f"subagent 環境（agent_id={input_data.get('agent_id')}），路徑範圍檢查通過")
-        return _allow_and_exit(logger, "subagent 的 Bash 寫入未命中受限路徑", input_data, "subagent_no_scope_hit", command, skipped)
+        return _allow_and_exit(logger, "subagent 的 Bash 寫入未命中受限路徑", input_data, "subagent_no_scope_hit", command, skipped, opaque)
 
     # 開發分支跳過（feat/*, fix/* 等），與 main-thread-edit-restriction 一致；
     # 僅作用於第二層
@@ -1374,14 +1625,14 @@ def main() -> int:
         logger.info(f"開發分支 '{current_branch}' 上，跳過 Bash 寫入邊界限制")
         return _allow_and_exit(
             logger, f"開發分支 '{current_branch}' 不受主線程 Bash 寫入邊界限制",
-            input_data, "dev_branch_skip", command, skipped,
+            input_data, "dev_branch_skip", command, skipped, opaque,
         )
 
     violation_path = _find_boundary_violation(command, logger)
 
     if violation_path is None:
         logger.debug("未偵測到明確的 test/lib/dart 寫入目標，允許（fail-open）")
-        return _allow_and_exit(logger, "未偵測到職責邊界違規的 Bash 寫入形態", input_data, "no_boundary_violation", command, skipped)
+        return _allow_and_exit(logger, "未偵測到職責邊界違規的 Bash 寫入形態", input_data, "no_boundary_violation", command, skipped, opaque)
 
     reason = (
         f"偵測到 Bash 寫入職責邊界違規（path={violation_path}）。"

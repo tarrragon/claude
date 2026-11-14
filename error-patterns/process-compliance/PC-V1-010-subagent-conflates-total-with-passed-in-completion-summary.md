@@ -57,4 +57,4 @@ uv run --with pytest python -m pytest <test_dir>/ -q 2>&1 | tail -4
 
 ---
 
-**Provenance**: 框架跨專案治理 wave 接手 session，W1-087 驗收時 PM 重跑全套件揪出摘要「187 passed」實為 186+1 failed。
+**Provenance**: 框架跨專案治理 wave 接手 session，某票驗收時 PM 重跑全套件揪出摘要「187 passed」實為 186+1 failed。

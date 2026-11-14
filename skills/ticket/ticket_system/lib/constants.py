@@ -4,7 +4,7 @@ Ticket System 常數定義（向後相容 shim）
 canonical location 已遷移至 `ticket_system.constants`。
 本模組保留以維持 skill 內部既有 `from ticket_system.lib.constants import X` 路徑相容。
 
-設計背景（W14-016）：
+設計背景：
     原先 constants 位於此處（lib/constants.py），skill 和 hook 皆 `from ticket_system.lib.constants import X`。
     但 lib/__init__.py eager-import ticket_loader → parser → yaml，導致 hook 在系統 Python（無 yaml）
     環境下觸發 ModuleNotFoundError（session 累積 97 次 traceback）。

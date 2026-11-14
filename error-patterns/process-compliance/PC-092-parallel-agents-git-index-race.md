@@ -25,40 +25,40 @@ PM 並行派發多個會執行 `git add` + `git commit` 的代理人（或 PM �
 
 ## 觸發案例
 
-### v1 案例（2026-04-18，W5-043.3 + W5-043.4）
+### v1 案例（2026-04-18，批次 3 + 批次 4）
 
 PM 並行派發 4 個 thyme-python-developer 子代理人：
-- W5-030.1 修改 thyme-extension-engineer.md
-- W5-043.2 修改 7 個 agent
-- W5-043.3 修改 6 個 agent
-- W5-043.4 修改 6 個 agent
+- 另一代理人任務修改 thyme-extension-engineer.md
+- 批次 2 修改 7 個 agent
+- 批次 3 修改 6 個 agent
+- 批次 4 修改 6 個 agent
 
-W5-043.4 代理人（先完成）執行 `git add .` 時，把 W5-043.3 已寫入但尚未 commit 的 6 個檔案一併 staged 並 commit 為 8e5b05e4（訊息標 batch 4，實際含 batch 3 + batch 4 共 12 個檔案）。
+批次 4 代理人（先完成）執行 `git add .` 時，把批次 3 已寫入但尚未 commit 的 6 個檔案一併 staged 並 commit 為 8e5b05e4（訊息標 batch 4，實際含 batch 3 + batch 4 共 12 個檔案）。
 
-W5-043.3 代理人後續嘗試 commit 時，看到 `no changes added to commit`，回報「commit race」。
+批次 3 代理人後續嘗試 commit 時，看到 `no changes added to commit`，回報「commit race」。
 
-### v2 案例（2026-05-26，W3-060 + W3-061）
+### v2 案例（2026-05-26，任務 A + 任務 B）
 
 PM 並行派發 2 個 thyme-python-developer 子代理人：
-- W3-060 修改 `.claude/rules/core/quality-baseline.md` + `.claude/rules/core/pm-role.md` + `.claude/pm-rules/pm-quality-baseline.md`
-- W3-061 修改 `.claude/error-patterns/process-compliance/PC-160-*.md` + `.claude/error-patterns/process-compliance/PC-061-*.md`
+- 任務 A 修改 `.claude/rules/core/quality-baseline.md` + `.claude/rules/core/pm-role.md` + `.claude/pm-rules/pm-quality-baseline.md`
+- 任務 B 修改 `.claude/error-patterns/process-compliance/PC-160-*.md` + `.claude/error-patterns/process-compliance/PC-061-*.md`
 
 派發 prompt **已含**「禁止觸碰 .claude/error-patterns/」與「禁止觸碰 .claude/rules/」職責邊界聲明（per PC-092 v1 教訓），但**未含**「git add 顯式路徑、禁止 git add . / -A」staging 紀律明示。
 
-W3-060 thyme（先完成）執行 `git add -A` 類行為，連帶 stage 並 commit W3-061 已寫入但未 stage 的 PC-160/PC-061，commit 13ad538d 含 7 檔（訊息標 W3-060，實際含 W3-060 主檔 3 + W3-061 主檔 2 + 兩個 ticket md）。
+任務 A thyme（先完成）執行 `git add -A` 類行為，連帶 stage 並 commit 任務 B 已寫入但未 stage 的 PC-160/PC-061，commit 13ad538d 含 7 檔（訊息標 任務 A，實際含 任務 A 主檔 3 + 任務 B 主檔 2 + 兩個 ticket md）。
 
-W3-061 thyme 後續執行 metadata sync commit 83149fc4 僅含 ticket metadata 變更（無主檔，因主檔已被連帶 commit）。
+任務 B thyme 後續執行 metadata sync commit 83149fc4 僅含 ticket metadata 變更（無主檔，因主檔已被連帶 commit）。
 
 雙 ticket acceptance 全勾、內容正確，但：
 - commit 13ad538d 的 commit message 與實際 diff 邊界不一致
-- W3-061 的主要工作 git blame 會歸屬到 W3-060 ticket ID
-- v1 教訓已寫入 parallel-dispatch.md L90「派發 prompt 必含精準 git staging」，但 W3-060/061 派發 prompt 未引用該段
+- 任務 B 的主要工作 git blame 會歸屬到 任務 A ticket ID
+- v1 教訓已寫入 parallel-dispatch.md L90「派發 prompt 必含精準 git staging」，但 任務 A/B 派發 prompt 未引用該段
 
 **雙重失職**：
 1. PM 失職 — 派發 prompt 未含 PC-092 v1 已固化的 staging 紀律明示（規則理解 ≠ 規則遵守，PC-123 家族）
 2. Agent 失職 — agent-definition-standard 未強制 agent 在並行情境查詢 sibling 工作前 `git status` 預檢
 
-### v3 案例（2026-07-05，1.5.0-W5-009 混合派發）
+### v3 案例（2026-07-05，混合派發）
 
 前兩個案例是 **agent → agent** 的 `git add .` 互掃。v3 是 **PM 主線程 → subagent** 的不同 actor / 不同機制變體：
 
@@ -149,5 +149,5 @@ PM 不並行派發會 commit 的代理人，改為序列。
 ---
 
 **Last Updated**: 2026-07-05
-**v3 Source**: 1.5.0-W5-010（補 v3 案例：PM 主線程裸 commit + ticket CLI auto-stage 掃入並行 subagent 暫存檔，commit b7d6d40b4 實證；1.5.0-W5-009 混合派發）
-**v2 Source**: 0.19.0-W3-060 commit 13ad538d + 0.19.0-W3-065 ticket（補 v2 案例 + PM PC-068/123 自評學習）
+**v3 Source**: 補 v3 案例（PM 主線程裸 commit + ticket CLI auto-stage 掃入並行 subagent 暫存檔，commit b7d6d40b4 實證；混合派發）
+**v2 Source**: 任務 A 的 commit 13ad538d（補 v2 案例 + PM PC-068/123 自評學習）

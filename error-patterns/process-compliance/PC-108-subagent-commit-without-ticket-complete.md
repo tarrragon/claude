@@ -4,7 +4,7 @@
 **Severity**: Medium
 **Status**: Active
 **Created**: 2026-04-21
-**Source**: W17-022 分析 subagent 完成實作並 commit 後只回報 PM，未執行 `ticket track check-acceptance --all` 與 `ticket track complete`。
+**Source**: 某分析 subagent 完成實作並 commit 後只回報 PM，未執行 `ticket track check-acceptance --all` 與 `ticket track complete`。
 
 ---
 
@@ -31,7 +31,7 @@ ticket track complete <ticket-id>
 | 層級 | 缺口 |
 |------|------|
 | Agent preload | Ticket 操作規範只強調 `query` / `append-log`，未明確要求完成後 check acceptance + complete |
-| Agent definition standard | W17-016.5 已補「body 填寫責任」，但沒有延伸到 complete 本身 |
+| Agent definition standard | 先前已補「body 填寫責任」，但沒有延伸到 complete 本身 |
 | Dispatch prompt | PM 有時會在 prompt 尾端提醒 complete，但不是穩定模板 |
 | Hook 安全網 | acceptance-gate-hook 會在 complete 時驗證，但無法促使 agent 主動呼叫 complete |
 
@@ -39,11 +39,11 @@ ticket track complete <ticket-id>
 
 ## 觸發案例
 
-### W17-020
+### 案例 A
 
 Thyme agent 修復 `runqueue --context=resume` 空結果訊息並 commit。實作與測試已完成，但 Ticket 狀態未由 agent 主動 complete，PM 後續補執行 acceptance 勾選與 complete。
 
-### W17-016.3
+### 案例 B
 
 Thyme agent 擴充 complete hook type-aware body 驗證與佔位符偵測並 commit。代理人回報完成後，Ticket 生命週期仍需 PM 補完，呈現同一模式。
 
@@ -58,7 +58,7 @@ Thyme agent 擴充 complete hook type-aware body 驗證與佔位符偵測並 com
 
 ### 1. Agent 自律收尾
 
-W17-033 應將以下流程寫入 `agent-definition-standard.md`（位於 `.claude/rules/core/`，該層已實測確認每次派發都會注入所有 subagent context，惟該檔為速查 stub，實質內容在 `references/agent-definition-standard-details.md`，仍需代理人依 stub 指引主動 Read）；`AGENT_PRELOAD.md` 亦含同一流程但僅供代理人主動 Read 時參考——`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，不構成自動送達路徑：
+後續規則落地應將以下流程寫入 `agent-definition-standard.md`（位於 `.claude/rules/core/`，該層已實測確認每次派發都會注入所有 subagent context，惟該檔為速查 stub，實質內容在 `references/agent-definition-standard-details.md`，仍需代理人依 stub 指引主動 Read）；`AGENT_PRELOAD.md` 亦含同一流程但僅供代理人主動 Read 時參考——`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，不構成自動送達路徑：
 
 ```bash
 ticket track check-acceptance --all <ticket-id>
@@ -89,7 +89,7 @@ PM 收到 subagent「已 commit / 完成」回報後，應抽查：
 ticket track query <ticket-id>
 ```
 
-若 commit 已存在但 Ticket 仍 `in_progress`，先判定為本 pattern，要求 agent 補 complete，或由 PM 補完並將案例回饋到 W17-033 的規則。
+若 commit 已存在但 Ticket 仍 `in_progress`，先判定為本 pattern，要求 agent 補 complete，或由 PM 補完並將案例回饋到該規則落地。
 
 ### 4. Dispatch Prompt 明示終點
 

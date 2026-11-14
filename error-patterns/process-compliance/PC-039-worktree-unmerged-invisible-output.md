@@ -19,7 +19,7 @@
 4. PM 誤判為「代理人未完成」，重複派發
 
 **場景 B - Feature 分支**：
-1. PM 或代理人建立了 feature 分支（如 `feat/0.17.3-W2-001-consolidate-808080`）
+1. PM 或代理人建立了 feature 分支（如 `feat/<ticket-id>-consolidate-808080`）
 2. 代理人在 feature 分支上 commit 了變更
 3. PM 回到 main 分支檢查 `git status` -> 看不到變更（因為在另一個分支）
 4. PM 誤判為「代理人未完成」，不必要地重新派發
@@ -83,7 +83,7 @@ git merge --abort
 
 ## 實際案例
 
-**案例（2026-04-09）**：代理人在 `feat/0.17.3-W2-001-consolidate-808080` 分支上成功 commit 了 5 個檔案的修改，但 PM 在 main 上執行 `git status` 看不到變更，誤判代理人失敗並重新派發，浪費了一次代理人執行。
+**案例（2026-04-09）**：代理人在 `feat/<ticket-id>-consolidate-808080` 分支上成功 commit 了 5 個檔案的修改，但 PM 在 main 上執行 `git status` 看不到變更，誤判代理人失敗並重新派發，浪費了一次代理人執行。
 
 **案例（2026-04-10）**：同樣的錯誤再次發生。代理人在 feature 分支上完成了 CSS 修改，PM 又誤判為失敗。
 

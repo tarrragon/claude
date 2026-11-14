@@ -40,7 +40,10 @@ def log_exception(message: str, error: Exception | None = None) -> None:
     print(full_message, file=sys.stderr)
 
     # 輸出到日誌檔（審計記錄）
-    log_file = Path(".claude/hook-logs/protocol-version-check.log")
+    # 經 hook_logging 取目錄（worktree 內解析到主 repo），不用依 cwd 的相對路徑
+    from ticket_system.lib.git_ops import hook_logs_root
+
+    log_file = Path(hook_logs_root()) / "protocol-version-check.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(log_file, "a", encoding="utf-8") as f:

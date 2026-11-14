@@ -16,17 +16,17 @@ PC-061 已完整描述「memory 寫入後未升級為框架」的症狀與四大
 
 ---
 
-## v2 實證案例：W3-028.2 → W3-058
+## v2 實證案例：實機驗證票 → 升級評估 ANA 票
 
 | 階段 | 動作 | 評估 |
 |------|------|------|
-| W3-028.2 實機驗證完成 | PM 發現「實驗工具觀察自身執行循環」設計洞察（diagnostic hook 被 PM session /clear 觸發產生非實驗目的紀錄） | OK |
+| 實機驗證票完成 | PM 發現「實驗工具觀察自身執行循環」設計洞察（diagnostic hook 被 PM session /clear 觸發產生非實驗目的紀錄） | OK |
 | PM 第一輪處理 | (a) 補入 ticket md Test Results 章節「實驗工具自指涉觀察」小節 (b) Write memory `feedback_experiment_tool_self_observation.md` (c) 更新 MEMORY.md (d) commit `a266807a` | (a) OK；(b/c/d) 違反：跳過升級評估閘門 |
 | 用戶糾正 | 「這應該新增一個 ticket，評估是否應該補充相關處理的方法或者規則」 | 用戶識別出 PM 跳過閘門 |
-| 補救 | 建 W3-058 ANA ticket，acceptance #4「評估方法論補強：檢視 PM 將 session 內浮現的洞察直接寫入 memory 是否跳過升級評估閘門，若是則建議補強流程」 | 補建閘門 |
-| W3-058 ANA 結論 | 確認 PC-160 = PC-061 同模式 v2 案例；改為 cross-reference 而非合併刪除（PC-061 已被多處引用，合併維護成本高） | 知識債 cross-ref 重構 |
+| 補救 | 建升級評估 ANA ticket，acceptance #4「評估方法論補強：檢視 PM 將 session 內浮現的洞察直接寫入 memory 是否跳過升級評估閘門，若是則建議補強流程」 | 補建閘門 |
+| ANA 結論 | 確認 PC-160 = PC-061 同模式 v2 案例；改為 cross-reference 而非合併刪除（PC-061 已被多處引用，合併維護成本高） | 知識債 cross-ref 重構 |
 
-> 完整時間軸見 W3-028.2、W3-058 ticket md 與 commits `a266807a`（直接寫 memory）、`7d09c3bd`（補建 ANA）、`f0dddc37`（W3-058 ANA complete）。
+> 完整時間軸見實機驗證票與升級評估 ANA 票的 ticket md，以及 commits `a266807a`（直接寫 memory）、`7d09c3bd`（補建 ANA）、`f0dddc37`（ANA complete）。
 
 ---
 
@@ -83,9 +83,6 @@ PM 在以下情境準備寫 memory 時應停下檢查：
 ## 相關條目
 
 - **PC-061**：本檔的主要 error-pattern（memory 升級盲區的完整論述）
-- **W3-058**：ANA 評估「實驗工具自指涉觀察」升級路徑 + 確認 PC-160 = PC-061 v2 案例的 source ticket
-- **W3-028.2**：v2 source 洞察的 ticket（自指涉觀察小節）
-- **W3-061**：本檔 cross-reference 重構 ticket
 - **quality-baseline 規則 5/6**：所有發現必須追蹤 + 失敗案例學習原則
 - **pm-quality-baseline 規則 7**：知識捕獲時分流（現行機制，memory 排除）
 - **continuous-learning skill**：知識捕獲時分流已內建於 skill 流程，memory 不再列為目的地
@@ -97,4 +94,4 @@ PM 在以下情境準備寫 memory 時應停下檢查：
 
 2026-07-27 / PC-160 v3.0（新增 v3 案例：框架落地票已建立仍追加寫 memory，失敗性質為反射而非判斷缺失；補步驟 4 三分支互斥判準與兩條識別觸發條件，已於 v4.0 併入新分流描述）
 
-2026-05-26 / PC-160 v2.0（改為 PC-061 v2 案例 cross-reference stub，W3-061 落地）
+2026-05-26 / PC-160 v2.0（改為 PC-061 v2 案例 cross-reference stub）

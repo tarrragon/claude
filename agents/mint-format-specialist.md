@@ -185,7 +185,7 @@ git diff --cached | grep "汙"
 
 ## 收尾責任：自律 complete
 
-**Why**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，AGENT_PRELOAD.md 從未送達任何 subagent context（不限 model）。mint 為 haiku + effort: low 模型，即使 AGENT_PRELOAD.md 內容能送達，對長文 attention 落地率仍系統性偏低（W3-049 ANA 驗證根因）——兩個因素疊加，在 agent 定義層直接寫入核心收尾指令是唯一已實測確認有效的路徑。
+**Why**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，AGENT_PRELOAD.md 從未送達任何 subagent context（不限 model）。mint 為 haiku + effort: low 模型，即使 AGENT_PRELOAD.md 內容能送達，對長文 attention 落地率仍系統性偏低（ANA 驗證根因）——兩個因素疊加，在 agent 定義層直接寫入核心收尾指令是唯一已實測確認有效的路徑。
 
 **Consequence**：未自律 complete 會留下 ticket 滯留 in_progress，PM 需額外執行 check-acceptance + complete 補做收尾，違反代理人自律主責原則（PC-105 模式重現）。
 
@@ -205,7 +205,7 @@ ticket track check-acceptance <ticket-id> --all --as mint-format-specialist
 ticket track complete <ticket-id> --as mint-format-specialist
 ```
 
-> `<ticket-id>` 替換為當前認領的 ticket ID（範例：`0.19.0-W3-049.1`）。`--as` 為必要而非選用：`claim --as` 會寫入 `who.current`，使後續 `complete --as` 與 identity-guard 對稱通過。
+> `<ticket-id>` 替換為當前認領的 ticket ID。`--as` 為必要而非選用：`claim --as` 會寫入 `who.current`，使後續 `complete --as` 與 identity-guard 對稱通過。
 
 ### 例外情境
 
@@ -332,7 +332,7 @@ ticket track complete <ticket-id> --as mint-format-specialist
 **Change Log**:
 
 - v1.3.0 (2026-08-17): 「收尾責任：自律 complete」段落 Why 句校準：三探針實測證實 AGENT_PRELOAD.md 從未經 `@-import` 送達任何 subagent context（不限 model），原「haiku 對長文 attention 落地率偏低」表述僅描述疊加因素之一，非完整根因
-- v1.2.0 (2026-05-26): 新增「收尾責任：自律 complete」段落，重複 AGENT_PRELOAD 規則 2.4 核心指令（check-acceptance + complete），補強 haiku low-effort model 對長文規則的 attention 落地率（W3-049 ANA 結論落地，W3-049.1，含 Layer 2 basil-writing-critic 微調：補佔位符範例 + NeedsContext schema 引用）
+- v1.2.0 (2026-05-26): 新增「收尾責任：自律 complete」段落，重複 AGENT_PRELOAD 規則 2.4 核心指令（check-acceptance + complete），補強 haiku low-effort model 對長文規則的 attention 落地率（ANA 結論落地，含 Layer 2 basil-writing-critic 微調：補佔位符範例 + NeedsContext schema 引用）
 - v1.1.0 (2026-03-02): 字元 Normalize 任務白名單機制
 
 

@@ -4,7 +4,6 @@ title: 大小寫不敏感檔案系統上 Edit 工具寫入成功，但 git paths
 category: implementation
 severity: low
 created: 2026-07-05
-source_ticket: 1.5.0-W5-011.1
 ---
 
 # IMP-V1-006: 大小寫不敏感檔案系統上 Edit 成功但 git pathspec 失敗

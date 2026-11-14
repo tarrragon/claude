@@ -103,9 +103,8 @@ def test_handle_close_resolved_by_unpaired_coordination_allowed(
         "ticket track close 0.6.0-W1-002 --resolved-by 0.6.0-W1-001 --reason duplicate",
         logger,
     )
-    out = json.loads(capsys.readouterr().out)
     assert rc == gate.EXIT_SUCCESS
-    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert capsys.readouterr().out == ""  # 放行不輸出 decision
 
 
 def test_handle_close_reason_note_ticket_id_allowed(
@@ -121,9 +120,8 @@ def test_handle_close_reason_note_ticket_id_allowed(
         "--reason-note 0.6.0-W1-001",
         logger,
     )
-    out = json.loads(capsys.readouterr().out)
     assert rc == gate.EXIT_SUCCESS
-    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert capsys.readouterr().out == ""  # 放行不輸出 decision
 
 
 def test_handle_close_positional_unpaired_coordination_still_blocked(
@@ -182,9 +180,8 @@ def test_handle_close_outputs_deny_and_exit_block(gate, logger, tmp_path, monkey
 
 def test_handle_close_allows_non_close_command(gate, logger, capsys):
     rc = gate._handle_close_command("ls -la", logger)
-    out = json.loads(capsys.readouterr().out)
     assert rc == gate.EXIT_SUCCESS
-    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert capsys.readouterr().out == ""  # 放行不輸出 decision
 
 
 def test_complete_message_unchanged(logger):

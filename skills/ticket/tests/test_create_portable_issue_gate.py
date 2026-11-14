@@ -452,6 +452,12 @@ def _use_sync_skills_config(monkeypatch, tmp_path, yaml_text):
     (claude_dir / "lib").symlink_to(real_lib)
     (claude_dir / "sync-skills.yaml").write_text(yaml_text, encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    # 204.1.4.3：.claude/lib 定位改取程式碼所在 checkout，須令其指向 tmp fixture
+    from ticket_system.lib import paths
+
+    monkeypatch.setattr(
+        paths, "_CODE_FILE", claude_dir / "skills" / "ticket" / "ticket_system" / "lib" / "paths.py"
+    )
 
 
 PRIVATE_VERIFY_YAML = "mode: all\nprivate:\n  - verify\n"
@@ -462,6 +468,39 @@ class TestPrivateSkillNotPortable:
     def test_e1_all_files_under_private_skill_not_portable(self, monkeypatch, tmp_path):
         _use_sync_skills_config(monkeypatch, tmp_path, PRIVATE_VERIFY_YAML)
         assert is_portable_where_files([".claude/skills/verify/SKILL.md"]) is False
+
+    def test_e1_code_root_wins_over_env_for_sync_config(self, monkeypatch, tmp_path):
+        # E1 對照：env 指向樹 E（verify 為 private），_CODE_FILE 指向樹 C（mode: all）。
+        # code root 優先 -> 依樹 C 判可攜；改指樹 E -> 不可攜；兩次結果必須不同。
+        from pathlib import Path
+
+        from ticket_system.lib import paths
+
+        real_lib = Path(__file__).resolve().parents[3] / "lib"
+
+        def _tree(name, yaml_text):
+            claude_dir = tmp_path / name / ".claude"
+            claude_dir.mkdir(parents=True)
+            (claude_dir / "lib").symlink_to(real_lib)
+            (claude_dir / "sync-skills.yaml").write_text(yaml_text, encoding="utf-8")
+            return claude_dir
+
+        tree_e = _tree("tree_e", PRIVATE_VERIFY_YAML)
+        tree_c = _tree("tree_c", "mode: all\n")
+
+        def _code_file(claude_dir):
+            return claude_dir / "skills" / "ticket" / "ticket_system" / "lib" / "paths.py"
+
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tree_e.parent))
+        where_files = [".claude/skills/verify/SKILL.md"]
+
+        monkeypatch.setattr(paths, "_CODE_FILE", _code_file(tree_c))
+        via_code_c = is_portable_where_files(where_files)
+        monkeypatch.setattr(paths, "_CODE_FILE", _code_file(tree_e))
+        via_code_e = is_portable_where_files(where_files)
+
+        assert via_code_c is True
+        assert via_code_e is False
 
     def test_e1_control_same_paths_portable_without_private_declaration(
         self, monkeypatch, tmp_path

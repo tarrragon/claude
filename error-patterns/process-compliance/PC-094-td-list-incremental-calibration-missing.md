@@ -28,7 +28,7 @@ TD（Technical Debt）在 Phase 3a/3b 中段已實際處理，但 Phase 1 寫下
 
 ---
 
-## W10-017.8 案例
+## 觸發案例
 
 ### TD4: ticket-query 全掃瞄風險
 
@@ -90,4 +90,4 @@ TD 清單視為 Phase 1 一次性產物，未建立「Phase 演進中校準」�
 
 **Last Updated**: 2026-04-19
 **Version**: 1.0.0
-**Source**: W10-017.8 Phase 4 parallel-evaluation 4 視角共識
+**Source**: Phase 4 parallel-evaluation 4 視角共識

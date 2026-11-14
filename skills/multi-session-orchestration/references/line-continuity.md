@@ -196,7 +196,7 @@ EOF
 `coordination_ticket.py` 回傳 none，或 `line_status` 回報「active 版本沒有標記 `coordination: true` 的進行中票」時，主控不自行判定要不要開線。依序處理：
 
 1. **分辨成因**，讀 `docs/todolist.yaml`：
-   - 沒有 status 為 active 的版本：上一版已完成，下一版還沒轉 active。
+   - 沒有 status 為 active 的版本：上一版已完成，下一版還沒轉 active（版本空窗）。這時先做發版後回饋檢查：執行 `python3 .claude/skills/framework-issue/scripts/feedback.py` 列出上一版發版後的回饋，依 `.claude/pm-rules/version-progression.md`〈版本生命週期〉「發版後回饋檢查」分診。有承諾未達成的回報就先發 patch，沒有才以 `version-release start --version <下一版>` 轉 active。
    - 有 active 版本，但沒有帶 `coordination: true` 的進行中票。
 2. **以 AskUserQuestion 問用戶開工作線或單一線**。問題內寫明成因。不以「目前只有一個 session」推定為單一線。
 3. **依裁定記錄**：
@@ -293,7 +293,7 @@ for f in ~/.claude/sessions/*.json; do python3 -c 'import json,sys; d=json.load(
 | step | 意義 | 結果欄位 |
 |------|------|---------|
 | `sent` | 已呼叫跨 session 傳送 | `isDelivered=true`；或 `isDelivered=false` 加 `reason=<拒絕原因>` |
-| `skipped` | 判定不送 | `reason=`：`no-session-name`（狀態檔比對不到 sessionId）、`coordinator`（主控自身）、`lane-not-found`（名稱比對不到現行佇列行）、`lane-ended`（已收線） |
+| `skipped` | 判定不送 | `reason=`：`no-session-name`（狀態檔比對不到 sessionId）、`coordinator`（主控自身）、`lane-not-found`（名稱比對不到現行佇列行）、`lane-ended`（已收線）、`coordinator-not-found`（本專案 checkout 下沒有帶 sessionId 的存活主控）、`coordinator-ambiguous`（不只一個主控）。收件主控以 sessionId 定址，不用裸名稱 |
 | `config-unavailable` | 專案設定讀不到或不成立 | `detail=<判定>：<訊息>` |
 | `state-unavailable` | session 狀態檔或協調票讀不到 | `detail=session 狀態：<訊息>` 或 `detail=協調票：<訊息>` |
 | `error` | 過程中丟出例外 | `detail=<例外訊息>` |

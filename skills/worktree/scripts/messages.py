@@ -11,7 +11,7 @@ class CommonMessages:
     WORKTREE_NOT_FOUND = "[錯誤] 找不到 Ticket {ticket_id} 對應的 worktree。"
 
     # M7 修復：集中 Ticket ID 驗證錯誤訊息
-    INVALID_TICKET_ID_FORMAT = "[錯誤] 無效的 Ticket ID 格式：\"{ticket_id}\"\n\nTicket ID 格式應為 X.X.X-WN-NNN（如：0.1.1-W9-002.1）"
+    INVALID_TICKET_ID_FORMAT = "[錯誤] 無效的 Ticket ID 格式：\"{ticket_id}\"\n\nTicket ID 格式應為 X.X.X-WN-NNN"
 
 
 class MergeMessages:

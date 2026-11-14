@@ -6,7 +6,7 @@
 """
 Dart Presence-Detection Hook —— dart profile 綁定 shim（PreToolUse on Edit / Write）
 
-歷史：本 hook 原內含 .dart 專屬偵測規則。1.2.0-W1-036 將通用偵測引擎抽至
+歷史：本 hook 原內含 .dart 專屬偵測規則。後來將通用偵測引擎抽至
 presence-detection-hook.py、語言規則抽至 .claude/config/presence_profiles.py，
 本檔降為「dart profile 綁定 shim」——把通用引擎的 profile 參數固定為 dart profile，
 對外維持原有 dart 介面（detect_violations(content) / should_skip_file(path) /
@@ -15,7 +15,7 @@ is_dart_file / extract_changed_content / main）1:1 不變。
 為何保留本 shim 而非直接刪除：
   - 既有 34 個 dart 測試（test_dart_presence_detection_hook）以 (content) / (path)
     單參數呼叫並 import 本檔，shim 維持測試契約 1:1 不變。
-settings.json 註冊已於 1.2.0-W1-036 改指向通用引擎 presence-detection-hook.py
+settings.json 註冊已改指向通用引擎 presence-detection-hook.py
 （引擎依副檔名選 profile，.dart 自動取得 dart profile，runtime 行為等價）。
 本檔保留 __main__ 入口供獨立執行 / 既有引用相容，新增語言無須改本檔。
 """

@@ -51,4 +51,4 @@
 
 ---
 
-**Last Updated**: 2026-06-18 | **Version**: 1.0.0 — 從 `pm-rules/decision-tree.md` 外移（1.2.0-W1-010，決策閘門預算原則 pilot）。內容語意不變，僅載入層改變。
+**Last Updated**: 2026-06-18 | **Version**: 1.0.0 — 從 `pm-rules/decision-tree.md` 外移（決策閘門預算原則 pilot）。內容語意不變，僅載入層改變。

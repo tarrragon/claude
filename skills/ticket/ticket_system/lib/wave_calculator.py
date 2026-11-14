@@ -75,7 +75,7 @@ class WaveCalculator:
 
         Args:
             tickets: Ticket 清單，每個 Ticket 包含：
-                   - id: Ticket ID（如 "0.31.0-W4-001"）
+                   - id: Ticket ID（如 "<ticket-id>"）
                    - blockedBy: 依賴的 Ticket ID 清單（可選，預設 []）
                    其他欄位會被忽略
 

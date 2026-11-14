@@ -31,6 +31,8 @@ class TestFindClaudeDir:
         (claude_dir / "lib").mkdir(parents=True)
         (claude_dir / "lib" / "pm_registry.py").write_text("", encoding="utf-8")
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        # 204.1.4.3：程式碼 checkout 優先；此測試驗證 env 後備，故令其無命中
+        monkeypatch.setattr(claude_lib_loader, "get_cli_code_root", lambda: tmp_path / "nocode")
 
         result = claude_lib_loader.find_claude_dir("pm_registry.py")
 
@@ -57,6 +59,7 @@ class TestFindClaudeDir:
         nested_cwd.mkdir(parents=True)
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
         monkeypatch.setattr(claude_lib_loader.Path, "cwd", staticmethod(lambda: nested_cwd))
+        monkeypatch.setattr(claude_lib_loader, "get_cli_code_root", lambda: tmp_path / "nocode")
 
         result = claude_lib_loader.find_claude_dir("git_utils.py")
 

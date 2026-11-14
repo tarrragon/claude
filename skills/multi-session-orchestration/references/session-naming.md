@@ -58,7 +58,7 @@
 - 來訊的 `from` 屬性形如 `uds:/tmp/cc-socks/<pid>.sock`，把它當作 SendMessage 的 `to` 可以送達該 session。
 - 未實測：以裸名稱「主控」寄送時會怎樣。依其中一個專案的回報：以名稱寄出的幾則回報，有一則送到另一個專案的主控，而且沒有報錯。為了不打擾別的專案，本次沒有重做這項實驗。
 
-**程式的同型路徑**：line-board 的恢復開工通知（`hooks/resumeFlow.ts`）以 `to: '主控'` 寄送，送出開關目前為關閉。開啟前要先改成以本專案的 session 解析出 ref 再寄。
+**程式的同型路徑**：line-board 的恢復開工通知（`hooks/resumeFlow.ts`）不寄裸名稱，從本專案 checkout 下的存活 session 取名稱為「主控」且帶 sessionId 的那一個，以 `to: { sessionId }` 寄送（`hooks/resumeNotice.ts` 的 `coordinatorAddress`）；沒有或不只一個時不送，記入送出紀錄檔（`line-continuity.md` §4）。送出開關目前為關閉。
 
 ---
 
@@ -123,7 +123,7 @@
 
 ## 6. 狀態列
 
-`scripts/statusline_lane.py` 在內層狀態列輸出前加一行 `L<n> │ <名稱>`，讓用戶切換終端機時辨認 session 所屬的線。名稱取 statusLine stdin 的 `session_name`（`/rename` 或 `-n` 設定後才出現），缺席時以 `session_id` 對 `~/.claude/sessions/*.json` 的 `sessionId` 取 `name`。線號從協調票 `## Solution` 段的現行佇列行取得（協調票由 `coordination_ticket.py` 自動解析：active 版本中 frontmatter 帶 `coordination: true` 且 `status: in_progress` 的票；0 張或多張時省略線號並寫一行 stderr；規則同看板：每線取最後一行、票序為 `（結束）` 或 `（無）` 的線視為結束、名稱精確比對；一個名稱對到多條線時列 `L6·L13`）。對不到線時只印名稱，名稱也沒有時不印前綴。任何解析失敗只省略前綴，內層狀態列照常輸出。
+`scripts/statusline_lane.py` 在內層狀態列輸出前加一行 `L<n> │ <名稱>`，讓用戶切換終端機時辨認 session 所屬的線。名稱取 statusLine stdin 的 `session_name`（`/rename` 或 `-n` 設定後才出現），缺席時以 `session_id` 對 `~/.claude/sessions/*.json` 的 `sessionId` 取 `name`。線號從協調票 `## Solution` 段的現行佇列行取得（協調票由 `coordination_ticket.py` 自動解析：active 版本中 frontmatter 帶 `coordination: true` 且 `status: in_progress` 的票；0 張或多張時省略線號並寫一行 stderr；解析由 `scripts/queue_line.py` 負責，與看板 `lanes.ts` 共用 `line-board/tests/queue-line-cases.json` 案例：每線取最後一行；只顯示現行線，票序為 `（結束）`、`（無）`、以它們或「無（」開頭附說明、或拆不出任何票號（空白、只有分隔符、只有文字）的線都不算；名稱精確比對；一個名稱對到多條線時列 `L6·L13`）。對不到線時只印名稱，名稱也沒有時不印前綴。任何解析失敗只省略前綴，內層狀態列照常輸出。
 
 **預設啟用**：框架的 `.claude/settings.json` 已設定 `statusLine`，隨 sync 進入每個 consumer 專案，不需另外啟用。專案層設定優先於全域設定，所以這行設定會取代全域 `statusLine`；全域那條命令改由本腳本當作內層呼叫，原本的顯示內容仍在，只是前面多一行前綴。
 

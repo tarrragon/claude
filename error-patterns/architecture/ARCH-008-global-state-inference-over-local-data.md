@@ -19,13 +19,13 @@ created: 2026-03-05
 
 ### 症狀
 
-- `ticket track query 0.1.0-W1-017` 回傳「找不到 Ticket」
-- `ticket track set-* 0.1.0-W1-017` 同樣失敗
+- `ticket track query <ticket-id>` 回傳「找不到 Ticket」（ID 版本號低於當前最高版本）
+- `ticket track set-* <ticket-id>` 同樣失敗
 - 但 `ticket track list --version 0.1.0` 正常顯示該 Ticket
 
 ### 根本原因 (5 Why 分析)
 
-1. Why 1: 系統在 `v0.3.0` 目錄下尋找 `0.1.0-W1-017.md`，但檔案在 `v0.1.0/` 下
+1. Why 1: 系統在 `v0.3.0` 目錄下尋找該 Ticket 的 md 檔，但檔案在較低版本的 `v0.1.0/` 下
 2. Why 2: `require_version(None)` 自動選擇了最高版本 v0.3.0
 3. Why 3: `_scan_worklog_directories()` 按版本號降序排列，返回最高版本
 4. Why 4: 版本推斷邏輯不考慮輸入的 Ticket ID
@@ -84,9 +84,9 @@ if not version:
 - API 路由的參數推斷
 - 任何「有預設值但接受覆蓋」的設計
 
-## 關聯 Ticket
+## 修復狀態
 
-- 0.1.0-W1-018：ticket track query/set-* 找不到 Ticket（已修復）
+- ticket track query/set-* 找不到 Ticket 的缺陷已修復（版本推斷改為優先從 Ticket ID 提取）
 
 ---
 

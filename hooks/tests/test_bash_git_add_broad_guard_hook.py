@@ -67,7 +67,6 @@ def _run_hook(
     payload = {"tool_name": tool_name, "tool_input": {"command": command}}
     stdin_buffer = io.StringIO(json.dumps(payload))
     monkeypatch.setattr(sys, "stdin", stdin_buffer)
-    monkeypatch.setattr(hook_module, "get_project_root", lambda: Path("/fake/project"))
     monkeypatch.setattr(
         hook_module, "get_uncommitted_files", lambda cwd=None: uncommitted or []
     )
@@ -474,3 +473,80 @@ class TestScanModeE2:
             monkeypatch, _SCAN_ONLY_ADD, uncommitted=[_fs("M ", "a.py")]
         )
         assert exit_code == 0
+
+
+# ============================================================================
+# 目標 repo：取命令實際作用的目錄（-C 與子 shell cd），以真實 git repo 驗證
+# ============================================================================
+
+
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+def _git(args, cwd):
+    subprocess.run(["git"] + args, cwd=str(cwd), capture_output=True, text=True, check=True)
+
+
+def _make_repo(path: Path, dirty: bool) -> Path:
+    path.mkdir()
+    _git(["init", "-q"], path)
+    _git(["config", "user.email", "t@example.com"], path)
+    _git(["config", "user.name", "T"], path)
+    (path / "README.md").write_text("x\n", encoding="utf-8")
+    _git(["add", "README.md"], path)
+    _git(["commit", "-q", "-m", "init"], path)
+    if dirty:
+        for i in range(3):
+            (path / f"dirty{i}.txt").write_text("x\n", encoding="utf-8")
+    return path
+
+
+class TestTargetRepoResolution:
+    """session repo 乾淨、他 repo 有未提交變更（或反之）時，判定落在命令作用的 repo。"""
+
+    @pytest.fixture
+    def repos(self, tmp_path):
+        return _make_repo(tmp_path / "clean", False), _make_repo(tmp_path / "dirty", True)
+
+    def _run(self, monkeypatch, session: Path, command: str) -> int:
+        payload = {"tool_name": "Bash", "cwd": str(session), "tool_input": {"command": command}}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        monkeypatch.chdir(session)
+        return main()
+
+    def test_direct_add_in_dirty_repo_denied(self, monkeypatch, repos):
+        """正向對照：在有未提交變更的 repo 直接廣域 add 應擋。"""
+        _, dirty = repos
+        assert self._run(monkeypatch, dirty, "git add -A") == 2
+
+    def test_subshell_cd_to_dirty_repo_denied(self, monkeypatch, repos):
+        """修正誤放：session 乾淨、子 shell cd 到有變更的 repo，應擋。"""
+        clean, dirty = repos
+        assert self._run(monkeypatch, clean, f"(cd {dirty} && git add -A)") == 2
+
+    def test_subshell_cd_to_clean_repo_allowed(self, monkeypatch, repos):
+        """修正誤擋：session 有變更、子 shell cd 到乾淨的 repo，應放。"""
+        clean, dirty = repos
+        assert self._run(monkeypatch, dirty, f"(cd {clean} && git add -A)") == 0
+
+    def test_dash_c_unchanged(self, monkeypatch, repos):
+        """`git -C` 寫法修改前後判定不變。"""
+        clean, dirty = repos
+        assert self._run(monkeypatch, clean, f"git -C {dirty} add -A") == 2
+        assert self._run(monkeypatch, dirty, f"git -C {clean} add -A") == 0
+
+    def test_unresolvable_dir_denied(self, monkeypatch, repos, capsys):
+        """目錄無法靜態解析時擋下並要求字面路徑。"""
+        clean, _ = repos
+        assert self._run(monkeypatch, clean, 'cd "$TARGET" && git add -A') == 2
+        assert "無法靜態解析" in capsys.readouterr().err
+
+    def test_non_git_dir_falls_back_to_previous_target(self, monkeypatch, repos, tmp_path):
+        """cd 目標不是 git repo：沿用修改前的目標（hook 行程 cwd）。"""
+        clean, dirty = repos
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        assert self._run(monkeypatch, dirty, f"(cd {plain} && git add -A)") == 2
+        assert self._run(monkeypatch, clean, f"(cd {plain} && git add -A)") == 0

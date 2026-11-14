@@ -13,9 +13,9 @@ Worktree Auto-Commit Hook - Stop
 觸發時機: Stop event（主 session 每次 turn 結束 + session 終止時皆觸發）
 行為: 不阻擋（exit 0），僅在「worktree 環境 + 有未提交變更 + 無活躍背景代理人」時自動 commit
 
-根因修復（W1-062）: Stop event 在主 session 每 turn 結束觸發，PM 以 user worktree 為
+根因修復: Stop event 在主 session 每 turn 結束觸發，PM 以 user worktree 為
 cwd + 背景代理人共用同一 cwd 時，原本的 `git add -A` 會搶先代捕代理人 in-flight WIP
-（1.0.0-W1-059 實證 221fb53b），導致代理人自身 ticket-referenced commit 被跳過、
+（曾有實證 commit 221fb53b），導致代理人自身 ticket-referenced commit 被跳過、
 commit 訊息無 ticket 語意。三道修正：
   (1) 防 race：偵測活躍背景代理人（dispatch-active.json）時跳過代捕，讓代理人自行
       commit；僅在無活躍代理人時兜底。stale entry 先以 cleanup_expired 清理，避免
@@ -129,7 +129,7 @@ def is_worktree_environment(logger) -> bool:
 def find_project_root(logger) -> "Path | None":
     """解析存放 dispatch-active.json / ticket 檔案的專案根目錄。
 
-    來源優先序（W1-062 dogfood 修正）:
+    來源優先序（dogfood 修正）:
       (1) cwd（worktree）內若已有 `.claude/dispatch-active.json` → 優先採用。
           PM / 背景代理人以 worktree 為 cwd 工作時，dispatch 狀態檔由 PM 寫在 cwd 的
           .claude/，而非主 repo。原本只取 git-common-dir 會讀到主 repo 的空檔案，
@@ -216,8 +216,8 @@ def _is_dispatch_stale(dispatch, logger) -> bool:
 def get_changed_files(logger) -> "list[str]":
     """回傳未提交變更的檔案路徑清單（含 untracked）。
 
-    改用 lib.git_utils.get_uncommitted_files 收斂 porcelain 解析（0.2.1-W3-290，
-    沿用 0.2.1-W3-286 rename 箭頭格式結論：取 " -> " 右側新路徑）；引號去除
+    改用 lib.git_utils.get_uncommitted_files 收斂 porcelain 解析（
+    沿用 rename 箭頭格式結論：取 " -> " 右側新路徑）；引號去除
     （特殊字元路徑）為本 hook 特有需求，收斂後保留於此層。
     """
     try:

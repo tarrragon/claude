@@ -39,9 +39,9 @@ PM 整合多視角審查結論時，每項 follow-up 必須轉為以下三種合
 
 ## 觸發案例
 
-### 案例：W17-008.5.6.2 三視角審查整合（2026-05-03）
+### 案例：某 group 三視角審查整合（2026-05-03）
 
-W17-008 group 三視角審查（linux + bay + thyme）完成後，PM 整合 follow-up 表格，多項條目落入違規灰區：
+該 group 三視角審查（linux + bay + thyme）完成後，PM 整合 follow-up 表格，多項條目落入違規灰區：
 
 #### 違規 1：ErrorEnvelope v2 升級規劃
 
@@ -61,7 +61,7 @@ W17-008 group 三視角審查（linux + bay + thyme）完成後，PM 整合 foll
 
 問題：「未來可考慮」+「目前不需動」雙重無 trigger 延後。
 
-#### 違規 3：W17-117.2 「未來擴充風險」
+#### 違規 3：另一張 ticket 的「未來擴充風險」
 
 ```
 **未來擴充風險**：bay 視角識別「callsite 增長後選擇隨意」屬 P3 風險，
@@ -70,7 +70,7 @@ W17-008 group 三視角審查（linux + bay + thyme）完成後，PM 整合 foll
 
 問題：「定期 grep 走查」是長期週期條件，必須先建監測 ticket。
 
-#### 違規 4：W17-008.5.5「不在本 ticket 範圍」
+#### 違規 4：第三張 ticket 的「不在本 ticket 範圍」
 
 ```
 - ErrorEnvelope v2 升級規劃（將來 ticket）
@@ -85,7 +85,7 @@ W17-008 group 三視角審查（linux + bay + thyme）完成後，PM 整合 foll
 | agent 措辭原汁原味保留 | linux / bay / thyme 用「P3」「不需要」「未來」等審查語氣，PM 整合時未轉換 |
 | 「P3 + 不建 ticket」誤認為合法選項 | 規則 1 明示「沒有第三種狀態」，優先級標記不能取代 trigger 綁定 |
 | 「重新評估時再規劃」變相否定追蹤 | 「等量化條件成立時再做」必須先建監測 ticket，否則永遠不會被觸發 |
-| 跨多個 ticket 重複 | W17-008.5.5 / W17-008.5.6.2 / W17-117.2 三處違規同源 |
+| 跨多個 ticket 重複 | 同一 group 內三張 ticket 的違規同源 |
 
 ---
 
@@ -131,7 +131,7 @@ PM 整合多視角審查時，將「視角報告」（descriptive）誤等同於
 |-------------|------|-------------|
 | `decision-trigger-binding.md` | 兩種合法狀態（已決策 / 綁 ticket trigger 延後） | 本規則為 multi-view 整合情境的具體執行落實 |
 | PC-093 | 描述 YAGNI 延後決策累積反模式 | PC-093 為現象描述；本規則為 multi-view 情境的事前防護 |
-| PC-119 | parallel-evaluation 單派 linux 違反三人組協議 | 同 W17-008.5.6.2 事件衍生；PC-119 處理派發協議，本規則處理整合階段 |
+| PC-119 | parallel-evaluation 單派 linux 違反三人組協議 | 同一事件衍生；PC-119 處理派發協議，本規則處理整合階段 |
 | `quality-baseline.md` 規則 5 | 所有發現必須追蹤 | 本規則延伸：發現追蹤的合法形式必須是 (a)/(b)/(c) 三狀態 |
 
 ---

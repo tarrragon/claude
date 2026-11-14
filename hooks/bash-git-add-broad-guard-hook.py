@@ -83,15 +83,18 @@ tokenize、語句切分等解析細節，機制說明見該共用模組 docstrin
 ============================================================
 範疇邊界（刻意不做，非遺漏，比照 bare-commit-guard-hook.py 同類邊界）
 ============================================================
-- 僅偵測 cwd 隱含形式的 `git add`（含 `git -C <path> add`），不解析子
-  shell `cd <path> && git add` 形式的目標 repo（與 bare-commit-guard-
-  hook.py 的既有範疇邊界一致，理由同源）。
-- worktree 豁免判定僅依目標 repo（-C 路徑或預設 project_root）當下的
-  git-dir / git-common-dir 差異，不解析 `cd` 子 shell 形式切換的工作目錄。
+- 目標 repo 取共用解析的 `effective_dir`：以 payload cwd 為基準，依語句前的
+  `cd` 與全部 `-C` 串接（2026-11-13 起；原本只看第一個 `-C`，子 shell
+  `(cd <他 repo> && git add -A)` 會改讀 session repo，誤放與誤擋同時存在）。
+- 目錄含變數、命令替換等無法靜態解析時擋下，要求改用字面路徑（落在阻擋側；
+  原本會讀 session repo 或因路徑不存在而放行）。
+- 解析出的目錄不是 git repo 時（git 本身也會失敗），沿用修改前的目標
+  （`-C` 第一個路徑，無則 hook 行程 cwd）。
+- worktree 豁免判定依上述目標 repo 當下的 git-dir / git-common-dir 差異。
 - 短選項組合（如 `-vA`、`-uv`）僅掃描是否含 `A` 或 `u` 字元即視為命中，
   可能對「恰好命中字母但語意不同」的極端組合誤判。方向安全（誤判方向是
   「該擋的沒擋」或「保守多擋」而非放過真正的廣域 add）。
-- cwd 判定不解析 `cd` 子 shell（同上）；前綴包裹、引號不平衡失敗語意、
+- 前綴包裹、引號不平衡失敗語意、
   多語句解析已由共用 lib 層處理，見下方 main() 的處置說明。
 
 ============================================================
@@ -107,7 +110,7 @@ import json
 import shlex
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -118,7 +121,7 @@ from lib.git_command_parse import (
     find_git_invocations,
     is_literal_pathspec_token,
 )
-from lib.git_utils import get_project_root, run_git_command, get_uncommitted_files, FileStatus
+from lib.git_utils import run_git_command, get_uncommitted_files, FileStatus
 
 
 # git add/stage 無法靜態列舉的 flag（目錄列舉語意，需實際檔案系統狀態）
@@ -173,6 +176,45 @@ def _is_target_worktree(cwd: Optional[str]) -> bool:
     if not success_dir:
         return False
     return Path(common_dir).resolve() != Path(git_dir).resolve()
+
+
+def _is_git_dir(path: str) -> bool:
+    """目錄是否位於 git repo 內（rev-parse 成功即是）。"""
+    success, _ = run_git_command(["rev-parse", "--git-dir"], cwd=path)
+    return success
+
+
+def _resolve_target_dir(
+    entry: GitInvocation, logger
+) -> Tuple[Optional[str], bool]:
+    """取廣域 add 實際作用的目錄。
+
+    Returns:
+        (目標目錄, 是否無法靜態解析)。目標為 None 代表 hook 行程 cwd。
+    """
+    if entry.dir_unknown:
+        return None, True
+    legacy = entry.dash_c_path
+    target = entry.effective_dir or legacy
+    if target and target != legacy and not _is_git_dir(target):
+        # 解析出的目錄不在 git repo 內，git add 本身會失敗；沿用修改前的目標
+        logger.info("effective_dir 不在 git repo 內，沿用修改前的目標: %s -> %s", target, legacy)
+        return legacy, False
+    return target, False
+
+
+def _build_unknown_dir_message(broad_command: str) -> str:
+    """目標目錄無法靜態解析時的 deny 訊息。"""
+    return "\n".join([
+        "[bash-git-add-broad-guard] 廣域 git add 的目標目錄無法靜態解析",
+        "",
+        f"命令：{broad_command}",
+        "",
+        "`cd` 或 `-C` 的目錄含變數、命令替換、`cd -` 等，hook 在命令執行前",
+        "看不出 add 會作用在哪個 repo，也就無法確認該 repo 有沒有不該納入的變更。",
+        "",
+        "請改用展開後的字面絕對路徑重新執行，例如：git -C /abs/path add <檔案>",
+    ])
 
 
 def _build_pathspec_review_command(uncommitted: List[FileStatus]) -> str:
@@ -257,7 +299,9 @@ def main() -> int:
     if not raw_command:
         return 0
 
-    invocations = find_git_invocations(raw_command, {"add"}, scan=True)
+    invocations = find_git_invocations(
+        raw_command, {"add"}, base_dir=input_data.get("cwd") or None, scan=True
+    )
     if invocations is None:
         # 無法安全 tokenize（未閉合引號等）：既有設計選擇 fail-open——
         # 無法靜態確認時傾向不誤擋非本 hook 意圖攔截的命令，簽名收斂後
@@ -278,7 +322,13 @@ def main() -> int:
         logger.debug("命令含 git add 但 pathspec 皆可靜態列舉，放行")
         return 0
 
-    target_cwd = broad_entry.dash_c_path
+    broad_command = " ".join(broad_entry.statement)
+    target_cwd, dir_unknown = _resolve_target_dir(broad_entry, logger)
+    if dir_unknown:
+        logger.warning("廣域 git add 目標目錄無法靜態解析，阻擋：%s", broad_command)
+        print(_build_unknown_dir_message(broad_command), file=sys.stderr)
+        return 2
+    logger.info("廣域 git add 目標目錄：%s", target_cwd or "(hook 行程 cwd)")
 
     if _is_target_worktree(target_cwd):
         logger.debug("目標 repo 為 worktree 隔離環境，豁免放行")
@@ -289,7 +339,6 @@ def main() -> int:
         logger.debug("廣域 add 但目前無未提交變更，無汙染風險，放行")
         return 0
 
-    broad_command = " ".join(broad_entry.statement)
     logger.warning(
         "廣域 git add 被阻擋（未提交變更數=%d）：%s",
         len(uncommitted), broad_command,

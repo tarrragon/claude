@@ -17,7 +17,6 @@ readme_index 程式碼自包含於 .claude/skills/error-pattern/lib/readme_index
 
 import sys
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -649,12 +648,23 @@ def _write_new_pattern(claude_dir: Path, pattern_id: str, title: str) -> None:
     path.write_text(f"# {pattern_id}: {title}\n\n- **風險等級**: 中\n", encoding="utf-8")
 
 
-def _naive_unlocked_sync_write(claude_dir: Path, delay: float) -> None:
+def _naive_unlocked_sync_write(
+    claude_dir: Path,
+    read_done: "threading.Event | None" = None,
+    proceed: "threading.Event | None" = None,
+) -> None:
     """模擬 0.2.1-W3-272 修復前的舊版流程：讀-算與寫檔分離、無鎖保護
-    （對應舊版 `main()` 的 `--write` 分支邏輯，僅用於校準對照組）。"""
+    （對應舊版 `main()` 的 `--write` 分支邏輯，僅用於校準對照組）。
+
+    read_done／proceed 以事件建立先後順序：讀完快照後通知呼叫端，等呼叫端
+    放行才寫檔。不用 sleep 估時——負載高時排程延後會讓估時失準，快照時機
+    漂移而校準翻紅（3.3.0-W1-223）。
+    """
     _original, updated, diff = sync(claude_dir)
-    if delay:
-        time.sleep(delay)
+    if read_done is not None:
+        read_done.set()
+    if proceed is not None:
+        assert proceed.wait(timeout=10), "校準時序未在時限內放行"
     if diff:
         (claude_dir / "error-patterns" / "README.md").write_text(updated, encoding="utf-8")
 
@@ -707,33 +717,54 @@ def test_calibration_naive_unlocked_flow_loses_concurrent_row(tmp_path):
     claude_dir = _setup_claude_dir(tmp_path)
     _write_new_pattern(claude_dir, "IMP-010", "A 的發現")
 
+    a_read_done = threading.Event()
+    b_write_done = threading.Event()
     thread_a = threading.Thread(
-        target=_naive_unlocked_sync_write, args=(claude_dir, 0.3)
+        target=_naive_unlocked_sync_write,
+        args=(claude_dir,),
+        kwargs={"read_done": a_read_done, "proceed": b_write_done},
     )
     thread_a.start()
-    time.sleep(0.05)  # 確保 A 已完成讀取（只看到 IMP-010）才建立 B 的檔案
+    # A 讀完快照（只看到 IMP-010）才建立 B 的檔案
+    assert a_read_done.wait(timeout=10), "A 未在時限內完成讀取"
     _write_new_pattern(claude_dir, "IMP-011", "B 的發現")
-    _naive_unlocked_sync_write(claude_dir, 0)  # B：無延遲，搶先寫入
-    thread_a.join(timeout=5)
+    _naive_unlocked_sync_write(claude_dir)  # B：讀到兩列並先寫入
+    b_write_done.set()  # B 寫完才放行 A 以舊快照覆寫
+    thread_a.join(timeout=10)
 
     final = (claude_dir / "error-patterns" / "README.md").read_text(encoding="utf-8")
     assert "IMP-010" in final
     assert "IMP-011" not in final, "校準失敗：naive 流程理應遺失 B 的列"
 
 
-def test_sync_and_write_concurrent_upserts_both_rows_survive(tmp_path):
+def test_sync_and_write_concurrent_upserts_both_rows_survive(tmp_path, monkeypatch):
     """0.2.1-W3-272 修復驗證：與校準測試相同的時序（A 延遲寫入、B 搶先），
     改用 `sync_and_write`（鎖保護）——A 的讀取與寫入之間 B 必須等鎖，故 B 的
     讀取會發生在 A 寫入之後，兩列皆存活（acceptance #1：兩 agent 同時各
-    upsert 一列，兩列皆存活）。"""
+    upsert 一列，兩列皆存活）。
+
+    A 持鎖的時機以事件確認（包住 `sync`，第一次呼叫即 A 已在臨界區內），
+    不以 sleep 估時，B 才必然撞上鎖。"""
+    import readme_index
+
     claude_dir = _setup_claude_dir(tmp_path)
     _write_new_pattern(claude_dir, "IMP-010", "A 的發現")
+
+    a_in_lock = threading.Event()
+    real_sync = readme_index.sync
+
+    def _sync_signalling_first_entry(*args, **kwargs):
+        result = real_sync(*args, **kwargs)
+        a_in_lock.set()
+        return result
+
+    monkeypatch.setattr(readme_index, "sync", _sync_signalling_first_entry)
 
     thread_a = threading.Thread(
         target=sync_and_write, args=(claude_dir,), kwargs={"_pre_write_delay": 0.3}
     )
     thread_a.start()
-    time.sleep(0.05)  # 確保 A 已進入臨界區（持鎖中）才讓 B 起跑
+    assert a_in_lock.wait(timeout=10), "A 未在時限內進入臨界區"
     _write_new_pattern(claude_dir, "IMP-011", "B 的發現")
     sync_and_write(claude_dir)  # B：會阻塞在鎖上，直到 A 釋放
     thread_a.join(timeout=5)

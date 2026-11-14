@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""SessionStart source diagnostic hook (W3-028.2).
+"""SessionStart source diagnostic hook.
 
 Records SessionStart event source field for /resume bg session verification.
 Pure observer: never blocks session startup, dual-channel failure logging.
@@ -13,9 +13,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib import get_hook_log_dir  # noqa: E402
+
 
 def main() -> int:
-    log_dir = Path(__file__).resolve().parent.parent / "hook-logs" / "session-source-diagnostic"
+    log_dir = get_hook_log_dir("session-source-diagnostic")
     log_file = log_dir / "diagnostic.log"
     try:
         payload = json.loads(sys.stdin.read() or "{}")

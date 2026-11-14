@@ -108,12 +108,12 @@
 **Last Updated**: 2026-09-23
 **Version**: 1.11.0 - version-scope-convergence-methodology.md 索引項補「執行 runbook」（收件側開工／發版側收尾兩入口、PM 驗收清單、常見失效）
 **Version**: 1.10.0 - 新增 version-scope-convergence-methodology.md 索引項（流程管理節）
-**Version**: 1.9.0 - 新增 data-layer-contract-methodology.md 索引項（程式碼品質節，0.2.0-W2-002，source: PROP-002 In Scope 2）
-**Version**: 1.8.0 - W8-041 標籤同步：11 處用途欄「30 秒核心」標籤改為「核心判準」，對齊 W8-040 方法論新定位（框架判斷標準，非 30 秒壓縮）。版本註腳歷史保留原「30 秒核心」字樣
-**Version**: 1.7.0 - 補列 package-import-language-mechanisms.md 衛星檔索引項 + 主檔用途補「30 秒核心」（程式碼品質節，W8-020.1 衛星檔原未入索引，W8-020.12 campaign 收尾 gate 補齊）
-**Version**: 1.6.0 - 新增 five-document-system-examples.md 衛星檔索引項 + 主檔用途補「30 秒核心」（核心方法論節，W8-020.11 方法論瘦身校準）
-**Version**: 1.5.0 - 新增 business-layer-i18n-examples.md 衛星檔索引項 + 主檔用途補「30 秒核心」（i18n 與業務節，W8-020.10 方法論瘦身校準）
-**Version**: 1.4.0 - 新增 personalized-consultation-methodology.md 主檔 + personalized-consultation-examples.md 衛星檔索引項（分析與決策節，原未列入索引）（W8-020.9 方法論瘦身校準）
-**Version**: 1.3.0 - 新增 frontmatter-ticket-tracking-operations.md 衛星檔索引項 + 主檔用途補「30 秒核心」（W8-020.5 方法論瘦身校準）
-**Version**: 1.2.0 - 新增 problem-awareness-evaluation-examples.md 衛星檔索引項 + 主檔用途補「30 秒核心」（W8-020.3 方法論瘦身校準）
-**Version**: 1.1.0 - 新增 acceptance-criteria-templates.md 衛星檔索引項（W8-020.2 方法論瘦身校準）
+**Version**: 1.9.0 - 新增 data-layer-contract-methodology.md 索引項（程式碼品質節，source: PROP-002 In Scope 2）
+**Version**: 1.8.0 - 標籤同步：11 處用途欄「30 秒核心」標籤改為「核心判準」，對齊方法論新定位（框架判斷標準，非 30 秒壓縮）。版本註腳歷史保留原「30 秒核心」字樣
+**Version**: 1.7.0 - 補列 package-import-language-mechanisms.md 衛星檔索引項 + 主檔用途補「30 秒核心」（程式碼品質節，衛星檔原未入索引，campaign 收尾 gate 補齊）
+**Version**: 1.6.0 - 新增 five-document-system-examples.md 衛星檔索引項 + 主檔用途補「30 秒核心」（核心方法論節，方法論瘦身校準）
+**Version**: 1.5.0 - 新增 business-layer-i18n-examples.md 衛星檔索引項 + 主檔用途補「30 秒核心」（i18n 與業務節，方法論瘦身校準）
+**Version**: 1.4.0 - 新增 personalized-consultation-methodology.md 主檔 + personalized-consultation-examples.md 衛星檔索引項（分析與決策節，原未列入索引）（方法論瘦身校準）
+**Version**: 1.3.0 - 新增 frontmatter-ticket-tracking-operations.md 衛星檔索引項 + 主檔用途補「30 秒核心」（方法論瘦身校準）
+**Version**: 1.2.0 - 新增 problem-awareness-evaluation-examples.md 衛星檔索引項 + 主檔用途補「30 秒核心」（方法論瘦身校準）
+**Version**: 1.1.0 - 新增 acceptance-criteria-templates.md 衛星檔索引項（方法論瘦身校準）

@@ -3,8 +3,7 @@ id: IMP-BAL-001
 title: Hook（PreToolUse / PostToolUse）提前 emit stdout JSON，後續分支 exit 2 時訊號被 runtime 丟棄
 severity: medium
 category: implementation
-source_ticket: 0.2.0-W4-009
-related: [0.2.0-W4-008, PC-019]
+related: [PC-019]
 created: 2026-07-25
 ---
 
@@ -30,7 +29,7 @@ Hook 實作若把「emit 輸出」寫在檢查函式內部（副作用式輸出�
 - 最終 exit 0 → emit additionalContext JSON
 - 最終 exit 2 → 警告文字併入 stderr 阻擋訊息（同通道 bundling，訊號零丟失）
 
-實例（第一例，PreToolUse）：`.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py`（0.2.0-W4-009 修復，commit 6ffbf27）——`_check_origin_behind` 純計算回傳 behind_count，main() 依 PC-019 判定結果分流輸出。
+實例（第一例，PreToolUse）：`.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py`（修復 commit 6ffbf27）——`_check_origin_behind` 純計算回傳 behind_count，main() 依 PC-019 判定結果分流輸出。
 
 實例（第二例，PostToolUse）：`.claude/skills/ticket/hooks/ticket-quality-gate-hook.py`（當時狀態，該 hook 事後已降級並刪除）。<!-- broken-link-exempt: 案例敘事，明文陳述該 hook 事後已刪除，路徑不存在是預期的 -->該 hook 註冊於 PostToolUse、matcher `Write`、`continueOnBlock: true`。以構造的 PostToolUse Write 輸入餵入真實 ticket md 實測：exit code 2，stdout 4975 bytes（`decision: block` + reason + 完整 additionalContext 報告），stderr 0 bytes。代理人在此路徑收到的是無說明的失敗訊號——診斷內容全在被 runtime 丟棄的 stdout，與第一例同一根因：輸出決策未集中於 exit code 確定之後。
 
@@ -42,5 +41,5 @@ Hook 實作若把「emit 輸出」寫在檢查函式內部（副作用式輸出�
 
 ## 關聯
 
-- Ticket：0.2.0-W4-008（引入警告 additionalContext 化時埋下）、0.2.0-W4-009（第一例修復）
+- 成因：引入警告 additionalContext 化時埋下；第一例修復見 commit 6ffbf27
 - 相關模式：PC-019（worktree 派發前未 commit 防護，第一例的 block 段來源）

@@ -51,7 +51,14 @@ def write_config(project: Path, *tickets: str) -> None:
 
 
 def env_for(tmp_path: Path) -> dict:
-    return {"HOME": str(tmp_path / "home"), "CLAUDE_PROJECT_DIR": str(tmp_path / "project"), "PATH": "/usr/bin:/bin"}
+    # HOOK_TEST_ISOLATION：日誌目錄經 hook_logging 解析，pytest 在 linked worktree 內執行時
+    # 會繞過 CLAUDE_PROJECT_DIR；此旗標讓解析採 tmp 專案根
+    return {
+        "HOME": str(tmp_path / "home"),
+        "CLAUDE_PROJECT_DIR": str(tmp_path / "project"),
+        "HOOK_TEST_ISOLATION": "1",
+        "PATH": "/usr/bin:/bin",
+    }
 
 
 def run(tmp_path: Path, source: str, session_id: str = SESSION_ID, stdin: str | None = None) -> subprocess.CompletedProcess:
@@ -146,6 +153,55 @@ def test_none_step_does_not_tell_master_to_decide_alone(mod):
         assert "開工作線或單一線" in mod.none_step(has_active)
 
 
+@pytest.mark.parametrize("has_active", [True, False])
+def test_none_record_step_follows_step_two_answer(tmp_path, has_active):
+    """正向對照：沒有協調票時，第 3 步不得無條件寫「在協調票追加」，
+    寫入位置須對應第 2 步的兩種答案。"""
+    write_session(tmp_path / "home", "999", "主控", SESSION_ID)
+    write_config(tmp_path / "project")
+    for ticket in (tmp_path / "project/docs/work-logs/v0.5.0/tickets").glob("*.md"):
+        ticket.unlink()
+    if not has_active:
+        todolist = tmp_path / "project" / "docs" / "todolist.yaml"
+        todolist.write_text(todolist.read_text(encoding="utf-8").replace('"active"', '"planned"'), encoding="utf-8")
+    text = context_of(run(tmp_path, "clear"))
+    step3 = next(line for line in text.splitlines() if line.startswith("3. "))
+    assert "在協調票追加" not in step3
+    assert "開工作線時寫進新建的協調票" in step3
+    assert "單一線時寫進當前處理的票" in step3
+    assert "〈主控接續（clear，<日期 時間>）〉段" in step3
+
+
+def test_record_step_with_ticket_is_unchanged(tmp_path):
+    """有協調票時第 3 步與修改前逐字相同。"""
+    write_session(tmp_path / "home", "999", "主控", SESSION_ID)
+    write_config(tmp_path / "project")
+    text = context_of(run(tmp_path, "compact"))
+    assert (
+        "3. 依 .claude/skills/multi-session-orchestration/references/line-continuity.md §4 "
+        "在協調票追加〈主控接續（compact，<日期 時間>）〉段、推送，並先向用戶回報各線狀態與下一步"
+    ) in text
+
+
+def test_feedback_check_reminder_only_in_version_gap(mod):
+    """E1：同一函式傳 has_active 兩值，只有沒有 active 版本（版本空窗）時提醒回饋檢查；
+    有 active 版本時文字與加入提醒前逐字相同。"""
+    gap = mod.none_step(False)
+    active = mod.none_step(True)
+    assert gap != active
+    assert ".claude/skills/framework-issue/scripts/feedback.py" in gap
+    assert "發版後回饋檢查" in gap
+    assert "version-release start --version <下一版>" in gap
+    assert "feedback.py" not in active and "發版後回饋檢查" not in active
+    assert active == (
+        "2. 找不到協調票，成因：active 版本裡沒有標記 coordination: true 的進行中票。"
+        "不自行判定單一線，先以 AskUserQuestion 問用戶開工作線或單一線："
+        "開工作線時建協調票並列開線計畫表；"
+        "單一線時把〈主控接續〉段與裁定寫進當前處理的票，下次接續先讀該票"
+        "（.claude/skills/multi-session-orchestration/references/line-continuity.md §3）"
+    )
+
+
 def test_unresolvable_still_hints(tmp_path):
     write_session(tmp_path / "home", "999", "主控", SESSION_ID)
     assert "協調票解析失敗" in context_of(run(tmp_path, "clear"))
@@ -158,6 +214,72 @@ def test_multiple_tickets_lists_candidates_for_user(tmp_path):
     assert "0.5.0-W1-349" in text and "0.5.0-W1-350" in text
     assert "請用戶裁定" in text
     assert "ticket track full" not in text
+
+
+def test_log_lands_in_main_repo_when_run_in_linked_worktree(tmp_path):
+    """linked worktree 內（不設 HOOK_TEST_ISOLATION）日誌寫入主 repo，worktree 自己不建 hook-logs。"""
+    main, wt = tmp_path / "main", tmp_path / "wt"
+    main.mkdir()
+    git = ["git", "-C", str(main)]
+    subprocess.run([*git, "init", "-q", "-b", "main"], check=True)
+    subprocess.run([*git, "-c", "user.email=t@e.x", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+    subprocess.run([*git, "worktree", "add", "-q", str(wt), "-b", "wt-branch"], check=True)
+    env = {"HOME": str(tmp_path / "home"), "PATH": "/usr/bin:/bin"}
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT)], input="not json", capture_output=True, text=True,
+        env=env, cwd=str(wt), timeout=30,
+    )
+    assert result.returncode == 0
+    log = main.resolve() / ".claude" / "hook-logs" / "master-resume-hint" / "hook.log"
+    assert "Traceback" in log.read_text(encoding="utf-8")
+    assert not (wt / ".claude" / "hook-logs").exists()
+
+
+def _linked_worktree_with_main_config(tmp_path):
+    """MAIN 寫協調設定與 todolist，WT 不寫。"""
+    main, wt = (tmp_path / "main").resolve(), tmp_path / "wt"
+    main.mkdir()
+    git = ["git", "-C", str(main), "-c", "user.email=t@e.x", "-c", "user.name=t"]
+    subprocess.run([*git, "init", "-q", "-b", "main"], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+    subprocess.run([*git, "worktree", "add", "-q", str(wt), "-b", "wt-branch"], check=True)
+    write_config(main, "0.5.0-W1-349")
+    return wt.resolve()
+
+
+def _run_in_worktree(wt: Path, tmp_path: Path, isolation: bool) -> subprocess.CompletedProcess:
+    write_session(tmp_path / "home", "999", "主控", SESSION_ID)
+    env = {"HOME": str(tmp_path / "home"), "PATH": "/usr/bin:/bin"}
+    if isolation:
+        env["HOOK_TEST_ISOLATION"] = "1"
+    return subprocess.run(
+        [sys.executable, str(SCRIPT)], input=json.dumps({"source": "clear", "session_id": SESSION_ID}),
+        capture_output=True, text=True, env=env, cwd=str(wt), timeout=30,
+    )
+
+
+def test_linked_worktree_hint_reads_main_coordination_ticket(tmp_path):
+    wt = _linked_worktree_with_main_config(tmp_path)
+    assert "0.5.0-W1-349" in context_of(_run_in_worktree(wt, tmp_path, isolation=False))
+
+
+def test_linked_worktree_e1_isolation_reads_worktree_plane(tmp_path):
+    wt = _linked_worktree_with_main_config(tmp_path)
+    assert "0.5.0-W1-349" not in context_of(_run_in_worktree(wt, tmp_path, isolation=True))
+
+
+def test_linked_worktree_e1_identity_old_code_misses_main_config(tmp_path, monkeypatch):
+    """E1：lib.hook_base.get_shared_state_root 換成恆等函式（等於舊碼）後讀不到 MAIN 協調設定。"""
+    wt = _linked_worktree_with_main_config(tmp_path)
+    monkeypatch.chdir(wt)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(wt))
+    monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+    module = load_module()
+    assert "0.5.0-W1-349" in str(module.coordination_ticket(module.state_dir()))
+    import lib.hook_base as hook_base
+
+    monkeypatch.setattr(hook_base, "get_shared_state_root", lambda r=None: r)
+    assert "0.5.0-W1-349" not in str(module.coordination_ticket(module.state_dir()))
 
 
 def test_invalid_stdin_does_not_block_and_logs_traceback(tmp_path):

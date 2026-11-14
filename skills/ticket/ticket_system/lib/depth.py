@@ -1,12 +1,12 @@
 """
-Ticket 嵌套深度計算模組（W1-056.5 協議 v2 D3）
+Ticket 嵌套深度計算模組（協議 v2）
 
 深度沿 `parent_id` 鏈回溯計算，為世界平面 SSOT（field-semantics.md），
 與 ticket ID 字串格式解耦。
 
 設計背景（linux F1 fatal 修正）：
     協議 v1 曾以 `ticket_id.count('.') + 1` 計算深度，但完整 ticket ID 含版本號
-    前綴（如 `1.0.0-W1-056.5` 有 3 個點），會算出錯誤深度（silent bug）。
+    前綴（如 `<ticket-id>.5` 有 3 個點），會算出錯誤深度（silent bug）。
     v2 改為沿 parent_id 鏈計數：parent_id 由 CLI 自動維護，是層級結構的權威來源。
 
 純分析層補強：
@@ -69,16 +69,16 @@ def compute_depth(ticket_id: str, version: Optional[str] = None) -> int:
         - 二級子任務 → depth 3
 
     Args:
-        ticket_id: 目標 Ticket ID（如 "1.0.0-W1-056.5"）
+        ticket_id: 目標 Ticket ID（如 "<ticket-id>.5"）
         version: 版本號（可選，預設從 ticket_id 提取）
 
     Returns:
         int: 深度（>= 1）；若 ticket 不存在則以 ID 計為 depth 1
 
     Examples:
-        >>> # 1.0.0-W1-056（parent_id: null）→ 1
-        >>> # 1.0.0-W1-056.5（parent_id: 1.0.0-W1-056）→ 2
-        >>> # 1.0.0-W1-056.5.1（parent_id: 1.0.0-W1-056.5）→ 3
+        >>> # <ticket-id>（parent_id: null）→ 1
+        >>> # <ticket-id>.5（parent_id: <ticket-id>）→ 2
+        >>> # <ticket-id>.5.1（parent_id: <ticket-id>.5）→ 3
     """
     resolved_version = version or extract_version_from_ticket_id(ticket_id)
 

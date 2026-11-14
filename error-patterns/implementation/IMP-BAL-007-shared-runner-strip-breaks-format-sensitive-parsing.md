@@ -3,7 +3,6 @@ id: IMP-BAL-007
 title: 共用 runner 整體 strip 破壞下游格式敏感解析，測試 mock 在 runner 層繞過缺陷點
 severity: high
 category: implementation
-source_ticket: 0.2.1-W3-284
 related:
  - TEST-BAL-001
  - PC-165
@@ -74,5 +73,5 @@ related:
 
 ## 關聯
 
-- 來源 ticket：`0.2.1-W3-284`（修復），發現於 `0.2.1-W3-280` / `W3-282` / `W3-283` 的 Phase 4 多視角審查
+- 發現於 Phase 4 多視角審查（修復為後續獨立修復票）
 - 相關規則：`.claude/rules/core/quality-baseline.md` 規則 1 邊界「測試綠燈不等於 Runtime 正確」

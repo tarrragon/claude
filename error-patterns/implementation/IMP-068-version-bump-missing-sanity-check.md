@@ -96,5 +96,4 @@ line = line.strip().lstrip("\ufeff")  # 清 UTF-8 BOM
 
 ## 來源
 
-- W16-004.2 Ticket 實證分析（`docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W16-004.2.md`）
 - v1.17.0 → v1.36.2 事件（單次 Windows push 產生的 CHANGELOG 假線性）

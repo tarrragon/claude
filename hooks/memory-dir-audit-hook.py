@@ -58,8 +58,8 @@ Hook 類型: SessionStart + Stop（皆不掛 matcher）。兩事件本身已隱�
 deny 擋下，即時性的邊際價值低，換取的是不必為每種新增的寫入型工具再補一
 個 matcher。
 
-marker 儲存位置：`.claude/hooks/hook-logs/memory-dir-audit-marker.json`
-（`.gitignore` 的 `**/hook-logs/` 涵蓋，不進版控、不隨 `.claude/` sync 到
+marker 儲存位置：`.claude/hook-logs/memory-dir-audit/memory-dir-audit-marker.json`
+（linked worktree 內為主 checkout 的該路徑；`.gitignore` 的 `**/hook-logs/` 涵蓋，不進版控、不隨 `.claude/` sync 到
 其他專案）；可由環境變數 `MEMORY_DIR_AUDIT_MARKER_FILE` 覆寫，供測試隔離。
 結構為 `{目錄路徑: 排序後檔名清單}`，不含 session 維度。
 
@@ -96,6 +96,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))  # .claude/       (lib.*)
 try:
     from lib import (
         emit_model_reminder,
+        get_hook_log_dir,
         get_project_root,
         read_json_from_stdin,
         run_hook_safely,
@@ -121,17 +122,18 @@ EXIT_OK = 0
 
 _HOME = os.path.expanduser("~")
 
-_HOOK_DIR = Path(__file__).resolve().parent
-_DEFAULT_MARKER_FILE = _HOOK_DIR / "hook-logs" / "memory-dir-audit-marker.json"
+# marker 經 get_hook_log_dir 取得：linked worktree 內解析到主 checkout 的
+# .claude/hook-logs/memory-dir-audit/（舊 .claude/hooks/hook-logs 殘留檔不讀）
+_DEFAULT_MARKER_FILE = get_hook_log_dir("memory-dir-audit") / "memory-dir-audit-marker.json"
 
 # 改道指引：與 memory-write-guard-hook.py 的 DENY_REASON 同源
 # （EXCLUSION_RATIONALE + THREE_WAY_GUIDANCE 取自 lib/memory_triage_messages.py
-# 的 MemoryTriageMessages，0.2.1-W3-196 SSOT，語氣前綴各自獨立不合併）。
+# 的 MemoryTriageMessages，SSOT，語氣前綴各自獨立不合併）。
 # 首句先陳述能力事實——事後稽核、寫入已完成且未被阻擋、需主動處理——區辨
 # 事前阻擋的資訊排在最前面；「這不是不能記錄，是換個地方記錄」與 guard
 # DENY_REASON 首句幾乎逐字相同，降為補語置於原則之後，避免讀者在注意力
 # 前段只讀到與 deny 同構的文字而誤判寫入已被擋下、中止當下任務
-# （0.2.1-W3-197，PC-112 self-imposed early stop 形態）。Action 為兩步
+# （PC-112 self-imposed early stop 形態）。Action 為兩步
 # 可執行指令：依判準搬遷內容、搬遷後清空目錄，並說明不清空的後果——舊版
 # 「請評估是否需搬遷內容」不是動作，且缺此收尾步驟，會使稽核在後續每次
 # SessionStart / Stop 對同一份未清空內容重複告警。
@@ -175,7 +177,7 @@ def resolve_candidate_memory_dirs() -> list:
 
     走訪 `lib/memory_paths.MEMORY_LAYOUTS`（不得只 import 具名常數後自行
     重排一張表——那會在新增第三種 layout 時造成本函式與
-    memory-write-guard-hook.py 覆蓋範圍不對稱，0.2.1-W3-194 修過的同型
+    memory-write-guard-hook.py 覆蓋範圍不對稱，先前已修過的同型
     缺陷）；glob pattern 與識別符取法（哪一段是 `*`）皆由 `memory_paths`
     的 layout 定義推導，本函式只負責「哪種 identifier_kind 對應哪把
     comparison_key」這個 audit 特有的判定邏輯，以及 `_normalize_for_comparison`

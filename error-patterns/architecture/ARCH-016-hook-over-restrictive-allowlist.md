@@ -63,7 +63,7 @@ Hook 設計時遵循「最小權限」原則，允許清單只列「已知需要
 ### 實戰防護：撞牆即修
 
 - 主線程被 Hook 攔截時，第一反應不是「走繞路」，而是「評估是否清單遺漏」
-- 如判斷清單遺漏 → 建 IMP Ticket 修 Hook（本錯誤模式觸發的 W10-033 即此模式）
+- 如判斷清單遺漏 → 建 IMP Ticket 修 Hook（2026-04-13 的放寬修復即此模式）
 - 如判斷攔截合理 → 尊重 Hook，走 feature 分支 / 代理人
 
 ### 定期回顧：Hook 攔截統計
@@ -102,7 +102,7 @@ Hook 設計時遵循「最小權限」原則，允許清單只列「已知需要
 
 ## 本 error-pattern 觸發案例
 
-- 2026-04-13：主線程修 .gitignore 補 scheduled_tasks.lock 被雙 Hook 攔截，用戶反饋規則過嚴，W10-033 放寬（ALLOWED_PATTERNS / exempt_exact / EDIT_BLOCKED_DEFAULT_DENY 訊息三處同步）
+- 2026-04-13：主線程修 .gitignore 補 scheduled_tasks.lock 被雙 Hook 攔截，用戶反饋規則過嚴，隨後放寬（ALLOWED_PATTERNS / exempt_exact / EDIT_BLOCKED_DEFAULT_DENY 訊息三處同步）
 
 ## 驗證方式
 
@@ -113,4 +113,4 @@ Hook 設計時遵循「最小權限」原則，允許清單只列「已知需要
 
 ## 觸發日期
 
-- 2026-04-13：初次記錄，來源 W10-033
+- 2026-04-13：初次記錄，來源為 Hook 允許清單過嚴的放寬事件

@@ -15,6 +15,7 @@ import importlib.util
 import io
 import json
 import logging
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -198,6 +199,60 @@ class TestFailureSemantics:
         assert rc == 0
         assert "boom" in cap.err
         assert cap.out.strip() == ""
+
+    def _run_main_with_eval_error(self, payload, main_root, capsys):
+        with patch.object(hook, "read_json_from_stdin", return_value=payload), \
+             patch.object(hook, "resolve_main_root", return_value=main_root), \
+             patch.object(hook, "evaluate", side_effect=RuntimeError("boom")):
+            rc = hook.main()
+        cap = capsys.readouterr()
+        return rc, (json.loads(cap.out) if cap.out.strip() else None), cap.err
+
+    def test_exception_on_confirmed_isolated_file_write_denies(self, main_root, capsys):
+        """正向對照：已確認是隔離代理人的檔案寫入，判定例外時擋下。"""
+        write_state(main_root, [entry()])
+        rc, out, err = self._run_main_with_eval_error(
+            file_payload("Write", main_root / "a.md", main_root), main_root, capsys)
+        assert rc == 0
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "boom" in out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "boom" in err
+
+    def test_exception_without_isolation_mapping_allows(self, main_root, capsys):
+        """無法確認為隔離代理人（其他代理人）：維持放行，不讓守衛故障擋下所有代理人。"""
+        write_state(main_root, [entry(agent_id="someone-else")])
+        rc, out, err = self._run_main_with_eval_error(
+            file_payload("Write", main_root / "a.md", main_root), main_root, capsys)
+        assert rc == 0
+        assert out is None
+        assert "boom" in err
+
+    def test_exception_when_mapping_lookup_also_fails_allows(self, main_root, capsys):
+        """確認步驟本身失敗：放行（收緊只落在可確認的範圍）。"""
+        payload = file_payload("Write", main_root / "a.md", main_root)
+        with patch.object(hook, "find_isolated_entry", side_effect=OSError("state")):
+            rc, out, _ = self._run_main_with_eval_error(payload, main_root, capsys)
+        assert rc == 0
+        assert out is None
+
+    def test_deny_output_failure_falls_back_to_exit_2(self, main_root, monkeypatch):
+        """deny 經 emit_hook_output：stdout 寫入失敗時兜底為 exit 2，不退化為放行。"""
+        write_state(main_root, [entry()])
+
+        class BrokenStdout:
+            def write(self, _):
+                raise BrokenPipeError("closed")
+
+            def flush(self):
+                raise BrokenPipeError("closed")
+
+        monkeypatch.setattr(sys, "stdout", BrokenStdout())
+        with patch.object(hook, "read_json_from_stdin",
+                          return_value=file_payload("Edit", main_root / "a.md", main_root)), \
+             patch.object(hook, "resolve_main_root", return_value=main_root):
+            with pytest.raises(SystemExit) as exc:
+                hook.main()
+        assert exc.value.code == 2
 
     def _run_main(self, payload, main_root, capsys):
         with patch.object(hook, "read_json_from_stdin", return_value=payload), \

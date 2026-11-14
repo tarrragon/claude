@@ -46,6 +46,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
+from lib.hook_base import get_shared_state_root
 from lib import (
     setup_hook_logging,
     run_hook_safely,
@@ -55,7 +56,7 @@ from lib import (
     find_ticket_file,
 )
 
-# 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale（W17-095.3）
+# 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale
 # 同時加入 skills/ticket 父路徑以解析 handoff_utils 內部的 `from ticket_system.lib.*`
 # import（缺此路徑會使 import 靜默降級為 ModuleNotFoundError fallback，
 # resolve_target 永遠回 None，與 handoff-auto-resume-stop-hook.py 對齊補上）。
@@ -83,6 +84,31 @@ except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用�
         # 由呼叫端 `resolve_target(record) or record.get("ticket_id")` 自動 fallback 至來源票。
         return None
 
+try:
+    from handoff_utils import orphan_reason as _lib_orphan_reason  # type: ignore
+except Exception as _import_err:  # pragma: no cover
+    # PC-135 防護：退化為「永不判孤兒」，孤兒照舊列入提醒，須讓 PM 看見。
+    sys.stderr.write(
+        f"[handoff-reminder-hook][PC-135] handoff_utils.orphan_reason import failed, "
+        f"using degraded fallback (orphan handoffs stay listed). "
+        f"Cause: {type(_import_err).__name__}: {_import_err}\n"
+    )
+    def _lib_orphan_reason(record, ticket_id, project_root=None):  # type: ignore
+        return ""
+
+
+def _orphan_reason(record, project_root, logger) -> str:
+    """回傳孤兒原因；非孤兒或無法判斷時回空字串。來源票取法與 is_handoff_active 一致。"""
+    source_id = record.get("from_ticket") or record.get("ticket_id") or ""
+    if not source_id:
+        return ""
+    try:
+        return _lib_orphan_reason(record, source_id, project_root)
+    except Exception as err:
+        # 判斷失敗不等於孤兒：保留提醒，留日誌
+        logger.warning(f"orphan_reason 判斷失敗 ({source_id}): {err}")
+        return ""
+
 import re
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -98,13 +124,13 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> Tuple[List[Dic
     目錄結構:
     .claude/handoff/
       └── pending/
-          ├── 0.31.0-W4-001.1.json
-          ├── 0.31.0-W4-002.json
+          ├── <ticket-id>.json
+          ├── <ticket-id>.json
           └── ...
 
     JSON 檔案格式:
     {
-        "ticket_id": "0.31.0-W4-001.1",
+        "ticket_id": "<ticket-id>",
         "title": "任務標題",
         "what": "工作內容描述",
         "direction": "to-parent|to-child",
@@ -148,7 +174,7 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> Tuple[List[Dic
                     logger.debug(f"跳過已接手的任務: {file_path.stem} (resumed_at: {resumed_at})")
                     continue
 
-                # W17-095.3：過濾 stale handoff（與 CLI resume --list 對齊）
+                # 過濾 stale handoff（與 CLI resume --list 對齊）
                 try:
                     is_stale, stale_reason = is_handoff_stale(data, project_root)
                 except Exception as stale_err:
@@ -157,6 +183,14 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> Tuple[List[Dic
                 if is_stale:
                     stale_count += 1
                     logger.debug(f"跳過 stale handoff: {file_path.stem} ({stale_reason})")
+                    continue
+
+                # 孤兒（目標或來源查無）同樣不列入；判準與 handoff GC 共用 orphan_reason。
+                # 不用 is_handoff_active：它在票查詢模組載不到時回「無效」，會把全部 handoff 濾掉。
+                orphan = _orphan_reason(data, project_root, logger)
+                if orphan:
+                    stale_count += 1
+                    logger.debug(f"跳過孤兒 handoff: {file_path.stem} ({orphan})")
                     continue
 
                 # 提取必要欄位
@@ -250,7 +284,7 @@ def generate_reminder_message(
     Args:
         pending_tasks: 待恢復任務列表
         logger: 日誌物件
-        stale_count: 已過濾掉的 stale handoff 數量（W17-095.3，與 CLI resume --list 對齊）
+        stale_count: 已過濾掉的 stale handoff 數量
 
     Returns:
         str - 格式化的提醒訊息
@@ -345,10 +379,10 @@ def main() -> int:
             return 0
 
         # 步驟 3: 取得專案根目錄
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
         logger.info(f"專案根目錄: {project_root}")
 
-        # 步驟 4: 掃描待恢復任務（W17-095.3：含 stale 過濾計數）
+        # 步驟 4: 掃描待恢復任務
         pending_tasks, stale_count = scan_handoff_pending_directory(project_root, logger)
 
         # 步驟 5: 產生 Hook 輸出（自動載入最新任務或靜默跳過）

@@ -1,5 +1,5 @@
 """
-Phase 4 Review Evidence Checker（0.38.1-W1-080.1）
+Phase 4 Review Evidence Checker
 
 IMP ticket complete 時檢查 Solution 章節是否含 Phase 4 審查證據。
 缺少時 emit WARNING（不阻擋 complete），提醒執行 /parallel-evaluation。
@@ -89,7 +89,7 @@ def check_phase4_review_evidence(
 
     logger.info(f"ticket type={type_upper} 的 Solution 缺 Phase 4 審查證據，輸出 warning")
     return (
-        "[Phase 4 審查] Solution 中未見 Phase 4 審查證據（0.38.1-W1-080.1）\n"
+        "[Phase 4 審查] Solution 中未見 Phase 4 審查證據\n"
         "依 quality-baseline 規則 2，IMP ticket 必須完成 Phase 4 重構評估（無論是否走 TDD 流程）。\n"
         "建議執行 /parallel-evaluation 並將結論記錄到 Solution。\n"
         "本檢查為 warning（不阻擋 complete）。豁免：DOC type / 小型修改（<= 2 檔案）。"

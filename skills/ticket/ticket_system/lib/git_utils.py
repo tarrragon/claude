@@ -1,6 +1,6 @@
-"""Ticket md auto-commit 薄封裝（W7-001）。
+"""Ticket md auto-commit 薄封裝。
 
-承接 1.0.0-W7-001 / W1-017 ANA：ticket body 經 append-log 寫入後若停留於
+承接 ANA 結論：ticket body 經 append-log 寫入後若停留於
 未 commit 的 working tree，會被 ``git checkout -- <file>`` / ``git reset --hard``
 / ``git stash`` 還原回 create commit 的 placeholder 版本而遺失。
 
@@ -30,6 +30,7 @@ from .git_ops import (
     _lock_paths_from_error,
     _run_git,
     commit_files_isolated,
+    hook_log_dir,
 )
 from .lease import resolve_current_session_id
 
@@ -103,7 +104,7 @@ def _auto_commit_ticket_md(
     cwd 採 ticket md 所在目錄，讓 git 自動解析其所屬 repo（worktree 場景下
     commit 進 worktree 分支，complete merge 帶回 main）。
 
-    0.2.1-W3-257：新增 operation 參數取代原硬編 "append-log" 字面，避免
+    新增 operation 參數取代原硬編 "append-log" 字面，避免
     add-spawn-request / resolve-spawn-request 等非 append-log 呼叫端的
     commit 訊息被誤標。預設值維持 "append-log"，既有呼叫端（未傳此參數）
     的 commit 訊息格式逐字不變（向後相容）。
@@ -164,7 +165,16 @@ def _is_retryable_commit_failure(error: str) -> bool:
     return _is_lock_contention(error) or _is_cas_rejection(error)
 
 
-_RETRY_LOG_DIR = os.path.join(".claude", "hook-logs", "ticket-commit-retry")
+_RETRY_LOG_NAME = "ticket-commit-retry"
+# 測試 seam：None 走 hook_log_dir（worktree 內解析到主 repo）；非 None 時相對 repo root
+# 拼接（絕對路徑原樣使用），供 conftest 把日誌導向 tmp。
+_RETRY_LOG_DIR: Optional[str] = None
+
+
+def _retry_log_dir(base: str) -> str:
+    if _RETRY_LOG_DIR is not None:
+        return os.path.join(base, _RETRY_LOG_DIR)
+    return hook_log_dir(_RETRY_LOG_NAME)
 
 
 def _failure_reason(error: str) -> str:
@@ -198,7 +208,7 @@ def _log_commit_event(
             sys.stderr.write(f"[WARNING] 提交重試日誌未寫檔（無法解析 repo）：{line}")
             return
         base = root.strip()
-        log_dir = os.path.join(base, _RETRY_LOG_DIR)
+        log_dir = _retry_log_dir(base)
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, "retry-" + time.strftime("%Y%m%d") + ".log")
         with open(log_path, "a", encoding="utf-8") as fh:

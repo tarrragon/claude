@@ -3,7 +3,6 @@ id: PC-BAL-026
 title: 驗證管道經快取層讀取，輸出滯後於待驗現象，成功操作被報為失敗
 severity: medium
 category: process-compliance
-source_ticket: 0.2.1-W3-352
 related:
  - PC-BAL-010
  - PC-166
@@ -18,14 +17,13 @@ created: 2026-08-08
 |------|-----|
 | 風險等級 | 中 |
 | 分類 | process-compliance |
-| 來源 Ticket | 0.2.1-W3-352 |
 | 家族上位 | PC-BAL-010（驗證管道對待驗現象不敏感） |
 
 ## 症狀
 
 執行寫入操作（push / 上傳 / 發布）後立即以工具內建的檢查命令驗證，報告顯示狀態完全未變，看起來像操作靜默失敗。重跑操作得到「無變更可推送」，形成「工具說沒變、報告說沒生效」的矛盾狀態。
 
-實例（0.2.1-W3-352）：`skill-sync push` 連續推送 14 個 skill 全部回報成功，隨即執行漂移報告仍顯示 `diverged 14`，與 push 前完全相同。
+實例：`skill-sync push` 連續推送 14 個 skill 全部回報成功，隨即執行漂移報告仍顯示 `diverged 14`，與 push 前完全相同。
 
 ## 根因
 

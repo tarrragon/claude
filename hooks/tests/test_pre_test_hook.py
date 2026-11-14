@@ -84,6 +84,125 @@ def test_missing_lock_keeps_existing_behavior(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 只改 version 不提示依賴過期（3.3.0-W1-213.1）
+#
+# mtime 判定分不出 version bump 與改依賴；已提交的 yaml/lock 為一致的一對，
+# lock 未改動且 yaml 依賴區段與 HEAD 相同時不提示。正向對照：改 dependencies、
+# lock 已改動、yaml 未追蹤三種情境仍提示。
+# ---------------------------------------------------------------------------
+
+import subprocess
+
+BASE_YAML = (
+    "name: app\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n"
+    "dependencies:\n  foo: ^1.0.0\ndev_dependencies:\n  test: ^1.24.0\n"
+)
+
+
+def _git(project: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(project), *args], check=True, capture_output=True)
+
+
+def _committed_project(tmp_path: Path) -> Path:
+    project = _make_project(tmp_path)
+    (project / "pubspec.yaml").write_text(BASE_YAML)
+    (project / "pubspec.lock").write_text("packages: {}\n")
+    _git(project, "init", "-q")
+    _git(project, "add", "pubspec.yaml", "pubspec.lock")
+    _git(project, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    return project
+
+
+def _edit_yaml_later(project: Path, text: str) -> None:
+    (project / "pubspec.yaml").write_text(text)
+    later = (project / "pubspec.lock").stat().st_mtime + PUBSPEC_MTIME_TOLERANCE_SECONDS + 5
+    os.utime(project / "pubspec.yaml", (later, later))
+
+
+def test_version_only_bump_does_not_warn(tmp_path):
+    project = _committed_project(tmp_path)
+    _edit_yaml_later(project, BASE_YAML.replace("version: 1.0.0", "version: 1.0.1+2"))
+
+    assert check_dependencies(project) == []
+
+
+def test_dependency_change_still_warns(tmp_path):
+    project = _committed_project(tmp_path)
+    _edit_yaml_later(project, BASE_YAML.replace("foo: ^1.0.0", "foo: ^2.0.0"))
+
+    assert check_dependencies(project) == [pre_test_hook_module.ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED]
+
+
+@pytest.mark.parametrize("section_edit", [
+    ("sdk: '>=3.0.0 <4.0.0'", "sdk: '>=3.2.0 <4.0.0'"),
+    ("test: ^1.24.0", "test: ^1.25.0"),
+    ("version: 1.0.0\n", "version: 1.0.0\ndependency_overrides:\n  foo: 1.0.3\n"),
+])
+def test_other_dependency_sections_still_warn(tmp_path, section_edit):
+    project = _committed_project(tmp_path)
+    _edit_yaml_later(project, BASE_YAML.replace(*section_edit))
+
+    assert check_dependencies(project) == [pre_test_hook_module.ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED]
+
+
+def test_modified_lock_falls_back_to_mtime_warning(tmp_path):
+    project = _committed_project(tmp_path)
+    (project / "pubspec.lock").write_text("packages: {changed: 1}\n")
+    _edit_yaml_later(project, BASE_YAML.replace("version: 1.0.0", "version: 1.0.1"))
+
+    assert check_dependencies(project) == [pre_test_hook_module.ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED]
+
+
+def test_committed_dependency_change_without_pub_get_still_warns(tmp_path):
+    """yaml 的依賴變更已提交但沒跑 pub get（lock 未動）：HEAD 的 yaml 已與 lock 脫節，仍須提示。"""
+    project = _committed_project(tmp_path)
+    (project / "pubspec.yaml").write_text(BASE_YAML.replace("foo: ^1.0.0", "foo: ^2.0.0"))
+    _git(project, "add", "pubspec.yaml")
+    _git(project, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "deps only")
+    _edit_yaml_later(project, BASE_YAML.replace("foo: ^1.0.0", "foo: ^2.0.0"))
+
+    assert check_dependencies(project) == [pre_test_hook_module.ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED]
+
+
+def test_gitignored_lock_still_warns(tmp_path):
+    """lock 被 .gitignore 忽略：git status 不列出，不可當成未改動，仍須提示。"""
+    project = _make_project(tmp_path)
+    (project / "pubspec.yaml").write_text(BASE_YAML)
+    (project / "pubspec.lock").write_text("packages: {}\n")
+    (project / ".gitignore").write_text("pubspec.lock\n")
+    _git(project, "init", "-q")
+    _git(project, "add", "pubspec.yaml", ".gitignore")
+    _git(project, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    new_deps = BASE_YAML.replace("foo: ^1.0.0", "foo: ^2.0.0")
+    (project / "pubspec.yaml").write_text(new_deps)
+    _git(project, "add", "pubspec.yaml")
+    _git(project, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "deps only")
+    _edit_yaml_later(project, new_deps)
+
+    assert check_dependencies(project) == [pre_test_hook_module.ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED]
+
+
+def test_version_bump_after_dependency_commit_with_lock_does_not_warn(tmp_path):
+    """依賴變更與 lock 一起提交後，再只改 version：基準為該 commit 的 yaml，不提示。"""
+    project = _committed_project(tmp_path)
+    new_deps = BASE_YAML.replace("foo: ^1.0.0", "foo: ^2.0.0")
+    (project / "pubspec.yaml").write_text(new_deps)
+    (project / "pubspec.lock").write_text("packages: {foo: 2.0.0}\n")
+    _git(project, "add", "pubspec.yaml", "pubspec.lock")
+    _git(project, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "deps+lock")
+    _edit_yaml_later(project, new_deps.replace("version: 1.0.0", "version: 1.1.0"))
+
+    assert check_dependencies(project) == []
+
+
+def test_unparseable_yaml_falls_back_to_mtime_warning(tmp_path):
+    project = _committed_project(tmp_path)
+    _edit_yaml_later(project, "name: app\nversion: [unclosed\n")
+
+    assert check_dependencies(project) == [pre_test_hook_module.ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED]
+
+
+# ---------------------------------------------------------------------------
 # is_test_command：只認敘述開頭的測試指令（0.5.0-W1-232）
 #
 # 舊判定以子字串比對整段命令文字，grep 的 pattern、建票命令的參數只要含
@@ -221,10 +340,58 @@ def test_mcp_run_tests_without_paths_denied():
         assert reason is not None and "run-with-timeout.py" in reason
 
 
+def test_mcp_rewrite_follows_project_fvm_config(tmp_path):
+    """改寫的 flutter 命令依專案是否有 .fvmrc 決定帶不帶 fvm（E1：同批對照兩者不同）。"""
+    (tmp_path / ".git").mkdir()
+    plain = build_block_reason("mcp__dart__run_tests", {}, str(tmp_path))
+    (tmp_path / ".fvmrc").write_text("{}")
+    pinned = build_block_reason("mcp__dart__run_tests", {}, str(tmp_path))
+    assert plain != pinned
+    assert "-- flutter test" in plain and "fvm" not in plain
+    assert "-- fvm flutter test" in pinned
+
+
+def test_mcp_rewrite_failure_still_denies(monkeypatch, capsys):
+    """FVM 判定拋例外時改寫退回 flutter test，仍回傳封堵理由（不讓呼叫端 fail-open 放行）。"""
+    import lib.flutter_launcher as launcher
+
+    def boom(*_a, **_k):
+        raise OSError("stat failed")
+
+    monkeypatch.setattr(launcher, "launch_argv", boom)
+    reason = build_block_reason("mcp__dart__run_tests", {}, "/nonexistent")
+    assert reason is not None and "-- flutter test" in reason
+    assert "FVM 判定失敗" in capsys.readouterr().err
+
+
 def test_mcp_run_tests_with_paths_passes():
     assert build_block_reason(
         "mcp__dart__run_tests",
         {"roots": [{"root": "file:///x", "paths": ["test/a_test.dart"]}]}) is None
+
+
+# 原本同一 matcher 另掛 mcp-run-tests-validator，兩支任一 deny 即擋下；併入後判定為兩者 deny 的聯集，
+# 實際效果不變：頂層 paths、roots.paths、空 roots 三種輸入各一，加上部分 root 缺 paths
+@pytest.mark.parametrize("tool_input", [
+    {"paths": ["test/a_test.dart"]},                                              # 頂層 paths
+    {"roots": [{"root": "file:///x", "paths": ["test/a_test.dart"]},
+               {"root": "file:///y", "paths": ["test/b_test.dart"]}]},           # 每個 root 都有 paths
+])
+def test_mcp_run_tests_scoped_inputs_pass(tool_input):
+    assert build_block_reason("mcp__dart__run_tests", tool_input) is None
+
+
+@pytest.mark.parametrize("tool_input", [
+    {"roots": []},                                                                # 空 roots
+    {"roots": [], "paths": []},
+    {"roots": [{"root": "file:///x", "paths": ["test/a_test.dart"]},
+               {"root": "file:///y"}]},                                          # 部分 root 缺 paths
+    {"paths": ["test/a_test.dart"], "roots": [{"root": "file:///y"}]},           # 頂層 paths 不涵蓋缺 paths 的 root
+    {"roots": ["file:///x"]},                                                     # root 不是物件
+])
+def test_mcp_run_tests_unscoped_inputs_denied(tool_input):
+    reason = build_block_reason("mcp__dart__run_tests", tool_input)
+    assert reason is not None and "run-with-timeout.py" in reason
 
 
 def test_judgement_exception_fails_open(monkeypatch, capsys):
@@ -234,7 +401,7 @@ def test_judgement_exception_fails_open(monkeypatch, capsys):
     monkeypatch.setattr(pre_test_hook_module, "read_json_from_stdin",
                         lambda logger: {"tool_name": "Bash", "tool_input": {"command": "flutter test"}})
     monkeypatch.setattr(pre_test_hook_module, "check_flutter_sdk", lambda: (True, "ok"))
-    monkeypatch.setattr(pre_test_hook_module, "check_dependencies", lambda d: [])
+    monkeypatch.setattr(pre_test_hook_module, "check_dependencies", lambda d, logger=None: [])
     assert pre_test_hook_module.main() == 0
     captured = capsys.readouterr()
     assert "fail-open" in captured.err
@@ -245,7 +412,7 @@ def _run_main_with(monkeypatch, command):
     monkeypatch.setattr(pre_test_hook_module, "read_json_from_stdin",
                         lambda logger: {"tool_name": "Bash", "tool_input": {"command": command}})
     monkeypatch.setattr(pre_test_hook_module, "check_flutter_sdk", lambda: (True, "ok"))
-    monkeypatch.setattr(pre_test_hook_module, "check_dependencies", lambda d: [])
+    monkeypatch.setattr(pre_test_hook_module, "check_dependencies", lambda d, logger=None: [])
 
 
 def test_parse_module_import_failure_fails_open(monkeypatch, capsys):

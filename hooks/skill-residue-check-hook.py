@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from lib import setup_hook_logging, run_hook_safely  # noqa: E402
 from skill_residue_detector import (  # noqa: E402
+    EXEMPT_HINT,
     blocking_only,
     format_report,
     scan_all,
@@ -67,8 +68,8 @@ def main() -> int:
     for line in format_report(target):
         print(line)
     print()
-    print("這些引用指向本專案不存在的檔案。push 至 canonical 前需修正，")
-    print("或於該行加 `skill-residue-exempt: <理由>` 標記說明為示意路徑。")
+    print("這些引用指向本專案不存在的檔案。push 至 canonical 前需修正；")
+    print(f"{EXEMPT_HINT}。")
     if not show_all and advisory_count:
         print(f"另有 advisory {advisory_count} 項（他專案 ticket ID），以 --all 查看。")
     print(SEPARATOR)

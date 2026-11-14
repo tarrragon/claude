@@ -7,7 +7,6 @@ created: 2026-07-28
 related:
  - PC-145
  - PC-166
- - 0.2.1-W3-123
 ---
 
 # PC-BAL-014: Skill 註冊表 session 快取遮蔽檔案系統變更
@@ -72,6 +71,6 @@ Claude Code 於 session 啟動時載入 skill 註冊表，並快取路徑與內�
 
 ## 相關案例
 
-`0.2.1-W3-123`（移除 personal 遮蔽副本）：移除當下 session 的 `/zellij` 探針回報 personal 路徑，`test -d` 回報 GONE，兩者矛盾。隔一個 session 同探針回報 project 路徑，構成對照組坐實快取假說，同時驗證 personal 缺席時 CC fallback 至 project 版。
+移除 personal 遮蔽副本一案：移除當下 session 的 `/zellij` 探針回報 personal 路徑，`test -d` 回報 GONE，兩者矛盾。隔一個 session 同探針回報 project 路徑，構成對照組坐實快取假說，同時驗證 personal 缺席時 CC fallback 至 project 版。
 
 該票的 acceptance 因此拆成兩個 session 執行，並將無法從本專案觸發的部分（另一個 consumer 專案的實地載入）切為獨立 ticket 綁定。

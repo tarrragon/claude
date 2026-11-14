@@ -26,7 +26,7 @@ related:
 
 ## 觸發案例
 
-### 1.0.0-W1-009 round-trip 驗證（2026-06-08）
+### 雙專案 sync round-trip 驗證（2026-06-08）
 
 **情境**：V1 與 APP（book_overview_app）共用 `tarrragon/claude.git`。round-trip 驗證中 APP pull 後，20 個 APP 特有檔被修復版 pull 轉至 `.sync-conflicts/`（second-line 保護，正確）。
 
@@ -89,17 +89,17 @@ preserve:
 ### 與既有機制的關係
 
 - 修復版 sync-pull 已提供 second-line 防護（`.sync-conflicts/` 不誤刪），但 first-line（preserve 清單）需專案各自維護
-- 專案專屬框架調整與共享 repo 的編號/架構衝突，屬獨立議題（見 1.0.0-W1-019 PC 編號碰撞分析）
+- 專案專屬框架調整與共享 repo 的編號/架構衝突，屬獨立議題（PC 編號碰撞，另行分析）
 
 ## 相關規則 / 經驗
 
 - PC-166（PM 敘事幻覺 / git ground truth）— 本案 PM 一度用錯誤路徑格式驗證 `.sync-conflicts/`（扁平命名 `/`→`__`）產生 19 個 false negative，差點誤報 BUG 復發，靠「先看實際檔案結構」救場
 - PC-175（framework sync 攜帶專案類型資產）— 反向情境：本案是「本地框架調整不該因 sync 丟失」，PC-175 是「他專案資產不該污染本地」，同屬「sync 邊界」家族
 - PC-109（claude runtime state 缺 sync 排除）— 同屬 sync 邊界判定
-- quality-baseline 規則 5（所有發現必須追蹤）— 本案 spawn 1.0.0-W1-019（PC 編號碰撞）+ W1-020（blocker 整合）
+- quality-baseline 規則 5（所有發現必須追蹤）— 本案另建兩張追蹤票（PC 編號碰撞、blocker 整合）
 - ai-communication-rules 規則 5（權力不對等下的 receiver-end 前提查驗）— 本案兩次用戶反饋糾正 PM 的決策耦合與假解，體現 receiver 端質疑的價值
 
 ---
 
 **Last Updated**: 2026-06-08
-**Source**: 1.0.0-W1-009（V1↔APP sync round-trip 驗證，用戶兩次反饋糾正 PM 決策維度耦合 + 揭穿「還原」假解，導向 sync-preserve.yaml first-line 根本解）
+**Source**: V1↔APP sync round-trip 驗證（用戶兩次反饋糾正 PM 決策維度耦合 + 揭穿「還原」假解，導向 sync-preserve.yaml first-line 根本解）

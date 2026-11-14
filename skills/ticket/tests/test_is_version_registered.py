@@ -39,7 +39,7 @@ class TestIsVersionRegistered:
             "versions": [{"version": "0.17.4", "status": "active"}],
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             assert is_version_registered("0.17.4") is True
@@ -50,7 +50,7 @@ class TestIsVersionRegistered:
             "versions": [{"version": "1.0.0", "status": "planned"}],
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             assert is_version_registered("1.0.0") is True
@@ -61,7 +61,7 @@ class TestIsVersionRegistered:
             "versions": [{"version": "0.17.3", "status": "completed"}],
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             assert is_version_registered("0.17.3") is True
@@ -72,7 +72,7 @@ class TestIsVersionRegistered:
             "versions": [{"version": "0.17.4", "status": "active"}],
         })
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             assert is_version_registered("99.99.99") is False
@@ -80,7 +80,7 @@ class TestIsVersionRegistered:
     def test_todolist_not_exists_allows(self, temp_project):
         """todolist.yaml 不存在時向後相容（允許）"""
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             assert is_version_registered("0.17.4") is True
@@ -90,7 +90,7 @@ class TestIsVersionRegistered:
         todolist_path = temp_project / "docs" / "todolist.yaml"
         todolist_path.write_text("{{invalid yaml", encoding="utf-8")
         with patch(
-            "ticket_system.lib.version.get_project_root",
+            "ticket_system.lib.version.get_ticket_state_root",
             return_value=temp_project,
         ):
             assert is_version_registered("0.17.4") is True

@@ -4,7 +4,6 @@ title: Hook 搬移後 sys.path 指向錯誤的 lib 目錄導致 import 失敗
 category: implementation
 severity: medium
 created: 2026-06-23
-source_ticket: 1.3.0-W1-056
 ---
 
 # IMP-V1-003: Hook 搬移後 sys.path 指向錯誤的 lib 目錄
@@ -69,9 +68,9 @@ sys.path.insert(0, str(_CLAUDE_DIR / "hooks" / "lib")) # sync_exclude_manifest �
 - `py_compile` 和 `pytest` 都無法攔截 runtime import path 錯誤
 - non-blocking hook 失敗容易被忽略（操作本身成功，錯誤只在 stderr 出現）
 
-## 復發案例：W1-058 lib 合併後 scripts/ 遺漏（v1.3.1-W1-001）
+## 復發案例：lib 合併後 scripts/ 遺漏（v1.3.1）
 
-**症狀**：W1-058 合併 `hooks/lib/` 到 `lib/` 時更新了 ~160 個 hook 的 sys.path 和 import，但遺漏 `.claude/scripts/` 目錄下三個 sync 腳本（push/pull/status）。執行 `sync-push` 時報 `ModuleNotFoundError: No module named 'sync_exclude_manifest'`。
+**症狀**：lib 合併作業把 `hooks/lib/` 合併到 `lib/` 時更新了 ~160 個 hook 的 sys.path 和 import，但遺漏 `.claude/scripts/` 目錄下三個 sync 腳本（push/pull/status）。執行 `sync-push` 時報 `ModuleNotFoundError: No module named 'sync_exclude_manifest'`。
 
 **根因**：搬移範圍盤點時只搜尋 `hooks/` 和 `skills/*/hooks/`，未涵蓋 `scripts/`。scripts/ 的 import 模式（`from sync_exclude_manifest import ...`）與 hooks/ 不同（`from lib.xxx`），且 scripts/ 無專屬測試，`npm run test:hooks` 不覆蓋。
 

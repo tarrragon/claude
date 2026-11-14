@@ -7,7 +7,6 @@ created: 2026-05-13
 related:
  - IMP-023
  - ARCH-020
- - W10-125
 ---
 
 # PC-145: Stale CLI install 偽裝為 validator bug
@@ -96,7 +95,7 @@ git commit -m "..."
 
 ## 歷史案例
 
-- 2026-05-13 W10-125（首例）：W10-125 修復 `_is_placeholder` 表格情境豁免，源碼測試全綠，CLI complete 仍報「Test Results 未填寫」誤判（CLI 用舊 validator）；`uv tool install --reinstall` 後解決。
+- 2026-05-13 首例：該次修復 `_is_placeholder` 表格情境豁免，源碼測試全綠，CLI complete 仍報「Test Results 未填寫」誤判（CLI 用舊 validator）；`uv tool install --reinstall` 後解決。
 - IMP-023（前置案例）：歷史已記錄此規則但未專項命名 PC，現補建 PC-145 作為偵測 + SOP 雙通道。
 - 2026-08-21（形態分化後首例，且後果升級）：某 sync 類 CLI skill 補齊內容雜湊的排除目錄清單後，原始碼層級測試全綠（直接呼叫雜湊函式與排除判定函式），但實際 CLI 執行時被排除的目錄**仍出現在推送預覽的新增清單**。查已安裝副本的常數確認仍為舊值，`--force --reinstall` 後重測即消失。與首例的差異在後果：首例是誤判修復未生效（讀取端），本例若當時帶 `--force` 執行推送，未被排除的工具快取目錄會被推上跨專案發佈庫並污染所有 consumer 的拉取內容（寫入端）。**測試層級與工具層級的落差在寫入端會實際造成損害，不只是誤判。**
 
@@ -121,4 +120,4 @@ PC-145 與 IMP-023 互補：IMP-023 告訴 PM「該做什麼」（強制 reinsta
 ---
 
 **Last Updated**: 2026-05-13
-**Version**: 1.0.0 - 初次記錄（W10-125 首例觸發 + 補 IMP-023 配套防護）
+**Version**: 1.0.0 - 初次記錄（首例觸發 + 補 IMP-023 配套防護）

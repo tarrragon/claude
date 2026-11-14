@@ -29,7 +29,7 @@ created: 2026-03-04
 1. Why 1: pending JSON 仍然被 GC 刪除
 2. Why 2: `should_preserve_pending_json` 回傳 False，GC 未保留
 3. Why 3: 函式使用精確匹配 `direction in {"to-sibling", "to-parent", "to-child"}`
-4. Why 4: 實際 direction 值為 `"to-sibling:0.31.1-W3-002"`（帶目標 ID 後綴），精確匹配失敗
+4. Why 4: 實際 direction 值為 `"to-sibling:<ticket-id>"`（帶目標 ID 後綴），精確匹配失敗
 5. Why 5: (根本原因) **修復時未查閱 direction 欄位的完整格式規範**。開發者假設 direction 是簡單字串，但實際上 `_resolve_direction_from_args` 會附加 `:{target_id}` 後綴
 
 ### 錯誤模式歸納

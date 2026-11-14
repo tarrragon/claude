@@ -30,11 +30,11 @@
 
 ---
 
-## W6-012.9.1 案例（歷史證據）
+## readmoo-adapter logger 級別修復案例（歷史證據）
 
 ### 時序
 
-1. W6-012.9.1 修復 readmoo-adapter logger 級別（commit `909865a5`）
+1. 修復 readmoo-adapter logger 級別（commit `909865a5`）
 2. 代理人實作期間呼叫端透過解構方式取得 logger 方法
 3. setTimeout callback 中呼叫解構方法 → `TypeError: this.currentLevel` undefined
 4. 錯誤被 setTimeout 吞掉，外層 Promise 既未 resolve 也未 reject
@@ -42,7 +42,7 @@
 
 ### 證據
 
-- W6-012.9.1 commit `909865a5`
+- logger 級別修復 commit `909865a5`
 - 代理人回報「promise hang 30s」現象與 logger 級別修復同 commit 視窗內出現
 - 重現範例見下方「重現步驟」
 
@@ -173,4 +173,4 @@ constructor() {
 
 **Last Updated**: 2026-05-17
 **Version**: 1.0.0
-**Source**: W6-012.9.1（commit `909865a5`）修復 readmoo-adapter logger 級別期間，代理人遇 30s promise hang，根因為 `const fn = logger.info` 解構丟失 this 綁定 + setTimeout 吞掉 TypeError 導致外層 Promise 永不 reject
+**Source**: commit `909865a5` 修復 readmoo-adapter logger 級別期間，代理人遇 30s promise hang，根因為 `const fn = logger.info` 解構丟失 this 綁定 + setTimeout 吞掉 TypeError 導致外層 Promise 永不 reject

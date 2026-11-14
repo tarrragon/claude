@@ -9,8 +9,10 @@ import type {
   BoardSnapshot,
   DispatchRow,
   GroupOverrides,
+  Lane,
   LaneGroup,
   LanesResult,
+  QueueToken,
   ReadyBoard,
   SessionsResult,
   UnsetProjectConfig,
@@ -59,6 +61,12 @@ export function groupFrameKey(id: string): string {
  * 這類線沒有佇列列（layout.ts queueRowSegments 回傳 null），沒有此標示時看板上只剩標題列、看不出佇列寫錯。
  */
 export const QUEUE_NO_TICKET_LABEL = '［佇列無票號］'
+
+/**
+ * 佇列行為附說明的收線寫法（Lane.ended 為 with-note，如 `（無）（全數終態）`、`無（…）`）時的標示，取代［佇列無票號］。
+ * 用語與 line_status 的過期項「收線寫法」相同：同一條線在兩個畫面歸為同一類。
+ */
+export const QUEUE_ENDED_WITH_NOTE_LABEL = '［收線寫法］'
 
 /** 群組標題 Box 的 key：內含標題列與其下的目標、活動計數各行。 */
 export function groupTitleKey(id: string): string {
@@ -210,7 +218,7 @@ function renderLaneGroup(
 function groupTitle(board: ReadyBoard, group: LaneGroup): Pick<GroupFrame, 'title' | 'details'> {
   const activity = formatActivity(group.activity)
   if (group.lane === null) return { title: OTHER_LANE_LABEL, details: [activity] }
-  const { lane, session, goal, tokens } = group.lane
+  const { lane, session, goal, tokens, ended } = group.lane
   const { sessions, tickets, usages, readAtMs } = board
   const context = laneContextLabel({
     sessionName: session,
@@ -220,9 +228,15 @@ function groupTitle(board: ReadyBoard, group: LaneGroup): Pick<GroupFrame, 'titl
     usages,
     nowMs: readAtMs,
   })
-  const noTicket = isQueueWithoutTicket(tokens) ? QUEUE_NO_TICKET_LABEL : ''
-  const title = `L${lane} ${session ?? '（未標 session）'}${laneStatusLabel(sessions, session)}${noTicket}${context}`
+  const queueMark = queueMarkOf(ended, tokens)
+  const title = `L${lane} ${session ?? '（未標 session）'}${laneStatusLabel(sessions, session)}${queueMark}${context}`
   return { title, details: [laneGoalLabel(goal), activity] }
+}
+
+/** 標題列的佇列標示：附說明的收線寫法優先標［收線寫法］，其次不含票號標［佇列無票號］，其餘不標。 */
+function queueMarkOf(ended: Lane['ended'], tokens: readonly QueueToken[]): string {
+  if (ended === 'with-note') return QUEUE_ENDED_WITH_NOTE_LABEL
+  return isQueueWithoutTicket(tokens) ? QUEUE_NO_TICKET_LABEL : ''
 }
 
 /** 標題的目標行 `目標：<文字>`；沒有目標時為空字串（不畫該行）。hot reload 後舊 snapshot 的線沒有 goal 欄（undefined），同樣為空字串。 */

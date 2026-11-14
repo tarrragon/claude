@@ -1270,6 +1270,8 @@ class TestDeclaration:
         assert mg.suite_command("web", skel) == ["npm", "test"]
 
     def test_builtin_flutter_equals_declared_flutter(self, skel):
+        """FVM 專案中，內建 Flutter 對應等同寫明 fvm 的宣告（內建命令依 .fvmrc 補前綴）。"""
+        _touch(Path(skel), ".fvmrc", "{}")
         paths = ["lib/a.dart", "pubspec.lock", "docs/x.md", "assets/a.json", "tools/z.py",
                  ".claude/hooks/h.py", "README.md"]
         builtin = ([mg.select_suites([p], skel) for p in paths], mg.suite_command("flutter", skel),
@@ -1279,7 +1281,7 @@ class TestDeclaration:
         declared = ([mg.select_suites([p], skel) for p in paths], mg.suite_command("flutter", skel),
                     [mg.needs_gate([p], decl) for p in paths], mg.unmapped_paths(paths, decl))
         assert declared == builtin
-        assert mg.declared_artifacts("flutter", decl) == mg.REQUIRED_ARTIFACTS["flutter"]
+        assert mg.declared_artifacts("flutter", decl) == mg.declared_artifacts("flutter", None, skel)
 
     def test_absent_declaration_is_none(self, skel):
         assert mg.load_declaration(skel) is None
@@ -1367,7 +1369,20 @@ class TestDeclaredGate:
         assert self._gate(repo, monkeypatch, ["lib/a.dart"], calls).passed
         out = capsys.readouterr().out
         assert "INFO" in out and DECL_REL in out
-        assert ["fvm", "flutter", "test"] in calls
+        assert ["flutter", "test"] in calls
+
+    def test_builtin_flutter_commands_follow_snapshot_fvm_config(self, repo, monkeypatch):
+        """快照有 .fvmrc 時內建套件命令與生成命令經 fvm，沒有時不帶（E1：同批對照兩者不同）。"""
+        plain = []
+        self._gate(repo, monkeypatch, ["lib/a.dart"], plain)
+        commit_file(repo, ".fvmrc", '{"flutter": "3.47.1"}', "pin flutter")
+        pinned = []
+        self._gate(repo, monkeypatch, ["lib/a.dart"], pinned)
+        assert plain != pinned
+        assert ["flutter", "test"] in plain and not any(c[0] == "fvm" for c in plain)
+        assert ["fvm", "flutter", "test"] in pinned
+        assert ["flutter", "pub", "get"] in plain  # 快照不含 gitignored 的生成產物，必先生成
+        assert ["fvm", "flutter", "pub", "get"] in pinned
 
 
 # ---- 宣告檔自身被改動時的加選（3.1.0-W1-047）----

@@ -41,4 +41,4 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "config"))  # .claude/conf
 ---
 
 **Last Updated**: 2026-06-23
-**Version**: 1.0.0 — Framework issue #10 建議 2 落地（W2-005）
+**Version**: 1.0.0 — Framework issue #10 建議 2 落地

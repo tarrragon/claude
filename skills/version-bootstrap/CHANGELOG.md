@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.7.8（2026-11-15）— 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；行為不變
+
 **Version**: 1.7.7（2026-11-11）— Step 6 補「票的關係」一行：規劃波建的執行期票為本版根票，不用 `--parent` 掛在規劃票下；理由與 `scope_blocker` 時點放在新增的 `references/step-rationale.md`〈規劃波票的關係〉（必要票由凍結程序回溯 `scope_blocker`，規劃票於凍結時結案）。SKILL.md 正文只加一行路由，論證外移以守 5000 tokens 門檻。來源：用戶裁定（2026-11-09），PC-091 落地路線加版本維度。
 
 **Version**: 1.7.6 — `step-rationale.md`〈元件契約遞移依賴〉補射程句：去重原則（「不必重複列出」）僅限元件契約自身的 `blockedBy`——元件契約對 i18n／design-system 只是經 UX 審查遞移取得完成訊號，未直接消費兩者產出；Step 4.5 元件庫的 `blockedBy` 不適用此原則，因元件庫「套 token + i18n + UX 反應，依契約實作」（SKILL.md Step 4.5 產出欄；方法論〈地基波 build 順序〉第 4 塊「文字經 i18n key 傳入、樣式取 design token」）直接消費三項產出，故仍須並列前三塊與元件契約四項為 `blockedBy`。起因：讀者探針審查閘門重測時歸因條文不清——把去重原則套用到元件庫 blockedBy 列舉，與 Step 4.5 明文相衝突。SKILL.md 僅升版號，正文未改（維持 4996 tokens，未超 skill-design-guide L2 5000 門檻）。

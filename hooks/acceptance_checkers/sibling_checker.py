@@ -36,7 +36,7 @@ def find_pending_sibling_tickets(
     4. 排除當前 ticket 自身
 
     Args:
-        ticket_id: 當前 Ticket ID (e.g., "0.1.0-W22-025")
+        ticket_id: 當前 Ticket ID (e.g., "{VERSION}-W{WAVE}-{SEQ}")
         project_dir: 專案根目錄
         logger: 日誌物件
 

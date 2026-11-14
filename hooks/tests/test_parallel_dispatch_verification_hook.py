@@ -246,7 +246,8 @@ def _run_main_with(input_data, where_files, git_changed):
          patch.object(hook_module, "get_project_root", return_value=Path("/nonexistent")), \
          patch.object(hook_module, "read_ticket_where_files",
                       return_value=where_files) as where_mock, \
-         patch.object(hook_module, "get_git_changed_files", return_value=git_changed), \
+         patch.object(hook_module, "get_ticket_change_sets",
+                      return_value=hook_module.TicketChangeSets(git_changed, [])), \
          patch("sys.stdout", out):
         rc = hook_module.main()
     return rc, json.loads(out.getvalue()), where_mock
@@ -465,12 +466,65 @@ class TestCommitRangeBaseline:
         lines = ctx.splitlines()
         assert lines[lines.index("缺失檔案（1 個）：") + 1] == "  - src/a.py"
 
-    def test_uncommitted_change_still_counted(self, repo):
-        (repo / "src").mkdir(exist_ok=True)
+    def test_uncommitted_change_not_missing_but_flagged_uncommitted(self, repo):
+        """只在未提交變更的檔不算缺失，改列「產出未 commit」（正向對照）"""
         (repo / "base.txt").write_text("dirty\n", encoding="utf-8")
         rc, payload, _ = _run_real(
             f"ticket track complete {SUB_ID}", ["src/a.py", "base.txt"], repo)
+        assert rc == 0
+        lines = payload["hookSpecificOutput"]["additionalContext"].splitlines()
+        assert not any(l.startswith("缺失檔案") for l in lines)
+        assert lines[lines.index("產出未 commit（1 個）：") + 1] == "  - base.txt"
+
+
+class TestUncommittedOnlyWarning:
+    """含票號 commit 與未提交變更分開比對：只出現在後者的 where.files 列為產出未 commit"""
+
+    def test_committed_and_also_dirty_no_warning(self, repo):
+        """已在含票號 commit 的檔，即使目前又有未提交修改，也不列（回歸）"""
+        (repo / "src" / "a.py").write_text("more\n", encoding="utf-8")
+        rc, payload, _ = _run_real(
+            f"ticket track complete {SUB_ID}", ["src/a.py", "src/b.py"], repo)
         assert "additionalContext" not in payload["hookSpecificOutput"]
+
+    def test_new_untracked_staged_file_flagged(self, repo):
+        """產出只在 index（git add 未 commit）：列為產出未 commit"""
+        (repo / "src" / "new.py").write_text("x\n", encoding="utf-8")
+        _git(repo, "add", "src/new.py")
+        rc, payload, _ = _run_real(
+            f"ticket track complete {SUB_ID}", ["src/a.py", "src/new.py"], repo)
+        ctx = payload["hookSpecificOutput"]["additionalContext"]
+        assert "[並行派發驗證警告：產出未 commit]" in ctx
+        lines = ctx.splitlines()
+        assert lines[lines.index("產出未 commit（1 個）：") + 1] == "  - src/new.py"
+
+    def test_missing_and_uncommitted_both_listed(self, repo):
+        (repo / "base.txt").write_text("dirty\n", encoding="utf-8")
+        rc, payload, _ = _run_real(
+            f"ticket track complete {SUB_ID}",
+            ["src/a.py", "base.txt", "src/never_touched.py"], repo)
+        lines = payload["hookSpecificOutput"]["additionalContext"].splitlines()
+        assert lines[lines.index("缺失檔案（1 個）：") + 1] == "  - src/never_touched.py"
+        assert lines[lines.index("產出未 commit（1 個）：") + 1] == "  - base.txt"
+
+    def test_log_records_uncommitted_only_count(self, repo):
+        (repo / "base.txt").write_text("dirty\n", encoding="utf-8")
+        logger = MagicMock()
+        with patch.object(hook_module, "setup_hook_logging", return_value=logger):
+            _run_real(f"ticket track complete {SUB_ID}", ["src/a.py", "base.txt"], repo)
+        infos = [c.args[0] for c in logger.info.call_args_list]
+        assert "Verification result: UNCOMMITTED" in infos
+        assert f"UncommittedOnly: 1 個（{SUB_ID}）" in infos
+
+    @pytest.mark.parametrize("where,committed,uncommitted,expected", [
+        (["a.py", "b.py"], ["a.py"], ["b.py"], ["b.py"]),
+        (["a.py"], ["a.py"], ["a.py"], []),
+        (["a.py"], [], [], []),
+        ([], [], ["a.py"], []),
+    ])
+    def test_find_uncommitted_only(self, where, committed, uncommitted, expected):
+        sets = hook_module.TicketChangeSets(committed, uncommitted)
+        assert hook_module.find_uncommitted_only(where, sets) == expected
 
     def test_git_failure_fail_open(self, tmp_path):
         """非 git 目錄：git 命令全數失敗，仍 exit 0 不阻擋、不拋例外"""

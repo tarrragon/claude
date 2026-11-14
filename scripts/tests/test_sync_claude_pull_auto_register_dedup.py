@@ -248,8 +248,31 @@ def test_skill_hooks_same_filename_different_path_not_falsely_deduped(tmp_path):
     final = json.loads((claude_dir / "settings.json").read_text(encoding="utf-8"))
     cmds = _registered_commands(final, "Stop")
     assert len(cmds) == 2
+    # 既有登記項保留原形式；新補登者為 uv run --quiet 形式
     assert "$CLAUDE_PROJECT_DIR/.claude/skills/alpha/hooks/x.py" in cmds
-    assert "$CLAUDE_PROJECT_DIR/.claude/skills/beta/hooks/x.py" in cmds
+    assert "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/beta/hooks/x.py" in cmds
+
+
+def test_auto_registered_command_uses_uv_run_not_bare_path(tmp_path):
+    """3.3.0-W1-204.6：自動補登寫入的 command 必須帶 uv run --quiet 前綴。
+    裸路徑由 OS 依可執行位元與 shebang 執行，可執行位遺失時 hook 不執行且無訊號；
+    依賴可執行位的防護也以全部顯式解譯器形式為前提。"""
+    claude_dir = tmp_path / ".claude"
+    _write_text(claude_dir / "hooks" / "new-hook.py", "# new\n")
+    _write_text(
+        claude_dir / "config" / "hook-registry.yaml",
+        "hooks:\n  new-hook.py:\n    event: SessionStart\n",
+    )
+    _write_json(claude_dir / "settings.json", _base_settings())
+
+    added = pull.auto_register_hooks(tmp_path)
+
+    assert added == 1
+    final = json.loads((claude_dir / "settings.json").read_text(encoding="utf-8"))
+    cmds = _registered_commands(final, "SessionStart")
+    assert cmds == ["uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/new-hook.py"]
+    # E1 對照：修正前的產物（裸路徑）不得出現
+    assert "$CLAUDE_PROJECT_DIR/.claude/hooks/new-hook.py" not in cmds
 
 
 def test_all_hooks_already_registered_via_prefixed_form_yields_zero_added(tmp_path):
@@ -281,3 +304,59 @@ def test_all_hooks_already_registered_via_prefixed_form_yields_zero_added(tmp_pa
     final = json.loads((claude_dir / "settings.json").read_text(encoding="utf-8"))
     cmds = _registered_commands(final, "PreToolUse")
     assert len(cmds) == 3
+
+
+# ---------------------------------------------------------------------------
+# 3.3.0-W1-163：已列在 hook-dispatch-registry 的 hook 由 dispatcher 執行，
+# pull 收尾不可再以獨立項目登記進 settings.json。dispatcher 與獨立項目的
+# command 字串不同，Claude Code 只對完全相同的字串去重，故會每次事件執行兩次。
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_registry_member_not_registered_while_unlisted_hook_is(tmp_path):
+    claude_dir = tmp_path / ".claude"
+    _write_text(claude_dir / "hooks" / "in-dispatcher.py", "# dispatched\n")
+    _write_text(claude_dir / "hooks" / "unlisted.py", "# nowhere\n")
+    _write_text(claude_dir / "skills" / "s" / "hooks" / "skill-dispatched.py", "# d\n")
+    _write_text(
+        claude_dir / "config" / "hook-registry.yaml",
+        (
+            "hooks:\n"
+            "  in-dispatcher.py:\n"
+            "    event: PreToolUse\n"
+            "    matcher: Bash\n"
+            "  unlisted.py:\n"
+            "    event: PreToolUse\n"
+            "    matcher: Bash\n"
+            "skill_hooks:\n"
+            "  s/skill-dispatched.py:\n"
+            "    event: PostToolUse\n"
+            "    matcher: Bash\n"
+        ),
+    )
+    _write_json(
+        claude_dir / "hooks" / "hook-dispatch-registry.json",
+        {
+            "groups": {
+                "PreToolUse:Bash": {
+                    "hooks": [{"path": ".claude/hooks/in-dispatcher.py"}]
+                },
+                "PostToolUse:Bash": {
+                    "hooks": [{"path": ".claude/skills/s/hooks/skill-dispatched.py"}]
+                },
+            }
+        },
+    )
+    _write_json(claude_dir / "settings.json", _base_settings())
+
+    added = pull.auto_register_hooks(tmp_path)
+
+    final = json.loads((claude_dir / "settings.json").read_text(encoding="utf-8"))
+    pre = _registered_commands(final, "PreToolUse")
+    post = _registered_commands(final, "PostToolUse")
+    # 對照組：兩處都未登記的 hook 仍被補登（判斷未退化為一律不登記）
+    assert any(c.endswith("/.claude/hooks/unlisted.py") for c in pre)
+    # dispatch registry 成員不新增
+    assert not any("in-dispatcher.py" in c for c in pre)
+    assert post == []
+    assert added == 1

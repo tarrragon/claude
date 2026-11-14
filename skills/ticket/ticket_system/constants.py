@@ -3,7 +3,7 @@ Ticket System 常數定義（Canonical Location）
 
 定義系統中使用的常數，包含狀態、ID 格式、路徑等。
 
-設計背景（W14-016）：
+設計背景：
     本模組原位於 ticket_system/lib/constants.py，因 lib/__init__.py 會 eager-import
     ticket_loader → parser → yaml，導致 hook 在系統 Python（無 yaml）環境下觸發
     ModuleNotFoundError。將 constants 上移至 package 頂層後，hook 可用
@@ -32,7 +32,7 @@ __all__ = [
     "TICKET_STATUS",
     "STATUS_LABELS",
     "TERMINAL_STATUSES",
-    # Close reason 枚舉（PC-090 / W15-024 C1）
+    # Close reason 枚舉（PC-090）
     "CLOSE_REASONS",
     "CLOSE_REASON_RETROSPECTIVE_UNKNOWN",
     # Ticket ID
@@ -41,9 +41,9 @@ __all__ = [
     "WHEN_TICKET_REF_PATTERN",
     "WHEN_TICKET_REF_RE",
     "KNOWN_TICKET_SUFFIXES",
-    # 嵌套深度上限（W1-056.5 協議 v2 D3）
+    # 嵌套深度上限（協議 v2）
     "MAX_TICKET_DEPTH",
-    # 子票扇出 warning 閾值（W5-005.11 D11）
+    # 子票扇出 warning 閾值
     "MAX_CHILDREN_WARNING_THRESHOLD",
     # 路徑
     "WORK_LOGS_DIR",
@@ -72,7 +72,7 @@ __all__ = [
     "DEFAULT_PRIORITY",
     "DEFAULT_HOW_TASK_TYPE",
     "DEFAULT_UNDEFINED_VALUE",
-    # Context Bundle (W17-002.1)
+    # Context Bundle
     "CONTEXT_BUNDLE_PLACEHOLDER_VALUES",
     "CONTEXT_BUNDLE_MAX_TOTAL_CHARS",
     "CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD",
@@ -102,7 +102,7 @@ __all__ = [
     # SRP
     "SRP_WHAT_CONJUNCTIONS",
     "SRP_ACCEPTANCE_MODULE_THRESHOLD",
-    # SPEC 引用驗證（0.4.1-W2-001）
+    # SPEC 引用驗證
     "SPEC_REFERENCE_PATTERN",
     # 重複偵測
     "DUPLICATE_DETECTION_THRESHOLD",
@@ -149,7 +149,7 @@ STATUS_LABELS: Dict[str, str] = {
 
 # Terminal（終止）狀態集合：視為任務已結案的狀態
 #
-# 單一真實來源（W14-004 整併 + W14-016 上移至 package 頂層）：
+# 單一真實來源（整併後上移至 package 頂層）：
 #   - skill: ticket_system/commands/lifecycle.py 的 spawned 檢查
 #   - hook: .claude/hooks/acceptance_checkers/children_checker.py 的子任務檢查
 #   兩邊都從此處 import，避免雙邊宣告與語意飄移。
@@ -184,7 +184,7 @@ STATUS_TRANSITIONS: Dict[str, frozenset] = {
 }
 
 # ============================================================
-# Close reason 枚舉（PC-090 / W15-024 C1）
+# Close reason 枚舉（PC-090）
 # ============================================================
 #
 # ticket close 必須填寫 close_reason 且符合以下合法枚舉之一。
@@ -219,7 +219,7 @@ WHEN_TICKET_REF_PATTERN: str = r"W\d+-\d+(?:\.\d+)?"
 WHEN_TICKET_REF_RE = re.compile(WHEN_TICKET_REF_PATTERN)
 
 # ============================================================
-# 嵌套派發深度上限（W1-056.5 協議 v2 D3）
+# 嵌套派發深度上限（協議 v2）
 # ============================================================
 # 深度 = 沿 parent_id 鏈回溯到根的邊數 + 1（根 = depth 1）。
 # 保守設計：平台 5 層 - 1 層 PM - 1 層安全邊距 = 3 層 agent 可用。
@@ -230,7 +230,7 @@ WHEN_TICKET_REF_RE = re.compile(WHEN_TICKET_REF_PATTERN)
 MAX_TICKET_DEPTH: int = 3
 
 # ============================================================
-# 子票扇出 warning 閾值（W5-005 F7/D11）
+# 子票扇出 warning 閾值
 # ============================================================
 # 普查分佈：巨型父票 top4 = 18/16/14/13 子；全語料 67% 無子票。
 # 閾值 10 覆蓋 top4 全部超標案例，同時不干擾一般使用。
@@ -313,11 +313,11 @@ DEFAULT_HOW_TASK_TYPE: str = "Implementation"
 DEFAULT_UNDEFINED_VALUE: str = "待定義"
 
 # ============================================================
-# Context Bundle 抽取（W17-002 / W17-002.1）
+# Context Bundle 抽取
 # ============================================================
 #
 # placeholder 清單：_is_placeholder 用於判定 source ticket 欄位是否已填入有效內容。
-# 擴為 list（W17-002.1 acceptance #10）涵蓋常見未填值：DEFAULT_UNDEFINED_VALUE
+# 擴為 list涵蓋常見未填值：DEFAULT_UNDEFINED_VALUE
 # 為系統官方佔位，其餘為人工撰寫常見變體。
 CONTEXT_BUNDLE_PLACEHOLDER_VALUES: tuple = (
     DEFAULT_UNDEFINED_VALUE,
@@ -334,7 +334,7 @@ CONTEXT_BUNDLE_PLACEHOLDER_VALUES: tuple = (
 
 # 規模限制
 #
-# MAX_TOTAL_CHARS rationale（W17-002.1 acceptance #2）：
+# MAX_TOTAL_CHARS rationale：
 #   - 2000 字元約 1000 中文 token，對應典型 ticket body 中 Context Bundle section
 #     的 10-15% 體積，不致於淹沒 PM 認知負擔。
 #   - Phase 1 多視角審查以「PM 可於 10 秒內掃完」為錨，實測 2000 字元約 8-12 秒。
@@ -342,12 +342,12 @@ CONTEXT_BUNDLE_PLACEHOLDER_VALUES: tuple = (
 CONTEXT_BUNDLE_MAX_TOTAL_CHARS: int = 2000
 CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD: int = 5
 
-# opt-out 標記（W17-002.1 acceptance #9）：
+# opt-out 標記：
 #   frontmatter 含 `context-bundle: manual` 時，自動抽取不覆寫 section，僅輸出略過訊息。
 CONTEXT_BUNDLE_OPT_OUT_KEY: str = "context_bundle"
 CONTEXT_BUNDLE_OPT_OUT_VALUE_MANUAL: str = "manual"
 
-# UC 自動注入控制開關（0.38.1-W1-066.4）：
+# UC 自動注入控制開關：
 #   frontmatter `context_bundle_uc_injection` 控制 target ticket what/why/acceptance
 #   中 UC-XX 引用是否自動注入 UC Context 子章節。auto=偵測到就注入（預設）；
 #   manual=偵測到但略過並提示；off=靜默略過（不偵測）。
@@ -361,7 +361,7 @@ CONTEXT_BUNDLE_UC_INJECTION_MODES: tuple = (
     CONTEXT_BUNDLE_UC_INJECTION_MODE_OFF,
 )
 
-# Literal 枚舉（W17-002.1 acceptance #3：Python 慣例對齊）
+# Literal 枚舉（Python 慣例對齊）
 # 將 SourceKind / ExtractStatus / SkipReason 的合法值集中於 constants，
 # 方便其他模組（test、metric hook）引用而不依賴 extractor 內部私有符號。
 CONTEXT_BUNDLE_SOURCE_KINDS: tuple = ("source_ticket", "blocked_by", "related_to")
@@ -505,7 +505,7 @@ SRP_WHAT_CONJUNCTIONS: List[str] = [
 SRP_ACCEPTANCE_MODULE_THRESHOLD: int = 2
 
 # ============================================================
-# SPEC 引用驗證常數（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
+# SPEC 引用驗證常數（SPEC-008 誤植跨票傳染防護）
 # ============================================================
 
 # 比對 --why/--what/--where 等欄位中的 SPEC-NNN 引用；NNN 位數不限（避免
@@ -519,7 +519,7 @@ SPEC_REFERENCE_PATTERN: str = r"SPEC-\d+"
 DUPLICATE_DETECTION_THRESHOLD: float = 0.3
 DUPLICATE_DETECTION_COMPLETED_WINDOW_DAYS: int = 7
 
-# Tier 2 阻擋層常數（1.0.0-W1-040.1）
+# Tier 2 阻擋層常數
 #
 # 阻擋層在 Tier 1 警告層之上加「高相似 + 短窗口」雙條件交集，鎖定 ghost
 # 雙執行流同 turn（數分鐘內）重複 spawn 同語意票的簽名。
@@ -558,7 +558,7 @@ PROTOCOL_VERSION_MIGRATIONS: Dict[str, Dict] = {
 
 if __name__ == "__main__":
     # __main__ guard：constants 模組不應被直接執行
-    # 不 import lib.messages 以避免觸發 lib/__init__.py eager-import（W14-016）
+    # 不 import lib.messages 以避免觸發 lib/__init__.py eager-import
     import sys
     print("=" * 60)
     print("此模組不可直接執行：ticket_system/constants.py")

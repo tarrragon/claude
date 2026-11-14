@@ -42,4 +42,3 @@ model: sonnet
 
 **Last Updated**: 2026-03-02
 **Version**: 2.0.0 - Deprecated, merged into ginger-performance-tuner
-**Ticket**: 0.31.0-W28-003

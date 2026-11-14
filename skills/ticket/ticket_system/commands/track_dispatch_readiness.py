@@ -1,4 +1,4 @@
-"""ticket track dispatch-readiness 命令（0.18.0-W17-053）。
+"""ticket track dispatch-readiness 命令。
 
 派發前認知負擔閾值與綜合就緒度檢查。讀取 ticket frontmatter `where.files`
 與 Context Bundle section 自動計算三項核心指標，輸出 pass/warn/fail 與
@@ -57,8 +57,8 @@ Exit code 語意（與 dispatch-check / dispatch-validate 不共享）：
 必須以命令名稱判別語意，禁止以 exit code 跨命令解讀。
 
 邊界：本 CLI **不** 修改 ticket、**不** 取代 hook / scheduler；僅輸出
-結構化診斷供 PM / agent 派發前自檢使用（W17-209 ANA 方案 A 邊界）。
-不觸碰既有 `dispatch-check`（W10-017.2）與 `dispatch-validate`（W17-003）。
+結構化診斷供 PM / agent 派發前自檢使用。
+不觸碰既有 `dispatch-check`與 `dispatch-validate`。
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ from ticket_system.lib.section_locator import find_section
 _CONTEXT_BUNDLE_SECTION = "Context Bundle"
 
 # 三項核心閾值（與 cognitive-load-execution-details.md 對齊）
-# W17-213: 原 _RESPONSIBILITY_SOFT_MAX 重命名為 _RESPONSIBILITY_PASS_MAX
+# 原 _RESPONSIBILITY_SOFT_MAX 重命名為 _RESPONSIBILITY_PASS_MAX
 # 「PASS」更貼合 > N 即離開 pass 區的閘門語意（rules/cognitive-load.md 3b 派發前閾值）
 _RESPONSIBILITY_PASS_MAX = 2  # > 2 軟警告
 _RESPONSIBILITY_HARD_MAX = 4  # > 4 視為強制拆分（依據 7±2 取下限保守）
@@ -89,7 +89,7 @@ _CB_TOKENS_SOFT_MAX = 3000  # > 3000 軟上限
 _CB_TOKENS_HARD_MAX = 5000  # > 5000 強制拆分
 _CHARS_PER_TOKEN = 4  # 粗估換算（OpenAI cl100k 平均）
 
-# 第四項一致性檢查（0.2.1-W3-249）：acceptance 測試類關鍵詞 + 測試路徑判定
+# 第四項一致性檢查：acceptance 測試類關鍵詞 + 測試路徑判定
 # 啟發式限制：關鍵詞比對無法涵蓋所有表述方式，未命中不代表無矛盾；「回歸」等
 # 泛用詞亦可能在非測試語境誤判（如「回歸原設計」）——故本檢查上限為 warn。
 _TEST_KEYWORDS = ("測試", "test", "覆蓋", "回歸", "regression", "涵蓋")

@@ -1,6 +1,6 @@
 # 行為優先 TDD 方法論
 
-> **本檔已瘦身（W8-018.2）**：路徑驅動測試、Bug 遮蔽模式、try-catch 測試策略、Fake/Mock 設計原則、測試自我檢查清單已完整收錄於 `/tdd` skill 的 `.claude/skills/tdd/references/phase2-test-design.md`（「測試實戰教訓」「從呼叫路徑出發」「try-catch 設計原則」「Fake/Mock 設計原則」「檢查清單」）。本檔僅保留核心摘要 + 本方法論的 distinct 內容（Sociable vs Solitary 選擇與前置條件關係）。需要實戰教訓六個坑的完整案例時直接讀 phase2-test-design.md。
+> **本檔已瘦身**：路徑驅動測試、Bug 遮蔽模式、try-catch 測試策略、Fake/Mock 設計原則、測試自我檢查清單已完整收錄於 `/tdd` skill 的 `.claude/skills/tdd/references/phase2-test-design.md`（「測試實戰教訓」「從呼叫路徑出發」「try-catch 設計原則」「Fake/Mock 設計原則」「檢查清單」）。本檔僅保留核心摘要 + 本方法論的 distinct 內容（Sociable vs Solitary 選擇與前置條件關係）。需要實戰教訓六個坑的完整案例時直接讀 phase2-test-design.md。
 
 測試耦合到行為（Module API），而非結構（Class Methods）。重構時測試保持穩定，因為測試只透過 Public API 互動，不知道內部有哪些類別。
 
@@ -57,4 +57,4 @@ Sociable Unit Tests 的「使用真實 Domain Entities」原則，使前置條�
 ---
 
 **Last Updated**: 2026-06-13
-**Version**: 2.0.0 — W8-018.2 整併瘦身：路徑驅動測試 / try-catch / Fake-Mock / 自我檢查清單路由至 `/tdd` skill phase2-test-design.md（內容已完整收錄），保留 30 秒核心 + distinct 的 Sociable vs Solitary 選擇與前置條件關係。歷史 1.3.0 完整版見 git log。
+**Version**: 2.0.0 — 整併瘦身：路徑驅動測試 / try-catch / Fake-Mock / 自我檢查清單路由至 `/tdd` skill phase2-test-design.md（內容已完整收錄），保留 30 秒核心 + distinct 的 Sociable vs Solitary 選擇與前置條件關係。歷史 1.3.0 完整版見 git log。

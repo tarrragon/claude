@@ -1,4 +1,4 @@
-"""ticket track parallel-check 命令（0.18.0-W17-203.1）。
+"""ticket track parallel-check 命令。
 
 偵測目標 ticket 的 children（或同 parent 兄弟）pending 集合中，
 依 ``where.files`` 路徑前綴判斷哪些可平行派發、哪些互相衝突，
@@ -317,5 +317,5 @@ def register_parallel_check(
             "輸出可平行派發/衝突任務分組（對齊 askuserquestion-rules 規則 7）"
         ),
     )
-    p.add_argument("ticket_id", help="目標 ticket ID（例如 0.18.0-W17-203）")
+    p.add_argument("ticket_id", help="目標 ticket ID（例如 <ticket-id>）")
     return p

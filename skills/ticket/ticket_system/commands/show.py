@@ -3,7 +3,7 @@ ticket show 子命令
 
 終端顯示 Ticket 內容，支援 Markdown 渲染、TTY 偵測與分頁。
 
-設計目標（見 0.18.0-W17-015 Solution）：
+設計目標：
 - 單一短指令入口 `ticket show <id>`（取代 `ticket track full <id> | bat -l md`）
 - TTY auto render（glow > mdcat > bat > raw fallback），非 TTY 自動 raw
 - 短 flag 為主：-r/-R/-p/-P，細節靠 --help 說明
@@ -77,18 +77,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         description=(
             "顯示 Ticket 完整內容，TTY 下自動以 Markdown 渲染。\n\n"
             "範例：\n"
-            "  ticket show 0.18.0-W17-015     # 完整 ID\n"
-            "  ticket show W17-015            # 短 ID（自動補當前版本）\n"
-            "  ticket show W17-015 -r         # 純文字輸出\n"
-            "  ticket show W17-015 -R bat     # 指定渲染器\n"
-            "  ticket show W17-015 | cat      # pipe 自動降 raw\n\n"
+            "  ticket show <version>-W<wave>-<seq>   # 完整 ID\n"
+            "  ticket show W<wave>-<seq>             # 短 ID（自動補當前版本）\n"
+            "  ticket show W<wave>-<seq> -r          # 純文字輸出\n"
+            "  ticket show W<wave>-<seq> -R bat      # 指定渲染器\n"
+            "  ticket show W<wave>-<seq> | cat       # pipe 自動降 raw\n\n"
             "渲染器偵測順序：glow > mdcat > bat > raw fallback"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "ticket_id",
-        help="Ticket ID（完整如 0.18.0-W17-015，或短 ID 如 W17-015）",
+        help="Ticket ID（完整如 <version>-W<wave>-<seq>，或短 ID 如 W<wave>-<seq>）",
     )
     parser.add_argument(
         "--version",
@@ -133,9 +133,9 @@ def expand_short_id(ticket_id: str, version: Optional[str]) -> str:
     - 其他格式 → 原樣返回（讓下游 loader 處理錯誤）
 
     Examples:
-        expand_short_id("W17-015", "0.18.0") → "0.18.0-W17-015"
-        expand_short_id("0.18.0-W17-015", "0.18.0") → "0.18.0-W17-015"
-        expand_short_id("W17-015.1", "0.18.0") → "0.18.0-W17-015.1"
+        expand_short_id("W<wave>-<seq>", "<version>") → "<version>-W<wave>-<seq>"
+        expand_short_id("<version>-W<wave>-<seq>", "<version>") → 原樣返回
+        expand_short_id("W<wave>-<seq>.1", "<version>") → "<version>-W<wave>-<seq>.1"
     """
     if SHORT_ID_RE.match(ticket_id) and version:
         return f"{version}-{ticket_id}"

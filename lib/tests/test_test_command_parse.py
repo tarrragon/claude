@@ -523,6 +523,40 @@ def test_direct_or_unrelated_commands_not_reported(command):
     assert find_unrecognized_runner_mention(command) is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        'ticket create --action 分析 --why "清單為空時 pytest 會跑全套件"',
+        'git commit -m "fix: pre-test-hook 對 pytest 的提示"',
+        "cat > note.md <<'EOF'\n執行 uv run pytest 後再提交\nEOF",
+        "echo 'pytest -q'",
+        'printf "%s\\n" "flutter test 的說明"',
+    ],
+    ids=["quoted-why", "commit-message", "heredoc-body", "single-quoted", "double-quoted"],
+)
+def test_runner_word_only_in_quoted_arguments_not_reported(command):
+    """3.3.0-W1-080：runner 字樣只出現在引號參數或 heredoc 內文時不提醒。"""
+    from lib.test_command_parse import find_unrecognized_runner_mention
+
+    assert find_unrecognized_runner_mention(command) is None
+
+
+@pytest.mark.parametrize(
+    ("command", "mention"),
+    [
+        ('sh -lc "cd .claude/hooks && uv run pytest"', "pytest"),
+        ('eval "uv run pytest"', "pytest"),
+        ('echo "result: $(run_t uv run pytest)"', "pytest"),
+    ],
+    ids=["sh-lc-double-quoted", "eval", "command-substitution-in-quotes"],
+)
+def test_executable_quoted_strings_still_reported(command, mention):
+    """3.3.0-W1-080 正向對照（E2）：引號內但會被執行的字串仍回報。"""
+    from lib.test_command_parse import find_unrecognized_runner_mention
+
+    assert find_unrecognized_runner_mention(command) == mention
+
+
 def test_readonly_command_with_runner_word_is_reported():
     """唯讀命令含 runner 字樣也會回報；這是只提醒、不阻擋的理由（以測試釘住此已知誤報）。"""
     from lib.test_command_parse import find_unrecognized_runner_mention

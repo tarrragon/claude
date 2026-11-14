@@ -16,7 +16,8 @@ UC Reference Validation Hook - PreToolUse Hook
 
   白名單解析、豁免判定複用 doc_system.core.uc_registry（uc CLI 交付的
   共用模組），避免 hook 與 doc uc CLI 各自實作導致規則漂移。規則來源：
-  docs/spec/uc-numbering-convention.md。
+  .claude/skills/doc/SKILL.md〈uc 子命令群組〉（專案若另有 UC 編號規範文件，
+  以專案文件為準；框架不假設其路徑）。
 
 攔截邊界（寫入端防線非全覆蓋，已知邊界如下）：
   - MultiEdit：已涵蓋——聚合 edits[] 各項 new_string 逐一掃描（見
@@ -45,6 +46,7 @@ _DOC_SKILL_DIR = _CLAUDE_DIR / "skills" / "doc"
 sys.path.insert(0, str(_CLAUDE_DIR))  # for `from lib import ...`
 sys.path.insert(0, str(_DOC_SKILL_DIR))  # for `from doc_system.core.uc_registry import ...`
 
+from lib.git_utils import get_action_root  # noqa: E402
 from lib import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,
@@ -57,7 +59,7 @@ from lib import (  # noqa: E402
 WARNING_TEMPLATE = """[uc-reference-validation] 偵測到未定義的 UC 編號：{tokens}
 
 檔案：{file_path}
-規則來源：docs/spec/uc-numbering-convention.md
+規則來源：.claude/skills/doc/SKILL.md〈uc 子命令群組〉（判定實作：doc_system/core/uc_registry.py）
 
 合法 UC 編號清單：
 {valid_list}
@@ -131,6 +133,11 @@ def main() -> int:
     # worktree 內，若不優先讀取明確覆寫，該偵測會恆常蓋掉呼叫端指定的
     # project_root，使白名單解析讀到錯誤專案的 SSOT。
     project_root = os.environ.get("CLAUDE_PROJECT_DIR") or str(get_project_root())
+    # 作用根：payload.cwd 所屬 checkout 優先（情境 C：env 指向 MAIN、cwd 在
+    # linked worktree，豁免路徑與 UC 對照須以 worktree 判定）；缺 cwd 不呼叫
+    # helper（其缺 cwd 會寫 stderr），沿用上方的根。
+    if input_data.get("cwd"):
+        project_root = str(get_action_root(input_data, Path(project_root)))
 
     if is_exempt_path(file_path, project_root):
         logger.debug("路徑豁免，跳過驗證：%s", file_path)

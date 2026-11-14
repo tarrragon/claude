@@ -2,7 +2,7 @@
 name: error-pattern
 description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯誤經驗和防護措施 (query), (2) 記錄新發現的錯誤模式和教訓 (add), (3) Ticket 開始前查詢歷史問題避免再犯, (4) 系統化管理錯誤學習經驗。Use when: user mentions error pattern, 錯誤模式, 教訓, 經驗記錄, 學習經驗, 防護措施, 錯誤紀錄, or needs to avoid recurring issues."
 metadata:
-  version: 1.7.0
+  version: 1.7.1
 ---
 
 # error-pattern SKILL
@@ -50,13 +50,13 @@ metadata:
 未找到相關錯誤模式。這可能是新發現的問題，請使用 /error-pattern add 記錄。
 ```
 
-**`severity` 權威來源與更新時機**（0.2.1-W3-106）：內文「基本資訊」區塊的「風險等級」／「嚴重度」欄位是第一手判斷來源（撰寫當下對症狀實際後果的人工評估）；frontmatter `severity` 是供 `query` 排序/顯示讀取的同步鏡射欄位，兩者必須一致。更新時機：
+**`severity` 權威來源與更新時機**：內文「基本資訊」區塊的「風險等級」／「嚴重度」欄位是第一手判斷來源（撰寫當下對症狀實際後果的人工評估）；frontmatter `severity` 是供 `query` 排序/顯示讀取的同步鏡射欄位，兩者必須一致。更新時機：
 
 - **新建立時**：撰寫「基本資訊」區塊的內文「風險等級」時，frontmatter `severity` 必須同時填入相同值，禁止 frontmatter 留預設 placeholder 或憑感覺快速填寫後不比對內文。
-- **事後修訂內文風險等級時**：必須同步更新 frontmatter `severity`，否則 `query` 排序/顯示會呈現與內文判斷不一致的等級（PC-BAL 類漂移，見 0.2.1-W3-105 診斷）。
+- **事後修訂內文風險等級時**：必須同步更新 frontmatter `severity`，否則 `query` 排序/顯示會呈現與內文判斷不一致的等級（PC-BAL 類漂移）。
 - **禁止**片面只改 frontmatter `severity` 而不核對內文——frontmatter 是否正確以「是否忠實反映內文判斷」為準，不是獨立來源。
 
-0.2.1-W3-106 已完成全量覆核修正：381 檔中 15 檔（皆有值可比對者）分歧，14 檔判定內文較準確並已同步更新 frontmatter；1 檔（ARCH-001）判定 frontmatter 較準確而保留原值，內文對應修正已記錄為 spawn-request（SR-1）待後續票處理。
+已完成一次全量覆核修正：381 檔中 15 檔（皆有值可比對者）分歧，14 檔判定內文較準確並已同步更新 frontmatter；1 檔（ARCH-001）判定 frontmatter 較準確而保留原值，內文對應修正已記錄為 spawn-request 待後續票處理。
 
 **不變式的適用範圍：應然目標，非存量現況**（2026-08 全量掃描）：上述不變式定義「新建立與事後修訂時必須遵守」的目標狀態，不代表語料庫現況已達標。語料自前次覆核（381 檔）後持續成長，現全量掃描 420 檔，僅 63 檔（15.0%）兩側皆有值且一致；其餘 357 檔（85%）依三類分別處置：
 
@@ -109,10 +109,10 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
 6. **關聯 Ticket**
    - 輸入相關 Ticket 編號
 
-7. **原子分配並保留來源前綴 ID**（跨專案共享框架必用，0.2.1-W3-271 改接原子版入口）
+7. **原子分配並保留來源前綴 ID**（跨專案共享框架必用，走原子版入口）
    - 呼叫 allocator 的 `allocate_and_reserve_pattern_id`：在鎖保護下把「決定編號」與
      「建立佔位檔」合併為單一原子操作。**取代**舊版 `allocate_pattern_id`（僅回傳
-     預覽字串、不建檔、不持鎖，並行呼叫下有 TOCTOU 撞號風險，見 0.2.1-W3-167）：
+     預覽字串、不建檔、不持鎖，並行呼叫下有 TOCTOU 撞號風險）：
      ```python
      import sys; sys.path.insert(0, ".claude/skills/error-pattern/lib")
      from allocator import identify_project_code, allocate_and_reserve_pattern_id
@@ -141,7 +141,7 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
      不參與遞增）。
    - **禁止**手動指定 flat `<CATEGORY>-NNN`（凍結 base 不再新增，見編號章節）。
 
-8. **同步 README 索引**（0.2.1-W3-099，取代舊版「手動更新 README.md 統計資訊」）
+8. **同步 README 索引**（取代舊版「手動更新 README.md 統計資訊」）
    - **順序要求（強制）：欄位補齊須早於 sync**。保守 upsert 只做「新增缺漏列」
      與「移除死連結列」，既有列逐字保留、不重新生成（見模組 docstring 保守
      upsert 核心約束）——一旦某檔案以佔位符（風險等級／來源版本缺漏）首次被
@@ -176,8 +176,8 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
      ```
    - **禁止**手動編輯 README.md 的「現有模式」表格資料列（結構化內容由工具生成，
      見 structured-content-generation 原則）；新增列的風險等級一律取自檔案內文
-     「基本資訊」區塊，**不取自 frontmatter `severity`**（0.2.1-W3-105 診斷分歧、
-     0.2.1-W3-106 全量覆核並同步兩者後，`readme_index.extract_row` 維持讀內文
+     「基本資訊」區塊，**不取自 frontmatter `severity`**（曾診斷出兩者分歧，
+     全量覆核並同步兩者後，`readme_index.extract_row` 維持讀內文
      的既有設計不變——內文是第一手來源，frontmatter 是同步鏡射，讀哪一份理論
      上結果相同，維持讀內文可省一次「若未來又漂移」的防呆成本）。
 

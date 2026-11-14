@@ -112,7 +112,7 @@ def _cleanup_check_level2(branch: str, base: str = DEFAULT_BASE_BRANCH) -> tuple
 
     Args:
         rule8-exempt: relocation:自 .claude/skills/worktree/scripts/worktree_manager.py 逐字搬移
-        branch: 分支名稱（如 "feat/0.1.1-W9-002"）
+        branch: 分支名稱（如 "feat/<ticket-id>"）
 
     Returns:
         tuple[bool, str]:
@@ -136,7 +136,7 @@ def _cleanup_check_level3(branch: str, base: str = DEFAULT_BASE_BRANCH) -> tuple
 
     Args:
         rule8-exempt: relocation:自 .claude/skills/worktree/scripts/worktree_manager.py 逐字搬移
-        branch: 分支名稱（如 "feat/0.1.1-W9-002"）
+        branch: 分支名稱（如 "feat/<ticket-id>"）
         base: 基礎分支，預設 "main"
 
     Returns:

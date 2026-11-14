@@ -4,10 +4,6 @@ title: Validator regex 缺字邊界導致 substring 誤判 placeholder
 category: process-compliance
 severity: medium
 created: 2026-04-30
-related:
- - W17-072
- - W17-074
- - W17-094
 ---
 
 # PC-113: Validator regex 缺字邊界導致 substring 誤判 placeholder
@@ -44,20 +40,20 @@ r"\(pending\)|TBD|TODO|N/A"
 
 | 家族 | 觸發機制 | 處理 |
 |------|---------|------|
-| W17-072 | agent 自定義 H2 切斷 schema section | 已修（`_find_next_schema_section_boundary` 限定 schema 名單） |
-| W17-074 | backtick 內 `## Test Results` 引用被誤判章節 | 已修（line-anchored regex） |
-| W17-094 / PC-113 | substring TODO/TBD/N/A 誤判 placeholder | 已修（加 `\b` 字邊界） |
+| 家族 1 | agent 自定義 H2 切斷 schema section | 已修（`_find_next_schema_section_boundary` 限定 schema 名單） |
+| 家族 2 | backtick 內 `## Test Results` 引用被誤判章節 | 已修（line-anchored regex） |
+| 家族 3 / PC-113 | substring TODO/TBD/N/A 誤判 placeholder | 已修（加 `\b` 字邊界） |
 
 三者共同病因：validator 的 pattern 過寬，未考慮 markdown content 的 substring / 引用上下文。
 
 ## 案例
 
-### 案例 1：W17-007 ANA complete 失敗（2026-04-30）
+### 案例 1：某 ANA ticket complete 失敗（2026-04-30）
 
-W17-007 Problem Analysis 含字串「列所有 CC tasks（非 TodoList）」描述 `TaskList()` runtime tool。
+該 ANA ticket 的 Problem Analysis 含字串「列所有 CC tasks（非 TodoList）」描述 `TaskList()` runtime tool。
 
 ```bash
-$ ticket track complete 0.18.0-W17-007
+$ ticket track complete <ticket-id>
 [Error] body 未依 ANA schema 填寫必填章節
    未填寫的必填章節：
    - Problem Analysis
@@ -70,7 +66,7 @@ PM 實際 debug 路徑：
 3. 對章節內容跑 `re.findall(r'TODO', content, re.IGNORECASE)` → 命中 `Todo`
 4. 確認元凶為 `TodoList` 內 substring
 
-PM 當下 fallback 是把字眼改為「task 待辦清單」繞開，再回頭建 W17-094 修 regex。
+PM 當下 fallback 是把字眼改為「task 待辦清單」繞開，再回頭建 ticket 修 regex。
 
 ### 案例 2：合併閘門摘要把 xfailed 判為失敗（2026-11-10）
 
@@ -122,7 +118,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
 
 ### 還原驗證
 
-修復後還原 PM 當下繞開的字眼（如 W17-007 line 77 的 `TodoList`），重跑驗證確認通過。
+修復後還原 PM 當下繞開的字眼（如案例 1 ticket 內的 `TodoList`），重跑驗證確認通過。
 
 ## 防護
 
@@ -148,11 +144,10 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.I
 ## 相關文件
 
 - `.claude/skills/ticket/ticket_system/lib/ticket_validator.py` `_is_placeholder` — 修復主體
-- W17-072 / W17-074 / W17-094 — 同家族 false positive 修補歷史
 - `.claude/error-patterns/process-compliance/PC-110-...` — body schema 範本驗證家族
 
 ---
 
 **Last Updated**: 2026-11-10（補案例 2：合併閘門測試摘要的 xfailed 誤判；checklist 補測試輸出字詞一項）
 **Last Updated**: 2026-04-30
-**Source**: W17-007 ANA complete 期間 PM 實證踩到（commit 75ef9fd8 → W17-094 ticket → fix commit a47ffb14）
+**Source**: 某 ANA ticket complete 期間 PM 實證踩到（commit 75ef9fd8 → 修復 ticket → fix commit a47ffb14）

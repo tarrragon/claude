@@ -25,9 +25,9 @@ from ticket_system.lib.constants import (
 from ticket_system.lib.paths import get_ticket_state_root
 
 # 共用的掃描和判斷函式
-# W17-163 L1-A: 改用 is_handoff_stale 統一 stale 判定（消除 ARCH-020 同構）
+# L1-A: 改用 is_handoff_stale 統一 stale 判定（消除 ARCH-020 同構）
 # 歷史背景：handoff_gc 原獨立重寫 stale 判定邏輯，與 handoff_utils 漂移；
-# W10-047.4 漏判（direction=to-source + from_status="in_progress" 走非任務鏈分支
+# 漏判（direction=to-source + from_status="in_progress" 走非任務鏈分支
 # 但 from_status != "completed" 即不標 stale）即此漂移之直接成因。
 # 本次改 delegate 到 is_handoff_stale，三套消費者共用單一判定函式。
 from ticket_system.lib.handoff_utils import (
@@ -47,7 +47,7 @@ def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
     """
     掃描 pending/ 目錄，收集所有 stale handoff 檔案。
 
-    Stale 判斷 delegate 至 handoff_utils.is_handoff_stale（W17-163 L1-A，
+    Stale 判斷 delegate 至 handoff_utils.is_handoff_stale（
     消除 ARCH-020 跨進程重複邏輯）。判定規則詳見該函式 docstring。
 
     Markdown 格式 handoff 因無 direction 資訊，沿用原行為：
@@ -56,7 +56,7 @@ def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
     Args:
         force: True 時跳過 task-chain 保護（is_handoff_stale），改用
                is_ticket_completed(source_ticket) 統一判定；False 時保持
-               現有行為（向後相容）。W3-018.2 新增。
+               現有行為（向後相容）。
 
     Returns:
         List of (file_path, ticket_id, reason) tuples
@@ -76,7 +76,7 @@ def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
                 continue
 
             if force:
-                # W3-018.2: --force 模式跳過 task-chain 保護，
+                # --force 模式跳過 task-chain 保護，
                 # 來源 ticket 已 completed 即視為 stale
                 if is_ticket_completed(ticket_id):
                     reason = (
@@ -89,7 +89,7 @@ def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
                     if orphan:
                         stale.append((record.file_path, ticket_id, orphan))
             else:
-                # W17-163 L1-A: delegate 至 is_handoff_stale（單一 stale 判定來源）
+                # L1-A: delegate 至 is_handoff_stale（單一 stale 判定來源）
                 is_stale, reason = is_handoff_stale(record.data)
                 if is_stale:
                     stale.append((record.file_path, ticket_id, reason))
@@ -115,7 +115,7 @@ def execute_gc(dry_run: bool = True, force: bool = False) -> int:
 
     Args:
         dry_run: True 時僅預覽，False 時實際移動至 archive/
-        force: True 時跳過 task-chain 保護（W3-018.2）
+        force: True 時跳過 task-chain 保護
 
     Returns:
         int: 退出碼（0 成功）

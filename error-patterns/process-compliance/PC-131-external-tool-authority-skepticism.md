@@ -9,7 +9,7 @@
 | 編號 | PC-131 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-05-05（W17-144.1 / W17-144.1.1） |
+| 首發時間 | 2026-05-05 |
 | 姊妹模式 | PC-074（字元集判定共用字陷阱）/ PC-088（LLM 工具選擇偏誤） |
 
 ---
@@ -22,8 +22,8 @@ PM 採用外部工具（如 OpenCC / 第三方 lint / 商用 API / 標準字典�
 
 | Session | 場景 | 錯誤假設 | 實際偏差 |
 |---------|------|---------|---------|
-| W17-144.1 | charset-pollution-detector.py 用 OpenCC s2t 判斷簡繁 | 「OpenCC 是權威簡繁映射工具」 | 對台灣現代繁體標準字（台/群/干）30% 誤判（OpenCC STCharacters 表來自中國大陸 GB 標準） |
-| W17-144 | 用 zhtw-mcp 掃描污染源 | 「zhtw-mcp 是 zhtw 文字檢查工具，應能找污染」 | zhtw-mcp 自動 S2T 而非報錯，對「找污染」場景不適用 |
+| 案例 1 | charset-pollution-detector.py 用 OpenCC s2t 判斷簡繁 | 「OpenCC 是權威簡繁映射工具」 | 對台灣現代繁體標準字（台/群/干）30% 誤判（OpenCC STCharacters 表來自中國大陸 GB 標準） |
+| 案例 2 | 用 zhtw-mcp 掃描污染源 | 「zhtw-mcp 是 zhtw 文字檢查工具，應能找污染」 | zhtw-mcp 自動 S2T 而非報錯，對「找污染」場景不適用 |
 
 ---
 
@@ -50,7 +50,7 @@ PM 採用外部工具（如 OpenCC / 第三方 lint / 商用 API / 標準字典�
 
 對工具的判斷做抽樣測試（≥ 10 個目標場景案例），統計準確度。若準確度 < 95%，必須補位策略（雙權威源 / 反向過濾 / 種子手選 / 不採用）。
 
-範例（W17-144.1.1）：
+範例（charset 偵測器的 OpenCC 抽樣）：
 
 ```python
 # 對 OpenCC s2t 抽樣台灣標準字
@@ -110,13 +110,12 @@ def self_test():
 
 ## 相關文件
 
-- `.claude/scripts/charset-pollution-detector.py` — W17-144.1 落地，含 _ANCHORS_SEED 警告 + TAIWAN_STANDARD_WHITELIST + self-test 第五層
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-144.1.1.md` — ANA 完整 WRAP 分析
+- `.claude/scripts/charset-pollution-detector.py` — 案例 1 的落地檔，含 _ANCHORS_SEED 警告 + TAIWAN_STANDARD_WHITELIST + self-test 第五層
 - `.claude/error-patterns/process-compliance/PC-074-charset-guard-hook-shared-char-false-positive.md` — 字元集共用字陷阱（姊妹模式）
 - `.claude/error-patterns/process-compliance/PC-088-llm-tool-selection-heuristic-bias.md` — LLM 工具選擇偏誤（姊妹模式）
 
 ---
 
 **Last Updated**: 2026-05-05
-**Version**: 1.0.0 — 初始建立：外部工具權威性預設質疑（交叉驗證後再採信）（W17-144.1）
+**Version**: 1.0.0 — 初始建立：外部工具權威性預設質疑（交叉驗證後再採信）
 **Source**: 用戶 WRAP 質疑「OpenCC 並不是完全正確的權威資料」+ 實證 OpenCC 對台灣標準字 30% 誤判 + zhtw-mcp 對相同字組 100% 正確

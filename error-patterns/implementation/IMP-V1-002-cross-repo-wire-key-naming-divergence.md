@@ -4,7 +4,6 @@ title: 跨 repo 交換格式 wire key 命名慣例分歧（DB snake_case 洩漏�
 category: implementation
 severity: medium
 first_seen: 2026-06-18
-ticket: 1.0.0-W5-004
 status: resolved
 ---
 

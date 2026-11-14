@@ -66,5 +66,5 @@
 ---
 
 **Last Updated**: 2026-06-12
-**Version**: 1.0.0 — 從 `.claude/rules/core/ai-communication-rules.md` 規則 6 全文外移（1.0.0-W7-004.3 token 收斂）
-**Source**: W17-060 / W17-123
+**Version**: 1.0.0 — 從 `.claude/rules/core/ai-communication-rules.md` 規則 6 全文外移（token 收斂）
+**Source**: 估時驅動決策的跨 ticket 實測歸納

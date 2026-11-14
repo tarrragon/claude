@@ -2,10 +2,10 @@
 
 **Category**: process-compliance
 **Severity**: High
-**Status**: Protected (methodology-backed) material-traced (R5 追溯 W17-078.1) — W17-075 WRAP 深度分析後升級，防護機制整合至 `.claude/methodologies/pm-judgment-interference-map.md` v1.0.0；W17-078.1 素材溯源追溯後升級 R5
+**Status**: Protected (methodology-backed) material-traced (R5 追溯素材溯源) — WRAP 深度分析後升級，防護機制整合至 `.claude/methodologies/pm-judgment-interference-map.md` v1.0.0；素材溯源追溯後升級 R5
 **Created**: 2026-04-24
-**Source**: 2026-04-24 session W17-072/074 並行派發事件 — PM 用「兩個 thyme working memory 混淆」編造機制支撐分工決策；被用戶糾正後第一反應歸因為「我判斷錯誤 / 過度臆測」，被用戶二次糾正「任何時候都不應該把問題歸納為你的判斷錯誤或者過度臆測」。
-**Updated**: 2026-04-24 — W17-078.1 素材溯源：R1「AI 合理化傾向」改寫為「素材存在但層級誤置」；新增 R5「素材跨層誤推」；觸發案例補素材溯源鏈
+**Source**: 2026-04-24 session 兩張 ticket 並行派發事件 — PM 用「兩個 thyme working memory 混淆」編造機制支撐分工決策；被用戶糾正後第一反應歸因為「我判斷錯誤 / 過度臆測」，被用戶二次糾正「任何時候都不應該把問題歸納為你的判斷錯誤或者過度臆測」。
+**Updated**: 2026-04-24 — 素材溯源：R1「AI 合理化傾向」改寫為「素材存在但層級誤置」；新增 R5「素材跨層誤推」；觸發案例補素材溯源鏈
 
 ---
 
@@ -37,7 +37,7 @@ PM 做決策（分工、拆分、派發、風險評估）後，論述中使用�
 
 ## 根因（機制層）
 
-### R1：素材存在但層級誤置（原「AI 合理化傾向」，W17-078.1 改寫）
+### R1：素材存在但層級誤置（原「AI 合理化傾向」，素材溯源後改寫）
 
 LLM 輸出論述時，通常**確實有素材**作為推論起點，並非憑空捏造。問題在於：素材所屬的抽象層級（如 git index 競爭、agent 各看局部）被提升到更高層次（如「working memory 混淆」），造成論述聽起來合理但機制描述失準。
 
@@ -70,7 +70,7 @@ LLM 輸出論述時，通常**確實有素材**作為推論起點，並非憑空
 2. **遮蔽機制根因**：真正該挖的是「論述生成機制為何會選機制句型」。
 3. **違反 quality-baseline 規則 6**：失敗案例學習原則要求「提煉教訓固化為規則」，而不是情緒性自責。
 
-### R5：素材跨層誤推（W17-078.1 新增）
+### R5：素材跨層誤推（素材溯源後新增）
 
 **定義**：PM 論述編造的具體機制——存在真實素材，但素材所屬的抽象層級（實作層 / 工具層）被提升至更高抽象層（認知層 / 架構層），導致論述「有素材可追溯但機制描述失準」。
 
@@ -82,7 +82,7 @@ LLM 輸出論述時，通常**確實有素材**作為推論起點，並非憑空
 | 工具層：subagent 各看局部 transcript（feedback_parallel_agent_arbitration） | 跨層提升 | 認知層：working memory | 「各 thyme 的 working memory 不共享」 |
 | 協作層：agent-team SKILL 的 Team 共享 state 設計 | 跨層提升 | 架構層：記憶體共用 | 「同 agent 類型共用 working memory 資源」 |
 
-**W17-072/074 實例（跨層誤推路徑）**：
+**並行派發實例（跨層誤推路徑）**：
 
 ```
 素材 A：PC-092 — 並行 thyme 對同一檔案的 git index.lock 競爭（實作層）
@@ -114,7 +114,7 @@ LLM 輸出論述時，通常**確實有素材**作為推論起點，並非憑空
 
 - `working memory`、`context pollution`、`race condition`
 - `認知負擔累積`（泛用版，需指向 cognitive-load.md 具體閾值）
-- `attention pool 污染`（需指向 PC-072/W12-002 等具體事件）
+- `attention pool 污染`（需指向 PC-072 等具體事件）
 - 任何「可能會 / 傾向於 / 容易導致」的預測性機制描述
 
 ### 防護 B：被糾正時的分層挖因
@@ -149,7 +149,7 @@ LLM 輸出論述時，通常**確實有素材**作為推論起點，並非憑空
 
 | 規則 | 關係 |
 |------|------|
-| `quality-baseline.md` 規則 6（失敗案例學習原則） | PC-111 是此規則的具體執行範例：流程瑕疵不回退決策（W17-072/074 派發結果保留），提煉機制為規則 |
+| `quality-baseline.md` 規則 6（失敗案例學習原則） | PC-111 是此規則的具體執行範例：流程瑕疵不回退決策（並行派發結果保留），提煉機制為規則 |
 | `ai-communication-rules.md` 規則 5（權力不對等下的對話品質） | 「Claude 自信度校準」是主體性保護的一部分；PC-111 處理的是「自信度校準失效」 |
 | `document-writing-style.md`（正面陳述原則） | 「禁用『不要』改用『必須』」的同構：「禁用『我判斷錯』改用『我在 X 情境下用 Y 論述模式』」 |
 | PC-066（決策品質 autopilot） | 同宗——都是 PM 跳過自檢直接輸出的問題。PC-066 關注「決策本身未經 WRAP」，PC-111 關注「論述生成未經事實驗證」 |
@@ -157,11 +157,11 @@ LLM 輸出論述時，通常**確實有素材**作為推論起點，並非憑空
 
 ## 觸發案例
 
-### 案例 1：W17-072/074 並行派發論述（2026-04-24 初次觸發）
+### 案例 1：並行派發論述（2026-04-24 初次觸發）
 
-**情境**：PM 準備派發 W17-072（IMP-2）+ W17-074（validator bug），用戶問「不重疊就併發」。
+**情境**：PM 準備派發 IMP-2 任務 + validator bug 任務，用戶問「不重疊就併發」。
 
-**PM 輸出（錯）**：「無重疊，可安全並行。派發 thyme-python-developer（W17-072）+ thyme-python-developer（W17-074）——但同 agent 類型並發會造成 working memory 混淆。改派 basil-hook-architect（W17-072）+ thyme-python-developer（W17-074）。」
+**PM 輸出（錯）**：「無重疊，可安全並行。派發 thyme-python-developer（IMP-2 任務）+ thyme-python-developer（validator bug 任務）——但同 agent 類型並發會造成 working memory 混淆。改派 basil-hook-architect（IMP-2 任務）+ thyme-python-developer（validator bug 任務）。」
 
 **用戶糾正**：「剛剛提到這個問題，可以詳細解釋嗎？」
 
@@ -175,9 +175,9 @@ LLM 輸出論述時，通常**確實有素材**作為推論起點，並非憑空
 - 機制層：R1（素材存在但層級誤置）+ R2（自信度校準失效）+ R3（機制句型偏好）+ R5（素材跨層誤推）
 - 防護：Q1-Q4 自檢 + 警戒術語清單
 
-### 素材溯源鏈（W17-078.1 補充）
+### 素材溯源鏈（補充）
 
-W17-072/074 事件的「working memory 混淆」論述，素材溯源結果如下：
+並行派發事件的「working memory 混淆」論述，素材溯源結果如下：
 
 **三個原始素材**：
 
@@ -197,7 +197,7 @@ W17-072/074 事件的「working memory 混淆」論述，素材溯源結果如�
 
 **素材本身正確**，錯誤在「三素材均屬系統底層」卻被提升至「PM 認知 working memory」層描述，形成聽起來合理但無文件支撐的論述。正確使用方式：保留素材本身的層級（「並行 thyme 有 git index 競爭風險，見 PC-092；subagent 各看局部 transcript，需 PM 仲裁」），不跨層轉譯。
 
-## 抽象層級分析（W17-080 backfill 示範）
+## 抽象層級分析（backfill 示範）
 
 > 本章節為 README 模板「抽象層級分析」必填章節的撰寫示範。R5 跨層誤推案例完整展現「症狀層 → 根因層」的層級錯位。
 
@@ -209,16 +209,16 @@ W17-072/074 事件的「working memory 混淆」論述，素材溯源結果如�
 | 防護層級 | 工具層（防護 A Q4 句型檢查）+ 協作層（PM 自檢清單）+ 架構層（pm-judgment-interference-map methodology 13 因子地圖） |
 | 跨層警示 | 本 PC 素材若被引用，禁止再從「實作層 git 機制」提升至「認知層 working memory」；任何跨層論述必須先補對應抽象層的支撐文件，禁止用流暢句型自動橋接 |
 
-## 撰寫側設計要求（W17-079 撰寫側延伸）
+## 撰寫側設計要求（撰寫側延伸）
 
 讀者自檢（防護 A Q4）只能在閱讀時觸發；R5 防護的長期落地需要**撰寫端的結構性引導**。下列要求作用於 SKILL / PC / 方法論的撰寫者：
 
 | 要求 | 落地位置 |
 |------|---------|
-| 新建 PC 必填「抽象層級分析」5 欄位表格 | `.claude/error-patterns/README.md` 模板（W17-080 已落地） |
-| compositional-writing 原則 3 顯性化「層級貼合」 | `compositional-writing` skill 的〈3. 意圖顯性與層級貼合〉標題（SKILL.md）與其粗體層級標記句（`.claude/skills/compositional-writing/references/core-principles.md`〈Core Principles 原則 1 至 5 全文〉，SKILL.md 1.50.0 外移）（W17-081 已落地） |
-| 既有 PC 追溯補欄（按需 backfill） | 延後執行，3 個月觀察 README 模板與原則 3 升級效果後決定（pending ticket，待 W17-079 Worth-It Filter C 觸發時建立） |
-| Lint hook 偵測跨層誤推 | 延後評估，需 D / B' 觀察期累積證據（W17-079 Worth-It Filter F） |
+| 新建 PC 必填「抽象層級分析」5 欄位表格 | `.claude/error-patterns/README.md` 模板（已落地） |
+| compositional-writing 原則 3 顯性化「層級貼合」 | `compositional-writing` skill 的〈3. 意圖顯性與層級貼合〉標題（SKILL.md）與其粗體層級標記句（`.claude/skills/compositional-writing/references/core-principles.md`〈Core Principles 原則 1 至 5 全文〉，SKILL.md 1.50.0 外移）（已落地） |
+| 既有 PC 追溯補欄（按需 backfill） | 延後執行，3 個月觀察 README 模板與原則 3 升級效果後決定（pending ticket，待 Worth-It Filter C 觸發時建立） |
+| Lint hook 偵測跨層誤推 | 延後評估，需 D / B' 觀察期累積證據（Worth-It Filter F） |
 
 ## 相關文件
 
@@ -226,14 +226,12 @@ W17-072/074 事件的「working memory 混淆」論述，素材溯源結果如�
 - `.claude/rules/core/ai-communication-rules.md` 規則 5 — 權力不對等下的自信度校準
 - `.claude/rules/core/document-writing-style.md` — 正面陳述原則、二次審查強制執行
 - `.claude/error-patterns/process-compliance/PC-066-decision-quality-autopilot.md` — 同宗：決策自檢缺失
-- `.claude/methodologies/pm-judgment-interference-map.md` — 13 因子 × 6 層 PM 判斷干擾地圖；本 PC 對應層 1 論述生成 + 層 2 歸因；R5 對應因子 1.4（素材錯置抽象層級，W17-078.2 新增）
-- `docs/work-logs/v0.18.0/tickets/0.18.0-W17-078.md` — 父 Ticket：強化 PC-111 + methodology 新增 R5 整體規劃
-- `docs/work-logs/v0.18.0/tickets/0.18.0-W17-075.md` — 上游 WRAP ANA：13 因子地圖產出、素材溯源起點
+- `.claude/methodologies/pm-judgment-interference-map.md` — 13 因子 × 6 層 PM 判斷干擾地圖；本 PC 對應層 1 論述生成 + 層 2 歸因；R5 對應因子 1.4（素材錯置抽象層級，後續新增）
 
 ---
 
 **Last Updated**: 2026-04-27
-**Version**: 1.3.0 — backfill「抽象層級分析」5 欄位表格作為 README 模板示範；新增「撰寫側設計要求」章節呼應 W17-079 撰寫側延伸（W17-080 落地）
+**Version**: 1.3.0 — backfill「抽象層級分析」5 欄位表格作為 README 模板示範；新增「撰寫側設計要求」章節呼應撰寫側延伸
 **Version**: 1.2.0 — R1 改寫為「素材存在但層級誤置」；新增 R5「素材跨層誤推」（定義、運作機制、三素材溯源鏈）；觸發案例補素材溯源鏈小節；防護 A 新增 Q4 抽象層級檢查；相關文件補 methodology
 **Version**: 1.1.0 — Status 升 Protected；指向 `pm-judgment-interference-map.md` methodology；本 PC 對應地圖層 1 因子 1.1-1.3（R1-R3）+ 層 2 因子 2.1（R4）
 **Version**: 1.0.0 — 初版；雙層症狀（論述編造 + 淺層歸因）與四層根因（R1-R4）

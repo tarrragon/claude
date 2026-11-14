@@ -50,7 +50,10 @@ def test_project_root_uses_get_project_root_when_lib_available(tmp_path, monkeyp
         sys.path.insert(0, str(REPO_ROOT / ".claude"))
     import lib as _lib_pkg
 
-    with patch.object(_lib_pkg, "get_project_root", return_value=fake_root):
+    with patch.object(_lib_pkg, "get_project_root", return_value=fake_root), patch.object(
+        _lib_pkg, "get_hook_log_dir",
+        side_effect=lambda n: fake_root / ".claude" / "hook-logs" / n,
+    ):
         mod = _load_hook_module()
 
     assert mod.PROJECT_ROOT == fake_root
@@ -75,7 +78,10 @@ def test_project_root_independent_of_caller_cwd(tmp_path, monkeypatch):
         sys.path.insert(0, str(REPO_ROOT / ".claude"))
     import lib as _lib_pkg
 
-    with patch.object(_lib_pkg, "get_project_root", return_value=fake_root):
+    with patch.object(_lib_pkg, "get_project_root", return_value=fake_root), patch.object(
+        _lib_pkg, "get_hook_log_dir",
+        side_effect=lambda n: fake_root / ".claude" / "hook-logs" / n,
+    ):
         mod = _load_hook_module()
 
     resolved = mod.LOG_DIR

@@ -61,4 +61,4 @@ grep -rn --include='*.py' "\b<fn>\b" <root> | grep -v "/tests/" | grep -v "<file
 
 ## 來源
 
-flutter_balance 專案 `ticket` skill 的 `commands/track_board.py` 可達性盤點（0.2.1-W3-813 ANA）。該檔 865 行中 457 行（9 函式）自進入 repo 起即無生產呼叫者，且 396 行測試全綠。原判斷方向為拆檔，盤點後改為刪死碼，超標幅度由 188% 降至 36%。
+flutter_balance 專案 `ticket` skill 的 `commands/track_board.py` 可達性盤點（ANA）。該檔 865 行中 457 行（9 函式）自進入 repo 起即無生產呼叫者，且 396 行測試全綠。原判斷方向為拆檔，盤點後改為刪死碼，超標幅度由 188% 降至 36%。

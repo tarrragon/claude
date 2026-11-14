@@ -2,8 +2,8 @@
 
 **類別**: process-compliance
 **嚴重度**: High
-**首次發現**: 2026-05-10（W17-182 retrospective ANA）
-**相關**: ARCH-020、PC-135、W17-179（false negative 案例）、W17-181（重啟調查觸發）
+**首次發現**: 2026-05-10（retrospective ANA）
+**相關**: ARCH-020、PC-135
 
 ---
 
@@ -48,23 +48,23 @@ ANA 驗證「函式 A 是否正確」時，只檢查 A 本體，未檢查：
 
 ## 案例
 
-### 案例 1：ARCH-020 三次重爆軌跡（W17-165 → W17-176.2.1 → W17-181）
+### 案例 1：ARCH-020 三次重爆軌跡（第一次修復 → 第二次修復 → 第三次修復）
 
 | 重爆 | 修了什麼 | 漏了什麼 | 後果 |
 |------|---------|---------|------|
-| W17-165 | stop hook 自身 `is_ticket_completed` 改用 `find_ticket_file` | prompt-reminder hook 同名函式、lib 層 `handoff_utils.is_ticket_completed` | 數月後 prompt-reminder 重爆 |
-| W17-176.2.1 | prompt-reminder hook 改用 `find_ticket_file` | lib 層 `handoff_utils.is_ticket_completed` / `is_ticket_in_progress_or_completed` | 同月內 stale handoff 持續未 GC |
-| W17-181 | 識別完整消費者清單（8 處）+ lib SSOT delegate | （後續 W17-181.1/.2 執行） | （目前修復鏈閉合） |
+| 第一次修復 | stop hook 自身 `is_ticket_completed` 改用 `find_ticket_file` | prompt-reminder hook 同名函式、lib 層 `handoff_utils.is_ticket_completed` | 數月後 prompt-reminder 重爆 |
+| 第二次修復 | prompt-reminder hook 改用 `find_ticket_file` | lib 層 `handoff_utils.is_ticket_completed` / `is_ticket_in_progress_or_completed` | 同月內 stale handoff 持續未 GC |
+| 第三次修復 | 識別完整消費者清單（8 處）+ lib SSOT delegate | （後續子票執行） | （目前修復鏈閉合） |
 
 每次修復者都覺得「這次徹底了」，但下次重爆暴露範圍未足。
 
-### 案例 2：W17-179 ANA false negative
+### 案例 2：ANA false negative
 
-W17-179 ANA 結論「stop hook 行為正確」是 false negative。
+某次調查該問題的 ANA 結論「stop hook 行為正確」是 false negative。
 
 | ANA 步驟 | 做了什麼 | 應做但沒做 |
 |---------|---------|-----------|
-| 驗證 stop hook L361 自身函式 | 是（已由 W17-165 修） | — |
+| 驗證 stop hook L361 自身函式 | 是（已由第一次修復處理） | — |
 | 驗證 lib `handoff_utils.is_ticket_completed`（L49） | **否** | grep 所有 `def is_ticket_completed` |
 | 驗證 `is_handoff_stale` 呼叫的是 lib 版 | **否** | trace import chain |
 
@@ -115,19 +115,17 @@ PM 派發共用 lib 修復 IMP 時，prompt 加註：
 | Pattern | 關係 |
 |---------|------|
 | ARCH-020 | 描述「為何會有重複邏輯」的結構問題；本 PC 描述「修復重複邏輯時未掃所有實作」的流程問題。互補不重複 |
-| PC-135 | 環境異質（pytest vs hook subprocess）；本 PC 是 caller 範圍盲點。兩者並列為 W17-181.1 regression 的雙重根因 |
-| W17-182 | 本 PC 為 W17-182 retrospective ANA 的核心產出 |
-| W17-179 | 本 PC 解釋 W17-179 false negative 的方法論成因 |
+| PC-135 | 環境異質（pytest vs hook subprocess）；本 PC 是 caller 範圍盲點。兩者並列為 lib SSOT delegate regression 的雙重根因 |
 
 ---
 
 ## 後續觀測
 
 - 觀測 ARCH-020 變體是否在其他 lib/hook 場景重現
-- 若觀測到第 4 次同類重爆（含 W17-181 之後），需考慮升級為強制 hook 檢查（commit msg parse 偵測「fix」+「共用函式名」+ 強制要求附 grep 結果）
-- 重啟調查鏈累積閾值（W17-154 機制）：W17-165 → W17-176.2.1 → W17-181 + W17-181.1 → 共 4 次相關修復；下次同類事件必須觸發 PC-115 強制重啟調查
+- 若觀測到第 4 次同類重爆（含第三次修復之後），需考慮升級為強制 hook 檢查（commit msg parse 偵測「fix」+「共用函式名」+ 強制要求附 grep 結果）
+- 重啟調查鏈累積閾值：第一次修復 → 第二次修復 → 第三次修復 + lib SSOT delegate → 共 4 次相關修復；下次同類事件必須觸發 PC-115 強制重啟調查
 
 ---
 
 **Last Updated**: 2026-05-10
-**Version**: 1.0.0 — 從 W17-182 retrospective ANA 收斂（saffron 分析 + PM 整理）
+**Version**: 1.0.0 — 從 retrospective ANA 收斂（saffron 分析 + PM 整理）

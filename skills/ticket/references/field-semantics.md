@@ -6,7 +6,7 @@
 >
 > **同目錄**：`create-command.md`（`--parent` vs `--source-ticket` 建立時的 CLI 副作用）、`track-command.md`（`set-blocked-by` / `set-related-to` 操作說明）。
 >
-> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在；此後累積增修（如 relatedTo 方向性裁決、context bundle 作為 relatedTo 合法消費端的承認），未見單次外移原始拆分點（可用 `git log --oneline -- references/field-semantics.md` 查證）。初版（1.0.0）提煉自 0.18.0-W17-120 ANA 多視角審查共識（linux + saffron-system-analyst + basil-hook-architect）→ W17-120.1（DOC）建立本 SSOT，PC-091 路線（ANA 落地用 children）取代 PC-073；後續版本歷史見 `CHANGELOG.md`。
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在；此後累積增修（如 relatedTo 方向性裁決、context bundle 作為 relatedTo 合法消費端的承認），未見單次外移原始拆分點（可用 `git log --oneline -- references/field-semantics.md` 查證）。初版（1.0.0）提煉自 ANA 多視角審查共識（linux + saffron-system-analyst + basil-hook-architect），據此建立本 SSOT，PC-091 路線（ANA 落地用 children）取代 PC-073；後續版本歷史見 `CHANGELOG.md`。
 
 本檔章節：〈適用範圍〉〈六欄位定義〉〈阻擋語意對照表〉〈用戶情境對照表〉〈欄位選擇決策樹〉〈反模式速查〉〈相關文件〉。
 
@@ -67,7 +67,7 @@
 | `track-command.md`〈track conflicts 子命令〉判定規則第 4 項 | 與 pm-registry 交叉比對時僅採 `write` 集合 |
 | `track-command.md`〈track onboard 子命令〉髒檔歸屬設計 | 髒檔命中依最長匹配前綴特異度歸屬；泛目錄宣告（路徑段數 <= 2）無鑑別力 |
 | `track-command.md`〈track dispatch-readiness 子命令〉閾值 2／檢查 5／6 | 修改檔案數計數、路徑存在性、acceptance 路徑涵蓋性三項啟發式皆讀 `where.files` |
-| `create-command.md`〈多值參數格式〉`--where` | `--where` CLI 參數僅支援逗號分隔多值語法；後綴標記語法不在 CLI 建立階段輸入範圍內，須另以 frontmatter 直接編輯或 `set-where` 系操作附加 |
+| `create-command.md`〈多值參數格式〉`--where` | `--where` CLI 參數僅支援逗號分隔多值語法；後綴標記語法不在 CLI 建立階段輸入範圍內，須於建票後以 `set-where` 附加（直接 Edit frontmatter 會被 ticket-file-access-guard 擋下） |
 
 原始碼權威：`ticket_system/lib/file_conflict.py`（`parse_file_intent` / `_default_intent` / `is_directory_declaration`）、`ticket_system/commands/track_dispatch.py`（`_directory_declaration_block_message`）。
 
@@ -84,7 +84,7 @@
 | 雙向欄位 | `parent.children[]`（CLI 自動維護） |
 | 阻擋語意 | 父 ticket 被未完成 children 阻擋 complete |
 | Runqueue 影響 | 子 ticket 受 blockedBy 機制間接影響（本欄位本身不直接過濾） |
-| 序號規則 | 自動子序號（如 `W17-001.1`） |
+| 序號規則 | 自動子序號（如 `<id>.1`） |
 | 版本歸屬 | 必與父票同版本（子票 ID 含父票 ID）；要落在其他版本的工作改用 `source_ticket` |
 | CLI 寫入 | `--parent <PARENT-ID>` |
 | CLI 互斥 | 與 `--source-ticket` 互斥 |
@@ -135,11 +135,11 @@
 | Runqueue 影響 | `blockedBy` 非空 → 不在 runqueue 列表 |
 | CLI 寫入 | `--blocked-by`、`set-blocked-by --add/--remove` |
 
-> **When 散文與 blockedBy 的邊界（零機制慣例，W5-005 F4/D5 量測定案）**：When 是給人讀的時機敘事，提及 ticket ID 不構成依賴宣告；任何工具（warn / auto-populate / runqueue）不得從 When 散文推斷依賴。
+> **When 散文與 blockedBy 的邊界（零機制慣例）**：When 是給人讀的時機敘事，提及 ticket ID 不構成依賴宣告；任何工具（warn / auto-populate / runqueue）不得從 When 散文推斷依賴。
 >
 > **Action**：(1) 真依賴（需等 X 進 terminal）於建立時顯性 `--blocked-by`，禁只寫進 When 散文；(2) 出處敘事用 `--source-ticket`、弱關聯用 `--related-to`；(3) 接手 ticket 時發現 When 語意前提未被 blockedBy 編碼，人工 `set-blocked-by` 補齊（blockedBy 滿足不等於 When 意圖滿足）。
 >
-> 依據：W5-005 量測（2285 票語料，精準度上限 25%），見 `CHANGELOG.md`。
+> 依據：先前量測（2285 票語料，精準度上限 25%），見 `CHANGELOG.md`。
 
 ### relatedTo（陣列，array of IDs）
 
@@ -189,7 +189,7 @@
 | `children` 對 `blockedBy` 下游的傳遞效果（下游 blockedBy 指向有非終態 children 的父票，常見於 ANA） | 否（下游自身 complete 不受影響） | 是（傳遞阻擋）：父票因 children 未終態而無法 complete，下游的 blockedBy 目標便不進入 terminal，下游持續被過濾。處置：下游 `blockedBy` 改指具體 child，不指父票（PC-091） |
 | `relatedTo` | 否 | 否 |
 
-> **現況分層說明**：`acceptance-gate-hook.py` 的 `ana_spawned_checker`（hook 層舊機制）已於 W17-120.2 退場，僅保留 `check_ana_has_spawned_tickets` 作為「無後續 ticket」的 missing 警告（不阻擋）。但 ANA complete 阻擋本身**未**隨之移除，仍由另外兩個獨立機制實際執行：`lifecycle.py` 的 `_handle_ana_spawned_confirmation`（complete 時的互動/CLI 確認關卡）與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`（W15-003，acceptance 稽核階段的 FAIL 判定）。此為目前已定案的現行設計，非等待收斂的過渡態；若日後確有移除計畫，應另建 ticket 並在此標註其 ID。
+> **現況分層說明**：`acceptance-gate-hook.py` 的 `ana_spawned_checker`（hook 層舊機制）已退場，僅保留 `check_ana_has_spawned_tickets` 作為「無後續 ticket」的 missing 警告（不阻擋）。但 ANA complete 阻擋本身**未**隨之移除，仍由另外兩個獨立機制實際執行：`lifecycle.py` 的 `_handle_ana_spawned_confirmation`（complete 時的互動/CLI 確認關卡）與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`（acceptance 稽核階段的 FAIL 判定）。此為目前已定案的現行設計，非等待收斂的過渡態；若日後確有移除計畫，應另建 ticket 並在此標註其 ID。
 
 ---
 
@@ -202,7 +202,7 @@
 | **ANA 結論的執行延伸，依 `.claude/pm-rules/version-progression.md`〈兩期：規劃期與執行期〉排入後續版本** | **`source_ticket` / `spawned_tickets`** | **`--version <目標版本> --source-ticket <ANA-ID>`** | 「落地要排進後續版本？」是 → 目標版本根票（子票必與父票同版本，無法落在後續版本） |
 | 規劃波建的本版執行期票 | `source_ticket`（選填）/ `spawned_tickets` | 本版根票，可附 `--source-ticket <規劃票>` | 版本契約的工作，不是 ANA 落地；必要票的 `scope_blocker` 由凍結程序回溯標記（`.claude/pm-rules/version-progression.md`〈版本生命週期〉「凍結程序」） |
 | 執行過程中發現獨立 bug / 技術債（與當前 ticket 無因果） | `source_ticket` / `spawned_tickets` | `--source-ticket <SOURCE-ID>` | 「上游 ticket 結論要求？」否，但發現於執行中 → spawned |
-| 兄弟單向時序依賴（規格→實作） | `blockedBy` | `set-blocked-by` 或建立時 `--blocked-by` | 「需要血緣？」否；「需要時序等待？」是 → blockedBy（須滿足串行 4 條件，定義見 `atomic-ticket-methodology.md`〈串行兄弟合法 4 條件〉，否則回歸 ARCH-017 重組） |
+| 兄弟單向時序依賴（規格→實作） | `blockedBy` | `set-blocked-by` 或建立時 `--blocked-by` | 「需要血緣？」否；「需要時序等待？」是 → blockedBy（須滿足串行 4 條件，定義見 `atomic-ticket-methodology.md`〈串行兄弟合法 4 條件〉，否則回歸 ARCH-017 重組；同時依賴 2 個以上未全終態的兄弟票時，CLI 在寫入點拒絕） |
 | 同 wave 內彼此引用、無時序依賴 | `relatedTo` | `set-related-to` 或建立時 `--related-to` | 「需要等待？」否；「想記錄關聯？」是 → relatedTo |
 | 完全獨立的新需求 | （無欄位）sibling | （三皆否，不指定上述任一） | 「上游觸發？時序依賴？關聯？」三皆否 → sibling |
 

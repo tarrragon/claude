@@ -124,7 +124,7 @@ def build_tree_structure(tickets: List[Dict[str, Any]]) -> Tuple[Dict[str, List[
 
     for ticket in tickets:
         tid = ticket.get("id", "")
-        # 判斷是否為子任務（ID 包含 "." 如 W7-001.1）
+        # 判斷是否為子任務（ID 包含 "." 如 <version>-W<wave>-<seq>.1）
         if "." in tid.split("-")[-1]:
             # 找父任務 ID
             parts = tid.rsplit(".", 1)
@@ -322,10 +322,10 @@ def simplify_ticket_id(full_id: str) -> str:
     簡化 Ticket ID（去除版本前綴）
 
     Args:
-        full_id: 完整 ID（如 "0.31.0-W7-001"）
+        full_id: 完整 ID（如 "<version>-W<wave>-<seq>"）
 
     Returns:
-        str: 簡化 ID（如 "W7-001"）
+        str: 簡化 ID（如 "W<wave>-<seq>"）
 
     邏輯：
         1. 驗證輸入（None 或空字串 → "Unknown"）
@@ -342,7 +342,7 @@ def simplify_ticket_id(full_id: str) -> str:
     # 組合 Wave 和序號
     if len(parts) >= 3:
         # 預期格式: ["版本號", "Wave", "序號"]
-        # 如 "0.31.0-W7-001" → ["0.31.0", "W7", "001"]
+        # 如 "<version>-W<wave>-<seq>" → ["<version>", "W<wave>", "<seq>"]
         return f"{parts[1]}-{parts[2]}"
     else:
         # 如果無法分割，返回原始值

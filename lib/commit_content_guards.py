@@ -46,6 +46,7 @@ class Finding(NamedTuple):
     severity: str  # "deny" | "warn"
     source: str  # 來源 guard 名稱，供訊息與稽核追溯
     message: str
+    path: str = ""  # 觸發本發現的檔案相對路徑（需依路徑聚合輸出的 guard 才填）
 
 
 class StagedFile(NamedTuple):
@@ -118,8 +119,26 @@ def _check_rule8(sf: StagedFile, logger) -> List[Finding]:
     return findings
 
 
+def _fallback_action_root(payload: Optional[dict] = None) -> Path:
+    """呼叫端未傳 project_root 時的作用根。
+
+    payload 帶 cwd 時依 cwd 所屬 checkout 解析（情境 C：env 指向 MAIN、cwd 在
+    linked worktree，取 worktree）；缺 cwd 時不呼叫 get_action_root（其缺 cwd
+    會寫 stderr），沿用 get_project_root()。
+    """
+    from lib.git_utils import get_action_root, get_project_root  # noqa: PLC0415
+
+    root = get_project_root()
+    if isinstance(payload, dict) and payload.get("cwd"):
+        return get_action_root(payload, root)
+    return root
+
+
 def _check_uc_reference(
-    sf: StagedFile, logger, project_root: Optional[str] = None
+    sf: StagedFile,
+    logger,
+    project_root: Optional[str] = None,
+    payload: Optional[dict] = None,
 ) -> List[Finding]:
     """轉呼 uc-reference-validation-hook：直接 import doc_system.core.uc_registry
     （原 hook 亦於 main() 內 lazy import 同一模組）。WARN-only，保留原語意
@@ -143,9 +162,7 @@ def _check_uc_reference(
     if not sf.rel_path.lower().endswith(HOOK_SCANNABLE_EXTENSIONS):
         return []
     if project_root is None:
-        from lib.git_utils import get_project_root  # noqa: PLC0415
-
-        project_root = str(get_project_root())
+        project_root = str(_fallback_action_root(payload))
     if is_exempt_path(sf.rel_path, project_root):
         return []
     if not sf.added_text:
@@ -266,6 +283,7 @@ def _resolve_branch_context(
     is_merge_commit: bool,
     project_root: Optional[Path] = None,
     branch: Optional[str] = None,
+    payload: Optional[dict] = None,
 ) -> Optional[_BranchContext]:
     """解析 branch-verify 與檔案無關的前置條件：專案根、當前分支、是否受保護、
     是否為合併事件。回傳 None 代表本次掃描 branch-verify 不會產生任何發現
@@ -282,6 +300,8 @@ def _resolve_branch_context(
     branch：本次實際寫入的分支（reference-transaction 取 stdin 的 ref）。
     提供時以之為準；未提供（None，含 detached HEAD 寫入）時退回讀
     project_root 的 HEAD 分支。
+    payload：未提供 project_root 時，帶 cwd 則以其所屬 checkout 為作用根
+    （見 _fallback_action_root）；缺 cwd 沿用 get_project_root()。
     """
     m = _load_module("commit_gate_branch_verify", _HOOKS_DIR / "branch-verify-hook.py")
     if m is None:
@@ -289,7 +309,7 @@ def _resolve_branch_context(
     from lib.git_utils import get_current_branch, get_project_root, is_protected_branch, is_allowed_branch  # noqa: E402,PLC0415
 
     explicit_root = project_root is not None
-    project_root = Path(project_root) if explicit_root else get_project_root()
+    project_root = Path(project_root) if explicit_root else _fallback_action_root(payload)
     current_branch = branch or get_current_branch(cwd=str(project_root))
     if not current_branch or is_allowed_branch(current_branch):
         return None
@@ -304,7 +324,11 @@ def _resolve_branch_context(
 
 
 def _check_branch_verify(
-    sf: StagedFile, logger, is_merge_commit: bool = False, ctx=_CTX_UNSET
+    sf: StagedFile,
+    logger,
+    is_merge_commit: bool = False,
+    ctx=_CTX_UNSET,
+    payload: Optional[dict] = None,
 ) -> List[Finding]:
     """轉呼 branch-verify-hook：完整重用 is_protected_branch /
     is_allowed_branch / is_exempt_path_on_protected_branch，內容無關，
@@ -322,7 +346,7 @@ def _check_branch_verify(
     未提供時（單檔呼叫端）於本次呼叫內自行解析，行為與批次前相同。
     """
     if ctx is _CTX_UNSET:
-        ctx = _resolve_branch_context(is_merge_commit)
+        ctx = _resolve_branch_context(is_merge_commit, payload=payload)
     if ctx is None:
         return []
     if ctx.module.is_exempt_path_on_protected_branch(
@@ -382,11 +406,56 @@ def _check_framework_skill_trigger(sf: StagedFile, logger) -> List[Finding]:
     return [
         Finding(
             "warn",
-            "framework-rule-edit-skill-trigger",
+            _SKILL_TRIGGER_SOURCE,
             f"[skill-trigger] 內含 framework 規則層變更：{rel_path}。"
-            "建議確認已讀過 compositional-writing SKILL（此階段無法核實，僅提醒）。",
+            f"{_SKILL_TRIGGER_ADVICE}",
+            path=rel_path,
         )
     ]
+
+
+_SKILL_TRIGGER_SOURCE = "framework-rule-edit-skill-trigger"
+_SKILL_TRIGGER_ADVICE = "建議確認已讀過 compositional-writing SKILL（此階段無法核實，僅提醒）。"
+_SKILL_DIR_RE = re.compile(r"^(\.claude/skills/[^/]+)/")
+
+
+def _group_skill_trigger_findings(findings: List[Finding]) -> List[Finding]:
+    """skill-trigger 提醒依 skill 目錄聚合：同一 skill 目錄下 2 個以上檔案合為一則並附檔數。
+
+    一次收入整個 skill（如 skill-sync pull 回流）時，逐檔提醒會印出數十則
+    相同建議，淹沒同段輸出的其他警告。只聚合輸出，findings 本身仍逐檔，
+    稽核與計數不變。skill 目錄外的框架檔（rules、pm-rules、references 等）
+    與只動到單一檔的 skill 維持逐檔提醒。聚合後的訊息放在該組第一則的位置。
+    """
+    groups: dict = {}
+    for f in findings:
+        if f.source != _SKILL_TRIGGER_SOURCE:
+            continue
+        m = _SKILL_DIR_RE.match(f.path or "")
+        if m:
+            groups.setdefault(m.group(1), []).append(f)
+    merged: List[Finding] = []
+    emitted: set = set()
+    for f in findings:
+        m = _SKILL_DIR_RE.match(f.path or "") if f.source == _SKILL_TRIGGER_SOURCE else None
+        group = groups.get(m.group(1)) if m else None
+        if not group or len(group) < 2:
+            merged.append(f)
+            continue
+        skill_dir = m.group(1)
+        if skill_dir in emitted:
+            continue
+        emitted.add(skill_dir)
+        merged.append(
+            Finding(
+                f.severity,
+                f.source,
+                f"[skill-trigger] 內含 framework 規則層變更：{skill_dir}/ 下 {len(group)} 個檔案"
+                f"（例：{group[0].path}）。{_SKILL_TRIGGER_ADVICE}",
+                path=skill_dir + "/",
+            )
+        )
+    return merged
 
 
 def _check_memory_write(sf: StagedFile, logger) -> List[Finding]:
@@ -648,7 +717,41 @@ def _run_all_checks(
             if wrap_findings:
                 findings.extend(wrap_findings)
                 wrap_checked = True
+    findings.extend(_check_doc_validate(staged_files, project_root, logger, is_merge_commit))
+    _log_skill_trigger_grouping(findings, logger)
     return findings
+
+
+def _check_doc_validate(
+    staged_files: List[StagedFile], project_root: Path, logger, is_merge_commit: bool
+) -> List[Finding]:
+    """觸及的 docs 節點跑 doc validate，只擋新增錯誤（判定見 .claude/lib/commit_doc_validate.py）。
+
+    合併 commit 不套用：合併帶入的內容已在分支提交時驗過，且合併進行中工作區
+    可能含衝突中間態。整批檔案一次判定（需建一次提交前 docs 樹），故不列入
+    _PER_FILE_CHECKS。模組載入或執行例外時 fail-open，stderr 與日誌雙通道。
+    """
+    if is_merge_commit:
+        return []
+    try:
+        from lib.commit_doc_validate import check_doc_validate  # noqa: PLC0415
+
+        return check_doc_validate(staged_files, project_root, logger, Finding)
+    except Exception as exc:  # noqa: BLE001 — fail-open，見 docstring
+        msg = f"[doc-validate] 檢查內部錯誤，已放行未判定：{exc}"
+        sys.stderr.write(msg + "\n")
+        logger.warning(msg)
+        return []
+
+
+def _log_skill_trigger_grouping(findings: List[Finding], logger) -> None:
+    """記錄 skill-trigger 提醒的聚合結果（輸出由 _build_warn_message 聚合，findings 不變）。"""
+    before = sum(1 for f in findings if f.source == _SKILL_TRIGGER_SOURCE)
+    if before < 2:
+        return
+    after = sum(1 for f in _group_skill_trigger_findings(findings) if f.source == _SKILL_TRIGGER_SOURCE)
+    if after < before:
+        logger.info(f"skill-trigger 提醒依 skill 目錄聚合：{before} 則合為 {after} 則")
 
 
 def _build_deny_message(deny_findings: List[Finding], header: str) -> str:
@@ -657,5 +760,6 @@ def _build_deny_message(deny_findings: List[Finding], header: str) -> str:
 
 
 def _build_warn_message(warn_findings: List[Finding], header: str) -> str:
-    body = "\n\n".join(f"[{f.source}] {f.message}" for f in warn_findings)
+    grouped = _group_skill_trigger_findings(warn_findings)
+    body = "\n\n".join(f"[{f.source}] {f.message}" for f in grouped)
     return header + "\n" + body

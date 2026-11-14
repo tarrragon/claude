@@ -94,13 +94,19 @@ def _install_context_bundle_path_mocks(monkeypatch, tickets_dir: Path) -> None:
     )
 
 
-def _write_source_ticket_for_bundle(tickets_dir: Path, source_id: str) -> None:
-    """建立可被 extract_and_write_context_bundle 抽取的 source ticket。"""
+def _write_source_ticket_for_bundle(
+    tickets_dir: Path, source_id: str, status: str = "completed"
+) -> None:
+    """建立可被 extract_and_write_context_bundle 抽取的 source ticket。
+
+    status 預設 completed（--source-ticket 的典型來源）；當父票使用時須傳
+    非 terminal 狀態，create 會拒絕在已結案父票下建子票。
+    """
     content = (
         "---\n"
         f"id: {source_id}\n"
         "title: bundle source\n"
-        "status: completed\n"
+        f"status: {status}\n"
         "what: source-what-content\n"
         "why: source-why-content\n"
         "---\n"

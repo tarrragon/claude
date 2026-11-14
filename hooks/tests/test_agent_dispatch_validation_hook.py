@@ -385,6 +385,7 @@ class TestParallelWideStagingWarning:
         """並行場景（>=2 dispatches）+ prompt 含 git add . → stderr 印警告。"""
         _write_dispatch_active(tmp_path, count=2)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -406,6 +407,7 @@ class TestParallelWideStagingWarning:
         """並行 + git add -A → 警告。"""
         _write_dispatch_active(tmp_path, count=3)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -426,6 +428,7 @@ class TestParallelWideStagingWarning:
         """並行場景但 prompt 是精準 staging（git add src/foo.py）→ 不警告。"""
         _write_dispatch_active(tmp_path, count=2)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -446,6 +449,7 @@ class TestParallelWideStagingWarning:
         """單一派發場景（<2 dispatches）+ git add . → 不警告（合法單人用例）。"""
         _write_dispatch_active(tmp_path, count=1)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -465,6 +469,7 @@ class TestParallelWideStagingWarning:
     ):
         """dispatch-active.json 不存在 → 不警告（視為單一場景）。"""
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -482,12 +487,14 @@ class TestParallelWideStagingWarning:
     def test_count_active_dispatches_handles_missing_file(self, tmp_path, monkeypatch):
         """_count_active_dispatches：檔案不存在回傳 0。"""
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
         assert _count_active_dispatches() == 0
 
     def test_count_active_dispatches_reads_entries(self, tmp_path, monkeypatch):
         """_count_active_dispatches：正確計數 dispatches 條目。"""
         _write_dispatch_active(tmp_path, count=3)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
         assert _count_active_dispatches() == 3
 
     def test_count_active_dispatches_handles_corrupt_json(self, tmp_path, monkeypatch):
@@ -496,6 +503,7 @@ class TestParallelWideStagingWarning:
         claude_dir.mkdir()
         (claude_dir / "dispatch-active.json").write_text("not json", encoding="utf-8")
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
         assert _count_active_dispatches() == 0
 
 
@@ -649,6 +657,7 @@ class TestKeywordConflictIntegration:
         """AC-T1：sage agent + prompt 含『實作』 → stderr 印警告。"""
         _write_agent_md(tmp_path, "sage-test-architect", _SAGE_LIKE_MD)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -679,6 +688,7 @@ class TestKeywordConflictIntegration:
 """
         _write_agent_md(tmp_path, "thyme-python-developer", body)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
         monkeypatch.delenv(_hook._BYPASS_ENV_VAR, raising=False)
 
         exit_code = _run_hook(
@@ -699,6 +709,7 @@ class TestKeywordConflictIntegration:
         """AC-T3：prompt 與 agent 禁止行為無衝突 → 不警告。"""
         _write_agent_md(tmp_path, "sage-test-architect", _SAGE_LIKE_MD)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -718,6 +729,7 @@ class TestKeywordConflictIntegration:
     def test_missing_agent_md_no_warning(self, monkeypatch, capsys, tmp_path):
         """agent .md 檔不存在時靜默放行（不丟例外）。"""
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -739,6 +751,7 @@ class TestKeywordConflictIntegration:
             tmp_path, "bare-agent", "# bare\n\n只有簡介\n"
         )
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
 
         exit_code = _run_hook(
             monkeypatch,
@@ -1464,6 +1477,7 @@ class TestTieredVerdictIntegration:
     def _setup(self, monkeypatch, tmp_path, agent_name="tiered-test-agent"):
         _write_agent_md(tmp_path, agent_name, _HIGH_CONF_AGENT_MD)
         monkeypatch.setattr(_hook, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(_hook, "get_code_root", lambda: tmp_path)
         monkeypatch.delenv(_hook._BYPASS_ENV_VAR, raising=False)
 
     def test_high_confidence_git_commit_blocks(self, monkeypatch, capsys, tmp_path):
@@ -2347,7 +2361,7 @@ class TestWorktreeCompleteWarning:
         assert context, "worktree + track complete 應輸出 additionalContext 提示"
 
     def test_track_finish_prompt_emits_warning(self, monkeypatch, capsys):
-        """正向對照：worktree + track finish 同樣出提示，且 permissionDecision 為 allow（不阻擋）。"""
+        """正向對照：worktree + track finish 同樣出提示，且不帶 permissionDecision（只提醒，不代用戶核可）。"""
         exit_code = _run_hook(
             monkeypatch,
             capsys,
@@ -2365,7 +2379,7 @@ class TestWorktreeCompleteWarning:
         out = capsys.readouterr().out.strip()
         assert out, "worktree + track finish 應輸出提示"
         hso = json.loads(out)["hookSpecificOutput"]
-        assert hso["permissionDecision"] == "allow"
+        assert "permissionDecision" not in hso
         assert hso.get("additionalContext")
 
     def test_track_commit_only_prompt_no_warning(self, monkeypatch, capsys):
@@ -2560,3 +2574,55 @@ class TestNonListAgentPathBased:
             "prompt": "",
         })
         assert code == 2
+
+
+# ----------------------------------------------------------------------------
+# W17-018 fallback 只對實作名單內代理人套用：名單外代理人 prompt 中的票號
+# 是被分析對象，不得以其 where.files 當成派發目標（3.3.0-W1-198.1）
+# ----------------------------------------------------------------------------
+
+
+class TestFallbackScopedToImplementationAgents:
+    _PROMPT = "分診 3.3.0-W1-197 與 3.3.0-W1-197.1 的票面，回報結論"
+
+    def _scope_has_other(self, monkeypatch):
+        monkeypatch.setattr(
+            _hook, "_merge_ticket_scope", lambda ids: (False, False, True)
+        )
+
+    def test_non_list_agent_ticket_ids_only_allowed(self, monkeypatch, capsys):
+        # 修正前：L2 以被分析票的 where.files 補成 other=True → 阻擋（紅）
+        self._scope_has_other(monkeypatch)
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "Explore",
+            "prompt": self._PROMPT,
+        })
+        assert code == 0
+
+    def test_list_agent_same_prompt_still_blocked(self, monkeypatch, capsys):
+        # E2 正向對照：實作名單內代理人同條件仍套用 L2 並阻擋
+        self._scope_has_other(monkeypatch)
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "thyme-python-developer",
+            "prompt": self._PROMPT,
+        })
+        assert code == 2
+
+    def test_non_list_agent_explicit_src_path_still_blocked(self, monkeypatch, capsys):
+        # E2 正向對照：名單外代理人 prompt 明寫非 .claude/ 路徑仍阻擋
+        self._scope_has_other(monkeypatch)
+        code = _run_hook(monkeypatch, capsys, {
+            "subagent_type": "Explore",
+            "prompt": self._PROMPT + "，並修改 src/foo.py",
+        })
+        assert code == 2
+
+    def test_helper_skips_l2_for_non_list_agent(self, monkeypatch):
+        self._scope_has_other(monkeypatch)
+        ids = ["3.3.0-W1-197"]
+        assert _hook._resolve_path_classification(
+            self._PROMPT, ids, is_implementation_agent=False
+        ) == (False, False, False)
+        assert _hook._resolve_path_classification(
+            self._PROMPT, ids
+        ) == (False, False, True)

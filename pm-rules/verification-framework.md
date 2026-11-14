@@ -61,6 +61,8 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 
 **檢查 3 的範圍以派發時的票面為準**：驗收時才想到的要求，不能回頭加進本票的 acceptance。票面 acceptance 本身寫得不清楚時，照字面最寬鬆的合理解讀收件，改進寫法的工作排進後續版本。
 
+**檢查 3 的明文例外：防護類 hook 票的執行證據格式**。where.files 觸及 hooks 目錄的票，建票時會自動寫入四項必含 acceptance（實地觸發、載入確認、失敗語意、產生路徑盤點），證據格式由 acceptance-gate 機械驗證，不套用「最寬鬆的合理解讀」。**Why**：hook 已註冊卻零效力時，單元測試、註冊與實機試用都會呈現正常，只有格式固定的執行證據能分辨。**Action**：這四項照 gate 提示的證據格式填寫；格式不符時 gate 阻擋 complete，屬派發時票面已寫入的要求，不是驗收時新增的條件。
+
 **檢查 2 的 where 擴充程序**：本票 acceptance 以全文 grep 驗收某個概念（概念替換類，見 `.claude/error-patterns/documentation/DOC-008-partial-definition-replacement-in-same-file.md`〈變體：驗收條件以位置界定範圍〉），執行中在 `where.files` 以外的檔案 grep 到同一概念的命中時，依下表處理。
 
 | 步驟 | 執行者 | 動作 |
@@ -75,6 +77,22 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 **Why**：檢查 2 要求變更只落在 where 內，概念替換卻要求同一概念在全文都改完。命中在 where 以外時，兩者會互相衝突：照 grep 驗收改，會被檢查 2 退件；照檢查 2 停手，同一概念的新舊寫法會並存發佈。**Consequence**：沒有擴充程序，執行者只能二選一，選哪一邊都會讓驗收結果取決於執行者的判斷，而不是票面。**Action**：規劃期先 grep，把已知命中放進 where（減少執行中擴充）；執行中仍有新命中時，走上表四步。
 
 **Why**：驗收範圍不固定時，每一輪審查都能找到新的意見，同一張票來回退件，執行期跟著變成第二輪規劃。**Consequence**：退件理由一旦超出三項，代理人無法預先知道怎樣算完成，版本的終點會一直往後推。**Action**：驗收報告只列三項的結果；其他觀察寫成後續版本的票或 issue，不寫成退件理由。
+
+---
+
+## complete 前置條件
+
+**acceptance-gate 擋下 complete 的條件，不全是驗收。** 下表三項擋的是「現在 complete 會讓系統狀態出錯或資料遺失」，不評價產出品質，所以不屬退件理由，也不受〈驗收三項固定檢查〉「其他一律不審」的限制，維持阻擋。
+
+| 條件 | 擋什麼 | 不擋的後果 | 解除方式 |
+|------|-------|-----------|---------|
+| 後代未完成 | 子、孫票未全落入 completed 或 closed | 父票標為完成而問題未解決，看板與依賴判斷讀到錯誤狀態 | 完成或關閉後代；確認要旁路時用 `ticket track complete <id> --force`，gate 放行並把未完成後代寫入稽核日誌 |
+| 協調票未配對的用戶待辦 | `coordination: true` 的票仍有未寫完成行的用戶待辦 | 用戶待辦埋在已完成的舊票，之後沒有人讀得到 | 在 Solution 為每項寫完成行，或寫完成行註明轉移至新協調票 |
+| 實驗器材殘留 | 工作區有屬於本票、未處置的實驗器材 | 器材被誤當正式檔案提交、或無人清理 | `ticket track resolve-artifact` 處置後再 complete |
+
+**與退件的區別**：退件表示產出不合格，要回到執行者重做；前置條件不成立表示收尾時機還沒到，產出本身不需重做。驗收報告不把前置條件列為退件理由。
+
+**Why**：gate 的阻擋若一律視為驗收，「退件只看三項」就與實際行為不符，執行者無法從規則預知哪些阻擋會出現。**Consequence**：歸類不清時，前置條件會被當成額外的退件條件質疑，或反過來被當成可放寬的審查意見而降級，失去資料保全作用。**Action**：新增 gate 阻擋項時，先判定它屬三項檢查、ANA 專屬 checklist，還是本節的前置條件；三者皆非的，不設為阻擋。
 
 ---
 
@@ -186,34 +204,34 @@ Level 4 找不到閘門結果的處置與 `--skip-gate` 例外，以 `.claude/ag
 
 > **核心定位**：本章節是 Level 4 驗收層的 ANA 專屬延伸，補強 PM 在 ANA complete 前對 Solution 規劃 vs 實際 spawned ticket 的一致性檢查。**作為 hook 強制層（acceptance-gate-hook 整合 ana_spawn_consistency_checker）+ 規則自律層（quality-baseline 規則 5）之外的第三道行為層防護**。
 >
-> 來源：W17-167 ANA L4 結論。落地基線：W17-162 ANA 暴露 ANA Solution 規劃 spawn 但未實際建 ticket，acceptance 勾選只檢文字產出，靜默放行。
+> 來源：ANA L4 結論。落地基線：一次 ANA 暴露 ANA Solution 規劃 spawn 但未實際建 ticket，acceptance 勾選只檢文字產出，靜默放行。
 
 ### 適用範圍
 
 | 觸發條件 | 是否啟用 |
 |---------|---------|
-| ANA 類 ticket complete 前驗收 | 是 |
+| ANA 或 DOC 類 ticket complete 前驗收 | 是 |
 | Solution 內含 spawn 規劃表格（IMP/DOC 清單） | 是 |
-| ANA 結論為「無需 spawn」且已顯性標註 | 例外豁免（Q3） |
-| IMP / DOC 類 ticket | 否（不適用） |
+| 結論為「無需 spawn」且已顯性標註 | 例外豁免（Q3） |
+| IMP 等其他類型 ticket | 否（不適用） |
 
 ### 三題 Checklist（PM 驗收 ANA 時逐題核對）
 
 #### Q1：Solution spawn 規劃表格的每一項，是否都已建對應 ticket？
 
-**Why**：Solution 寫了規劃不等於建了 ticket。acceptance 條目「產出 spawned IMP/DOC 清單」勾選只代表 Solution 章節文字產出存在，與「實際 `ticket track create` 建檔」是兩件事。
+**Why**：Solution 寫了規劃不等於建了 ticket。acceptance 條目「產出 spawned IMP/DOC 清單」勾選只代表 Solution 章節文字產出存在，與「實際 `ticket create` 建檔」是兩件事。
 
-**Consequence**：未建 ticket 的規劃會在 ANA complete 後靜默遺忘——觸發 PC-093（無 trigger 延後決策累積）模式，且違反 quality-baseline 規則 5（所有發現必須追蹤）。歷史 W17-162 / W11-003.6 等案例證實此漏洞反覆發生。
+**Consequence**：未建 ticket 的規劃會在 ANA complete 後靜默遺忘——觸發 PC-093（無 trigger 延後決策累積）模式，且違反 quality-baseline 規則 5（所有發現必須追蹤）。歷史多個案例證實此漏洞反覆發生。
 
-**Action**：逐項比對 Solution 表格 vs frontmatter `spawned_tickets` / `children`，缺漏立即執行 `ticket track create` 補建並追加至 frontmatter。
+**Action**：逐項比對 Solution 表格與落地票（frontmatter `spawned_tickets`／`children`、已判定的 spawn request、以 `source_ticket` 回指本票的票），缺漏立即以 `ticket create` 補建：本版範圍用 `--parent <本票 ID>`，排入後續版本用 `--version <目標版本> --source-ticket <本票 ID>`。
 
-#### Q2：frontmatter `spawned_tickets` + `children` 數量是否 >= Solution 規劃數量？
+#### Q2：落地數是否 >= Solution 規劃數量？
 
 **Why**：數量不一致代表至少有一項規劃漏建。Q1 的逐項比對若有遺漏（如表格項目較多時人工比對失準），數量門檻提供第二層防護。
 
 **Consequence**：部分規劃遺忘會導致後續 Wave 排程缺料；ANA L1-L4 多層防護中，若 L4 行為層未檢，hook + 規則層的設計意圖無法在「PM 主動驗收」場景閉環。
 
-**Action**：以 `len(spawned_tickets) + len(children) >= Solution 表格列數` 為門檻；數量不足時逐行回查 Solution 表格，補建遺漏 ticket，並在 ticket frontmatter `spawned_tickets` 補入新建 ticket ID。
+**Action**：落地數與強制層同口徑：`spawned_tickets` + `children` + 已判定 spawn request，不足時再計入以 `source_ticket`／`discovered_during`／`parent_id` 回指本票、或 `previous_ids` 含本票子號的票。落地數 >= Solution 表格列數才通過，部分落地即不通過；不足時逐行回查 Solution 表格，依 Q1 的血緣規則補建遺漏 ticket。
 
 #### Q3：若合法不 spawn，Solution 是否有顯性否定標記？
 
@@ -223,7 +241,7 @@ Level 4 找不到閘門結果的處置與 `--skip-gate` 例外，以 `.claude/ag
 
 **Action**：在 Solution 章節以下列任一格式顯性標註：
 - `「無需建 ticket：[具體理由，如：現有 Wave X 已涵蓋 / 等待外部依賴 Y / 經多視角審查確認屬 over-engineering]」`
-- 對應 hook 偵測模式由 `ana_spawn_consistency_checker` 規格定義（W17-167 spawned IMP #1 落地）。
+- 對應 hook 偵測模式由 `ana_spawn_consistency_checker` 規格定義。
 
 ### 與既有驗收條目的關係
 
@@ -239,7 +257,7 @@ ANA complete 前，PM 在主線程依序執行：
 
 1. `ticket track show <ana-id>` 取得 frontmatter `spawned_tickets` / `children` 與 Solution 章節
 2. 逐題執行 Q1 / Q2 / Q3
-3. 若 Q1 / Q2 不通過，立即 `ticket track create` 補建並更新 frontmatter
+3. 若 Q1 / Q2 不通過，立即依 Q1 的血緣規則以 `ticket create` 補建
 4. 若 Q3 適用，在 Solution 補上顯性否定標記
 5. 執行 `ticket track check-acceptance --all <ana-id>` + `ticket track complete <ana-id>`
 
@@ -345,7 +363,9 @@ PM 遇 AC 爭議裁決時：
 
 ---
 
-**Last Updated**: 2026-11-09
+**Last Updated**: 2026-11-13
+**Version**: 2.2.1 - 〈ANA 專屬驗收 checklist〉對齊 spawn 一致性強制層現行判定：適用 ANA 與 DOC；Q2 落地數改與強制層同口徑（含已判定 spawn request 與回指本票的票），部分落地即不通過；補建命令改為實際存在的 `ticket create`，並依本版／後續版本區分 `--parent` 與 `--source-ticket`。
+**Version**: 2.2.0 - 新增〈complete 前置條件〉：後代未完成、協調票未配對用戶待辦、實驗器材殘留三項擋的是狀態一致性與資料保全，不屬退件理由、維持阻擋；新增阻擋項須先歸入三項檢查、ANA 專屬 checklist 或前置條件。〈驗收三項固定檢查〉補檢查 3 的明文例外：防護類 hook 票的執行證據格式由 gate 機械驗證，不套用最寬鬆解讀。來源：用戶裁定（2026-11-12）
 **Version**: 2.1.0 - 〈驗收三項固定檢查〉新增〈檢查 2 的 where 擴充程序〉：概念替換類票在 where 以外 grep 到同概念命中時，執行者停手回報，PM 以 set-where 擴充並記理由，驗收以擴充後的 where 機械比對、無理由的擴充條目視為範圍外。消解檢查 2 與 DOC-008 變體的衝突。來源：用戶裁定（2026-11-09）
 **Version**: 2.0.0 - 新增〈驗收三項固定檢查〉：收退只看能不能跑、有沒有動到範圍外的檔案、輸出格式對不對，其他一律不退件；Phase 4 與多視角審查照跑，發現排進後續版本。〈驗證失敗處理〉Level 3／4 與〈品質不達標重做決策〉依三項改寫。來源：用戶裁定（2026-11-09）
 **Version**: 1.11.0 - 新增「合併前全綠與實機驗證票」章節（時點分工、開票條件、名額閘門排入、與 CI 分工）；Phase 3b 驗收改為本票相關測試檔
@@ -355,7 +375,7 @@ PM 遇 AC 爭議裁決時：
 
 **Change Log**:
 - v1.10.0 (2026-08-10): 新增「驗收條件爭議裁決框架」章節，補足 PM 裁決 AC 與實況爭議時缺乏固定判準、需臨場推導的缺口；與 `acceptance-criteria-methodology.md`「條件式驗收條件的設計判準」章節雙向引用
-- v1.9.0 (2026-05-08): 新增 ANA 專屬驗收 checklist（Q1 規劃 vs ticket / Q2 數量比對 / Q3 否定標記），每題附 Why/Consequence/Action 三明示；作為 hook 強制層 + 規則自律層之外的第三道行為層防護（W17-170，源 W17-167）
+- v1.9.0 (2026-05-08): 新增 ANA 專屬驗收 checklist（Q1 規劃 vs ticket / Q2 數量比對 / Q3 否定標記），每題附 Why/Consequence/Action 三明示；作為 hook 強制層 + 規則自律層之外的第三道行為層防護
 - v1.8.0 (2026-03-27): 新增品質不達標重做決策
 - v1.7.0 (2026-03-13): Level 3 新增「驗收條件主動勾選」驗證項目
 - v1.5.0 (2026-03-04): Level 1 新增建立後品質審核

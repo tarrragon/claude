@@ -36,8 +36,13 @@ def hook_mod():
 
 
 @pytest.fixture
-def project_root(tmp_path):
-    """建立含 CLAUDE.md + rules/core/ 的最小專案結構"""
+def project_root(tmp_path, monkeypatch):
+    """建立含 CLAUDE.md + rules/core/ 的最小專案結構
+
+    state 檔改經 get_hook_log_dir 解析（HOOK_TEST_ISOLATION=1 下取自
+    CLAUDE_PROJECT_DIR），故每測試把專案根指向自己的 tmp_path，維持 state 隔離。
+    """
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     (tmp_path / ".claude" / "rules" / "core").mkdir(parents=True)
     (tmp_path / ".claude" / "references").mkdir(parents=True)
     (tmp_path / "CLAUDE.md").write_text(

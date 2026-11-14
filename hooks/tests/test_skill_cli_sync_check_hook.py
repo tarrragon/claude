@@ -17,6 +17,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 # 動態導入（檔名含 dash）
 # 0.2.1-W3-239: 由 .claude/skills/ticket/hooks/ 泛化搬遷至 .claude/hooks/
 hooks_path = Path(__file__).parent.parent
@@ -165,6 +167,33 @@ def test_build_reminder_contains_all_unsynced_skills():
     assert ".claude/skills/ticket/ticket_system/lifecycle.py" in message
     assert ".claude/skills/doc/doc_system/cli.py" in message
     assert ".claude/skills/doc/SKILL.md" in message
+
+
+def _assert_subprocess_caller_hint(message: str, skill: str) -> None:
+    """提示須帶子程序呼叫點的 grep 範例（以該 CLI 命令名）與非 0 結束碼分支確認。"""
+    assert "子程序呼叫點" in message
+    assert f"grep -rnE \"['\\\"]{skill}['\\\"]\"" in message
+    assert "非 0" in message
+
+
+def test_build_reminder_includes_subprocess_caller_hint_per_skill():
+    unsynced = {
+        "ticket": [".claude/skills/ticket/ticket_system/lifecycle.py"],
+        "doc": [".claude/skills/doc/doc_system/cli.py"],
+    }
+    message = hook.build_reminder(unsynced)
+    _assert_subprocess_caller_hint(message, "ticket")
+    _assert_subprocess_caller_hint(message, "doc")
+
+
+def test_legacy_reminder_without_caller_hint_is_rejected():
+    """E2 正向對照：只列 SKILL.md／pm-rules 同步目標的舊提示，斷言必須判紅"""
+    legacy = (
+        "[ticket]\n  改動檔案：\n    - .claude/skills/ticket/ticket_system/lifecycle.py\n"
+        "  建議同步目標：\n    - .claude/skills/ticket/SKILL.md\n"
+    )
+    with pytest.raises(AssertionError):
+        _assert_subprocess_caller_hint(legacy, "ticket")
 
 
 # ----------------------------------------------------------------------------

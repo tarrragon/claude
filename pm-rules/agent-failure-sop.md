@@ -148,5 +148,5 @@ git branch | grep feat/
 
 **Last Updated**: 2026-10-08
 **Version**: 1.1.0 — 「背景代理人超時」列補路由：SendMessage 催促前先確認 worktree 仍在，指向恢復前判準段落
-**Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（W10-076.2 拆分；原檔 v3.7.0 L162-L292）
+**Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（拆分；原檔 v3.7.0 L162-L292）
 **Source**: PC-045 + PC-050 + PC-070 教訓疊加

@@ -35,7 +35,7 @@ from lib import (
     read_json_from_stdin,
     extract_tool_input,
     emit_hook_output,
-    get_project_root,
+    get_hook_log_dir,
 )
 
 
@@ -52,8 +52,8 @@ REPLACEMENT_CHAR = "\ufffd"
 # 每個檔案最多報告的損壞位置數
 MAX_REPORTED_LOCATIONS = 5
 
-# W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook，候選 3）
-# 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+# 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook）
+# 依據：Hook 觸發後 0% 產生 Action 的比例實測
 SAMPLING_N = 10
 
 
@@ -64,7 +64,7 @@ def _get_sampling_counter_file() -> Path:
     repo 層級 .claude/hook-logs/，不受 CLAUDE_PROJECT_DIR 覆寫，測試以
     subprocess 執行時會 prime production 計數器並與 live session 競態。
     """
-    return get_project_root() / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+    return get_hook_log_dir("_sampling") / "utf8-integrity-check-hook.count"
 
 # 忽略的檔案類型（二進位或非文字檔案）
 BINARY_EXTENSIONS = frozenset({
@@ -201,7 +201,7 @@ def main() -> int:
         emit_hook_output(HOOK_EVENT)
         return 0
 
-    # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查
+    # 抽樣降級：每 N 次觸發 1 次完整檢查
     if not should_sample_run(logger):
         emit_hook_output(HOOK_EVENT)
         return 0

@@ -165,7 +165,7 @@ tail -f .claude/hook-logs/file-type-permission/file-type-permission-*.log
 
 # 測試 Ticket 檔案
 echo '{"tool_name":"Edit","tool_input":{"file_path":".claude/tickets/test.md"}}' | \
-  python3 .claude/hooks/file-type-permission-hook.py
+  uv run --quiet .claude/hooks/file-type-permission-hook.py
 
 # 驗證語法
 python3 -m py_compile .claude/hooks/file-type-permission-hook.py

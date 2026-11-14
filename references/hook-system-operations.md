@@ -9,7 +9,7 @@
 
 ## Hook 清單 per-hook 詳解
 
-> 本節描述的是 W8-020.6 外移時繼承的早期整併式 bash 架構（每個 event 對應約 1-2 個複合腳本）。現行 `.claude/hooks/` 已改為每個關注點各自獨立的 Python hook（見 `.claude/hooks/README.md` 與 `settings.json` 的實際註冊清單），下列 `.sh` 檔名均不存在，本節僅保留其決策邏輯與演算法策略供設計參考，2026-08-22 文件複查更正。
+> 本節描述的是 hook 家族整併外移時繼承的早期整併式 bash 架構（每個 event 對應約 1-2 個複合腳本）。現行 `.claude/hooks/` 已改為每個關注點各自獨立的 Python hook（見 `.claude/hooks/README.md` 與 `settings.json` 的實際註冊清單），下列 `.sh` 檔名均不存在，本節僅保留其決策邏輯與演算法策略供設計參考，2026-08-22 文件複查更正。
 
 ### SessionStart Hook
 
@@ -255,15 +255,25 @@ if __name__ == "__main__":
 
 ### 輸出規範（stderr 與 exit code）
 
-> **背景**：Claude Code 將 hook 的 stderr 輸出和 exit code 1 都視為 "hook error"（IMP-048, IMP-049）。此為 CLI 已知 bug（anthropics/claude-code#34713 等），但在 CLI 修復前 Hook 需配合。
+> **runtime 實際行為（2026-11 實測，SessionStart、UserPromptSubmit、PreToolUse、PostToolUse 四個事件一致）**：hook 以 exit 1 結束時，runtime 記為 non-blocking error，把 stderr 原文寫進 transcript 的 `hook_non_blocking_error` attachment，不送模型，工具照常執行。exit 0 是成功，runtime 不記錄任何錯誤。早期把 exit 1 的「hook error」顯示當成 CLI bug 而要求避開 stderr 與 exit 1（IMP-048、IMP-049）；實測顯示它是 runtime 保存的錯誤紀錄，是可用的訊號，本節據此改寫。
+
+**原則：exit 1 只表示「hook 本身失敗」**。業務結果不用 exit 1 表達：提醒走 `additionalContext`，阻擋走 exit 2（品質基線規則 4）。這樣 runtime 的錯誤紀錄才只含真正的失敗，讀取端轉告給模型時不會混入誤報。
+
+**失敗的三個層次與負責層**：
+
+| 層次 | 發生位置 | 負責層 | 輸出管道 |
+|------|---------|--------|---------|
+| 執行期例外 | `run_hook_safely` 呼叫的 `main` 內 | `run_hook_safely` | 完整 traceback 寫日誌檔（`.claude/hook-logs/`），stderr 寫一行摘要，回傳 exit 1；`fail_closed=True` 的守衛回傳 exit 2。hook 本身不另外處理 |
+| 進程級失敗 | import 期、直譯器啟動，`run_hook_safely` 尚未執行（實測對象為 import 期崩潰） | runtime 記錄、框架讀取端轉告 | hook 不攔截成 exit 0，讓進程以非 0 結束（未捕捉例外的直譯器預設 exit 1）；runtime 把 stderr 寫進 transcript，框架讀取端在後續事件以 `additionalContext` 轉給模型 |
+| 業務提醒 | hook 正常執行完畢 | hook 本身 | 受眾含模型時走 `additionalContext` 或 exit 2；exit 0 加 stderr 對模型不可見（品質基線規則 4） |
 
 **Hook 執行路徑規則**（由 `run_hook_safely` 呼叫的程式碼）：
 
 | 規則 | 說明 |
 |------|------|
-| 禁止 `sys.exit(1)` | 改用 `return 0` 或拋出 Exception 由 `run_hook_safely` 捕獲 |
-| 避免 stderr 輸出 | StreamHandler 使用 stdout，錯誤記錄到日誌檔 |
-| ImportError 防護 | `sys.exit(0)` + stderr 報錯（ImportError 在 `run_hook_safely` 外，無法被捕獲） |
+| 不以 `sys.exit(1)` 表達業務結果 | 正常結束 `return 0`；失敗時拋出 Exception，由 `run_hook_safely` 寫日誌、寫 stderr 摘要並回傳 exit 1 |
+| 日誌不寫 stdout | stdout 是 runtime 解析的輸出管道（JSON 或注入 context 的文字），日誌寫進去會破壞輸出；用 `setup_hook_logging()`，檔案日誌加 stderr |
+| import 期失敗不吞成 exit 0 | 以 `try/except ImportError: sys.exit(0)` 包住 import，會讓 runtime 判為成功、不留任何紀錄，讀取端也看不到；讓例外照常拋出，或印出原因後以 exit 1 結束 |
 
 **`__main__` CLI 工具規則**（不經過 Hook 系統的 CLI 測試入口）：
 
@@ -275,18 +285,23 @@ if __name__ == "__main__":
 **日誌配置標準模板**：
 
 ```python
-# 正確：使用 stdout（Hook 執行路徑）
-logging.basicConfig(
-    level=log_level,
-    format="[%(asctime)s] %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)  # Hook 路徑必須用 stdout
-    ]
-)
+# 正確：經 run_hook_safely 執行，日誌由 setup_hook_logging 建立（檔案 + stderr）
+from lib import run_hook_safely
+
+def main() -> int:
+    ...  # 失敗時直接拋出例外
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(run_hook_safely(main, "my-hook"))
 ```
 
-**與 quality-baseline 規則 4 的關係**：quality-baseline 要求「異常必須寫入 stderr」，但 Hook 系統因 CLI bug 限制無法遵守。Hook 的替代方案為異常記錄到日誌檔（`.claude/hook-logs/`），不寫 stderr。這是 CLI bug 的已知妥協，不適用於非 Hook 的一般程式碼。
+```python
+# 錯誤：StreamHandler 指向 stdout，日誌混進 runtime 解析的輸出
+logging.basicConfig(handlers=[logging.StreamHandler(sys.stdout)])
+```
+
+**與 quality-baseline 規則 4 的關係**：兩者要求一致。規則 4 要求 hook 異常寫 stderr 並同時寫檔案日誌，對應上表「執行期例外」一列，由 `run_hook_safely` 完成；進程級失敗發生在 hook 的錯誤處理之前，hook 自己做不到，改由 runtime 記錄、框架讀取端轉告。
 
 ### 測試要求
 
@@ -557,5 +572,6 @@ subprocess.run(
 
 ---
 
-**Last Updated**: 2026-06-14
-**Version**: 1.0.0 — 從 hook-system-methodology.md 外移（W8-020.6 hook 家族整併）：per-hook 程式碼詳解、Event 選擇決策流程、模組化開發規範、跨平台部署規範、Hook 設計完整決策樹與反模式清單；emoji 全數清理為純文字
+**Last Updated**: 2026-11-13
+**Version**: 1.1.0 — 〈輸出規範〉依 2026-11 runtime 實測改寫：exit 1 是 runtime 保存的錯誤紀錄而非需避開的 bug；新增失敗三層次與負責層表（執行期例外由 run_hook_safely、進程級失敗由 runtime 記錄加框架讀取端轉告、業務提醒由 hook 本身）；import 期失敗不吞成 exit 0；日誌不寫 stdout；與品質基線規則 4 的關係改為一致
+**Version**: 1.0.0 — 從 hook-system-methodology.md 外移（hook 家族整併）：per-hook 程式碼詳解、Event 選擇決策流程、模組化開發規範、跨平台部署規範、Hook 設計完整決策樹與反模式清單；emoji 全數清理為純文字

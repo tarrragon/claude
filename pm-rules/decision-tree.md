@@ -89,7 +89,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 >
 > 本章節不複述條件以避免清單漂移（DRY 違反 → PC-066 教訓）。
 
-**自動偵測**：`decision-quality-guard-hook.py`（W10-009 追蹤）為唯一強制觸發節點，本章節為人工 fallback。
+**自動偵測**：`decision-quality-guard-hook.py`為唯一強制觸發節點，本章節為人工 fallback。
 
 ---
 
@@ -101,7 +101,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ---
 
-## 認知接地雙層（決策第一級護欄，1.2.0-W1-033）
+## 認知接地雙層（決策第一級護欄）
 
 > 條件觸發層（依「決策閘門預算原則」lazy 化）。決策失敗最大兩軸是「信念是否對齊世界」（F 知識缺口 + D 狀態漂移，N=326 快照合佔 53.7%），非功能/分類軸。第一級護欄按信念接地分流——事前查證（F）+ 事後對帳（D），手段不對稱。
 
@@ -124,7 +124,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 所有派發前（強制，主題層先於票層） | parallel-dispatch.md「主題層前置」 | 先選主題再選票：查主題佔用狀態、一 session 一主題、主題內再套既有五觸發條件與複雜度五維度分流 |
 | 動作摩擦力評估（哲學層） | friction-management-methodology.md | 判斷動作應降低/保留/增加摩擦力（30 秒準則）。流程階段摩擦力曲線見同文件「開發流程階段的摩擦力曲線」章節 |
 | ANA/Debug/提案（強制 WRAP） | /wrap-decision | 分析、除錯、提案評估必須先 WRAP |
-| 反思迴路偵測（session ANA ≥ 3 / 鏈深度 ≥ 3 / 耗時 > 4 hr） | reflection-termination.md | 強制 AUQ 詢問終止，防止反思無限循環（W15-010 Layer 3） |
+| 反思迴路偵測（session ANA ≥ 3 / 鏈深度 ≥ 3 / 耗時 > 4 hr） | reflection-termination.md | 強制 AUQ 詢問終止，防止反思無限循環（Layer 3） |
 | Proposal 建立 / 狀態變更 | proposal-evaluation-gate.md | docs/proposals/ 新建或修改 confirmed/approved 狀態時的強制分級與評估 |
 | 書面文字品質審查（強制：情境 C/D/F/G） | parallel-evaluation SKILL + basil-writing-critic | 規則/Skill/方法論變更後、分析報告（ANA Solution）產出後、Phase 1 功能規格產出後、Ticket body 完成後：自動加入 basil-writing-critic 委員（與 linux 並列常駐）；觸發條件對照 `.claude/agents/basil-writing-critic.md`「適用情境」章節 |
 | Hook 設計 / 盤點 / 降級 | hook-system-methodology.md「Hook 階段平衡」「Hook 生命週期與降級觀察」章節 | 新增 Hook、既有 Hook 盤點、降級評估時的階段平衡設計原則（追蹤表與 Rollback SOP 見 `.claude/references/hook-system-downgrade-tracking.md`） |
@@ -139,7 +139,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 完成後發現 | execution-discovery-rules.md 3.5-B | completed Ticket 交付物需修正 |
 | 任務完成 | completion-checkpoint-rules.md | Checkpoint 循環（0/0.5/1/1.5/1.8/1.9/2/3/4/R） |
 | TDD 完成路由 | tdd-completion-routing.md | Checkpoint 2 情境 D（TDD Phase 完成） |
-| 多 agent 協作機制選擇 | 本檔案「Workflow vs Agent 決策路由」 | 任務需多 agent 協作時，依持久化需求 / 控制流確定性 / 視角衝突仲裁選擇四機制（W3-002 結論） |
+| 多 agent 協作機制選擇 | 本檔案「Workflow vs Agent 決策路由」 | 任務需多 agent 協作時，依持久化需求 / 控制流確定性 / 視角衝突仲裁選擇四機制 |
 | 代理人管理 | agent-dispatch-enforcement.md | 觸發優先級、強制命令、違規 |
 | Ticket 進度更新（強制） | completion-checkpoint-rules.md | Checkpoint 轉換時更新 Ticket |
 | 代理人權限查詢 | agent-path-registry.md | 路徑表 Source of Truth |
@@ -148,7 +148,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ## Workflow vs Agent 決策路由
 
-> **來源**：1.5.0-W3-002 ANA 結論（AC5）+ W4-001 agentType 繼承驗證。
+> **來源**：ANA 結論（AC5）+ agentType 繼承驗證。
 
 任務需要多 agent 協作時，依以下決策樹選擇機制：
 
@@ -179,7 +179,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 | parallel-evaluation | 常駐委員 + 衝突處理 + Worth-It Filter | N 視角 x 1 標的（審查/評估） |
 | Workflow | 確定性控制流 + 結構化聚合 + budget 感知 + resume | 同質批量 + pipeline + adversarial verify |
 
-### agentType 橋接（W4-001 已驗證）
+### agentType 橋接（已驗證）
 
 兩種情況皆繼承 CLAUDE.md + `rules/core/`。差別在於：指定 `agentType` 時額外繼承該框架 agent 的定義檔全文；未指定時為匿名 agent，只有前者。定義檔主文的 `@-import` 僅以路徑字串留存，不展開為被引用檔案的內容。
 
@@ -220,15 +220,15 @@ Skill 是預建的專用工具，優先於代理人派發。
 ---
 
 **Last Updated**: 2026-06-18
-**Version**: 9.8.0 — 新增「Workflow vs Agent 決策路由」章節 + 路由表一列：四機制選擇決策樹、uniqueness axis 表、agentType 橋接摘要（1.5.0-W3-002 結論 + W4-001 驗證 + W4-003 落地）
-**Version**: 9.7.0 — 新增「認知接地雙層」結構（L_ground-before F 判斷協議 + L_ground-truth D 機械閘門 + 軸登錄協議）+ 路由表一列；詳細協議 / 承載機制 / 相容對照外移 `.claude/references/cognitive-grounding-layers.md`（遵決策閘門預算原則 lazy 化）（1.2.0-W1-035 落地，1.2.0-W1-033 設計）
+**Version**: 9.8.0 — 新增「Workflow vs Agent 決策路由」章節 + 路由表一列：四機制選擇決策樹、uniqueness axis 表、agentType 橋接摘要
+**Version**: 9.7.0 — 新增「認知接地雙層」結構（L_ground-before F 判斷協議 + L_ground-truth D 機械閘門 + 軸登錄協議）+ 路由表一列；詳細協議 / 承載機制 / 相容對照外移 `.claude/references/cognitive-grounding-layers.md`（遵決策閘門預算原則 lazy 化）
 
-**Version**: 9.6.0 — 新增路由：書面文字品質審查（強制：情境 C/D/F/G）→ parallel-evaluation SKILL + basil-writing-critic 委員觸發條件（W17-058 落地）
+**Version**: 9.6.0 — 新增路由：書面文字品質審查（強制：情境 C/D/F/G）→ parallel-evaluation SKILL + basil-writing-critic 委員觸發條件
 
-**Version**: 9.5.0 — 新增路由：反思迴路偵測 → reflection-termination.md（W15-010 Layer 3 落地）
+**Version**: 9.5.0 — 新增路由：反思迴路偵測 → reflection-termination.md（Layer 3 落地）
 
 **Version**: 9.4.0 — 新增路由：Ticket claim AC 驗證 / stale 警告 → ticket-lifecycle.md「AC 漂移偵測」章節（PC-055 / PROP-010 防護文件化）
 
 **Version**: 9.3.0 — 新增路由：代理人派發後快速完成通知 → agent-failure-sop.md Step 0.5 / 0.5-A 強制 TaskOutput 查詢（PC-050 模式 E / PC-070 防護）
 
-**Version**: 9.2.0 — 新增 Context 重度檢查層（PC-066 入口）：條件權威來源指向 wrap-decision SKILL（避免 DRY 違反），本層僅為人工 fallback；自動強制由 W10-009 Hook 處理
+**Version**: 9.2.0 — 新增 Context 重度檢查層（PC-066 入口）：條件權威來源指向 wrap-decision SKILL（避免 DRY 違反），本層僅為人工 fallback；自動強制由 Hook 處理

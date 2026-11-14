@@ -15,7 +15,7 @@ severity: medium
 | 編號 | PC-SCLK-005 |
 | 類別 | process-compliance |
 | 風險等級 | 中（範圍面：本次未造成損害，執行代理人在 commit 前自行發現並改用精準 pathspec 攔截；互斥面：命令直接失敗未觸及 index，本質安全，僅需正確復原程序） |
-| 首發時間 | 2026-07-31（範圍面：1.4.0-W2-016 修正 CursorLocatorBridge 時發現；互斥面：同日 PM 在 1.4.0-W3-002 追蹤票 commit 時撞見） |
+| 首發時間 | 2026-07-31（範圍面：修正 CursorLocatorBridge 時發現；互斥面：同日 PM 在追蹤票 commit 時撞見） |
 | 姊妹模式 | PC-SCLK-001（並行 agent 的 `--amend` 改寫他人 commit，同屬「共享 HEAD/index 心智模型失效」家族，但 001 是寫入面直接破壞、本模式是暫存面夾帶）、PC-019（worktree 派發前的未 commit 變更防護，見下方適用條件）、PC-BAL-008（跨 consumer 同家族：flutter_balance 專案獨立捕獲，本模式聚焦路徑級隔離「commit 帶精準 pathspec」；PC-BAL-008「變體：檔案級共用」章節實證此防護在兩票 `where.files` 指向同一實體檔案時失效，見下方「解決方案」章節補述） |
 
 ---
@@ -28,14 +28,14 @@ severity: medium
 
 ---
 
-## 實例（2026-07-31，1.4.0-W2-016）
+## 實例（2026-07-31，CursorLocatorBridge 修正）
 
 事件序列：
 
 | 步驟 | 動作 | 觀察到的結果 |
 |------|------|------|
 | 1 | 執行 `git add macos/Runner/MainFlutterWindow.swift`（僅此一個路徑） | 命令本身成功，只操作了指定路徑 |
-| 2 | 執行 `git status --porcelain` 確認 add 結果 | 除了預期的 `M macos/Runner/MainFlutterWindow.swift`，同時看到 `M  lib/app_constants.dart`、`M  lib/main.dart`、`A  lib/platform/cursor_locator_hotkey_controller.dart`、`M  test/fullscreen_clock_visibility_test.dart`、`A  test/platform/cursor_locator_hotkey_controller_test.dart`、`M  test/widget_test.dart` 六個檔案的 staged 標記——這些檔案我從未 add 過，是另一個並行 agent（負責 W2-005 hotkey 相關 ticket）先前已 stage、尚未 commit 完成的工作 |
+| 2 | 執行 `git status --porcelain` 確認 add 結果 | 除了預期的 `M macos/Runner/MainFlutterWindow.swift`，同時看到 `M  lib/app_constants.dart`、`M  lib/main.dart`、`A  lib/platform/cursor_locator_hotkey_controller.dart`、`M  test/fullscreen_clock_visibility_test.dart`、`A  test/platform/cursor_locator_hotkey_controller_test.dart`、`M  test/widget_test.dart` 六個檔案的 staged 標記——這些檔案我從未 add 過，是另一個並行 agent（負責 hotkey 相關 ticket）先前已 stage、尚未 commit 完成的工作 |
 | 3 | 意識到若直接 `git commit -m "..."`（不帶 pathspec）會把上述 6 個他人檔案一併提交，改用 `git commit -m "..." -- macos/Runner/MainFlutterWindow.swift` | commit 只包含 1 個檔案、99 行變更；`git status --porcelain` 確認其餘 6 個檔案維持原 staged 狀態未被觸碰 |
 
 發現方式：commit 前對照 `git status --porcelain` 的檔案清單與自己實際修改的範圍是否一致，而非信任「我只 add 了一個檔案，commit 應該也只有一個檔案」的直覺推論。
@@ -69,7 +69,7 @@ severity: medium
 | 範圍（上述章節） | index 的**內容**：多個 agent 的 staged 檔案共存於同一份 index | 靜默夾帶——commit 成功執行，混入他人內容，事後才發現（或發現不了） | `git commit -m "..." -- <path>` |
 | 互斥（本節） | `.git/index.lock`：git 寫入 index 前建立的排他鎖，同時只允許一個寫入程序持有 | 命令當場失敗（`fatal: Unable to create '.git/index.lock': File exists.`），exit 128，什麼都沒發生 | 間隔後重試，**絕不手動刪除 lock 檔** |
 
-**實例**（2026-07-31，PM 在 1.4.0-W3-002 追蹤票 commit 時觸發）：與另一個並行 agent 的 commit 撞期，取得 `.git/index.lock` 失敗，git 回報：
+**實例**（2026-07-31，PM 在追蹤票 commit 時觸發）：與另一個並行 agent 的 commit 撞期，取得 `.git/index.lock` 失敗，git 回報：
 
 ```
 fatal: Unable to create '.git/index.lock': File exists.
@@ -167,5 +167,5 @@ Worktree 隔離可從根本避免本模式——每個 agent 各自的 index 天
 
 ## 關聯 Ticket
 
-- `1.4.0-W2-016`（發現範圍面並自行以 `git commit -- <path>` 攔截的 ticket）
-- `1.4.0-W3-002`（PM 追蹤票 commit 時撞見互斥面 `index.lock` 衝突）
+- 發現範圍面並自行以 `git commit -- <path>` 攔截的 ticket
+- PM 追蹤票 commit 時撞見互斥面 `index.lock` 衝突的 ticket

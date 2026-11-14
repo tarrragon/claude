@@ -3,7 +3,6 @@ id: PC-153
 title: PM 對 local-command-caveat 包裹的 skill 觸發訊號過度保守解讀
 category: process-compliance
 severity: medium
-source_case: 0.19.0-W3-022
 created: 2026-05-20
 ---
 
@@ -61,11 +60,11 @@ Linux signal handling 提供清晰類比：
 | `<command-name>` 訊號 | SIGKILL / SIGSTOP（不可遮罩的用戶顯式訊號） |
 | 規則缺口 | mask 沒有定義「不可遮罩訊號」例外清單 |
 
-Signal mask 不可遮蔽所有訊號（OS 設計），同理 caveat 不可遮蔽所有用戶顯式意圖。此類比直到 0.19.0-W3-022 ANA 才明示。
+Signal mask 不可遮蔽所有訊號（OS 設計），同理 caveat 不可遮蔽所有用戶顯式意圖。此類比直到後續 ANA 才明示。
 
 ## 案例
 
-### 案例 1: 0.19.0-W3-022（2026-05-20）
+### 案例 1: `/clear` 後 `/ticket` 被當作不回應（2026-05-20）
 
 **情境**：用戶 `/clear` 後緊接著輸入 `/ticket`（無參數）。runtime 將兩個 command 訊息整段包入 `<local-command-caveat>`，包含 `<command-name>/ticket</command-name>` + `<command-message>ticket</command-message>` + 完整 SKILL.md 載入。
 
@@ -79,14 +78,14 @@ Signal mask 不可遮蔽所有訊號（OS 設計），同理 caveat 不可遮蔽
 
 **用戶糾正**：「我預設如果輸入 /ticket，應該要列出當前版本可選的任務才對，但是你並沒有列出來，請檢查流程哪裡出錯了」
 
-**修正動作**：補執行 `ticket track runqueue --context=resume --top 3` + `ticket track list --status pending,in_progress`，並以 AskUserQuestion 列出工作焦點供用戶選擇。後續建立 ANA ticket 0.19.0-W3-022 + spawned IMP 0.19.0-W3-023 落地規則修訂。
+**修正動作**：補執行 `ticket track runqueue --context=resume --top 3` + `ticket track list --status pending,in_progress`，並以 AskUserQuestion 列出工作焦點供用戶選擇。後續建立 ANA ticket 與其 spawned IMP 落地規則修訂。
 
 ## 防護
 
 | 層級 | 機制 | 狀態 |
 |------|------|------|
-| 規則層 | `.claude/references/pm-role-details.md`「Caveat 區塊訊號判讀規則」章節 | 已落地（0.19.0-W3-023） |
-| 教訓層 | 本 PC-153 | 已落地（0.19.0-W3-023） |
+| 規則層 | `.claude/references/pm-role-details.md`「Caveat 區塊訊號判讀規則」章節 | 已落地 |
+| 教訓層 | 本 PC-153 | 已落地 |
 | Hook 層（未來） | 偵測 PM 在 `<command-name>` 存在的 caveat 區塊內未執行對應 skill 流程，發出提示 | 未實作（後續 ticket 評估必要性） |
 
 ## 相關規則
@@ -97,4 +96,4 @@ Signal mask 不可遮蔽所有訊號（OS 設計），同理 caveat 不可遮蔽
 
 ---
 
-**Last Updated**: 2026-05-20 | **Source**: 0.19.0-W3-022（ANA：分析 PM 對 local-command-caveat 包裹 skill 觸發指令的解讀錯誤與防護）
+**Last Updated**: 2026-05-20 | **Source**: 2026-05-20 ANA（分析 PM 對 local-command-caveat 包裹 skill 觸發指令的解讀錯誤與防護）

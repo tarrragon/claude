@@ -5,5 +5,5 @@ defaults:
   priority: P2
   who: thyme-documentation-integrator
   how_task_type: Documentation
-  how_strategy: 依 W10-098 計畫補 frontmatter evaluation_level + 必填章節
-  when: W10-098 子任務派發時
+  how_strategy: 依計畫補 frontmatter evaluation_level + 必填章節
+  when: 子任務派發時

@@ -144,4 +144,4 @@ Hook 通過只代表子 status 形式合規，不代表子 Ticket 實際完成�
 **Version**: 2.0.1 — complete 強制條件的「相關測試 100% 通過」改為「本票相關測試檔全綠（全套件由合併閘門確認）」，對齊 quality-baseline 規則 1 的時點（tarrragon/claude#104）
 
 **Last Updated**: 2026-06-14
-**Version**: 2.0.0 — W8-019.3 整併瘦身：178→約 130 行。移除頂部孤兒 ticket 範本片段（line 1-23，無 H1 / 無開 code fence 的結構缺陷，範本權威路由 ticket-log-template.md）；新增 H1 + 30 秒核心；執行步驟改表格；CLI 命令路由 ticket skill。保留全部 15 引用者錨點：「核心原則：Ticket 引導優先於 Hook 防護」（PC-061）、「父 complete 前置條件」（atomic-ticket / ticket-lifecycle-details / pm-rules）、生命週期/狀態轉換（ticket-design-dispatch）、形式驗證 vs 實質驗收（W10-039.4）、SMART、經驗傳承
+**Version**: 2.0.0 — 整併瘦身：178→約 130 行。移除頂部孤兒 ticket 範本片段（line 1-23，無 H1 / 無開 code fence 的結構缺陷，範本權威路由 ticket-log-template.md）；新增 H1 + 30 秒核心；執行步驟改表格；CLI 命令路由 ticket skill。保留全部 15 引用者錨點：「核心原則：Ticket 引導優先於 Hook 防護」（PC-061）、「父 complete 前置條件」（atomic-ticket / ticket-lifecycle-details / pm-rules）、生命週期/狀態轉換（ticket-design-dispatch）、形式驗證 vs 實質驗收、SMART、經驗傳承

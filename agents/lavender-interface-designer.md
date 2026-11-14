@@ -394,8 +394,8 @@ Ticket: {ticket-id}
 **Updates**:
 
 - v1.8.0 (2026-07-09): 新增「元件庫優先設計」設計端條款（介面設計只引用專案元件庫元件，缺件停止並回報 PM 開元件票，禁發明一次性樣式），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`
-- v1.7.0 (2026-06-14): 外移 Phase 1 通用六階段流程至 `.claude/skills/tdd/references/phase1/rules.md`（流程與人格解耦），保留 ARCH-010 框架內建機制防護表 + spec 整合路由；Handoff 退出條件改路由至 phase1/rules.md（1.0.0-W8-009.3.3）
-- v1.6.0 (2026-03-27): 修正 Skill 引用方式 — slash command 改為 Read SKILL.md（代理人無法觸發 slash command）；新增需求不清時回報 PM 機制（W7-011）
+- v1.7.0 (2026-06-14): 外移 Phase 1 通用六階段流程至 `.claude/skills/tdd/references/phase1/rules.md`（流程與人格解耦），保留 ARCH-010 框架內建機制防護表 + spec 整合路由；Handoff 退出條件改路由至 phase1/rules.md
+- v1.6.0 (2026-03-27): 修正 Skill 引用方式 — slash command 改為 Read SKILL.md（代理人無法觸發 slash command）；新增需求不清時回報 PM 機制
 - v1.5.0 (2026-03-25): 整合 /spec 工具 — Phase 1 起始使用 /spec init 產出骨架，完成前使用 /spec validate 驗證需求完善度
 - v1.4.0 (2026-03-02): 移除 Chrome Extension 相關設計內容（不適用 Flutter 手機應用）
 - v1.4.0 (2026-03-02): 將英文段落改為繁體中文，符合語言規範

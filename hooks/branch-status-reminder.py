@@ -16,7 +16,7 @@ Hook Event: SessionStart
   禁止切換或建立分支並路由至 parallel-dispatch.md〈派發位置判準（強制）〉。
   該選項與 branch-verify-hook 舊 deny 訊息同型，會把讀者推向在共用主工作樹切分支。
 
-改進 (v1.3.0, W13-011):
+改進 (v1.3.0):
 - PC-076 防護落地：列出全部 tracked-modified + untracked
 - 分組顯示（staged / modified / untracked），上限提升至 50 + 完整清單提示
 - 雙通道輸出（stderr + logger.warning），避免 PM 誤認工作區乾淨
@@ -84,7 +84,7 @@ except ImportError as e:
 
 
 # 顯示設定常數
-# W13-011：上限提升至 50（PC-076 防護全量列出），超過則提示用 git status 取完整清單
+# 上限提升至 50（PC-076 防護全量列出），超過則提示用 git status 取完整清單
 MAX_UNCOMMITTED_FILES_DISPLAY = 50
 
 
@@ -113,7 +113,7 @@ def _classify_files(files):
 
 def _report_uncommitted_changes(logger) -> None:
     """
-    偵測並報告未提交的變更（W13-011 改寫，PC-076 防護落地）。
+    偵測並報告未提交的變更（PC-076 防護落地）。
 
     變更：
     1. 列出全部 tracked-modified + untracked，分組（staged / modified / untracked）
@@ -215,7 +215,7 @@ def main():
         hook_output(f"[branch-status-reminder] 提示：當前在主倉庫的開發分支 '{current_branch}'", "info")
         hook_output("", "info")
 
-        # W13-011：情況 2 也須列未提交變更（PC-076 防護）
+        # 情況 2 也須列未提交變更（PC-076 防護）
         _report_uncommitted_changes(logger)
 
         hook_output("建議使用 worktree 保持環境隔離：", "info")
@@ -229,7 +229,7 @@ def main():
         hook_output(f"當前分支：{current_branch}（detached 或不是預期分支）", "info")
         hook_output("", "info")
 
-        # W13-011：情況 3 也須列未提交變更（PC-076 防護）
+        # 情況 3 也須列未提交變更（PC-076 防護）
         _report_uncommitted_changes(logger)
 
         logger.warning(f"Worktree branch anomaly detected: {current_branch}")
@@ -239,7 +239,7 @@ def main():
         hook_output(f"[branch-status-reminder] 提示：當前在 {current_branch}", "info")
         hook_output("", "info")
 
-        # W13-011：情況 4 也須列未提交變更（PC-076 防護）
+        # 情況 4 也須列未提交變更（PC-076 防護）
         _report_uncommitted_changes(logger)
 
         logger.debug(f"Current branch: {current_branch}")

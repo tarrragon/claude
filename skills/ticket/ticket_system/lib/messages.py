@@ -25,10 +25,10 @@ if __name__ == "__main__":
     print()
     print("正確使用方式：")
     print("  ticket track summary")
-    print("  ticket track claim 0.31.0-W4-001")
+    print("  ticket track claim <ticket-id>")
     print()
-    print("如尚未安裝，請執行：")
-    print("  cd .claude/skills/ticket && uv tool install .")
+    print("如尚未安裝，請在專案根目錄執行：")
+    print("  python3 .claude/scripts/install-skill-clis.py")
     print()
     print("詳見 SKILL.md")
     print(SEPARATOR_PRIMARY)
@@ -271,15 +271,15 @@ class ModuleMessages:
     NOT_DIRECTLY_EXECUTABLE = "[ERROR] 此檔案不支援直接執行"
     HINT_NOT_EXECUTABLE = "[提示] 此模組不支援直接執行"
     CORRECT_USAGE = "正確使用方式："
-    INSTALL_INSTRUCTION = "如尚未安裝，請執行："
-    INSTALL_COMMAND = "  cd .claude/skills/ticket && uv tool install ."
+    INSTALL_INSTRUCTION = "如尚未安裝，請在專案根目錄執行："
+    INSTALL_COMMAND = "  python3 .claude/scripts/install-skill-clis.py"
     SEE_DOCS = "詳見 SKILL.md"
 
 
 @dataclass(frozen=True)
 class ErrorEnvelope:
     """
-    結構化錯誤封包（W17-008.5.2）。
+    結構化錯誤封包。
 
     將錯誤訊息從純文字升級為四元組結構，便於：
     - CLI 統一輸出格式（component / action / errno / hint）
@@ -336,7 +336,7 @@ def format_error(template: Union[str, ErrorEnvelope], **kwargs) -> str:
 
     路徑分發以 isinstance 判斷：
     - ErrorEnvelope：渲染為含版本標記的結構化格式
-    - str：保留 W17-008.5.2 之前的文字插值行為（向後相容）
+    - str：保留早期的文字插值行為（向後相容）
 
     Args:
         template: ErrorMessages 類別中的常數模板字串，或 ErrorEnvelope 實例
@@ -351,10 +351,10 @@ def format_error(template: Union[str, ErrorEnvelope], **kwargs) -> str:
 
     Examples:
         # Legacy 路徑（向後相容）
-        >>> format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id="0.31.0-W4-001")
-        '[Error] 找不到 Ticket 0.31.0-W4-001'
+        >>> format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id="<ticket-id>")
+        '[Error] 找不到 Ticket <ticket-id>'
 
-        # Envelope 路徑（W17-008.5.2 新增；末行尾部摘要見 _render_envelope docstring）
+        # Envelope 路徑（末行尾部摘要見 _render_envelope docstring）
         >>> env = ErrorEnvelope("track", "claim", "TICKET_NOT_FOUND", hint="檢查 ID")
         >>> print(format_error(env))
         [Error] __error_envelope_v1__
@@ -391,8 +391,8 @@ def format_warning(template: str, **kwargs) -> str:
         KeyError: 若 kwargs 缺少 template 所需的參數
 
     Examples:
-        >>> format_warning(WarningMessages.TICKET_ALREADY_CLAIMED, ticket_id="0.31.0-W4-001")
-        '[Warning] 0.31.0-W4-001 已被接手'
+        >>> format_warning(WarningMessages.TICKET_ALREADY_CLAIMED, ticket_id="<ticket-id>")
+        '[Warning] <ticket-id> 已被接手'
         >>> format_warning(WarningMessages.NO_TICKETS)
         '[Warning] 無符合條件的 Tickets'
     """
@@ -411,14 +411,14 @@ def format_info(template: str, **kwargs) -> str:
         str: 格式化後的訊息
 
     Examples:
-        >>> format_info(InfoMessages.TICKET_CLAIMED, ticket_id="0.31.0-W4-001")
-        '[OK] 已接手 0.31.0-W4-001'
+        >>> format_info(InfoMessages.TICKET_CLAIMED, ticket_id="<ticket-id>")
+        '[OK] 已接手 <ticket-id>'
     """
     return template.format(**kwargs)
 
 
 # ---------------------------------------------------------------------------
-# Argparse 業務錯誤統一格式（W17-008.5.4）
+# Argparse 業務錯誤統一格式
 # ---------------------------------------------------------------------------
 
 # 業務錯誤訊息特徵（argparse 內建訊息片段；穩定 keyword 易維護）
@@ -449,7 +449,7 @@ def _classify_argparse_error(message: str) -> Optional[str]:
 class ArgparseFormatErrorParser(argparse.ArgumentParser):
     """ArgumentParser subclass：業務錯誤改走 format_error(ErrorEnvelope)。
 
-    W17-008.5.4 動機：argparse 預設 error() 輸出英文 POSIX 風格，與 CLI 業務錯誤
+    動機：argparse 預設 error() 輸出英文 POSIX 風格，與 CLI 業務錯誤
     （format_error 結構化封包）格式分歧。本類別 overload error() 將業務錯誤
     （invalid choice / invalid type value）改走 ErrorEnvelope 統一輸出，
     保留純語法錯誤（unrecognized args / missing required positional）的 argparse 預設行為。
@@ -496,7 +496,7 @@ def print_not_executable_and_exit():
     print()
     print(ModuleMessages.CORRECT_USAGE)
     print("  ticket track summary")
-    print("  ticket track claim 0.31.0-W4-001")
+    print("  ticket track claim <ticket-id>")
     print()
     print(ModuleMessages.INSTALL_INSTRUCTION)
     print(ModuleMessages.INSTALL_COMMAND)

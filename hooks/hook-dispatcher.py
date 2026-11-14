@@ -74,13 +74,15 @@ TAIL_WORKERS = 32
 # 與 hook 檔實際宣告的一致性由 test_hook_dispatcher 的漂移測試守住
 FALLBACK_FAIL_CLOSED_GUARDS = {
     "PreToolUse:Bash": [
-        ".claude/hooks/bash-git-protected-branch-guard-hook.py",
         ".claude/hooks/workspace-wipe-guard-hook.py",
         ".claude/hooks/bash-write-boundary-guard-hook.py",
+        ".claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py",
     ],
     "PostToolUseFailure:Bash": [],  # 失敗事件無阻擋語意：無 fail_closed 守衛
 }
-_FAIL_CLOSED_RE = re.compile(r"fail_closed\s*=\s*True")
+# 只認 run_hook_safely 呼叫引數內的 fail_closed=True；hook 內部函式的同名引數
+# （如訊息組裝的 fail_closed=True）不是入口宣告。[^)]* 可跨行，不支援引數內含括號。
+_FAIL_CLOSED_RE = re.compile(r"run_hook_safely\([^)]*\bfail_closed\s*=\s*True")
 DEFAULT_GROUP_BUDGET = 120
 DECISION_RANK = {"deny": 3, "block": 3, "ask": 2, "allow": 1}
 DENY_LEVELS = ("deny", "block", "ask")

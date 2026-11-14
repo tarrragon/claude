@@ -3,7 +3,6 @@ id: PC-154
 title: 派發 worktree agent 前未驗證兩項前置條件（worktree base 完整性 + ticket 已 claim）
 category: process-compliance
 severity: medium
-source_case: 0.19.0-W1-043
 created: 2026-05-23
 ---
 
@@ -22,7 +21,7 @@ PM commit 後立即派發 worktree-isolation subagent，agent 在起步階段即
 
 **Why**：worktree base 是否含所需檔案、ticket 是否已 claim，是兩個獨立前提；任一不滿足都讓 agent 起步即卡死。
 
-**Consequence**：agent 無法 claim、無法填 body、無法執行任務，整輪派發需重派；嚴重時 agent 在受阻狀態下困惑地消耗大半 context 才回報（W1-040/W1-041 實測其中一個 agent 浪費大半工作）。
+**Consequence**：agent 無法 claim、無法填 body、無法執行任務，整輪派發需重派；嚴重時 agent 在受阻狀態下困惑地消耗大半 context 才回報（案例 1 實測其中一個 agent 浪費大半工作）。
 
 **Action**：派發 worktree agent 前，PM 逐一驗證下節「兩項前置條件」，任一不滿足先處理再派發。
 
@@ -92,7 +91,7 @@ worktree base 落後、ticket 未 claim 在派發當下沒有任何警示。失�
 
 ## 案例
 
-### 案例 1: 0.19.0-W1-040 / W1-041（2026-05-22）
+### 案例 1: 兩個 ticket 並行派發 worktree agent（2026-05-22）
 
 **情境**：PM commit 4 個 ticket md 到本機 main（`76b0d070`）後，立即並行派發兩個 worktree-isolation agent。
 
@@ -116,7 +115,7 @@ worktree base 落後、ticket 未 claim 在派發當下沒有任何警示。失�
 
 | 層級 | 機制 | 狀態 |
 |------|------|------|
-| 教訓層 | 本 PC-154 | 已落地（0.19.0-W1-043） |
+| 教訓層 | 本 PC-154 | 已落地 |
 | 規則層 | `.claude/rules/core/pm-role.md` 派發前檢查清單補入兩項前置驗證 | 待後續 ticket 評估 |
 | 並行派發層 | 並行派發多個 worktree agent 時，逐一驗證兩項前置條件，不可整批假設一致 | 自律 |
 
@@ -138,4 +137,4 @@ PC-154 前置 1 是 IMP-066 所述現象的派發流程防護；PC-154 另涵蓋
 
 ---
 
-**Last Updated**: 2026-05-23 | **Source**: 0.19.0-W1-043（DOC：固化 worktree agent 派發失敗為 PC error-pattern）
+**Last Updated**: 2026-05-23 | **Source**: DOC 票（固化 worktree agent 派發失敗為 PC error-pattern）

@@ -3,7 +3,6 @@ id: IMP-BAL-005
 title: 錯誤訊號被消費為顯示而非判定——印了紅字，流程照走
 category: implementation
 severity: high
-source_ticket: 0.2.1-W3-165
 related:
  - ARCH-BAL-005
  - IMP-BAL-002
@@ -68,7 +67,7 @@ created: 2026-07-30
 
 注意 `if conflicts:` 這一行**確實存在**——它只是用來決定要不要印訊息。整段程式碼裡，`conflicts` 從未影響 `write_base_sha` 是否被呼叫。
 
-實證後果見 `0.2.1-W3-145`：某 skill 目錄缺 7 個檔案且無法透過重新同步恢復。
+實證後果：某 skill 目錄缺 7 個檔案且無法透過重新同步恢復。
 
 ## 解決方案
 

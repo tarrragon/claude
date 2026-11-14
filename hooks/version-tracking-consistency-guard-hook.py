@@ -4,10 +4,10 @@
 # dependencies = ["pyyaml>=5.0"]
 # ///
 #
-# 依賴說明（0.2.1-W3-013）：前提驗證需 yaml.safe_load 解析 todolist.yaml。
+# 依賴說明：前提驗證需 yaml.safe_load 解析 todolist.yaml。
 # 顯式宣告 pyyaml 由 uv 保證依賴可用，取代先前 subprocess 探測系統 python3
 # 路徑候選的做法——探測找不到含 PyYAML 的 python3 時會靜默跳過解析前提
-# 驗證，等於用條件性靜默降級取代 0.2.1-W3-008 原本要消除的靜默降級
+# 驗證，等於用條件性靜默降級取代前提驗證原本要消除的靜默降級
 # （同 repo 先例：.claude/skills/ticket/hooks/agent-ticket-validation-hook.py）。
 """
 Version Tracking Consistency Guard Hook - 版本追蹤一致性守衛
@@ -32,13 +32,13 @@ quality-baseline 規則 4）：
 5. closed 票延後承諾稽核：closed_by 缺失、不在其 close_reason 允許的值域
    （lib/close_resolution.py），或
    close_reason_note 含延後語意（延後/移到/後續）卻無 ticket ID 引用
-   （0.3.6-W1-006 稽核已知六張 0.3.0 歷史存量列豁免清單，技術債由
-   0.3.6-W1-005 承接，避免重複噪音）
+   （全歷史稽核已知六張 0.3.0 歷史存量列豁免清單，技術債另有追蹤票承接，
+   避免重複噪音）
 6. 提案層 stale：提案 target_version 在 todolist.yaml 已 completed，
-   但提案 status 仍為 draft（0.3.6-W1-004 評估結論）
+   但提案 status 仍為 draft（評估結論：此為收版漏更新的漂移）
 7. 提案未註冊 todolist：提案 status 為 confirmed 且 target_version 非
    null，但 target_version 未在 todolist.yaml 中登記（任何 status 皆算
-   已登記）。缺席時 activate 版本推進看不到此候選（0.38.0-W1-002，PROP-016
+   已登記）。缺席時 activate 版本推進看不到此候選（PROP-016
    實證：confirmed 且 target_version=v0.38.0，但提案確認流程無 todolist
    註冊步驟，導致 activate 誤選 1.0.0）
 8. 版本目錄缺 main worklog：todolist.yaml 中 status 為 active/planned 的
@@ -46,19 +46,18 @@ quality-baseline 規則 4）：
    v0.37.0 目錄缺 main worklog 達三個月，既有幽靈偵測只查 todolist 條目
    缺席，未查目錄「存在但缺檔案」的維度）。僅查 active/planned 是歷史盤點
    結論——本 repo 33 個版本目錄中 16 個為 completed 存量且無 main.md，若
-   全量檢查將重演噪音淹沒訊號（W9-003 教訓），故限縮為只查尚在進行/待辦
+   全量檢查將重演噪音淹沒訊號，故限縮為只查尚在進行/待辦
    的版本
 
 前提驗證（IMP-BAL-003 判定順序，先於上述八類漂移掃描）：
 todolist.yaml 必須可被 yaml.safe_load 解析，且 versions 鍵為 list、每個
 條目含 version/status 欄位。前提不成立時（ParserError 或結構錯位）輸出
 ERROR 級雙通道警告（stderr + 日誌檔），中止後續漂移掃描——前提失敗時
-後續層級結論不具意義，不應輸出（0.2.1-W3-008，實證：0.2.1 版本條目誤插
+後續層級結論不具意義，不應輸出（實證：某版本條目誤插
 到 references mapping 之後造成 ParserError，舊版寬鬆 regex 對此隱形，
 只報 closed 票稽核）。
 
-來源: PC-MON-001、0.4.0-W1-003、0.3.6-W1-006、0.3.6-W1-004、0.38.0-W1-002、
-0.38.0-W1-005、0.2.1-W3-008
+來源: PC-MON-001
 """
 
 import re
@@ -92,9 +91,9 @@ COMPLETED_TICKET_STATUSES = {"completed", "closed"}
 # ticket_system，避免拉入 PyYAML 以外更大的 ticket_system 依賴鏈。
 DEFER_SEMANTIC_PATTERN = re.compile(r"延後|移到|後續")
 
-# 0.3.6-W1-006 全歷史稽核已知六張 0.3.0 存量票：延後語意但無 follow-up
-# ticket ID 引用，技術債由 0.3.6-W1-005 承接（非本 hook 職責），故豁免以
-# 避免每 session 重複噪音。
+# 全歷史稽核已知六張 0.3.0 存量票：延後語意但無 follow-up
+# ticket ID 引用，技術債另有追蹤票承接（非本 hook 職責），故豁免以
+# 避免每 session 重複噪音。（下列 ID 為功能性比對資料，hook 以其判定豁免。）
 KNOWN_LEGACY_CLOSED_TICKET_IDS = frozenset(
     {
         "0.3.0-W1-004",
@@ -115,12 +114,49 @@ SECTION_BOUNDARY_PATTERN = re.compile(r"^\S", re.MULTILINE)
 
 # 漂移 8：main worklog 缺席偵測僅查此範圍內的 status。completed 版本歷史
 # 存量大量缺 main.md（33 個版本目錄中 16 個），全量檢查將重演噪音淹沒訊號
-# （W9-003 教訓），故限縮為進行中/待辦版本。
+# ，故限縮為進行中/待辦版本。
 MAIN_WORKLOG_CHECK_STATUSES = frozenset({"active", "planned"})
 
 # 警告區塊的格式出處：讀者知道缺了什麼之後，還要知道照什麼格式補
 MAIN_WORKLOG_TEMPLATE = ".claude/skills/doc-flow/templates/worklog.md.template"
 TODOLIST_ENTRY_TEMPLATE = ".claude/skills/doc-flow/templates/todolist.yaml.template"
+CLOSE_RESOLUTION_TABLE = ".claude/lib/close_resolution.py"
+
+# 每類漂移的補法：寫出要改的檔與欄位，接在漂移描述的下一行。
+# 各類漂移的修正落點不同（todolist、提案追蹤、ticket frontmatter、worklog 目錄），
+# 只給一句通用建議時讀者不知道該改哪一邊。
+FIX_PREFIX = "\n      補法："
+FIX_MULTIPLE_ACTIVE = (
+    "docs/todolist.yaml 的 versions 下只留目前進行中的版本為 status: active，"
+    "其餘改為 completed（已發版）或 planned（未開始）"
+)
+FIX_GHOST = (
+    f"在 docs/todolist.yaml 的 versions 下補上該版本條目（格式見 {TODOLIST_ENTRY_TEMPLATE}）；"
+    "若 worklog 目錄或 ticket 屬誤建，改為移除該目錄"
+)
+FIX_STALE_ACTIVE = (
+    "版本確定收尾時，依發版流程（/version-release）把 docs/todolist.yaml 該版本的 status 改為 completed；"
+    "還要加票則維持 active"
+)
+FIX_TAG_DRIFT = (
+    "tag 已打代表已發版：把 docs/todolist.yaml 該版本條目的 status 改為 completed；"
+    f"條目缺席時依 {TODOLIST_ENTRY_TEMPLATE} 補建"
+)
+FIX_CLOSED_TICKET = (
+    f"在該 ticket md 的 frontmatter 補 closed_by（值須對應 close_reason，對照表見 {CLOSE_RESOLUTION_TABLE}）；"
+    "延後語意則在 close_reason_note 補上承接的 ticket ID"
+)
+FIX_STALE_PROPOSAL = (
+    "docs/proposals-tracking.yaml 該提案的 status 由 draft 改為 implemented（已落地）或 withdrawn（放棄）"
+)
+FIX_UNREGISTERED_PROPOSAL = (
+    "在 docs/todolist.yaml 的 versions 下以 status: planned 登記該 target_version"
+    f"（格式見 {TODOLIST_ENTRY_TEMPLATE}）"
+)
+FIX_MISSING_MAIN_WORKLOG = (
+    f"依 {MAIN_WORKLOG_TEMPLATE} 在上列路徑建立主工作日誌"
+    "（建立步驟見 doc-flow SKILL〈worklog init 執行步驟〉）"
+)
 
 
 def main_worklog_relpath(version: str) -> str | None:
@@ -254,7 +290,7 @@ def get_latest_git_tag_version(project_root: Path, logger) -> str | None:
     只認 HEAD 可達的 tags（--merged HEAD）：框架 repo（tarrragon/claude.git）
     的版本 tags（v2.x 系列）若因 sync-pull 未加 --no-tags 而混入本地，其指向
     的 commit 不在本 APP repo 的 HEAD 歷史內，--merged 過濾天然排除，不需
-    額外維護版本範圍白名單（0.37.0-W9-005）。
+    額外維護版本範圍白名單。
     """
     try:
         result = subprocess.run(
@@ -378,7 +414,7 @@ def detect_closed_ticket_anomalies(closed_tickets: list[dict]) -> list[str]:
     """偵測漂移 5：closed 票 closed_by 缺失/不在 close_reason 值域，或 note 含延後語意無 ticket ID 引用。
 
     已知六張 0.3.0 歷史存量（KNOWN_LEGACY_CLOSED_TICKET_IDS）列入豁免，
-    避免每 session 重複噪音（0.3.6-W1-006 稽核結論）。
+    避免每 session 重複噪音。
     """
     anomalies: list[str] = []
     for frontmatter in closed_tickets:
@@ -465,7 +501,7 @@ def detect_unregistered_confirmed_proposals(proposals: dict, versions: dict[str,
 
     對賬方向與漂移 6 相反：漂移 6 查「已註冊但收版慢半拍」，本項查
     「提案已 confirmed 但從未進入 todolist 候選清單」——未註冊時
-    activate 版本推進邏輯看不到此候選（0.38.0-W1-002 背景：PROP-016
+    activate 版本推進邏輯看不到此候選（背景：PROP-016
     confirmed + target_version=v0.38.0，但 0.38.0 缺席 planned 清單，
     導致 activate 誤選 1.0.0）。target_version 已在 todolist.yaml 中
     登記即視為已知（不論 status 為 planned/active/completed）。
@@ -499,37 +535,50 @@ def build_warning_lines(
     lines: list[str] = []
 
     if multiple_active:
-        lines.append(f"[多重 active 版本] {', '.join(multiple_active)} 同時標記 active，應僅保留一個")
+        lines.append(
+            f"[多重 active 版本] {', '.join(multiple_active)} 同時標記 active，應僅保留一個"
+            + FIX_PREFIX + FIX_MULTIPLE_ACTIVE
+        )
 
     if ghosts:
-        lines.append(f"[幽靈版本] worklog/ticket 存在但 todolist.yaml 無條目: {', '.join(ghosts)}")
+        lines.append(
+            f"[幽靈版本] worklog/ticket 存在但 todolist.yaml 無條目: {', '.join(ghosts)}"
+            + FIX_PREFIX + FIX_GHOST
+        )
 
     if stale_active:
-        lines.append(f"[全完成未收版] 版本 ticket 已全數完成，但 status 仍為 active: {', '.join(stale_active)}")
+        lines.append(
+            f"[全完成未收版] 版本 ticket 已全數完成，但 status 仍為 active: {', '.join(stale_active)}"
+            + FIX_PREFIX + FIX_STALE_ACTIVE
+        )
 
     if tag_drift_version:
         actual_status = versions.get(tag_drift_version, "(無條目)")
         lines.append(
             f"[tag-todolist drift] 最新 git tag v{tag_drift_version} 對應版本，"
             f"todolist.yaml status 為 {actual_status}（預期 completed）"
+            + FIX_PREFIX + FIX_TAG_DRIFT
         )
 
     if closed_ticket_anomalies:
         lines.append(
             "[closed 票延後承諾稽核] closed_by 缺失/非法或延後語意無 ticket ID 引用: "
             + "; ".join(closed_ticket_anomalies)
+            + FIX_PREFIX + FIX_CLOSED_TICKET
         )
 
     if stale_proposals:
         lines.append(
             "[提案層 stale] target_version 已 completed 但提案 status 仍 draft: "
             + ", ".join(stale_proposals)
+            + FIX_PREFIX + FIX_STALE_PROPOSAL
         )
 
     if unregistered_confirmed_proposals:
         lines.append(
             "[提案未註冊 todolist] confirmed 提案 target_version 未登記，"
             "activate 推進將看不到此候選: " + ", ".join(unregistered_confirmed_proposals)
+            + FIX_PREFIX + FIX_UNREGISTERED_PROPOSAL
         )
 
     if missing_main_worklog:
@@ -537,6 +586,7 @@ def build_warning_lines(
         lines.append(
             "[缺 main worklog] 版本目錄存在但缺主工作日誌（僅查 "
             "active/planned，避免歷史存量噪音），應建於: " + ", ".join(paths)
+            + FIX_PREFIX + FIX_MISSING_MAIN_WORKLOG
         )
 
     return lines
@@ -554,10 +604,6 @@ def print_warnings(lines: list[str]) -> None:
     for line in lines:
         print(f"  - {line}")
     print()
-    print("建議：校準 docs/todolist.yaml，或補建缺漏版本條目")
-    print(f"  todolist 條目格式：{TODOLIST_ENTRY_TEMPLATE}")
-    print(f"  主工作日誌格式：{MAIN_WORKLOG_TEMPLATE}"
-          "（建立步驟見 doc-flow SKILL〈worklog init 執行步驟〉）")
     print("背景：.claude/error-patterns/process-compliance/PC-MON-001-guard-on-bypassable-execution-point.md")
     print()
     print("=" * 60)

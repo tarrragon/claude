@@ -53,6 +53,24 @@ def test_version_guard_reminder_survives_merge(monkeypatch):
     assert "Version Release Guard" in hso["additionalContext"]
 
 
+def test_wipe_guard_without_cwd_has_no_action_root_stderr(monkeypatch, tmp_path):
+    """payload 無 cwd 時 workspace-wipe-guard 不呼叫 get_action_root，stderr 不含其噪音。
+
+    守衛自身的非並行期 WARN 仍會寫 stderr，故斷言限於 helper 的訊息。
+    """
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+    wipe = _CLAUDE_DIR / "hooks" / "workspace-wipe-guard-hook.py"
+    result = dispatcher.run_inprocess(wipe, _payload("git reset --hard"), 30)
+    code, _stdout, stderr = dispatcher.merge_results([result], event="PreToolUse")
+    assert code == 0
+    assert "get_action_root" not in stderr
+
+
 def test_reminder_merges_with_other_hook_context():
     a = dispatcher.HookResult(
         "a-hook", 0,

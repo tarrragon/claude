@@ -92,10 +92,20 @@ stash`、`(cd <他 repo> && git stash create)`）時前提不成立，主 repo �
 
 取捨（fail-closed，維持保守原意）：任何無法確認的情形一律視為主 repo 並照舊
 判定——`-C` 含 `$VAR`／命令替換／`~`、目錄不存在、git 執行失敗、cwd 隱含
-形式（無 -C 亦無 cd）、-C 與 cd 併用、同命令任一呼叫目標為主 repo。主 repo
-的 linked worktree 與主 repo 共用 git common dir，歸屬維持現行行為（視為主
-repo，不放行）。寧可誤擋 scratch repo 上的命令，也不因解析錯誤放行對主工作區
-的破壞性操作。`_get_active_dispatch_count` 的全量計數語意不在本次變更範圍。
+形式（無 -C 亦無 cd）、-C 與 cd 併用、同命令任一呼叫目標為主 repo。寧可誤擋
+scratch repo 上的命令，也不因解析錯誤放行對主工作區的破壞性操作。
+`_get_active_dispatch_count` 的全量計數語意不在本次變更範圍。
+
+linked worktree（2026-11 放寬）：目標是主 repo 的 linked worktree（toplevel 不同、
+git common dir 相同）時，原本一律視為主 repo，清理無人使用的半刪 worktree 也會因
+別處的活躍派發而被擋。現改為看派發條目是否綁在該 worktree：沒有任何條目的
+work_checkout 指向該根、也沒有 work_checkout 不明的條目，而且該 worktree 的
+`git status --porcelain` 只有 tracked 檔的刪除（或沒有變更）時放行，不套用主 repo
+的並行期與未提交條件。後一條件的理由：各線 session 直接在自己的 worktree 工作、
+不經派發條目，沒有派發綁定不代表沒人在用；只有刪除時清空操作只會還原或暫存已刪除
+的檔案。有綁定、位置不明、派發記錄讀不到、有刪除以外的變更、status 讀取失敗、
+或 `git clean` 帶 -x／-X（會刪 ignored 檔，status 不列）時，維持主 repo 判定。
+計入全部條目，不排除孤兒。
 
 ============================================================
 背景（2026-09：偵測改為命令位置 token 比對，修復引號內參數誤判）
@@ -162,7 +172,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
-from lib.dispatch_tracker import get_active_dispatches
+from lib.dispatch_tracker import (
+    filter_dispatches_for_checkout,
+    get_active_dispatches,
+    get_state_file_path,
+)
 from lib.git_command_parse import (
     classify_parse_cause,
     contains_git_word,
@@ -170,7 +184,7 @@ from lib.git_command_parse import (
     find_git_invocations,
     parse_command_statements,
 )
-from lib.git_utils import FileStatus, get_project_root, get_uncommitted_files
+from lib.git_utils import FileStatus, get_action_root, get_project_root, get_uncommitted_files
 
 
 # 建立形式 git stash 的安全子命令（不清空工作區）
@@ -184,6 +198,11 @@ _FORCE_FLAG_TOKEN_RE = re.compile(r"^(?:--force|-[a-zA-Z]*f[a-zA-Z]*)$")
 # --staged／--worktree 旗標（含含大寫 S/W 的單破折號組合）—— restore 用
 _STAGED_FLAG_TOKEN_RE = re.compile(r"^(?:--staged|-[a-zA-Z]*S[a-zA-Z]*)$")
 _WORKTREE_FLAG_TOKEN_RE = re.compile(r"^(?:--worktree|-[a-zA-Z]*W[a-zA-Z]*)$")
+# git clean 會刪 ignored 檔的旗標（-x、-X，可與其他短旗標合寫）
+_CLEAN_IGNORED_FLAG_TOKEN_RE = re.compile(r"^-[a-zA-Z]*[xX][a-zA-Z]*$")
+# linked worktree 放寬只允許的 status --porcelain 狀態碼：tracked 檔的刪除
+_DELETION_ONLY_STATUS = frozenset({" D", "D "})
+_STATUS_TIMEOUT_SECONDS = 5
 
 
 def _invocations_or_conservative_default(command: str, subcommand: str):
@@ -282,6 +301,11 @@ def _is_restore_wipe(command: str) -> bool:
     return False
 
 
+_WIPE_SUBCOMMANDS = frozenset({"stash", "checkout", "reset", "clean", "restore"})
+
+# 命令含 git 字樣但無法切詞（未閉合引號等）時的操作名稱：不冠具體子命令
+UNPARSEABLE_OPERATION = "無法判定子命令的 git 命令"
+
 # 操作名稱 -> (偵測函式, 安全形式提示｜None 表示無 pathspec 安全形式)
 _OPERATIONS = [
     ("git stash", _is_stash_wipe, 'git stash push -- <file>   # 只 stash 指定檔案'),
@@ -320,13 +344,14 @@ def _detect_operation(command: str) -> Optional[Tuple[str, Optional[str]]]:
         return None
     if not contains_git_word(command):
         return None
+    if find_git_invocations(command, _WIPE_SUBCOMMANDS, scan=True) is None:
+        # 切詞失敗：五個偵測器都會保守命中，排第一的 stash 會被當成操作名稱，
+        # 訊息與命令內容無關。改回報「無法判定子命令」，阻擋判定不變。
+        return UNPARSEABLE_OPERATION, None
     for name, detector, safe_hint in _OPERATIONS:
         if detector(command):
             return name, safe_hint
     return None
-
-
-_WIPE_SUBCOMMANDS = frozenset({"stash", "checkout", "reset", "clean", "restore"})
 
 
 _SINGLE_SUBSHELL_RE =re.compile(r"^\(\s*cd\s+[^\s()]+\s*&&[^()]*\)$")
@@ -352,56 +377,159 @@ def _run_rev_parse(target_dir: str, *flags: str) -> Optional[List[str]]:
     return result.stdout.splitlines()
 
 
-def _resolve_target_is_other_repo(
-    target_dir: str, project_root: Path, cwd: str, logger: logging.Logger
-) -> bool:
-    """判斷 target_dir 是否為「與本專案主 repo 無關的另一個 repo」。
+# 目標歸屬（_classify_target 的回傳值第一欄）
+TARGET_OTHER_REPO = "other"
+TARGET_LINKED_WORKTREE = "linked"
+TARGET_MAIN_REPO = "main"
 
-    以 `git -C <dir> rev-parse --show-toplevel` 取目標根並與專案根比對；相等
-    即主 repo。目標根不同時再比對 git common dir：主 repo 的 linked worktree
-    與主 repo 共用 common dir，其歸屬維持現行行為（視為主 repo，不放行）。
+
+def _classify_target(
+    target_dir: str, project_root: Path, cwd: str, logger: logging.Logger
+) -> Tuple[str, Optional[str]]:
+    """判斷 target_dir 的歸屬：(歸屬, linked worktree 的根)。
+
+    以 `git -C <dir> rev-parse --show-toplevel --git-common-dir` 與專案根比對：
+    - toplevel 與 common dir 皆不同：其他 repo（TARGET_OTHER_REPO）
+    - toplevel 不同、common dir 相同：主 repo 的 linked worktree（TARGET_LINKED_WORKTREE，
+      第二欄為該 worktree 的根），是否放行由呼叫端依派發綁定判定
+    - 其餘：主 repo（TARGET_MAIN_REPO）
 
     任何無法解析的情形（含 shell 變數／命令替換／`~`、目錄不存在、git 執行
-    失敗、專案根本身無法解析）一律回傳 False（視為主 repo，fail-closed）。
+    失敗、專案根本身無法解析）一律歸為主 repo（fail-closed）。
     """
     if any(ch in target_dir for ch in ("$", "`", "~", "*", "?")):
         logger.info("目標 repo 解析: dir=%s 含 shell 展開語法，無法解析，視為主 repo", target_dir)
-        return False
+        return TARGET_MAIN_REPO, None
     base = target_dir if os.path.isabs(target_dir) else os.path.join(cwd, target_dir)
     flags = ("--path-format=absolute", "--show-toplevel", "--git-common-dir")
     target = _run_rev_parse(base, *flags)
     main = _run_rev_parse(str(project_root), *flags)
     if not target or len(target) < 2 or not main or len(main) < 2:
         logger.info("目標 repo 解析: dir=%s 解析失敗，視為主 repo（fail-closed）", target_dir)
-        return False
+        return TARGET_MAIN_REPO, None
     same_top = os.path.realpath(target[0]) == os.path.realpath(main[0])
     same_common = os.path.realpath(target[1]) == os.path.realpath(main[1])
-    is_other = not same_top and not same_common
-    logger.info(
-        "目標 repo 解析: dir=%s toplevel=%s 歸屬=%s",
-        target_dir,
-        target[0],
-        "其他 repo（放行）" if is_other else "主 repo（維持判定）",
-    )
-    return is_other
+    if not same_top and not same_common:
+        kind, label = TARGET_OTHER_REPO, "其他 repo（放行）"
+    elif not same_top:
+        kind, label = TARGET_LINKED_WORKTREE, "主 repo 的 linked worktree（依派發綁定判定）"
+    else:
+        kind, label = TARGET_MAIN_REPO, "主 repo（維持判定）"
+    logger.info("目標 repo 解析: dir=%s toplevel=%s 歸屬=%s", target_dir, target[0], label)
+    return kind, (target[0] if kind == TARGET_LINKED_WORKTREE else None)
 
 
-def _command_targets_only_other_repos(
-    command: str, project_root: Path, cwd: str, logger: logging.Logger
+def _resolve_target_is_other_repo(
+    target_dir: str, project_root: Path, cwd: str, logger: logging.Logger
 ) -> bool:
-    """命令中所有清空工作區類 git 呼叫的目標 repo 皆不是主 repo 時回傳 True。
+    """target_dir 是否為與本專案主 repo 無關的另一個 repo（linked worktree 不算）。"""
+    return _classify_target(target_dir, project_root, cwd, logger)[0] == TARGET_OTHER_REPO
+
+
+def _read_dispatches_strict(project_root: Path) -> List[dict]:
+    """讀派發條目；狀態檔存在但讀不到、不是合法 JSON 或缺 dispatches 清單時拋例外。
+
+    不用 get_active_dispatches：它在這些情形回傳空清單（與「沒有派發」同形），
+    放寬路徑若採用，記錄損毀就會放行。狀態檔不存在才視為沒有派發。
+    """
+    state_file = get_state_file_path(project_root)
+    if not state_file.exists():
+        return []
+    data = json.loads(state_file.read_text(encoding="utf-8"))
+    dispatches = data.get("dispatches") if isinstance(data, dict) else None
+    if not isinstance(dispatches, list):
+        raise ValueError("dispatch-active.json 缺 dispatches 清單")
+    return dispatches
+
+
+def _linked_worktrees_unbound(
+    roots: List[str], project_root: Path, logger: logging.Logger
+) -> bool:
+    """每個 linked worktree 根都沒有綁定的派發條目、且只有刪除變更時回傳 True。
+
+    綁定判定沿用 filter_dispatches_for_checkout：work_checkout 指向該根的條目，
+    以及 work_checkout 不明（空、缺欄位、路徑無法解析）的條目都會保留，保留任一
+    即視為綁定。計入全部條目，不排除孤兒（/clear 後子代理與背景命令仍可能寫檔，
+    見 dispatch_scope.exclude_orphan_confirmed 的已知限制）。
+
+    取捨（fail-closed）：讀取派發記錄失敗回傳 False，維持主 repo 的判定。
+    """
+    try:
+        dispatches = _read_dispatches_strict(project_root)
+    except Exception:
+        logger.warning(
+            "讀取 dispatch-active.json 失敗，無法判定 linked worktree 綁定，維持主 repo 判定",
+            exc_info=True,
+        )
+        return False
+    for root in roots:
+        bound = filter_dispatches_for_checkout(dispatches, Path(root))
+        if bound:
+            logger.info(
+                "linked worktree 有綁定或位置不明的派發條目，維持主 repo 判定: root=%s tickets=%s",
+                root,
+                [d.get("ticket_id") if isinstance(d, dict) else None for d in bound],
+            )
+            return False
+        if not _worktree_has_only_deletions(root, logger):
+            return False
+    return True
+
+
+def _worktree_has_only_deletions(root: str, logger: logging.Logger) -> bool:
+    """worktree 的變更只有 tracked 檔的刪除（或沒有變更）時回傳 True。
+
+    各線 session 直接在自己的 worktree 工作、不經派發條目，「沒有派發綁定」
+    不代表沒人在用；只有刪除時，清空操作（stash、checkout、reset --hard、
+    restore、不帶 -x／-X 的 clean）只會還原或暫存已刪除的檔案，不會損失內容。
+    修改、新增、改名、未追蹤檔都回傳 False。status 非 0、逾時或例外回傳
+    False（fail-closed）。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", root, "--no-optional-locks", "status", "--porcelain",
+             "--untracked-files=all"],
+            capture_output=True,
+            text=True,
+            timeout=_STATUS_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning(
+            "linked worktree status 讀取失敗，維持主 repo 判定: root=%s %s: %s",
+            root, type(e).__name__, e,
+        )
+        return False
+    if result.returncode != 0:
+        logger.warning(
+            "linked worktree status 結束碼 %d，維持主 repo 判定: root=%s", result.returncode, root
+        )
+        return False
+    others = [ln for ln in result.stdout.splitlines() if ln and ln[:2] not in _DELETION_ONLY_STATUS]
+    if others:
+        logger.info(
+            "linked worktree 有刪除以外的變更，維持主 repo 判定: root=%s 例=%s", root, others[:3]
+        )
+        return False
+    return True
+
+
+def _command_targets_outside_main_tree(
+    command: str, project_root: Path, cwd: str, logger: logging.Logger
+) -> Optional[List[str]]:
+    """命令中所有清空工作區類 git 呼叫的目標都不是主 repo 本身時，回傳其中 linked
+    worktree 的根（去重，可為空清單）；否則回傳 None。
 
     目標來源：`git -C <dir>`，或同命令中先前語句的 `cd <dir>`（涵蓋
     `(cd <dir> && git ...)`）。兩者皆無 = cwd 隱含形式，視為主 repo。
 
     取捨（fail-closed）：解析失敗、無任何可辨識呼叫、或任一呼叫目標為主 repo
-    時回傳 False，維持原保守判定——本守衛防不可逆資料遺失，寧可誤擋 scratch
+    時回傳 None，維持原保守判定——本守衛防不可逆資料遺失，寧可誤擋 scratch
     repo 上的命令，也不放行無法確認的目標。
     """
     statements = parse_command_statements(command)
     invocations = find_git_invocations(command, _WIPE_SUBCOMMANDS)
     if not statements or not invocations:
-        return False
+        return None
     # cd 作用域：tokenizer 會丟括號，無法得知子 shell 何時結束，故含括號時
     # 只接受「整個命令恰為單一 ( cd X && ... ) 且內部無其他括號」，其餘不採用
     # cd 推導（fail-closed，視為主 repo）。
@@ -422,15 +550,25 @@ def _command_targets_only_other_repos(
             cd_by_statement[key] = "$"  # 同語句在不同目錄重複出現：無法區分，視為無法解析
         else:
             cd_by_statement[key] = current_cd
+    linked_roots: List[str] = []
     for inv in invocations:
         target_dir = inv.dash_c_path or cd_by_statement.get(tuple(inv.statement))
         if not target_dir:
-            return False
+            return None
         if inv.dash_c_path and cd_by_statement.get(tuple(inv.statement)):
-            return False  # -C 與 cd 併用：相對路徑組合語意不處理，視為主 repo
-        if not _resolve_target_is_other_repo(target_dir, project_root, cwd, logger):
-            return False
-    return True
+            return None  # -C 與 cd 併用：相對路徑組合語意不處理，視為主 repo
+        kind, root = _classify_target(target_dir, project_root, cwd, logger)
+        if kind == TARGET_MAIN_REPO:
+            return None
+        if kind == TARGET_LINKED_WORKTREE and inv.subcommand == "clean" and any(
+            _CLEAN_IGNORED_FLAG_TOKEN_RE.match(tok) for tok in inv.args
+        ):
+            # clean -x／-X 會刪 ignored 檔，status 不列 ignored，「只有刪除」條件涵蓋不到，不放寬
+            logger.info("linked worktree 的 git clean 帶 -x／-X，不適用放寬，視為主 repo: dir=%s", target_dir)
+            return None
+        if kind == TARGET_LINKED_WORKTREE and root not in linked_roots:
+            linked_roots.append(root)
+    return linked_roots
 
 
 def _get_active_dispatch_count(
@@ -583,14 +721,26 @@ def main() -> int:
         return 0
 
     op_name, safe_hint = detected
-    project_root = get_project_root()
+    project_root = get_project_root()  # dispatch 狀態（SR）仍讀主 repo
+    # payload 無 cwd 時直接用 project_root，避免 helper 的 stderr 噪音
+    action_root = (
+        get_action_root(input_data, project_root) if input_data.get("cwd") else project_root
+    )  # 本 repo 歸屬與未提交檔（AR）
     cwd = str(input_data.get("cwd") or os.getcwd())
-    if _command_targets_only_other_repos(command, project_root, cwd, logger):
+    linked_roots = _command_targets_outside_main_tree(command, action_root, cwd, logger)
+    if linked_roots is not None and not linked_roots:
         logger.info("命令目標為非主 repo，不套用主 repo 狀態條件，放行（操作=%s）", op_name)
         return 0
-    logger.info("命令目標為主 repo 或無法解析，維持既有判定（操作=%s）", op_name)
+    if linked_roots and _linked_worktrees_unbound(linked_roots, project_root, logger):
+        logger.info(
+            "命令目標為無綁定派發的 linked worktree，不套用主 repo 狀態條件，放行（操作=%s，root=%s）",
+            op_name,
+            ",".join(linked_roots),
+        )
+        return 0
+    logger.info("命令目標為主 repo、有綁定的 linked worktree 或無法解析，維持既有判定（操作=%s）", op_name)
     dispatch_count = _get_active_dispatch_count(project_root, logger)
-    main_repo_dirty = _has_main_repo_uncommitted_tracked_changes(project_root, logger)
+    main_repo_dirty = _has_main_repo_uncommitted_tracked_changes(action_root, logger)
 
     is_parallel = dispatch_count is None or dispatch_count > 0
     is_main_repo_dirty = main_repo_dirty is None or main_repo_dirty

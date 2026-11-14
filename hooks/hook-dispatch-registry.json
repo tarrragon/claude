@@ -35,6 +35,9 @@
           "path": ".claude/hooks/pre-test-hook.py"
         },
         {
+          "path": ".claude/hooks/fvm-launcher-guard-hook.py"
+        },
+        {
           "path": ".claude/skills/dart-test-async-guardian/hooks/pre-test-scan.py"
         },
         {

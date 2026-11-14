@@ -103,7 +103,7 @@ def _query_python_version(executable: str) -> Optional[PythonInfo]:
 def detect_python() -> PythonInfo:
     """偵測 Python 版本和路徑（OS 感知多候選 + uv fallback）。
 
-    Why（W9-001 跨平台）：原版只查 `shutil.which("python3")`，但 Windows
+    Why（跨平台）：原版只查 `shutil.which("python3")`，但 Windows
     的執行檔名為 `python.exe`（無 python3），且 uv 下載的 Python 不進系統
     PATH，導致正常 Windows 環境被誤判「未安裝」（framework issue #1 問題1）。
     改為多候選命令（Windows: python/python3/py；類 Unix: python3/python），

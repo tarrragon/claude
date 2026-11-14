@@ -9,7 +9,7 @@
 | 編號 | PC-077 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-04-17（W13-003 實作中派發 thyme-python-developer 遭 Hook 擋） |
+| 首發時間 | 2026-04-17（某 IMP 實作中派發 thyme-python-developer 遭 Hook 擋） |
 | 姊妹模式 | ARCH-015（subagent 對 `.claude/` Edit 在主 repo 和 worktree 均擋） |
 
 ---
@@ -80,19 +80,19 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 
 ---
 
-## Meta 循環觀察（2026-04-20 W10-017.2 新增）
+## Meta 循環觀察（2026-04-20 新增）
 
-修該 Hook 自身的 Ticket（W11-004.7「修改 agent-dispatch-validation-hook 使 `.claude/` 豁免 worktree」）**本身也受同 Hook 限制**。具體鏈：
+修該 Hook 自身的 Ticket（「修改 agent-dispatch-validation-hook 使 `.claude/` 豁免 worktree」）**本身也受同 Hook 限制**。具體鏈：
 
 | 修 Hook Ticket | 被同 Hook 擋 | 後果 |
 |---------------|------------|------|
-| W11-004.7 目標：讓 `.claude/` prompt 豁免 worktree | 派發前即撞 Hook 要求 worktree | 需 PM 前台修 Hook 才能解開循環 |
+| 該 Ticket 目標：讓 `.claude/` prompt 豁免 worktree | 派發前即撞 Hook 要求 worktree | 需 PM 前台修 Hook 才能解開循環 |
 
 **Why（實踐驗證）**：Hook 修復前，任何修 `.claude/` 的 ticket（包含修 Hook 本身）都只能走 PM 前台。這不是 PC-077 的漏洞，是 PC-077 結論的實證。
 
 **How to apply（固化為規則）**：
 - 遇到「修 Hook 的 Ticket 被同 Hook 擋」立刻認定為 PC-077 觸發案例，PM 前台處理
-- W11-004.7 落地前，任何 `.claude/` 修改都走 PM 前台，不做例外嘗試
+- 該 Ticket 落地前，任何 `.claude/` 修改都走 PM 前台，不做例外嘗試
 
 ---
 
@@ -100,12 +100,12 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 
 | 日期 | Ticket | 情境 |
 |------|--------|------|
-| 2026-04-17 | W13-003 | 修 `askuserquestion-charset-guard-hook.py`（首發記錄） |
-| 2026-04-20 | W10-017.2 | 新增 `ticket track dispatch-check` CLI，涉及 `.claude/skills/ticket/` Python 套件（meta 循環觀察） |
+| 2026-04-17 | 字元污染補強 IMP | 修 `askuserquestion-charset-guard-hook.py`（首發記錄） |
+| 2026-04-20 | dispatch-check CLI IMP | 新增 `ticket track dispatch-check` CLI，涉及 `.claude/skills/ticket/` Python 套件（meta 循環觀察） |
 
 ---
 
-## 升級狀態（2026-05-30 W3-015.1 落地）
+## 升級狀態（2026-05-30 落地）
 
 本 PC 已升級為明示規則，落地於 `.claude/pm-rules/behavior-loop-details.md` 派發位置章節後新增的「`.claude/` 修改派發決策矩陣（PC-077 升級規則）」子章節。
 
@@ -138,5 +138,5 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 
 **Last Updated**: 2026-05-30
 **Version**: 1.1.0 — 補「升級狀態」章節：標註已升級至 behavior-loop-details.md v1.2.0；補 PC-115/PC-137 交叉引用；標註本 PC 不再作為單獨決策依據（相關決策已定案）
-**Version**: 1.0.0 — 首發記錄（W13-003 PC-072 補強派發 thyme 遭 Hook 擋）
-**Source**: 2026-04-17 W13-003 IMP 派發 thyme-python-developer 修改 `.claude/hooks/askuserquestion-charset-guard-hook.py` 被 agent-dispatch-validation-hook 擋 isolation:worktree 要求；對照 ARCH-015 確認即使加 worktree 仍被 runtime 擋
+**Version**: 1.0.0 — 首發記錄（PC-072 補強派發 thyme 遭 Hook 擋）
+**Source**: 2026-04-17 某 IMP 派發 thyme-python-developer 修改 `.claude/hooks/askuserquestion-charset-guard-hook.py` 被 agent-dispatch-validation-hook 擋 isolation:worktree 要求；對照 ARCH-015 確認即使加 worktree 仍被 runtime 擋

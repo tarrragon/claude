@@ -1031,3 +1031,38 @@ def test_real_declaration_yields_dart_format_for_dart_files():
         pytest.skip("本 checkout 無閘門宣告")
     cmds = gate_check_commands(["lib/x.dart"], path.read_text(encoding="utf-8"))
     assert all(c.endswith(" lib/x.dart") for c in cmds)
+
+
+# ============================================================================
+# 3.3.0-W1-216.1：寫入派發日誌 commit 且 worktree 派發時，stderr 提示先推送
+# ============================================================================
+
+
+def _stub_precheck_and_commit(monkeypatch, commit_failed: bool) -> None:
+    monkeypatch.setattr(td_mod, "execute_dispatch_readiness", lambda a, v: 0)
+    monkeypatch.setattr(td_mod, "execute_dispatch_validate", lambda a, v: 0)
+    monkeypatch.setattr(
+        td_mod.git_utils, "commit_ticket_md_reporting", lambda *a, **k: commit_failed
+    )
+
+
+def test_dispatch_worktree_commit_emits_push_hint(dispatch_ticket, monkeypatch, capsys):
+    _stub_precheck_and_commit(monkeypatch, commit_failed=False)
+    td_mod.execute_dispatch(_base_args(isolation="worktree"), "0.0.0")
+    captured = capsys.readouterr()
+    assert td_mod.DISPATCH_PUSH_HINT in captured.err
+    assert td_mod.DISPATCH_PUSH_HINT not in captured.out  # 骨架 stdout 不混入
+
+
+@pytest.mark.parametrize("overrides, commit_failed", [
+    ({"isolation": "none"}, False),                       # 非 worktree 派發
+    ({"isolation": None}, False),                         # 未指定隔離
+    ({"isolation": "worktree", "dry_run": True}, False),  # 未寫入 commit
+    ({"isolation": "worktree"}, True),                    # 提交失敗
+])
+def test_dispatch_push_hint_absent_without_worktree_commit(
+    dispatch_ticket, monkeypatch, capsys, overrides, commit_failed
+):
+    _stub_precheck_and_commit(monkeypatch, commit_failed=commit_failed)
+    td_mod.execute_dispatch(_base_args(**overrides), "0.0.0")
+    assert td_mod.DISPATCH_PUSH_HINT not in capsys.readouterr().err

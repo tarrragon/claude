@@ -2,7 +2,7 @@
 
 > **錯誤類別**：流程合規（cc runtime 行為認知缺口）
 > **嚴重度**：中（不阻擋但易造成 commit/merge 落點錯誤、與預期不符）
-> **發現案例**：0.19.0-W1-048.5.1 thyme isolation:worktree 派發後
+> **發現案例**：某次 thyme isolation:worktree 派發後
 
 ---
 
@@ -19,7 +19,7 @@ PM 派發 `isolation: "worktree"` agent 後（特別是 task-notification 到達
 
 cc runtime 為了讓 PM 接續處理 agent 結果（例如 merge worktree、commit 補強），設計可能會自動切 PM cwd 進 agent worktree。但這個設計沒有顯式告知 PM，且現行 hook（branch-status-reminder / SessionStart）只在 session 啟動時提示，不會在每次 cwd 切換時提示。
 
-## 案例：W1-048.5.1 thyme 派發
+## 案例：某次 thyme 派發
 
 | 時序 | 動作 | cwd / branch |
 |------|------|-------------|
@@ -27,7 +27,7 @@ cc runtime 為了讓 PM 接續處理 agent 結果（例如 merge worktree、comm
 | T+1958s | task-notification 到達（thyme token 耗盡中斷） | 自動切到 `.../.claude/worktrees/agent-a4473995e44001eef` / `worktree-agent-a4473995e44001eef` |
 | T+1959s | PM 執行 `git log` 確認狀態 | 看到 d0d8b965 / 598d99a4 stash refs，誤判仍在 main |
 | T+2000s | PM 執行 `npm test`、`git diff`、`git status` | 全在 agent worktree 內 |
-| T+2050s | PM `git commit` 建 W1-057 ticket | commit 落到 `worktree-agent-a4473995e44001eef` branch |
+| T+2050s | PM `git commit` 建新 ticket | commit 落到 `worktree-agent-a4473995e44001eef` branch |
 | T+2100s | hook 提示「待合併 commit」 | PM 才察覺 cwd 早已切換 |
 
 ## 防護要點
@@ -63,7 +63,7 @@ cc runtime 為了讓 PM 接續處理 agent 結果（例如 merge worktree、comm
 
 ## 追蹤
 
-- W1-048.5.1 派發案例（2026-05-23）— 首次發現
+- thyme 派發案例（2026-05-23）— 首次發現
 - 建議：建立 follow-up DOC ticket 補完防護機制（hook 層 + 規則層）
 
 ---

@@ -4,7 +4,7 @@
 **Severity**: High
 **Status**: Active
 **Created**: 2026-04-20
-**Source**: W17-011 scheduler runqueue CLI + hook 實作後，SKILL.md / references / pm-rules 全無引導，用戶質疑「系統怎麼知道怎麼使用？」才發現。
+**Source**: scheduler runqueue CLI + hook 實作後，SKILL.md / references / pm-rules 全無引導，用戶質疑「系統怎麼知道怎麼使用？」才發現。
 
 ---
 
@@ -30,12 +30,12 @@
 | PM 派發時未列引導檔 | where.files 只列實作檔 + 測試檔，漏引導檔 |
 | Hook 自動引導誤認充分 | session-hint hook 只顯示部分情境，其他情境仍需人工查文件 |
 
-## 案例（W17-011 系列）
+## 案例（scheduler runqueue 系列）
 
 **實作**：
-- `track_runqueue.py` + 17 tests（W17-011.1 commit 19bea58f）
-- `session-start-scheduler-hint-hook.py` + 9 tests（W17-011.4 commit edc78a20）
-- `handoff --auto`（W17-011.5 commit b8f9c564）
+- `track_runqueue.py` + 17 tests（commit 19bea58f）
+- `session-start-scheduler-hint-hook.py` + 9 tests（commit edc78a20）
+- `handoff --auto`（commit b8f9c564）
 
 **引導缺失**（2026-04-20 用戶質疑前）：
 - `.claude/skills/ticket/SKILL.md` 無 runqueue 章節
@@ -77,7 +77,7 @@ parallel-evaluation 情境 A / C（程式碼 / 架構審查）加一視角：**I
 
 ## 相關
 
-- `W17-010` NeedsContext 協議類比（PM 無法看到 agent 狀態 vs 用戶無法看到工具存在）
+- NeedsContext 協議類比（PM 無法看到 agent 狀態 vs 用戶無法看到工具存在）
 - PC-053「所有規則修改都需要 Ticket」（結構類似：實作有 ticket，文件更新常漏）
 - PC-066「decision-quality autopilot」（缺指引時 PM 回退到熟悉舊路徑）
 

@@ -4,7 +4,7 @@
 來源掃描既有序號以避免碰撞——本地 tickets 目錄、main ref 上的檔案清單、
 以及同層 worktree——因為並行 session 各自持有工作區，只看本地會配出重複 ID。
 
-自 commands/create.py 抽出（0.2.1-W3-834 分群結論第 A 群）：本群有 39 項專屬測試
+自 commands/create.py 抽出（分群結論第 A 群）：本群有 39 項專屬測試
 （id_allocation_race / id_scan_main_ref / id_sibling_worktree_scan / auto_seq_collision
 四檔），是該次分群中回歸保護最厚的一群，且介面單純——輸入 args 與版本，輸出
 (版本, ticket_id, wave) 三元組。
@@ -61,7 +61,7 @@ def resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Option
             ))
         ticket_id = format_child_ticket_id(args.parent, child_seq)
 
-        # 深度上限檢查（W1-056.5 協議 v2 D3）：沿 parent_id 鏈計算新子任務深度，
+        # 深度上限檢查（協議 v2）：沿 parent_id 鏈計算新子任務深度，
         # 超過 MAX_TICKET_DEPTH 時 warn（深度 == MAX 為合法最深層，裁決 E）（不硬擋，留旁路）。深度沿 parent_id 鏈
         # 而非 ID 字串數點（linux F1 fatal 教訓）。
         new_depth = compute_depth(args.parent, version) + 1
@@ -73,7 +73,7 @@ def resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Option
                 max_depth=MAX_TICKET_DEPTH,
             ))
 
-        # 扇出 warning（W5-005 F7/D11）：父票 children 數超閾值時 warn（不硬擋）。
+        # 扇出 warning：父票 children 數超閾值時 warn（不硬擋）。
         existing_children_count = child_seq - 1
         if existing_children_count >= MAX_CHILDREN_WARNING_THRESHOLD:
             print(format_warning(
@@ -99,11 +99,11 @@ def resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Option
             return None
 
         if args.seq is None:
-            # auto-seq 模式：get_next_seq 回傳值已內部保證可用（W1-051 內聚
+            # auto-seq 模式：get_next_seq 回傳值已內部保證可用（內聚
             # collision guard 至 get_next_seq 降級分支），caller 不再兜底。
-            # 防護 W1-042：兩來源（本地 glob + main ref）同時掃空降級時，
+            # 防護：兩來源（本地 glob + main ref）同時掃空降級時，
             # get_next_seq 內的 resolve_available_seq 推進至本地檔案系統可用
-            # 序號——僅保證本地 FS 可用，main-only 票不在保證範圍（W1-052 措辭
+            # 序號——僅保證本地 FS 可用，main-only 票不在保證範圍（措辭
             # 對齊；PC-152 collision 家族；消除 caller while-loop 特例外洩）。
             seq = get_next_seq(version, wave)
             ticket_id = format_ticket_id(version, wave, seq)

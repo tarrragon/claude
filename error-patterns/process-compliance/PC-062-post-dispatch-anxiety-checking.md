@@ -20,7 +20,7 @@ PM 派發代理人（background）後，task-notification 未到達前主動執�
 
 ### 深層原因：async-mindset 規則結構缺陷（根本問題）
 
-> 關鍵洞察：W10-023 WRAP 分析 Consider the Opposite 揭示。
+> 關鍵洞察：一次 WRAP 分析的 Consider the Opposite 揭示。
 
 `async-mindset.md` 原版只有 don't（禁止等待、禁止同步），沒有 do（派發後應做什麼）。規則層面的注意力空缺會自動由焦慮填補，不是執行者意志問題。
 
@@ -34,14 +34,14 @@ Hook 觸發「已清理派發記錄」訊息與 task-notification 到達的形�
 
 ### 規則層（已落地）
 
-- **async-mindset.md v1.2.0**（W10-025）：新增「派發後注意力出口」章節，包含合法 vs 焦慮檢查對照表、注意力切換範本（5 層優先級）、代理人完成訊號可信度表、4 個邊界案例
+- **async-mindset.md v1.2.0**：新增「派發後注意力出口」章節，包含合法 vs 焦慮檢查對照表、注意力切換範本（5 層優先級）、代理人完成訊號可信度表、4 個邊界案例
 - **pm-rules/behavior-loop-details.md**：派發後行為表已規範應做事項（Context Bundle / 下個 Ticket 分析 / worklog 整理）
 
 ### CLI 層（已落地）
 
-- **ticket CLI claim 簡化 WRAP 三問**（W10-028）：每次 claim 強制 PM 回答 W/A/P 三問，其中 A（機會成本）直接對抗「閒著就查代理人」的傾向——迫使 PM 意識到此刻應投入的下件事
+- **ticket CLI claim 簡化 WRAP 三問**：每次 claim 強制 PM 回答 W/A/P 三問，其中 A（機會成本）直接對抗「閒著就查代理人」的傾向——迫使 PM 意識到此刻應投入的下件事
 
-### Hook 層（待落地 W10-024）
+### Hook 層（待落地）
 
 - `active-dispatch-tracker-hook.py` 訊息調整：dispatch-active.json 為空且無近期通知時不輸出「[OK] 已完成」，避免誤導正向強化
 
@@ -93,13 +93,13 @@ Hook 觸發「已清理派發記錄」訊息與 task-notification 到達的形�
 
 ## 觸發日期
 
-- 2026-04-13 新增：W10-023 WRAP 分析揭示，W10-026 建立
+- 2026-04-13 新增：由一次 WRAP 分析揭示並建立本錯誤模式
 
 ## 防護措施實作追蹤
 
-| 層次 | Ticket | 狀態 |
-|------|--------|------|
-| 規則層：async-mindset 注意力出口 | 0.18.0-W10-025 | 完成（v1.2.0） |
-| CLI 層：claim 簡化 WRAP 三問 | 0.18.0-W10-028 | 完成 |
-| Hook 層：active-dispatch-tracker 訊息調整 | 0.18.0-W10-024 | 待執行 |
-| 錯誤模式：本檔案 | 0.18.0-W10-026 | 完成 |
+| 層次 | 狀態 |
+|------|------|
+| 規則層：async-mindset 注意力出口 | 完成（v1.2.0） |
+| CLI 層：claim 簡化 WRAP 三問 | 完成 |
+| Hook 層：active-dispatch-tracker 訊息調整 | 待執行 |
+| 錯誤模式：本檔案 | 完成 |

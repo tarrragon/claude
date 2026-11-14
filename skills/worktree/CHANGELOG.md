@@ -2,6 +2,16 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.8.0（2026-11-14）— 合併閘門支援不使用 FVM 的 Flutter 專案，另有守衛與 SessionStart 稽核的修正：
+- 合併閘門的 Flutter 呼叫方式改由框架 lib 的 `flutter_launcher.launch_argv` 依快照判定：快照有 `.fvmrc` 或 `.fvm/fvm_config.json` 時為 `fvm flutter test`／`fvm flutter pub get`，否則為 `flutter test`／`flutter pub get`。原本寫死 `fvm`，未使用 FVM 的專案無法通過閘門。宣告檔中的 `command`、`generate` 由專案寫定，閘門不補 `fvm` 前綴。SKILL.md 套件表與產物生成段同步。
+- SKILL.md 補一段：`worktree merge` 不可再以 `run-with-timeout.py` 包裝（外層計時會把閘門內的排隊時間算進逾時），需長時間等待時改用背景執行並把輸出寫檔。
+- `worktree-remove-deliverable-check-hook.py` 的 Guard C 在 `git status` 查詢失敗或路徑不存在時改為阻擋 remove，並列出改用絕對路徑、先查狀態、改用 `git worktree prune` 三種處置；hook 以 `fail_closed` 執行。原本共用層把查詢失敗與無變更都回傳空清單，Guard C 因此放行，而 `remove --force` 會刪除未提交的修改且不可逆。
+- `session-start-merged-worktree-audit-hook.py`：ahead=0 的 worktree 若分支沒有自己的提交（剛自 main 建立）、工作區有未提交變更或未追蹤檔，或無法判定，改列為進行中，不給清理建議；孤兒票稽核改讀共用狀態根。
+- `worktree-commit-before-dispatch-hook.py`：找票、比對目標票是否已同步、訊息中的相對路徑改用共用狀態根（linked worktree 內為主 checkout）；未同步訊息補「常見來源是 `ticket track dispatch` 寫入的派發日誌 commit，需在 dispatch 之後再推送一次」。
+- `worktree-branch-check-hook.py`：未提交變更的計數單位由「個未追蹤檔案」改為「個未提交變更」（計數本來就含已修改、已暫存與未追蹤）。
+- 測試：`tests/conftest.py` 接上 hook-logs 洩漏哨兵；上述各項補對照測試。
+- 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；僅註解與 docstring，行為不變。
+
 **Version**: 1.7.1（2026-11-11）— 合併閘門內建的 Flutter 對應（`fvm flutter test`）只在合併快照根目錄有 `pubspec.yaml` 時生效；沒有時，`lib/`、`docs/` 等慣例目錄的改動視為範圍外、只印 WARNING，非 Flutter 專案不再被誤選 Flutter 套件。專案宣告檔指定的套件不受影響。git 查詢失敗時保守視為有 `pubspec.yaml`。
 
 **Version**: 1.7.0（2026-11-10）— cleanup 與合併閘門的五項修正：

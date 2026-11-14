@@ -2,13 +2,13 @@
 
 本文件規範專案內具 CLI 入口點的 skill 源碼發生行為變更時，必須同步掃描該 skill 的決策層文件，防止行為層與決策層脫節。
 
-> **來源**：本規則前身為 ticket 專屬版本（ANA 結論「採三層防護組合」中的 B 路徑），0.2.1-W3-239 依 0.2.1-W3-136 ANA 結論泛化涵蓋範圍，與 PC-118（A 路徑：error-pattern 描述層）+ commit-level sync-check hook（C 路徑：強制層）三者互補。
+> **來源**：本規則前身為 ticket 專屬版本（ANA 結論「採三層防護組合」中的 B 路徑），後依盤點 ANA 結論泛化涵蓋範圍，與 PC-118（A 路徑：error-pattern 描述層）+ commit-level sync-check hook（C 路徑：強制層）三者互補。
 
 ---
 
 ## 適用範圍
 
-**涵蓋 skill 清單**（0.2.1-W3-136 ANA 盤點，共 7 個具 CLI 入口點的 skill）：
+**涵蓋 skill 清單**（ANA 盤點，共 7 個具 CLI 入口點的 skill）：
 
 | Skill | Src prefix | 決策層同步目標 |
 |-------|-----------|---------------|
@@ -55,7 +55,7 @@
 
 **待掃描目標**：依「適用範圍」表該 skill 對應的「決策層同步目標」欄位；ticket 額外含 `.claude/pm-rules/*.md`（決策路由與情境 SOP）。
 
-**Why**：CLI skill 是操作者（PM 或其他代理人）與該功能互動的唯一介面。子命令語意、flag 行為、核心動作條件改變後，決策層引用若未同步，操作者執行既有流程會「靜默失效」——命令仍可執行但語意已不同。0.2.1-W3-131 skill-sync 案例已實證：`cmd_pull_all` 行為變更後 `SKILL.md` 描述過期，全程無提示。
+**Why**：CLI skill 是操作者（PM 或其他代理人）與該功能互動的唯一介面。子命令語意、flag 行為、核心動作條件改變後，決策層引用若未同步，操作者執行既有流程會「靜默失效」——命令仍可執行但語意已不同。skill-sync 案例已實證：`cmd_pull_all` 行為變更後 `SKILL.md` 描述過期，全程無提示。
 
 **Consequence**：跳過同步掃描會讓決策層累積過時引用。過時引用不會直接報錯，後人照 SOP 操作會得到錯誤結果。補償成本隨時間遞增。
 
@@ -72,7 +72,12 @@
    | 引用仍對應現行行為（grep 命中項與 src 一致） | 無需改動 |
    | 引用舊命令名稱 / 舊 flag / 舊條件 | 當場更新，納入同一 commit |
 
-3. 若同步更新跨越 skill src + 多個決策層檔且預期 commit 體量過大，建立獨立 DOC Ticket 追蹤後再繼續。**禁止只口頭記錄「之後再更新」而不建立 Ticket**（違反 `quality-baseline.md` 規則 5）。
+3. 變更涉及結束碼或輸出語意時，另查子程序呼叫點：其他 skill、hook、scripts（以及本 skill 內部）可能以子程序呼叫此 CLI，並以結束碼分支。這類呼叫端不會出現在 SKILL.md 或 pm-rules，第 1 步的 grep 掃不到。
+   ```bash
+   grep -rnE "['\"]<CLI 命令名>['\"]" .claude/hooks .claude/skills .claude/scripts --include='*.py'
+   ```
+   對每個命中的呼叫端確認非 0 結束碼的分支仍符合新語意（例如新增的結束碼原本會被當成全失敗）；不符合者納入同一 commit 修正，或建 Ticket 追蹤。
+4. 若同步更新跨越 skill src + 多個決策層檔且預期 commit 體量過大，建立獨立 DOC Ticket 追蹤後再繼續。**禁止只口頭記錄「之後再更新」而不建立 Ticket**（違反 `quality-baseline.md` 規則 5）。
 
 ### 規則 2：歷史案例作為判別錨點
 
@@ -99,9 +104,9 @@
 
 ### 規則 4：新增 CLI skill 須同步更新 registry
 
-**Why**：hook 的偵測範圍以 `SKILL_CLI_REGISTRY`（顯式清單）為準，非自動推導（0.2.1-W3-136 ANA 已排除 pyproject.toml 自動推導方案，因 src layout 不統一）。新增具 CLI 入口點的 skill 若未同步登記，該 skill 將不受本規則與 hook 保護。
+**Why**：hook 的偵測範圍以 `SKILL_CLI_REGISTRY`（顯式清單）為準，非自動推導（盤點 ANA 已排除 pyproject.toml 自動推導方案，因 src layout 不統一）。新增具 CLI 入口點的 skill 若未同步登記，該 skill 將不受本規則與 hook 保護。
 
-**Consequence**：registry 與實際 CLI skill 清單脫節時，防護語意雖成立但實作不覆蓋，重演 0.2.1-W3-136 發現的落差。
+**Consequence**：registry 與實際 CLI skill 清單脫節時，防護語意雖成立但實作不覆蓋，重演盤點 ANA 發現的落差。
 
 **Action**：新增 skill 的 `pyproject.toml` 含 `[project.scripts]` 入口點且 `SKILL.md` 含命令行為描述時，同步在 `.claude/hooks/skill-cli-sync-check-hook.py` 的 `SKILL_CLI_REGISTRY` 新增一條（name / src_prefix / sync_targets），並同步更新本文件「適用範圍」表。
 
@@ -115,6 +120,9 @@ git diff --name-only | grep ".claude/skills/ticket/ticket_system/"
 
 # 找出該 skill 對應決策層文件中含 CLI 引用者（規則 1 Action 第 1 步，ticket 範例）
 grep -rln "ticket track\|/ticket" .claude/skills/ticket/SKILL.md .claude/pm-rules/
+
+# 找出以子程序呼叫該 CLI 的位置（規則 1 Action 第 3 步，ticket 範例）
+grep -rnE "['\"]ticket['\"]" .claude/hooks .claude/skills .claude/scripts --include='*.py'
 ```
 
 ---
@@ -124,7 +132,7 @@ grep -rln "ticket track\|/ticket" .claude/skills/ticket/SKILL.md .claude/pm-rule
 | 規則 | 聚焦 | 與本規則差異 |
 |------|------|------------|
 | `decision-trigger-binding.md` | 決策合法狀態（已決策 / 綁 ticket trigger 延後） | 聲明層；本規則為執行面同步機制 |
-| `quality-baseline.md` 規則 5 | 所有發現必須追蹤（建 Ticket） | 本規則 Action 第 3 步直接援引 |
+| `quality-baseline.md` 規則 5 | 所有發現必須追蹤（建 Ticket） | 本規則 Action 第 3、4 步直接援引 |
 | `PC-118`（A 路徑） | 反模式描述（為何發生、歷史案例，原以 ticket 為例） | 事後描述層；本規則為事前規範 |
 | `skill-cli-sync-check-hook.py`（C 路徑） | commit-level 自動偵測 + 提醒，涵蓋 registry 內全部 skill | 強制層；本規則為自律層；兩者互補，hook 兜底 |
 
@@ -137,6 +145,7 @@ grep -rln "ticket track\|/ticket" .claude/skills/ticket/SKILL.md .claude/pm-rule
 - [ ] 改動性質依「行為變更定義表」分類（行為變更 vs 豁免）？
 - [ ] 若屬行為變更，已執行同步掃描快速指令（代入對應 skill 的路徑與關鍵字）？
 - [ ] 引用舊命令 / flag / 條件的文件已更新（或已建 DOC Ticket 追蹤）？
+- [ ] 結束碼或輸出語意有變時，已 grep 子程序呼叫點並確認各呼叫端的非 0 分支？
 - [ ] commit msg type 正確反映性質（`feat` / `refactor` 行為變更 vs `fix` 純修復）？
 - [ ] 若新增具 CLI 入口點的 skill，已同步登記 `SKILL_CLI_REGISTRY` 與本文件「適用範圍」表（規則 4）？
 
@@ -152,6 +161,6 @@ grep -rln "ticket track\|/ticket" .claude/skills/ticket/SKILL.md .claude/pm-rule
 ---
 
 **Last Updated**: 2026-08-04
-**Version**: 2.0.0 — 依 0.2.1-W3-136 ANA 結論泛化涵蓋範圍由 ticket 單一 skill 擴至 7 個具 CLI 入口點的 skill；新增規則 4（新增 CLI skill 須同步登記 registry）；改名自 `ticket-skill-sync-check-rules.md`（0.2.1-W3-239）
+**Version**: 2.0.0 — 依盤點 ANA 結論泛化涵蓋範圍由 ticket 單一 skill 擴至 7 個具 CLI 入口點的 skill；新增規則 4（新增 CLI skill 須同步登記 registry）；改名自 `ticket-skill-sync-check-rules.md`
 **Version**: 1.1.0 — 套用 multi-view review 修正：合併規則 1/3 重複條款為「行為變更定義表」單一來源、規則 2/3 補三明示、規則 1 觸發情境拆分為觸發路徑 + 定義引用、grep 指令去特定 keyword、刪「使用方式」廢話段、改 >5 文件閾值為定性條件、適用範圍第三列改為反向同步條款、Action 第 2 步條件分支表格化、規則 3 判別欄位分為實質 / 輔助雙層
 **Version**: 1.0.0 — 初始建立（B 路徑落地）

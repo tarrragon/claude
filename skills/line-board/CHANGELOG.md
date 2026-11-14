@@ -2,6 +2,17 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 0.15.0（2026-11-13）— 恢復開工通知改以 sessionId 寄給本專案的主控，不再以裸名稱「主控」寄送。本機同時有多個專案時，每個專案的主控都叫「主控」，裸名稱可能送到別的專案。新增 `coordinatorAddress`（`hooks/resumeNotice.ts`）：從已依 checkout 路徑過濾的存活 session 中，取名稱為「主控」且帶 sessionId 的那一個；沒有時不送並記 `coordinator-not-found`，不只一個時不送並記 `coordinator-ambiguous`。送出紀錄檔的 skipped reason 型別同步擴充。測試：恰好一個、沒有、缺 sessionId、多個四種輸入，以及名稱不符的對照。multi-session-orchestration `references/line-continuity.md` §4 的 reason 欄同步。
+- 移除框架檔內的專案層級票號（規則 8 存量清理）：一處註解的票號範例改為 `<版號>-W<波次>-<序號>` 佔位符；行為不變。
+
+**Version**: 0.14.1（2026-11-12）— compact 後不再以 compact 前的用量標［待 compact］。實測 compact 完成時用量檔在同一毫秒寫入 phase compacted，tokens 與百分比仍是 compact 前的值，下一次回應前不更新；原本 `contextMarkOf` 不看 phase，line_status 因此對剛 compact 過的線顯示「ctx 61%（29 分前）［待 compact］」。新增 `isPreCompactMeasure`（phase 為 compacted 且 measuredAt 不晚於 phase.at）：成立時不判待 compact／待 clear，用量字尾寫「ctx compact 前 <百分比>%」。看板線標題與 line_status 共用同一判定。`contextUsage.ts` 檔頭原寫「compact 後記為 null」與實測不符，改寫；`references/board-screens.md` 同步。測試：3.2.0 實測形狀的 E2 正向對照與量測晚於 compact 的 E1 對照。
+
+**Version**: 0.14.0（2026-11-12）— 跨專案行為變更：佇列行分類兩處修正，看板與 `line_status` 對同一條線的歸類一致。
+- 空票序（佇列行冒號後空白，或只有 `→`、`∥`）改判為「佇列無票號」：`line_status` 列過期項，看板線標題標［佇列無票號］。原本 `isQueueWithoutTicket` 要求至少一段非票號文字，空票序既不是無票號也不是全數完成，兩個畫面都沒有任何警示。
+- 附說明的收線寫法（如 `（無）（全數終態）`、`無（…）`）在看板改標［收線寫法］，不再標［佇列無票號］；`line_status` 原本就列為過期項「收線寫法」。`parseLanes` 的 `Lane` 新增 `ended` 欄（with-note 或 null），看板以它判斷；hot reload 後舊 snapshot 沒有此欄時視同 null。
+- `line_status` 兩種過期項的說明文字同步：收線寫法改寫「看板仍顯示該線並標［收線寫法］」，佇列無票號補「空白或只有文字」。
+- 測試：空票序的 E2 正向對照（原測試斷言空票序不判，改為判定）、`parseLanes` 的 `ended` 欄對照、看板標題的［收線寫法］與［佇列無票號］互斥。
+
 **Version**: 0.13.0（2026-11-11）— `line_status` 在沒有協調票時的補法改為先問用戶：先以 AskUserQuestion 問開工作線或單一線，用戶選開工作線後才建協調票；這套步驟與 multi-session-orchestration `references/line-continuity.md` §3〈協調票為 none 時〉一致。新常數 `LINE_STATUS_NONE_STEP` 定義在 `hooks/lineStatus.ts`。看板 /board 的成因用語與補法（`COORDINATION_NONE`、`COORDINATION_HOWTO`）不變。`tests/board.test.ts` 的 line_status none 案例 regex 改為要求先問用戶、再接補法的順序。
 
 **Version**: 0.12.6（2026-11-04）— 純註解改動，程式碼、數值與測試數不變。`tests/paneHarness.ts` 的 `PANE_TEST_TIMEOUT_MS` 註解補上逾時餘裕的失效條件：非首測單測耗時有 72–77% 是每個 test 的 plugin 冷啟動，冷啟動隨看板原始碼量成長（2026-11-04 量測，多引入約 215 KB 原始碼時多 77%）；原始碼量明顯成長時需依同樣方法重新量測餘裕。

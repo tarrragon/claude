@@ -2,7 +2,6 @@
 """
 dispatch_stats.py — Agent Dispatch Validation 警告統計與標註 CLI
 
-對應 Ticket: 0.18.0-W11-004.1.1
 規格權威: ticket Solution「Phase 1 功能規格設計 v2」
 
 用法：
@@ -48,10 +47,13 @@ REQUIRED_EVENT_FIELDS = (
 )
 
 
-_PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
-# 與 agent-dispatch-validation-hook.py 的 _EVENTS_JSONL_PATH 必須一致
-_EVENTS_JSONL_PATH: Path = _PROJECT_ROOT / ".claude/hook-logs/agent-dispatch-validation/events/events.jsonl"
-_ANNOTATIONS_JSON_PATH: Path = _PROJECT_ROOT / ".claude/hook-logs/agent-dispatch-validation/events/annotations.json"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.hook_logging import get_hook_log_dir  # noqa: E402
+
+# 與 agent-dispatch-validation-hook.py 的 _EVENTS_JSONL_PATH 必須一致（兩端皆經 get_hook_log_dir）
+_EVENTS_DIR: Path = get_hook_log_dir("agent-dispatch-validation") / "events"
+_EVENTS_JSONL_PATH: Path = _EVENTS_DIR / "events.jsonl"
+_ANNOTATIONS_JSON_PATH: Path = _EVENTS_DIR / "annotations.json"
 
 
 def _resolve_path(env_var: str, default: Path) -> Path:

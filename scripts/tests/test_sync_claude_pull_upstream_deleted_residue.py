@@ -175,3 +175,73 @@ def test_warn_residue_silent_when_empty(capsys):
     pull.warn_upstream_deleted_residue([])
     out = capsys.readouterr().out
     assert out == ""
+
+
+# ============================================================================
+# 改名後繼與註冊狀態（3.3.0-W1-214.2，tarrragon/claude#68）
+#
+# 「上游已刪除但本地已修改而保留」原本只列路徑，consumer 分不出這是改名的前身
+# 還是本地客製。提示改為標明上游改名後繼（新路徑與相似度），以及舊路徑在
+# settings.json 是否仍有註冊；純刪除的保留檔維持原措辭（對照）。
+# ============================================================================
+
+def _setup_rename_and_delete(tmp_path):
+    """上游同一 commit：old-hook 改名移位（內容相似）、gone 純刪除。"""
+    upstream = tmp_path / "upstream"
+    _init_repo(upstream)
+    body = "".join(f"line {i}\n" for i in range(30))
+    (upstream / "skills" / "s" / "hooks").mkdir(parents=True)
+    (upstream / "skills" / "s" / "hooks" / "old-hook.py").write_text(body, encoding="utf-8")
+    (upstream / "rules").mkdir()
+    (upstream / "rules" / "gone.md").write_text("base line\n", encoding="utf-8")
+    base = _commit_all(upstream, "base")
+
+    (upstream / "skills" / "s" / "hooks" / "old-hook.py").unlink()
+    (upstream / "hooks").mkdir()
+    (upstream / "hooks" / "new-hook.py").write_text(body + "line extra\n", encoding="utf-8")
+    (upstream / "rules" / "gone.md").unlink()
+    _commit_all(upstream, "rename and delete")
+    return upstream, base
+
+
+def test_detect_upstream_renames_maps_old_to_new(tmp_path):
+    upstream, base = _setup_rename_and_delete(tmp_path)
+
+    renames = pull.detect_upstream_renames(upstream, base)
+
+    new_rel, similarity = renames["skills/s/hooks/old-hook.py"]
+    assert new_rel == "hooks/new-hook.py"
+    assert 50 <= similarity <= 100
+    assert "rules/gone.md" not in renames
+
+
+def test_warn_residue_marks_rename_successor_and_registration(capsys):
+    """改名前身：標明新路徑、相似度與「settings.json 仍有註冊」；純刪除維持原措辭。"""
+    pull.warn_upstream_deleted_residue(
+        ["skills/s/hooks/old-hook.py", "rules/gone.md"],
+        renames={"skills/s/hooks/old-hook.py": ("hooks/new-hook.py", 96)},
+        registered_scripts={"skills/s/hooks/old-hook.py"},
+    )
+    lines = capsys.readouterr().out.splitlines()
+    old_line = next(l for l in lines if "old-hook.py" in l)
+    gone_line = next(l for l in lines if "gone.md" in l)
+
+    assert "hooks/new-hook.py" in old_line
+    assert "96%" in old_line
+    assert "settings.json" in old_line
+    # 對照：純刪除的保留檔沒有改名或註冊註記
+    assert "改名" not in gone_line
+    assert "settings.json" not in gone_line
+
+
+def test_warn_residue_rename_without_registration_omits_registration_note(capsys):
+    pull.warn_upstream_deleted_residue(
+        ["skills/s/hooks/old-hook.py"],
+        renames={"skills/s/hooks/old-hook.py": ("hooks/new-hook.py", 96)},
+        registered_scripts=set(),
+    )
+    old_line = next(
+        l for l in capsys.readouterr().out.splitlines() if "old-hook.py" in l
+    )
+    assert "hooks/new-hook.py" in old_line
+    assert "settings.json" not in old_line

@@ -70,6 +70,21 @@ grep -c "<測試 fixture 專用的識別字串>" <production 檔案>   # 測試�
 | 審查 | 見到 `X = Path(__file__)...` 形式的 module 層級賦值，即檢查該專案的測試隔離機制是否依賴改寫 `__file__` |
 | 驗證 | 新增涉及路徑解析的測試時，以 production 檔案的命中數前後對照確認隔離生效，不以套件綠燈為證 |
 
+## 變體：測試端的 fixture scope 早於隔離 fixture
+
+**主張**：production 端寫法正確（路徑在呼叫時求值）時，同樣的時序缺陷仍會從測試端發生。測試以 module 級（或更高 scope）fixture 載入「import 時就有副作用」的模組，例如以 `exec_module` 載入 hook，而載入過程呼叫了日誌初始化。conftest 的隔離若是 function 級 autouse，就來不及攔截，因為 pytest 一律先建立較高 scope 的 fixture。
+
+**Why**：pytest 依 scope 由高到低建立 fixture，與 conftest 和測試檔的宣告位置無關。function 級隔離只保護 function 級之後發生的事；module 級 fixture 內的副作用落在它之前，求值時讀到的是未隔離的環境。
+
+**Consequence**：副作用寫進真實位置，測試照樣全綠。若 fixture 另啟子行程且沒有明確傳入 env，子行程只繼承啟動當下的環境，同樣繞過隔離；在 linked worktree 內執行時，worktree 偵測優先於環境變數，問題更隱蔽。
+
+**Action**：
+- 載入有 import 副作用模組的 fixture，scope 若高於 function，該 fixture 自己就要建立隔離。做法是在同一 scope 用 `pytest.MonkeyPatch.context()` 或 module 級 autouse fixture 設定隔離環境變數。
+- 呼叫子行程時明確傳入 `env=`。
+- 偵測不靠套件綠燈：以前後快照比對真實輸出位置，有新增即判紅。
+
+**實證（2026-11-12）**：測試洩漏哨兵改為前後快照比對後，第一次合併閘門在 ticket 套件判紅，訊息為 `hook-logs/<hook 名>` 被建在真實根。套件內 5157 個測試全數 passed，結束碼由哨兵設為 1。改用 module 級隔離加上子行程明確傳 env 後，該套件整套結束碼為 0。
+
 ## 與既有模式的邊界
 
 | 模式 | 差異 |

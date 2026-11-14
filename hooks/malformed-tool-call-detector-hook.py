@@ -25,13 +25,13 @@ Action:
   後，掃描殘餘文字是否出現未解析工具標記簽章。命中 → exit 2 + stderr 指引重發；
   否則 exit 0 放行。雙通道可觀測性（stderr + 檔案日誌）遵循 quality-baseline 規則 4。
 
-  meta-context 豁免（W2-011.3，PC-099 對齊）：訊息含顯式標記
+  meta-context 豁免（PC-099 對齊）：訊息含顯式標記
     <!-- malformed-detector-exempt: <reason> -->
   時整段豁免——用於「正常討論本失敗形態本身」的散文（裸標記嵌入說明句、無 code
   包覆）。真正寫壞的工具呼叫由 harness 渲染而成，絕不含此 meta 註解，故不削弱
   true-positive 攔截力。
 
-retry-continuation 簽章涵蓋（W2-011.4，thyme F5）:
+retry-continuation 簽章涵蓋:
   double-failure（harness in-turn retry 也失敗）結束狀態的 assistant 訊息仍含
   malformed 標記，Stop 觸發本 hook 注入重發指令使下回合自動重試。為涵蓋
   「漏 antml 前綴的完整 invoke 字面」缺口，新增 signature 5（成對閉合）：同訊息
@@ -43,10 +43,10 @@ retry-continuation 簽章涵蓋（W2-011.4，thyme F5）:
     （要嘛完整渲染 tool-call 結構，要嘛漏前綴的完整標記）。為此類形態疊 regex
     特例的維護成本與誤報風險遠高於其涵蓋價值，故依 YAGNI 原則不實作。
 
-架構邊界——「孤兒結尾漏網路徑」屬 Stop-hook 機制邊界，非 signature 覆蓋缺口（W8-029）:
+架構邊界——「孤兒結尾漏網路徑」屬 Stop-hook 機制邊界，非 signature 覆蓋缺口:
   曾觀察到一類間歇漏網：訊息以孤兒短 token（如 court）結尾、`<invoke>` 字面已
   被 harness 抽離，現有 5 signature 皆需後接 `<invoke` 字面故不命中。直覺反應是
-  新增「孤兒 token 結尾」signature 補洞，但 W8-029 transcript census 否證此方向的
+  新增「孤兒 token 結尾」signature 補洞，但 transcript census 否證此方向的
   前提——漏網路徑（單次 parse-failure）在持久化 transcript 層**零可掃文字**：
 
     census（單一 PM session，121 筆 assistant 訊息）：
@@ -74,7 +74,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parent / "hook-logs"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib import get_hook_log_dir  # noqa: E402
+
+LOG_DIR = get_hook_log_dir("malformed-tool-call-detector")
 LOG_FILE = LOG_DIR / "malformed-tool-call-detector.log"
 
 # 未解析工具標記簽章（剝除 code 區塊後比對）。
@@ -87,7 +90,7 @@ SIGNATURE_PATTERNS = [
     re.compile(r"(?m)^[ \t]*</\s*invoke\s*>", re.IGNORECASE),
     # 游離 token（如 count）單獨一行後緊接 <invoke（本 session 實際反覆出現的形態）
     re.compile(r"(?m)^[ \t]*[A-Za-z]{1,12}[ \t]*\n[ \t]*<\s*invoke\b", re.IGNORECASE),
-    # 成對閉合（signature 5，W2-011.4 / thyme F5）：同訊息同時出現裸 <invoke …
+    # 成對閉合（signature 5）：同訊息同時出現裸 <invoke …
     # 與裸 </invoke>（全域 search 非行首），中間任意內容。涵蓋「漏 antml 前綴的
     # 完整 invoke 字面」缺口——完整工具呼叫被當文字渲染，但 <invoke> 不在行首
     # （前有散文夾住），signature 1/3 的行首錨點接不到。特異性靠「成對閉合」：
@@ -99,7 +102,7 @@ SIGNATURE_PATTERNS = [
 
 # meta-context 豁免標記（PC-099 對齊，治本特異性）。
 #
-# 動機（W2-011.3）：IMP .1 strip_code_regions 修復後，仍殘留一類誤報——
+# 動機：strip_code_regions 修復後，仍殘留一類誤報——
 # 「行首裸 <invoke>/<parameter>/</invoke> 字面出現在純散文」（無 fenced /
 # inline backtick / 4-space 縮排包覆）。最典型場景是「meta 自我引用」：在訊息或
 # ticket 中正常討論本 hook 偵測的失敗形態本身（例如本 ticket 工作流、hook
@@ -136,7 +139,7 @@ def strip_code_regions(text: str) -> str:
     """剝除 fenced code block、backtick 引述與縮排 code block，避免「在程式碼／
     反引號內合法引用 <invoke 字面」造成誤判（例如說明本問題時）。
 
-    剝除順序（W2-011.1 false-positive 修復）：
+    剝除順序（false-positive 修復）：
       1. fenced block（``` ... ```）—— 須最先，避免後續 backtick 規則誤切三引號內部。
       2. backtick 引述—— 改用 `[^`]*` 允許跨行（根因 B：多行反引號引述漏剝）。
       3. 4-space／tab 縮排 code block—— 整行剝為空白（根因 A：縮排引述標記命中 signature）。
@@ -192,7 +195,7 @@ def detect(text: str) -> str:
     偵測順序：
       1. meta-context 豁免（PC-099 對齊）：訊息含顯式 exempt marker → 整段豁免
          （回傳空字串）。優先於 signature 比對，使「正常討論本失敗形態本身」的
-         meta 散文不被誤判（W2-011.3 治本）。
+         meta 散文不被誤判（治本）。
       2. 剝除 code 區塊（fenced / inline backtick / 縮排）後比對 signature。
     """
     if EXEMPT_MARKER.search(text):
@@ -205,7 +208,7 @@ def detect(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 內嵌 self-test fixtures（W2-011.2 / W2-011 acceptance 3）
+# 內嵌 self-test fixtures
 #
 # 標記字面以字串拼接（"<in" "voke"）組裝，避免本 hook 或其他 lint hook
 # 掃描本檔原始碼時把 fixture 字面誤判為「未解析工具標記」造成連鎖誤觸。
@@ -242,14 +245,14 @@ SELF_TEST_TRUE_NEGATIVES = {
     "inline_backtick": (
         f"請用帶前綴的 `{_OPEN}>` 標記，不要寫成裸的。"
     ),
-    # 成對閉合 prose 引述（W2-011.4 / signature 5 真陰）：散文討論完整 invoke
+    # 成對閉合 prose 引述（signature 5 真陰）：散文討論完整 invoke
     # 形態時，把成對標記字面包在 fenced code block 內引述 → strip 後消失，
     # signature 5 不應命中。驗證新簽章不誤觸 prose 引述（高訊號仍須實機驗）。
     "paired_close_fenced_prose": (
         "完整寫壞的形態長這樣（成對閉合，fenced 引述）：\n\n```xml\n"
         f"{_OPEN} name=\"Qux\">內容{_CLOSE}\n```\n\n以上為說明。"
     ),
-    # meta-context 豁免（W2-011.3 治本，PC-099 對齊）：
+    # meta-context 豁免（治本，PC-099 對齊）：
     # 純散文中嵌入裸標記字面（無 code 包覆，strip 後仍命中 signature），
     # 但含顯式 exempt marker → 應整段豁免。模擬「正常討論本失敗形態本身」。
     "meta_context_exempt": (
@@ -274,7 +277,7 @@ SELF_TEST_TRUE_POSITIVES = {
     "stray_token_invoke": (
         f"count\n{_OPEN} name=\"Real\">"
     ),
-    # 成對閉合、非行首、漏 antml 前綴的完整 invoke（signature 5，W2-011.4）：
+    # 成對閉合、非行首、漏 antml 前綴的完整 invoke（signature 5）：
     # 整段工具呼叫被當文字渲染，<invoke> 前有散文夾住（非行首），signature 1/3
     # 的行首錨點接不到，須靠成對閉合簽章攔截。
     "paired_close_non_linestart": (

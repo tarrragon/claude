@@ -136,4 +136,4 @@ SOLID 五原則的傳統解釋人盡皆知，但「為何」遵循它們？認�
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 2.0.0 — 瘦身 419 -> <300 行（1.0.0-W8-020.8）：五大來源完整程式碼範例 + SOLID 五原則詳解外移至 `.claude/references/cognitive-load-design-examples.md`；與 rule `cognitive-load.md` 重疊的量化標準/閾值表/五原則速查/檢查清單改路由不複製；主檔專注三種類型 + 來源機制 + SOLID 視角概要 + 方法論關係。歷史 1.x 版見 git log。
+**Version**: 2.0.0 — 瘦身 419 -> <300 行：五大來源完整程式碼範例 + SOLID 五原則詳解外移至 `.claude/references/cognitive-load-design-examples.md`；與 rule `cognitive-load.md` 重疊的量化標準/閾值表/五原則速查/檢查清單改路由不複製；主檔專注三種類型 + 來源機制 + SOLID 視角概要 + 方法論關係。歷史 1.x 版見 git log。

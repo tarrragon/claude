@@ -1,4 +1,4 @@
-"""Memory 分流指引訊息 SSOT（0.2.1-W3-196，Phase 4 第二輪修正）
+"""Memory 分流指引訊息 SSOT
 
 三處消費端：
 - memory-write-guard-hook.py 的 DENY_REASON（拒絕語氣）

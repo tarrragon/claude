@@ -302,4 +302,4 @@ ls .claude/skills/ > /tmp/local-skills.txt
 **Last Updated**: 2026-06-11
 **Version**: 1.2.0 — 第 4 章新增「已評估不需要清單（防復裝）」：記錄已正式評估為不需要的 plugin 與量化依據，重裝前須推翻原評估（document-skills 復裝事件教訓）
 
-**Version**: 1.1.0 — 對齊 CC v2.1.143：第 1 章新增第 7 題依賴性檢查、第 4 題改用 projected context cost；第 2 章補 projected cost 查詢指令與 dependency enforcement 機制說明；第 4 章補 dependency enforcement 卸載注意事項；第 5 章補 LSP servers 查詢指令；第 7 章補根目錄 SKILL.md 意外曝光與 dependency enforcement 忽略兩個反模式（W3-033 ANA 結論落地）
+**Version**: 1.1.0 — 對齊 CC v2.1.143：第 1 章新增第 7 題依賴性檢查、第 4 題改用 projected context cost；第 2 章補 projected cost 查詢指令與 dependency enforcement 機制說明；第 4 章補 dependency enforcement 卸載注意事項；第 5 章補 LSP servers 查詢指令；第 7 章補根目錄 SKILL.md 意外曝光與 dependency enforcement 忽略兩個反模式（ANA 結論落地）

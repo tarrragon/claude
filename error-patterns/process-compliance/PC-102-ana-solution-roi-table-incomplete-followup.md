@@ -51,8 +51,8 @@ PM 整合 ANA Solution 後注意力轉移，未完成「逐條目 → spawned ti
    ```
    | # | 修復 | 類比 | 成本 | 追蹤 |
    |---|------|------|------|------|
-   | 1 | X | Y | ~Nh | W17-00X |
-   | 2 | Y | Z | ~Nh | W17-00Y |
+   | 1 | X | Y | ~Nh | <ticket-id-1> |
+   | 2 | Y | Z | ~Nh | <ticket-id-2> |
    | 3 | Z | W | ~Nh | **未建（理由：...）** |
    ```
 3. ANA complete 前自檢：Solution 表格項數 = 已建 ticket 數 + 明確豁免數
@@ -65,15 +65,15 @@ PM 整合 ANA Solution 後注意力轉移，未完成「逐條目 → spawned ti
 
 ## 觸發案例
 
-### W17-001 修復方向表遺漏（本 Pattern 發現案例）
+### 修復方向表遺漏（本 Pattern 發現案例）
 
-W17-001 Solution 列 4 項修復方向：
-1. C Context Bundle 自動化 → 建 W17-002 IMP（已 cover）
-2. A dispatch-check 安全網 → 建 W17-003 ADJ（已 cover）
+該 ANA 的 Solution 列 4 項修復方向：
+1. C Context Bundle 自動化 → 建 IMP（已 cover）
+2. A dispatch-check 安全網 → 建 ADJ（已 cover）
 3. **Exit code 標準化（waitpid）→ 未建**
 4. **Signal 通道（SIGUSR1）→ 未建**
 
-PM 整合 Solution 後直接進下個任務，方向 3、4 僅在表格文字呈現。用戶於數輪對話後查問「主線程仰賴 polling 的改進設計」才察覺遺漏，補建 W17-007 ANA 處理。
+PM 整合 Solution 後直接進下個任務，方向 3、4 僅在表格文字呈現。用戶於數輪對話後查問「主線程仰賴 polling 的改進設計」才察覺遺漏，補建一張 ANA 處理。
 
 ---
 
@@ -87,4 +87,4 @@ PM 整合 Solution 後直接進下個任務，方向 3、4 僅在表格文字呈
 ---
 
 **Last Updated**: 2026-04-20
-**Version**: 1.0.0 — 從 W17-001 修復方向遺漏案例建立
+**Version**: 1.0.0 — 從修復方向遺漏案例建立

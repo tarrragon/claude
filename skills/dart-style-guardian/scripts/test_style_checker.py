@@ -173,6 +173,30 @@ class TestDetection:
         assert result.exempt_count == 0
 
 
+def _i18n_hit(tmp_path, literal: str) -> bool:
+    root = make_project(tmp_path)
+    path = write_dart(root, f"Text('{literal}');\n")
+    result = scan_file(path, load_config(root / "lib"))
+    return any(v.category == "i18n" for v in result.violations)
+
+
+class TestI18nUppercaseLeadingText:
+    """常數排除須整串錨定：大寫開頭的 UI 文字不可因首字大寫而放行"""
+
+    @pytest.mark.parametrize("literal", ["Save", "Hello world", "Sign In"])
+    def test_uppercase_leading_ui_text_is_reported(self, tmp_path, literal):
+        """E2 正向對照：改前這些輸入全數放行"""
+        assert _i18n_hit(tmp_path, literal)
+
+    @pytest.mark.parametrize("literal", ["API_KEY", "OK", "https://example.com", "v1.2"])
+    def test_constant_url_and_version_forms_stay_exempt(self, tmp_path, literal):
+        """全大寫常數形態（含刻意保留的 OK 這類全大寫短字）、網址、版本號維持放行"""
+        assert not _i18n_hit(tmp_path, literal)
+
+    def test_lowercase_ui_text_still_reported(self, tmp_path):
+        assert _i18n_hit(tmp_path, "hello world")
+
+
 class TestExemptPatternConstruction:
     def test_returns_none_when_no_markers_configured(self):
         assert build_exempt_pattern(StyleConfig(exempt_markers=[])) is None

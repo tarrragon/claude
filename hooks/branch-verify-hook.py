@@ -11,7 +11,7 @@ Branch Verify Hook - PreToolUse Hook 用於編輯前檢查分支
 
 Hook Event: PreToolUse
 Matcher: Edit, Write
-Decision: "allow" (feature 分支) | "deny" (保護分支)
+Decision: 不輸出（放行，交回平台權限流程） | "deny" (保護分支)
 
 重構紀錄 (v0.28.0):
 - 使用 .claude/lib/git_utils 共用模組
@@ -48,6 +48,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.git_utils import (
     get_current_branch,
     get_project_root,
+    get_target_root,
     is_protected_branch,
     is_allowed_branch,
     generate_worktree_info,
@@ -60,6 +61,30 @@ from lib.hook_io import (
     create_pretooluse_output,
 )
 from lib import setup_hook_logging, run_hook_safely
+from lib.checkout_identity import common_dir, is_absolute_path, owning_checkout_root, strip_root_prefix
+
+# 受檢的檔案寫入工具（settings.json 對三者各有 matcher 註冊）
+WRITE_TOOLS = ("Edit", "Write", "NotebookEdit")
+
+
+def _resolve_host_root(file_path: str, payload: dict) -> str:
+    """host 比對與相對化的作用根。
+
+    目標檔所屬 checkout 與原根（get_project_root）同屬一個 repo（common dir 相同，
+    含 linked worktree）時，以目標檔所屬 checkout 為根；目標在他 repo 時維持原根，
+    跨專案判定不變。目標不在 checkout 內時退回 get_action_root(payload)；
+    payload 缺 cwd 時沿用原根（不新增 stderr）。
+    """
+    original = get_project_root()
+    target_root = get_target_root(file_path, payload, original)
+    if target_root is None:
+        return str(original)
+    target_common = common_dir(str(target_root))
+    if target_common is not None and target_common == common_dir(str(original)):
+        return str(target_root)
+    if is_absolute_path(file_path) and owning_checkout_root(file_path) is not None:
+        return str(original)  # 目標在他 repo：維持原根
+    return str(target_root)
 
 
 def _resolve_cwd_for_branch_detection(file_path: str) -> "str | None":
@@ -75,14 +100,13 @@ def _resolve_cwd_for_branch_detection(file_path: str) -> "str | None":
     Returns:
         str | None: 用於 git 命令的工作目錄，None 表示使用預設 cwd
     """
-    if file_path and file_path.startswith("/"):
-        parent = str(Path(file_path).parent)
-        # 如果父目錄存在，使用它；否則向上尋找存在的目錄
-        check_dir = parent
-        while check_dir and check_dir != "/" and not Path(check_dir).exists():
-            check_dir = str(Path(check_dir).parent)
-        if check_dir and check_dir != "/" and Path(check_dir).exists():
-            return check_dir
+    if is_absolute_path(file_path):
+        # 如果父目錄存在，使用它；否則向上尋找存在的目錄（到達根即停）
+        check_dir = Path(file_path).parent
+        while not check_dir.exists() and check_dir.parent != check_dir:
+            check_dir = check_dir.parent
+        if check_dir.exists() and check_dir.parent != check_dir:
+            return str(check_dir)
 
     # Fallback: 使用 CLAUDE_PROJECT_DIR（可能是 worktree 路徑）
     project_dir = os.getenv("CLAUDE_PROJECT_DIR")
@@ -99,22 +123,14 @@ def _is_same_repo(target_repo: Optional[str], host_root: str) -> bool:
     return os.path.realpath(target_repo) == os.path.realpath(host_root)
 
 
-def _is_drive_path(path: str) -> bool:
-    """已統一為正斜線的 Windows 磁碟機絕對路徑（如 C:/...）。"""
-    return len(path) > 2 and path[0].isalpha() and path[1:3] == ":/"
-
-
 def _strip_root(path: str, root: str) -> "str | None":
     """
-    path 位於 root 之下時回傳去掉 root 前綴與開頭斜線的相對路徑，否則回傳 None。
+    path 位於 root 之下時回傳相對路徑，否則回傳 None。
 
-    兩者須先統一為正斜線。磁碟機路徑的代號大小寫不定（Claude Code 與 git 回傳可能不同），
-    比對前折疊大小寫；POSIX 路徑維持逐字比對，前綴判定與原 startswith 語意相同。
+    委派 checkout_identity.strip_root_prefix：分隔符統一、磁碟機代號大小寫折疊，
+    並要求 root 之後為字串結尾或 "/"（同字首兄弟目錄如 proj-wt 不算在 proj 之下）。
     """
-    fold = str.lower if _is_drive_path(path) else (lambda p: p)
-    if not fold(path).startswith(fold(root)):
-        return None
-    return path[len(root):].lstrip("/")
+    return strip_root_prefix(path, root)
 
 
 def is_exempt_path_on_protected_branch(
@@ -126,7 +142,7 @@ def is_exempt_path_on_protected_branch(
     """
     判斷此路徑是否在保護分支上被豁免（允許編輯）
 
-    W17-149: 區分 same-repo（本專案豁免清單）vs cross-repo（通用豁免清單）
+    區分 same-repo（本專案豁免清單）vs cross-repo（通用豁免清單）
 
     Args:
         file_path: 要編輯的檔案路徑
@@ -148,7 +164,7 @@ def is_exempt_path_on_protected_branch(
     host_root = host_root.replace("\\", "/")
     if target_repo:
         target_repo = target_repo.replace("\\", "/")
-    is_absolute = file_path.startswith("/") or _is_drive_path(file_path)
+    is_absolute = is_absolute_path(file_path)
 
     if not same_repo:
         # 跨專案：使用通用豁免清單（不套用 .claude/、docs/ 等本專案約定）
@@ -164,7 +180,7 @@ def is_exempt_path_on_protected_branch(
     exempt_prefixes = [
         ".claude/",
         "docs/",
-        "scripts/experiments/",  # 實驗一次性腳本（W15-023，對應 docs/experiments/ 報告）
+        "scripts/experiments/",  # 實驗一次性腳本（對應 docs/experiments/ 報告）
     ]
     exempt_exact = [
         "CLAUDE.md",
@@ -172,8 +188,8 @@ def is_exempt_path_on_protected_branch(
         "CHANGELOG.md",
         "package.json",
         "manifest.json",
-        ".gitignore",  # repo 層級忽略清單（W10-033）
-        ".gitattributes",  # repo 層級檔案屬性（W10-054.1.1）
+        ".gitignore",  # repo 層級忽略清單
+        ".gitattributes",  # repo 層級檔案屬性
     ]
 
     relative = _strip_root(file_path, host_root)
@@ -187,6 +203,9 @@ def is_exempt_path_on_protected_branch(
     for prefix in exempt_prefixes:
         if normalized.startswith(prefix):
             return True
+    # 任意層級 README.md：與 pm-role 可寫路徑、lib/path_permission 白名單一致
+    if normalized.rsplit("/", 1)[-1] == "README.md":
+        return True
     return normalized in exempt_exact
 
 
@@ -196,7 +215,7 @@ def build_cross_repo_deny_message(
     target_branch: str,
     suggested_branch: str = "feat/cross-repo-edit",
 ) -> str:
-    """W17-149: 跨專案保護分支 deny 訊息，附目標 repo 切換指令。"""
+    """跨專案保護分支 deny 訊息，附目標 repo 切換指令。"""
     return f"""保護分支編輯被阻止（跨專案）
 
 目標檔案位於外部 repo，且該 repo 當前在保護分支：
@@ -221,72 +240,60 @@ def main() -> int:
 
     # 讀取輸入
     input_data = read_hook_input()
+    # 放行路徑一律不輸出 decision：allow 會略過平台的權限提示，等於代用戶核可；
+    # 本 hook 只負責擋保護分支上的編輯，放行時交回平台權限流程。
+    # 執行期例外仍由 run_hook_safely(fail_closed=True) 處理為阻擋，不受影響。
     if not input_data:
-        # 無法解析輸入，允許繼續
-        logger.debug("無法解析輸入，默認允許")
-        output = create_pretooluse_output("allow", "無法解析輸入，默認允許")
-        write_hook_output(output)
+        logger.debug("無法解析輸入，不輸出決策（交回平台權限流程）")
         return 0
 
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}
 
-    # 只檢查 Edit 和 Write 工具
-    if tool_name not in ["Edit", "Write"]:
+    # 只檢查檔案寫入工具；NotebookEdit 的路徑欄位是 notebook_path
+    if tool_name not in WRITE_TOOLS:
         logger.debug(f"工具 {tool_name} 不需要分支檢查")
-        output = create_pretooluse_output("allow", f"工具 {tool_name} 不需要分支檢查")
-        write_hook_output(output)
         return 0
 
     # 從被編輯檔案路徑推導 git repo context（支援 worktree 環境）
-    file_path = tool_input.get("file_path", "")
+    file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
     file_dir = _resolve_cwd_for_branch_detection(file_path)
 
     # 獲取當前分支
     current_branch = get_current_branch(cwd=file_dir)
     if not current_branch:
-        logger.warning("無法獲取分支資訊，默認允許")
-        output = create_pretooluse_output("allow", "無法獲取分支資訊，默認允許")
-        write_hook_output(output)
+        logger.warning("無法獲取分支資訊，不輸出決策（交回平台權限流程）")
         return 0
 
     # 檢查是否為允許的分支（feat/*, fix/* 等）
     # 在開發分支上，所有路徑均允許編輯，不需要進一步檢查
     if is_allowed_branch(current_branch):
         logger.info(f"當前在 feature 分支 '{current_branch}' 上，允許編輯")
-        output = create_pretooluse_output(
-            "allow",
-            f"當前在 feature 分支 '{current_branch}' 上，允許編輯"
-        )
-        write_hook_output(output)
         return 0
 
     # 檢查是否為保護分支
     if is_protected_branch(current_branch):
-        file_path = tool_input.get("file_path", "unknown")
+        file_path = file_path or "unknown"
 
-        # W17-149: 偵測目標 repo，判斷是否跨專案
-        target_repo = find_target_repo(file_path) if file_path and file_path.startswith("/") else None
-        host_root = str(get_project_root())
+        # 偵測目標 repo，判斷是否跨專案
+        target_repo = find_target_repo(file_path) if is_absolute_path(file_path) else None
+        host_root = _resolve_host_root(file_path, input_data)
         is_cross_repo = (
             target_repo is not None
             and os.path.realpath(target_repo) != os.path.realpath(host_root)
         )
 
         # 檢查是否為豁免路徑（在保護分支上允許編輯）
-        if is_exempt_path_on_protected_branch(file_path, cwd=file_dir, target_repo=target_repo):
+        if is_exempt_path_on_protected_branch(
+            file_path, cwd=file_dir, target_repo=target_repo, host_root=host_root
+        ):
             logger.info(f"在保護分支 '{current_branch}' 上編輯豁免路徑 {file_path}，允許")
-            output = create_pretooluse_output(
-                "allow",
-                f"在保護分支上編輯豁免路徑：{file_path}"
-            )
-            write_hook_output(output)
             return 0
 
         logger.info(f"在保護分支 '{current_branch}' 上嘗試編輯非豁免檔案 {file_path}，操作已阻止 (cross_repo={is_cross_repo})")
 
         if is_cross_repo:
-            # W17-149: 跨專案保護分支：附目標 repo 切換指令
+            # 跨專案保護分支：附目標 repo 切換指令
             deny_message = build_cross_repo_deny_message(
                 file_path=file_path,
                 target_repo=target_repo,
@@ -298,7 +305,10 @@ def main() -> int:
 
         # 同 repo 路徑判斷
         project_root = host_root
-        is_project_file = file_path.startswith(str(project_root)) if file_path.startswith("/") else True
+        is_project_file = (
+            _strip_root(file_path, str(project_root)) is not None
+            if is_absolute_path(file_path) else True
+        )
 
         if is_project_file:
             # 專案內的檔案
@@ -337,11 +347,6 @@ def main() -> int:
 
     # 其他分支，允許編輯
     logger.info(f"當前在分支 '{current_branch}' 上，允許編輯")
-    output = create_pretooluse_output(
-        "allow",
-        f"當前在分支 '{current_branch}' 上，允許編輯"
-    )
-    write_hook_output(output)
     return 0
 
 

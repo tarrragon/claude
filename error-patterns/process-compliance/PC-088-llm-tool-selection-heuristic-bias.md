@@ -75,14 +75,14 @@ LLM 是 autoregressive，**每個 next-token 的 perplexity 是直接感受**，
 
 ## 分類證據（E3 實驗，2026-04-18）
 
-**來源**：`docs/experiments/PC-088-v2-validation.md`（W15-014 執行）
+**來源**：`docs/experiments/PC-088-v2-validation.md`（E3 audit 執行）
 **方法**：掃描 50 個 session transcript，n=1157 tool_use 事件，依 4 類 canonical task 編碼為 short/long path。
 
 ### E3 long_path_rate 結果
 
 | Task | short | long | total | long_path_rate | 判讀 |
 |------|-------|------|-------|----------------|------|
-| pass_long_text_to_cli | 63 | 5 | 68 | 0.074 | < 0.1，缺實證（PC-087/W15-007 規則有效） |
+| pass_long_text_to_cli | 63 | 5 | 68 | 0.074 | < 0.1，缺實證（PC-087 規則有效） |
 | modify_file_locally | 468 | 0 | 468 | 0.000 | < 0.1，缺實證（v1 保守計數，保留觀察） |
 | search_strings | 361 | 124 | 485 | 0.256 | 0.1–0.3 灰色地帶，接近邊緣，加觀察條款 |
 | find_files | 80 | 56 | 136 | 0.412 | > 0.3，支持偏誤，強化防護 |
@@ -90,8 +90,8 @@ LLM 是 autoregressive，**每個 next-token 的 perplexity 是直接感受**，
 
 ### 主張範圍限定
 
-- **特別 endorsed（觀察性強證據，H1 步驟估算偏誤機制支持）**：`find_files`（rate 0.412；W15-015 分層驗證：71.9% long-path 為 Glob 單步可替代；mixed-session 可替代率 60.9% 顯示「未被觸發」而非「不知道」）
-- **明確 NOT endorsed（防護已有效）**：`pass_long_text_to_cli`（rate 0.074，PC-087/W15-007 heredoc 規則已控制）
+- **特別 endorsed（觀察性強證據，H1 步驟估算偏誤機制支持）**：`find_files`（rate 0.412；分層驗證：71.9% long-path 為 Glob 單步可替代；mixed-session 可替代率 60.9% 顯示「未被觸發」而非「不知道」）
+- **明確 NOT endorsed（防護已有效）**：`pass_long_text_to_cli`（rate 0.074，PC-087 heredoc 規則已控制）
 - **灰色地帶觀察中**：`search_strings`（rate 0.256，接近但未達 > 0.3 閾值）
 - **整體主張**：不降級為 hypothesis，但限定為「在特定 task 類別有實證支持」，不得引用 PC-088 v2 作全稱 causal claim
 
@@ -105,7 +105,7 @@ E3 整體 rate（0.160）未達 > 0.3 的 E2 觸發閾值，**E2 完整 A/B 因�
 
 保留選項：未來可針對 `find_files` 單一類別執行 E2 子實驗（rate 0.412，具備因果分析基礎）。觸發條件：若累積更多 session 後 `find_files` rate 穩定 > 0.3，可重啟 E2 設計（參見 `docs/experiments/PC-088-v2-validation.md` §6）。
 
-### find_files 子類因果驗證（W15-015，2026-04-18）
+### find_files 子類因果驗證（2026-04-18）
 
 針對 find_files rate 0.412 觸發進一步分層分析（採 Path A 觀察性方法，放棄 Path B 因其 rule-loading 污染風險高於可獲資訊量）。結果：
 
@@ -143,7 +143,7 @@ E3 整體 rate（0.160）未達 > 0.3 的 E2 觸發閾值，**E2 完整 A/B 因�
 
 | 情境 | short path（預設）| E3 狀態 | 規則來源 |
 |------|-----------|---------|---------|
-| 長文字傳遞 | heredoc | 已有效（rate 0.074） | 規則五（W15-007）|
+| 長文字傳遞 | heredoc | 已有效（rate 0.074） | 規則五 |
 | 檔案搜尋 | Glob | **強化防護**（rate 0.412，find 是高頻 long path 來源） | tool-discovery + 本條款 |
 | 內容搜尋 | Grep | 觀察中（rate 0.256，加觀察條款） | CLAUDE.md Bash 規範 |
 | 檔案編輯 | Edit/MultiEdit | 無實證問題（rate 0.000） | Edit 工具描述 |
@@ -156,7 +156,7 @@ E3 整體 rate（0.160）未達 > 0.3 的 E2 觸發閾值，**E2 完整 A/B 因�
 ### Layer 3：決策點摩擦（與短路徑預設並行）
 
 決策點（象限 C）不因「短路徑是預設」而降摩擦：
-- ANA Ticket claim → Phase 1+2 反思（W15-009 設計）
+- ANA Ticket claim → Phase 1+2 反思（決策樹觸發點設計）
 - Phase 4 重構評估 → Phase 2 WRAP
 - 規則/規格修改 → parallel-evaluation
 
@@ -173,17 +173,17 @@ E3 整體 rate（0.160）未達 > 0.3 的 E2 觸發閾值，**E2 完整 A/B 因�
 
 ## 案例
 
-- 2026-04-18（W15-001 session）：PM 選 Write /tmp → cat → append-log（**3 步**）而非 heredoc（**1 步**）。PC-087 記錄具體案例
-- 2026-04-18（W15-005 session）：用戶質疑 PC-087 根因太淺，PM 深度反思識別到「檔案感物化 + 認知負擔規避」，但此第二層深因仍未達真根因
-- 2026-04-18（W15-008 後 reframe）：用戶指出此與 friction-methodology 衝突，真根因是**步驟數估算偏誤**而非「短路徑偏好 bias」。PC-088 v2 依此重寫
-- 2026-04-18（W15-014 E3 audit）：n=1157 retrospective audit 顯示 find_files 偏誤最高（0.412），pass_long_text 已被防護控制（0.074）；整體 0.160 為灰色地帶，採分類討論取代一刀切結論
-- 2026-04-18（W15-015 find_files 子類驗證）：採 Path A 觀察性分層分析（n=57 納入樣本）。結果：71.9% long-path 為 Glob 單步可替代，mixed-session 可替代率 60.9% → **H1 步驟估算偏誤機制獲觀察性強證據支持**。放棄 Path B prospective A/B（rule-loading 污染風險 > 資訊增益）。見 `docs/experiments/PC-088-v2-find-files-validation.md`
+- 2026-04-18（首次事件 session）：PM 選 Write /tmp → cat → append-log（**3 步**）而非 heredoc（**1 步**）。PC-087 記錄具體案例
+- 2026-04-18（深度反思 session）：用戶質疑 PC-087 根因太淺，PM 深度反思識別到「檔案感物化 + 認知負擔規避」，但此第二層深因仍未達真根因
+- 2026-04-18（reframe）：用戶指出此與 friction-methodology 衝突，真根因是**步驟數估算偏誤**而非「短路徑偏好 bias」。PC-088 v2 依此重寫
+- 2026-04-18（E3 audit）：n=1157 retrospective audit 顯示 find_files 偏誤最高（0.412），pass_long_text 已被防護控制（0.074）；整體 0.160 為灰色地帶，採分類討論取代一刀切結論
+- 2026-04-18（find_files 子類驗證）：採 Path A 觀察性分層分析（n=57 納入樣本）。結果：71.9% long-path 為 Glob 單步可替代，mixed-session 可替代率 60.9% → **H1 步驟估算偏誤機制獲觀察性強證據支持**。放棄 Path B prospective A/B（rule-loading 污染風險 > 資訊增益）。見 `docs/experiments/PC-088-v2-find-files-validation.md`
 
 ## 方法論教訓
 
 ### 「深度反思」本身也有盲點
 
-W15-005 的 two-phase reflection 產出了「認知負擔規避」作為根因。但用戶的摩擦力視角 reframe 揭示：
+深度反思 ANA 的 two-phase reflection 產出了「認知負擔規避」作為根因。但用戶的摩擦力視角 reframe 揭示：
 - Phase 1 的多假設 Reality Test 深度仍不夠
 - 缺少「與既有方法論對照」檢查
 - 真根因再深一層（估算偏誤）
@@ -206,9 +206,9 @@ E3 結果顯示不同 task 類別之間 long_path_rate 差距達 0.412 倍。若
 
 - `.claude/error-patterns/process-compliance/PC-087-pm-tmp-detour-for-ticket-content.md`（具體案例）
 - `.claude/methodologies/friction-management-methodology.md`（摩擦力權威 source）
-- `.claude/methodologies/three-phase-reflection-methodology.md`（反思方法論，W15-009 將補 Phase 3 方法論對照檢查）
-- `docs/experiments/PC-088-v2-validation.md`（E3 audit 完整報告，W15-014）
-- 0.18.0-W15-005（深度反思 ANA）
-- 0.18.0-W15-009（決策樹反思觸發點細化，方向調整為「決策點摩擦 + 執行點短路徑預設」）
-- 0.18.0-W15-014（E3 retrospective audit 執行）
+- `.claude/methodologies/three-phase-reflection-methodology.md`（反思方法論，將補 Phase 3 方法論對照檢查）
+- `docs/experiments/PC-088-v2-validation.md`（E3 audit 完整報告）
+- 深度反思 ANA
+- 決策樹反思觸發點細化（方向調整為「決策點摩擦 + 執行點短路徑預設」）
+- E3 retrospective audit 執行
 - `.claude/rules/core/tool-discovery.md`（工具發現規則）

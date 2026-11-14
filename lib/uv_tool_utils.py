@@ -61,6 +61,77 @@ def is_shimmed_cli(cli_name: str, logger: Optional[logging.Logger] = None) -> bo
         return False
 
 
+# 判定重裝來源是否為主 checkout 的 git 子程序逾時（秒）
+REINSTALL_ROOT_CHECK_TIMEOUT = 5
+
+
+def reinstall_skip_reason(
+    project_root: Path, logger: Optional[logging.Logger] = None
+) -> Optional[str]:
+    """
+    判定能否以 project_root 的源碼重裝全域 uv tool，不能時回傳原因。
+
+    `uv tool install . --reinstall` 會把來源目錄的源碼複製進全域 tool 環境，
+    影響所有 session，直到下次重裝。來源若是 linked worktree，全域 CLI 就換成
+    該 worktree 尚未合併的版本，所以只有主 checkout 可以自動重裝。
+
+    判據：`git rev-parse --git-dir --git-common-dir`，兩者相同為主 checkout，
+    不同為 linked worktree。git 失敗、逾時或輸出不完整時視為無法判定，
+    回傳原因（不重裝）：無法確認來源是主 checkout，就不拿它覆蓋全域 CLI。
+    這點和 hook_base._linked_worktree_root、git_utils.is_in_worktree 不同，
+    它們在判定失敗時回「非 worktree」。
+
+    Args:
+        project_root: 準備作為重裝來源的專案根
+        logger: 可選日誌器；不重裝時以 warning 記錄原因
+
+    Returns:
+        None 表示 project_root 為主 checkout，可以重裝；字串為不重裝的原因。
+    """
+    reason = _probe_reinstall_root(project_root)
+    if reason is not None and logger:
+        logger.warning(f"reinstall_skip_reason({project_root}): {reason}")
+    return reason
+
+
+def _probe_reinstall_root(project_root: Path) -> Optional[str]:
+    """執行 git 判定；回傳 None（主 checkout）或不重裝原因。"""
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(project_root), "rev-parse",
+                "--path-format=absolute", "--git-dir", "--git-common-dir",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=REINSTALL_ROOT_CHECK_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"無法判定 {project_root} 是否為主 checkout（git 執行失敗：{e}）"
+
+    if result.returncode != 0:
+        detail = result.stderr.strip()[:200]
+        return (
+            f"無法判定 {project_root} 是否為主 checkout"
+            f"（git rev-parse rc={result.returncode}：{detail}）"
+        )
+
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return f"無法判定 {project_root} 是否為主 checkout（git rev-parse 輸出不完整）"
+
+    git_dir = Path(lines[0]).resolve()
+    common_dir = Path(lines[1]).resolve()
+    if git_dir == common_dir:
+        return None
+    return (
+        f"{project_root} 是 linked worktree（主 checkout 為 {common_dir.parent}），"
+        "從這裡重裝會以該 worktree 的源碼覆蓋全域 CLI"
+    )
+
+
 def compute_file_hashes(
     directory: Path,
     exclude_dirs: Optional[Set[str]] = None,

@@ -18,7 +18,7 @@ PC-099 防護：acceptance-gate-hook 場景 #17 AUQ 原本僅比對 mtime > tick
      檔名（basename）或 PC ID（如 `PC-099`）→ 歸屬
    - 完全無引用 → 不歸屬（meta-ticket / 跨 session 保護）
 
-此策略對應 ticket W10-087 how.strategy 的混合方案：(b) source_ticket 前瞻 +
+此策略採混合方案：(b) source_ticket 前瞻 +
 (a) 時間窗 fallback（以 ticket md 引用為近似證據，避免依賴 git log）。
 """
 
@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-# Pattern ID 正規表達式收斂為單一 SSOT（1.0.0-W1-019.2 / E2 linux F3）。
+# Pattern ID 正規表達式收斂為單一 SSOT。
 # PATTERN_ID_RE 涵蓋全 category（PC/IMP/ARCH/...）並支援 Model 1 來源前綴格式
 # （PC-V1-001）。新增 category 前綴時只需改 lib/pattern_id.py 一處。
 _hooks_dir = Path(__file__).resolve().parent.parent  # .claude/hooks
@@ -118,7 +118,7 @@ def filter_error_patterns_by_ticket_scope(
 
     Args:
         candidate_files: `check_error_patterns_changed` 回傳的候選檔案相對路徑清單
-        current_ticket_id: 當前 complete 中的 ticket ID（如 `0.18.0-W10-087`）
+        current_ticket_id: 當前 complete 中的 ticket ID（格式 `{VERSION}-W{WAVE}-{SEQ}`）
         ticket_content: 當前 ticket md 完整內容（含 frontmatter + body）
         project_dir: 專案根目錄
         logger: 日誌物件（可選）

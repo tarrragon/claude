@@ -1,4 +1,4 @@
-"""ticket track handoff-ready 命令（W10-017.1 v2 新增）。
+"""ticket track handoff-ready 命令。
 
 提供 GO/NO-GO 結論用於 shell pipeline：
 - exit 0: GO（ready for /clear）
@@ -10,7 +10,7 @@
 - v2.3 Q5 IO_ERRORS exit 2 (保守 NO-GO)
 - Phase 3a §4 execute_handoff_ready 偽碼骨架
 
-W10-017.12 Phase 4b P1 重構：
+Phase 4b P1 重構：
 - AC1: _compute_blockers 上移 lib/checkpoint_view.compute_blockers；本模組僅
   決定 exit code 與渲染輸出。
 - AC4: _print_go 改為複用 render_ready_check（消除手刻 checklist 重複）。
@@ -47,7 +47,7 @@ def _print_no_go(blockers: List[Blocker]) -> None:
 def _print_go(state: CheckpointState, ticket_id: Optional[str] = None) -> None:
     """渲染 GO 結論。
 
-    W10-017.12 AC4：複用 render_ready_check 取代手刻 checklist，避免與 lib 層
+    AC4：複用 render_ready_check 取代手刻 checklist，避免與 lib 層
     判定邏輯重複維護。GO 路徑下 render_ready_check 的四項判定必全綠（因 blockers
     為空通過 compute_blockers 檢查），僅視覺化該共識。
     """

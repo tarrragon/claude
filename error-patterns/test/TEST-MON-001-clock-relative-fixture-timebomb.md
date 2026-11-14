@@ -4,7 +4,7 @@ title: 硬編碼時間戳 fixture × 時間相對查詢窗 = clock 時間炸彈
 type: test
 severity: high
 status: active
-source: 0.2.0-W1-008 incident-responder 根因分析
+source: incident-responder 根因分析
 related:
   - PC-168
   - TEST-001
@@ -38,4 +38,4 @@ fixture 的**絕對時間基準**與查詢的**相對 now 基準**是兩個獨�
 
 ## 來源
 
-0.2.0-W1-008（根因分析）→ 0.2.0-W1-009（fixture 相對化修復）。專案 memory `clock-timebomb-fixture` 升級（0.2.0-W4-005）。
+根因分析 → fixture 相對化修復。專案 memory `clock-timebomb-fixture` 升級。

@@ -21,7 +21,7 @@ Matcher: Write
 
 使用方式:
     PostToolUse Hook 自動觸發，或手動測試:
-    echo '{"tool_name":"Write","tool_input":{"file_path":".claude/tickets/0.31.0-W5-001.md"}}' | python3 ticket-id-validator-hook.py
+    echo '{"tool_name":"Write","tool_input":{"file_path":".claude/tickets/<ticket-id>.md"}}' | python3 ticket-id-validator-hook.py
 
 環境變數:
     HOOK_DEBUG: 啟用詳細日誌（true/false）
@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
-    get_project_root, save_check_log, validate_hook_input
+    save_check_log, validate_hook_input
 )
 
 # ============================================================================
@@ -49,8 +49,8 @@ from lib import (
 
 # Ticket ID 正規表達式（支援描述性後綴）
 # ^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$
-# 範例：0.31.0-W5-001, 0.31.0-W5-001.1, 0.31.0-W5-001.1.2
-#       0.1.0-W11-004-phase1-design, 0.1.0-W25-005-analysis
+# 範例：<version>-W<wave>-<seq>, <version>-W<wave>-<seq>.1, <version>-W<wave>-<seq>.1.2
+#       <version>-W<wave>-<seq>-phase1-design, <version>-W<wave>-<seq>-analysis
 # 後綴可選，允許描述性後綴以 "-" 開頭，只含小寫字母、數字、連字號
 #
 # ⚠️ 維護重點（Hook standalone 設計）：
@@ -157,8 +157,8 @@ def get_directory_version(file_path: str, logger) -> Optional[str]:
         str - 版本號（如 "0.31.0"），或 None 如無法提取
 
     範例：
-    - docs/work-logs/v0.31.0/tickets/0.31.0-W5-001.md -> "0.31.0"
-    - .claude/tickets/0.31.0-W5-001.md -> 無版本目錄，返回 None
+    - docs/work-logs/v0.31.0/tickets/<ticket-id>.md -> "0.31.0"
+    - .claude/tickets/<ticket-id>.md -> 無版本目錄，返回 None
     """
     path = Path(file_path)
 
@@ -274,7 +274,7 @@ def validate_ticket_id_format(ticket_id: str, logger) -> Tuple[bool, str, bool]:
         msg = (
             f"Ticket ID 格式錯誤: {ticket_id}\n"
             f"正規表達式: {TICKET_ID_REGEX}\n"
-            f"範例: 0.31.0-W5-001, 0.31.0-W5-001.1, 0.31.0-W5-001-phase1-design"
+            f"範例: <version>-W<wave>-<seq>, <version>-W<wave>-<seq>.1, <version>-W<wave>-<seq>-phase1-design"
         )
         logger.error(msg)
         return False, msg, False

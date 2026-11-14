@@ -120,7 +120,7 @@
 ### 手動測試特定輸入
 
 ```bash
-cat <<'EOF' | python3 ./.claude/hooks/task-dispatch-readiness-check.py
+cat <<'EOF' | uv run --quiet ./.claude/hooks/task-dispatch-readiness-check.py
 {
   "hook_event_name": "PreToolUse",
   "tool_name": "Task",

@@ -16,6 +16,7 @@ Source: 0.2.1-W3-1151
 """
 
 import importlib.util
+import json
 import shutil
 import stat
 import subprocess
@@ -130,6 +131,46 @@ class TestInstall:
 
         assert result.returncode == 0
         assert not (non_repo / ".git").exists()
+
+
+class TestCoreHooksPath:
+    """core.hooksPath 有設定時 git 不讀 .git/hooks：兩支 shim 都不裝，並對用戶與模型警告。"""
+
+    def test_hooks_path_set_skips_both_shims_and_warns(self, scratch_repo):
+        _run_git(["config", "core.hooksPath", ".husky"], cwd=scratch_repo)
+        hooks = scratch_repo / ".git" / "hooks"
+
+        result = _run_installer(scratch_repo)
+
+        assert result.returncode == 0
+        assert not (hooks / hook_module.HOOK_FILENAME).exists()
+        assert not (hooks / hook_module.PRECOMMIT_FILENAME).exists()
+        assert not (scratch_repo / ".husky").exists()
+        assert "core.hooksPath" in result.stderr
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "core.hooksPath" in context and "reference-transaction" in context
+
+    @pytest.mark.parametrize("form", ["relative", "absolute"])
+    def test_hooks_path_pointing_to_default_dir_installs_both(self, scratch_repo, form):
+        """hooksPath 就是 .git/hooks 時 git 仍讀該目錄：兩支 shim 都寫入，不發警告。"""
+        hooks = scratch_repo / ".git" / "hooks"
+        value = ".git/hooks" if form == "relative" else str(hooks.resolve())
+        _run_git(["config", "core.hooksPath", value], cwd=scratch_repo)
+
+        result = _run_installer(scratch_repo)
+
+        assert result.returncode == 0
+        assert (hooks / hook_module.HOOK_FILENAME).exists()
+        assert (hooks / hook_module.PRECOMMIT_FILENAME).exists()
+        assert "core.hooksPath" not in result.stdout + result.stderr
+
+    def test_hooks_path_unset_installs_without_model_output(self, scratch_repo):
+        """對照：未設 hooksPath 時照常安裝，stdout 不輸出警告。"""
+        result = _run_installer(scratch_repo)
+
+        assert result.returncode == 0
+        assert (scratch_repo / ".git" / "hooks" / hook_module.HOOK_FILENAME).exists()
+        assert "core.hooksPath" not in result.stdout + result.stderr
 
 
 def _install_shim_with_fake_uv(repo, tmp_path, uv_rc):

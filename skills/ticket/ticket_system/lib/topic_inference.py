@@ -5,11 +5,11 @@
 判斷新票應歸屬哪個主題（推導判準 S1/S2/S3），以及驗證使用者顯式給定的主題
 參數是否合法。
 
-自 commands/create.py 抽出（0.2.1-W3-831）：該檔已達 1684 行，主題推導與建票
+自 commands/create.py 抽出：該檔已達 1684 行，主題推導與建票
 流程協調屬不同 domain，且推導邏輯可被 topic_backfill 等命令重用於批次指派建議。
 抽出過程不改變任何行為，由 test_create_topic_selection 的 36 項測試作回歸保護。
 
-判準來源為 0.2.1-W3-826 分析：
+判準來源為分析結論：
 - S1 上游繼承：source_ticket 或 parent_id 的上游已有主題（2026-08-24
   全量模擬 448 張已指派票：結構上可觸及 79.7%、實際命中 45.5%，命中時
   主題正確率 91.7%——優先序依據是命中精度而非覆蓋廣度）
@@ -62,7 +62,7 @@ def build_topic_file_clusters() -> dict:
     """從已指派票反推「主題 -> where.files 路徑集合」，供判準 S2 比對。
 
     只讀已指派票，不掃全部票：未指派票對叢集形狀零貢獻，讀它們純屬浪費
-    （0.2.1-W3-828 實測 231 張已指派 351 ms，全量 895 張 2218 ms）。
+    （實測 231 張已指派 351 ms，全量 895 張 2218 ms）。
     不設快取為用戶裁示（2026-08-20），改以 S1 優先短路壓低本函式呼叫
     頻率；成本隨已指派票數線性成長，需要快取時再依當時票數評估。
     """
@@ -107,7 +107,7 @@ def infer_topic_from_files(where_files) -> tuple:
     交集的特異性以雙方較淺的一方計：真實票庫存在 docs/ 與 .claude/hooks/
     這類淺層 where.files，它們與該目錄下任何路徑都相交。若不設門檻，
     擁有淺層路徑的主題會成為所有新票的推導結果，推導從「找出相關主題」
-    退化為「總是指向同一個主題」（0.2.1-W3-828 實測：docs/spec/ 下的
+    退化為「總是指向同一個主題」（實測：docs/spec/ 下的
     新票因 docs/ 而誤指 skill-sync 主題）。
 
     同深度多主題命中時以主題名排序決定勝者：真實票庫中同一檔案可能見於
@@ -156,7 +156,7 @@ def infer_topic_from_files(where_files) -> tuple:
 
 
 def infer_topic(args: argparse.Namespace) -> tuple:
-    """依 0.2.1-W3-826 判準推導主題，回傳 (topic, basis)。
+    """依判準推導主題，回傳 (topic, basis)。
 
     S1 上游繼承優先於 S2 檔案叢集：S1 只需讀映射表與一個鍵（實測 35 ms），
     S2 需反推全部已指派票的路徑集合（351 ms），且 S1 的語意更強——衍生票
@@ -194,7 +194,7 @@ def requires_topic_assignment(args: argparse.Namespace) -> bool:
 
     ANA 必然 spawn 衍生票，其主題經 S1 放大到整串後續票；ANA 自身未歸屬
     會使整串後續票一併失明。本函式只判定「應歸屬」，實際的要求邏輯
-    （旗標三選一）由 0.2.1-W3-829 承接。
+    （旗標三選一）由獨立的後續改動承接。
     """
     return (getattr(args, "type", None) or "IMP").upper() == "ANA"
 

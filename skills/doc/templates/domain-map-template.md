@@ -134,7 +134,7 @@ aggregate A  aggregate B（by-id 參照，非直接依賴）
 
 <!-- 資料契約文件引用連結欄填法：僅 data/infrastructure 列（承載持久化細節的 bundle）需填，連結到 doc skill data-contract-template 產出的文件（如 SPEC-010）。其餘列（domain 純函式 bundle）標「N/A」——資料層設計意圖屬 data 層 bundle 職責，不下沉 domain。判準與模板見 .claude/methodologies/data-layer-contract-methodology.md。 -->
 
-<!-- 實查約束（PC-BAL-007）：本欄陳述的持久化型態（實表/內嵌 VO/無持久化）必須以 schema 實查（讀 DDL、grep `CREATE TABLE`、ls migration 目錄）為準，禁止轉述既有 domain-map 描述或憑推論下斷言——並行文件票各自陳述同一事實時，未實查的一方曾寫入與實查結果相反的斷言（實證：W10-006 誤述 loan domain 為「無獨立持久化」，同時段 W10-003 實查確認 `book_loans` 為實表）。無法實查時，本欄標註「待 {來源票 ticket-id} 定案」，不得留空白斷言。 -->
+<!-- 實查約束（PC-BAL-007）：本欄陳述的持久化型態（實表/內嵌 VO/無持久化）必須以 schema 實查（讀 DDL、grep `CREATE TABLE`、ls migration 目錄）為準，禁止轉述既有 domain-map 描述或憑推論下斷言——並行文件票各自陳述同一事實時，未實查的一方曾寫入與實查結果相反的斷言（實證：某文件票誤述 loan domain 為「無獨立持久化」，同時段另一票實查確認 `book_loans` 為實表）。無法實查時，本欄標註「待 {來源票 ticket-id} 定案」，不得留空白斷言。 -->
 
 | Bundle | 分類 | 納入概念 | 排除 | 目標路徑 | 測試層/方法 | 實作狀態 | 資料契約文件引用連結 |
 |---|---|---|---|---|---|---|---|
@@ -212,6 +212,6 @@ Step 5 測試設計逐條列舉為 domain unit test，不靠「剛好出現於 U
 **Template Updated**: 2026-11-05 | **Version**: 2.5.0 — source_specs 註解改「§7 表列出的 spec」、§7 標題改「驗收條文 → Bundle 覆蓋對照」並要求 `### SPEC-NNN` 子標題
 **Template Updated**: 2026-10-07 | **Version**: 2.4.0 — frontmatter 新增選填欄位 `depends_on_bundles`（DomainBundle 出邊，B 層 proposed 邊型 `bundle_dependency`）；檔頭補指向 `system-layer-template.md`，跨 domain 決策改寫在系統層文件
 **Template Updated**: 2026-09-09 | **Version**: 2.3.0 — §2 依賴方向節之後新增「§2.5 通道與協調圖」（三個子項：通道清單、協調圖、到達類別與級別實例），節號用小數點插入不佔用既有 §3-§7 編號；判準以標題文字引用《事件流負載仲裁方法論》，範本內只留欄位與填寫提示
-**Template Updated**: 2026-07-25 | **Version**: 2.2.0 — §3 Bundle 界定表新增「資料契約文件引用連結」欄，僅 data/infrastructure 列需填，連結至 doc skill data-contract-template 產出文件（PROP-002 In Scope 3，0.2.0-W2-003）
-**Template Updated**: 2026-07-24 | **Version**: 2.1.0 — §3 Bundle 界定表新增「實作狀態」欄，防止未接線概念被誤標已實作（PC-APP-012，0.38.1-W9-003）
-**Template Updated**: 2026-07-23 | **Version**: 2.0.0 — 追加多 aggregate DAG 變體 + command-side bundle 行 + DAG 底線（0.1.0-W2-021）
+**Template Updated**: 2026-07-25 | **Version**: 2.2.0 — §3 Bundle 界定表新增「資料契約文件引用連結」欄，僅 data/infrastructure 列需填，連結至 doc skill data-contract-template 產出文件（PROP-002 In Scope 3）
+**Template Updated**: 2026-07-24 | **Version**: 2.1.0 — §3 Bundle 界定表新增「實作狀態」欄，防止未接線概念被誤標已實作（PC-APP-012）
+**Template Updated**: 2026-07-23 | **Version**: 2.0.0 — 追加多 aggregate DAG 變體 + command-side bundle 行 + DAG 底線

@@ -30,7 +30,8 @@
    ```
    ticket 範例：`grep -rln "ticket track\|/ticket" .claude/skills/ticket/SKILL.md .claude/pm-rules/`
 2. 對每個含該 skill CLI 引用的文件，逐一確認是否與現行行為一致；不一致即更新並納入同一 commit。
-3. 同步範圍過大時建立獨立 DOC Ticket 追蹤（禁止口頭延後，違反 quality-baseline 規則 5）。
+3. 結束碼或輸出語意有變時，另 grep 子程序呼叫點並確認各呼叫端的非 0 分支（命令見完整規則〈同步掃描快速指令〉）。
+4. 同步範圍過大時建立獨立 DOC Ticket 追蹤（禁止口頭延後，違反 quality-baseline 規則 5）。
 
 ## 與 skill 設計規範的分工
 

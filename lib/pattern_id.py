@@ -1,18 +1,18 @@
 """Error-pattern ID 解析單一權威（SSOT）。
 
-來源：1.0.0-W1-019.2（E2 / linux F3：收斂散佈 regex 為單一 util，避免下次再獵）。
+用意：收斂散佈各處的 regex 為單一 util，避免下次再逐處獵找。
 
-支援 Model 1 來源前綴格式（W1-019 決策）：
+支援 Model 1 來源前綴格式（決策）：
 - flat 凍結核心：`PC-099`、`IMP-049`（既有共享 base，凍結不再新增）
 - 前綴格式：`PC-V1-001`、`IMP-APP-012`（`<CAT>-<PROJ>-NNN`，各專案命名空間）
 
 用途邊界（重要）：本 util 服務「識別任意 error-pattern ID 字串」用途——歸屬判斷
-（error_pattern_attribution）、未來的 ID 生成 / 驗證（W1-019.3 `/error-pattern add`）。
+（error_pattern_attribution）、未來的 ID 生成 / 驗證（`/error-pattern add`）。
 
 flat-only 的 collision-resolution 子系統（`scripts/sync-claude-pull.py` 的
 `_PC_FILENAME_RE` / `_PROVENANCE_UPSTREAM_RE`）**刻意不使用**本 util：前綴格式天生
 不參與 flat 整數撞號（各專案在自己前綴空間累加，零協調防碰撞），其 regex 只認 flat
-凍結核心才是正確語意（W1-019.2 範圍收斂決策）。
+凍結核心才是正確語意（範圍收斂決策）。
 """
 
 import re

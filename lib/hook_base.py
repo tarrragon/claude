@@ -58,7 +58,7 @@ def _linked_worktree_root() -> Path | None:
     此判據精確區分「真的在 worktree 中」與「只是 cwd 在主 repo」，
     避免誤把主 repo 當 worktree 而覆蓋 CLAUDE_PROJECT_DIR（與
     .claude/skills/ticket/ticket_system/lib/paths.py 同判據，
-    Hook 層 worktree 洩漏修復，0.38.1-W2-020）。
+    Hook 層 worktree 洩漏修復）。
 
     Returns:
         Path | None: linked worktree 根目錄；非 worktree / git 不可用時回傳 None
@@ -150,7 +150,7 @@ def _resolve_project_root() -> Path:
        生產路徑不設此旗標故不受影響。
     1. worktree 感知：當前位於 git linked worktree 時，優先用該 worktree
        的根目錄，避免 CLAUDE_PROJECT_DIR 恆指向主 repo 導致 worktree 內
-       的 Hook 動作（append-log 等）洩漏到主 repo（0.38.1-W2-020）
+       的 Hook 動作（append-log 等）洩漏到主 repo
     2. 環境變數 CLAUDE_PROJECT_DIR
     3. git rev-parse --show-toplevel（git-native，支援 worktree）
     4. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
@@ -328,6 +328,39 @@ def get_shared_state_root(default_root: Optional[Path] = None) -> Path:
         return fallback
     main_root = _main_repo_root_of_linked_worktree()
     return main_root if main_root is not None else fallback
+
+
+def get_main_checkout_root(start) -> Optional[Path]:
+    """取得 start 所屬 repo 的主 checkout 根（MR）；解析失敗回 None，由呼叫端決定落點。
+
+    MR = common_dir(owning_checkout_root(start)) 的父目錄，common dir 須以 .git 結尾
+    （bare repo 等不符者回 None）。純檔案系統查詢，不呼叫 git 子行程。
+    start 為檔案或目錄路徑皆可：AR（payload cwd）或目標路徑。
+    """
+    from .checkout_identity import common_dir, owning_checkout_root
+
+    # owning_checkout_root 以 dirname 起算，補一段使目錄起點不被吃掉最後一層
+    owner = owning_checkout_root(os.path.join(str(start), "x"))
+    if owner is None:
+        return None
+    common = common_dir(owner)
+    if common is None or os.path.basename(common) != ".git":
+        return None
+    return Path(os.path.dirname(common))
+
+
+def get_code_root() -> Path:
+    """取得載入中的 .claude（本 lib 所在）的上層目錄，供讀取框架檔（CR）使用。
+
+    由本檔 __file__ resolve 後回推（parents[2]：hook_base.py -> lib -> .claude -> 根），
+    不讀 CLAUDE_PROJECT_DIR、不讀 cwd，不接受根參數。
+    HOOK_TEST_ISOLATION=1 時回 get_project_root()（比照 get_shared_state_root 的
+    測試 fallback，讓以 CLAUDE_PROJECT_DIR=tmp 為 fixture 的測試仍掃 fixture）；
+    正式執行不讀 env。
+    """
+    if os.environ.get(ENV_HOOK_TEST_ISOLATION) == "1":
+        return get_project_root()
+    return Path(__file__).resolve().parents[2]
 
 
 def has_parallel_dispatch(

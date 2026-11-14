@@ -10,9 +10,9 @@
 
 ## 1. 工具呼叫方式（MCP deferred tools 已曝光）
 
-**現況（2026-06-24 W1-006 驗證）**：`mcp__codebase-memory-mcp__*` 系列工具已正常曝光於 ToolSearch deferred tools，可直接呼叫。`ToolSearch(query="select:mcp__codebase-memory-mcp__list_projects")` 載入 schema 後呼叫成功（回傳已索引 project）。**MCP deferred tools 為首選呼叫路徑**，CLI 模式（§下方）保留為 PM 前台離線驗證的替代手段。
+**現況（2026-06-24 驗證）**：`mcp__codebase-memory-mcp__*` 系列工具已正常曝光於 ToolSearch deferred tools，可直接呼叫。`ToolSearch(query="select:mcp__codebase-memory-mcp__list_projects")` 載入 schema 後呼叫成功（回傳已索引 project）。**MCP deferred tools 為首選呼叫路徑**，CLI 模式（§下方）保留為 PM 前台離線驗證的替代手段。
 
-> **歷史**：W6-001.4（2026-05-25）實證當時 namespace 未曝光，需走 CLI workaround；W1-006 觀測 trigger（namespace 曝光）已於 2026-06-24 達成，缺口解除。
+> **歷史**：2026-05-25 實證當時 namespace 未曝光，需走 CLI workaround；namespace 曝光已於 2026-06-24 達成，缺口解除。
 
 **CLI 統一格式**（PM 前台離線驗證 / MCP 不可用時 fallback）：
 
@@ -58,7 +58,7 @@ cbm 將 `repo_path` 轉成 project ID：去除前置 `/`，路徑分隔符 `/` �
 
 ### 觀察事實
 
-W6-001.4 PM 前台執行的 6 步驗證實驗：
+PM 前台執行的 6 步驗證實驗：
 
 | 步驟 | 操作 | 結果 |
 |------|------|------|
@@ -129,7 +129,7 @@ cbm v0.6.1 對 `.claude/` 目錄存在 **hardcoded skip**：
 
 ---
 
-## 5. 三 MCP 實證紀錄（W6-001.4）
+## 5. 三 MCP 實證紀錄
 
 ### cbm CLI 模式（PM 前台驗證）
 
@@ -169,10 +169,10 @@ cbm v0.6.1 對 `.claude/` 目錄存在 **hardcoded skip**：
 |-------------|------|
 | `.claude/skills/search-tools-guide/SKILL.md` | 本檔的 parent；主檔含三 MCP 章節 + 命令速查 |
 | `lsp-first` skill（若已安裝） | 補強三 MCP 路由；LSP 為精度錨點，cbm/codegraph 為查詢入口。若未採用，仍可用 cbm/codegraph 三 MCP 查詢，只是少了 LSP 這層精度錨點 |
-| `.claude/rules/core/tool-discovery.md` | ToolSearch 五問檢查；cbm MCP namespace 缺口（已於 W1-006 解除）曾為「規則 1 問題 5」的反例案例 |
+| `.claude/rules/core/tool-discovery.md` | ToolSearch 五問檢查；cbm MCP namespace 缺口（已解除）曾為「規則 1 問題 5」的反例案例 |
 
 ---
 
 **Last Updated**: 2026-06-24
-**Version**: 1.1.0 — W1-006 落地：cbm MCP namespace 已曝光於 ToolSearch deferred tools，§1 改為 MCP deferred tools 首選 / CLI 為 fallback；`.claude/` 不索引限制（§2，v0.6.1）維持待 W1-005 上游修復
-**Version**: 1.0.0 — 從 W6-001.4 落地：cbm CLI 用法 + `.claude/` 不索引限制 + 三 MCP 分工
+**Version**: 1.1.0 — cbm MCP namespace 已曝光於 ToolSearch deferred tools，§1 改為 MCP deferred tools 首選 / CLI 為 fallback；`.claude/` 不索引限制（§2，v0.6.1）維持待上游修復
+**Version**: 1.0.0 — 初版：cbm CLI 用法 + `.claude/` 不索引限制 + 三 MCP 分工

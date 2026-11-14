@@ -5,11 +5,11 @@ SPEC 引用驗證模組
 引用，對照 SPEC 登錄簿（docs/traceability.yaml + docs/proposals-tracking.yaml
 聯集）已登錄編號，未登錄即輸出警告（不阻擋建立）。
 
-動機（0.4.1-W2-001，F1）：SPEC-008 誤植跨票傳染（0.4.1-W1-001 →
-0.4.1-W2-004），建票當下即時提示未登錄編號，可在源頭攔截誤植擴散，
+動機（F1）：SPEC-008 誤植跨票傳染（由一張票傳染到下一張票），
+建票當下即時提示未登錄編號，可在源頭攔截誤植擴散，
 不需等到後續 review 才發現。
 
-登錄簿聯集設計（0.38.1-W1-107）：doc skill 的 traceability.yaml 為按需
+登錄簿聯集設計：doc skill 的 traceability.yaml 為按需
 建立檔（batch-init 產生），未執行過 batch-init 的專案改用
 proposals-tracking.yaml 的 `specs:` 區段登錄 SPEC 編號。兩檔皆屬框架層
 標準路徑（doc skill tracking_schema SSOT），聯集讀取兩者避免專案未初始化
@@ -33,7 +33,7 @@ from ticket_system.lib.paths import get_project_root
 
 _SPEC_REF_RE = re.compile(SPEC_REFERENCE_PATTERN)
 
-# 掃描範圍：Ticket 中易攜帶 SPEC 引用的自由文字欄位（Solution 1.0.0-W1-001）
+# 掃描範圍：Ticket 中易攜帶 SPEC 引用的自由文字欄位（Solution）
 _SCANNED_TEXT_KEYS = ("title", "what", "why")
 
 

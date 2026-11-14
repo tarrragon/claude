@@ -425,3 +425,115 @@ def test_execute_missing_hook_input_returns_error():
 def test_execute_invalid_since_format_returns_error(fake_project_root):
     rc = execute_hook_liveness(_args(hook="foo-guard", since="not-a-date"))
     assert rc == 2
+
+
+# ---------------------------------------------------------------------------
+# runtime 非阻擋錯誤（3.3.0-W1-204.2.1）：relay hook 寫入的
+# hook-logs/_nonblocking_errors/<session>.jsonl，依 hook 檔名統計
+# ---------------------------------------------------------------------------
+
+
+def _write_nonblocking(root: Path, session_id: str, records: list) -> Path:
+    d = root / ".claude" / "hook-logs" / "_nonblocking_errors"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{session_id}.jsonl"
+    with open(path, "w", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return path
+
+
+def _nb(hook_file: str, event: str, ts: str, summary: str = "ModuleNotFoundError: x") -> dict:
+    return {
+        "hook_file": hook_file,
+        "hook_name": event + ":Bash",
+        "hook_event": event,
+        "exit_code": 1,
+        "summary": summary,
+        "uuid": hook_file + ts,
+        "session_id": "s1",
+        "ts": ts,
+    }
+
+
+def test_scan_nonblocking_errors_counts_by_hook_file(tmp_path):
+    from ticket_system.commands.track_hook_liveness import scan_nonblocking_errors
+
+    _write_nonblocking(
+        tmp_path,
+        "s1",
+        [
+            _nb("crash-hook.py", "PreToolUse", "2026-11-13T10:00:00"),
+            _nb("crash-hook.py", "SessionStart", "2026-11-13T11:00:00", "ImportError: y"),
+            _nb("other-hook.py", "PreToolUse", "2026-11-13T12:00:00"),
+        ],
+    )
+    d = tmp_path / ".claude" / "hook-logs" / "_nonblocking_errors"
+    result = scan_nonblocking_errors("crash-hook.py", d)
+    assert result["total"] == 2
+    assert result["by_event"] == {"PreToolUse": 1, "SessionStart": 1}
+    assert result["latest_ts"] == "2026-11-13T11:00:00"
+    assert result["latest_summary"] == "ImportError: y"
+
+
+def test_scan_nonblocking_errors_respects_since(tmp_path):
+    from datetime import datetime
+
+    from ticket_system.commands.track_hook_liveness import scan_nonblocking_errors
+
+    _write_nonblocking(
+        tmp_path,
+        "s1",
+        [
+            _nb("crash-hook.py", "PreToolUse", "2026-11-12T10:00:00"),
+            _nb("crash-hook.py", "PreToolUse", "2026-11-13T10:00:00"),
+        ],
+    )
+    d = tmp_path / ".claude" / "hook-logs" / "_nonblocking_errors"
+    result = scan_nonblocking_errors("crash-hook.py", d, since=datetime(2026, 11, 13))
+    assert result["total"] == 1
+
+
+def test_execute_lists_import_crash_errors_when_liveness_empty(fake_project_root):
+    """import 期崩潰的 hook 到不了 run_hook_safely，liveness 0 筆；
+    此時不得說「可能代表 hook 確實未觸發」，須列出 runtime 錯誤筆數。"""
+    hook_file = fake_project_root / "crash-hook.py"
+    hook_file.write_text(
+        'import does_not_exist\nrun_hook_safely(main, "crash")\n', encoding="utf-8"
+    )
+    _write_nonblocking(
+        fake_project_root,
+        "s1",
+        [
+            _nb("crash-hook.py", "PreToolUse", "2026-11-13T10:00:00"),
+            _nb("crash-hook.py", "PostToolUse", "2026-11-13T10:05:00"),
+        ],
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = execute_hook_liveness(_args(hook=str(hook_file)))
+    output = buf.getvalue()
+    assert rc == 0
+    assert "runtime 非阻擋錯誤: 2 筆" in output
+    assert "ModuleNotFoundError: x" in output
+    assert "可能代表 hook 確實未觸發" not in output
+
+
+def test_execute_reports_zero_nonblocking_errors(fake_project_root):
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = execute_hook_liveness(_args(hook="foo-guard"))
+    assert rc == 0
+    assert "runtime 非阻擋錯誤: 0 筆" in buf.getvalue()
+
+
+def test_execute_json_includes_nonblocking_errors(fake_project_root):
+    _write_nonblocking(
+        fake_project_root, "s1", [_nb("foo-guard.py", "PreToolUse", "2026-11-13T10:00:00")]
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = execute_hook_liveness(_args(hook="foo-guard", format="json"))
+    payload = json.loads(buf.getvalue())
+    assert rc == 0
+    assert payload["nonblocking_errors"]["total"] == 1

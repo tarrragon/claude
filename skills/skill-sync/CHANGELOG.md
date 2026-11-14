@@ -2,6 +2,8 @@
 
 新到舊。版號有三個住址，bump 時必須一起動：本檔最上方的 `**Version**:` 條目、`SKILL.md` frontmatter 的 `metadata.version`、`pyproject.toml` 的 `project.version`。三者相等由 `tests/test_cli.py::test_three_version_addresses_agree` 斷言，漏動任何一處測試即紅並印出三個值。（`uv.lock` 也帶版號，但由 uv 依 `pyproject.toml` 自動重算，不是人工住址。）版號規則見專案的 skill 同步規範。
 
+**Version**: 1.25.5 — 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；行為不變
+
 **Version**: 1.25.4 — SKILL.md 的〈Installation〉改述 shim 化後的做法：`skill-sync` 是 SessionStart 安裝的 cwd-resolving shim，改原始碼即時生效，安裝指令改為 `python3 .claude/scripts/install-skill-clis.py`（原為 `uv tool install`）；行為不變
 
 **Version**: 1.25.3 — 警告處置表的 `pruned N file(s) but preview promised M` 一列註明它在 prune 套用之後才印，`echo n` 的預覽裡看不到。

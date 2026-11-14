@@ -127,6 +127,40 @@ def test_undefined_uc_token_emits_warning_but_passes(monkeypatch, capsys, tmp_pa
     assert "UC-05" in ctx
 
 
+def test_warning_rule_source_points_to_framework_doc(monkeypatch, capsys, tmp_path):
+    """規則來源須指向框架內存在的文件，不寫死 consumer 專案的規格路徑"""
+    project_root = _make_fake_project(tmp_path)
+    _run_hook(
+        monkeypatch,
+        project_root,
+        {
+            "file_path": str(project_root / "lib" / "book_service.dart"),
+            "old_string": "x",
+            "new_string": "// 對應 UC-99 尚未定義的用例",
+        },
+    )
+    ctx = _context(capsys.readouterr())
+    assert "docs/spec/uc-numbering-convention.md" not in ctx
+    assert ".claude/skills/doc/SKILL.md" in ctx
+    framework_root = Path(__file__).resolve().parents[2]
+    assert (framework_root / "skills" / "doc" / "SKILL.md").exists()
+
+
+def test_extension_and_lowercase_words_no_warning(monkeypatch, capsys, tmp_path):
+    """子樹段不吞副檔名、小寫字詞經正規化後豁免：合法引用的檔名與 uc-unset 不報"""
+    project_root = _make_fake_project(tmp_path)
+    _run_hook(
+        monkeypatch,
+        project_root,
+        {
+            "file_path": str(project_root / "lib" / "book_service.dart"),
+            "old_string": "x",
+            "new_string": "// 見 UC-01.md；state = 'uc-unset'",
+        },
+    )
+    assert _is_silent(capsys.readouterr())
+
+
 # ----------------------------------------------------------------------------
 # 案例 3：五類豁免規則
 # ----------------------------------------------------------------------------

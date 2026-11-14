@@ -6,7 +6,9 @@
 // - window／percent：模型的 context window，與狀態列的 context_window_size／used_percentage 相同。
 // - compactWindow／compactPercent：/context 量測所用的 compaction window（breakdown.rawMaxTokens），
 //   可能小於 window；auto-compact 以它為準。兩者都記，門檻採哪一個由實測後寫在票面。
-// compact 剛完成、下一次回應前 tokens 與 percent 缺席：記為 null，不寫成 0（0 會被讀成幾乎沒用）。
+// tokens 與 percent 缺席時記為 null，不寫成 0（0 會被讀成幾乎沒用）。
+// compact 完成當下實測不是缺席：同一毫秒寫入 phase compacted，tokens 與 percent 仍是 compact 前的值（3.2.0 執行期實測），
+// 下一次回應前不再更新。判定端以 contextJudge.ts 的 isPreCompactMeasure 辨識這筆記錄，不以它標［待 compact］。
 
 import type { ContextUsageRecord, ResumePhase } from '../types'
 

@@ -256,7 +256,7 @@ Ticket 摘要 v0.15.16 (15/34 完成) [csv]
 | 檔案 | 用途 |
 | ---- | ---- |
 | `.claude/skills/ticket/SKILL.md` | Ticket 系統 Skill 入口（create / track / handoff / resume / migrate / generate） |
-| `.claude/skills/ticket/ticket_system/` | live CLI Python 套件（透過 `uv tool install` 安裝為 `ticket` 命令） |
+| `.claude/skills/ticket/ticket_system/` | live CLI Python 套件（`~/.local/bin/ticket` 為 shim，每次執行以 `uv run --directory` 讀當前專案的原始碼，安裝見 `.claude/scripts/install-skill-clis.py`） |
 | `.claude/skills/ticket/ticket_system/lib/ticket_builder.py` | Ticket body 與 frontmatter code-gen（不讀 `.template` 檔） |
 
 ---

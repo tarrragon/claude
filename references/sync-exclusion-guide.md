@@ -81,6 +81,15 @@
 | .gitignore | 不加入（與 A/B/C 不同） |
 | 範例 | `skills/*/references/project-integration/`（per-project 落地層）；根層 `project-integration/` 同樣受排除，作為專案宣告的放置處（如合併閘門的 `merge-gate.yaml`）與 skill 的每專案狀態（如 `framework-update-adaptation/last-adapted.md`，記錄本專案上次適應到的框架版本） |
 
+類型 E 在 `sync_exclude_manifest.py` 有兩個集合，比對方式不同：
+
+| 集合 | 比對方式 | 成員 |
+|------|------|------|
+| `PER_PROJECT_PATTERNS` | 路徑任一段同名即排除 | `project-integration`、`.version-release.yaml`（各專案的發版設定） |
+| `PER_PROJECT_ROOT_DIRS` | 只在 `.claude/` 根層排除，`skills/*/plans/` 等巢狀同名目錄照常同步 | `plans`、`analyses`、`migration-backups`（專案的計畫、分析與 ticket 備份） |
+
+兩個集合都不在 `GITIGNORE_EXPECTED`，SessionStart 的 `.gitignore` 檢查不要求忽略它們。防止專案產物被推進框架 repo 靠的是同步排除（push 複製到遠端前以 `should_exclude` 過濾），與 `.gitignore` 無關；專案也可以自行選擇忽略它們。
+
 **skill 的每專案狀態放根層 `project-integration/<skill 名>/`，不放 skill 目錄內**：skill 目錄內的檔案隨 sync 擴散，狀態放那裡會讓各 consumer 共用同一份進度。放根層 `project-integration/` 時沿用既有的雙向排除，不需在 `sync_exclude_manifest.py` 新增名稱。對照：`cc-release-impact-review` 的 `state/last-reviewed.md` 刻意放在 skill 目錄內、隨 sync 共用，因為 Claude Code 版本評估的結論跨專案通用。
 
 **辨識問題**：這個檔案需要留在專案 git 中（便於團隊協作），但不應隨 sync 推到框架 repo？若是，屬類型 E。
@@ -224,6 +233,7 @@ Q5: 需要留在專案 git 但不跨專案同步嗎？
 | `sync-preserve.yaml` | 保留本地特化檔案，但接收遠端更新通知 | 類型 B 的子集，用於「可接收更新提示但不自動覆蓋」的檔案 |
 | `EXCLUDE_NAME_PREFIXES` (push) | 前綴匹配變體檔名 | 類型 D 的安全網，避免漏排變體 |
 | `EXCLUDE_SUFFIXES` (push) | 副檔名匹配 | 類型 D 的安全網（`.pem`、`.key` 等） |
+| `required_gitignore_entries()` | `.gitignore` 必要條目：`GITIGNORE_EXPECTED` 推導的條目，加上不屬同步範圍的 `GITIGNORE_EXTRA_ENTRIES`（`coverage/`、`.claude/tool-results/`） | SessionStart 的 gitignore 檢查與 `project-init onboard` 都讀這個函式，兩邊不各留清單；類型 A/B/C 新增名稱後兩邊同時要求 |
 
 ---
 
@@ -237,5 +247,5 @@ Q5: 需要留在專案 git 但不跨專案同步嗎？
 ---
 
 **Last Updated**: 2026-04-22
-**Version**: 1.0.0 — 從 W17-045.1 建立，補齊 sync 排除清單的分類規範與新增機制 checklist
-**Source**: W17-045（dispatch-active.json + hook-state 被誤同步事件）
+**Version**: 1.0.0 — 初版建立，補齊 sync 排除清單的分類規範與新增機制 checklist
+**Source**: dispatch-active.json + hook-state 被誤同步事件）

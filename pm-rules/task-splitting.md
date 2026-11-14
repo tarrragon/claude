@@ -31,7 +31,7 @@
 
 > **核心定位**：本章節是 PM 在 TDD Phase 3b（GREEN 實作派發）之前的整合性檢查門，將上方通用拆分條件收斂為三項核心閾值與單一 CLI 入口，避免 PM 派發過大任務壓垮代理人認知負擔。
 
-**Why**：3b 派發決策路徑歷史上缺乏強制檢查點——通用拆分條件涵蓋多場景（變數狀態、層級、依賴、檔案、認知負擔、tool call），PM 派發前若逐項對照，認知負擔本身即超過 7±2 上限，導致 PM 趕時間直接跳過；W17-048 系列即為「派發後撞 Hook 30 行硬上限才被迫拆分」的典型案例。
+**Why**：3b 派發決策路徑歷史上缺乏強制檢查點——通用拆分條件涵蓋多場景（變數狀態、層級、依賴、檔案、認知負擔、tool call），PM 派發前若逐項對照，認知負擔本身即超過 7±2 上限，導致 PM 趕時間直接跳過；某系列任務即為「派發後撞 Hook 30 行硬上限才被迫拆分」的典型案例。
 
 **Consequence**：缺乏 3b 派發前檢查門會導致（1）代理人回合耗盡，commit 時遺漏部分職責；（2）Context Bundle 膨脹超過 20K tokens 在實作前已逼近 context window 上限；（3）PM 在 Hook 阻擋後才補拆分，浪費已寫入的 prompt 與 Context Bundle。
 
@@ -65,7 +65,7 @@ ticket track dispatch-readiness <ticket-id>
 
 > **CLI 邊界**：閾值 1（功能職責數）以 acceptance 條目近似，含驗證類條目時可能高估；PM 於 WARN/FAIL 應手動覆核功能職責是否真的 > 2。完整參數與輸出格式見 `.claude/skills/ticket/references/track-command.md`「track dispatch-readiness 子命令」章節。
 
-> **與既有 Hook 的分工**：`agent-prompt-length-guard-hook` 檢 prompt 行數（30 行硬上限），偵測「prompt 大小」；`dispatch-readiness` 檢三項閾值，偵測「任務大小」。兩者不同維度，互補而非重複（W17-049 三方審查共識）。
+> **與既有 Hook 的分工**：`agent-prompt-length-guard-hook` 檢 prompt 行數（30 行硬上限），偵測「prompt 大小」；`dispatch-readiness` 檢三項閾值，偵測「任務大小」。兩者不同維度，互補而非重複（三方審查共識）。
 
 ### PM 派發前檢查清單
 
@@ -99,9 +99,9 @@ ticket track dispatch-readiness <ticket-id>
 | 1. 採樣 | 30 天內所有 3b 派發 ticket 標註 CLI 執行狀態與派發結果 |
 | 2. 計算指標 | 依上表三項公式計算實際比率 |
 | 3. 觸發決策 | 任一指標越過升級門檻 → 建立評估 ticket，依方向（加 Hook / 重校閾值 / 加豁免）規劃下一步；無越界 → 結案保留現方案 |
-| 4. 升級條件結算 ticket | 由 W17-055（30 天後效果驗證）執行 |
+| 4. 升級條件結算 ticket | 由 30 天後效果驗證 ticket 執行 |
 
-> **觀測對象 ticket**：W17-055（30 天後效果驗證）為本 tripwire 的結算入口。詳細評估流程與假設清單見 W17-049 ANA「仍未驗證假設」章節。
+> **觀測對象 ticket**：30 天後效果驗證 ticket 為本 tripwire 的結算入口。詳細評估流程與假設清單見該 ticket 的來源 ANA「仍未驗證假設」章節。
 
 ---
 
@@ -234,4 +234,4 @@ ticket track dispatch-readiness <ticket-id>
 ---
 
 **Last Updated**: 2026-05-17
-**Version**: 5.1.0 — 新增「3b 派發前檢查」章節（W17-054 落地，W17-049 ANA 階段三）：引用 cognitive-load-execution-details.md SSOT、`ticket track dispatch-readiness` CLI 為主檢查機制、tripwire 三項觀測指標（CLI 主動執行率 / 派發一次通過率 / 誤擋率）。歷史 5.0 版見 git log。
+**Version**: 5.1.0 — 新增「3b 派發前檢查」章節（ANA 階段三落地）：引用 cognitive-load-execution-details.md SSOT、`ticket track dispatch-readiness` CLI 為主檢查機制、tripwire 三項觀測指標（CLI 主動執行率 / 派發一次通過率 / 誤擋率）。歷史 5.0 版見 git log。

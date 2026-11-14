@@ -53,7 +53,7 @@ def main() -> int:
 
         tool_name = input_data.get("tool_name", "")
 
-        # 只處理 Task/Agent 工具（CC subagent 工具已由 Task 改名 Agent，見 1.5.0-W5-002 分析）
+        # 只處理 Task/Agent 工具（CC subagent 工具已由 Task 改名 Agent）
         if tool_name not in ("Agent", "Task"):
             logger.debug(f"非 Task/Agent 工具: {tool_name}，跳過")
             return 0

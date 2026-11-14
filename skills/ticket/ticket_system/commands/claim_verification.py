@@ -1,4 +1,4 @@
-"""claim 命令的 AC 驗證子系統（Ticket 0.18.0-W11-001.1.x）。
+"""claim 命令的 AC 驗證子系統。
 
 本模組承載 claim 命令在派發前自動執行 AC 驗證所需的核心函式。
 
@@ -467,7 +467,7 @@ def collect_ac_verifications(
     ``ValidationCommand | None``。本函式不做執行，僅做資料層配對。
 
     Args:
-        ticket_id: Ticket ID（如 "0.18.0-W5-002"）。
+        ticket_id: Ticket ID（如 "<ticket-id>"）。
 
     Returns:
         ``(AC, ValidationCommand | None)`` 配對清單；Ticket 無 AC 時回 []。
@@ -487,7 +487,7 @@ def collect_ac_verifications(
 # 互動式 prompt 文字
 _PROMPT_TEXT = "continue claim? [y] continue / [n] cancel (default: y): "
 
-# 非 tty 環境警告訊息（W4-019：--skip-verify 已移除）
+# 非 tty 環境警告訊息
 _NON_TTY_WARNING = (
     "[AC verification] non-interactive environment, cancelled; "
     "use --yes to override"

@@ -4,7 +4,6 @@ title: 規範描述多載體雙寫漂移——方案變更後人工同步只掃�
 severity: medium
 category: process-compliance
 created: "2026-07-13"
-source_tickets: [0.38.0-W10-002, 0.38.0-W10-003]
 related_patterns: [PC-093]
 ---
 
@@ -21,7 +20,7 @@ related_patterns: [PC-093]
 | Repo | 提案 | 同步時改了 | 漏掉的載體 |
 |------|------|-----------|-----------|
 | book_overview_app | PROP-018 | In Scope、討論記錄 | AC 第 2 項（仍寫「值由中介格式生成」）、proposals-tracking.yaml 標題（仍寫「雙端生成」） |
-| book_overview_v1 | PROP-014 | 討論記錄、多視角審查記錄 | In Scope 項 3（生成 pipeline 改造）、AC 第 2 項、影響範圍表、轉化記錄（W6-007/008 已完成仍標 pending） |
+| book_overview_v1 | PROP-014 | 討論記錄、多視角審查記錄 | In Scope 項 3（生成 pipeline 改造）、AC 第 2 項、影響範圍表、轉化記錄（已完成的轉化項仍標 pending） |
 
 諷刺點：漏掉的提案正是要解決「token 值雙寫無校驗必漂移」的提案——提案文件自身重現了它要解的病，反向佐證「人工同步必漏」的提案主張。
 
@@ -51,6 +50,6 @@ sibling 提案（雙 repo）場景：兩端各執行一輪，並在 Completion I
 
 ## 關聯
 
-- 0.38.0-W10-002 / W10-003（APP 端修正）、1.5.0-W6-027（V1 端修正）
+- APP 端與 V1 端各自的修正（見上方實證案例）
 - PC-093（無 trigger 延後——轉化記錄 stale 的近親：狀態欄位無人負責回填）
 - `.claude/rules/core/structured-content-generation.md`（第三層防護：確定性欄位工具生成）

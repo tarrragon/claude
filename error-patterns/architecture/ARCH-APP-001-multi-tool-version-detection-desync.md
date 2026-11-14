@@ -7,9 +7,6 @@ first_seen: 2026-06-22
 last_seen: 2026-06-22
 occurrences: 1
 status: open
-related_tickets:
-  - 0.36.0-W1-003
-  - 0.36.0-W1-004
 ---
 
 # ARCH-APP-001: 多工具版本偵測邏輯不同步
@@ -36,9 +33,16 @@ ticket CLI 與 version-release 的版本偵測優先序完全獨立，無共同�
 ## 預防措施
 
 - release 失敗後檢查 todolist 是否有 active 版本
-- 長期：version-release 的 `detect_version()` 應優先讀 todolist.yaml active（W1-004 追蹤）
-- 長期：activate-next-version 步驟應與 git commit 解耦，即使 commit 失敗也能推進（W1-003 追蹤）
+- 長期：version-release 的 `detect_version()` 應優先讀 todolist.yaml active（另票追蹤）
+- 長期：activate-next-version 步驟應與 git commit 解耦，即使 commit 失敗也能推進（另票追蹤）
 
 ## 識別方式
 
 `ticket track board` 輸出包含「使用目錄掃描的版本」警告訊息，且顯示的版本與 pubspec.yaml 不符。
+
+## 後續變更：發版後沒有 active 版本已屬正常
+
+version-release 3.0.0 起，`release`／`finish` 標 completed 後預設不推進下一版，todolist 進入版本空窗（定義見 `.claude/pm-rules/version-progression.md`〈版本生命週期〉）。「發版後沒有 active 版本」不再只出現在推進步驟失敗時，上方的即時修復不再適用：
+
+- 不要為了消除警告而手動把下一版設為 `active`。下一版要等發版後回饋檢查決定，決定後以 `version-release start --version <下一版>` 轉 active。
+- 本 pattern 的風險仍在：空窗期間 ticket CLI 會退回目錄掃描。建根票一律以 `--version` 明示目標版本，不依賴後備結果。

@@ -267,7 +267,7 @@ Q1: 子任務彼此真的獨立（可同時執行）？
 
 **判準**：問「此修改的本質是改變規則『入口索引』還是『規則本身的內容』？」骨架只是索引，承諾讀者「內容看 references/」，故擴充規則內容必然牽動 references/。僅列骨架時 agent 須自裁是否延伸，有範圍漂移風險。
 
-> **完整操作細節**（10+ 組已知拆分對表、PM 拆分偵測 bash script、Agent 延伸行為規範、反例 W10-011）：`.claude/references/where-files-split-pairing-rules.md`。
+> **完整操作細節**（10+ 組已知拆分對表、PM 拆分偵測 bash script、Agent 延伸行為規範、反例）：`.claude/references/where-files-split-pairing-rules.md`。
 
 ---
 
@@ -313,5 +313,5 @@ Q1: 子任務彼此真的獨立（可同時執行）？
 
 **版本歷史**：
 
-- v3.1.0：W8-034.4 核心化瘦身。「where.files 撰寫指引」的操作細節（10+ 組拆分對表、PM 偵測 bash script、Agent 延伸行為規範、反例）外移至 `.claude/references/where-files-split-pairing-rules.md`，主檔保留判準摘要 + 路由（符合 methodology-writing 原則二「只放判準，不混流程」）。acceptance-auditor-details.md 三處「完整清單」引用同步改指 references 新檔。
-- v3.0.0：W8-019.2 整併瘦身。保留 30 秒核心（單一職責四大檢查 + 任務鏈哲學 + 子任務建立指引 + where.files 拆分配對 + ID/Wave 命名，皆為外部引用的 load-bearing 章節）；移除 emoji 與冗長 code 範例（符合/違反對照壓為表格），「Ticket 服務精神」「行為分離原則」「拆分範例」「版本驅動任務管理」去重至 ticket-design-dispatch 與 ticket-lifecycle 權威處。歷史 v1.0.0~v2.2.0 完整版見 git log。
+- v3.1.0：核心化瘦身。「where.files 撰寫指引」的操作細節（10+ 組拆分對表、PM 偵測 bash script、Agent 延伸行為規範、反例）外移至 `.claude/references/where-files-split-pairing-rules.md`，主檔保留判準摘要 + 路由（符合 methodology-writing 原則二「只放判準，不混流程」）。acceptance-auditor-details.md 三處「完整清單」引用同步改指 references 新檔。
+- v3.0.0：整併瘦身。保留 30 秒核心（單一職責四大檢查 + 任務鏈哲學 + 子任務建立指引 + where.files 拆分配對 + ID/Wave 命名，皆為外部引用的 load-bearing 章節）；移除 emoji 與冗長 code 範例（符合/違反對照壓為表格），「Ticket 服務精神」「行為分離原則」「拆分範例」「版本驅動任務管理」去重至 ticket-design-dispatch 與 ticket-lifecycle 權威處。歷史 v1.0.0~v2.2.0 完整版見 git log。

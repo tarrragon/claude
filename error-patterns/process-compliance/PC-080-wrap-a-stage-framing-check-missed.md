@@ -9,7 +9,7 @@
 | 編號 | PC-080 |
 | 類別 | process-compliance |
 | 風險等級 | 中（影響 ANA 結論品質，可能產出錯誤方向的 IMP） |
-| 首發時間 | 2026-04-17（W13-007 AUQ 漢字污染根因分析 session） |
+| 首發時間 | 2026-04-17（AUQ 漢字污染根因分析 session） |
 | 姊妹模式 | PC-066（多視角審核發現元架構過度設計） |
 
 ---
@@ -24,7 +24,7 @@
 
 ---
 
-## 實際案例（W13-007）
+## 實際案例
 
 **任務**：分析 AUQ 漢字污染生成層根因
 
@@ -79,7 +79,7 @@
 |------|------|------|
 | 流程 | WRAP A 階段**必須**先做框架測試：「能否用一句話概括所有選項？」能 → 回 W 重擴增 | 行為準則 |
 | 流程 | WRAP A 階段進入前先問：「這個問題的反面問法是什麼？」明確列出相反框架 | 行為準則 |
-| 工具 | wrap-decision skill 補強 A 階段進入條件：要求顯式回答「相反框架是否已檢視」 | 已實施（W13-012 完成） |
+| 工具 | wrap-decision skill 補強 A 階段進入條件：要求顯式回答「相反框架是否已檢視」 | 已實施 |
 | Memory | 記錄本失誤作為跨 session 提醒 | 已實施（配對本檔） |
 
 ---
@@ -95,7 +95,7 @@
 
 ## 教訓
 
-1. **框架決定解法品質**：W13-007 中 6 個方案比較周詳完整，但全錯方向；用戶一句 reframe 讓整個分析重做
+1. **框架決定解法品質**：該分析中 6 個方案比較周詳完整，但全錯方向；用戶一句 reframe 讓整個分析重做
 2. **WRAP 不保證結論正確**：WRAP 是結構化思考工具，但 Consider the Opposite 被跳過時仍會產出錯誤結論
 3. **用戶 reframe 是最後防線**：設計階段若缺框架檢查，用戶即時指正成為唯一的糾錯機制，應提早自檢
 
@@ -105,10 +105,9 @@
 
 - `.claude/skills/wrap-decision/SKILL.md` — WRAP 框架定義，含 Consider the Opposite
 - `.claude/skills/wrap-decision/references/detailed-techniques.md` — W 階段技巧詳述
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W13-007.md` — 實際發生案例
 
 ---
 
 **Last Updated**: 2026-04-17
 **Version**: 1.0.0
-**Source**: W13-007 AUQ 漢字污染 ANA 中，用戶 reframe「擋訊號 vs 修污染源」導致整個 WRAP A 階段 6 方案失效
+**Source**: AUQ 漢字污染 ANA 中，用戶 reframe「擋訊號 vs 修污染源」導致整個 WRAP A 階段 6 方案失效

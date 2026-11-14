@@ -24,6 +24,7 @@ Hook 類型: UserPromptSubmit
 """
 
 import json
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -42,6 +43,8 @@ from lib import (
     find_active_in_progress_ticket,
 )
 from lib.hook_base import get_shared_state_root  # noqa: E402
+from lib.dispatch_scope import exclude_orphan_confirmed  # noqa: E402
+from lib.hook_logging import resolve_session_id  # noqa: E402
 from lib.hook_messages import (
     AskUserQuestionMessages,
     ProcessSkipMessages,
@@ -54,7 +57,7 @@ from lib.hook_messages import (
 SA_GUARD_SILENCE_TYPES = {"DOC", "ANA"}
 SA_GUARD_IMP_SILENCE_PHASE = "Phase 4"
 
-# 引用/討論抑制（W1-005）：僅作用於 SKIP_SA_REVIEW 的 lexical 假陽性
+# 引用/討論抑制：僅作用於 SKIP_SA_REVIEW 的 lexical 假陽性
 #
 # 設計方向強制保守：只在「明確是引用/討論」時抑制，絕不可漏放真正跳過意圖
 # （false negative 比 false positive 危險得多）。不確定時維持觸發。
@@ -83,7 +86,7 @@ EXIT_SUCCESS = 0
 
 
 # ============================================================================
-# 型別定義（W11-022 thyme 視角）：pattern_info 抽 TypedDict
+# 型別定義：pattern_info 抽 TypedDict
 # ============================================================================
 
 class SkipPatternInfo(TypedDict):
@@ -116,7 +119,7 @@ SKIP_PATTERNS: dict[str, SkipPatternInfo] = {
         "full_process": ProcessSkipMessages.SKIP_PHASE4_FULL_PROCESS,
     },
     # 優先級 2：SA 審查（需要在通用 Phase 檢查前）
-    # 註：移除 ("不做","架構審查") — 與一般「這次不做架構審查改良」討論重疊（高 FP，W11-004.2）
+    # 註：移除 ("不做","架構審查") — 與一般「這次不做架構審查改良」討論重疊（高 FP）
     "SKIP_SA_REVIEW": {
         "pairs": [
             ("不需要", "sa"),
@@ -140,7 +143,7 @@ SKIP_PATTERNS: dict[str, SkipPatternInfo] = {
         "full_process": ProcessSkipMessages.SKIP_AGENT_DISPATCH_FULL_PROCESS,
     },
     # 優先級 4：驗收相關
-    # 註：移除 ("直接","完成") 與 ("不做","審查") — 高假陽性 pair（W11-004.2）
+    # 註：移除 ("直接","完成") 與 ("不做","審查") — 高假陽性 pair
     # 「直接修復後完成」「這次不做審查」是合法措辭，且 ("不做","審查") 語意屬 SA 而非驗收
     "SKIP_ACCEPTANCE": {
         "pairs": [
@@ -152,7 +155,7 @@ SKIP_PATTERNS: dict[str, SkipPatternInfo] = {
         "full_process": ProcessSkipMessages.SKIP_ACCEPTANCE_FULL_PROCESS,
     },
     # 優先級 5：並行評估
-    # 註：移除 ("不用","評估") — 與 ("不需要","評估") 語意重複（同為「否定+評估」結構，W11-022）
+    # 註：移除 ("不用","評估") — 與 ("不需要","評估") 語意重複（同為「否定+評估」結構）
     "SKIP_PARALLEL_EVAL": {
         "pairs": [
             ("跳過", "審核"),
@@ -265,7 +268,7 @@ def _matched_sa_review_pairs(user_input_lower: str) -> List[Tuple[str, str]]:
 
 
 def _should_suppress_sa_review_reference(user_input: str) -> bool:
-    """SKIP_SA_REVIEW 引用/討論抑制判定（W1-005，方向保守）。
+    """SKIP_SA_REVIEW 引用/討論抑制判定（方向保守）。
 
     僅在以下「明確引用/討論」情境抑制，避免漏放真正跳過意圖：
     (a) 所有命中關鍵字皆落在引用 span（quote 前綴行 / system-reminder 區）
@@ -291,7 +294,7 @@ def _should_suppress_sa_review_reference(user_input: str) -> bool:
     return False
 
 
-def has_active_dispatch() -> bool:
+def has_active_dispatch(self_session_id: str = "", logger=None) -> bool:
     """
     檢查 .claude/dispatch-active.json 是否含 active dispatch
 
@@ -303,6 +306,10 @@ def has_active_dispatch() -> bool:
     刻意保守的判斷，非可再細分為「僅計入尚在執行回合中者」（見
     `.claude/lib/dispatch_tracker.py` 模組 docstring「turn_ended_at 欄位」
     段）。
+
+    擁有者 session 已結束（orphan_confirmed）的條目不計入，與 bare-commit、
+    workspace-wipe 守衛共用 `exclude_orphan_confirmed`；registry 讀取失敗
+    時全數計入。
 
     Returns:
         True 若有 active dispatch；False 若檔案缺失/損毀/dispatches 空
@@ -320,7 +327,14 @@ def has_active_dispatch() -> bool:
             dispatches = data
         else:
             return False
-        return bool(dispatches)
+        if not dispatches:
+            return False
+        return bool(
+            exclude_orphan_confirmed(
+                dispatches, root, self_session_id,
+                logger or logging.getLogger("process-skip-guard"),
+            )
+        )
     except (json.JSONDecodeError, OSError, Exception):
         # JSON 損毀 / 讀取失敗 → 視為無 active dispatch（不阻擋 hook）
         return False
@@ -329,7 +343,7 @@ def has_active_dispatch() -> bool:
 def _started_at_sort_key(value) -> Tuple[int, object]:
     """ISO 8601 started_at 排序鍵（fromisoformat fallback）。
 
-    W11-022 linux 視角：原始 W11-004.2 spec 採 started_at 字串排序，雖然
+    原始設計採 started_at 字串排序，雖然
     ISO 8601 字串字典序與時序大致一致，但遇到非 ISO 格式（舊資料 / 手動編輯
     錯誤 / 缺欄位）字串排序會給出未定義結果。本 helper 統一語意：
 
@@ -338,7 +352,7 @@ def _started_at_sort_key(value) -> Tuple[int, object]:
 
     tuple 首元素確保「可解析」永遠優於「不可解析」項；同類內部仍可比較。
 
-    本函式為防禦性 helper：W11-021 改採 mtime 排序後 hot path 不再依賴
+    本函式為防禦性 helper：改採 mtime 排序後 hot path 不再依賴
     started_at 字串排序，但保留此 helper 供未來 tie-break / 校驗用途，並
     記錄不可解析情況以利偵測異常資料。
     """
@@ -352,12 +366,12 @@ def _started_at_sort_key(value) -> Tuple[int, object]:
 
 def get_active_in_progress_ticket() -> Optional[dict]:
     """
-    找出最新 in_progress ticket（W11-021 統一入口包裝）
+    找出最新 in_progress ticket（統一入口包裝）
 
     委派至 hook_utils.find_active_in_progress_ticket（共用 helper，含 archive/backup
     排除與 get_project_root worktree 支援），並投影為本 hook 所需欄位。
 
-    W11-022：對返回 ticket 的 started_at 套用 _started_at_sort_key 驗證；
+    對返回 ticket 的 started_at 套用 _started_at_sort_key 驗證；
     不可解析時記錄訊息但不改變返回值（避免影響 type/phase guard 行為）。
 
     Returns:
@@ -365,7 +379,7 @@ def get_active_in_progress_ticket() -> Optional[dict]:
 
     Performance:
         共用 helper 採 mtime 排序 + short-circuit；hot path 命中第一個 in_progress
-        即 return，cold path 延遲 << 100ms（W11-019）
+        即 return，cold path 延遲 << 100ms
     """
     fm = find_active_in_progress_ticket()
     if not fm:
@@ -413,7 +427,7 @@ def _emit_basic() -> int:
     """輸出無提醒的基本 Hook 協定 JSON 並回傳 EXIT_SUCCESS。
 
     收斂 main() 中 7 處重複的 `print(json.dumps(generate_hook_output(...))) + return`
-    模式（W11-020 重構）。特殊 reminder emit（含 reminder payload）保留於 main 內
+    模式（重構後）。特殊 reminder emit（含 reminder payload）保留於 main 內
     直接輸出，不經此 helper。
     """
     print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
@@ -459,16 +473,16 @@ def main() -> int:
     skip_type, pattern_info = detect_skip_intent(user_input)
 
     # Active-dispatch guard（cold path：偵測到 skip intent 才查 dispatch-active.json）
-    # 代理人執行中時用戶輸入易誤觸驗收/省略偵測，靜默避免誤報（W11-004.3）
+    # 代理人執行中時用戶輸入易誤觸驗收/省略偵測，靜默避免誤報
     if skip_type:
         try:
-            if has_active_dispatch():
+            if has_active_dispatch(resolve_session_id(input_data), logger):
                 logger.info(f"偵測到 active dispatch，靜音 {skip_type} 提醒")
                 return _emit_basic()
         except Exception as exc:
             logger.warning(f"has_active_dispatch 失敗，回退原行為: {exc}")
 
-    # SKIP_SA_REVIEW 引用/討論抑制（W1-005，cold path：純 lexical 無 IO）
+    # SKIP_SA_REVIEW 引用/討論抑制（cold path：純 lexical 無 IO）
     # 命中關鍵字落在引用 span 或與強 meta 討論詞共現時，判為引用/討論非意圖 → 靜音
     if skip_type == "SKIP_SA_REVIEW" and _should_suppress_sa_review_reference(user_input):
         logger.info("SKIP_SA_REVIEW 因引用/討論語境（quote span 或 meta 詞共現）抑制")

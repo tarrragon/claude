@@ -53,7 +53,7 @@ def extract_children_from_frontmatter(frontmatter: dict, logger) -> List[str]:
         else:
             lines = children_str.split("\n")
             if any(line.strip().startswith("-") for line in lines):
-                # 路徑 2：多行 YAML 列表 (e.g., "- 0.31.0-W4-036.1\n- 0.31.0-W4-036.2")
+                # 路徑 2：多行 YAML 列表 (e.g., "- <child-id-1>\n- <child-id-2>")
                 for line in lines:
                     line = line.strip()
                     if line.startswith("-"):
@@ -61,7 +61,7 @@ def extract_children_from_frontmatter(frontmatter: dict, logger) -> List[str]:
                         if child_id:
                             children.append(child_id)
             else:
-                # 路徑 3：單一純量寫法 (e.g., "children: 0.31.0-W4-036")，
+                # 路徑 3：單一純量寫法 (e.g., "children: <child-id>")，
                 # 合法 YAML（schema 允許 list 欄位純量化，同 where.files
                 # 已知結果），非手寫 parser 缺陷
                 children.append(children_str)
@@ -81,7 +81,7 @@ def extract_children_from_frontmatter(frontmatter: dict, logger) -> List[str]:
 def extract_where_files(frontmatter: dict, logger) -> List[str]:
     """
     從 frontmatter 提取 `where.files` 欄位，正規化為去重、去佔位符的
-    `list[str]`（0.2.1-W3-052.1：`god_ticket_scale_checker` /
+    `list[str]`（`god_ticket_scale_checker` /
     `responsibility_scope_checker` 共用）。
 
     `where.files` 在 frontmatter 中可能是 `list[str]` 或 `str`，兩者皆為

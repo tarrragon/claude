@@ -60,7 +60,7 @@ def project(tmp_path, monkeypatch):
 
     monkeypatch.setattr(migrate_mod, "get_ticket_state_root", lambda: tmp_path)
     monkeypatch.setattr(paths_mod, "get_project_root", lambda: tmp_path)
-    monkeypatch.setattr(version_mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(version_mod, "get_ticket_state_root", lambda: tmp_path)
 
     _write_todolist(tmp_path, [{"version": "0.20.0", "status": "active"}])
 

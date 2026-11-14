@@ -2,7 +2,6 @@
 
 **類別**: process-compliance
 **發現日期**: 2026-07-02
-**相關 Ticket**: 0.3.6-W1-006（稽核 ANA）、0.3.6-W1-007（CLI 驗證修復）、0.3.6-W1-008（hook 存量掃描）
 **嚴重度**: 中（防護表面存在但實質可穿透，比無防護更危險——產生已防護的錯覺）
 
 ---
@@ -11,7 +10,7 @@
 
 `ticket track close` 的 `--resolved-by` 為必填參數（PC-090 C1 防護），語意是「解決此問題的 Ticket ID」，但實際接受任意字串：
 
-- 0.4.0-W3-001 以 `--resolved-by 設計決策` 通過關閉，frontmatter 留下 `closed_by: 設計決策`
+- 某票以 `--resolved-by 設計決策` 通過關閉，frontmatter 留下 `closed_by: 設計決策`
 - 預設 note 模板產生「已在 設計決策 一併解決」——語法通順掩蓋了引用對象不存在的事實
 - 追蹤鏈斷裂：該票宣稱被「某處」解決，但無任何可導航的 ticket ID
 
@@ -29,7 +28,7 @@
 
 ## 解決方案
 
-0.3.6-W1-007 落地：close() 依 reason 分歧驗證——superseded_by/duplicate 的 resolved_by 必為合法且存在的 ticket ID；requirement_vanished/cancelled_by_user 允許顯式 `none` + 必填 note（消除「欄位語意不適用→塞自由文字」的設計逼迫）；note 含延後語意時 reject 引導 `ticket migrate`。
+修復落地：close() 依 reason 分歧驗證——superseded_by/duplicate 的 resolved_by 必為合法且存在的 ticket ID；requirement_vanished/cancelled_by_user 允許顯式 `none` + 必填 note（消除「欄位語意不適用→塞自由文字」的設計逼迫）；note 含延後語意時 reject 引導 `ticket migrate`。
 
 ## 預防措施
 

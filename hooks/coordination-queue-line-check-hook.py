@@ -10,10 +10,13 @@ coordination-queue-line-check-hook - PostToolUse Hook（Bash / Edit / Write / Mu
       檢查現行佇列行的兩種寫法錯誤，以 additionalContext 提示模型（不阻擋，exit 0）。
       文字約定兩度失守，故由機械層在寫入當下指出。
 
-檢查（解析規則照 .claude/skills/line-board/hooks/lanes.ts：行首、只掃 Solution、每線取最後一行）:
+檢查（解析由 multi-session-orchestration/scripts/queue_line.py 負責，規則與 line-board lanes.ts 相同：
+行首、只掃 Solution、每線取最後一行；收線（（無）、（結束））不檢查）:
   1. 作用中（票序不是（無））且有括號的線，括號內文不等於任何存活 session 名稱
      （~/.claude/sessions/*.json，cwd 屬本 repo 任一 checkout）-> 提示兩種可能原因
-  2. 票序票號全部可解析且狀態皆 completed/closed，卻未寫（無）-> 提示可結束，附完整格式
+  2. 票序票號全部可解析且狀態皆 completed/closed，卻未寫（無）-> 提示可結束，附完整格式。
+     本檢查另收步驟內任一位置的票號並展開範圍寫法（queue_check_ids），不用 queue_line 只認步驟開頭的
+     解析；任一步驟收不到票號時不下全終態結論（自然語句步驟的狀態無從判定）
   3. 以「**L<n> 現行佇列**」開頭卻不符 LANE_LINE 的行（如漏冒號），若在該線最後一筆合格行之後
      -> 報出原文與格式；解析層照 lanes.ts 不採用此行，不報會被誤以為已寫入
 
@@ -45,88 +48,43 @@ sys.path.insert(
     0, str(Path(__file__).parent.parent / "skills" / "multi-session-orchestration" / "scripts")
 )
 from coordination_ticket import parse_user_todos  # noqa: E402
+# 佇列行解析的 Python 唯一實作（與 line-board lanes.ts 共用 queue-line-cases.json 案例）
+from queue_line import (  # noqa: E402
+    LANE_LINE,
+    LANE_LINE_PREFIX,
+    QUEUE_SEPARATOR,
+    parse_lane_lines,
+    parse_lanes,
+    solution_lines,
+    ticket_prefix_of,
+)
+from lib.ticket_command_parse import find_ticket_track_invocations  # noqa: E402
 
 HOOK_NAME = "coordination-queue-line-check"
-TICKET_ID_IN_TEXT = re.compile(r"(?<![\w.-])(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)(?![\w.-])")
-LANE_ENDED = "（無）"
 TERMINAL_STATUSES = ("completed", "closed")
+# 檢查 2 用：步驟內任一位置的票號（完整票號、W<波次>-<序號>、三位數短號），可接範圍終點 ～.<末段>
+STEP_ID_ANYWHERE = re.compile(
+    r"(?<![\w.-])(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*|W\d+-\d+(?:\.\d+)*|\d{3}(?:\.\d+)*)"
+    r"(?:[～~]\.(\d+))?(?![\w-])"
+)
+PREFIX_VERSION = re.compile(r"^(.+)-W\d+-$")
+# 範圍寫法展開上限：超過視為寫錯，只取起點與終點，不展開
+RANGE_EXPAND_MAX = 50
+
+
+class _AnyTrackVerb(tuple):
+    """find_ticket_track_invocations 的 verbs：任何 ticket track 子命令都算（寫入目標由參數決定）。"""
+
+    def __contains__(self, verb) -> bool:
+        return True
 WRITE_TOOLS = ("Edit", "Write", "MultiEdit")
 # 檢查 4 的完成行格式（line-continuity.md §2〈用戶待辦〉）
 TODO_DONE_FORMAT = "**用戶待辦完成**（%s）：<結果>"
 TODO_DONE_KEYLESS = "**用戶待辦完成**：%s"
 
-# 以下常數與解析函式逐項對應 lanes.ts / shared.ts
-LANE_LINE = re.compile(r"^\*\*L(\d+) 現行佇列\*\*(?:（([^）]*)）)?：(.*)$")
-LANE_LINE_PREFIX = re.compile(r"^\*\*L(\d+) 現行佇列\*\*")
 LANE_FORMAT = "**L%d 現行佇列**（<session 名稱>）：<票序，或（無）>"
-QUEUE_SEPARATOR = re.compile(r"\s*(→|∥)\s*")
-STEP_SERIAL = re.compile(r"^(\d{3}(?:\.\d+)*)(.*)$")
-STEP_FULL_ID = re.compile(r"^(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)(.*)$")
-STEP_WAVE_ID = re.compile(r"^(W\d+-\d+(?:\.\d+)*)(.*)$")
-PREFIX_VERSION = re.compile(r"^(.+)-W\d+-$")
+# 票檔路徑推導用（非佇列行解析）：完整票號拆出版本
 TICKET_ID = re.compile(r"^v?(\d+\.\d+\.\d+)-(W\d+)-\d+(?:\.\d+)*$")
-
-
-def ticket_prefix_of(coordinator_id: str) -> Optional[str]:
-    m = TICKET_ID.match(coordinator_id)
-    return None if m is None else "%s-%s-" % (m.group(1), m.group(2))
-
-
-def _step_ticket(part: str, prefix: str):
-    full = STEP_FULL_ID.match(part)
-    if full:
-        return full.group(1), full.group(1), full.group(2)
-    wave = STEP_WAVE_ID.match(part)
-    if wave:
-        ver = PREFIX_VERSION.match(prefix)
-        if ver is None:
-            return None
-        return wave.group(1), "%s-%s" % (ver.group(1), wave.group(1)), wave.group(2)
-    short = STEP_SERIAL.match(part)
-    if short:
-        return short.group(1), prefix + short.group(1), short.group(2)
-    return None
-
-
-def parse_queue(queue: str, prefix: str) -> List[Dict[str, str]]:
-    """票序拆成票號 token（分隔符與無法辨識文字略過，共用案例只列 ticket token）。"""
-    tickets = []
-    for part in QUEUE_SEPARATOR.split(queue.strip()):
-        if part in ("", "→", "∥"):
-            continue
-        t = _step_ticket(part, prefix)
-        if t is not None:
-            tickets.append({"serial": t[0], "id": t[1], "note": t[2].strip()})
-    return tickets
-
-
-def solution_lines(text: str) -> List[str]:
-    lines = [ln.rstrip() for ln in text.split("\n")]
-    start = next(
-        (i for i, ln in enumerate(lines) if ln == "## Solution" or ln.startswith("## Solution ")),
-        -1,
-    )
-    if start == -1:
-        return []
-    rest = lines[start + 1:]
-    for i, ln in enumerate(rest):
-        if ln.startswith("## "):
-            return rest[:i]
-    return rest
-
-
-def parse_lanes(text: str, prefix: str) -> List[Dict[str, object]]:
-    """每線取最後一次出現的現行佇列行；票序為（無）的線不回傳。依線號排序。"""
-    latest = {}
-    for line in solution_lines(text):
-        m = LANE_LINE.match(line)
-        if m:
-            latest[int(m.group(1))] = (m.group(2), m.group(3).strip())
-    return [
-        {"lane": lane, "session": session, "tickets": parse_queue(queue, prefix)}
-        for lane, (session, queue) in sorted(latest.items())
-        if queue != LANE_ENDED
-    ]
 
 
 def ticket_file_candidates(ticket_id: str) -> List[str]:
@@ -151,18 +109,71 @@ def read_ticket_status(root: Path, ticket_id: str) -> Optional[str]:
     return None
 
 
+def _resolve_step_id(token: str, prefix: Optional[str]) -> Optional[str]:
+    """步驟內的票號 token 轉完整票號；短號或 W 開頭寫法缺前綴時回 None。"""
+    if TICKET_ID.match(token):
+        return token
+    if prefix is None:
+        return None
+    if token.startswith("W"):
+        ver = PREFIX_VERSION.match(prefix)
+        return None if ver is None else "%s-%s" % (ver.group(1), token)
+    return prefix + token
+
+
+def _expand_range(start: str, end_last: Optional[str]) -> List[str]:
+    """<起點>～.<末段> 展開為同層連號；沒有終點、終點不大於起點或跨度過大時不展開。"""
+    if end_last is None:
+        return [start]
+    base, _, first = start.rpartition(".")
+    if not base or not first.isdigit():
+        return [start]
+    lo, hi = int(first), int(end_last)
+    if hi <= lo or hi - lo > RANGE_EXPAND_MAX:
+        return [start, "%s.%s" % (base, end_last)]
+    return ["%s.%d" % (base, k) for k in range(lo, hi + 1)]
+
+
+def queue_check_ids(queue: str, prefix: Optional[str]) -> Optional[List[str]]:
+    """檢查 2 用的票號：每一步收任一位置的票號並展開範圍；任一步收不到或無法轉成完整票號時回 None。"""
+    ids: List[str] = []
+    for part in QUEUE_SEPARATOR.split(queue.strip()):
+        if part in ("", "→", "∥"):
+            continue
+        found = STEP_ID_ANYWHERE.findall(part)
+        if not found:
+            return None
+        for token, end_last in found:
+            for raw in _expand_range(token, end_last or None):
+                full = _resolve_step_id(raw, prefix)
+                if full is None:
+                    return None
+                ids.append(full)
+    return list(dict.fromkeys(ids))
+
+
+def lanes_for_check(text: str, prefix: Optional[str]) -> List[Dict[str, object]]:
+    """parse_lanes 的線，另加 check_ids（queue_check_ids 的結果，可能為 None）。"""
+    queues = {line["lane"]: line["queue"] for line in parse_lane_lines(text)}
+    lanes = parse_lanes(text, prefix)
+    for lane in lanes:
+        lane["check_ids"] = queue_check_ids(queues[lane["lane"]], prefix)
+    return lanes
+
+
 def find_problems(lanes, alive_names: Optional[set], status_of) -> List[str]:
-    """alive_names 為 None 表示無法取得 session 名單，略過檢查 1。status_of(id)->Optional[str]。"""
+    """lanes 來自 lanes_for_check。alive_names 為 None 表示無法取得 session 名單，略過檢查 1。
+    status_of(id)->Optional[str]。check_ids 為 None（有步驟收不到票號）時不下全終態結論。"""
     msgs = []
     for lane in lanes:
-        n, session, tickets = lane["lane"], lane["session"], lane["tickets"]
+        n, session, check_ids = lane["lane"], lane["session"], lane["check_ids"]
         if session is not None and alive_names is not None and session not in alive_names:
             msgs.append(
                 "L%d 括號內『%s』目前沒有同名 session：若是附註，請移到票序；"
                 "若 session 已結束而線仍在，可忽略" % (n, session)
             )
-        if tickets:
-            statuses = [status_of(t["id"]) for t in tickets]
+        if check_ids:
+            statuses = [status_of(tid) for tid in check_ids]
             if all(s in TERMINAL_STATUSES for s in statuses):
                 msgs.append(
                     "L%d 佇列票皆已終態，若線已結束請寫（無），格式：%s" % (n, LANE_FORMAT % n)
@@ -239,15 +250,33 @@ def list_checkouts(logger, root: Path) -> List[str]:
         return [str(root)]
 
 
-def written_ticket_ids(input_data: dict) -> List[str]:
-    """本次寫入涉及的票號：Edit 類取檔名，Bash 的 ticket track 命令取命令中的票號。"""
+def _track_targets(args: List[str]) -> List[str]:
+    """`ticket track <子命令>` 之後、第一個選項之前的完整票號（寫入目標）；選項值與內文不算。"""
+    targets = []
+    for arg in args:
+        if arg.startswith("-"):
+            break
+        if TICKET_ID.match(arg):
+            targets.append(arg)
+    return targets
+
+
+def written_ticket_ids(input_data: dict, logger=None) -> List[str]:
+    """本次寫入涉及的票號：Edit 類取檔名；Bash 取每個 `ticket track <子命令>` 的目標票號，
+    不取參數內文提到的票號。命令無法解析時回空清單（只少一次提示，不阻擋）。"""
     tool = input_data.get("tool_name", "")
     ti = input_data.get("tool_input") or {}
     if tool == "Bash":
         cmd = ti.get("command", "")
         if "ticket track" not in cmd:
             return []
-        return list(dict.fromkeys(TICKET_ID_IN_TEXT.findall(cmd)))
+        invocations = find_ticket_track_invocations(cmd, _AnyTrackVerb())
+        if invocations is None:
+            if logger is not None:
+                logger.info("命令無法解析，略過協調票檢查: %s", cmd[:120])
+            return []
+        ids = [tid for _verb, args in invocations for tid in _track_targets(args)]
+        return list(dict.fromkeys(ids))
     if tool in WRITE_TOOLS:
         stem = Path(str(ti.get("file_path", ""))).stem
         return [stem] if ticket_prefix_of(stem) else []
@@ -284,7 +313,7 @@ def main() -> int:
     if input_data is None:
         return 0
     root = get_project_root()
-    for coord_id in written_ticket_ids(input_data):
+    for coord_id in written_ticket_ids(input_data, logger):
         text = read_ticket_text(root, coord_id)
         if text is not None and has_coordination_flag(text):
             return check_coordination_ticket(logger, root, input_data, coord_id, text)
@@ -293,7 +322,10 @@ def main() -> int:
 
 
 def check_coordination_ticket(logger, root: Path, input_data: dict, coord_id: str, text: str) -> int:
-    lanes = parse_lanes(text, ticket_prefix_of(coord_id))
+    lanes = lanes_for_check(text, ticket_prefix_of(coord_id))
+    for lane in lanes:
+        if lane["check_ids"] is None:
+            logger.info("L%d 有步驟收不到票號，不判全終態", lane["lane"])
     alive = alive_session_names(logger, list_checkouts(logger, root))
     msgs = find_malformed_lines(text) + find_problems(
         lanes, alive, lambda tid: read_ticket_status(root, tid)

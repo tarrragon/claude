@@ -42,7 +42,9 @@ def setup_project_environment() -> Tuple[Path, Path, Path]:
     project_dir = get_project_root()
 
     hooks_dir = project_dir / '.claude' / 'hooks'
-    logs_dir = project_dir / '.claude' / 'hook-logs'
+    # 空名稱取得 hook-logs 根（linked worktree 內為主 repo）；延遲 import 避免循環依賴
+    from lib.hook_logging import get_hook_log_dir
+    logs_dir = get_hook_log_dir('')
 
     # 確保日誌目錄存在
     logs_dir.mkdir(parents=True, exist_ok=True)

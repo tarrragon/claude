@@ -175,14 +175,14 @@ DECISION_KEYWORDS = {
 
 # Ticket ID 正則表達式 (支援版本號格式和 W 波次格式)
 TICKET_ID_PATTERNS = [
-    r"\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*",  # 0.31.0-W4-001.1
-    r"W\d+-\d+(?:\.\d+)*",                  # W4-001.1
+    r"\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*",  # 版本化格式（含子序號）
+    r"W\d+-\d+(?:\.\d+)*",                  # 裸格式（含子序號）
 ]
 
 
 def resolve_ticket_path(project_root: Path, ticket_id: str) -> Optional[Path]:
     """
-    從 ticket_id 尋找 Ticket 檔案路徑（W17-188 修復：改用共用 helper 支援雙結構）
+    從 ticket_id 尋找 Ticket 檔案路徑（改用共用 helper 支援雙結構）
 
     使用 hook_utils.find_ticket_file 支援：
     - 舊扁平結構：docs/work-logs/v{version}/tickets/
@@ -337,7 +337,7 @@ def check_skill_suggestion(prompt: str) -> Optional[tuple]:
         if match:
             ticket_id = match.group()
             # 只對完整格式（含版本號）的 Ticket ID 進行存在性驗證
-            # W17-188 修復：resolve_ticket_path 已透過 find_ticket_file 支援雙結構
+            # resolve_ticket_path 已透過 find_ticket_file 支援雙結構
             # 回傳 None 即代表 Ticket 不存在
             if '-W' in ticket_id and '.' in ticket_id.split('-')[0]:
                 ticket_path = resolve_ticket_path(project_root, ticket_id)

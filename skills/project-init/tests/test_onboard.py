@@ -235,10 +235,10 @@ __pycache__/
         captured = capsys.readouterr()
         assert "0 項需處理" in captured.out or "需處理" in captured.out
 
-    def test_onboard_hook_completeness_section(
+    def test_onboard_hook_coverage_section(
         self, tmp_path: Path, capsys
     ) -> None:
-        """測試 onboard 包含 Hook 完整性驗證區段."""
+        """測試 onboard 包含 Hook 註冊涵蓋率區段，並寫明不量的維度."""
         # 建立最小的 Flutter 專案
         (tmp_path / "pubspec.yaml").touch()
 
@@ -254,8 +254,11 @@ __pycache__/
         result = run_onboard(tmp_path)
 
         captured = capsys.readouterr()
-        # 應該包含 Hook 完整性檢查的輸出
-        assert "Hook 完整性驗證" in captured.out
+        # 區段標題為註冊涵蓋率，舊的「完整性」標題不再出現
+        assert "[Hook 註冊涵蓋率]" in captured.out
+        assert "Hook 完整性" not in captured.out
+        # 寫明只量登記、不量的維度
+        assert "不量觸發、事件、權限、依賴" in captured.out
 
     def test_onboard_unregistered_hooks_in_todo(
         self, tmp_path: Path, capsys

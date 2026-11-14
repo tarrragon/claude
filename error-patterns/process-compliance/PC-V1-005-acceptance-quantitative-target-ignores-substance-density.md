@@ -23,7 +23,7 @@
 
 ## 案例
 
-- 1.0.0-W7-004.5：六檔 auto-load 修剪目標 >= 40%，strategy 明細全數執行後實得 20.8%；NeedsContext 三選一交 PM，用戶跨 session 兩度確認放寬至 >= 20% 後才 complete。同票 Problem Analysis 早已明示「pm-role 情境觸發路由必須完整保留」「cognitive-load 閾值數字不可動」，與 40% 目標的衝突在 create 時即可偵測。
+- 動機案例：六檔 auto-load 修剪目標 >= 40%，strategy 明細全數執行後實得 20.8%；NeedsContext 三選一交 PM，用戶跨 session 兩度確認放寬至 >= 20% 後才 complete。同票 Problem Analysis 早已明示「pm-role 情境觸發路由必須完整保留」「cognitive-load 閾值數字不可動」，與 40% 目標的衝突在 create 時即可偵測。
 
 ## 防護
 
@@ -41,9 +41,8 @@
 
 - `.claude/rules/core/quality-baseline.md` 規則 6 — 失敗案例學習（不為達標數字傷害載重規則）
 - `.claude/rules/core/ai-communication-rules.md` 規則 6 — 以價值 / 容量 / 優先級為決策依據
-- `docs/work-logs/v1/v1.0/v1.0.0/tickets/1.0.0-W7-004.5.md` — 動機案例（NeedsContext 三選一全文）
 
 ---
 
 **Last Updated**: 2026-06-12
-**Version**: 1.0.0 — 自 W7-004.5 acceptance 門檻與 substance 鐵則衝突案例建立（症狀 / 根因 / 三時機防護）
+**Version**: 1.0.0 — 自 auto-load 修剪票 acceptance 門檻與 substance 鐵則衝突案例建立（症狀 / 根因 / 三時機防護）

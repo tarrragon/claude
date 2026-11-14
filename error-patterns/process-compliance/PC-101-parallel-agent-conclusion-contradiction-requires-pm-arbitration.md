@@ -71,18 +71,18 @@ multi_view_status:
 
 ## 觸發案例
 
-### W17-004 多視角並行分析（本 Pattern 發現案例）
+### 多視角並行分析（本 Pattern 發現案例）
 
 PM 並行派發 3 個 Explore：
-- W17-004.1：POSIX 成功模式研究
-- W17-004.2：CLI 三向對齊審計
-- W17-004.3：結構性深度分析
+- 視角 1：POSIX 成功模式研究
+- 視角 2：CLI 三向對齊審計
+- 視角 3：結構性深度分析
 
-**衝突**：W17-004.2 結論「`create --source-ticket` 存在但副作用未文件化」；W17-004.3 結論「--source-ticket 缺席，PM 被迫用 --parent 繞路」。兩者互斥。
+**衝突**：視角 2 結論「`create --source-ticket` 存在但副作用未文件化」；視角 3 結論「--source-ticket 缺席，PM 被迫用 --parent 繞路」。兩者互斥。
 
-**PM 仲裁**：本 session 實際用 `ticket create --source-ticket 0.18.0-W17-001` 成功建 W17-004（實證參數存在）。仲裁：004.3 誤判；真痛在副作用未文件化（004.2 結論正確）。
+**PM 仲裁**：本 session 實際用 `ticket create --source-ticket <ticket-id>` 成功建立該分析 ticket（實證參數存在）。仲裁：視角 3 誤判；真痛在副作用未文件化（視角 2 結論正確）。
 
-**若無仲裁**：PM 可能取 004.3 結論，衍生出「新增 --source-ticket 參數」的 IMP ticket，浪費資源修不存在的問題。
+**若無仲裁**：PM 可能取視角 3 結論，衍生出「新增 --source-ticket 參數」的 IMP ticket，浪費資源修不存在的問題。
 
 ---
 
@@ -97,4 +97,4 @@ PM 並行派發 3 個 Explore：
 ---
 
 **Last Updated**: 2026-04-20
-**Version**: 1.0.0 — 從 W17-004 並行 Explore 結論矛盾案例建立
+**Version**: 1.0.0 — 從並行 Explore 結論矛盾案例建立

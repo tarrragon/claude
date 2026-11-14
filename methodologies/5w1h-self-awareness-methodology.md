@@ -262,4 +262,4 @@ How: [Task Type: {任務類型}] {具體實作策略}
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 3.0.0 - 瘦身 605 -> 核心化（W8-020.4）：六維度判斷標準/執行規則/驗證機制 + 強制檢查機制 + 逃避行為識別 + 執行驗證留主檔（散文改表格）；六組正反判斷範例 + Hook 系統整合程式碼外移 `.claude/references/5w1h-self-awareness-examples.md`，雙向 intent 路由含「何時讀」；emoji 全清為純文字（document-format-rules 規則 1）。歷史版本見 git log。
+**Version**: 3.0.0 - 瘦身 605 -> 核心化：六維度判斷標準/執行規則/驗證機制 + 強制檢查機制 + 逃避行為識別 + 執行驗證留主檔（散文改表格）；六組正反判斷範例 + Hook 系統整合程式碼外移 `.claude/references/5w1h-self-awareness-examples.md`，雙向 intent 路由含「何時讀」；emoji 全清為純文字（document-format-rules 規則 1）。歷史版本見 git log。

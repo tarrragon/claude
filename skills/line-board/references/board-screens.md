@@ -33,12 +33,13 @@
 - **線群組的標題**分三行，不以 `｜` 分隔，收合時 `▾` 改為 `▸`；沒有目標或沒有活動計數時省略該行。session 狀態的判定見〈各 session 狀態〉最後一點：
 
   ```text
-  ▾ L<n> <session 名稱>［<session 狀態>］[［佇列無票號］][［待 compact］|［待 clear］][［/compact 後已恢復 HH:MM］]
+  ▾ L<n> <session 名稱>［<session 狀態>］[［收線寫法］|［佇列無票號］][［待 compact］|［待 clear］][［/compact 後已恢復 HH:MM］]
   目標：<目標>
   <活動計數>
   ```
 
-  - `［佇列無票號］`：現行佇列行的票序不含任何票號、只有非票號文字（如寫錯的收線記號 `（結束了）`、說明文字 `等主控通知`）時標示。這類線沒有佇列列，沒有此標示時看板上只剩標題列、看不出佇列寫錯。判定為 `lanes.ts` 的 `isQueueWithoutTicket`，與 `line_status` 的過期項「佇列無票號」同一個函式；含票號的票序（含票號夾說明文字）不標。收線但附說明的寫法（如 `無（…）`）同樣不含票號，看板上也標此標示，`line_status` 則列為「收線寫法」
+  - `［收線寫法］`：票序為附說明的收線寫法（如 `（無）（全數終態）`、`無（…）`，`lanes.ts` 的 `endedForm` 為 with-note，經 `Lane.ended` 帶到看板）時標示，與 `line_status` 的過期項「收線寫法」同一類；標此標示時不再標［佇列無票號］
+  - `［佇列無票號］`：現行佇列行的票序不含任何票號時標示：只有非票號文字（如寫錯的收線記號 `（結束了）`、說明文字 `等主控通知`），或票序為空（冒號後空白、只有 `→`、`∥`）。這類線沒有佇列列，沒有此標示時看板上只剩標題列、看不出佇列寫錯。判定為 `lanes.ts` 的 `isQueueWithoutTicket`，與 `line_status` 的過期項「佇列無票號」同一個函式；含票號的票序（含票號夾說明文字）不標
   - `［佇列無票號］` 之後的標記與徽章見〈context 用量〉的〈線標題的標記與徽章〉；三者皆無時標題列只到 `［狀態］`
 - **活動計數**：依序為 `N 派發中`、`N 閘門`、`等你處理`、`N 排隊`，只列不為零的項目，以 ` · ` 分隔。各項與展開後的內容一一對應：
   - `派發中`：群組內派發列的數目
@@ -97,7 +98,7 @@ Claude Code 為每個執行中的 session 寫一個 `<pid>.json`，含 `sessionI
 每個載入 line-board 的 session 以 `session.measure` 把自己的用量寫進主 checkout 的用量檔（`hooks/contextUsage.ts`），看板讀檔（`hooks/contextJudge.ts`），不靠 AI 回報。
 
 - **只讀存活 session 的檔**：以上方存活判定後的 `sessionId` 逐一讀 `<sessionId>.json`，不列目錄，所以已結束 session 留下的檔不會被讀到。內容的 `sessionId` 與檔名不符的檔不採用
-- **百分比的分母**：`autoCompactThreshold` 有值（auto-compact 開啟）用 `compactPercent`（以 compaction window 為分母），為 null 用 `percent`（以模型 window 為分母，同狀態列）。compact 剛完成、下一次回應前沒有用量，寫「ctx 未量測」，不寫 0%
+- **百分比的分母**：`autoCompactThreshold` 有值（auto-compact 開啟）用 `compactPercent`（以 compaction window 為分母），為 null 用 `percent`（以模型 window 為分母，同狀態列）。用量缺席寫「ctx 未量測」，不寫 0%。compact 完成當下用量檔寫入 phase compacted，但用量仍是 compact 前的值；phase 為 compacted 且量測時間不晚於 compact 完成時間（`isPreCompactMeasure`）時寫「ctx compact 前 <百分比>%」，不判待 compact／待 clear，下一次回應重新量測後恢復一般判定
 - **量測時間只顯示不停判**：用量檔只在用量變動時寫入，閒置 session 最後一次的值仍然準確；閒置正是最可能去 compact 的時候
 - **待 compact／待 clear 判定**（`contextMarkOf`，看板線標題與 `line_status` 共用）：
 
@@ -158,8 +159,8 @@ Claude Code 為每個執行中的 session 寫一個 `<pid>.json`，含 `sessionI
 
 - 行首即 `**L`，n 必須是數字；清單項（`- **L7 …`）、表格內、以反引號引用範本的說明行都不算
 - 同一條線有多行時只取最後一行，較早的行是歷史，其票號不出現在看板
-- 最後一行的票序整段寫 `（無）` 或 `（結束）` 表示這條線結束，看板不顯示該線；收線記號後面再接說明（如 `（無）— 說明`、`無（…）`）不算收線，看板照常顯示，`line_status` 列為過期項（判定在 `lanes.ts` 的 `endedForm`，看板與工具共用）
-- 最後一行的票序不是收線記號、也不含任何票號（如 `（結束了）`、`等主控通知`）時不當成收線；看板該線沒有佇列列（`layout.ts` 的 `queueRowSegments` 沒有票號即不畫），標題列標 `［佇列無票號］`，`line_status` 列為過期項「佇列無票號」（兩端同一個判定：`lanes.ts` 的 `isQueueWithoutTicket`，輸入為 `parseQueue` 的 token）
+- 最後一行的票序整段寫 `（無）` 或 `（結束）` 表示這條線結束，看板不顯示該線；收線記號後面再接說明（如 `（無）— 說明`、`無（…）`）不算收線，看板照常顯示並在標題列標 `［收線寫法］`，`line_status` 列為過期項「收線寫法」（判定在 `lanes.ts` 的 `endedForm`，看板與工具共用）
+- 最後一行的票序不是收線記號、也不含任何票號（如 `（結束了）`、`等主控通知`，或票序為空）時不當成收線；看板該線沒有佇列列（`layout.ts` 的 `queueRowSegments` 沒有票號即不畫），標題列標 `［佇列無票號］`，`line_status` 列為過期項「佇列無票號」（兩端同一個判定：`lanes.ts` 的 `isQueueWithoutTicket`，輸入為 `parseQueue` 的 token）
 - 括號內的 session 名稱原樣顯示；行內沒寫時顯示「（未標 session）」
 
 畫面能分辨兩種空狀態：「協調票尚無現行佇列行」（票檔讀得到但 Solution 內沒有任何現行佇列行）與「解析失敗」（票檔讀不到）。

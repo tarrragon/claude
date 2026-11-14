@@ -41,10 +41,11 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import emit_hook_output  # noqa: E402
+from lib import emit_hook_output, get_hook_log_dir  # noqa: E402
 
-HOOK_DIR = Path(__file__).resolve().parent
-LOG_DIR = HOOK_DIR / "hook-logs"
+# 狀態與日誌目錄經 get_hook_log_dir 取得：linked worktree 內解析到主 checkout
+# 的 .claude/hook-logs/<hook 名>，多個 checkout 共用同一份 state（以 session_id 分鍵）
+LOG_DIR = get_hook_log_dir("context-depth-warning")
 LOG_FILE = LOG_DIR / "context-depth-warning.log"
 DEFAULT_STATE_FILE = LOG_DIR / "context-depth-warning-state.json"
 

@@ -319,3 +319,133 @@ def test_main_skips_framework_hook_with_cjk_devstring():
                        "new_string": 'lines.append("修復選項（擇一）：")'},
     }
     assert _run_main(payload) == 0
+
+
+# ---------- 專案級覆寫層（.claude/project-integration/presence-overrides.yaml） ----------
+
+merge_project_overrides = profiles.merge_project_overrides
+
+_CONSUMER_SINK = "lib/app_constants.dart"
+_CONSUMER_SINK_PAYLOAD = {
+    "tool_name": "Edit",
+    "tool_input": {"file_path": _CONSUMER_SINK, "new_string": 'const kTitle = "登入失敗，請重試";'},
+}
+
+
+def _write_overrides(root: Path, text: str) -> None:
+    target = root / profiles.PRESENCE_OVERRIDES_RELATIVE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+
+def _project_env(root: Path) -> dict:
+    # HOOK_TEST_ISOLATION 使 get_project_root 直接採用 CLAUDE_PROJECT_DIR（略過 worktree 偵測）
+    return {"HOOK_TEST_ISOLATION": "1", "CLAUDE_PROJECT_DIR": str(root), "PRESENCE_HOOK_MODE": "block"}
+
+
+def test_override_skips_consumer_path_and_absence_blocks(tmp_path):
+    # 對照（E1）：同一輸入，無覆寫檔時阻擋，有覆寫檔時整檔跳過
+    assert _run_main(_CONSUMER_SINK_PAYLOAD, env=_project_env(tmp_path)) == 2
+
+    _write_overrides(tmp_path, "dart:\n  skip_patterns:\n    - 'app_constants\\.dart$'\n")
+    assert _run_main(_CONSUMER_SINK_PAYLOAD, env=_project_env(tmp_path)) == 0
+
+
+def test_override_absent_returns_base_profile(tmp_path):
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    assert merged is DART
+    assert errors == []
+
+
+def test_override_only_appends_framework_patterns_kept(tmp_path):
+    _write_overrides(tmp_path, "dart:\n  skip_patterns:\n    - 'app_constants\\.dart$'\n")
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    assert errors == []
+    base = [p.pattern for p in DART.skip_patterns]
+    assert [p.pattern for p in merged.skip_patterns] == base + [r"app_constants\.dart$"]
+    # 框架既有 pattern 照常生效，未命中任何 pattern 的路徑照常偵測
+    assert should_skip_file("app/test/foo_test.dart", merged)
+    assert not should_skip_file("lib/login_page.dart", merged)
+    # 基礎 profile 本身不被修改（frozen + replace）
+    assert [p.pattern for p in DART.skip_patterns] == base
+
+
+def test_override_empty_list_cannot_remove_framework_patterns(tmp_path):
+    _write_overrides(tmp_path, "dart:\n  skip_patterns: []\n")
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    assert errors == []
+    assert [p.pattern for p in merged.skip_patterns] == [p.pattern for p in DART.skip_patterns]
+
+
+def test_override_does_not_touch_other_profiles(tmp_path):
+    _write_overrides(tmp_path, "dart:\n  skip_patterns:\n    - 'app_constants\\.dart$'\n")
+    merged, errors = merge_project_overrides(PYTHON, tmp_path)
+    assert merged is PYTHON
+    assert errors == []
+
+
+def test_override_invalid_yaml_falls_back_and_still_blocks(tmp_path, capsys):
+    # 正向對照（E2）：覆寫檔壞掉時退回基礎 profile，原本該擋的輸入照樣被擋
+    _write_overrides(tmp_path, "dart: [unclosed\n")
+    assert _run_main(_CONSUMER_SINK_PAYLOAD, env=_project_env(tmp_path)) == 2
+    err = capsys.readouterr().err
+    assert "[presence-detection]" in err
+    assert "讀取或解析失敗" in err
+
+
+def test_override_unexpected_exception_still_blocks(tmp_path, monkeypatch, capsys):
+    # 正向對照（E2）：merge 拋未預期例外時不得穿到 run_hook_safely 回 1 放行
+    def _boom(profile, project_root):
+        raise TypeError("unhashable type: 'list'")
+
+    monkeypatch.setattr(_engine, "merge_project_overrides", _boom)
+    assert _run_main(_CONSUMER_SINK_PAYLOAD, env=_project_env(tmp_path)) == 2
+    err = capsys.readouterr().err
+    assert "[presence-detection]" in err
+    assert "未預期錯誤" in err
+
+
+def test_override_list_key_yaml_still_blocks(tmp_path):
+    # YAML 以清單作鍵時 `name not in known_names` 會拋 TypeError，仍須照常阻擋
+    _write_overrides(tmp_path, "? [a, b]\n: x\n")
+    assert _run_main(_CONSUMER_SINK_PAYLOAD, env=_project_env(tmp_path)) == 2
+
+
+def test_override_bad_regex_falls_back(tmp_path):
+    _write_overrides(tmp_path, "dart:\n  skip_patterns:\n    - 'app_constants\\.dart$'\n    - '('\n")
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    assert merged is DART
+    assert len(errors) == 1 and "無法編譯的 regex" in errors[0]
+
+
+def test_override_wrong_shape_falls_back(tmp_path):
+    _write_overrides(tmp_path, "dart:\n  skip_patterns: 'app_constants\\.dart$'\n")
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    assert merged is DART
+    assert len(errors) == 1 and "須為字串清單" in errors[0]
+
+
+def test_override_top_level_not_mapping_falls_back(tmp_path):
+    _write_overrides(tmp_path, "- dart\n")
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    assert merged is DART
+    assert len(errors) == 1 and "mapping" in errors[0]
+
+
+def test_override_unknown_profile_name_reported(tmp_path):
+    _write_overrides(
+        tmp_path,
+        "kotlin:\n  skip_patterns: ['x']\ndart:\n  skip_patterns:\n    - 'app_constants\\.dart$'\n",
+    )
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    # 不存在的 profile 名回報錯誤，但不影響有效 profile 的合併
+    assert len(errors) == 1 and "kotlin" in errors[0]
+    assert should_skip_file(_CONSUMER_SINK, merged)
+
+
+def test_override_without_pyyaml_falls_back(tmp_path, monkeypatch):
+    _write_overrides(tmp_path, "dart:\n  skip_patterns:\n    - 'app_constants\\.dart$'\n")
+    monkeypatch.setitem(sys.modules, "yaml", None)  # 使 import yaml 拋 ImportError
+    merged, errors = merge_project_overrides(DART, tmp_path)
+    assert merged is DART
+    assert len(errors) == 1 and "pyyaml" in errors[0]

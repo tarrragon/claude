@@ -690,7 +690,7 @@ def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str
 
     檔名須以該型別合法 ID 開頭（格式取自 tracking_schema 的 id_pattern，
     含 EVT 這類分 domain 編號），否則配號掃描與 ID 查找都看不到該檔，
-    可能導致號碼重複配發（book W11-004）。本檢查讓這類檔案顯性化：
+    可能導致號碼重複配發（曾於下游專案發生）。本檢查讓這類檔案顯性化：
     - 檔名開頭不是合法 ID -> 違規（框架約定固定命名文件除外）
     - 檔名開頭的 ID 與 frontmatter id 不一致 -> 違規
 

@@ -65,7 +65,7 @@ PM 在 source ticket（ANA）已完成充分分析（Linux 類比、WRAP 結論�
 2. **where 欄位禁止僅目錄**：必須列至少 1 個具體檔案
 3. **acceptance 禁止模糊詞**：「合理性」「錯誤偵測」必須替換為可量化指標（Tripwire）
 
-### 系統性（待 W17-002 實作完成）
+### 系統性（待自動抽取機制實作完成）
 
 `ticket create --source-ticket` 自動抽取 source ticket 的 what/why/where.files/acceptance 填入新 ticket Context Bundle（對齊 Linux kernel ELF loader 自動載入依賴）。
 
@@ -75,7 +75,7 @@ PM 在 source ticket（ANA）已完成充分分析（Linux 類比、WRAP 結論�
 
 ### W17 Meta 循環（本 Pattern 發現案例）
 
-PM 完成 W17-001 ANA（分析 subagent 派發 PCB 半填就 fork 反模式），建立 spawned IMP W17-002 / ADJ W17-003 時，首版 PCB 欄位全空（Problem Analysis placeholder、where 僅目錄、how 高階策略）。用戶審視後指出「正犯我們剛發現的毛病」，PM 被迫補欄位。
+PM 完成一張 ANA（分析 subagent 派發 PCB 半填就 fork 反模式），建立 spawned IMP / ADJ 時，首版 PCB 欄位全空（Problem Analysis placeholder、where 僅目錄、how 高階策略）。用戶審視後指出「正犯我們剛發現的毛病」，PM 被迫補欄位。
 
 **Meta 觀察**：分析「PCB 未繼承」這個問題的 ticket，自己衍生的 IMP 就犯了同樣錯誤——證明沒有系統自動化，純靠 PM 自律難以維持一致性。
 

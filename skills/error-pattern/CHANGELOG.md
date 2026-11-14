@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.7.1 — `hooks/error-pattern-flat-gate-hook.py` 放行時不再輸出 `permissionDecision: allow`，只在擋下新建 flat 號 error-pattern 時輸出 deny。原本輸入為空或判定放行時都輸出 allow，會略過平台的權限提示，等於代使用者核可。擋下的判定與訊息不變。
+- 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符。運行時字串：擋下新建 flat 號時的訊息移除括號內的專案票號參照；其餘為註解與文件。判定行為不變。
+**Last Updated**: 2026-11-14
+
 **Version**: 1.7.0 — `add` 流程新增步驟 9「對應系統條目」：新 pattern 涉及系統行為誤判時，更新 `system-misjudgment` skill 對應系統檔（有則補、無則新增，來源欄放 pattern ID）。流程新增一步，既有步驟與命令不變
 **Last Updated**: 2026-11-04
 

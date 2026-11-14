@@ -160,6 +160,7 @@ class TestMainEndToEnd:
         monkeypatch.setattr(
             summary_hook, "get_project_root", lambda: tmp_path
         )
+        monkeypatch.setattr(summary_hook, "get_code_root", lambda: tmp_path)
         monkeypatch.setenv(summary_hook.ENV_SESSION_ID, "current-session")
         monkeypatch.setattr(
             "sys.stdin", __import__("io").StringIO("")
@@ -179,6 +180,7 @@ class TestMainEndToEnd:
         monkeypatch.setattr(
             summary_hook, "get_project_root", lambda: tmp_path
         )
+        monkeypatch.setattr(summary_hook, "get_code_root", lambda: tmp_path)
         monkeypatch.setattr(
             "sys.stdin", __import__("io").StringIO("")
         )
@@ -781,3 +783,66 @@ class TestDispatchRegistryMerge:
         settings = {"hooks": {}}
         merge_dispatch_registry(settings, tmp_path, _test_logger)
         assert settings == {"hooks": {}}
+
+
+def _settings_with_commands(*commands):
+    return {
+        "hooks": {
+            "SessionStart": [
+                {"hooks": [{"type": "command", "command": c} for c in commands]}
+            ]
+        }
+    }
+
+
+class TestBarePathRegistrationWarning:
+    """3.3.0-W1-204.6：settings.json 的 hook 註冊沒有直譯器前綴（裸路徑）時，
+    SessionStart 以 additionalContext 示警；沒有裸路徑時不輸出。"""
+
+    BARE = "$CLAUDE_PROJECT_DIR/.claude/hooks/bare-hook.py"
+    UV = "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uv-hook.py"
+    PY = "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/py-hook.py"
+
+    def test_detects_bare_path_forms(self):
+        settings = _settings_with_commands(
+            self.BARE,
+            '"$CLAUDE_PROJECT_DIR"/.claude/skills/s/hooks/q.py',
+            "${CLAUDE_PROJECT_DIR}/.claude/hooks/b.py",
+            self.UV,
+            self.PY,
+        )
+        found = summary_hook._bare_path_registrations(settings)
+        assert found == sorted([
+            self.BARE,
+            '"$CLAUDE_PROJECT_DIR"/.claude/skills/s/hooks/q.py',
+            "${CLAUDE_PROJECT_DIR}/.claude/hooks/b.py",
+        ])
+
+    def test_warns_when_bare_path_registered(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(
+            summary_hook, "_smoke_test_registered_hooks", lambda root, settings, logger: []
+        )
+        settings = _settings_with_commands(self.BARE, self.UV)
+
+        summary_hook._report_smoke_test_crashes(
+            tmp_path, settings, _test_logger, None,
+            extra_sections=summary_hook._bare_path_warning_sections(settings),
+        )
+
+        out = capsys.readouterr().out
+        assert "hookSpecificOutput" in out
+        assert "bare-hook.py" in out
+        assert "uv-hook.py" not in out
+
+    def test_silent_when_no_bare_path(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(
+            summary_hook, "_smoke_test_registered_hooks", lambda root, settings, logger: []
+        )
+        settings = _settings_with_commands(self.UV, self.PY)
+
+        summary_hook._report_smoke_test_crashes(
+            tmp_path, settings, _test_logger, None,
+            extra_sections=summary_hook._bare_path_warning_sections(settings),
+        )
+
+        assert capsys.readouterr().out == ""

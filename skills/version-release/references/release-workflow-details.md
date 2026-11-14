@@ -120,7 +120,10 @@ def git_merge_and_push(version: str, dry_run: bool = False):
         git branch -d feature/v{VERSION}
         git push origin --delete feature/v{VERSION}
 
-    3.8 推進下一版本為 active（啟動，冪等）
+    3.8 下一版處置（advance_after_completion）
+        預設：不推進，下一個 planned 版本維持 planned（版本空窗），
+        印出以 start --version <下一版> 轉 active 的提示後回傳成功
+        帶 --activate-next 時才推進下一版本為 active（啟動，冪等）：
         讀取 todolist.yaml，依 semver 排序選最小的 planned/pending 候選版本
         呼叫 ensure_version_activated(next_version)：逐項檢查 todolist
         status、worklog 主檔、版本檔版號、CHANGELOG In Development 段落，
@@ -150,6 +153,6 @@ def git_merge_and_push(version: str, dry_run: bool = False):
 5. 建立 Tag
 6. 推送 main + Tag
 7. 刪除本地/遠端 feature 分支
-8. 標記版本完成、推進下一版本為 active
-9. 第二次收尾提交（涵蓋標記完成與版本啟用的變更）
+8. 標記版本完成；下一版預設維持 planned，帶 `--activate-next` 才推進為 active
+9. 第二次收尾提交（涵蓋標記完成與版本啟用的變更；未推進時只含標記完成）
 10. exit 前殘留守衛（非空即非 0 退出並列殘留清單）

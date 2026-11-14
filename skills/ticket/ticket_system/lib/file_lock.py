@@ -1,11 +1,11 @@
 """
-Per-ticket-file advisory lock 模組（W14-042）
+Per-ticket-file advisory lock 模組
 
 提供跨模組共用的檔案鎖包裝 context manager，給 ticket_builder 等
 caller 包圍 `load → modify → save` 三步驟，消除 logical race。
 
 Why（與設計緣由）：
-    W14-005 重現實驗確認 ticket_builder.update_parent_children /
+    重現實驗確認 ticket_builder.update_parent_children /
     update_source_spawned_tickets 的 load-modify-save 三步存在 logical race
     （lost_rate 55.6%~71.9%）。本模組為共用 utility，由 caller 顯式以
     `with file_lock(ticket_path): ...` 包圍完整序列。
@@ -14,7 +14,7 @@ Why（與設計緣由）：
     atomic，且若 save_ticket 內部再加 lock 會與 caller 的外層 lock 形成
     巢狀鎖（同 process 對同一 file），導致 self-block。
 
-跨平台（1.0.0-W9-001）：
+跨平台：
     改用 filelock 庫取代 POSIX-only 的 fcntl 直接呼叫。
 
     Why：原版以 `fcntl.flock` 直接實作，fcntl 為 POSIX-only API，在
@@ -83,7 +83,7 @@ def file_lock(target_path: Path) -> Iterator[None]:
 
 
 # ---------------------------------------------------------------------------
-# stale lock 收割（W8-017）
+# stale lock 收割
 # ---------------------------------------------------------------------------
 
 
@@ -94,7 +94,7 @@ def reap_stale_locks(directory: Path) -> int:
         file_lock context manager 釋鎖後可能保留 sentinel lock file
         （POSIX 後端），每次 load-modify-save 序列殘留一個
         0-byte ``{ticket}.md.lock``。長期累積會讓 PM 誤判有 active 操作
-        （W8-017）。本函式於 CLI 安全收尾處呼叫，收割無人持有的殘留。
+        。本函式於 CLI 安全收尾處呼叫，收割無人持有的殘留。
 
     安全策略（禁止天真 inline unlink）：
         對每個 ``*.md.lock`` 嘗試 ``FileLock(timeout=0).acquire()``：
@@ -102,7 +102,7 @@ def reap_stale_locks(directory: Path) -> int:
           unlink。
         - 搶不到（``Timeout``）= 有人持鎖 = active → 跳過，絕不誤刪。
         非阻塞特性確保本函式不會卡在 active lock 上，亦不破壞既有
-        flock-unlink race 防護（W14-005）：active lock 永不被收割。
+        flock-unlink race 防護：active lock 永不被收割。
 
     Args:
         directory: 收割起點目錄；遞迴掃描其下所有 ``*.md.lock``。
@@ -205,7 +205,7 @@ def _try_acquire_create_lock(tickets_dir: Path) -> Optional[FileLock]:
     異常（lock file 無法建立）阻斷基本建票功能（acceptance：不阻斷單
     process create）。
 
-    跨平台（W9-001）：改用 filelock 後不再有「無 fcntl 平台」降級分支
+    跨平台：改用 filelock 後不再有「無 fcntl 平台」降級分支
     （filelock 在 Windows 亦提供有效鎖）；僅在 lock file 無法建立 / 取得
     時降級。
     """

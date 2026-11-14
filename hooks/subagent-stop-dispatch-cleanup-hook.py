@@ -10,13 +10,13 @@ SubagentStop Dispatch Cleanup Hook
       （不刪除 entry）+ 回合狀態廣播。
 觸發時機: SubagentStop
 行為: 不阻擋（exit 0），以 top-level systemMessage（純顯示通道）輸出 [OK]/[WAIT] 狀態。
-       自激迴圈防護（1.0.0-W1-055.1）：
+       自激迴圈防護：
        1. stop_hook_active=true（runtime 因 stop hook 而繼續）時靜默 exit 0，
           斷開「注入 → 繼續 → 再停止 → 再注入」迴圈（CC hook 規格的防迴圈欄位）。
        2. [WAIT] 廣播以 agent_id + still_running 內容 hash 為 key 做 TTL 去重，
           同 key 在 TTL 內已播報則跳過輸出。
        3. 輸出通道自 hookSpecificOutput.additionalContext 回退 systemMessage：
-          W1-055 ANA 活體確證 additionalContext 的投遞對象是「停止中的 subagent」
+          活體實測確證 additionalContext 的投遞對象是「停止中的 subagent」
           （注入其對話並令其繼續，H1 confidence 0.95），與本 hook「通知 PM 主線程」
           意圖不符，且為自激迴圈的觸發核心；systemMessage 為 2026-06-05 前的
           已知良好狀態（每 agent_id 恆 1 次事件）。
@@ -43,9 +43,9 @@ SubagentStop Dispatch Cleanup Hook
   已真正終止，此宣稱與事實不符。
 
 來源:
-  - W10-066 — 從 PostToolUse(Agent) 遷移清理和廣播職責到 SubagentStop
-  - 0.19.1-W1-046 — CC 2.1.163 解禁後曾改用 additionalContext（已由 W1-055.1 回退）
-  - 1.0.0-W1-055.1 — 自激迴圈斷路器 + WAIT 廣播 dedup + 通道回退 systemMessage
+  - 從 PostToolUse(Agent) 遷移清理和廣播職責到 SubagentStop
+  - CC 2.1.163 解禁後曾改用 additionalContext（後因自激迴圈回退）
+  - 自激迴圈斷路器 + WAIT 廣播 dedup + 通道回退 systemMessage
   - SubagentStop 刪除記錄前提失準修復票 — 標記不刪除 + still_running 語意修正
   - 識別碼命名空間修復票 — 新增 mark_turn_ended_by_handle 精準比對路徑，
     先於既有 mark_turn_ended_by_id 呼叫（named 派發 tool_response.agentId
@@ -65,6 +65,7 @@ from lib import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
+    get_hook_log_dir,
 )
 
 from lib.dispatch_tracker import (
@@ -93,16 +94,16 @@ def _get_project_root() -> Path:
 
 
 # [WAIT] 廣播去重 TTL：自激迴圈與多 agent 收尾叢集的觀測間隔為 5-15 秒/次、
-# 鏈長 5-20 次（W1-055 重現實驗），10 分鐘足以覆蓋整段叢集；TTL 過後同 key
+# 鏈長 5-20 次（重現實驗），10 分鐘足以覆蓋整段叢集；TTL 過後同 key
 # 重新播報，避免長時間執行的真實 [WAIT] 狀態永久靜默。
 WAIT_BROADCAST_DEDUP_TTL_SECONDS = 600
 
 
 def _get_wait_dedup_state_file(project_root: Path) -> Path:
     """[WAIT] 廣播去重 state 檔路徑（hook-logs 已被 .gitignore 排除）。"""
-    return (
-        project_root / ".claude" / "hook-logs" / HOOK_NAME / "wait-broadcast-dedup.json"
-    )
+    # 經 get_hook_log_dir：linked worktree 內解析到主 checkout，讀寫同一檔
+    # （project_root 保留供呼叫端相容，不再參與路徑）
+    return get_hook_log_dir(HOOK_NAME) / "wait-broadcast-dedup.json"
 
 
 def check_and_record_broadcast(
@@ -176,7 +177,7 @@ def main() -> int:
         logger.error("SubagentStop 無 agent_id（schema violation）")
         return 0
 
-    # 自激迴圈斷路器（1.0.0-W1-055.1 修復 1）：stop_hook_active=true 表示本次
+    # 自激迴圈斷路器：stop_hook_active=true 表示本次
     # 停止是「上一輪 stop hook 輸出令 agent 繼續」的結果，記錄已於首次事件
     # 清理完畢，任何輸出都會再度延續迴圈 —— 靜默退出。
     if input_data.get("stop_hook_active"):
@@ -238,7 +239,7 @@ def main() -> int:
         wait_message = (
             "[WAIT] 仍有 {} 個代理人在執行: {}".format(len(still_running), agents_list)
         )
-        # WAIT 廣播 dedup（1.0.0-W1-055.1 修復 2）：同一 agent_id 對相同
+        # WAIT 廣播 dedup：同一 agent_id 對相同
         # still_running 內容在 TTL 內只播報一次；內容變化（agent 增減）
         # 視為新狀態重新播報
         dedup_key = hashlib.sha256(
@@ -262,8 +263,8 @@ def main() -> int:
         return 0
 
     context = " | ".join(messages)
-    # 1.0.0-W1-055.1 修復 4：通道回退 top-level systemMessage（純顯示）。
-    # additionalContext 經 W1-055 活體確證會注入「停止中的 subagent」並令其
+    # 通道回退 top-level systemMessage（純顯示）。
+    # additionalContext 經活體實測確證會注入「停止中的 subagent」並令其
     # 繼續（自激迴圈核心），與「通知 PM 主線程」意圖不符。
     print(json.dumps({"systemMessage": context}, ensure_ascii=False))
 

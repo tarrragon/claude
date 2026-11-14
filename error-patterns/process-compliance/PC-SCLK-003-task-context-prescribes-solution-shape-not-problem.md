@@ -15,7 +15,7 @@ severity: medium
 | 編號 | PC-SCLK-003 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-07-31（screen_clock 1.4.0-W1-001.3 Context Bundle 指定「換算點須具名或註解」，使實作偏離規格已訂的型別解） |
+| 首發時間 | 2026-07-31（screen_clock 某實作票的 Context Bundle 指定「換算點須具名或註解」，使實作偏離規格已訂的型別解） |
 | 姊妹模式 | PC-040（context 塞 prompt 未進 ticket）、PC-088（LLM 工具選擇偏誤） |
 
 ---
@@ -33,7 +33,7 @@ severity: medium
 
 ---
 
-## 實例（2026-07-31，screen_clock 1.4.0-W1-001）
+## 實例（2026-07-31，screen_clock）
 
 規格 SPEC-008 已明訂介面為 `Future<void> play({required Duration duration, required Color tint})`。
 
@@ -115,6 +115,4 @@ PM 撰寫子票 Context Bundle 時，關注點放在「單位變更沒有機械�
 
 ---
 
-**相關 Ticket**：1.4.0-W1-001（Phase 4 多視角評估）、1.4.0-W1-001.5（本輪修正）、1.4.0-W2-017（文字層修正，含 context 來源同步）
-
-**Last Updated**: 2026-07-31 | **Source**: screen_clock 1.4.0-W1-001 Phase 4 多視角評估（linux 架構視角發現偏離、basil 文字視角追溯至 Context Bundle 來源）
+**Last Updated**: 2026-07-31 | **Source**: screen_clock Phase 4 多視角評估（linux 架構視角發現偏離、basil 文字視角追溯至 Context Bundle 來源）

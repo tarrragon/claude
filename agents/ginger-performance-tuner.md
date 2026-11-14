@@ -281,6 +281,6 @@ incident-responder (效能問題分類)
 ---
 
 **Last Updated**: 2026-03-02
-**Version**: 2.0.0 - 合併 john-carmack 能力（W28-003）
+**Version**: 2.0.0 - 合併 john-carmack 能力
 **Specialization**: Performance Analysis, Architecture Optimization, and Systems Design
 **Merged From**: ginger-performance-tuner v1.1.0 + john-carmack v1.0.0

@@ -4,7 +4,7 @@ title: ANA 建議方案的可行性驗證僅跑 happy path，前提與 UX 後果
 type: process-compliance
 severity: medium
 status: active
-source: 0.37.0-W7-003 retrospective ANA（saffron）
+source: retrospective ANA（saffron）
 related:
   - ARCH-APP-002
   - PC-055
@@ -14,7 +14,7 @@ related:
 
 ## 摘要
 
-ANA 提出「全面取代既有機制」的建議方案並聲稱「已驗證可行性」，但驗證僅限「單一指令能跑」（happy path），未覆蓋 UX 變化與取代後的前提條件——這些未測面向在 IMP 階段才暴露，導致需 PM 介入修正方案。本案（W7-001）建議 `uv run --directory` 全面取代全域 install，實測僅跑一行 `ticket track list`，但 (a) 破壞 bare CLI 互動 UX、(b) 規劃移除 `[project.scripts]` 後 `uv run` 根本無法解析 CLI——最終改採 ANA 自己列的方案 4（shim）。
+ANA 提出「全面取代既有機制」的建議方案並聲稱「已驗證可行性」，但驗證僅限「單一指令能跑」（happy path），未覆蓋 UX 變化與取代後的前提條件——這些未測面向在 IMP 階段才暴露，導致需 PM 介入修正方案。本案建議 `uv run --directory` 全面取代全域 install，實測僅跑一行 `ticket track list`，但 (a) 破壞 bare CLI 互動 UX、(b) 規劃移除 `[project.scripts]` 後 `uv run` 根本無法解析 CLI——最終改採 ANA 自己列的方案 4（shim）。
 
 ## 症狀
 
@@ -39,4 +39,4 @@ ANA 提出「全面取代既有機制」的建議方案並聲稱「已驗證可�
 
 ## 來源
 
-0.37.0-W7-003 retrospective ANA（root cause 3）。動機案例 W7-001 ANA（建議方案 1 在 IMP 階段被推翻，改採方案 4 shim）。
+retrospective ANA（root cause 3）。動機案例為全域 install 取代方案的 ANA（建議方案 1 在 IMP 階段被推翻，改採方案 4 shim）。

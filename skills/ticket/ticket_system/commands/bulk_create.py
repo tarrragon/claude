@@ -253,7 +253,7 @@ def _create_batch_tickets(
     for i, target in enumerate(targets, 1):
         try:
             # 分配序號（使用 wave_seq_map 維持批次內遞增起點，避免競態）。
-            # W1-051：每個配號都經 resolve_available_seq 保證可用，消除稀疏佔用
+            # 每個配號都經 resolve_available_seq 保證可用，消除稀疏佔用
             # 撞號（例：起始 051 可用但 052 已被既有票佔用，批次 += 1 會撞）與
             # 降級連鎖覆寫。dry_run 不寫檔，仍走 guard 使預演號與正式一致。
             if wave not in wave_seq_map:
@@ -274,10 +274,10 @@ def _create_batch_tickets(
                 parent_id=parent_id,
             )
 
-            # Tier 1 警告層（1.0.0-W1-040.1：補齊 bulk_create 偵測缺口）
+            # Tier 1 警告層
             # 與 create 警告層共用 detect_duplicate_tickets（僅警告不阻擋）。
             # bulk_create 不套用 Tier 2 阻擋層——批次內部同質性高，
-            # 阻擋誤報風險大（parent W1-040 Solution 誤報率考量）。
+            # 阻擋誤報風險大（誤報率考量）。
             detect_duplicate_tickets(
                 version=version,
                 new_title=config.get("title", ""),
@@ -285,7 +285,7 @@ def _create_batch_tickets(
                 new_ticket_id=ticket_id,
             )
 
-            # checklist 驗證（1.0.0-W1-027：warning 級，不阻擋）
+            # checklist 驗證
             # 與 create 命令層共用 validate_create_checklist，補側門缺口。
             # 在 flat config 階段呼叫（key 與驗證函式一致），非 save 階段。
             missing = validate_create_checklist(config, config["ticket_type"])

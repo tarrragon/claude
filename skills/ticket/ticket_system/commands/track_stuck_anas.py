@@ -1,5 +1,5 @@
 """
-ticket track stuck-anas 命令（W17-008.15 方案 D 第 1 項；children 落地路徑擴充）
+ticket track stuck-anas 命令（children 落地路徑擴充）
 
 掃描 ANA type + status=in_progress + 落地路徑（spawned_tickets 與/或
 children）已全數 terminal 的 ticket，協助 PM 識別「衍生/子任務全完成但

@@ -8,8 +8,6 @@ status: active
 related:
   - IMP-054
   - PC-064
-  - W14-024
-  - W14-028
 ---
 
 # PC-086: Subagent 建 Hook 腳本缺執行權限（exec bit）
@@ -20,7 +18,7 @@ subagent（如 basil-hook-architect）執行 Write 工具建立 `.py` Hook 腳�
 
 ## 重現情境
 
-**W14-028 實測**（commit 6945319c → dea1939e 修復）：
+**實測**（commit 6945319c → dea1939e 修復）：
 
 1. basil-hook-architect 執行 `Write .claude/hooks/ticket-frontmatter-validator-hook.py`（案例敘事：事發時路徑）<!-- broken-link-exempt: 本行為更正說明，案例本文保留原始路徑以忠實記錄事發當時狀態 -->
    （現搬遷至 `.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py`，2026-08-22 文件複查更正）
@@ -31,7 +29,7 @@ subagent（如 basil-hook-architect）執行 Write 工具建立 `.py` Hook 腳�
 
 ## 根因分析
 
-與 PC-064（PM 列純文字選項繞過 AUQ）和 W14-024（subagent 手寫 frontmatter 繞過 CLI）**同類根因**：
+與 PC-064（PM 列純文字選項繞過 AUQ）和 subagent 手寫 frontmatter 繞過 CLI（另一 ANA 的分析對象）**同類根因**：
 
 **subagent 寫檔缺系統約束**。具體表現：
 
@@ -49,7 +47,7 @@ Subagent 訓練傾向於「完成主任務」，不自動處理周邊系統約�
 - `chmod +x` 手動修復
 - commit message 紀錄根因 + 防護方向
 
-### 中期（W14-024 分析範圍延伸）
+### 中期（frontmatter 繞過 ANA 的分析範圍延伸）
 - **擴充 ticket-frontmatter-validator 偵測範圍**：新 Hook 腳本建立時檢查：
   - Shebang 存在（`#!/usr/bin/env python3` 或類似）
   - Exec bit 正確（`0o755`）
@@ -57,7 +55,7 @@ Subagent 訓練傾向於「完成主任務」，不自動處理周邊系統約�
 - 派發 Hook 建立任務的 prompt 必須明列：「建檔後執行 `chmod +x`」
 
 ### 長期
-- W14-024 Phase B IMP-3（CLI 強化）可延伸為 `ticket track register-hook` 命令，統一處理權限 + 註冊
+- frontmatter 繞過 ANA 的 Phase B IMP-3（CLI 強化）可延伸為 `ticket track register-hook` 命令，統一處理權限 + 註冊
 - 或新增 `basil-hook-architect` 代理人後置 hook：自動 `chmod +x` 新建的 `.claude/hooks/*.py`
 
 ## 檢測信號
@@ -68,8 +66,8 @@ Subagent 訓練傾向於「完成主任務」，不自動處理周邊系統約�
 ## 相關規則 / Ticket
 
 - IMP-054：exec bit 缺失的技術根因與機械修法（chmod +x）。本文件聚焦 subagent 寫檔行為模式；IMP-054 聚焦技術細節與通用防護措施，兩者互為交叉引用，非重複記錄
-- W14-024 ANA：subagent frontmatter bypass（同類根因分析）
-- W14-028 IMP：ticket-frontmatter-validator-hook（本 ticket 建 hook 時發生）
+- subagent frontmatter bypass 的 ANA（同類根因分析）
+- ticket-frontmatter-validator-hook 的 IMP（建 hook 時發生）
 - PC-064：PM 無意識繞過 AUQ（同類「系統約束缺失」）
 - ARCH-BAL-015：本 pattern 衍生的自動 chmod 補救機制掃描軸過寬，波及不需要 exec bit 的測試檔，把執行期問題轉化為版本控制問題
-- 建議後續：擴充 W14-024 Phase A IMP 範圍涵蓋 Hook 腳本驗證
+- 建議後續：擴充 frontmatter 繞過 ANA 的 Phase A IMP 範圍涵蓋 Hook 腳本驗證

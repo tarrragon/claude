@@ -448,6 +448,8 @@ class TestAdoptionDefaultLogPathResolution:
         (fake_root / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(fake_root))
         monkeypatch.setenv("TICKET_SYSTEM_TEST_ISOLATION", "1")
+        monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
+        monkeypatch.delenv("HOOK_LOGS_DIR", raising=False)
         from ticket_system.lib.paths import reset_project_root_cache
 
         reset_project_root_cache()
@@ -455,4 +457,4 @@ class TestAdoptionDefaultLogPathResolution:
         resolved = adoption._resolve_log_path(None)
 
         assert resolved.is_absolute()
-        assert resolved == fake_root / adoption.DEFAULT_LOG_RELATIVE_PATH
+        assert resolved == fake_root / ".claude" / "hook-logs" / "identity-guard" / "usage.log"

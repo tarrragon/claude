@@ -640,6 +640,71 @@ class TestMainEntryRealPayload:
 
 
 # ============================================================================
+# 代理人清單讀 .claude/agents/ 現況
+# ============================================================================
+
+
+def _write_agent(agents_dir, name, deprecated=False):
+    desc = "[DEPRECATED] 已合併" if deprecated else "現役代理人"
+    (agents_dir / f"{name}.md").write_text(
+        f"---\nname: {name}\ndescription: \"{desc}\"\n---\n# {name}\n", encoding="utf-8"
+    )
+
+
+class TestAllowedAgentsFromAgentsDir:
+    """執行者清單改讀 agents 目錄：現役通過、已廢與不存在者被擋、讀不到時示警放行"""
+
+    def test_real_agents_dir_includes_active_and_excludes_deprecated(self):
+        agents = hook_module.load_allowed_agents()
+        assert agents is not None
+        for active in ("thyme-python-developer", "saffron-system-analyst", "incident-responder"):
+            assert active in agents
+        assert "memory-network-builder" not in agents
+        assert "AGENT_PRELOAD" not in agents and "README" not in agents
+
+    def test_active_agent_passes(self, tmp_path):
+        _write_agent(tmp_path, "thyme-python-developer")
+        allowed = hook_module.load_allowed_agents(tmp_path)
+        result = hook_module.check_compliance("thyme-python-developer", "implementation", allowed)
+        assert result == {"compliant": True}
+
+    def test_deprecated_agent_blocked(self, tmp_path):
+        """正向對照：標 [DEPRECATED] 的代理人被擋"""
+        _write_agent(tmp_path, "thyme-python-developer")
+        _write_agent(tmp_path, "memory-network-builder", deprecated=True)
+        allowed = hook_module.load_allowed_agents(tmp_path)
+        result = hook_module.check_compliance("memory-network-builder", "documentation", allowed)
+        assert result["compliant"] is False
+        assert "未定義的代理人名稱" in result["error"]
+
+    def test_unknown_agent_blocked(self, tmp_path):
+        """正向對照：不存在的代理人被擋，建議清單列出現役者"""
+        _write_agent(tmp_path, "thyme-python-developer")
+        allowed = hook_module.load_allowed_agents(tmp_path)
+        result = hook_module.check_compliance("ghost-agent", "implementation", allowed)
+        assert result["compliant"] is False
+        assert "thyme-python-developer" in result["suggestions"][0]
+
+    def test_pm_always_allowed_without_definition_file(self, tmp_path):
+        _write_agent(tmp_path, "thyme-python-developer")
+        allowed = hook_module.load_allowed_agents(tmp_path)
+        assert "rosemary-project-manager" in allowed
+
+    def test_missing_or_empty_dir_returns_none(self, tmp_path):
+        assert hook_module.load_allowed_agents(tmp_path / "missing") is None
+        assert hook_module.load_allowed_agents(tmp_path) is None
+
+    def test_unreadable_list_skips_executor_check_with_warning(self, monkeypatch):
+        """清單無法判定時不擋執行者名稱，結果帶 warning；任務類型檢查照常"""
+        monkeypatch.setattr(hook_module, "load_allowed_agents", lambda *a, **k: None)
+        result = hook_module.check_compliance("ghost-agent", "implementation")
+        assert result["compliant"] is True
+        assert "未檢查 Who 執行者名稱" in result["warning"]
+        bad_type = hook_module.check_compliance("ghost-agent", "NotAType")
+        assert bad_type["compliant"] is False
+
+
+# ============================================================================
 # 測試執行入口
 # ============================================================================
 

@@ -70,7 +70,7 @@ Your final message IS the deliverable — PM will archive it immediately.
 ---
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-## 交付通道速查（W5-005.12）
+## 交付通道速查
 
 交付通道由**兩個維度**共同決定：agent 能力（有無 Edit/Write）決定能不能落檔，派發形態（有無 `name`）決定 final message 送不送得到 PM。只看能力維度會漏掉第二項。
 
@@ -83,7 +83,7 @@ Your final message IS the deliverable — PM will archive it immediately.
 | L0（Plan type 唯讀） | final message | 立即落檔保全（見上方 snippet） |
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-### 維度二：派發形態（W3-182）
+### 維度二：派發形態
 
 | 派發形態 | final message 可達性 | 唯一可靠通道 | prompt 必寫 |
 |---------|-------------------|------------|-----------|

@@ -2,8 +2,8 @@
 
 本文件定義不同 Ticket type 在 body 章節的**必填 / 選填 / 免填**對照，作為 PM 派發、代理人填寫、Hook 驗證的唯一依據。
 
-> **來源**：W17-016.1 盤點結論（樣本 ANA × 4 + IMP × 1；DOC 樣本不足，現以保守建議落地）。完整樣本統計見該 ticket Solution 章節。
-> **落地時機**：W17-016.2 寫入 template + SKILL.md；W17-016.3 上 Hook 驗證；3 個月後若完整率 < 50% 重啟盤點（樣本 40+）。
+> **來源**：盤點結論（樣本 ANA × 4 + IMP × 1；DOC 樣本不足，現以保守建議落地）。完整樣本統計見該 ticket Solution 章節。
+> **落地時機**：寫入 template + SKILL.md；上 Hook 驗證；3 個月後若完整率 < 50% 重啟盤點（樣本 40+）。
 
 ---
 
@@ -20,7 +20,7 @@
 | Test Results | 選填（若有實驗） | 必填 | 免填 |
 | Context Bundle | 選填（auto-extracted，非人工填寫） | 選填（auto-extracted，非人工填寫） | 選填（auto-extracted，非人工填寫） |
 | NeedsContext | 選填（僅資料缺口時填寫） | 選填（僅資料缺口時填寫） | 選填（僅資料缺口時填寫） |
-| Exit Status | 選填（W17-010 協議，代理人自報） | 選填（W17-010 協議，代理人自報） | 選填（W17-010 協議，代理人自報） |
+| Exit Status | 選填（代理人自報） | 選填（代理人自報） | 選填（代理人自報） |
 | Spawn Requests | 選填（發現應開新 ticket 議題時填寫） | 選填（發現應開新 ticket 議題時填寫） | 選填（發現應開新 ticket 議題時填寫） |
 | Completion Info | 必填 | 必填 | 必填（附變更摘要） |
 
@@ -53,21 +53,21 @@
 
 **Action**：`實驗發現` 子節補一行「本實驗不涵蓋：[逐條列出未測的失效模式]」，需具體列出失效模式，禁止「其餘情況未測試」等籠統帶過。引用實驗結論作設計依據前的三問檢查清單見 `.claude/references/experiment-evidence-citation-rules.md`。
 
-#### Solution 章節：Spawn 落地確認（W17-167 強制）
+#### Solution 章節：Spawn 落地確認（強制）
 
-ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete 前確認以下子節（被 acceptance-gate-hook Step 2.5.2 自動偵測）：
+ANA 或 DOC 的 Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete 前確認以下子節（acceptance-gate-hook Step 2.5.2 自動偵測：規劃數不計本子節的落地確認表，落地少於規劃即阻擋，部分落地亦同）：
 
 ```markdown
 ### Spawn 落地確認
 
-- [ ] 所有規劃項目已建 ticket（`spawned_tickets` 或 `children` 已記錄對應 ID）
+- [ ] 所有規劃項目已建 ticket（`spawned_tickets` 或 `children` 已記錄對應 ID，或新票以 `source_ticket`／`discovered_during` 回指本票）
 - [ ] 或已登記 spawn request 並 resolve 為終態（`processed` 附 ticket ID／`dismissed` 附理由）
 - [ ] 或在本章節逐項標註「無需建 ticket：[具體理由]」（一則宣告扣抵一項）
 ```
 
 **Why**：acceptance 勾選「產出 spawned 清單」只檢文字產出，不檢 ticket 是否實際建立；Solution 寫了表格但未建 ticket = 無 trigger 延後決策（PC-093 模式）。停在 `pending` 的 spawn request 屬同一模式，故不計為落地。
 
-**Consequence**：缺此 checklist，分析代理人 complete 時 frontmatter 為空也能放行，spawn 規劃靜默丟失（W17-167 元層級反例已證明）。
+**Consequence**：缺此 checklist，分析代理人 complete 時 frontmatter 為空也能放行，spawn 規劃靜默丟失（元層級反例已證明）。
 
 **Action**：落地是**執行者**於 complete 前的義務——complete 後強制層已無執行時機，PM 事後驗收屬冗餘檢查而非唯一保證。
 
@@ -79,7 +79,7 @@ ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete �
 | 評估後不需建 | 勾選第三項，**逐項**標註「無需建 ticket：[理由]」 |
 | 工具清單不含 Bash 而無法呼叫 CLI | 停手上報 NeedsContext 由 PM 改派；此情形應在派發階段即避免 |
 
-**Spawn 規劃表建議格式**（W1-004 擴充）：
+**Spawn 規劃表建議格式**：
 
 ```markdown
 | 項目 | 形態 | 優先級 | Source FR | 說明 |
@@ -95,7 +95,7 @@ ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete �
 - 規則層：`.claude/rules/core/quality-baseline.md` 規則 5「ANA Solution 內 spawn 規劃」
 - Lifecycle 層：`.claude/pm-rules/ticket-lifecycle.md`「ANA 衍生 Ticket 溯源驗證」Step 0（FR↔Ticket 覆蓋矩陣）
 - Lifecycle 層：`.claude/pm-rules/ticket-lifecycle.md`「ANA Solution Spawn 規劃落地（強制）」
-- 強制層：acceptance-gate-hook Step 2.5.2（W17-168 落地）
+- 強制層：acceptance-gate-hook Step 2.5.2（2026-11-12 起涵蓋 DOC，部分落地亦阻擋，落地數計入回指本票的票）
 
 #### Solution 章節：逐筆清單落地（PC-BAL-054 強制）
 
@@ -126,18 +126,18 @@ acceptance 須寫成可獨立驗證的兩條，禁止只寫「已保留逐筆清
 
 **交叉引用**：`.claude/error-patterns/process-compliance/PC-BAL-054-analysis-ticket-judgment-without-itemized-list.md`（三條件的推導與下游受阻實例）
 
-### Solution 章節：H3 子標題與表格使用慣例（W10-123 / W10-124 / W10-125 補強）
+### Solution 章節：H3 子標題與表格使用慣例（補強）
 
 ANA / IMP Solution 章節支援 H3 子標題組織內容（如「### WRAP 完整分析」「### 修復策略」「### 變更總覽」），並支援 markdown 表格作為主要展示形式。Validator 層級規則：
 
 | 元素 | 規則 |
 |------|------|
 | `### multi_view_status`（ANA 專用） | 不可作為 H3 子章節；必須以平鋪 `multi_view_status: <reviewed/skipped/n_a>` + `reason: ...` 寫入 Solution 文字內容（schema 來源：`.claude/config/ana-solution-schema.yaml`） |
-| `### 自檢結果`（Layer 1） | 可作為 H3 子章節；hook 識別前綴匹配，可含中文括號補充說明（W10-124 修復後） |
-| 表格 cell 中的 `N/A` / `TODO` / `TBD` | 屬合法「不適用 / 待辦 / 待定」標示，不視為 placeholder（W10-125 修復後；PC-138 / PC-144） |
+| `### 自檢結果`（Layer 1） | 可作為 H3 子章節；hook 識別前綴匹配，可含中文括號補充說明（修復後） |
+| 表格 cell 中的 `N/A` / `TODO` / `TBD` | 屬合法「不適用 / 待辦 / 待定」標示，不視為 placeholder（修復後；PC-138 / PC-144） |
 | 章節整體只有 placeholder 字面（無表格） | 仍視為 placeholder，阻擋 complete |
 
-**為何 multi_view_status 例外**：hook 用 regex 跨行掃描平鋪 YAML-like 結構，H3 子章節包裝會切斷掃描範圍（PC-117 / W17-111 設計）。
+**為何 multi_view_status 例外**：hook 用 regex 跨行掃描平鋪 YAML-like 結構，H3 子章節包裝會切斷掃描範圍（PC-117 設計）。
 
 ### Problem Analysis 章節：CLI 自動寫入的 H3 子章節登記
 
@@ -174,10 +174,11 @@ ticket 的 Solution / Test Results 章節被清空（不含「免填」placehold
 
 - `Test Results` 必填：至少記錄執行指令與通過數（或 commit SHA）。
 - `Problem Analysis` / `Solution` 選填：小型 IMP 以 frontmatter how/acceptance 已足；大型 IMP 建議補充決策理由。
+  - **例外：由子代理人執行時，寫產品檔前須已填。** `analysis-before-edit-checkpoint-hook.py` 會檢查子代理人寫入的產品檔：IMP 票的 Problem Analysis 仍是 placeholder 時，寫入會被擋下；若 acceptance 含測試字樣，檢查的是 Test Results 的紅燈紀錄。判定前會先排除 CLI 自動寫入的子節（查重紀錄、派發日誌、Commit 規範），所以只有這些子節不算已填。線 session 與 PM 寫入時只收到提醒，不會被擋。
 
 #### 安裝指令 IMP 額外 acceptance（PC-159 防護）
 
-IMP ticket 含安裝指令時，acceptance 必須補上 fresh shell 驗證條件，避免 PM / agent 既有環境通過驗證但 fresh shell 失敗的系統性風險（PC-159 / W3-050 codegraph placeholder package、W3-051 sys.path hack 案例）。
+IMP ticket 含安裝指令時，acceptance 必須補上 fresh shell 驗證條件，避免 PM / agent 既有環境通過驗證但 fresh shell 失敗的系統性風險（PC-159：codegraph placeholder package、sys.path hack 案例）。
 
 **觸發條件**（任一成立即須補強）：
 
@@ -194,18 +195,18 @@ IMP ticket 含安裝指令時，acceptance 必須補上 fresh shell 驗證條件
 
 表格三項為 OR 關係，任一勾選即滿足 PC-159 acceptance 閘門；多項並列僅為冗餘保護，無加分效果。
 
-**Why**：規則 5（所有發現必須追蹤）+ PC-159 三層防護（規則層 / Hook 層 / 文件層）的 Acceptance Schema 層落地。Hook 層（W3-052.1 `install-guide-edit-reminder-hook`）僅提供 reminder，acceptance schema 層提供 complete-time 強制驗證閘門。
+**Why**：規則 5（所有發現必須追蹤）+ PC-159 三層防護（規則層 / Hook 層 / 文件層）的 Acceptance Schema 層落地。Hook 層（`install-guide-edit-reminder-hook`）僅提供 reminder，acceptance schema 層提供 complete-time 強制驗證閘門。
 
-**Consequence**：未補強 acceptance 的 IMP 可在 PM / agent 既有環境通過 complete，但其他用戶 fresh shell 安裝即失敗（PC-159 重現模式：W3-050 codegraph placeholder package、W3-051 sys.path hack 在 uv tool install 後失效）；此時責任歸屬不清，需事後重新復現。
+**Consequence**：未補強 acceptance 的 IMP 可在 PM / agent 既有環境通過 complete，但其他用戶 fresh shell 安裝即失敗（PC-159 重現模式：codegraph placeholder package、sys.path hack 在 uv tool install 後失效）；此時責任歸屬不清，需事後重新復現。
 
 **Action**：IMP claim 後若觸發條件成立，依上方表格至少勾選一項並在 ticket Test Results 附驗證輸出；若三項皆不適用（如離線環境、自訂 registry），於 acceptance 增列豁免條件並明示理由（避免規則 1.5 無 trigger 延後）。
 
 **參考**：
 
 - `.claude/error-patterns/process-compliance/PC-159-install-command-not-verified-in-fresh-shell.md`
-- 設計來源：`docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W3-052.md` Solution 方案 (b)
+- 設計來源：對應 ANA 的 Solution 方案 (b)
 
-#### src 字串輸出變更額外 acceptance（W1-005.2 / W1-040 防護）
+#### src 字串輸出變更額外 acceptance（防護）
 
 IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm test`（或對應測試套件）驗證，不可只驗 `npm run build:dev`。
 
@@ -222,19 +223,19 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 
 **Why**：`tests/` 斷言（`toHaveBeenCalledWith` / `toContain` / `toEqual`）與 `src/` 字串輸出同源。`npm run build:dev` 只驗編譯可通過，不驗斷言期待值是否與新字串一致。修改 src 字面後 tests/ 若未同步更新，兩者靜默不一致，build 綠燈掩蓋隱性回歸。
 
-**Consequence**：未補強的 IMP 可通過 build 驗收，但 tests/ 斷言期待值仍含舊字串字面，進入 in_progress 的其他 ticket 執行 `npm test` 時爆發——回溯根因成本遠高於修改時同步驗證（W1-005.2 → W1-005.3 案例：12 檔 48+ 處斷言需補修）。
+**Consequence**：未補強的 IMP 可通過 build 驗收，但 tests/ 斷言期待值仍含舊字串字面，進入 in_progress 的其他 ticket 執行 `npm test` 時爆發——回溯根因成本遠高於修改時同步驗證（案例：12 檔 48+ 處斷言需補修）。
 
 **Action**：IMP claim 後若觸發條件成立，在 acceptance 補列「complete 時驗收：`npm test` exit 0」；若同時修改 tests/ 斷言（正確做法），在 Test Results 附執行輸出；若未修改 tests/ 但 `npm test` 仍通過，說明無斷言依賴（可加注）。
 
 **觸發案例**：
 
-- `docs/work-logs/v0/v0.19/v0.19.1/tickets/0.19.1-W1-005.2.md`（acceptance 僅驗 build:dev，致 12 檔 48+ 處隱性回歸，W1-005.3 補修）
+- 某 IMP 案例（acceptance 僅驗 build:dev，致 12 檔 48+ 處隱性回歸，後續補修）
 
 **交叉引用**：
 
 - `.claude/rules/core/test-assertion-design-rules.md`「延伸路由：src 字串輸出變更 acceptance 設計」章節
 
-#### 含 UI 的 IMP 額外 acceptance：集中化（1.2.0-W1-015 防護）
+#### 含 UI 的 IMP 額外 acceptance：集中化（防護）
 
 含 UI 產出的 IMP ticket，acceptance 必須補上集中化驗收條目。
 
@@ -249,7 +250,7 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 |---|---------|------|
 | 1 | 本功能 user-facing 文字→i18n key、顏色→theme token、魔術數字→具名常數，無新增裸 `Color()` / 字面字串 / 字面尺寸 | grep 變更碼確認 |
 
-**Why**：1.2.0-W1-015 根因——既有 hook（l10n-sync / dart-style-guardian）對「應有設施缺席」失明，只在設施已存在時生效。升為 per-feature acceptance gate，不依賴 greenfield 是否 bootstrap。
+**Why**：根因——既有 hook（l10n-sync / dart-style-guardian）對「應有設施缺席」失明，只在設施已存在時生效。升為 per-feature acceptance gate，不依賴 greenfield 是否 bootstrap。
 **Consequence**：未補此維度的 UI IMP 可在無 i18n/theme 的專案通過驗收，硬編碼暢行至 1.0（v1.0 實證：app 21 文字 / 19 數字 / 18 顏色全程未攔）。
 **Action**：IMP claim 後若觸發，acceptance 補列集中化條目；純後端/CLI（Go server log）依語言慣例可標註豁免理由。
 
@@ -311,6 +312,31 @@ ticket track hook-liveness .claude/hooks/<hook 檔名>.py --format json > /tmp/a
 
 比對 `before.total` 與 `after.total` 是否增加（或 `by_session` 中本 session 的計數是否增加）。Solution / Test Results 記錄時附上解析到的名稱（`resolution.name`）與前後筆數差值，不記錄未經此命令驗證的口頭斷言。命令本身的用法（名稱解析順序、`--since`／`--session`／`--format` 旗標）見 `.claude/skills/ticket/references/track-command.md`〈track hook-liveness 子命令〉節。
 
+#### 證據寫法與三種標記
+
+前三項除了 acceptance 要提及，checker 另在 Solution 與 Test Results 找證據；找不到且 acceptance 字面也不符時阻擋 complete。下表是承認的證據寫法。
+
+| 類別 | 承認的寫法 |
+|------|-----------|
+| 實地觸發、liveness | `hook-logs/` 日誌行引文；`ticket track hook-liveness` 輸出（含「解析名稱:」）；格式為 `[YYYY-MM-DD HH:MM:SS] LEVEL - ` 的日誌行，且該行或其區塊標頭（往上略過空行、code fence 與日誌行後的第一行）含本票 hook 名。hook 名取自 `where.files` 中 hooks 路徑的檔名，也接受去掉 `-hook` 的寫法。追得到來源的日誌行同時算兩類 |
+| 失敗語意 | fail-open 或 fail-closed 加「觸發條件：」，寫在 acceptance 也算；或同一行寫「放行」或「阻擋」並附「觸發條件：」。範本條目名「放行或阻擋」與未改寫的佔位條目都不算 |
+
+**Why**：只寫 `hook-logs 引文：` 而日誌行不帶 hook 名，讀者分不出那一行是不是本票的 hook 產生的；放寬辨識只承認追得到來源的寫法，避免其他 hook 的日誌冒充證據。
+
+拿不到證據時，用下表三種標記之一寫在 Solution 或 Test Results，括號內寫類別（`實地觸發` 或 `liveness`）。
+
+| 標記 | 寫法 | 抵扣 | checker 的處置 |
+|------|------|------|---------------|
+| 證據不適用 | `證據不適用（實地觸發）：<理由>` | 該類別 | 記 `[evidence-not-applicable]`；適用於 hook 不寫日誌、只以 stdout 輸出等情況，理由寫實際替代的證據 |
+| 延後取證 | `延後取證（liveness）：<ticket-id>` | 該類別 | 票號須存在且未完成、未關閉，否則不算；記 `[evidence-deferred]` WARNING。適用於合併後才拿得到證據的情況 |
+| 待主線程補證 | `待主線程補證（實地觸發）：<要做的取證動作>` | 不抵任何類別 | 代理人交還 PM 的交接標記；PM 補上證據，或改寫為前兩種標記之一，才能 complete |
+
+**限制**：失敗語意不接受任何標記，一律要寫出宣告與「觸發條件：」。
+
+**Consequence**：不用標記而直接留空，complete 會被擋；把「待主線程補證」當成已交代，同樣會被擋。
+
+**Action**：代理人在 worktree 內拿不到本 session 證據時寫「待主線程補證」並在回報中列出；PM 合併後實跑取證，或判定屬於前兩種情況並改寫標記。
+
 **參考**：
 
 - `.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py`
@@ -330,7 +356,7 @@ ticket track hook-liveness .claude/hooks/<hook 檔名>.py --format json > /tmp/a
 
 ### 語義基礎：Complete-Time Verification
 
-ticket track claim 不再執行 AC verification（W3-046 L3-b 實作），所有驗收測試（包括 npm test）延遲到 complete 階段。Acceptance 欄位應以此為前提進行撰寫。
+ticket track claim 不再執行 AC verification（L3-b 實作），所有驗收測試（包括 npm test）延遲到 complete 階段。Acceptance 欄位應以此為前提進行撰寫。
 
 ### 防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy
 
@@ -382,7 +408,7 @@ ticket track claim 不再執行 AC verification（W3-046 L3-b 實作），所有
 
 ### 反模式與修正（單一權威源）
 
-> 本表為全專案 acceptance 反模式的單一權威源；`.claude/pm-rules/ticket-lifecycle.md` 反向引用本表，避免雙處維護漂移（W3-057 整併）
+> 本表為全專案 acceptance 反模式的單一權威源；`.claude/pm-rules/ticket-lifecycle.md` 反向引用本表，避免雙處維護漂移
 
 | 反模式 | 問題 | 修正 |
 |-------|------|------|
@@ -391,7 +417,7 @@ ticket track claim 不再執行 AC verification（W3-046 L3-b 實作），所有
 | `全套件測試通過` / `全套件測試無回歸` | 並行 claim 會衝突（PC-078 根因）+ 時機不明 | 改為「相關檔案測試（X 個檔案）通過」或「complete 時驗收 npm test 0 failed」 |
 | `測試通過率 100%` | 過於抽象 + 驗收時機不明 | 改為「complete 時驗收：npm test exit 0 無 failed tests」 |
 | `lint 0 warning` / `npm run lint 無問題` | 缺少具體指標（error vs warning） | 改為「complete 時驗收：npm run lint 0 errors / 0 warnings」 |
-| 修改 src/ 字串字面只驗 `npm run build:dev` | build 不覆蓋 tests/ 斷言期待值一致性（W1-005.2 隱性回歸） | 改為「complete 時驗收：`npm test` exit 0」（IMP 修改 src/ 字串字面類必填） |
+| 修改 src/ 字串字面只驗 `npm run build:dev` | build 不覆蓋 tests/ 斷言期待值一致性（隱性回歸） | 改為「complete 時驗收：`npm test` exit 0」（IMP 修改 src/ 字串字面類必填） |
 
 ### 有效 Acceptance 範例
 
@@ -433,13 +459,13 @@ acceptance:
 
 ## 歷史豁免
 
-已完成（status=completed）的 ticket 不回頭補章節。schema 只對新建 + in_progress 的 ticket 生效。Hook 驗證（W17-016.3）應以 `status != completed` 為前置條件。
+已完成（status=completed）的 ticket 不回頭補章節。schema 只對新建 + in_progress 的 ticket 生效。Hook 驗證應以 `status != completed` 為前置條件。
 
 ---
 
 ## Frontmatter protocol_version 契約
 
-自 W5-005.4 起，新建票 frontmatter 自動 emit `protocol_version` 欄位（值取自 `constants.py` 的 `PROTOCOL_VERSION_CURRENT`，當前 `"2.0"`）。
+自該契約落地起，新建票 frontmatter 自動 emit `protocol_version` 欄位（值取自 `constants.py` 的 `PROTOCOL_VERSION_CURRENT`，當前 `"2.0"`）。
 
 | 契約 | 說明 |
 |------|------|
@@ -456,13 +482,15 @@ acceptance:
 |------|------|------|
 | 1.8.0 | 2026-08-20 | 改寫「Type-aware Quality Gate」節：`ticket-quality-gate-hook.py` 已刪除，改以現行承接者（`execution_log_checker.py` / `responsibility_scope_checker.py`）重寫 c2/c3 表格；c2 對 DOC 的行為改正為「範本 placeholder 副作用，非顯式豁免」（原表格誤植為「跳過」），c3 對 ANA/DOC 維持顯式豁免 |
 | 1.5.0 | 2026-08-17 | IMP 區塊新增「防護類 hook ticket 額外 acceptance（三項必含）」段落：where.files 觸及 hooks 目錄（含頂層與 skill hooks）時強制三項語意（session 生效策略/liveness 驗證方式/失敗語意），對應 hook 硬擋於 acceptance-gate 新增 checker |
-| 1.4.0 | 2026-07-05 | 新增「Frontmatter protocol_version 契約」段落：emit 機制 + 凍結豁免 + lazy-migration 契約（W5-005.4） |
-| 1.3.0 | 2026-06-04 | IMP 區塊新增「src 字串輸出變更額外 acceptance」段落；反模式表補充 build-only 驗收反模式（W1-005.2 / W1-040） |
-| 1.2.0 | 2026-05-13 | 新增「Solution 章節：H3 子標題與表格使用慣例」+「Type-aware Quality Gate」兩段（W10-123 / W10-124 / W10-125 規則收斂；W10-126 落地） |
-| 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
-| 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
+| 1.4.0 | 2026-07-05 | 新增「Frontmatter protocol_version 契約」段落：emit 機制 + 凍結豁免 + lazy-migration 契約 |
+| 1.3.0 | 2026-06-04 | IMP 區塊新增「src 字串輸出變更額外 acceptance」段落；反模式表補充 build-only 驗收反模式 |
+| 1.2.0 | 2026-05-13 | 新增「Solution 章節：H3 子標題與表格使用慣例」+「Type-aware Quality Gate」兩段（規則收斂與落地） |
+| 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（L3 落地，配合 hook 與 quality-baseline / ticket-lifecycle 同步修訂） |
+| 1.0.0 | 2026-04-20 | 初版（落地盤點結論） |
 
-**Last Updated**: 2026-11-11
+**Last Updated**: 2026-11-13
+**Version**: 1.13.0 — 「防護類 hook ticket 額外 acceptance」新增〈證據寫法與三種標記〉：列出 checker 在 Solution／Test Results 承認的證據寫法（含追得到來源的日誌行、同一行的放行／阻擋加觸發條件），以及「證據不適用」「延後取證」「待主線程補證」三種標記的寫法、抵扣範圍與 checker 處置；失敗語意不接受標記。
+**Version**: 1.12.1 — 「Spawn 落地確認」子節對齊 Step 2.5.2 現行判定：適用 ANA 與 DOC；落地確認表不計入規劃數；回指本票的新票計入落地；部分落地亦阻擋。
 **Version**: 1.12.0 — 「Spawn 落地確認」部分未建列加版本維度：屬本版範圍的落地用 `--parent`，依〈兩期〉排入後續版本者在目標版本以 `--source-ticket` 建根票，路由 ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉。
 **Version**: 1.11.0 — 「Spawn 落地確認」部分未建列對齊 PC-091：ANA 落地用 `--parent`，`--source-ticket` 限結論未要求的獨立工作。
 **Version**: 1.10.0 — ANA 章節新增第三個強制子節「Solution 章節：逐筆清單落地（PC-BAL-054 強制）」：三條件 AND 判準（可枚舉且量大 / 下游逐筆依賴 / 量測具時間敏感性）成立時逐筆清單須落地為獨立檔案，附可驗證的 acceptance 兩條寫法與「已保留逐筆清單」不可用的理由，並劃出與 Spawn 落地確認的邊界（前者管規劃是否變成 ticket，後者管判定所本資料是否留存，無替代關係）。體例沿用同章節既有兩個強制子節。與 1.9.0 改的是不同子節，無覆蓋。
@@ -471,9 +499,9 @@ acceptance:
 **Version**: 1.8.0 — 「防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy」節的盤點表範例後補「格式限制」兩項（逐列緊接不夾空行、「是否覆蓋」欄只寫是或否），並寫明各自不符時 acceptance-gate 的處置（判為無表而擋／fail-open 放行）。此前兩項限制只存在於檢查器實作與派發骨架提示，派發骨架為守 30 行上限縮減提示後改路由至本節。
 **Version**: 1.7.2 — 補改名漏網：「防護類 hook ticket 額外 acceptance」節與「邊界（兩個方向）」段的四項散文列舉仍寫舊 label「既有 session 生效策略」，與同節表格第 1 列的現行 label 不一致；依表格改為「本 session 實地觸發確認」。讀者依散文寫出的 acceptance 會落在舊措辭上，而 checker 的關鍵詞清單刻意保留舊用詞故不會擋，此不一致無自曝管道。要求本身與硬擋行為未變。
 **Version**: 1.7.1（原記為 1.7.0，與先落地的方案 F 條目撞號，依落地順序改號） — 依 PC-BAL-033 機制收窄同步（2026-08-18）：必含項第 1 項由「既有 session 生效策略」改名為「本 session 實地觸發確認」（收窄後需驗的是本 session 實地觸發是否落檔，非屬哪個 session 世代），合格填法同步改寫；「Why（前三項）」段的機制句由單一快照模型斷言改為兩條成因並列（缺可執行位恆成立、註冊快照版本相依），並說明第 1 項為何選在兩種載入模型下都有效的證據。要求本身、觸發條件與硬擋行為皆未變。
-**Version**: 1.7.0 — 依 0.2.1-W3-527 完整 WRAP 裁示改採方案 F（機器讀正本）：第 4 項的檢查對象由 acceptance 的數字宣告改為 `how.strategy` 的盤點表正本，撰寫者不再需要在 acceptance 重複宣告數字；補 Why（副本 vs 正本、消費者缺席）與強制層現況（改動待 0.2.1-W3-533 落地，該票完成前 checker 仍檢查 acceptance 宣告）。
+**Version**: 1.7.0 — 依完整 WRAP 裁示改採方案 F（機器讀正本）：第 4 項的檢查對象由 acceptance 的數字宣告改為 `how.strategy` 的盤點表正本，撰寫者不再需要在 acceptance 重複宣告數字；補 Why（副本 vs 正本、消費者缺席）與強制層現況（改動待後續落地，落地前 checker 仍檢查 acceptance 宣告）。
 **Version**: 1.6.2 — 依第二輪 Layer 2 審查更新：「維度型檢查」術語隨 PC-BAL-035 判準軸更換為「對外部事實可證偽」；補實作限制（判定須用 regex 不可用 substring，實測 18.0% 誤過率）。
-**Version**: 1.6.1 — 依 Layer 2 審查修正 v1.6.0 的三項失準：強制層宣稱與實作不符（產生路徑盤點結果尚未進入 checker，已補「強制層現況」段明示該項在 0.2.1-W3-525 落地前為自律層）；Why／Consequence 原僅支撐前三項卻以全節語氣陳述，已拆為「Why（前三項）」與「Why（產生路徑盤點結果）」；節標題與內文改以角色命名（「必含項」）取代數量命名，位置序數引用改語意錨點。
+**Version**: 1.6.1 — 依 Layer 2 審查修正 v1.6.0 的三項失準：強制層宣稱與實作不符（產生路徑盤點結果尚未進入 checker，已補「強制層現況」段明示該項在產生路徑盤點結果落地前為自律層）；Why／Consequence 原僅支撐前三項卻以全節語氣陳述，已拆為「Why（前三項）」與「Why（產生路徑盤點結果）」；節標題與內文改以角色命名（「必含項」）取代數量命名，位置序數引用改語意錨點。
 **Version**: 1.6.0 — 「防護類 hook ticket 額外 acceptance」新增「產生路徑盤點結果」項（須含可數的路徑數與覆蓋數）；補該項的形態要求說明（維度型檢查，刻意不檢查 acceptance 措辭形態因其屬可空洞滿足的形式型）與作用邊界（使缺口可見而非防止缺口）；與下方攔截點分工節的雙向邊界說明同步更新。
 **Version**: 1.5.0 — 新增「防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy」節（欄位分工表 + 判準問句 + 三步 Action 含產生路徑盤點表欄位與範例 + 雙向邊界）；「防護類 hook ticket 額外 acceptance（三項必含）」節補與該新節的關係說明（兩節對同一張 hooks 票同時生效，前者機械判定並硬擋且屬驗收手段，後者語意判定純自律且管攔截點，職責正交）。完整論述路由至 acceptance-criteria-methodology 與 PC-BAL-035，本檔不存副本。
-**Version**: 1.4.0 — 新增 protocol_version 契約段落（emit + 凍結豁免 + lazy-migration，W5-005.4）
+**Version**: 1.4.0 — 新增 protocol_version 契約段落（emit + 凍結豁免 + lazy-migration）

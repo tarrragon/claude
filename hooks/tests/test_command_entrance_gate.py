@@ -377,35 +377,41 @@ class TestCheckTicketStatus:
         assert "未找到" in error_msg or "找不到" in error_msg or "待處理" in error_msg
 
     def test_ticket_not_claimed(self):
-        """測試 Ticket 未認領情境（邊界情境 1）"""
+        """測試 Ticket 未認領情境（邊界情境 1）：放行並回傳認領引導"""
         hook_module = load_hook_module()
         logger = MagicMock()
 
         with patch.object(hook_module, 'get_latest_pending_ticket',
                          return_value=("0.1.0-W39-003", "pending", "content")):
-            is_valid, error_msg, ticket_id, _ = hook_module.check_ticket_status(
+            is_valid, error_msg, ticket_id, guidance = hook_module.check_ticket_status(
                 prompt="實作功能", logger=logger
             )
 
-        assert is_valid is False
+        assert is_valid is True
+        assert error_msg is None
         assert ticket_id == "0.1.0-W39-003"
-        assert "未認領" in error_msg or "未被認領" in error_msg
+        assert "ticket track claim 0.1.0-W39-003" in guidance
 
     def test_missing_decision_tree(self):
-        """測試缺少決策樹欄位情境"""
+        """缺決策樹改為提醒：放行並以第 4 欄回傳提醒（3.3.0-W1-220.3）。
+
+        UserPromptSubmit exit 2 會丟棄整則 prompt（含跨 session 訊息），
+        阻擋留給 claim／complete 等寫入點。
+        """
         hook_module = load_hook_module()
         logger = MagicMock()
 
         with patch.object(hook_module, 'get_latest_pending_ticket',
                          return_value=("0.1.0-W39-003", "in_progress", "content")):
             with patch.object(hook_module, 'validate_ticket_has_decision_tree', return_value=False):
-                is_valid, error_msg, ticket_id, _ = hook_module.check_ticket_status(
+                is_valid, error_msg, ticket_id, reminder = hook_module.check_ticket_status(
                     prompt="實作功能", logger=logger
                 )
 
-        assert is_valid is False
+        assert is_valid is True
+        assert error_msg is None
         assert ticket_id == "0.1.0-W39-003"
-        assert "決策樹" in error_msg
+        assert "決策樹" in reminder
 
     def test_valid_ticket_without_relevance_check(self):
         """測試有效 Ticket，無 relevance 警告"""
@@ -701,6 +707,66 @@ class TestW4027L1WordBoundaryContext:
         assert hook_module.is_development_command("重構 UC-06", logger) is True
 
 
+class TestW1220_3SubTicketAndPromptKept:
+    """3.3.0-W1-220.3：子票號擷取完整；缺決策樹時 prompt 不被丟棄。"""
+
+    @pytest.mark.parametrize("prompt,expected", [
+        ("處理 3.3.0-W1-186.2", "3.3.0-W1-186.2"),
+        ("處理 3.3.0-W1-186.2 的修正", "3.3.0-W1-186.2"),
+        ("3.3.0-W1-186.2。接著做", "3.3.0-W1-186.2"),
+        ("多層 3.3.0-W1-204.1.3.1 子票", "3.3.0-W1-204.1.3.1"),
+        ("父票 3.3.0-W1-186 本身", "3.3.0-W1-186"),
+    ])
+    def test_extracts_full_sub_ticket_id(self, prompt, expected):
+        hook_module = load_hook_module()
+        assert hook_module.extract_ticket_id_from_prompt(prompt) == expected
+
+    def test_sub_ticket_prompt_resolves_to_sub_ticket_not_parent(self, tmp_path):
+        hook_module = load_hook_module()
+        logger = MagicMock()
+        parent = tmp_path / "3.3.0-W1-186.md"
+        parent.write_text("---\nid: 3.3.0-W1-186\ntitle: 父\nstatus: in_progress\n---\n", encoding="utf-8")
+        child = tmp_path / "3.3.0-W1-186.2.md"
+        child.write_text("---\nid: 3.3.0-W1-186.2\ntitle: 子\nstatus: pending\n---\n", encoding="utf-8")
+
+        with patch.object(hook_module, 'get_project_root', return_value=tmp_path):
+            with patch.object(hook_module, 'find_ticket_files', return_value=[parent, child]):
+                result = hook_module.get_latest_pending_ticket(
+                    logger, prompt="實作 3.3.0-W1-186.2 的修正"
+                )
+
+        assert result is not None and result[0] == "3.3.0-W1-186.2"
+
+    def _run_main(self, hook_module, has_tree):
+        captured = io.StringIO()
+        with patch.object(hook_module, 'read_json_from_stdin',
+                         return_value={"prompt": "實作 0.1.0-W39-003 功能"}):
+            with patch.object(hook_module, 'is_management_operation', return_value=False):
+                with patch.object(hook_module, 'is_development_command', return_value=True):
+                    with patch.object(hook_module, 'get_latest_pending_ticket',
+                                     return_value=("0.1.0-W39-003", "in_progress", "title: 功能")):
+                        with patch.object(hook_module, 'validate_ticket_has_decision_tree',
+                                         return_value=has_tree):
+                            with patch('sys.stdout', captured):
+                                with patch('sys.stderr', new_callable=io.StringIO):
+                                    result = hook_module.main()
+        return result, json.loads(captured.getvalue())
+
+    def test_missing_decision_tree_keeps_prompt_with_reminder(self):
+        hook_module = load_hook_module()
+        result, output = self._run_main(hook_module, has_tree=False)
+        context = output["hookSpecificOutput"].get("additionalContext", "")
+        assert result == 0
+        assert "決策樹" in context and "未被阻擋" in context
+
+    def test_complete_decision_tree_has_no_missing_reminder(self):
+        """正向對照：決策樹完整時不產生缺欄提醒。"""
+        hook_module = load_hook_module()
+        result, output = self._run_main(hook_module, has_tree=True)
+        assert result == 0
+        assert "決策樹" not in output["hookSpecificOutput"].get("additionalContext", "")
+
+
 class TestW4027L2TriggerNarrowing:
     """L2 get_latest_pending_ticket：觸發限縮
 
@@ -797,21 +863,43 @@ class TestW4027L3PendingRelevanceGate:
         # 無關 pending 不阻擋
         assert is_valid is True
 
-    def test_pending_relevant_still_blocked(self):
-        """pending ticket 與 prompt 相關但未認領 → 仍阻擋（要求 claim，防護不喪失）"""
+    def test_pending_relevant_allowed_with_claim_guidance(self):
+        """pending ticket 與 prompt 相關但未認領 → 放行並回傳認領引導（不在 prompt 階段擋下）"""
         hook_module = load_hook_module()
         logger = MagicMock()
 
         with patch.object(hook_module, 'get_latest_pending_ticket',
                           return_value=("0.20.0-W1-013", "pending",
                                         "title: 修復 command-entrance-gate-hook")):
-            is_valid, error_msg, ticket_id, _ = hook_module.check_ticket_status(
+            is_valid, error_msg, ticket_id, guidance = hook_module.check_ticket_status(
                 prompt="修復 command-entrance-gate-hook", logger=logger
             )
 
-        assert is_valid is False
+        assert is_valid is True
+        assert error_msg is None
         assert ticket_id == "0.20.0-W1-013"
-        assert "未認領" in error_msg or "未被認領" in error_msg
+        assert "ticket track claim 0.20.0-W1-013 --as" in guidance
+
+    def test_main_pending_relevant_exit0_injects_guidance(self):
+        """main：相關 pending → exit 0、stderr 空、additionalContext 含認領引導
+
+        prompt 避開 management 白名單詞（如 hook），確保走開發命令驗證路徑。
+        """
+        hook_module = load_hook_module()
+
+        with patch.object(hook_module, 'read_json_from_stdin',
+                          return_value={"prompt": "實作使用者登入流程"}):
+            with patch.object(hook_module, 'get_latest_pending_ticket',
+                              return_value=("0.20.0-W1-013", "pending",
+                                            "title: 實作使用者登入流程")):
+                with patch('sys.stdout', new_callable=io.StringIO) as out:
+                    with patch('sys.stderr', new_callable=io.StringIO) as err:
+                        result = hook_module.main()
+
+        assert result == 0
+        assert err.getvalue() == ""
+        payload = json.loads(out.getvalue())
+        assert "ticket track claim 0.20.0-W1-013" in payload["hookSpecificOutput"]["additionalContext"]
 
 
 class TestW4027IntegrationReproCase:
@@ -833,9 +921,10 @@ class TestW4027IntegrationReproCase:
 
         assert result == 0  # 不應阻擋
 
-    def test_real_coding_intent_no_ticket_still_blocked(self):
-        """防護不喪失：真實命令式開發意圖（句首開發詞）+ 有相關 pending 仍被擋
+    def test_real_coding_intent_pending_ticket_not_blocked(self):
+        """真實命令式開發意圖（句首開發詞）+ 有相關 pending → 放行並注入認領引導
 
+        原為阻擋（exit 2 會丟棄用戶 prompt）；改為引導，認領由執行者以 claim --as 完成。
         prompt 避開 management 白名單詞（如 hook/commit），確保走開發命令驗證路徑。
         """
         hook_module = load_hook_module()
@@ -849,7 +938,7 @@ class TestW4027IntegrationReproCase:
                     with patch('sys.stderr', new_callable=io.StringIO):
                         result = hook_module.main()
 
-        assert result == 2  # EXIT_BLOCK
+        assert result == 0
 
 
 # ============================================================================

@@ -38,11 +38,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from typing import Optional
 from lib.bash_tool_response import is_bash_success
 from lib.ticket_claim_verifier import make_claim_verifier
+from lib.hook_base import get_shared_state_root
 from lib import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    get_hook_log_dir,
     find_ticket_files,
     parse_ticket_frontmatter,
     extract_version_from_ticket_id,
@@ -52,7 +54,8 @@ from lib import (
 # 匹配 `ticket track claim <id>`（容許前後管線、選項）
 _CLAIM_RE = re.compile(r"\bticket\s+track\s+claim\s+(\S+)")
 
-_AUDIT_LOG_RELPATH = Path(".claude") / "hook-logs" / "parallel-claim-audit.log"
+_HOOK_NAME = "parallel-claim-audit-hook"
+_AUDIT_LOG_FILENAME = "parallel-claim-audit.log"
 
 
 def parse_claim_command(command: str):
@@ -165,9 +168,9 @@ def build_same_wave_snapshot(ticket_id: str, project_root: Path, logger):
     return wave, snapshot
 
 
-def write_audit_entry(entry: dict, project_root: Path, logger):
-    """以 append JSONL 方式寫入 audit log。"""
-    audit_path = project_root / _AUDIT_LOG_RELPATH
+def write_audit_entry(entry: dict, logger):
+    """以 append JSONL 方式寫入 audit log（落點由 get_hook_log_dir 決定，linked worktree 內為主 repo）。"""
+    audit_path = get_hook_log_dir(_HOOK_NAME) / _AUDIT_LOG_FILENAME
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     with audit_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -203,7 +206,7 @@ def main() -> int:
     # 任一步驟失敗都不可影響 claim（純 observability），故包裹 try/except
     # 並依規則 4 雙通道（stderr + logger）輸出異常。
     try:
-        project_root = get_project_root()
+        project_root = get_shared_state_root(get_project_root())
         wave, snapshot = build_same_wave_snapshot(ticket_id, project_root, logger)
         entry = {
             "ticket_id": ticket_id,
@@ -212,7 +215,7 @@ def main() -> int:
             "same_wave_in_progress_count": len(snapshot),
             "same_wave_in_progress": snapshot,
         }
-        write_audit_entry(entry, project_root, logger)
+        write_audit_entry(entry, logger)
     except Exception as exc:  # noqa: BLE001 — observability 不可因任何失敗中斷 claim
         msg = "parallel-claim-audit-hook 記錄失敗（不影響 claim）: {}".format(exc)
         logger.info(msg)

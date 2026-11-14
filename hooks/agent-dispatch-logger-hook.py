@@ -36,7 +36,7 @@ from lib import (
     get_project_root,
     run_hook_safely,
 )
-from lib.ticket_id_pattern import SEARCH_SINGLE_SUFFIX_RE as TICKET_ID_PATTERN
+from lib.ticket_id_pattern import extract_ticket_id_anchored
 
 # ============================================================================
 # 常數定義
@@ -72,9 +72,12 @@ DEFAULT_OUTPUT = {
 
 
 def extract_ticket_id(prompt: str) -> str:
-    """從 prompt 中正則提取 ticket_id"""
-    match = TICKET_ID_PATTERN.search(prompt)
-    return match.group(0) if match else ""
+    """從 prompt 提取 ticket_id：優先取「Ticket:」等標籤後的票號，否則取第一個票號。
+
+    兩條路徑都接受多層子票號後綴，結尾不加 \\b（單層後綴的規則式會把
+    多層子票號截成上一層，緊接中文字時 \\b 會回溯成更短的前綴）。
+    """
+    return extract_ticket_id_anchored(prompt or "") or ""
 
 
 def check_failure_indicators(response_text: str) -> dict:

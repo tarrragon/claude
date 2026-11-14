@@ -1,5 +1,5 @@
 """
-ticket track td-status 命令（W10-083 / PC-094 防護建議 3）
+ticket track td-status 命令（PC-094 防護建議 3）
 
 掃描指定 ticket 的 TD（Technical Debt）清單，比對 ticket body 與 git commit
 訊息中的 TD 引用，將每個 TD 編號分類為「已處理 / 無需處理 / 仍待處理」三狀態，
@@ -241,7 +241,7 @@ def register_td_status(
     )
     p.add_argument(
         "ticket_id",
-        help="目標 Ticket ID（如 0.18.0-W10-017.8）",
+        help="目標 Ticket ID（如 <ticket-id>.8）",
     )
     p.add_argument(
         "--version",

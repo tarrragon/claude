@@ -74,7 +74,7 @@ PM 接連執行兩個關於「PM 系統性盲點」的 ANA Ticket，第二個 AN
 
 **Why**: 同一觸發條件複述在多處（規則 + Skill + 持續層）會導致漂移——三處文字不同步時，PM 不知哪份權威。**Consequence**: 初版設計（規則層 + Skill 層 + 持續層三處複述）被多視角審查（linux 視角）指出為 DRY 違反，修訂前若已落地將累積三份不同步的觸發條件清單。**Action**: 強制觸發收斂在 single source of truth（Hook 動態讀 YAML）；其他位置只引用不複述；新增防護機制設計時先檢查「此條件是否已在他處定義？」
 
-### 措施 1：decision-quality-guard-hook（強制節點，唯一強制觸發點，W10-009 追蹤）
+### 措施 1：decision-quality-guard-hook（強制節點，唯一強制觸發點）
 
 `.claude/hooks/decision-quality-guard-hook.py`（規劃階段暫名，待落地）為唯一自動強制觸發節點。<!-- broken-link-exempt: 規劃階段暫名，實際落地名稱見下方更正說明 -->偵測訊號：
 
@@ -130,9 +130,9 @@ PM 接連執行兩個關於「PM 系統性盲點」的 ANA Ticket，第二個 AN
 | decision-tree fallback（措施 4） | 人工 | Hook 與 CLI 都無法偵測的 PM 主觀場景由 PM 自律觸發 |
 | AUQ 規則 6（措施 5） | 設計約束 | 預設選項不得引導用戶跳過評估，與其他措施正交 |
 
-**反設計**：本結構**避免**「規則層 + Skill 層 + 持續層」三處複述觸發條件的初版設計（W10-008 多視角審查發現 DRY 違反）。觸發條件 single source of truth = wrap-decision SKILL；其他位置只引用不複述。
+**反設計**：本結構**避免**「規則層 + Skill 層 + 持續層」三處複述觸發條件的初版設計（多視角審查發現 DRY 違反）。觸發條件 single source of truth = wrap-decision SKILL；其他位置只引用不複述。
 
-> **與 PC-060/PC-061 的關係**：三 ANA 暴露同樣的結構問題（原則正確但執行落差），但**防護方式因領域差異而不同**：PC-060 是工具發現規則化（tool-discovery rule）、PC-061 是 memory 升級評估規則化（quality-baseline 規則 7）、PC-066 是決策觸發 Hook 化（W10-009）。**三者沒有可重用的「三層元架構」**，將其抽象為通用結構是錯誤的概念升維。
+> **與 PC-060/PC-061 的關係**：三 ANA 暴露同樣的結構問題（原則正確但執行落差），但**防護方式因領域差異而不同**：PC-060 是工具發現規則化（tool-discovery rule）、PC-061 是 memory 升級評估規則化（quality-baseline 規則 7）、PC-066 是決策觸發 Hook 化。**三者沒有可重用的「三層元架構」**，將其抽象為通用結構是錯誤的概念升維。
 
 ## 自我檢查清單
 

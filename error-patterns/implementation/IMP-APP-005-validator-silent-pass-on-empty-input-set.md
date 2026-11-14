@@ -4,7 +4,6 @@ title: 驗證工具對空/無效輸入集靜默回報通過——假綠燈侵蝕
 severity: high
 category: implementation
 created: "2026-07-14"
-source_tickets: [0.38.1-W1-064, 0.38.1-W1-068]
 related_patterns: [PC-APP-011, IMP-APP-004]
 ---
 
@@ -19,7 +18,7 @@ related_patterns: [PC-APP-011, IMP-APP-004]
 - 「驗證通過」訊息不附「掃描了多少檔案 / 白名單有多少項」等分母資訊。
 - CI 中該步驟從未紅過，且無人能說出它上次真正攔到東西是何時。
 
-## 實證案例（0.38.1-W1-064 uc verify，2026-07-14 平行審查發現）
+## 實證案例（uc verify，2026-07-14 平行審查發現）
 
 `doc uc verify /nonexistent/path` → 輸出「UC 編號驗證通過，無違規 token。」exit 0。根因：`_iter_scannable_files` 對 `not root.is_dir()` 靜默回空清單，違規判定端把「無檔案」與「有檔案且全合規」折疊為同一狀態。CI 掛載時打錯路徑即永久假綠。同族：白名單（spec 解析）為空時，語意應為 fail-fast 而非「全部違規」或「全部通過」。
 

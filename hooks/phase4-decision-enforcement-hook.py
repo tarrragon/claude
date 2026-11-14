@@ -12,10 +12,11 @@ Phase 4 Decision Enforcement Hook - PC-093 YAGNI 累積防護
 
 Hook 類型：
 - PostToolUse (Bash): 主觸發，匹配 `ticket track phase <id> phase4`
-- PreToolUse (Bash): 輔助觸發，匹配 `ticket track complete <id>`（殘留二次掃描）
+- PreToolUse (Bash): 輔助觸發，匹配 `ticket track complete <id>`（殘留二次掃描；
+  MUST-block 等級在此只警告不阻擋，驗收只審三項固定檢查）
 
 分級：
-- MUST-block（M1-M4）：Exit 2，stderr 阻擋
+- MUST-block（M1-M4）：phase4 閘門 Exit 2，stderr 阻擋；complete 前 Exit 0 + additionalContext 警告
 - WARN（W1-W4）：Exit 0，stdout 警告
 - INFO（I1-I2）：Exit 0，stdout 提醒
 
@@ -26,7 +27,6 @@ Hook 類型：
   reason: ≥10 字元；baseline-gated 需含數字；ticket-tracked / history 需含 ticket id；
           rule-quote 需含 .claude/rules/ 或 .claude/pm-rules/ 路徑
 
-Ticket: 0.18.0-W10-082
 Pattern: PC-093
 """
 
@@ -51,6 +51,10 @@ from lib import (  # noqa: E402
 )
 from lib.ticket_command_parse import (  # noqa: E402
     COMPLETE_VERBS,
+    SCOPE_MIXED,
+    SCOPE_OTHER,
+    SCOPE_UNKNOWN,
+    classify_ticket_command_scope,
     find_ticket_track_invocations,
 )
 from lib.ticket_id_pattern import BARE_START_BOUNDED_RE  # noqa: E402
@@ -74,6 +78,16 @@ REASON_MIN_LEN = 10
 # Ticket ID 通用格式：W{wave}-{seq}（SSOT：lib.ticket_id_pattern.BARE_START_BOUNDED_RE）
 TICKET_ID_PATTERN = BARE_START_BOUNDED_RE
 
+# issue 編號（#123 或 owner/repo#123）：ticket-tracked / history 的錨點也可指向
+# framework issue。追蹤載體不限 ticket——版本執行期的發現常先收束到 issue。
+ISSUE_REF_PATTERN = re.compile(r"(?:\b[\w.-]+/[\w.-]+)?#\d+\b")
+
+
+def _has_tracking_anchor(reason: str) -> bool:
+    """reason 是否含 ticket ID 或 issue 編號（ticket-tracked / history 共用）。"""
+    return bool(TICKET_ID_PATTERN.search(reason) or ISSUE_REF_PATTERN.search(reason))
+
+
 # Rule-quote 類別：reason 必須含 .claude/rules/ 或 .claude/pm-rules/ 路徑
 # 用途：PM 在 acceptance / Solution 引用規則名稱（如「禁止 Phase 5 再決定」）時豁免
 RULE_PATH_PATTERN = re.compile(r"\.claude/(?:rules|pm-rules)/")
@@ -87,15 +101,17 @@ EXEMPT_MARKER = re.compile(
     r"<!--\s*PC-093-exempt\s*:\s*([^:]+?)\s*:\s*(.+?)\s*-->"
 )
 
-# 豁免 marker 剔除（掃描 phrase 前移除，避免 marker 內含 phrase 誤判）
-EXEMPT_MARKER_STRIP = re.compile(r"<!--\s*PC-093-exempt[^>]*-->")
+# 豁免 marker 剔除（掃描 phrase 前移除，避免 marker 內含 phrase 誤判）。
+# 非貪婪比對到第一個 -->，與 EXEMPT_MARKER 同形：理由可含 >（如 baseline>80ms），
+# 且同行兩個 marker 之間的正文不會被一併剝掉。
+EXEMPT_MARKER_STRIP = re.compile(r"<!--\s*PC-093-exempt.*?-->")
 
-# Context Bundle 自動抽取的 [ref] 行豁免（W10-127）：
+# Context Bundle 自動抽取的 [ref] 行豁免：
 # ticket-loader 抽取 source ticket 的 acceptance / rationale 時，會將每行加上
 # `[ref]` 前綴標記。這些行是「引用其他 ticket 的內容」，不是本 ticket 的延後
 # 決策。常見模式：
 #   - [ref] [ ] Phase 4 評估結論明確（無需重構 / ...，禁止 Phase 5 再決定）
-# 屬於 PC-142 case 4 漏網案例（W10-122 rule-quote 豁免未涵蓋 ref 行模式）。
+# 屬於 PC-142 case 4 漏網案例（rule-quote 豁免未涵蓋 ref 行模式）。
 # 行級豁免（trim 後以 `- [ref]` 或 `[ref]` 開頭）— 採方向 A：簡單精準。
 REF_LINE_PATTERN = re.compile(r"^\s*-?\s*\[ref\]")
 
@@ -105,18 +121,18 @@ REF_LINE_PATTERN = re.compile(r"^\s*-?\s*\[ref\]")
 SCHEMA_PLACEHOLDER_END_H2 = re.compile(r"^\s*##\s")
 SCHEMA_PLACEHOLDER_END_HR = re.compile(r"^\s*---\s*$")
 
-# W1-120: Context Bundle auto-extracted 區塊起點。
+# Context Bundle auto-extracted 區塊起點。
 # ticket-loader 抽取 source ticket 的 what / why 寫入 `## Context Bundle` 時，
 # 以 `<!-- auto-extracted: v1 | sources: ... -->` marker 標記為機器產生的結構化
 # 元資料（逐字引用 source ticket why / what）。該區塊與 frontmatter 同類——非
 # 人類撰寫的決策論述，其中的「Phase 4 評估」「Phase 5 再決定」等字面屬 source
 # ticket history 引用，不應被誤判為本 ticket 延後決策（PC-142 case 5 同根因，
-# W1-092 frontmatter 修復的延伸）。
+# 為 frontmatter 豁免的延伸）。
 # 錨定 marker 而非整個 section：人工撰寫的 Context Bundle（無 marker）仍應被攔截。
 # 區塊終點複用 SCHEMA_PLACEHOLDER_END_H2 / SCHEMA_PLACEHOLDER_END_HR。
 CONTEXT_BUNDLE_START = re.compile(r"<!--\s*auto-extracted\s*:")
 
-# W11-018: Fenced code block 範例語境豁免
+# Fenced code block 範例語境豁免
 # Markdown fenced code block 內的延後話術與 PC-093-exempt marker 屬「範例展示」，
 # 非實際延後決策或豁免宣告。整段跳過 phrase 掃描與 marker 蒐集。
 # 規則：採 CommonMark 0.31 fenced code block 子集
@@ -151,12 +167,12 @@ EXEMPT_PROXIMITY_LINES = 1
 #   或 list 形式含此值時，整檔豁免偵測（hook 自身設計/測試/實作 ticket）。
 SELF_REFERENCE_HOOK_ID = "phase4-decision-enforcement"
 
-# Exempt marker 驗證失敗的人類可讀訊息對照表（W17-085 / quality-baseline 規則 4）
+# Exempt marker 驗證失敗的人類可讀訊息對照表（quality-baseline 規則 4）
 # 每項 = (humanized 描述, 修復範例/提示)；保留 err code 作 grep 訊號（向後相容）
 ERR_MESSAGE_MAP: Dict[str, Tuple[str, str]] = {
     "format-error": (
         "Exempt marker 格式錯誤（需 <!-- PC-093-exempt: 類別:理由 -->）",
-        "範例：<!-- PC-093-exempt: ticket-tracked:W17-085 hook 訊息改善 -->",
+        "範例：<!-- PC-093-exempt: ticket-tracked:<ticket-id> hook 訊息改善 -->",
     ),
     "category-whitelist": (
         "Exempt category 不在白名單",
@@ -171,16 +187,16 @@ ERR_MESSAGE_MAP: Dict[str, Tuple[str, str]] = {
         "範例：<!-- PC-093-exempt: baseline-gated:測量結果 84ms，低於 100ms AC 故無需快取 -->",
     ),
     "ticket-tracked-need-id": (
-        "ticket-tracked 類別的 reason 必須含 W{wave}-{seq} 格式 ticket ID",
-        "範例：<!-- PC-093-exempt: ticket-tracked:W17-085 hook 訊息改善 -->",
+        "ticket-tracked 類別的 reason 必須含 W{wave}-{seq} 格式 ticket ID 或 issue 編號（#123、owner/repo#123）",
+        "範例：<!-- PC-093-exempt: ticket-tracked:<ticket-id> hook 訊息改善 --> 或 <!-- PC-093-exempt: ticket-tracked:追蹤於 tarrragon/claude#56 -->",
     ),
     "rule-quote-need-path": (
         "rule-quote 類別的 reason 必須含規則檔案路徑（.claude/rules/ 或 .claude/pm-rules/）",
         "範例：<!-- PC-093-exempt: rule-quote:引用 .claude/rules/core/decision-trigger-binding.md 規則 1.5 -->",
     ),
     "history-need-anchor": (
-        "history 類別的 reason 必須含 W{wave}-{seq} 格式 ticket ID 作歷史錨點",
-        "範例：<!-- PC-093-exempt: history:本段引用 parent W11-004.7 多視角審查發現作動機脈絡 -->",
+        "history 類別的 reason 必須含 W{wave}-{seq} 格式 ticket ID 或 issue 編號作歷史錨點",
+        "範例：<!-- PC-093-exempt: history:本段引用 parent W{wave}-{seq} 多視角審查發現作動機脈絡 -->",
     ),
 }
 
@@ -233,7 +249,7 @@ def build_regex_table() -> List[PhraseRule]:
     flags = re.IGNORECASE | re.MULTILINE
     return [
         # M1: Phase X 再決定（遞迴推給未來 phase）
-        # 「評估」單獨要求前接「再|在」才觸發（W2-017：「Phase 4 重構評估」是
+        # 「評估」單獨要求前接「再|在」才觸發（「Phase 4 重構評估」是
         # 標準章節名非延後話術，但「Phase 5 再評估」仍需攔截）。
         #
         # 雙分支設計（修正單分支「收逗號」方案的回歸）：
@@ -366,7 +382,7 @@ def build_regex_table() -> List[PhraseRule]:
 # ============================================================================
 
 def compute_frontmatter_lines(lines: List[str]) -> set:
-    """W1-092: 計算 YAML frontmatter 區塊的 1-based 行號集合（含起訖 `---` 行）。
+    """計算 YAML frontmatter 區塊的 1-based 行號集合（含起訖 `---` 行）。
 
     Frontmatter 定義（採嚴格規則，PM WRAP P 防護）：
     - 必須由「檔案第一行」起始（trim 後完全等於 `---`）
@@ -377,8 +393,8 @@ def compute_frontmatter_lines(lines: List[str]) -> set:
 
     Why: ticket md frontmatter 為結構化元資料（YAML），其 why/title/strategy 等
     欄位可能含「Phase 4 評估」「Phase 5 再決定」等歷史引用字面，屬於 source
-    ticket history 引用而非本 ticket 延後決策論述，與 W10-130 Schema placeholder
-    + W11-018 fenced code block 同精神整段跳過。
+    ticket history 引用而非本 ticket 延後決策論述，與 Schema placeholder
+    + fenced code block 同精神整段跳過。
 
     邊界匹配限「行首僅有 `---` 三字元」避免內文 `---` 水平分隔符誤判結束。
     """
@@ -460,15 +476,15 @@ def _is_exempt_declaration(raw: str) -> bool:
 
 
 def compute_context_bundle_lines(lines: List[str]) -> set:
-    """W1-120: 計算 Context Bundle auto-extracted 區塊的 1-based 行號集合。
+    """計算 Context Bundle auto-extracted 區塊的 1-based 行號集合。
 
     起點：含 `<!-- auto-extracted: ... -->` marker 的行（含該行）。
     終點：下個 H2（`## `）或 `---` 水平分隔符（不含該邊界行）。
 
     Why: `## Context Bundle` 區塊由 ticket-loader 自動抽取，逐字引用 source
     ticket 的 why / what，屬機器產生的結構化元資料（與 frontmatter 同類）。其中
-    階段名稱字面屬 source ticket history 引用而非本 ticket 延後決策，與 W1-092
-    frontmatter + W10-130 Schema placeholder + W11-018 fenced code block 同精神
+    階段名稱字面屬 source ticket history 引用而非本 ticket 延後決策，與
+    frontmatter + Schema placeholder + fenced code block 同精神
     整段跳過。
 
     邊界：錨定 auto-extracted marker（非整個 section）。人工撰寫的 Context
@@ -496,7 +512,7 @@ def compute_context_bundle_lines(lines: List[str]) -> set:
 
 
 def compute_fenced_block_lines(lines: List[str]) -> set:
-    """W11-018: 計算 fenced code block 內的 1-based 行號集合（含 fence 自身行）。
+    """計算 fenced code block 內的 1-based 行號集合（含 fence 自身行）。
 
     規則（CommonMark 0.31 子集）：
     - FENCE-1: 起始 fence = 行首 0-3 空格 + 3+ 連續 backtick 或 tilde
@@ -632,23 +648,23 @@ def scan_lines_for_phrases(
     resolved_spawn_lines = compute_resolved_spawn_request_lines(lines)
     hits: List[Hit] = []
     for idx, raw in enumerate(lines, start=1):
-        # W1-092: Frontmatter (YAML 區塊) 跳過 (source ticket history 引用等結構化元資料)
+        # Frontmatter (YAML 區塊) 跳過 (source ticket history 引用等結構化元資料)
         if idx in frontmatter_lines:
             continue
-        # W1-120: Context Bundle auto-extracted 區塊跳過（機器逐字引用 source ticket why/what）
+        # Context Bundle auto-extracted 區塊跳過（機器逐字引用 source ticket why/what）
         if idx in context_bundle_lines:
             continue
         # 已 resolved 的 Spawn Request 條目跳過（CLI 產出結構化欄位，非
         # 使用者當下延後決策，見 compute_resolved_spawn_request_lines）
         if idx in resolved_spawn_lines:
             continue
-        # W11-018: Fenced code block 範例語境豁免（行級 short-circuit，最先檢查）
+        # Fenced code block 範例語境豁免（行級 short-circuit，最先檢查）
         if idx in fenced_lines:
             continue
         # 純 HTML 註解行跳過（註解內容不是可見論述）
         if idx in placeholder_lines:
             continue
-        # W10-127: Context Bundle 自動抽取的 [ref] 行豁免（行級 short-circuit）。
+        # Context Bundle 自動抽取的 [ref] 行豁免（行級 short-circuit）。
         # 這些行屬 source ticket 引用，非本 ticket 延後決策。
         if REF_LINE_PATTERN.match(raw):
             continue
@@ -695,15 +711,15 @@ def validate_exempt_fields(marker: ExemptMarker) -> Tuple[bool, Optional[str]]:
         return (False, "reason-too-short")
     if marker.category == "baseline-gated" and not re.search(r"\d", marker.reason):
         return (False, "baseline-need-number")
-    if marker.category == "ticket-tracked" and not TICKET_ID_PATTERN.search(marker.reason):
+    if marker.category == "ticket-tracked" and not _has_tracking_anchor(marker.reason):
         return (False, "ticket-tracked-need-id")
     if marker.category == "rule-quote" and not RULE_PATH_PATTERN.search(marker.reason):
         return (False, "rule-quote-need-path")
-    # W11-023: history 類別 reason 必須含 ticket ID 作歷史錨點，
+    # history 類別 reason 必須含 ticket ID 作歷史錨點，
     # 避免「歷史脈絡」變成自由文字逃生閥。語意上 history 描述「引用已完成的
     # 歷史 / 動機脈絡」（如 parent ANA 審查發現），與 ticket-tracked（等待
     # 該 ticket 完成）語意不同。
-    if marker.category == "history" and not TICKET_ID_PATTERN.search(marker.reason):
+    if marker.category == "history" and not _has_tracking_anchor(marker.reason):
         return (False, "history-need-anchor")
     return (True, None)
 
@@ -725,17 +741,17 @@ def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
     resolved_spawn_lines = compute_resolved_spawn_request_lines(lines)
     refs: List[ExemptRef] = []
     for idx, raw in enumerate(lines, start=1):
-        # W1-092: Frontmatter 內 marker 不蒐集（結構化元資料非豁免宣告載體）
+        # Frontmatter 內 marker 不蒐集（結構化元資料非豁免宣告載體）
         if idx in frontmatter_lines:
             continue
-        # W1-120: Context Bundle auto-extracted 區塊內 marker 不蒐集（機器引用非豁免宣告載體）
+        # Context Bundle auto-extracted 區塊內 marker 不蒐集（機器引用非豁免宣告載體）
         if idx in context_bundle_lines:
             continue
         # 已 resolved 的 Spawn Request 條目內 marker 不蒐集（同上，非人工
         # 豁免宣告載體；該區塊此時亦不產生 hit，本就無需豁免）
         if idx in resolved_spawn_lines:
             continue
-        # W11-018: Fenced code block 範例語境豁免（範例 marker 不蒐集）
+        # Fenced code block 範例語境豁免（範例 marker 不蒐集）
         if idx in fenced_lines:
             continue
         if idx in placeholder_lines:
@@ -915,7 +931,7 @@ def extract_ticket_targets_from_command(
         # ID 以 TICKET_ID_PATTERN 比對取得（比照 acceptance-gate），帶值選項
         # （--as X、--version X）的值不是 ID，不得以位置推定；選項值本身若
         # 恰符合 ID 格式則一併收集，真正的目標仍會被判定。
-        ids = [a for a in args if not a.startswith("-") and TICKET_ID_PATTERN.search(a)]
+        ids = _ticket_ids_in_args(args)
         if verb == "phase":
             if "phase4" not in args:
                 continue
@@ -924,6 +940,53 @@ def extract_ticket_targets_from_command(
             mode = "residual_gate"
         targets.extend((tid, mode) for tid in ids)
     return targets
+
+
+def _ticket_ids_in_args(args: List[str]) -> List[str]:
+    """動詞之後的 token 中符合票號格式者（選項本身不算；選項值若恰為票號一併收集）。"""
+    return [a for a in args if not a.startswith("-") and TICKET_ID_PATTERN.search(a)]
+
+
+# 會改寫票面正文（非 frontmatter）的子命令。frontmatter 不在掃描範圍
+# （scan_lines_for_phrases 跳過），改 acceptance、set-what 等不影響本 hook 判定。
+BODY_WRITE_VERBS = (
+    "append-log",
+    "add-exempt-marker",
+    "add-spawn-request",
+    "resolve-spawn-request",
+    "fix-multi-view-status",
+    "register-artifact",
+    "resolve-artifact",
+    "set-completion-info",
+    "set-exit-status",
+)
+
+CHAIN_WRITE_HINT = (
+    "[PC-093 同鏈寫入] 本命令在 complete 之前寫入同一張票的正文，"
+    "本 hook 在整條命令執行前讀票，判定依據的是寫入前的內容。\n"
+    "同鏈寫入的文字未經延後話術掃描，同鏈補上的豁免標記也未納入判定。\n"
+    "拆成獨立呼叫：先執行寫入命令，再單獨執行 complete。"
+)
+
+
+def find_pre_complete_body_writes(command: str) -> set:
+    """回傳在同一條命令中、complete 之前已有正文寫入的票號集合。
+
+    只認寫入命令出現在完成類命令之前、且引數含同一票號的情形；寫在 complete
+    之後或寫他票不算。命令無法解析時回傳空集合（只影響提示，fail-open）。
+    """
+    found = find_ticket_track_invocations(command, BODY_WRITE_VERBS + COMPLETE_VERBS)
+    if not found:
+        return set()
+    written: set = set()
+    stale: set = set()
+    for verb, args in found:
+        ids = _ticket_ids_in_args(args)
+        if verb in COMPLETE_VERBS:
+            stale.update(tid for tid in ids if tid in written)
+        else:
+            written.update(ids)
+    return stale
 
 
 # ============================================================================
@@ -950,7 +1013,7 @@ def format_block_message(
 ) -> str:
     """組 §4.1 stderr block 訊息 + AUQ 骨架。
 
-    W10-108: 訊息開頭主動提示「優先嘗試 inline 標記」+ 列出白名單完整 category 清單
+    訊息開頭主動提示「優先嘗試 inline 標記」+ 列出白名單完整 category 清單
     （含適用情境），引導 agent 走 inline 路徑而非字串繞過（PC-093 同精神反模式）。
     """
     lines = []
@@ -971,6 +1034,9 @@ def format_block_message(
     lines.append("優先嘗試 inline 標記（不要改寫文字繞過偵測）:")
     lines.append("  在命中行同行或前 1 行加 <!-- PC-093-exempt: <category>:<reason> -->")
     lines.append("  若屬合法延後情境，這是最低成本的解法；改寫文字 = PC-093 同精神反模式。")
+    lines.append("  ticket md 無法以 Edit 修改時（被讀寫守衛擋下），用 CLI 補標記，不要改用 sed 或腳本寫檔：")
+    lines.append("    ticket track add-exempt-marker {} --section <章節> --match \"<命中行文字>\" \\".format(ticket_id))
+    lines.append("      --category <下列白名單類別> --reason \"<理由>\"")
     lines.append("")
     lines.append("Ticket: {}".format(ticket_id))
     lines.append("命中:")
@@ -990,14 +1056,17 @@ def format_block_message(
     lines.append("  詳見 .claude/references/decision-trigger-binding-details.md「Hook 引用豁免機制」章節")
     lines.append("")
     lines.append("要求對每項做出三選一:")
-    lines.append("  1. 執行 — 立即實作，附 use case + AC")
+    lines.append("  1. 執行 — 規劃期：本版實作，附 use case + AC；")
+    lines.append("     執行期（版本 scope 已凍結）：建後續版本票，不在本版實作：")
+    lines.append("       ticket create --version <後續版本> --source-ticket {} ...".format(ticket_id))
+    lines.append("     再以 ticket-tracked 標記引用新票號（見 version-progression〈兩期〉）")
     lines.append("  2. 移除 — 刪除預留 + dead code，記錄理由")
     lines.append("  3. 豁免 — 符合上述白名單條件，加 <!-- PC-093-exempt: cat:reason --> 標記")
     lines.append("")
     lines.append("修復後重新 ticket track phase {} phase4。".format(ticket_id))
     lines.append("")
     lines.append("AUQ 選項骨架:")
-    lines.append("  - label: 執行          description: Phase 4 立即實作 + 加 AC")
+    lines.append("  - label: 執行          description: 規劃期本版實作 + 加 AC；執行期建後續版本票")
     lines.append("  - label: 移除          description: 刪除預留 + dead code")
     lines.append("  - label: 豁免（附條件） description: 加 PC-093-exempt 標記")
     if exempted:
@@ -1067,7 +1136,7 @@ def main() -> int:
     if input_data is None:
         return 0
 
-    # Effort 感知（v2.1.133+，W14-034）：
+    # Effort 感知（v2.1.133+）：
     # PC-093 偵測屬「事實判斷」（quality-baseline 規則 2 強制），
     # 必擋邏輯與 effort 無關 — 不論 effort 為何，blocked 一律阻擋。
     # low effort 僅抑制 warn/info audit 輸出以省 tokens。
@@ -1087,16 +1156,58 @@ def main() -> int:
         logger.debug("command not matching main/residual gate: {}".format(command[:80]))
         return 0
 
+    # 命令作用在其他 repo（子 shell cd）時不讀 session repo 的同 ID 票：
+    # 其他 repo 的票由該 repo 自己的 session 與 hook 管（2026-11-13 起）。
+    # 目錄無法靜態解析或混合時沿用修改前的判定（complete 的無法解析情形由
+    # acceptance-gate 擋下）。
+    scope = classify_ticket_command_scope(
+        command, ("phase",) + COMPLETE_VERBS, input_data.get("cwd") or None
+    )
+    if scope == SCOPE_OTHER:
+        logger.info("ticket 命令作用在其他 repo，略過判定：{}".format(command[:200]))
+        return 0
+    if scope in (SCOPE_UNKNOWN, SCOPE_MIXED):
+        logger.info("ticket 命令作用範圍為 {}，沿用修改前的判定".format(scope))
+
+    # 同鏈偵測只服務提示，不得影響阻擋結果：例外時回空集合，逐票判定照常進行
+    try:
+        chain_written = find_pre_complete_body_writes(command)
+    except Exception as exc:
+        logger.warning("同鏈寫入偵測失敗，略過拆分提示: %s", exc)
+        sys.stderr.write("[phase4-decision-enforcement] 同鏈寫入偵測失敗，略過拆分提示: {}\n".format(exc))
+        chain_written = set()
+
     # 多 ID 寫法逐一判定；任一阻擋即 exit 2（其餘仍照常輸出）
     exit_code = 0
     for ticket_id, mode in targets:
-        if _check_ticket(ticket_id, mode, event_name, effort, logger) == 2:
+        stale = mode == "residual_gate" and ticket_id in chain_written
+        if _check_ticket(ticket_id, mode, event_name, effort, logger, stale) == 2:
             exit_code = 2
     return exit_code
 
 
-def _check_ticket(ticket_id, mode, event_name, effort, logger) -> int:
-    """對單一 (ticket_id, mode) 執行掃描與輸出，回傳 0 或 2。"""
+def _check_ticket(ticket_id, mode, event_name, effort, logger, chain_written=False) -> int:
+    """chain_written：同鏈在 complete 之前寫過本票正文，輸出須附拆分提示。"""
+    if chain_written:
+        logger.info("ticket=%s complete 前有同鏈正文寫入，附拆分提示", ticket_id)
+    rc = _scan_ticket(ticket_id, mode, event_name, effort, logger, chain_written)
+    if rc is None:
+        if chain_written:
+            emit_hook_output(event_name or "PreToolUse", additional_context=CHAIN_WRITE_HINT)
+        return 0
+    return rc
+
+
+def _with_hint(msg: str, chain_written: bool) -> str:
+    return msg + "\n\n" + CHAIN_WRITE_HINT if chain_written else msg
+
+
+def _scan_ticket(ticket_id, mode, event_name, effort, logger, chain_written) -> Optional[int]:
+    """對單一 (ticket_id, mode) 執行掃描與輸出，回傳 0 或 2。
+
+    回傳 None：事件相符但未輸出任何訊息，呼叫端可補拆分提示。事件不符的
+    提前返回回 0（本次呼叫不屬此閘門，不補提示）。
+    """
     # Event 與 mode 對應檢查（INT-6/INT-10）
     if mode == "main_gate" and event_name not in ("PostToolUse", ""):
         logger.debug("main_gate 但 event 非 PostToolUse: {}".format(event_name))
@@ -1107,25 +1218,25 @@ def _check_ticket(ticket_id, mode, event_name, effort, logger) -> int:
 
     if not ticket_id:
         logger.debug("no ticket_id extracted")
-        return 0
+        return None
 
     md_path = resolve_ticket_md_path(ticket_id, logger)
     if md_path is None or not md_path.exists():
         logger.info("ticket md not found: {}".format(ticket_id))
-        return 0
+        return None
 
     try:
         content = md_path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError) as exc:
         logger.info("read ticket md failed: {}".format(exc))
-        return 0
+        return None
 
     # PC-099: 檔級豁免（meta-ticket self-reference）
     if detect_hook_self_reference(content):
         logger.info(
             "ticket {} declared hook_self_reference, skip scan (PC-099)".format(ticket_id)
         )
-        return 0
+        return None
 
     lines = content.split("\n")
     table = build_regex_table()
@@ -1138,6 +1249,16 @@ def _check_ticket(ticket_id, mode, event_name, effort, logger) -> int:
             ticket_id, mode, len(blocked), len(warned), len(info), len(exempted_hits)
         )
     )
+
+    if blocked and mode == "residual_gate":
+        # complete 前不以延後話術退件：驗收只審三項固定檢查
+        # （verification-framework〈驗收三項固定檢查〉），其餘觀察記到後續版本。
+        # 降為警告走 additionalContext，模型看得到，不受 effort 抑制。
+        msg = format_block_message(ticket_id, blocked, exempted_hits)
+        msg = "[PC-093 警告：complete 前不阻擋] 以下延後話術請建後續版本票或補豁免標記\n" + msg
+        emit_hook_output(event_name or "PreToolUse", additional_context=_with_hint(msg, chain_written))
+        logger.info("residual_gate blocked-class hits=%d 降為警告放行", len(blocked))
+        return 0
 
     if blocked:
         msg = format_block_message(ticket_id, blocked, exempted_hits)
@@ -1152,13 +1273,15 @@ def _check_ticket(ticket_id, mode, event_name, effort, logger) -> int:
         if warned or info or markers:
             logger.info("effort=low，抑制 warn/info audit 輸出（warned=%d info=%d markers=%d）",
                         len(warned), len(info), len(markers))
-        return 0
+        return None
 
     if warned or info or markers:
         msg = format_warn_info_message(warned, info, markers)
         if msg:
-            emit_hook_output(event_name or "PostToolUse", additional_context=msg)
-    return 0
+            emit_hook_output(event_name or "PostToolUse",
+                             additional_context=_with_hint(msg, chain_written))
+            return 0
+    return None
 
 
 if __name__ == "__main__":

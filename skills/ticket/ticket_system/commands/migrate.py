@@ -199,7 +199,7 @@ def _update_cross_references_collecting(old_id: str, new_id: str) -> List[Path]:
     hierarchical_dirs = list(work_logs_root.glob("v*/v*/v*/tickets"))
     for tickets_dir in sorted(set(flat_dirs + hierarchical_dirs)):
         for ticket_file in sorted(tickets_dir.glob("*.md")):
-            # 跳過剛遷移的 Ticket 本身（來源：0.18.0-W10-037 Bug 2）
+            # 跳過剛遷移的 Ticket 本身
             # 原本使用 startswith 會誤跳過子 Ticket（檔名以 new_id 開頭），
             # 導致它們的 blockedBy / parent_id / relatedTo 等引用不被更新。
             # 改用 extract_core_ticket_id 取得核心 ID 做精確比較，
@@ -296,7 +296,7 @@ def _load_ticket_from_path(ticket_path: Path) -> Optional[Dict[str, Any]]:
         with open(ticket_path, "r", encoding="utf-8") as f:
             content = f.read()
         # parse_frontmatter 返回 (frontmatter_dict, body_text)
-        # W4-025：保留 body 至 ticket["_body"]，否則 save_ticket 寫回時
+        # 保留 body 至 ticket["_body"]，否則 save_ticket 寫回時
         # body 預設空字串 → 截斷被引用 ticket 的整個 Execution Log（資料損壞）
         ticket, body = parse_frontmatter(content)
         if ticket:
@@ -341,7 +341,7 @@ def _backup_ticket(version: str, ticket_id: str) -> Optional[Path]:
 
 def _check_target_collision(target_id: str, version: str) -> Optional[Dict[str, Any]]:
     """
-    檢查目標 ID 是否與既有 Ticket 撞檔（W14-048 collision detection）。
+    檢查目標 ID 是否與既有 Ticket 撞檔。
 
     Args:
         target_id: 目標 Ticket ID
@@ -436,7 +436,7 @@ def _resolve_available_target_id(
 
 def _validate_target_version(target_id: str, version: str) -> Optional[str]:
     """
-    驗證目標 Ticket ID 的版本是否已在 todolist.yaml 中註冊（W9-002）。
+    驗證目標 Ticket ID 的版本是否已在 todolist.yaml 中註冊。
 
     僅阻擋完全未註冊的版本；planned/active/completed 皆放行，因為
     跨版本遷移（含遷入尚未 active 的未來版本）是正當場景。
@@ -934,7 +934,7 @@ def _migrate_ticket_files(
         target_id: 目標 Ticket ID
         dry_run: 預覽模式
         backup: 是否備份
-        force_overwrite: 明示授權覆寫目標 ID 既有 Ticket（W14-048）
+        force_overwrite: 明示授權覆寫目標 ID 既有 Ticket
         reserved: 本批次已預留的目標 ID 集合；本函式把最終目標加入，供同批次後續票避開
 
     Returns:
@@ -946,7 +946,7 @@ def _migrate_ticket_files(
         print(MigrateMessages.INVALID_TICKET_ID_FORMAT)
         return 1, None
 
-    # W9-002: 目標版本合法性守衛（未註冊阻擋；dry-run 同樣須過守衛）
+    # 目標版本合法性守衛（未註冊阻擋；dry-run 同樣須過守衛）
     version_error = _validate_target_version(target_id, version)
     if version_error:
         print(format_error(version_error))
@@ -956,7 +956,7 @@ def _migrate_ticket_files(
     source_components = extract_id_components(source_id)
     source_version = source_components["version"] if source_components else version
 
-    # W14-048: 在 load_and_validate_ticket 之前先檢查實體檔案存在
+    # 在 load_and_validate_ticket 之前先檢查實體檔案存在
     # （load_ticket 有 process-scoped cache，可能在檔案已刪除後仍命中快取，
     #  導致冪等性 re-run 場景誤判 source 仍存在）
     source_path_check = get_ticket_path(source_version, source_id)
@@ -976,7 +976,7 @@ def _migrate_ticket_files(
             return _migrate_subtree(version, source_id, target_id, root, descendants,
                                     dry_run, backup, force_overwrite, reserved)
 
-    # W14-048: collision detection（target 已存在）
+    # collision detection（target 已存在）
     # 例外：source == target（同 ID rename，等同 in-place 更新）不視為 collision
     collision = None
     if source_id != target_id:
@@ -1255,7 +1255,7 @@ def _batch_migrate(
         config_file: 配置檔案路徑
         dry_run: 預覽模式
         backup: 是否備份
-        force_overwrite: 明示授權覆寫目標 ID 既有 Ticket（W14-048）
+        force_overwrite: 明示授權覆寫目標 ID 既有 Ticket
 
     Returns:
         int: exit code (0 全部成功, 1 部分失敗, 2 全部失敗)

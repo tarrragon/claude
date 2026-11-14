@@ -55,9 +55,11 @@ class TestNewestFileMtime:
         # 檔案 mtime（現在）應遠比目錄 mtime（100 小時前）新
         assert newest > old_time + 3600
 
-    def test_large_file_count_stays_fast_and_non_recursive(self, tmp_path):
-        """P0 回歸：大量檔案（5000 個）不遞迴子目錄仍應在合理時間內完成，
-        且子目錄內的檔案不影響結果（第一層限定，非遞迴）
+    def test_large_file_count_stays_non_recursive(self, tmp_path):
+        """P0 回歸：大量檔案（5000 個）時只掃第一層，子目錄內的檔案不影響結果。
+
+        原本另以牆鐘上界斷言「合理時間內完成」，已移除（規則 D1）；不遞迴即是
+        效能回歸的成因防線，由結果斷言鎖住。
         """
         log_dir = tmp_path / "busy-hook"
         log_dir.mkdir()
@@ -75,11 +77,10 @@ class TestNewestFileMtime:
 
         os.utime(nested_file, (future_time, future_time))
 
-        start = time.monotonic()
+        # 不以牆鐘上界判 pass-fail（負載下會對正確程式判紅，test-assertion-design 規則 D1）；
+        # 本測試鎖住的行為是「只掃第一層」，由下方斷言承擔
         newest = monitor._newest_file_mtime(log_dir)
-        elapsed = time.monotonic() - start
 
-        assert elapsed < 5.0, f"應在合理時間內完成，實際耗時 {elapsed:.2f}s"
         # 巢狀檔案的未來時間戳不應影響結果（未遞迴掃描）
         assert newest < future_time
 
@@ -95,6 +96,10 @@ class TestNewestFileMtime:
     def test_check_single_hook_log_uses_newest_file_not_dir_mtime(self, tmp_path, monkeypatch):
         """回歸案例：目錄 mtime 過期但檔案內容最近寫入 -> 不應判 FAIL"""
         project_root = tmp_path
+        monkeypatch.setattr(
+            monitor, "get_hook_log_dir",
+            lambda name: project_root / ".claude" / "hook-logs" / name,
+        )
         log_dir = project_root / ".claude" / "hook-logs" / "some-hook"
         log_dir.mkdir(parents=True)
         (log_dir / "some-hook.log").write_text("recent\n", encoding="utf-8")
@@ -151,8 +156,12 @@ class TestResolveHookNameFromSource:
 class TestResolveHookLogDirSourceFallback:
     """resolve_hook_log_dir: 第三層 fallback 讀取 HOOK_NAME 常數"""
 
-    def test_falls_back_to_source_hook_name_when_stem_mismatches(self, tmp_path):
+    def test_falls_back_to_source_hook_name_when_stem_mismatches(self, tmp_path, monkeypatch):
         project_root = tmp_path
+        monkeypatch.setattr(
+            monitor, "get_hook_log_dir",
+            lambda name: project_root / ".claude" / "hook-logs" / name,
+        )
         hooks_dir = project_root / ".claude" / "hooks"
         hooks_dir.mkdir(parents=True)
         hook_file = hooks_dir / "foo-availability-check-hook.py"

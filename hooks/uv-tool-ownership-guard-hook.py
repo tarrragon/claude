@@ -6,11 +6,11 @@
 """
 uv tool Ownership Guard Hook（PreToolUse: Bash + SessionStart）
 
-防跨專案全域 uv tool 污染（W3-087 方案 A）。
+防跨專案全域 uv tool 污染。
 
 兩個事件，兩種職責：
   - PreToolUse: Bash — mid-session ownership 防線（見下方「本 hook 的職責」）
-  - SessionStart — SKILLS 清單漂移檢查（0.2.1-W3-184）。掃描候選集合與本檔
+  - SessionStart — SKILLS 清單漂移檢查。掃描候選集合與本檔
     SKILLS 常數比對，漏列或冗列時輸出具體差異項。放在 SessionStart 而非
     PreToolUse 的理由見 `_check_skills_drift` docstring（成本差三個數量級）。
 
@@ -44,7 +44,6 @@ uv tool Ownership Guard Hook（PreToolUse: Bash + SessionStart）
   - 可觀測性（quality-baseline 規則 4）：reinstall 動作雙通道（stderr + log）。
   - Exit code 永遠 0：不阻塊使用者命令；reinstall 失敗僅 warn。
 
-對應 ticket 0.19.0-W3-090（source ANA 0.19.0-W3-087 方案 A）。
 """
 
 from __future__ import annotations
@@ -65,10 +64,22 @@ from lib import (  # noqa: E402
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    emit_model_reminder,
 )
-from lib.uv_tool_utils import is_shimmed_cli  # noqa: E402
+from lib.uv_tool_utils import is_shimmed_cli, reinstall_skip_reason  # noqa: E402
 
 HOOK_NAME = "uv-tool-ownership-guard"
+
+# 受眾：模型與用戶。reinstall 動作與失敗、SKILLS 清單漂移都影響模型接下來呼叫的
+# CLI 是否為本專案版本，模型須知道才能判讀命令結果或建票；exit 0 的 stderr 模型
+# 看不到，故收集後由 main 經 emit_model_reminder 走 additionalContext，stderr 保留給用戶。
+_model_notes: List[str] = []
+
+
+def _notify(message: str) -> None:
+    """提醒雙管道：stderr 給用戶，並收集待 main 送 additionalContext 給模型。"""
+    sys.stderr.write(message + "\n")
+    _model_notes.append(message)
 
 # reinstall 子程序逾時（秒）
 REINSTALL_TIMEOUT = 60
@@ -87,7 +98,7 @@ class SkillEntry:
 #
 # 納入判準：`.claude/skills/<name>/pyproject.toml` 存在**且**定義 `[project.scripts]`。
 # 後半是關鍵——無 `[project.scripts]` 者不產生任何 executable，沒有可被劫持的全域 slot，
-# 列入即為幽靈項。校準指令（0.2.1-W3-181）：
+# 列入即為幽靈項。校準指令：
 #   for d in .claude/skills/*/; do [ -f "$d/pyproject.toml" ] && \
 #     grep -q '^\[project.scripts\]' "$d/pyproject.toml" && basename "$d"; done
 #   uv tool list
@@ -99,7 +110,7 @@ class SkillEntry:
 #
 # branch-worktree-guardian 曾列於本清單，實查其 pyproject.toml 無 `[project.scripts]`
 # （僅 `[project]` 與 `[project.optional-dependencies]`），不符判準且該 executable 從未
-# 存在，已於 0.2.1-W3-181 移除。
+# 存在，已移除。
 SKILLS: Tuple[SkillEntry, ...] = (
     SkillEntry(".claude/skills/ticket", "ticket-system", "ticket"),
     SkillEntry(".claude/skills/doc", "doc-system", "doc"),
@@ -206,7 +217,7 @@ def _reinstall(skill: SkillEntry, project_root: Path, logger) -> bool:
         f"reinstall 自 {source_dir}"
     )
     logger.info(msg)
-    sys.stderr.write(msg + "\n")
+    _notify(msg)
 
     try:
         result = subprocess.run(
@@ -221,12 +232,12 @@ def _reinstall(skill: SkillEntry, project_root: Path, logger) -> bool:
     except subprocess.TimeoutExpired:
         warn = f"[OwnershipGuard] reinstall {skill.cli_name} 逾時（{REINSTALL_TIMEOUT}s）"
         logger.info(warn)
-        sys.stderr.write(warn + "\n")
+        _notify(warn)
         return False
     except Exception as e:
         warn = f"[OwnershipGuard] reinstall {skill.cli_name} 失敗: {e}"
         logger.info(warn)
-        sys.stderr.write(warn + "\n")
+        _notify(warn)
         return False
 
     if result.returncode != 0:
@@ -235,7 +246,7 @@ def _reinstall(skill: SkillEntry, project_root: Path, logger) -> bool:
             f"（code={result.returncode}）: {result.stderr.strip()[:200]}"
         )
         logger.info(warn)
-        sys.stderr.write(warn + "\n")
+        _notify(warn)
         return False
 
     logger.info(f"[OwnershipGuard] reinstall {skill.cli_name} 成功")
@@ -283,6 +294,18 @@ def _guard_command(command: str, project_root: Path, logger) -> None:
             f"{exe} ownership mismatch："
             f"receipt={receipt_dir} expected={expected}"
         )
+
+        # 只從主 checkout 重裝：linked worktree 或判定失敗時改為提醒，
+        # 不以未確認來源的源碼覆蓋全域 CLI。
+        skip_reason = reinstall_skip_reason(project_root, logger)
+        if skip_reason is not None:
+            _notify(
+                f"[OwnershipGuard] 未自動重裝 {exe}：{skip_reason}。"
+                f"需要對齊時，請在主 checkout 的 {skill.source_subpath} "
+                "執行 uv tool install . --reinstall"
+            )
+            continue
+
         _reinstall(skill, project_root, logger)
 
 
@@ -290,7 +313,7 @@ def _scan_candidate_skills(project_root: Path) -> Dict[str, str]:
     """掃描 `.claude/skills/` 得候選集合：有 pyproject.toml 且定義 project.scripts 者。
 
     回傳 {skill 目錄名: package name}。判準的兩個條件缺一不可——只看 pyproject.toml
-    會納入無 CLI 入口者（其 executable 從未存在，列入即幽靈項，0.2.1-W3-181 實證）。
+    會納入無 CLI 入口者（其 executable 從未存在，列入即幽靈項，已實測證實）。
     純文字比對不解析 TOML，與本 hook 其餘部分同一設計選擇（避免額外依賴）。
     """
     candidates: Dict[str, str] = {}
@@ -316,12 +339,12 @@ def _check_skills_drift(project_root: Path, logger) -> None:
 
     Why：SKILLS 是靜態清單，新增有 CLI 入口的 skill 時若未同步，該 CLI 完全不受
     ownership 保護且無任何告警——名單語意為「該保護誰」時漏列不撞牆（ARCH-BAL-003
-    症狀變體）。skill-sync 曾因此被他專案副本佔用逾一個月（0.2.1-W3-181）。
+    症狀變體）。skill-sync 曾因此被他專案副本佔用逾一個月。
 
     為何在 SessionStart 而非 PreToolUse 做：本掃描讀 8 個 pyproject.toml 約 0.4 ms，
     PreToolUse 現行 fast-path 約 0.0002 ms，相差三個數量級；該事件跑在每個 Bash
     命令上，設計約束要求非 uv-tool 命令 O(1) 立即返回。SessionStart 每 session 僅
-    一次，同樣成本可忽略（0.2.1-W3-184）。
+    一次，同樣成本可忽略。
     """
     candidates = _scan_candidate_skills(project_root)
     listed = {s.source_subpath.rsplit("/", 1)[-1] for s in SKILLS}
@@ -340,10 +363,10 @@ def _check_skills_drift(project_root: Path, logger) -> None:
         lines.append(f"冗列（清單有但無 CLI 入口）：{', '.join(extra)}")
         lines.append("  後果：幽靈項，永遠不會被命令辨識命中")
     lines.append("修復：同步 uv-tool-ownership-guard-hook.py 的 SKILLS 常數")
-    lines.append("背景：ARCH-BAL-003 症狀變體 / 0.2.1-W3-181")
+    lines.append("背景：ARCH-BAL-003 症狀變體")
     lines.append("=" * 60)
     warning = "\n".join(lines)
-    print(warning, file=sys.stderr)
+    _notify(warning)
     logger.warning(warning)
 
 
@@ -354,9 +377,12 @@ def main() -> int:
     if input_data is None:
         return 0
 
+    _model_notes.clear()
+
     # SessionStart：跑清單漂移檢查（無 tool_name 欄位，與 PreToolUse 分流）
     if input_data.get("hook_event_name") == "SessionStart":
         _check_skills_drift(get_project_root(), logger)
+        _emit_model_notes("SessionStart", logger)
         return 0
 
     if input_data.get("tool_name", "") != "Bash":
@@ -369,7 +395,16 @@ def main() -> int:
 
     project_root = get_project_root()
     _guard_command(command, project_root, logger)
+    _emit_model_notes("PreToolUse", logger)
     return 0
+
+
+def _emit_model_notes(event: str, logger) -> None:
+    """有收集到提醒時，經 additionalContext 送給模型（不帶 permissionDecision）。"""
+    if not _model_notes:
+        return
+    logger.info("送出模型提醒 %d 則（event=%s）", len(_model_notes), event)
+    emit_model_reminder(event, "\n".join(_model_notes))
 
 
 if __name__ == "__main__":

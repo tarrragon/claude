@@ -2,7 +2,7 @@
 name: doc
 description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、建立、導航和管理。Use for: (1) 查詢提案、規格、用例文件, (2) 建立新提案/規格/用例（從模板）, (3) 跨文件導航（從 UC 找 spec/ticket）, (4) Domain 地圖查詢, (5) 追蹤索引管理, (6) UC 測試對應驗證, (7) 提案評估與審查, (8) 測試追溯矩陣查詢（UC↔測試覆蓋狀態）, (9) UC 編號治理（uc list 列合法 UC / uc verify 白名單驗證可掛 CI / uc trace 引用追溯 / uc context 派發 UC 定位）。Use when: user mentions PROP-, UC-, SPEC-, 功能, 需求, feature, issue, 提案, 用例, 規格, 需求文件, 需求追蹤, 測試覆蓋, 追溯, traceability, test-map, UC 編號, 編號驗證, uc verify, 偽 UC, 合法 UC 清單"
 metadata:
-  version: 1.26.1
+  version: 1.26.2
 ---
 
 # Doc SKILL
@@ -205,7 +205,7 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 | 提案評估 | 提案 draft → discussing 時，執行 `references/proposal-evaluation-guide.md` 三關式審查 | - |
 | 所有 checklist 完成 | 提案 status → implemented | 版本 worklog 記錄 |
 
-**提案確認的 target_version 源頭引導（0.38.0-W1-004）**：`doc update <PROP-ID> confirmed` 時，若提案 target_version 已設定但未在 `docs/todolist.yaml` 註冊（不論 status），輸出提醒指引使用者補建版本條目。判定標準與 `version-tracking-consistency-guard-hook`（session-start 事後偵測層）一致，形成三層防護模型的第 1 層（源頭引導）；target_version 為 null 時不提示（不同關注點）。
+**提案確認的 target_version 源頭引導**：`doc update <PROP-ID> confirmed` 時，若提案 target_version 已設定但未在 `docs/todolist.yaml` 註冊（不論 status），輸出提醒指引使用者補建版本條目。判定標準與 `version-tracking-consistency-guard-hook`（session-start 事後偵測層）一致，形成三層防護模型的第 1 層（源頭引導）；target_version 為 null 時不提示（不同關注點）。
 
 ### 與 /spec Skill 的關係
 

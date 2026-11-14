@@ -14,23 +14,23 @@ Agent Commit Verification Hook - SubagentStop
   4. 輸出整合的「PM 立即動作」摘要，指引 PM 下一步操作。
   5. 掃描 hook-logs 輸出 hook error 摘要。
 
-觸發時機: SubagentStop（CC runtime 代理人真正停止時觸發，W10-067 遷移自 PostToolUse）
+觸發時機: SubagentStop（CC runtime 代理人真正停止時觸發，遷移自 PostToolUse）
 行為: 不阻擋（exit 0），有警告時以 top-level systemMessage（純顯示通道）輸出。
   無內容時靜默退出。
-  自激迴圈防護（1.0.0-W1-055.1）：
+  自激迴圈防護：
   1. stop_hook_active=true（runtime 因 stop hook 而繼續）時靜默 exit 0（CC hook
      規格的防迴圈欄位）。
   2. Hook error 摘要以錯誤記錄 fingerprint 做 TTL 去重，相同錯誤集合在 TTL 內
-     不重複播報（W1-074/075/076 觀測的重播症狀）。
-  3. 輸出通道自 hookSpecificOutput.additionalContext 回退 systemMessage：W1-055
-     ANA 活體確證 additionalContext 投遞對象是「停止中的 subagent」（注入其對話
+     不重複播報（曾觀測到的重播症狀）。
+  3. 輸出通道自 hookSpecificOutput.additionalContext 回退 systemMessage：
+     活體確證 additionalContext 投遞對象是「停止中的 subagent」（注入其對話
      並令其繼續，H1 confidence 0.95），與本 hook「通知 PM 主線程」意圖不符。
 
 來源:
   - PC-024 — 代理人完成實作但跳過 git commit，變更未持久化
-  - W10-067 — 從 PostToolUse 遷移至 SubagentStop，解決 background 啟動誤觸發
-  - 0.19.1-W1-046 — CC 2.1.163 解禁後曾改用 additionalContext（已由 W1-055.1 回退）
-  - 1.0.0-W1-055.1 — 自激迴圈斷路器 + hook error fingerprint dedup + 通道回退
+  - 從 PostToolUse 遷移至 SubagentStop，解決 background 啟動誤觸發
+  - CC 2.1.163 解禁後曾改用 additionalContext（後已回退為 systemMessage）
+  - 自激迴圈斷路器 + hook error fingerprint dedup + 通道回退
 """
 
 import hashlib
@@ -48,6 +48,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import (
     setup_hook_logging,
+    get_hook_log_dir,
     read_json_from_stdin,
     get_worktree_list as shared_get_worktree_list,
     get_uncommitted_files as shared_get_uncommitted_files,
@@ -56,7 +57,7 @@ from lib import (
 # dispatch-active.json 查詢與 worktree/分支掃描皆為跨 worktree 全域狀態，
 # 用 git_utils 版 get_project_root（CLAUDE_PROJECT_DIR 導向，恆指主 repo），
 # 而非 lib.hook_base 的 worktree 感知版本（見 ARCH-BAL-020）
-from lib.git_utils import get_project_root
+from lib.git_utils import get_action_root, get_project_root
 
 from lib.dispatch_tracker import get_active_dispatches
 
@@ -69,7 +70,7 @@ EXIT_SUCCESS = 0
 
 # 預設輸出格式（靜默通過）
 # 無內容時靜默退出（不輸出任何 JSON）；有警告時以 top-level systemMessage
-# （純顯示通道）輸出。1.0.0-W1-055.1 自 additionalContext 回退：該欄位會注入
+# （純顯示通道）輸出。自 additionalContext 回退：該欄位會注入
 # 停止中的 subagent 並令其繼續（自激迴圈），與通知 PM 的意圖不符。
 
 # Git 命令超時（秒）
@@ -106,7 +107,7 @@ MSG_CWD_RESTORE_BODY = (
     "  cd {project_root} && pwd && git branch --show-current"
 )
 
-# Worktree 未提交變更警告訊息（0.2.1-W3-283，issue 46 症狀四驗收側）
+# Worktree 未提交變更警告訊息（issue 46 症狀四驗收側）
 MSG_WORKTREE_UNCOMMITTED_TITLE = "[Worktree 未提交警告] 以下 worktree 有未 commit 的變更"
 MSG_WORKTREE_UNCOMMITTED_BODY = (
     "Agent 完成後，以下 worktree 內有未提交的變更（可能是未落地的產品碼）。\n"
@@ -137,7 +138,7 @@ FEATURE_BRANCH_PREFIXES = ("feat/", "feature/", "fix/", "refactor/")
 
 # Hook error 摘要
 HOOK_ERROR_SCAN_MINUTES = 5
-# Hook error 摘要去重 TTL（1.0.0-W1-055.1 修復 2）：相同錯誤集合（fingerprint）
+# Hook error 摘要去重 TTL：相同錯誤集合（fingerprint）
 # 在 TTL 內只播報一次。TTL 取掃描視窗（5 分鐘）的兩倍，確保同一批錯誤記錄
 # 在其可見視窗內不會二次播報；新錯誤出現會改變 fingerprint、立即播報。
 HOOK_ERROR_DEDUP_TTL_SECONDS = HOOK_ERROR_SCAN_MINUTES * 60 * 2
@@ -153,7 +154,7 @@ MSG_HOOK_ERROR_BODY = (
 
 
 # ============================================================================
-# Worktree 回傳型別（0.2.1-W3-287：具名化取代位置解構）
+# Worktree 回傳型別（具名化取代位置解構）
 # ============================================================================
 
 
@@ -184,9 +185,9 @@ class WorktreeItems(NamedTuple):
 def get_uncommitted_files(project_root: str, logger: logging.Logger) -> list[str]:
     """取得未 commit 的檔案清單（排除豁免路徑）
 
-    0.2.1-W3-286：改用 lib.git_utils.get_uncommitted_files 共用實作，取代
+    改用 lib.git_utils.get_uncommitted_files 共用實作，取代
     自行 subprocess + porcelain 解析。舊版整體 strip 曾剝除首行前導空白
-    致路徑截斷（IMP-BAL-007 / 0.2.1-W3-284），共用層已修復且與本 hook 原本
+    致路徑截斷（IMP-BAL-007），共用層已修復且與本 hook 原本
     的行首空白保留邏輯一致，收斂不改變解析結果。
 
     Args:
@@ -255,9 +256,9 @@ def build_warning_message(
 def list_worktrees(project_root: str, logger: logging.Logger) -> list[WorktreeInfo]:
     """取得所有非 main 的 worktree 清單。
 
-    0.2.1-W3-286：改用 lib.git_utils.get_worktree_list(exclude_main=True)
+    改用 lib.git_utils.get_worktree_list(exclude_main=True)
     共用實作，取代自行 subprocess + porcelain 解析（原 _parse_worktree_
-    list_output，0.2.1-W3-283 從 get_unmerged_worktrees 抽出的版本）。
+    list_output，從 get_unmerged_worktrees 抽出的版本）。
     detached worktree（無 branch 值）依共用層慣例保留於原始清單，此處以
     `wt.get("branch")` 真值過濾排除——與原行為一致（detached 因無分支可供
     `git log main..branch` 比對，本就不出現在 WorktreeInfo 清單中）。
@@ -290,7 +291,7 @@ def get_worktree_uncommitted_files(
     路徑下的未提交變更不落在「產品碼遺失」風險範圍內。若此前提改變
     （框架修改開始走 worktree 派發），本排除即成偵測盲區，需重新評估
     是否仍適用。維持與主 repo 檢查一致的判準，避免同一份清單在兩處
-    產生不同語意（0.2.1-W3-288 SR-2 / 0.2.1-W3-293）。
+    產生不同語意。
 
     Args:
         worktrees: WorktreeInfo 清單（由 list_worktrees 取得）
@@ -323,7 +324,7 @@ def _build_worktree_items_message(
     command_for: Callable[[WorktreeItems], str],
     suggestion: str,
 ) -> str:
-    """組裝 worktree 項目清單訊息的共用骨架（0.2.1-W3-287：合併原
+    """組裝 worktree 項目清單訊息的共用骨架（合併原
     build_worktree_uncommitted_message 與 build_worktree_merge_message，
     截斷上限統一取 MAX_FILES_DISPLAY，取代原本各自寫死不同上限的漂移）。
 
@@ -604,7 +605,9 @@ def scan_hook_errors(project_root: str, minutes: int, logger: logging.Logger) ->
     import os
     import time
 
-    hook_logs_dir = Path(project_root) / ".claude" / "hook-logs"
+    # 讀回端與寫入端同源：linked worktree 內解析到主 checkout 的 hook-logs 根
+    # （project_root 參數保留供呼叫端相容，日誌位置不再由它決定）
+    hook_logs_dir = get_hook_log_dir("")
     if not hook_logs_dir.is_dir():
         logger.debug("hook-logs directory not found")
         return []
@@ -664,10 +667,7 @@ def build_hook_error_message(hook_errors: list[tuple[str, int]]) -> str:
 
 def _get_error_dedup_state_file(project_root) -> Path:
     """Hook error 摘要去重 state 檔路徑（hook-logs 已被 .gitignore 排除）。"""
-    return (
-        Path(project_root) / ".claude" / "hook-logs" / HOOK_NAME
-        / "hook-error-broadcast-dedup.json"
-    )
+    return get_hook_log_dir(HOOK_NAME) / "hook-error-broadcast-dedup.json"
 
 
 def build_error_fingerprint(hook_errors: list[tuple[str, int]]) -> str:
@@ -697,8 +697,8 @@ def check_and_record_broadcast(
     寧可重複通知，不可吞掉真實通知（quality-baseline 規則 4 可觀測性）。
 
     註：與 subagent-stop-dispatch-cleanup-hook.py 的同名函式刻意重複——
-    hook 檔名含 hyphen 無法互相 import，且 1.0.0-W1-055.1 約束僅允許修改
-    兩個 hook 本體；抽共用 lib 屬範圍外決策。
+    hook 檔名含 hyphen 無法互相 import，且當時約束僅允許修改
+    兩個 hook 本體，抽共用 lib 屬範圍外決策。
     """
     if now is None:
         now = time.time()
@@ -772,7 +772,7 @@ def main() -> None:
 
     if not input_data:
         logger.debug("no input data")
-        # W17-160: SubagentStop schema — 無內容時靜默退出，不輸出 hookSpecificOutput 殼
+        # SubagentStop schema — 無內容時靜默退出，不輸出 hookSpecificOutput 殼
         sys.exit(EXIT_SUCCESS)
 
     # SubagentStop input 含 agent_id（CC runtime 保證）
@@ -781,7 +781,7 @@ def main() -> None:
         logger.debug("no agent_id in SubagentStop input, skip")
         sys.exit(EXIT_SUCCESS)
 
-    # 自激迴圈斷路器（1.0.0-W1-055.1 修復 1）：stop_hook_active=true 表示本次
+    # 自激迴圈斷路器：stop_hook_active=true 表示本次
     # 停止是「上一輪 stop hook 輸出令 agent 繼續」的結果，任何輸出都會再度
     # 延續迴圈 —— 靜默退出。
     if input_data.get("stop_hook_active"):
@@ -798,8 +798,11 @@ def main() -> None:
         project_root, agent_id, logger
     )
 
+    # git status / worktree list / log 屬 AR：讀 payload.cwd 所屬 checkout
+    action_root = get_action_root(input_data, project_root)
+
     # 檢查未 commit 的檔案
-    uncommitted_files = get_uncommitted_files(str(project_root), logger)
+    uncommitted_files = get_uncommitted_files(str(action_root), logger)
 
     # 建構訊息
     messages = []
@@ -820,9 +823,9 @@ def main() -> None:
     else:
         logger.debug("no uncommitted files after agent completed")
 
-    # 0.2.1-W3-283：解析一次 worktree 清單，供未合併 commit 檢查與未提交
+    # 解析一次 worktree 清單，供未合併 commit 檢查與未提交
     # 變更檢查共用，避免重複 `git worktree list` 呼叫
-    all_worktrees = list_worktrees(str(project_root), logger)
+    all_worktrees = list_worktrees(str(action_root), logger)
 
     # 檢查 worktree 未提交變更（issue 46 症狀四驗收側，先於合併檢查獨立判定）
     worktree_uncommitted = get_worktree_uncommitted_files(all_worktrees, logger)
@@ -836,7 +839,7 @@ def main() -> None:
         messages.append(build_worktree_uncommitted_message(worktree_uncommitted))
 
     # 檢查 worktree 未合併 commit
-    unmerged_worktrees = get_unmerged_worktrees(str(project_root), logger, all_worktrees)
+    unmerged_worktrees = get_unmerged_worktrees(str(action_root), logger, all_worktrees)
     worktree_branch_names = {wt.branch for wt in unmerged_worktrees}
     if unmerged_worktrees:
         has_unmerged_worktrees = True
@@ -850,7 +853,7 @@ def main() -> None:
 
     # 檢查 feature 分支未合併 commit
     unmerged_branches = get_unmerged_feature_branches(
-        str(project_root), logger, worktree_branch_names,
+        str(action_root), logger, worktree_branch_names,
     )
     if unmerged_branches:
         has_unmerged_branches = True
@@ -870,7 +873,7 @@ def main() -> None:
     else:
         logger.debug("cwd restore reminder skipped (non-worktree agent)")
 
-    # Hook error 摘要（1.0.0-W1-055.1 修復 2：fingerprint 去重，相同錯誤集合
+    # Hook error 摘要（fingerprint 去重，相同錯誤集合
     # 在 TTL 內不重複播報）
     hook_errors = scan_hook_errors(str(project_root), HOOK_ERROR_SCAN_MINUTES, logger)
     if hook_errors:
@@ -897,8 +900,8 @@ def main() -> None:
             first_unmerged_branch,
         ))
 
-    # 1.0.0-W1-055.1 修復 4：通道回退 top-level systemMessage（純顯示）。
-    # additionalContext 經 W1-055 活體確證會注入「停止中的 subagent」並令其
+    # 通道回退 top-level systemMessage（純顯示）。
+    # additionalContext 經活體確證會注入「停止中的 subagent」並令其
     # 繼續（自激迴圈核心），與「通知 PM 主線程」意圖不符。
     # 無訊息時靜默不輸出（不送空殼）。
     if messages:

@@ -57,7 +57,7 @@ def project_dir(tmp_path, monkeypatch):
     """建立臨時專案根目錄並設 CLAUDE_PROJECT_DIR。"""
     # 建立必要目錄
     (tmp_path / ".claude" / "config").mkdir(parents=True)
-    (tmp_path / ".claude" / "hook-logs").mkdir(parents=True)
+    (tmp_path / ".claude" / "hook-logs" / "framework-rule-edit-skill-trigger").mkdir(parents=True)
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     return tmp_path
 
@@ -146,7 +146,7 @@ def test_framework_path_with_skill_read_passes(project_dir, monkeypatch, capsys)
     assert stderr == ""  # 無警告
 
     # cache 應未寫入該路徑（已讀 SKILL 屬合規路徑）
-    cache_files = list((project_dir / ".claude" / "hook-logs").glob("skill-trigger-cache-*.json"))
+    cache_files = list((project_dir / ".claude" / "hook-logs" / "framework-rule-edit-skill-trigger").glob("skill-trigger-cache-*.json"))
     if cache_files:
         # 即使有 cache 檔，warned_paths 不該含本路徑
         data = json.loads(cache_files[0].read_text())
@@ -168,7 +168,7 @@ def test_framework_path_without_skill_warns(project_dir, monkeypatch, capsys):
     assert ".claude/rules/core/example.md" in stderr
 
     # cache 應寫入該路徑
-    cache_files = list((project_dir / ".claude" / "hook-logs").glob("skill-trigger-cache-test-session-001.json"))
+    cache_files = list((project_dir / ".claude" / "hook-logs" / "framework-rule-edit-skill-trigger").glob("skill-trigger-cache-test-session-001.json"))
     assert len(cache_files) == 1
     data = json.loads(cache_files[0].read_text())
     assert ".claude/rules/core/example.md" in data["warned_paths"]
@@ -186,7 +186,7 @@ def test_non_framework_path_skips(project_dir, monkeypatch, capsys):
     assert code == 0
     assert stderr == ""
 
-    cache_files = list((project_dir / ".claude" / "hook-logs").glob("skill-trigger-cache-*.json"))
+    cache_files = list((project_dir / ".claude" / "hook-logs" / "framework-rule-edit-skill-trigger").glob("skill-trigger-cache-*.json"))
     assert cache_files == []  # 完全沒寫 cache
 
 
@@ -198,7 +198,7 @@ def test_cache_hit_skips_warning(project_dir, monkeypatch, capsys):
 
     session_id = "test-session-cache"
     # 預先寫入 cache（模擬第一次警告已發生）
-    cache_path = project_dir / ".claude" / "hook-logs" / f"skill-trigger-cache-{session_id}.json"
+    cache_path = project_dir / ".claude" / "hook-logs" / "framework-rule-edit-skill-trigger" / f"skill-trigger-cache-{session_id}.json"
     rel_target = ".claude/rules/core/example.md"
     cache_path.write_text(json.dumps({
         "session_id": session_id,

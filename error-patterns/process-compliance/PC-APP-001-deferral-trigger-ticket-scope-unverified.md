@@ -2,11 +2,11 @@
 
 ## 摘要
 
-本 pattern 指：延後決策引用的 trigger ticket 格式合法（確為 ticket ID）但其 scope 不涵蓋被延後的工作，導致 trigger 名存實亡——格式上通過 decision-trigger-binding 規則 2，語意上卻不會觸發任何後續動作，延後退化為無 trigger 延後（PC-093）。典型情境：延後敘述寫「Phase 4 評估抽為 X，依 W3-006 結論」，但引用者只確認該 ID 格式合法、未查證該 ticket 實際 scope 是否真涵蓋被延後工作。根因是 decision-trigger-binding 規則 2 只要求「trigger 限 ticket ID」（格式層），未要求「查證被引用 ticket 的 scope 涵蓋延後工作」（語意層），形成 guidance 缺口。修正方向：引用 ticket 作 trigger 前先 `ticket track query <id>` 讀其 what/scope，確認與延後工作主題一致；不一致則建真實承接 ticket 並改引用之。
+本 pattern 指：延後決策引用的 trigger ticket 格式合法（確為 ticket ID）但其 scope 不涵蓋被延後的工作，導致 trigger 名存實亡——格式上通過 decision-trigger-binding 規則 2，語意上卻不會觸發任何後續動作，延後退化為無 trigger 延後（PC-093）。典型情境：延後敘述寫「Phase 4 評估抽為 X，依 <ticket-id> 結論」，但引用者只確認該 ID 格式合法、未查證該 ticket 實際 scope 是否真涵蓋被延後工作。根因是 decision-trigger-binding 規則 2 只要求「trigger 限 ticket ID」（格式層），未要求「查證被引用 ticket 的 scope 涵蓋延後工作」（語意層），形成 guidance 缺口。修正方向：引用 ticket 作 trigger 前先 `ticket track query <id>` 讀其 what/scope，確認與延後工作主題一致；不一致則建真實承接 ticket 並改引用之。
 
 ## 症狀
 
-- 延後敘述含「依 W{X}-{Y} 結論 / 承接點 / 待 W{X}-{Y}」但未實際讀過該 ticket 內容
+- 延後敘述含「依 <ticket-id> 結論 / 承接點 / 待 <ticket-id>」但未實際讀過該 ticket 內容
 - 被引用 ticket 的 what 與延後工作主題不符（如引用「migration 分隔符語意」ticket 承接「VO 驗證遷移」工作）
 - 通過 decision-trigger-binding 規則 2 格式檢查（確實是 ticket ID），卻不會被任何後續流程觸發
 - 被引用 ticket 完成 / 關閉時，無人意識到它本應觸發延後工作，延後在「以後」與「永不」間累積為死議題
@@ -22,20 +22,20 @@ decision-trigger-binding 規則 2 的防護只覆蓋格式層：
 
 引用者看到「要綁 ticket trigger」便填一個看似相關的 ticket ID，未執行 `ticket track query` 核對該 ticket 的 what。當 ID 憑記憶或編號鄰近性填入時，誤引主題不符 ticket 的機率顯著上升。格式檢查通過營造「已正確綁定」的假象，遮蔽語意斷裂。
 
-## 案例：W5-002 ADR 3 引用 W3-006 承接 VO 驗證遷移（2026-06-14）
+## 案例：終態重構策略的 ADR 引用 migration 票承接 VO 驗證遷移（2026-06-14）
 
-W5-002 終態重構策略（pepper Phase 3a）在 ADR 3 與 Solution 第 3 節寫「VO 內領域驗證（ISBN 格式 / importance 1-7 / author 多值解析）刪 VO 後散落，建議 Phase 4 評估抽為 tag value validator（依 W3-006 結論）」。
+某張終態重構策略票（pepper Phase 3a）在 ADR 3 與 Solution 第 3 節寫「VO 內領域驗證（ISBN 格式 / importance 1-7 / author 多值解析）刪 VO 後散落，建議 Phase 4 評估抽為 tag value validator（依 migration 分隔符語意那張票的結論）」。
 
-U2 派發前多視角審查（linux）查證 W3-006 實際 scope：
+U2 派發前多視角審查（linux）查證被引用 ticket 的實際 scope：
 
 ```bash
-ticket track query 0.32.0-W3-006
+ticket track query <被引用 ticket id>
 # → what: 重評 v8 migration tag.id 分隔符語意 + 回滾 category 辨識（TD-1/TD-2）
 ```
 
-W3-006 主題是「migration 分隔符語意」，與「VO 驗證遷移」毫無關係。引用為誤——VO 驗證延後實際無真實承接 ticket，退化為無 trigger 延後（違反 decision-trigger-binding 規則 1）。
+被引用 ticket 主題是「migration 分隔符語意」，與「VO 驗證遷移」毫無關係。引用為誤——VO 驗證延後實際無真實承接 ticket，退化為無 trigger 延後（違反 decision-trigger-binding 規則 1）。
 
-修正：建立 0.32.0-W5-005（tag value validator，承接 ISBN/importance/author 驗證），改引用之並回填 spawned_tickets / blockedBy。
+修正：建立專責的 tag value validator ticket（承接 ISBN/importance/author 驗證），改引用之並回填 spawned_tickets / blockedBy。
 
 緩解因子：本案在 U2 派發前的審查階段被攔截，VO 驗證尚未真正遺失，屬 near-miss。本 PC 固化規則，防止未經審查直接派發時的實害（驗證隨 VO 刪除無痕消失，且無 ticket 追蹤）。
 
@@ -58,7 +58,7 @@ W3-006 主題是「migration 分隔符語意」，與「VO 驗證遷移」毫無
 
 | 訊號 | 判讀 |
 |------|------|
-| 延後敘述含「依 W{X}-{Y} 結論 / 承接點」但未見查證痕跡 | 高風險：可能引用未查證 scope 的 ticket |
+| 延後敘述含「依 <ticket-id> 結論 / 承接點」但未見查證痕跡 | 高風險：可能引用未查證 scope 的 ticket |
 | 被引用 ticket 的 what 與延後工作主題不符 | trigger 語意斷裂，須建真實承接 ticket 改引用 |
 | trigger ticket ID 憑記憶 / 憑編號鄰近填入 | 未執行 `ticket track query` 核對，高誤引率 |
 | 格式檢查通過但無人能說出被引用 ticket 完成後會發生什麼 | trigger 名存實亡的指標 |
@@ -75,4 +75,4 @@ W3-006 主題是「migration 分隔符語意」，與「VO 驗證遷移」毫無
 
 ## 案例文件來源
 
-W5-002 U2 派發前多視角審查（rosemary 主持 parallel-evaluation 情境 F+C，2026-06-14）。linux 委員查證 ADR 3 引用的 W3-006 實為「v8 migration tag.id 分隔符語意」，與延後的 VO 驗證遷移無關。修正建立 0.32.0-W5-005 作真實承接點並回填連結。near-miss——審查階段攔截，VO 驗證未真正遺失。
+某終態重構票 U2 派發前多視角審查（rosemary 主持 parallel-evaluation 情境 F+C，2026-06-14）。linux 委員查證 ADR 3 引用的 ticket 實為「v8 migration tag.id 分隔符語意」，與延後的 VO 驗證遷移無關。修正建立專責 ticket 作真實承接點並回填連結。near-miss——審查階段攔截，VO 驗證未真正遺失。

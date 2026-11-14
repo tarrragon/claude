@@ -29,25 +29,25 @@ PM 在單一 session 中並行執行 2+ 個 `ticket create` 命令（如 backgro
 
 ---
 
-## W10-105 ANA 收尾案例
+## ANA 收尾並行建票案例
 
 ### 時序
 
-1. PM W10-105 ANA 結論需建 2 個 spawned IMP（hook accessibility + CLI/schema 對齊）
+1. PM 的某 ANA 結論需建 2 個 spawned IMP（hook accessibility + CLI/schema 對齊）
 2. PM 並行派發 2 個 background bash `ticket create`：
    - bash bi43cud13: hook accessibility IMP
    - bash b6uyaczhp: CLI/schema 對齊 IMP
 3. 兩個 bash 都通知 completed exit 0
-4. ls 只看到 `W10-107.md`，內容為「CLI/schema 對齊」（後執行的 b6uyaczhp 內容）
+4. ls 只看到一個檔案（記為 `<N>.md`），內容為「CLI/schema 對齊」（後執行的 b6uyaczhp 內容）
 5. 第一個 bash 的「hook accessibility」內容被 overwrite 遺失
-6. PM 重新 serial 執行第一個 ticket create，建出 `W10-108.md`
+6. PM 重新 serial 執行第一個 ticket create，建出 `<N+1>.md`
 
 ### 證據
 
 - `cat b6uyaczhp.output` 顯示 Context Bundle 抽取成功訊息
 - `cat bi43cud13.output` 顯示同樣 Context Bundle 抽取訊息
-- `ls` 只有 W10-107.md（內容對應 b6uyaczhp）
-- 重新 serial 執行才建出 W10-108.md
+- `ls` 只有 `<N>.md`（內容對應 b6uyaczhp）
+- 重新 serial 執行才建出 `<N+1>.md`
 
 ---
 
@@ -105,8 +105,8 @@ PM 在單一 session 中並行執行 2+ 個 `ticket create` 命令（如 backgro
 
 | 撞號 | 雙方 ticket | 處置 |
 |------|------------|------|
-| 第一次 | telemetry IMP（並行 session，源 W1-049）vs bookkeeping IMP（主 session） | 主 session 的票遷移為 W1-058 |
-| 第二次 | auto-commit-hook ANA（並行 session）vs hook 注入污染 ANA（主 session） | 主 session 的票遷移為 W1-060 |
+| 第一次 | telemetry IMP（並行 session）vs bookkeeping IMP（主 session） | 主 session 的票遷移為新序號 |
+| 第二次 | auto-commit-hook ANA（並行 session）vs hook 注入污染 ANA（主 session） | 主 session 的票遷移為新序號 |
 
 **升級訊號**：並行 session 工作模式（PC-078）常態化後，跨 session create 的撞號機率與 session 活躍度成正比，不再是低頻事件。**Consequence**：撞號後的遷移處置會遺失 frontmatter 關聯欄位（relatedTo / spawned_tickets，IMP-061 已知），且後建方的內容存在被靜默覆寫的時間窗。**Action**：方案 A（fcntl file lock）優先級由「修補方向」升為「待排程」——已超過單日 2 次的頻率門檻；排程前 PM workaround 增加一條：跨 session 並行期間，create 後立即以 `grep -c "<自己的 title>" <新檔>` 確認內容歸屬，不只確認檔案存在。
 
@@ -141,4 +141,4 @@ PM 在單一 session 中並行執行 2+ 個 `ticket create` 命令（如 backgro
 **Version**: 1.1.0 — 新增「頻率升級案例：跨 session 同日二度撞號」；方案 A 升為待排程（trigger 綁修補 ticket）；PM workaround 增加 create 後內容歸屬確認
 
 **Version**: 1.0.0
-**Source**: W10-105 ANA 收尾時並行派發 2 個 ticket create 撞 ID（bi43cud13 vs b6uyaczhp），實際只建出 W10-107（後者內容），前者內容遺失需 serial 重建為 W10-108
+**Source**: 某 ANA 收尾時並行派發 2 個 ticket create 撞 ID（bi43cud13 vs b6uyaczhp），實際只建出一張票（後者內容），前者內容遺失需 serial 重建

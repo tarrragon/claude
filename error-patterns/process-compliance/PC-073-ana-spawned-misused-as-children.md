@@ -1,6 +1,6 @@
 # PC-073: ANA 衍生 IMP Ticket 誤用 --parent 導致 children 關係，complete 時被 acceptance-gate 擋下
 
-> **[DEPRECATED 部分內容]** 本檔對「ANA 衍生 IMP 應用 spawned 而非 children」的指引已於 2026-05-03 W17-120 多視角審查共識中被 PC-091 取代。ANA 結論的執行延伸（IMP/DOC 落地）依落地票所屬版本選關係：**本版範圍用 children（`--parent <ANA-ID>`）**；**依〈兩期〉排入後續版本者在目標版本以 `--source-ticket <ANA-ID>` 建根票**（2026-11-11 加版本維度，用戶裁定 2026-11-09）。路線與 complete 時點以 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉為準。
+> **[DEPRECATED 部分內容]** 本檔對「ANA 衍生 IMP 應用 spawned 而非 children」的指引已於 2026-05-03 多視角審查共識中被 PC-091 取代。ANA 結論的執行延伸（IMP/DOC 落地）依落地票所屬版本選關係：**本版範圍用 children（`--parent <ANA-ID>`）**；**依〈兩期〉排入後續版本者在目標版本以 `--source-ticket <ANA-ID>` 建根票**（2026-11-11 加版本維度，用戶裁定 2026-11-09）。路線與 complete 時點以 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉為準。
 >
 > 本檔保留的有效範圍：「執行 IMP/DOC 過程中發現的獨立技術債 / bug」應用 spawned（`--source-ticket`）。本檔「ANA 落地一律改用 spawned」的舊指引仍屬 deprecated：本版範圍的落地不適用 `--source-ticket`；排入後續版本的落地則以 `--source-ticket` 建根票（見上段）。
 >
@@ -15,8 +15,8 @@
 | 編號 | PC-073 |
 | 類別 | process-compliance |
 | 風險等級 | 低（純操作問題，已知解法） |
-| 首發時間 | 2026-04-17（W12-002 session） |
-| 範圍變更 | 2026-05-03 W17-120 — 「ANA 衍生 IMP 用 spawned」段落 deprecated；現定位於「執行中發現獨立技術債」 |
+| 首發時間 | 2026-04-17（污染調查 ANA 執行 session） |
+| 範圍變更 | 2026-05-03 多視角審查 — 「ANA 衍生 IMP 用 spawned」段落 deprecated；現定位於「執行中發現獨立技術債」 |
 | 姊妹模式 | PC-061（ticket migrate CLI bugs）、PC-091（ANA 落地用 children，取代本檔對 ANA 場景的指引） |
 
 ---
@@ -51,7 +51,7 @@ PM 執行 ANA 類型 Ticket 完成後，為其調查結論建立後續防護工�
 | 關係類型 | frontmatter 欄位 | 語意 | complete 行為 |
 |---------|-----------------|------|--------------|
 | 父子（children） | `parent_id` + `children[]` | 必須一起交付，子未完成父無法 complete | acceptance-gate 擋父 complete（永遠） |
-| 衍生（spawned） | `source_ticket` + `spawned_tickets[]` | 獨立排程的副產品 | 不影響非 ANA source 的 complete；對 ANA source 暫時阻擋（W15-003 升級，IMP 收斂後將回到「不阻擋」） |
+| 衍生（spawned） | `source_ticket` + `spawned_tickets[]` | 獨立排程的副產品 | 不影響非 ANA source 的 complete；對 ANA source 暫時阻擋（後續升級為阻擋，IMP 收斂後將回到「不阻擋」） |
 
 **關鍵認知**（2026-05-03 修訂）：
 
@@ -66,7 +66,7 @@ PM 執行 ANA 類型 Ticket 完成後，為其調查結論建立後續防護工�
 ### 已驗證事實
 
 1. **`ticket create --help` 無 `--source-ticket` 參數**：只有 `--parent`、`--blocked-by`、`--related-to`
-2. **W12-002 實測**：用 `--parent 0.18.0-W12-002` 建立 W12-002.1~.4，CLI 自動設為 children
+2. **實測**：對 ANA 用 `--parent <ANA-ID>` 建立 4 張子票，CLI 自動設為 children
 3. **Hook 攔截驗證**：acceptance-gate-hook 檢查 children 全部 completed 才允許 complete
 
 ### 真根因
@@ -150,5 +150,5 @@ PM 執行 ANA 類型 Ticket 完成後，為其調查結論建立後續防護工�
 
 **Last Updated**: 2026-05-03
 **Version**: 2.0.0 — 多視角審查共識結果應用：ANA 衍生 IMP 段落 deprecated，本檔範圍縮限為「執行中發現獨立技術債」。新增 deprecated 標註、姊妹模式 PC-091 引用、相關文件指向 field-semantics.md SSOT。
-**Version**: 1.0.0 — 首發記錄（W12-002 session 事發當場）
-**Source**: W12-002 建立 4 個 spawned IMP Ticket 時 CLI 誤設為 children 導致 ANA complete 被擋（v1.0）；W17-120 ANA 多視角審查（v2.0）
+**Version**: 1.0.0 — 首發記錄（污染調查 ANA session 事發當場）
+**Source**: 某 ANA 建立 4 個 spawned IMP Ticket 時 CLI 誤設為 children 導致 ANA complete 被擋（v1.0）；後續 ANA 多視角審查（v2.0）

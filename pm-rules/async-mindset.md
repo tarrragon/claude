@@ -197,7 +197,7 @@ PM 派發代理人後（background），**立刻**依以下優先順序切換注
 - [parallel-first](parallel-first.md) - 並行優先策略
 - [parallel-dispatch](parallel-dispatch.md) - 並行派發規則（派發後注意力切換的執行情境來源）
 - .claude/error-patterns/process-compliance/PC-050-premature-agent-completion-judgment.md - 誤判代理人完成的防護
-- .claude/error-patterns/process-compliance/PC-062-post-dispatch-anxiety-checking.md - 派發後焦慮性檢查錯誤模式（待建立，W10-026）
+- .claude/error-patterns/process-compliance/PC-062-post-dispatch-anxiety-checking.md - 派發後焦慮性檢查錯誤模式（待建立）
 
 ---
 

@@ -272,7 +272,7 @@ grep -rn "request\.body\|request\.query" --include="*.dart"
 ---
 
 **Last Updated**: 2026-03-02
-**Version**: 1.1.0 - 澄清與 security-review Skill 的分工邊界（W28-026）
+**Version**: 1.1.0 - 澄清與 security-review Skill 的分工邊界
 **Specialization**: Security Vulnerability Detection
 
 

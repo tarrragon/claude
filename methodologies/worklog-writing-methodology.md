@@ -193,7 +193,7 @@ byte index 2 is not a char boundary; it is inside '⏳' (bytes 0..3) of `⏳ |`
 
 | Ticket ID | Action | Target | Agent | 狀態 |
 |-----------|--------|--------|-------|------|
-| X.Y.Z-W1-001 | [動詞] | [目標] | [代理人] | 待處理 |
+| X.Y.Z-W{wave}-{seq} | [動詞] | [目標] | [代理人] | 待處理 |
 
 ---
 
@@ -212,7 +212,7 @@ byte index 2 is not a char boundary; it is inside '⏳' (bytes 0..3) of `⏳ |`
 
 | 欄位 | 說明 | 範例 |
 |------|------|------|
-| Ticket ID | 版本號-階段-序號 | `{version}-W1-001` |
+| Ticket ID | 版本號-階段-序號 | `{version}-W{wave}-{seq}` |
 | Action | 動詞（Analyze/Design/Fix/Implement） | `Analyze` |
 | Target | 修改目標 | `Widget 測試基礎設施` |
 | Agent | 執行代理人 | `sage-test-architect` |

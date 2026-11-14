@@ -273,4 +273,4 @@ def check_agile_refactor_compliance(who, how):
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 - 從 5w1h-self-awareness-methodology.md 瘦身外移（W8-020.4）：六維度完整正反判斷範例 + Hook 系統整合程式碼（5W1H 完整性檢查 + 敏捷重構合規性檢查）
+**Version**: 1.0.0 - 從 5w1h-self-awareness-methodology.md 瘦身外移：六維度完整正反判斷範例 + Hook 系統整合程式碼（5W1H 完整性檢查 + 敏捷重構合規性檢查）

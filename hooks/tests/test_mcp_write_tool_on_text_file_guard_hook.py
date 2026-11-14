@@ -56,6 +56,51 @@ def test_readonly_serena_tool_not_in_scope():
     assert not is_serena_write_tool("Write")
 
 
+PLUGIN_WRITE_TOOLS = [
+    "mcp__plugin_serena_serena__replace_content",
+    "mcp__plugin_serena_serena__replace_symbol_body",
+    "mcp__plugin_serena_serena__insert_after_symbol",
+    "mcp__plugin_serena_serena__insert_before_symbol",
+    "mcp__plugin_serena_serena__safe_delete_symbol",
+]
+
+
+def test_plugin_named_serena_write_tools_recognised():
+    """serena 以 plugin 安裝時工具名帶 plugin_serena_ 前綴，同樣屬寫入工具。"""
+    for name in PLUGIN_WRITE_TOOLS:
+        assert is_serena_write_tool(name), f"{name} 應屬於寫入工具"
+
+
+def test_plugin_named_readonly_tool_not_in_scope():
+    assert not is_serena_write_tool("mcp__plugin_serena_serena__find_symbol")
+    assert not is_serena_write_tool("mcp__plugin_other_serena__replace_content")
+
+
+def _guard_matchers() -> list:
+    import json
+    settings = json.loads(
+        (HOOKS_DIR.parent / "settings.json").read_text(encoding="utf-8")
+    )
+    matchers = []
+    for group in settings["hooks"].get("PreToolUse", []):
+        for hook in group.get("hooks", []):
+            if "mcp-write-tool-on-text-file-guard-hook.py" in hook.get("command", ""):
+                matchers.append(group.get("matcher", ""))
+    return matchers
+
+
+def test_settings_matcher_covers_both_namings():
+    """註冊面：matcher 為精確比對（| 分隔的工具名清單），兩種命名都要列出，
+    否則守衛不會被呼叫，常數涵蓋也沒有作用。"""
+    matchers = _guard_matchers()
+    assert matchers, "settings.json 應註冊本守衛"
+    listed = {name for m in matchers for name in m.split("|")}
+    for name in PLUGIN_WRITE_TOOLS + [
+        n.replace("mcp__plugin_serena_serena__", "mcp__serena__") for n in PLUGIN_WRITE_TOOLS
+    ]:
+        assert name in listed, f"matcher 缺 {name}"
+
+
 # ---------- classify_extension ----------
 
 def test_classify_extension_basic():

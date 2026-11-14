@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from lib import setup_hook_logging, run_hook_safely  # noqa: E402
 from lib.sync_exclude_manifest import load_sync_skills_config  # noqa: E402
 from skill_residue_detector import (  # noqa: E402
+    EXEMPT_HINT,
     blocking_only,
     format_report,
     scan_skill,
@@ -88,6 +89,25 @@ def main() -> int:
     if not target:
         return 0
 
+    # 已確認是 skill-sync push：判定本身失敗時落在阻擋側。
+    # push 到 canonical 屬對外發佈，consumer 可能在修正前取走殘留，放行後無法收回。
+    # 不在 run_hook_safely 宣告整支 fail-closed：本 hook 對每個 Bash 命令都執行，
+    # 整支 fail-closed 會讓模組層故障擋下所有 Bash；只在 push 命令內收緊。
+    try:
+        return _check_push(target, command, logger)
+    except Exception as exc:  # 例外不吞：寫日誌與 stderr 後阻擋
+        logger.error("push %s 判定失敗，保守阻擋：%s", target, exc, exc_info=True)
+        sys.stderr.write(
+            f"\n[Skill Residue Gate] 阻擋 push '{target}'：殘留檢查本身失敗（{exc}）。\n"
+            "push 到 canonical 後無法收回，判定失敗時不放行。\n"
+            "請先排除錯誤（日誌：.claude/hook-logs/skill-sync-push-residue-gate-hook/），\n"
+            "或確知無妨時於 push 命令加 --force 旁路殘留檢查。\n"
+        )
+        return 2
+
+
+def _check_push(target: str, command: str, logger) -> int:
+    """對已確認的 push 目標執行 private 與殘留檢查。回傳 exit code。"""
     root = project_root()
 
     # private 守衛先於 --force 判斷：無條件 deny，不讀取該旗標（見檔頭裁示）。
@@ -126,7 +146,7 @@ def main() -> int:
         "\n這些內容推上 canonical 後會被其他 consumer 取走，把讀者導向不存在的檔案。\n"
         "處理方式擇一：\n"
         "  1. 修正引用，或改為不指名具體路徑的描述性敘述\n"
-        "  2. 確屬示意路徑時，於該行加 `skill-residue-exempt: <理由>` 標記\n"
+        f"  2. {EXEMPT_HINT}\n"
         "  3. 確知無妨時，於 push 命令加 --force 旁路\n"
     )
     return 2

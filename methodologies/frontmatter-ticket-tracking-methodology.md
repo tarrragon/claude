@@ -63,13 +63,13 @@ docs/work-logs/
     └── v0.18/                       # minor 版本 group
         └── v0.18.0/                 # patch 版本資料夾
             ├── tickets/             # Ticket 檔案目錄
-            │   └── 0.18.0-W17-001.md
+            │   └── {VERSION}-W{WAVE}-{SEQ}.md
             └── v0.18.0-main.md      # 主版本日誌
 ```
 
 - 版本資料夾：`vX.Y.Z`
 - Tickets 目錄：`tickets/`
-- Ticket 檔案：`{VERSION}-W{WAVE}-{SEQ}.md`（例：`0.18.0-W17-001.md`）
+- Ticket 檔案：`{VERSION}-W{WAVE}-{SEQ}.md`
 - 舊版本 `v0.15.x` 為 CSV 格式（唯讀，未轉三層結構），相容處理見衛星檔
 
 ### 2.2 Frontmatter 欄位定義

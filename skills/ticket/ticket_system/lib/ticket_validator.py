@@ -15,16 +15,16 @@ def extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:
     """
     從 Ticket ID 提取版本號。
 
-    格式：0.1.0-W9-002 → "0.1.0"（以 "-W" 為分割點，語意清晰）
+    格式：<ticket-id> → "0.1.0"（以 "-W" 為分割點，語意清晰）
 
     Args:
-        ticket_id: Ticket ID，格式如 "0.1.0-W9-002"
+        ticket_id: Ticket ID，格式如 "<ticket-id>"
 
     Returns:
         Optional[str]: 版本號；ID 不含 "-W" 時返回 None
 
     Examples:
-        >>> extract_version_from_ticket_id("0.1.0-W9-002")
+        >>> extract_version_from_ticket_id("<ticket-id>")
         '0.1.0'
         >>> extract_version_from_ticket_id("invalid")
         None
@@ -38,16 +38,16 @@ def extract_wave_from_ticket_id(ticket_id: str) -> Optional[int]:
     """
     從 Ticket ID 提取 Wave 號（整數）。
 
-    格式：0.1.0-W9-002 → 9（以 regex 匹配 -W{num}- 模式）
+    格式：<ticket-id> → 9（以 regex 匹配 -W{num}- 模式）
 
     Args:
-        ticket_id: Ticket ID，格式如 "0.1.0-W9-002"
+        ticket_id: Ticket ID，格式如 "<ticket-id>"
 
     Returns:
         Optional[int]: Wave 號整數；格式不符時返回 None
 
     Examples:
-        >>> extract_wave_from_ticket_id("0.1.0-W9-002")
+        >>> extract_wave_from_ticket_id("<ticket-id>")
         9
         >>> extract_wave_from_ticket_id("invalid")
         None
@@ -80,11 +80,11 @@ def validate_ticket_id(ticket_id: str) -> bool:
         無，無效輸入返回 False 而非拋出異常
 
     Examples:
-        >>> validate_ticket_id("0.31.0-W3-001")
+        >>> validate_ticket_id("<ticket-id>")
         True
-        >>> validate_ticket_id("0.31.0-W3-001.1")
+        >>> validate_ticket_id("<ticket-id>.1")
         True
-        >>> validate_ticket_id("0.31.0-W3-001.1.1")
+        >>> validate_ticket_id("<ticket-id>.1.1")
         True
         >>> validate_ticket_id("invalid")
         False
@@ -172,7 +172,7 @@ def validate_ticket_dict(ticket: dict) -> Tuple[bool, List[str]]:
         Tuple[bool, List[str]]: (驗證通過, 錯誤訊息列表)
 
     Examples:
-        >>> ticket = {"id": "0.31.0-W3-001", "status": "pending"}
+        >>> ticket = {"id": "<ticket-id>", "status": "pending"}
         >>> passed, errors = validate_ticket_dict(ticket)
         >>> passed
         True
@@ -220,13 +220,13 @@ def validate_claimable_status(
         - (False, error_message): 不允許認領且返回原因
 
     Examples:
-        >>> validate_claimable_status("0.31.0-W3-001", "pending")
+        >>> validate_claimable_status("<ticket-id>", "pending")
         (True, None)
-        >>> valid, msg = validate_claimable_status("0.31.0-W3-001", "in_progress")
+        >>> valid, msg = validate_claimable_status("<ticket-id>", "in_progress")
         >>> valid
         False
         >>> msg
-        '0.31.0-W3-001 已被接手'
+        '<ticket-id> 已被接手'
     """
     from .constants import STATUS_IN_PROGRESS, STATUS_COMPLETED
 
@@ -273,15 +273,15 @@ def validate_completable_status(
         - (True, friendly_message, True): 已完成（冪等返回）
 
     Examples:
-        >>> validate_completable_status("0.31.0-W3-001", "in_progress")
+        >>> validate_completable_status("<ticket-id>", "in_progress")
         (True, None, False)
-        >>> can, msg, is_complete = validate_completable_status("0.31.0-W3-001", "completed", "2026-02-01T10:00:00")
+        >>> can, msg, is_complete = validate_completable_status("<ticket-id>", "completed", "2026-02-01T10:00:00")
         >>> can
         True
         >>> is_complete
         True
         >>> msg
-        '0.31.0-W3-001 已完成於 2026-02-01T10:00:00'
+        '<ticket-id> 已完成於 2026-02-01T10:00:00'
     """
     from .constants import STATUS_COMPLETED, STATUS_PENDING, STATUS_BLOCKED
 
@@ -314,12 +314,12 @@ def _is_placeholder(text: str) -> bool:
     判斷文字是否為佔位符。
 
     判斷策略：
-    1. 先剝除所有 HTML 註解（W17-032）。
-    2. 再剝除 markdown 分隔符（`---+` 行首行尾獨立一行；W17-071）。
+    1. 先剝除所有 HTML 註解。
+    2. 再剝除 markdown 分隔符（`---+` 行首行尾獨立一行）。
     3. 剝除純 markdown ATX 子標題行（`#{1,6} 標題文字`），子標題是結構標記
        非實質內容，避免「子標題 + 純佔位符」章節因標題文字殘留而誤判為
        非 placeholder。
-    4. W10-125：剝除 markdown 表格行（行首行尾為 `|` 的整行）。表格內的 keyword
+    4. 剝除 markdown 表格行（行首行尾為 `|` 的整行）。表格內的 keyword
        屬合法「不適用」/「待辦項目參考」標示（PC-138 / PC-144 共同治本）。
        - 剝除後仍有非表格文字：用 keyword 檢查該文字（表格外的 TODO/TBD/N/A 仍判 placeholder）
        - 剝除後為空且原本有表格：作者寫表格即實質內容，視為非 placeholder
@@ -333,14 +333,14 @@ def _is_placeholder(text: str) -> bool:
        一併丟棄，是資料遺失而非僅視覺殘留）。
     8. 否則非 placeholder（視為已有實質內容）。
 
-    W17-032 修復重點：`<!--.*?-->` 命中即回 True 會誤判
+    修復重點：`<!--.*?-->` 命中即回 True 會誤判
     「body schema 範本的 Schema 標註註解 + 實質內容」為 placeholder。
 
-    W17-071 修復重點：HTML 註解剝除後若剩下 markdown 分隔符 `---`
+    修復重點：HTML 註解剝除後若剩下 markdown 分隔符 `---`
     （ticket body schema 章節間的水平分隔），`_is_placeholder` 原先回傳 False，
     導致空殼章節（只有 schema note + `---`）被放行。
 
-    W10-125 修復重點（PC-138 / PC-144 治本）：表格 cell 內的 N/A / TODO / TBD
+    修復重點（PC-138 / PC-144 治本）：表格 cell 內的 N/A / TODO / TBD
     為合法標示，剝除表格行後再做 keyword 檢查避免誤判。
 
     此函式與 acceptance_auditor.py 中的同名函式功能一致，
@@ -362,12 +362,12 @@ def _is_placeholder(text: str) -> bool:
         return True
 
     # 剝除所有 HTML 註解後檢視剩餘實質內容
-    # （W17-032：body schema 範本固定含 Schema 標註註解，不應誤判為 placeholder）
+    # （body schema 範本固定含 Schema 標註註解，不應誤判為 placeholder）
     content_no_html = re.sub(r"<!--.*?-->", "", stripped, flags=re.DOTALL).strip()
     if not content_no_html:
         return True
 
-    # W17-071：剝除 markdown 分隔符（行首行尾獨立一行的 `---+`）。
+    #剝除 markdown 分隔符（行首行尾獨立一行的 `---+`）。
     # schema 範本使用 `---` 分隔章節，但分隔符本身非實質內容；
     # 原先未剝除導致「schema note + 分隔符」的空殼章節被誤判為非 placeholder。
     content_no_separator = re.sub(
@@ -390,7 +390,7 @@ def _is_placeholder(text: str) -> bool:
     if not content_no_headers:
         return True
 
-    # W10-125：剝除 markdown 表格行（PC-138 / PC-144 治本）。
+    # 剝除 markdown 表格行（PC-138 / PC-144 治本）。
     # 表格 cell 中的 N/A / TODO / TBD 屬合法標示（不適用 / 待辦項目參考），不應誤判。
     # 策略：剝除完整 table 行後檢查剩餘非表格內容。
     # - 若剝除後仍有實質非表格內容：以剩餘內容作 keyword 檢查
@@ -407,9 +407,9 @@ def _is_placeholder(text: str) -> bool:
     # 待填寫標記（含英文/中文佔位符）— 對剝除 HTML 註解 + 分隔符 + 表格後的內容檢查
     # - 英文：(pending), TBD, TODO, N/A
     # - 中文：（待填寫：...）、（必填：...）——template 預設佔位符
-    # W17-094：加 \b 字邊界避免 substring 誤判（如 TodoList 內的 Todo）。
-    # W10-125：表格 cell 已先剝除，避免合法 N/A / TODO / TBD 標示誤判（PC-138 / PC-144）。
-    # W10-133（PC-138 家族延伸）：剝除非表格描述性 `Layer N: N/A` / `Layer X N/A` /
+    #加 \b 字邊界避免 substring 誤判（如 TodoList 內的 Todo）。
+    #表格 cell 已先剝除，避免合法 N/A / TODO / TBD 標示誤判（PC-138 / PC-144）。
+    # PC-138 家族延伸：剝除非表格描述性 `Layer N: N/A` / `Layer X N/A` /
     #   `Phase X N/A` 行。這類描述性標記在 ANA / IMP body 中為合法「該層級不適用」
     #   標示（如多視角審查表述 Layer 2: N/A），不應觸發 placeholder 誤判。
     #   保守設計：僅剝除整行 keyword 為 N/A 的情境；含 TODO/TBD 的混合行不豁免，
@@ -420,7 +420,7 @@ def _is_placeholder(text: str) -> bool:
         re.MULTILINE | re.IGNORECASE,
     )
     target_after_descriptive = descriptive_na_line.sub("", target_content).strip()
-    # W2-028：英文佔位符改採「行首佔位標記」語意（對齊中文佔位符的 strip-and-check 精神）。
+    #英文佔位符改採「行首佔位標記」語意（對齊中文佔位符的 strip-and-check 精神）。
     # 真實佔位符 / 模板標記必為「行首關鍵字」（如 `TODO`、`TODO: 待處理`、`# TODO: implement`、
     # `(pending)`、`N/A`、`N/A.`），中段提及（如 Test Results 描述「修正內文字面 TODO 誤判」）
     # 屬合法正文，不應誤擋 complete。
@@ -431,14 +431,14 @@ def _is_placeholder(text: str) -> bool:
         r"^[\s\-\*\+>#]*(?:\(pending\)|(?:TBD|TODO|N/A)\b)",
         re.MULTILINE | re.IGNORECASE,
     )
-    # W2-036：補「行尾空殼」偵測，修 W2-028 僅行首語意造成的回歸。
-    # W2-028 改為「僅行首 keyword」後，會放行「label: keyword<行尾>」這類空殼
+    #補「行尾空殼」偵測，修僅行首語意造成的回歸。
+    # 改為「僅行首 keyword」後，會放行「label: keyword<行尾>」這類空殼
     #（如 `Found the root cause: N/A`、`Layer 1: TODO`、`這段需要實作: N/A`——
     # 看似填了值，實際值為 N/A/TODO 等於沒填），導致 4 個保護測試紅燈。
-    # 精確區分點：W2-028 prose 案例 keyword 後皆有內容延續（`N/A，因...`、`TODO 誤判...bug`），
+    # 精確區分點：prose 案例 keyword 後皆有內容延續（`N/A，因...`、`TODO 誤判...bug`），
     # 4 測試 shell 案例 keyword 為行尾最末 token（其後僅容許空白 + 至多一個尾標點 . / 。）。
     # 規則：keyword 出現在「行首」或「冒號標籤後」，且其後到行尾僅有空白 + 至多一個尾標點。
-    # 兩者 OR 命中即判 placeholder；placeholder_marker 保留 W2-028 行首語意不破壞。
+    # 兩者 OR 命中即判 placeholder；placeholder_marker 保留行首語意不破壞。
     shell_end_marker = re.compile(
         r"(?:^|[:：]\s*)(?:\(pending\)|(?:TBD|TODO|N/A))[ \t]*[.。]?[ \t]*$",
         re.MULTILINE | re.IGNORECASE,
@@ -486,11 +486,11 @@ def _is_placeholder(text: str) -> bool:
     return False
 
 
-# W17-071：Schema 定義章節名清單（Ticket body template 使用的固定章節集合）。
+#Schema 定義章節名清單（Ticket body template 使用的固定章節集合）。
 # 擷取 section 內容時只把這些章節名當作邊界，避免 agent 自定義 H2
 # （如 `## 實作摘要`）把 schema section 範圍切斷。
 # 來源：.claude/pm-rules/ticket-body-schema.md
-# Spawn Requests 於 0.0.1-W1-011 補列（canonical 清單新增此成員後三處驗證端清單漏同步，
+# Spawn Requests 後來補列（canonical 清單新增此成員後三處驗證端清單漏同步，
 # PC-BAL-001；補列為資料層修正，不改依賴方向，方案 A「驗證端 import 建立端常數」仍排除）。
 _SCHEMA_SECTION_NAMES: List[str] = [
     "Task Summary",
@@ -508,7 +508,7 @@ _SCHEMA_SECTION_NAMES: List[str] = [
 
 def _find_next_schema_section_boundary(body: str, content_start: int) -> int:
     """
-    尋找 `content_start` 之後下一個 Schema 定義章節標題的起始位置（W17-071）。
+    尋找 `content_start` 之後下一個 Schema 定義章節標題的起始位置。
 
     只把 Schema 定義的章節名（`_SCHEMA_SECTION_NAMES`）當作章節邊界；
     自定義 H2（如 `## 實作摘要`）或其他非 schema 章節不算邊界。
@@ -551,7 +551,7 @@ def validate_execution_log(
     對於包含佔位符的區段，會回傳區段名稱清單。
     這是一個「軟檢查」：回傳結果供呼叫者決定是否警告或阻止。
 
-    W17-071 修復重點（root cause B）：原先使用「任意 `##` 或 `###`」作為
+    修復重點（root cause B）：原先使用「任意 `##` 或 `###`」作為
     章節邊界，agent 寫自定義 H2（如 `## 實作摘要`）會把 schema section 的
     內容切斷，導致 schema section 只剩 note + 分隔符被誤判為已填寫。
     改為僅以 Schema 定義的章節名（`_SCHEMA_SECTION_NAMES`）作為邊界。
@@ -568,13 +568,13 @@ def validate_execution_log(
 
     Examples:
         >>> body = "## Execution Log\\n### Problem Analysis\\ncontent here"
-        >>> validate_execution_log("W4-001", body)
+        >>> validate_execution_log("<ticket-id>", body)
         (True, [])
         >>> body = "### Problem Analysis\\n<!-- To be filled by executing agent -->"
-        >>> validate_execution_log("W4-001", body)
+        >>> validate_execution_log("<ticket-id>", body)
         (False, ['Problem Analysis'])
         >>> body = "### Problem Analysis\\n(pending)"
-        >>> validate_execution_log("W4-001", body)
+        >>> validate_execution_log("<ticket-id>", body)
         (False, ['Problem Analysis'])
     """
     SECTIONS_TO_CHECK = ["Problem Analysis", "Solution", "Test Results"]
@@ -609,7 +609,7 @@ def validate_execution_log(
 
         content_start += 1  # 跳過換行符
 
-        # W17-071：章節邊界限定為 Schema 定義的章節名；
+        #章節邊界限定為 Schema 定義的章節名；
         # 自定義 H2 不再截斷 schema section 範圍。
         next_section_idx = _find_next_schema_section_boundary(body, content_start)
         section_content = body[content_start:next_section_idx].strip()
@@ -637,7 +637,7 @@ def validate_execution_log_by_type(
     body: str,
 ) -> Tuple[bool, List[str]]:
     """
-    依 type-aware schema 驗證 Ticket body 必填章節（W17-016.3）。
+    依 type-aware schema 驗證 Ticket body 必填章節。
 
     對照 `.claude/pm-rules/ticket-body-schema.md`：
     - ANA: Problem Analysis + Solution 必填
@@ -645,7 +645,7 @@ def validate_execution_log_by_type(
     - DOC: 無強制 body 章節（僅 Completion Info 由別處驗證）
 
     每個必填章節需：
-    1. 標題存在（## 或 ### 層級，line-anchored 匹配避免 backtick 內誤判；W17-074）
+    1. 標題存在（## 或 ### 層級，line-anchored 匹配避免 backtick 內誤判）
     2. 內容非 placeholder（含 `（待填寫：...）` 中文佔位符）
 
     Args:
@@ -671,9 +671,9 @@ def validate_execution_log_by_type(
 
     unfilled: List[str] = []
     for section in required:
-        # W17-074：使用 line-anchored regex 定位章節 header，避免 body.find
+        #使用 line-anchored regex 定位章節 header，避免 body.find
         # substring 匹配命中 backtick 包住的章節名引用（如 `## Test Results`）。
-        # 同家族修復對照：W17-071 已於 validate_execution_log 使用相同 pattern。
+        # 同家族修復對照：validate_execution_log 已使用相同 pattern。
         section_start = -1
         for level in ("###", "##"):
             pattern = rf"^{level} {re.escape(section)}\b"
@@ -693,7 +693,7 @@ def validate_execution_log_by_type(
         content_start += 1
 
         # 章節邊界：僅 h2 (`## `) 行首才算下一章節起點
-        # W17-047：原本把 `### ` 也當邊界會誤切含 h3 子標題的章節；
+        #原本把 `### ` 也當邊界會誤切含 h3 子標題的章節；
         # 改用 re.MULTILINE 行首匹配，避免 code block 或段落中間的
         # `## ` 字串誤判。
         next_section_idx = len(body)
@@ -708,8 +708,8 @@ def validate_execution_log_by_type(
     return len(unfilled) == 0, unfilled
 
 
-# Layer 1 自檢子章節（`### 自檢結果`）gate 阻擋適用範圍（0.4.1-W2-010）。
-# DOC 沿用免填規則（不納入本檢查），對齊 0.4.1-W2-008 ANA 決策。
+# Layer 1 自檢子章節（`### 自檢結果`）gate 阻擋適用範圍。
+# DOC 沿用免填規則（不納入本檢查），對齊 ANA 決策。
 _SELF_CHECK_GATE_TYPES = {"IMP", "ANA"}
 _SELF_CHECK_MISSING_LABEL = "Solution > ### 自檢結果"
 
@@ -756,10 +756,10 @@ def validate_self_check_subsection(
     body: str,
 ) -> Tuple[bool, Optional[str]]:
     """
-    驗證 IMP/ANA ticket 的 Solution 章節是否含 `### 自檢結果` 子章節（0.4.1-W2-010）。
+    驗證 IMP/ANA ticket 的 Solution 章節是否含 `### 自檢結果` 子章節。
 
-    W17-064 warning 級提示 8/8（加上 0.4.1-W1-001 共 9 次）全被忽略，
-    0.4.1-W2-008 ANA 決策供給側義務（dispatch template）落地後升級為 gate 阻擋。
+    warning 級提示 8/8（共 9 次）全被忽略，
+    ANA 決策供給側義務（dispatch template）落地後升級為 gate 阻擋。
     DOC 沿用免填規則，不納入本檢查。
 
     Args:
@@ -827,12 +827,12 @@ def validate_acceptance_criteria(
         - (False, [未完成項...]): 有未完成項（已標準化為 "[ ] ..." 格式）
 
     Examples:
-        >>> validate_acceptance_criteria("0.31.0-W3-001", None)
+        >>> validate_acceptance_criteria("<ticket-id>", None)
         (True, [])
-        >>> validate_acceptance_criteria("0.31.0-W3-001", [])
+        >>> validate_acceptance_criteria("<ticket-id>", [])
         (True, [])
         >>> criteria = ["[x] 完成項", "[ ] 未完成項", "[x] 另一完成項"]
-        >>> complete, incomplete = validate_acceptance_criteria("0.31.0-W3-001", criteria)
+        >>> complete, incomplete = validate_acceptance_criteria("<ticket-id>", criteria)
         >>> complete
         False
         >>> len(incomplete)
@@ -841,7 +841,7 @@ def validate_acceptance_criteria(
         '[ ] 未完成項'
         >>> # 向後相容：舊格式無前綴
         >>> criteria = ["[x] 完成", "未完成", "[x] 另一完成"]
-        >>> complete, incomplete = validate_acceptance_criteria("0.31.0-W3-001", criteria)
+        >>> complete, incomplete = validate_acceptance_criteria("<ticket-id>", criteria)
         >>> complete
         False
         >>> incomplete[0]
@@ -970,23 +970,23 @@ def validate_related_to(
         - (False, error_message): 驗證失敗，返回錯誤訊息
 
     Examples:
-        >>> validate_related_to("0.31.0-W5-001", None)
+        >>> validate_related_to("<ticket-id>", None)
         (True, None)
-        >>> validate_related_to("0.31.0-W5-001", [])
+        >>> validate_related_to("<ticket-id>", [])
         (True, None)
-        >>> validate_related_to("0.31.0-W5-001", ["0.31.0-W5-002", "0.31.0-W5-003"])
+        >>> validate_related_to("<ticket-id>", ["<other-id>", "<other-id-2>"])
         (True, None)
-        >>> valid, msg = validate_related_to("0.31.0-W5-001", ["invalid-id"])
+        >>> valid, msg = validate_related_to("<ticket-id>", ["invalid-id"])
         >>> valid
         False
         >>> msg
-        '0.31.0-W5-001: relatedTo 包含無效的 Ticket ID: invalid-id'
-        >>> valid, msg = validate_related_to("0.31.0-W5-001", ["0.31.0-W5-001"])
+        '<ticket-id>: relatedTo 包含無效的 Ticket ID: invalid-id'
+        >>> valid, msg = validate_related_to("<ticket-id>", ["<ticket-id>"])
         >>> valid
         False
         >>> msg
-        '0.31.0-W5-001: relatedTo 不能包含自我參考'
-        >>> valid, msg = validate_related_to("0.31.0-W5-001", ["0.31.0-W5-002", "0.31.0-W5-002"])
+        '<ticket-id>: relatedTo 不能包含自我參考'
+        >>> valid, msg = validate_related_to("<ticket-id>", ["<other-id>", "<other-id>"])
         >>> valid
         False
     """

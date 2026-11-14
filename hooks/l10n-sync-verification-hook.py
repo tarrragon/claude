@@ -28,6 +28,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib import ...`
 
 from lib import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin  # noqa: E402
+from lib.flutter_launcher import FVM_EXECUTABLE, launch_argv  # noqa: E402
+
+GEN_L10N_ARGV = ("flutter", "gen-l10n")
+ANALYZE_ARGV = ("flutter", "analyze")
 
 
 def is_arb_file(file_path: str) -> bool:
@@ -139,11 +143,17 @@ def run_flutter_gen_l10n(project_root: Path, logger) -> tuple[bool, str]:
     """
     自動執行 flutter gen-l10n 生成 L10n 檔案
 
+    專案有 FVM 設定檔時經 fvm 執行（lib.flutter_launcher 判定）；找不到 fvm 時
+    回報失敗，不改用裸 flutter，避免以全域預設版產生與釘選版不同的生成檔。
+
     返回: (success, message)
     """
+    argv = launch_argv(GEN_L10N_ARGV, project_root)
+    command = " ".join(argv)
+    logger.info("auto_gen_l10n: argv=%s", argv)
     try:
         result = subprocess.run(
-            ["flutter", "gen-l10n"],
+            argv,
             cwd=project_root,
             capture_output=True,
             text=True,
@@ -158,20 +168,31 @@ def run_flutter_gen_l10n(project_root: Path, logger) -> tuple[bool, str]:
                     result.stderr[:500] if result.stderr else "")
 
         if result.returncode == 0:
-            return True, "[OK] 自動執行 flutter gen-l10n 成功"
+            return True, f"[OK] 自動執行 {command} 成功"
         else:
-            return False, f"[FAIL] flutter gen-l10n 執行失敗: {result.stderr}"
+            return False, f"[FAIL] {command} 執行失敗: {result.stderr}"
 
     except subprocess.TimeoutExpired:
-        return False, "[FAIL] flutter gen-l10n 執行超時 (60s)"
+        logger.warning("auto_gen_l10n: %s 逾時 (60s)", command)
+        return False, f"[FAIL] {command} 執行超時 (60s)"
     except FileNotFoundError:
+        logger.warning("auto_gen_l10n: 找不到 %s 命令", argv[0])
+        if argv[0] == FVM_EXECUTABLE:
+            return False, (
+                "[FAIL] 找不到 fvm 命令：專案有 FVM 設定檔（.fvmrc），gen-l10n 須以釘選版執行，"
+                "未改用全域 flutter。請安裝 fvm 並確認在 PATH 中"
+            )
         return False, "[FAIL] 找不到 flutter 命令，請確保 Flutter 已安裝並在 PATH 中"
     except Exception as e:
-        return False, f"[FAIL] 執行 flutter gen-l10n 時發生錯誤: {e}"
+        logger.warning("auto_gen_l10n: 執行 %s 發生錯誤: %s", command, e)
+        return False, f"[FAIL] 執行 {command} 時發生錯誤: {e}"
 
 
-def generate_error_message(details: dict) -> str:
-    """生成錯誤訊息"""
+def generate_error_message(details: dict, project_root: Path | None = None) -> str:
+    """生成錯誤訊息；修復步驟的命令依專案是否使用 FVM 組成。"""
+    start = project_root if project_root is not None else Path.cwd()
+    gen_command = " ".join(launch_argv(GEN_L10N_ARGV, start))
+    analyze_command = " ".join(launch_argv(ANALYZE_ARGV, start))
     message = ""
 
     if details.get("missing_generated_files"):
@@ -190,8 +211,8 @@ def generate_error_message(details: dict) -> str:
         message += "\n"
 
     message += "[INFO] 修復步驟:\n"
-    message += "1. 執行命令: flutter gen-l10n\n"
-    message += "2. 驗證生成成功: flutter analyze\n"
+    message += f"1. 執行命令: {gen_command}\n"
+    message += f"2. 驗證生成成功: {analyze_command}\n"
     message += "3. 重新執行編輯操作或提交\n\n"
 
     message += "[DOC] 詳細資訊:\n"
@@ -260,7 +281,7 @@ def main() -> int:
                 return 0
             else:
                 # 自動生成失敗，顯示手動修復步驟
-                error_msg = generate_error_message(details)
+                error_msg = generate_error_message(details, project_root)
                 print(error_msg, file=sys.stderr)
 
                 output = {

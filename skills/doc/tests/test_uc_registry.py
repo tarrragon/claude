@@ -241,6 +241,78 @@ class TestCompoundIdentifierTokenBoundary:
         assert uc_registry.is_violation_token("UC-99", {"UC-01": "x"}) is True
 
 
+class TestPatternExemptAfterNormalization:
+    """豁免判定須用正規化後的形式：小寫寫法不可因原始字面不符而判成違規"""
+
+    @pytest.mark.parametrize("text", ["state = 'uc-unset'", "run uc-reference-validation-hook.py"])
+    def test_lowercase_word_tokens_are_not_violations(self, text):
+        tokens = [t for t, _ in uc_registry.find_uc_tokens_in_text(text)]
+        assert tokens
+        assert not any(uc_registry.is_violation_token(t, {"UC-01": "x"}) for t in tokens)
+
+    def test_unregistered_uc_number_still_violates(self):
+        """E2 正向對照：真正未登記的 UC 編號仍判違規"""
+        assert uc_registry.is_violation_token("uc-99", {"UC-01": "x"}) is True
+        assert uc_registry.is_violation_token("UC-99", {"UC-01": "x"}) is True
+
+
+class TestSubtreeSegmentExtensionCut:
+    """子樹段只截掉檔名副檔名段：副檔名不可被吞進 token，字母偽子段仍擷取"""
+
+    def test_file_extension_not_swallowed(self):
+        hits = uc_registry.find_uc_tokens_in_text("見 UC-02.md 與 UC-03.py")
+        assert [t for t, _ in hits] == ["UC-02", "UC-03"]
+
+    def test_registered_uc_with_extension_not_violation(self):
+        hits = uc_registry.find_uc_tokens_in_text("見 UC-02.md")
+        assert not uc_registry.is_violation_token(hits[0][0], {"UC-02": "x"})
+
+    def test_numeric_pseudo_subtree_still_captured(self):
+        """E2 正向對照：數字偽子樹仍完整擷取並判違規"""
+        hits = uc_registry.find_uc_tokens_in_text("見 UC-01.4.20")
+        assert hits[0][0] == "UC-01.4.20"
+        assert uc_registry.is_violation_token(hits[0][0], {"UC-01": "x"}) is True
+
+    @pytest.mark.parametrize("text,expected", [
+        ("見 UC-01.a", "UC-01.a"),
+        ("見 UC-03.Login", "UC-03.Login"),
+        ("見 UC-01.ａｂ", "UC-01.ａｂ"),
+    ])
+    def test_letter_pseudo_subtree_still_violates(self, text, expected):
+        """E2 正向對照：字母子段（含全形）仍擷取並判違規，只有副檔名段被截掉"""
+        hits = uc_registry.find_uc_tokens_in_text(text)
+        assert hits[0][0] == expected
+        assert uc_registry.is_violation_token(hits[0][0], {"UC-01": "x", "UC-03": "y"}) is True
+
+    @pytest.mark.parametrize("text", ["UC-02.md", "UC-02.yaml", "UC-02.MD", "UC-02.json"])
+    def test_known_extensions_are_cut(self, text):
+        hits = uc_registry.find_uc_tokens_in_text(text)
+        assert hits[0][0] == "UC-02"
+
+
+class TestFrameworkPathExempt:
+    def test_claude_dir_is_exempt(self, tmp_path):
+        p = str(tmp_path / ".claude" / "hooks" / "x.py")
+        assert uc_registry.is_exempt_path(p, str(tmp_path)) is True
+
+    def test_product_path_not_exempt(self, tmp_path):
+        p = str(tmp_path / "lib" / "x.py")
+        assert uc_registry.is_exempt_path(p, str(tmp_path)) is False
+
+    def test_relative_path_resolved_against_project_root(self, tmp_path, monkeypatch):
+        """行程 cwd 在 .claude/ 之下時，相對的產品路徑仍不豁免（以 project_root 解析）。"""
+        project = tmp_path / "proj"
+        project.mkdir()
+        cwd_under_claude = tmp_path / "other" / ".claude" / "hooks"
+        cwd_under_claude.mkdir(parents=True)
+        monkeypatch.chdir(cwd_under_claude)
+        assert uc_registry.is_exempt_path("lib/x.py", str(project)) is False
+
+    def test_relative_claude_path_still_exempt(self, tmp_path):
+        """正向對照：相對的 .claude/ 路徑以 project_root 解析後仍豁免。"""
+        assert uc_registry.is_exempt_path(".claude/hooks/x.py", str(tmp_path)) is True
+
+
 class TestGetUcSummary:
     def test_returns_none_when_uc_not_in_ssot(self, tmp_path):
         _write_spec(tmp_path, [("UC-01", "匯入書庫")])

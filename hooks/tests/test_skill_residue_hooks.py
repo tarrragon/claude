@@ -142,6 +142,30 @@ class TestGateDecision:
         fake_project("出自 9.9.9-W1-001\n")
         assert self._run("skill-sync push probe", monkeypatch) == 0
 
+    def test_scan_failure_on_push_blocks(self, fake_project, monkeypatch, capsys):
+        """push 已確認時判定本身失敗：落在阻擋側（對外發佈無法收回）。"""
+        fake_project("內容乾淨\n")
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("scanner crashed")
+
+        monkeypatch.setattr(gate_hook, "scan_skill", boom)
+        assert self._run("skill-sync push probe", monkeypatch) == 2
+        assert "殘留檢查本身失敗" in capsys.readouterr().err
+
+    def test_scan_failure_does_not_touch_unrelated_commands(
+        self, fake_project, monkeypatch
+    ):
+        """對照：同一故障下非 push 命令照常放行，收緊只限 push。"""
+        fake_project("內容乾淨\n")
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("scanner crashed")
+
+        monkeypatch.setattr(gate_hook, "scan_skill", boom)
+        assert self._run("git status", monkeypatch) == 0
+        assert self._run("skill-sync list", monkeypatch) == 0
+
     def test_malformed_stdin_passes_through(self, monkeypatch):
         """解析不了輸入就放行：gate 自身故障不該擋住使用者的工作。"""
         monkeypatch.setattr(sys, "stdin", io.StringIO("not json"))

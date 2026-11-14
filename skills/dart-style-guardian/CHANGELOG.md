@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.13.1（2026-11-14）— `scripts/style_checker.py` 的 i18n 規則修正漏報：`Text('...')` 的常數排除原本只看開頭字元，大寫開頭的 UI 文字（如 `'Save'`、`'Sign In'`）全被當成常數放行。改為整串錨定，字串全由大寫字母、數字、底線組成才放行；全大寫短字（如 `'OK'`）與常數同形，刻意維持放行，網址與版本號的排除不變。`test_style_checker.py` 補大寫開頭 UI 文字必報、常數形態維持放行的對照案例。
+
 **Version**: 1.13.0（2026-11-03）— 專案校準檔 `dart-style-guardian.json` 遷至 `.claude/project-integration/`。`scripts/style_checker.py` 先讀新位置，找不到時改讀舊位置並輸出遷移提示，舊位置的專案不必同步搬檔。SKILL.md 與 `references/i18n-guidelines.md` 的路徑同步更新；`test_style_checker.py` 補兩個案例：只有舊位置時讀舊檔並提示，新舊並存時讀新檔且不提示。
 
 **Version**: 1.12.1 — `references/i18n-guidelines.md`〈判準：錯誤碼與使用者可見錯誤訊息的交界〉的指涉修正：原寫「組合方式依上一節走參數化翻譯」，上一節〈標籤＋識別符組合時如何分割〉的主體是範例，讀者只讀條文時找不到可引的規則句。改為直接指名〈Exceptions〉的標籤與識別符組合規則與〈Violation 3: String Interpolation〉，判準內容不變。

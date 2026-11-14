@@ -9,7 +9,7 @@
 跨平台支援：macOS / Linux / Windows
 依賴：Python 3.8+, git
 
-推送內容（C1，0.19.1-W1-029）:
+推送內容（C1）:
   - .claude/ 內 **git tracked** 的檔案（以 git archive HEAD -- .claude 取得 tracked
     樹，非從磁碟 walk）。tracked 但須排除者（如 settings.local.json、.sync-state.json、
     憑證）仍經 should_exclude 過濾擋下。
@@ -18,9 +18,9 @@
 不推送內容:
   - 根目錄 CLAUDE.md（專案特定配置）
   - 任何 untracked / gitignored 檔（git archive 只取 tracked 樹，從架構層
-    消滅 W1-019 secret-leak 風險——機密檔只要未 git add 就不可能被推上去）
+    消滅 secret-leak 風險——機密檔只要未 git add 就不可能被推上去）
 
-commit-first 行為（M1 根因解，0.19.1-W1-030）:
+commit-first 行為（M1 根因解）:
   push 前以 git status --porcelain --untracked=all -- .claude 取工作區全狀態，
   再以 manifest should_exclude 過濾 local-only / 憑證後判定。過濾後仍有變更時
   abort，要求先 commit。因 push 取的是 git tracked 樹（HEAD），未 commit 的變更
@@ -28,7 +28,7 @@ commit-first 行為（M1 根因解，0.19.1-W1-030）:
   缺陷 T 修復：未進 .gitignore 的 local-only untracked 檔（如 .zhtw-mcp-skip）
   被 should_exclude 過濾，不再誤判為未提交變更而 abort。
 
-刪除傳播（K，0.19.1-W1-029）:
+刪除傳播（K）:
   本地 git rm 的檔案自然不在 git archive HEAD 的 tracked 樹中 → 遠端 git diff
   顯示 D(elete) → commit 帶刪除，刪除自動傳播到遠端。
 
@@ -105,7 +105,7 @@ from lib.ticket_id_pattern import (  # noqa: E402
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
 
-# .sync-state.json schema（W1-025）：單一 base 欄位，pull/push 共用。
+# .sync-state.json schema：單一 base 欄位，pull/push 共用。
 # 禁雙欄位（H1：對 commit SHA 用 max 會選錯共同祖先）。與 sync-claude-pull.py 對稱。
 SYNC_STATE_FILENAME = ".sync-state.json"
 BASE_SHA_FIELD = "last_synced_base_sha"
@@ -124,8 +124,8 @@ PRESERVE_FILENAME = "sync-preserve.yaml"
 # 括號（即句中位置），改用 placeholder 取代而非清空，避免留下無主詞的
 # 斷句（見 strip_project_specific_info）。
 PROJECT_SPECIFIC_PATTERNS = [
-    (r"\b\d+\.\d+\.\d+-W\d+-\d+\b", "某票"),   # Ticket ID: 0.2.0-W5-014
-    (r"\bW\d+-\d+\b", "某票"),                  # 短格式 Ticket: W5-014
+    (r"\b\d+\.\d+\.\d+-W\d+-\d+\b", "某票"),   # 完整格式 Ticket ID
+    (r"\bW\d+-\d+\b", "某票"),                  # 短格式 Ticket（省略版本前綴）
     (r"\bv\d+\.\d+\.\d+\b", "某版本"),         # 版本號: v0.2.0
     (r"\bWave\s*\d+\b", "某 Wave"),            # Wave 5
     (r"\b0\.\d+\.\d+\b", "某版本"),            # 裸版本: 0.2.0
@@ -170,6 +170,52 @@ def run_git(args: list[str], cwd: str | None = None, check: bool = True) -> subp
     return result
 
 
+_RULE8_REPORT_SCRIPT = Path(__file__).resolve().parent / "rule8-stock-report.py"
+_CLAUDE_PREFIX = ".claude/"
+
+
+def report_rule8_hits_before_push(temp_dir: Path) -> None:
+    """推送前報告待推送內容的規則 8 未豁免命中（只報告、不阻擋推送）。
+
+    掃描對象是本次將改變遠端的檔案（暫存 repo 已 `git add -A` 後的新增、修改、改名），
+    判定沿用 rule8-stock-report.py（即 rule8 守衛自身的函式）。全樹 overlay 推送會把
+    本端存量帶進 canonical，推送前是截斷這個迴路的唯一位置；阻擋需先有通用豁免條件，
+    故目前只報告。掃描本身任何失敗都寫 stderr 並照常推送。
+    """
+    try:
+        spec = importlib.util.spec_from_file_location("rule8_stock_report", _RULE8_REPORT_SCRIPT)
+        report = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(report)
+        guard = report.load_guard()
+        if guard is None:
+            raise RuntimeError("無法載入 rule8 守衛")
+        diff = run_git(
+            ["diff", "--cached", "--name-only", "--diff-filter=AMR", "-z"],
+            cwd=str(temp_dir), check=False,
+        )
+        if diff.returncode != 0:
+            raise RuntimeError(f"git diff 失敗：{diff.stderr.strip()}")
+        rel_paths = [_CLAUDE_PREFIX + p for p in diff.stdout.split("\0") if p]
+        result = report.scan(
+            temp_dir, guard, rel_paths,
+            read_path=lambda rel: temp_dir / rel[len(_CLAUDE_PREFIX):],
+        )
+    except Exception as exc:  # noqa: BLE001 — 報告失敗不影響推送，但須可見
+        sys.stderr.write(f"[rule8 推送前報告] 掃描失敗，照常推送：{exc}\n")
+        return
+    if not result.files:
+        print_color(f"   rule8 推送前報告：待推送 {len(rel_paths)} 檔，無未豁免命中", "green")
+        return
+    total = sum(len(fh.ids) for fh in result.files)
+    print_color(
+        f"[rule8 推送前報告] 待推送內容有 {len(result.files)} 檔含未豁免的專案 ticket ID，"
+        f"共 {total} 個（只報告，不阻擋本次推送）：",
+        "yellow",
+    )
+    for fh in sorted(result.files, key=lambda f: f.rel_path):
+        print(f"     - {fh.rel_path}: {', '.join(fh.ids)}")
+
+
 def find_project_root() -> Path:
     """Find the project root by looking for .claude/ directory upward."""
     current = Path.cwd()
@@ -182,7 +228,7 @@ def find_project_root() -> Path:
 
 
 def read_base_sha(claude_dir: Path) -> str | None:
-    """讀取 .sync-state.json 中的 last_synced_base_sha（W1-025 schema，與 pull 對稱）。
+    """讀取 .sync-state.json 中的 last_synced_base_sha（與 pull 對稱）。
 
     無檔案 / 無欄位 / 解析失敗皆回傳 None（向後相容：無 base 時 fallback）。
 
@@ -301,7 +347,7 @@ def _list_blocking_entries(project_root: Path) -> list[tuple[str, str]] | None:
 
 
 def ensure_committed(project_root: Path) -> bool:
-    """確認 .claude/ 已全數 commit（M1 根因解，0.19.1-W1-030）。
+    """確認 .claude/ 已全數 commit（M1 根因解）。
 
     push 取的是 git tracked 樹（HEAD，見 stage_tracked_tree）；若 .claude/ 有
     本應反映在推送內容中卻尚未 commit 的變更，該變更不會進入 push（git archive
@@ -351,7 +397,7 @@ def stage_tracked_tree(
 
     取代舊 copy_filtered 的磁碟 walk。git archive 只含 tracked 檔案，帶來兩個
     架構層保證：
-      - 安全（消滅 W1-019）：untracked / gitignored 機密檔不在 tracked 樹中，
+      - 安全（消滅 secret-leak 風險）：untracked / gitignored 機密檔不在 tracked 樹中，
         不可能被推上公開 repo，無需 detect_secret_leak_risk interim 防護。
       - 刪除傳播（K）：git rm 的檔自然不在 archive，下游 git diff 顯示 D(elete)。
 
@@ -407,7 +453,7 @@ def stage_tracked_tree(
 
 # extract_skill_versions / format_skill_version_diff / report_skill_repo_drift /
 # SKILL_DRIFT_PREVIEW_LIMIT 已提升至 .claude/lib/skill_version_diff.py，由本檔
-# 頂部 import（0.2.1-W3-356：消除與 sync-claude-pull.py 的逐字重複）。
+# 頂部 import（消除與 sync-claude-pull.py 的逐字重複）。
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
@@ -501,10 +547,10 @@ def copy_filtered_from_staging(
     公開 repo。should_exclude 契約要求相對 claude_dir 的路徑，故傳 item 相對
     src 的路徑判定。
 
-    preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的 APP 專案特化檔不推上
+    preserve：sync-preserve.yaml 列出的 APP 專案特化檔不推上
     共享框架，與 pull 端原地保留對稱。
 
-    skills_config（1.3.0-W1-054）：sync-skills.yaml 設定，過濾 skills/ 目錄。
+    skills_config：sync-skills.yaml 設定，過濾 skills/ 目錄。
     None 時不過濾（向後相容）。
 
     參數:
@@ -563,11 +609,11 @@ def git_update_index_chmod(root: Path) -> int:
 
     Windows NTFS 無 executable bit 概念，filesystem chmod 對 git index 無作用；
     `git update-index --chmod=+x` 直接寫入 git index，不依賴 filesystem 語意，
-    跨平台一致。這是 W16-004.3 的治本方案，覆蓋 restore_executable_bits 在
+    跨平台一致。這是治本方案，覆蓋 restore_executable_bits 在
     Windows 上的盲點。
 
     對象判定與 restore_executable_bits 相同（lib/executable_bits.iter_shebang_files）。
-    與 W1-029 git-archive push 流程相容：archive 解出的 tracked 樹保留目錄結構，
+    與 git-archive push 流程相容：archive 解出的 tracked 樹保留目錄結構，
     本函式仍以 git update-index --chmod=+x 顯式校正 index mode。
 
     呼叫時機：`git add -A` 之後（檔案已 tracked），`git commit` 之前。
@@ -801,7 +847,7 @@ def _normalize_subject_for_match(subject: str) -> str:
     """正規化 commit subject 用於 revert 配對比對。
 
     移除 conventional prefix（type(scope):）後 strip + lower，
-    讓 `chore(W14-031): migrate X` 與 `revert(W14-031): migrate X`
+    讓 `chore(<ticket-id>): migrate X` 與 `revert(<ticket-id>): migrate X`
     的 description 可正確配對。
     """
     # 剝 conventional prefix
@@ -1072,7 +1118,7 @@ def create_and_push_version_tag(repo_dir: Path, version: str) -> None:
 def _should_check_no_change(
     user_message: str | None, force_mode: bool, clean_mode: bool
 ) -> bool:
-    """判斷本次 push 是否應執行 no-change early-exit 檢查（0.2.1-W3-303）。
+    """判斷本次 push 是否應執行 no-change early-exit 檢查。
 
     三個旗標任一成立即跳過檢查：user 明確提供 commit message（既有）、--force
     （既有）、或 --clean（本次新增）。--clean 的意圖是把本地已刪除的檔案傳播到
@@ -1294,7 +1340,7 @@ def _list_base_files(temp_dir: Path, base_sha: str) -> set[str]:
 
     base_sha 不可達時回傳空集合（降級為無三方比對的舊行為）。
 
-    注意（0.2.1-W3-155）：本函式的空集合同時代表「base 確實無檔案」與
+    注意：本函式的空集合同時代表「base 確實無檔案」與
     「base 不可達」兩種語意。呼叫端若需要區分這兩種情況（例如判斷是否安全
     執行 --clean），不應依賴本函式的回傳值推論，改用 `_is_base_sha_reachable`
     獨立判定可達性。本函式契約維持不變（既有多個呼叫端依賴空集合語意）。
@@ -1311,7 +1357,7 @@ def _list_base_files(temp_dir: Path, base_sha: str) -> set[str]:
 
 
 def _is_base_sha_reachable(temp_dir: Path, base_sha: str | None) -> bool:
-    """獨立判定 base_sha 在 temp_dir（遠端 clone）內是否可達（0.2.1-W3-155）。
+    """獨立判定 base_sha 在 temp_dir（遠端 clone）內是否可達。
 
     不依賴 `_list_base_files` 的空集合語意（該函式的空集合同時代表「base
     確實無檔案」與「base 不可達」，兩種語意在此處必須區分——見
@@ -1338,7 +1384,7 @@ def _is_base_sha_reachable(temp_dir: Path, base_sha: str | None) -> bool:
 
 
 def _estimate_clean_deletion_scale(temp_dir: Path, reference_dir: Path) -> tuple[int, int]:
-    """粗估 --clean 若在無 base 保護下執行的刪除規模（0.2.1-W3-155）。
+    """粗估 --clean 若在無 base 保護下執行的刪除規模。
 
     回傳 (canonical_count, local_count)：分別為 temp_dir（遠端 canonical
     全樹，此時已被本地檔案 overlay）與 reference_dir（本地 tracked 樹
@@ -1359,7 +1405,7 @@ def _estimate_clean_deletion_scale(temp_dir: Path, reference_dir: Path) -> tuple
 
 
 def _clean_requires_abort(clean_mode: bool, base_sha: str | None, temp_dir: Path) -> bool:
-    """純判斷：本次 push 是否應因「無 base 保護卻要求 --clean」而中止（0.2.1-W3-155）。
+    """純判斷：本次 push 是否應因「無 base 保護卻要求 --clean」而中止。
 
     純函式（不含 print/sys.exit 副作用），供測試直接驗證判斷邏輯本身，
     與 `_abort_clean_without_base_protection` 的實際中止動作分離。
@@ -1380,14 +1426,14 @@ def _clean_requires_abort(clean_mode: bool, base_sha: str | None, temp_dir: Path
 def _abort_clean_without_base_protection(
     temp_dir: Path, staging_dir: Path, base_sha: str | None
 ) -> None:
-    """無可達 base 卻帶 --clean 時中止 push（0.2.1-W3-155）。
+    """無可達 base 卻帶 --clean 時中止 push。
 
     三方比對（見 `clean_stale_files` docstring）是區分「其他 consumer 在
     base 後新增」與「本地已 git rm」的唯一依據。base 不可達時
     `_list_base_files` 回空集合，`if base_files and ...` 整條保護失效，
     所有「canonical 有而本地無」的檔案一律視為待刪除——這與檔案是否被
     其他專案新增或本地刻意保留無關，純粹因為保護機制本身失效
-    （0.2.1-W3-130 實測：blog 無 sync-state 時會刪除 1991 個 canonical 檔案）。
+    （一次實測：blog 無 sync-state 時會刪除 1991 個 canonical 檔案）。
 
     Args:
         temp_dir: 遠端 repo 的本地 clone 暫存根目錄
@@ -1432,7 +1478,7 @@ def clean_stale_files(
     .claude/，使刪除傳播（K）對齊 git tracked 狀態：git rm 的檔不在 staging → 從
     遠端刪除。
 
-    三方比對（0.3.4-W2-005）：若提供 base_sha，會比對 base 時的檔案清單。
+    三方比對：若提供 base_sha，會比對 base 時的檔案清單。
     「base 無 + staging 無 + upstream 有」= 其他 consumer 在 base 後新增，不刪除。
     「base 有 + staging 無 + upstream 有」= 本地 git rm，應刪除。
     base_sha 不可達時降級為舊行為（不做三方比對）。
@@ -1447,9 +1493,9 @@ def clean_stale_files(
     命中的檔（local-only / 憑證）不刪除（這類檔本就不該被本腳本管理，可能是其他
     專案推送內容）。
 
-    preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的專案特化檔不刪除。
+    preserve：sync-preserve.yaml 列出的專案特化檔不刪除。
 
-    skills_config（1.3.0-W1-054）：被 skills_config 排除的 skill 不視為 stale。
+    skills_config：被 skills_config 排除的 skill 不視為 stale。
 
     回傳已刪除的檔案數量。
     """
@@ -1556,8 +1602,8 @@ def detect_uncleaned_deletions(
 
     Why：刪除跨專案傳播仰賴 --clean opt-in（預設關，刻意安全設計避免誤刪）。本地
     git rm tracked .claude/ 檔後若 push 未帶 --clean，遠端殘留孤兒，full overlay
-    sync 會把孤兒複製回下游（W10-049 / W1-003 根因）。
-    Consequence：孤兒長期累積（W1-009 實測遠端殘留 755 孤兒），下游反覆收到應已
+    sync 會把孤兒複製回下游。
+    Consequence：孤兒長期累積（一次實測遠端殘留 755 孤兒），下游反覆收到應已
     刪除的檔。
     Action：本函式偵測此情境，main 結尾以 stdout soft 警告提示可考慮帶 --clean
     重推以傳播刪除；不阻擋本次 push（避免誤刪風險）。
@@ -1645,7 +1691,7 @@ def _dry_run_report_pc_collision(claude_dir: Path, upstream_clone: Path) -> None
         "green",
     )
 
-    # 孤兒辨識預覽（PC-APP-002 / W1-039）：列出「上游有、本地 PC 重編後已無同名檔」
+    # 孤兒辨識預覽（PC-APP-002）：列出「上游有、本地 PC 重編後已無同名檔」
     # 的上游 PC 檔，並標明哪些受 lineage 認領保護（不清）、哪些為真孤兒（讓位後的
     # native intruder，可清）。純讀取，供 step-4 驗證辨識正確性。
     lineage_claimed = compute_lineage_claimed_upstream_files(claude_dir)
@@ -1693,7 +1739,7 @@ def run_dry_run() -> None:
         if clone_result.returncode == 0:
             last_sync = get_last_sync_timestamp(str(temp_dir))
             print_color(f"   上次推送時間: {last_sync}", "green")
-            # PC 撞號對帳預覽（規則 3，1.2.0-W1-038）：snapshot 上游 PC 純態 →
+            # PC 撞號對帳預覽（規則 3）：snapshot 上游 PC 純態 →
             # 列既存 mess 修正計畫；再對本地 PC 檔模擬 push 處置（不寫任何檔）。
             _dry_run_report_pc_collision(claude_dir, temp_dir)
         else:
@@ -1854,7 +1900,7 @@ def run_framework_smoke_test(staging_dir: Path) -> None:
 # ============================================================================
 # PC 編號撞號對稱（push 端，鏡像 sync-claude-pull.py 行 1329+ 的撞號邏輯）
 #
-# 背景（1.2.0-W1-037 根因）：sync-pull 已有「PC 撞號偵測 + 自動重編號」
+# 背景：sync-pull 已有「PC 撞號偵測 + 自動重編號」
 # （_next_available_pc_number），把上游 PC 撞本地時重編並注入 lineage 註記。
 # sync-push 卻無對稱邏輯——full-overlay 推全部，把本地原生 PC（bare 號）+ pull
 # 重編 artifact（含 lineage 的 181/182）一併推上 canonical 上游，製造撞號 + 重複
@@ -1868,7 +1914,7 @@ def run_framework_smoke_test(staging_dir: Path) -> None:
 #
 # 設計刻意只認 flat 凍結核心格式（PC-NNN），不拓寬至前綴格式（PC-V1-/PC-APP-/
 # PC-TUNL-）——前綴格式各專案在自己命名空間累加，天生不參與 flat 整數撞號。
-# 與 pull 端 _PC_FILENAME_RE 決策一致（1.0.0-W1-019.2）。
+# 與 pull 端 _PC_FILENAME_RE 決策一致。
 # ============================================================================
 
 # 與 pull 端 _PC_FILENAME_RE 對稱：只匹配 bare PC-<NNN>-<slug>.md（前綴格式回 None）
@@ -1914,7 +1960,7 @@ def compute_lineage_claimed_upstream_files(claude_dir: Path) -> set[str]:
     """掃描本地 error-patterns，回傳「被本地 lineage 重編號檔以溯源註解認領」的
     上游 repo 相對路徑集合（form: error-patterns/.../PC-<上游號>-<slug>.md）。
 
-    Why（PC-APP-002 + 1.2.0-W1-039）：detect_uncleaned_deletions / clean_stale_files
+    Why（PC-APP-002）：detect_uncleaned_deletions / clean_stale_files
     以純檔名比對判孤兒（上游有、本地 tracked 樹無 → 孤兒）。但本地把上游 canonical
     PC-<N> 重編為 PC-<M>（注入 lineage 註解，保留 slug）後，上游的 PC-<N>-<slug>
     在本地已無同名檔，會被誤列孤兒——若帶 --clean 會刪掉上游 canonical（PC-APP-002
@@ -2271,7 +2317,7 @@ def resolve_ref_or_exit(project_root: Path, ref: str) -> None:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    """以 argparse 解析命令列參數（0.32.0-W1-008，PC-V1-001 防護）。
+    """以 argparse 解析命令列參數（PC-V1-001 防護）。
 
     Why：舊版手動 `sys.argv[1]` 把任何位置參數當 commit 訊息，導致 --help /
     未知旗標被誤認為 commit message 而觸發真實不可逆推送（v1.48.6 誤推實證）。
@@ -2337,7 +2383,12 @@ def check_skill_residue(claude_dir: Path, force_mode: bool) -> bool:
     本函式的輸出為開發者工具的終端訊息，不進使用者介面，故不走 i18n。
     """
     try:
-        from skill_residue_detector import blocking_only, format_report, scan_all
+        from skill_residue_detector import (
+            EXEMPT_HINT,
+            blocking_only,
+            format_report,
+            scan_all,
+        )
     except ImportError as exc:
         print_color(
             # i18n-exempt: 開發者工具終端輸出
@@ -2371,7 +2422,7 @@ def check_skill_residue(claude_dir: Path, force_mode: bool) -> bool:
     print()
     print("這些內容推上 canonical 後會被其他 consumer 取走。處理方式擇一：")
     print("  1. 修正引用，或改為不指名具體路徑的描述性敘述")
-    print("  2. 確屬示意路徑時，於該行加 `skill-residue-exempt: <理由>` 標記")
+    print(f"  2. {EXEMPT_HINT}")
     print("  3. 確知無妨時加 --force 旁路")
     return False
 
@@ -2395,7 +2446,7 @@ def main() -> None:
     project_root = find_project_root()
     claude_dir = project_root / ".claude"
 
-    # 2. commit-first 檢查（M1 根因解，0.19.1-W1-030）：push 取 git tracked 樹（HEAD），
+    # 2. commit-first 檢查（M1 根因解）：push 取 git tracked 樹（HEAD），
     # tracked 檔案未 commit 的變更不會進入推送內容。clean-check 改用 git status
     # --porcelain 全狀態 + should_exclude 過濾：local-only / 憑證 untracked 檔
     # （如 .zhtw-mcp-skip）不再誤判為未提交變更而 abort（缺陷 T），但真正未 commit
@@ -2425,7 +2476,7 @@ def main() -> None:
         )
         sys.exit(1)
     # 安全說明（C1）：push 改以 git archive HEAD 取 tracked 樹，untracked / gitignored
-    # 機密檔不在 tracked 樹中，從架構層消滅 W1-019 secret-leak 風險，故無需 interim
+    # 機密檔不在 tracked 樹中，從架構層消滅 secret-leak 風險，故無需 interim
     # detect_secret_leak_risk 防護（已隨 C1 移除）。
 
     # 2.4. Skill 殘留 gate：他專案的檔案路徑與腳本名隨 skill 內容流入本地後，
@@ -2435,9 +2486,9 @@ def main() -> None:
     if not check_skill_residue(claude_dir, force_mode):
         sys.exit(1)
 
-    # 2.5. No-change early-exit（W3-075）：避免空 commit 污染歷史
+    # 2.5. No-change early-exit：避免空 commit 污染歷史
     # 跳過條件：user 提供 commit message（明確意圖）、--force 旗標，或 --clean 旗標
-    # （0.2.1-W3-303：--clean 的刪除傳播不依賴內容 hash 變化，見 _should_check_no_change）
+    # （--clean 的刪除傳播不依賴內容 hash 變化，見 _should_check_no_change）
     if _should_check_no_change(user_message, force_mode, clean_mode):
         should_exit, reason = check_no_change_early_exit(claude_dir, project_root)
         if should_exit:
@@ -2469,7 +2520,7 @@ def main() -> None:
             for warning in tree_case_warnings:
                 print_color(f"   {warning}", "yellow")
 
-        # 快照遠端 skill 版本（W2-001：push 尾端輸出 skill 版本 diff 摘要）
+        # 快照遠端 skill 版本（push 尾端輸出 skill 版本 diff 摘要）
         skill_versions_before = extract_skill_versions(temp_dir / "skills")
 
         # 4.0 快照上游 PC 純態（copy 覆蓋前）+ 首跑對帳計畫（規則 3）。
@@ -2542,7 +2593,7 @@ def main() -> None:
             # C1 生產閘：在 push / tag 任何階段之前，於 staging 樹做框架 import
             # smoke test。紅燈時 sys.exit(1)，確保損壞框架不會被 push 或打 tag。
             run_framework_smoke_test(staging_dir)
-            # 載入 preserve 清單（0.32.0-W1-008）：APP 專案特化檔不推上共享框架，
+            # 載入 preserve 清單：APP 專案特化檔不推上共享框架，
             # 與 pull 端原地保留對稱。傳入 copy / clean / detect 全程一致排除。
             preserve = load_preserve_list(claude_dir)
             if preserve:
@@ -2562,7 +2613,7 @@ def main() -> None:
             )
             print_color("   注意: CLAUDE.md 不再同步（專案特定配置）")
 
-            # 孤兒偵測前重建 lineage 認領集（PC-APP-002 / W1-039）：本地 lineage
+            # 孤兒偵測前重建 lineage 認領集（PC-APP-002）：本地 lineage
             # 重編號檔認領的上游 canonical（如 PC-181 認領上游 PC-177-defensive）不算
             # 孤兒，避免 --clean 誤刪框架 canonical。讓位後的 native intruder（PC-184
             # 等，無 lineage）不認領上游，故上游殘留 PC-177-malformed 仍為真孤兒可清。
@@ -2576,10 +2627,10 @@ def main() -> None:
             # 7.5. 清理遠端過時檔案（僅 --clean 模式）。
             # 以 staging（tracked 樹）為基準：git rm 的檔不在 staging → 從遠端刪除（K）。
             if clean_mode:
-                # 三方比對（0.3.4-W2-005）：用 base SHA 區分「本地 git rm」vs「其他 consumer 新增」
+                # 三方比對：用 base SHA 區分「本地 git rm」vs「其他 consumer 新增」
                 print_color("清理遠端過時檔案（對齊 git tracked 樹）...")  # i18n-exempt
                 sync_base_sha = read_base_sha(claude_dir)
-                # 0.2.1-W3-155：base 不可達時三方保護整條失效，--clean 會把所有
+                # base 不可達時三方保護整條失效，--clean 會把所有
                 # 「canonical 有而本地無」的檔案無差別刪除，先行中止而非降級繼續。
                 if _clean_requires_abort(clean_mode, sync_base_sha, temp_dir):
                     _abort_clean_without_base_protection(temp_dir, staging_dir, sync_base_sha)
@@ -2600,7 +2651,7 @@ def main() -> None:
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)
 
-        # 7.55. PC 編號撞號對稱（規則 1 + 2，1.2.0-W1-038）：對 temp_dir 內剛覆蓋
+        # 7.55. PC 編號撞號對稱（規則 1 + 2）：對 temp_dir 內剛覆蓋
         # 的本地 PC 檔施加 push 端撞號處置——排除 lineage artifact、本地原生撞號
         # 賦 canonical 號。upstream_pc_index 為 copy 之前快照的上游純態。
         pc_collision_result = apply_push_pc_collision(
@@ -2643,7 +2694,7 @@ def main() -> None:
         print_color("提交變更...")
         run_git(["add", "-A"], cwd=str(temp_dir))
 
-        # 10.5. 跨平台 hook mode 治本（W16-004.3）：直接寫 git index mode 為 100755
+        # 10.5. 跨平台 hook mode 治本：直接寫 git index mode 為 100755
         # Windows NTFS 無 exec bit，filesystem chmod 對 git index 無效；
         # 此處 git update-index --chmod=+x 不依賴 filesystem，跨平台一致
         index_fixed = git_update_index_chmod(temp_dir)
@@ -2655,6 +2706,8 @@ def main() -> None:
         if diff_result.returncode == 0:
             print_color("沒有變更需要推送")
             return
+
+        report_rule8_hits_before_push(temp_dir)
 
         run_git(["commit", "-m", commit_msg], cwd=str(temp_dir))
 
@@ -2734,7 +2787,7 @@ def main() -> None:
             encoding="utf-8",
         )
 
-        # 寫入單一 last_synced_base_sha（W1-025 schema）：push 成功後遠端 HEAD 即
+        # 寫入單一 last_synced_base_sha：push 成功後遠端 HEAD 即
         # 新 base 錨點，供下次 pull/push 三方合併使用（H1：禁雙欄位）。
         head_result = run_git(
             ["rev-parse", "HEAD"], cwd=str(temp_dir), check=False
@@ -2755,16 +2808,15 @@ def main() -> None:
         print_color("遠端 commit 歷史已保留", "green")  # i18n-exempt
         print_color("注意: 根目錄 CLAUDE.md 未被推送（專案特定配置）")  # i18n-exempt
 
-        # Skill 版本 diff 摘要（W2-001）
+        # Skill 版本 diff 摘要
         skill_versions_after = extract_skill_versions(claude_dir / "skills")
         skill_diff = format_skill_version_diff(skill_versions_before, skill_versions_after)
         if skill_diff:
             print_color(skill_diff, "green")
 
-        # Skill 庫內容漂移檢查（0.3.5-W1-001 建立，0.2.1-W3-134 移除，
-        # 0.2.1-W3-351 以重用實作的形式恢復）：比對邏輯來自
-        # skill_sync/cli.py::_classify_sync_status，本檔不維護第二套——W3-134
-        # 移除的理由是兩套實作各自隨 versions.json schema 漂移，重用即解除該
+        # Skill 庫內容漂移檢查（曾建立後移除，再以重用實作的形式恢復）：
+        # 比對邏輯來自 skill_sync/cli.py::_classify_sync_status，本檔不維護第二套——
+        # 舊實作移除的理由是兩套實作各自隨 versions.json schema 漂移，重用即解除該
         # 顧慮；當時改印的靜態提示則指向不存在的子命令，無自動檢查亦無可執行指引。
         drift_report = report_skill_repo_drift(claude_dir)
         print_color(drift_report, "yellow")

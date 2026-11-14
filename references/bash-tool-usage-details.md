@@ -261,7 +261,7 @@ $ <上述命令> 2>&1 | tail -2
 
 ## 規則三詳細：禁止串接多個 git 寫入操作
 
-**前提修正（issue-34，0.2.1-W3-262）**：本節原表述隱含「唯讀 git 命令可安全併發，index.lock 只在寫入串接時才會發生」。此前提已被實驗推翻——見「情境二」。串接寫入操作仍應避免（機制見情境一），但 index.lock 本身不是「串接違規」的專屬訊號，遇到時的預設處置是短暫重試，見本節末「index.lock 錯誤的診斷」。
+**前提修正（issue-34）**：本節原表述隱含「唯讀 git 命令可安全併發，index.lock 只在寫入串接時才會發生」。此前提已被實驗推翻——見「情境二」。串接寫入操作仍應避免（機制見情境一），但 index.lock 本身不是「串接違規」的專屬訊號，遇到時的預設處置是短暫重試，見本節末「index.lock 錯誤的診斷」。
 
 ### 情境一：寫入串接觸發 Hook 競爭（根因圖解）
 
@@ -299,7 +299,7 @@ Bash: git add file.md && git commit -m "msg" && git merge feat/xxx --no-edit && 
 
 **Why**：git 唯讀子命令（`git status --porcelain`、`git diff-tree`、`git log -1` 等）在需要 refresh index stat cache 時，會透過標準 lockfile 機制短暫建立並釋放 `index.lock`——此行為與命令對使用者呈現的唯讀語意無關，純粹是 git 內部實作細節。
 
-**實證**（框架 issue 34，consumer `screen_clock` ticket `1.4.0-W2-030`）：背景併發執行 `git status --porcelain` / `git diff-tree` / `git log -1` 時，前景 30 次獨立 `git add` 命中 1 次 index.lock 失敗；依原規則採 `add && commit` 串接則連續三次失敗，拆開後 `git add` 仍間歇性失敗需重試。此結果與原表述「add 不觸發 Hook」矛盾——真正發生競爭的不是「add 是否觸發 Hook」，而是「任一 git 命令（含唯讀命令）refresh stat cache 時是否恰好撞上另一 git 命令持有 lock 的瞬間」，屬本質上的機率性競爭，不是串接才會出現的行為。
+**實證**（框架 issue 34，consumer `screen_clock` 專案的一次背景併發實測）：背景併發執行 `git status --porcelain` / `git diff-tree` / `git log -1` 時，前景 30 次獨立 `git add` 命中 1 次 index.lock 失敗；依原規則採 `add && commit` 串接則連續三次失敗，拆開後 `git add` 仍間歇性失敗需重試。此結果與原表述「add 不觸發 Hook」矛盾——真正發生競爭的不是「add 是否觸發 Hook」，而是「任一 git 命令（含唯讀命令）refresh stat cache 時是否恰好撞上另一 git 命令持有 lock 的瞬間」，屬本質上的機率性競爭，不是串接才會出現的行為。
 
 **Consequence**：把 index.lock 錯誤逕自解讀為「一定是串接違規」會誤導排查方向——並行環境（背景任務、其他 subagent、外部 GUI app）中即使每個 git 呼叫都獨立、未串接，仍可能間歇命中 lock。IMP-046 已記錄此類 Hook 內 `git status` 與主線程 git 操作競爭的案例，本次 issue-34 補上「純唯讀命令互相競爭、與 Hook 或串接皆無關」的變體。
 
@@ -368,8 +368,7 @@ quoted delimiter (`'EOF'`) 禁用變數展開與 command substitution，內容�
 ### 觸發來源
 
 - PC-087（PM 寫 /tmp 中介）直接觸發
-- W15-005 WRAP 分析確認方案 E（規則 + memory + 交叉引用）為最低成本最大覆蓋方案
-- W15-007 落地實作
+- WRAP 分析確認方案 E（規則 + memory + 交叉引用）為最低成本最大覆蓋方案
 
 ---
 
@@ -394,7 +393,7 @@ quoted delimiter (`'EOF'`) 禁用變數展開與 command substitution，內容�
 
 ## 規則六詳細：長背景任務需即時可觀察時使用 PYTHONUNBUFFERED + tee
 
-> **來源**：0.19.0-W3-086 ANA spike 實證（buffered 全程 0 行 vs PYTHONUNBUFFERED 逐行成長）。
+> **來源**：ANA spike 實證（buffered 全程 0 行 vs PYTHONUNBUFFERED 逐行成長）。
 
 **Why（雙層緩衝根因）**：Bash 子行程的 stdout 在非 TTY（管道/檔案）環境下預設為 fully-buffered（4-8 KB 才 flush）。加上 `| tail` 額外等 EOF 才吐出，雙層緩衝導致長任務輸出檔全程空白，用戶與 PM 無法即時觀察進度或早期偵測卡死/失敗。
 
@@ -509,7 +508,7 @@ done
 
 **已驗證實作**：`.claude/skills/ticket/hooks/ticket-md-auto-commit-hook.py` 的 `auto_commit_ticket_md` 函式（現行實作，對應歷史 fix commit `bd849894a`）。因不經過 `git commit`，此路徑不會觸發 pre-commit/commit-msg hook（含 bare-commit-guard-hook）——這是 plumbing 命令的固有行為，不是刻意繞過；guard 存在的目的是攔截「範圍不明的裸 commit」，本配方以步驟 7 的自我驗證取代 guard 的把關角色，提交範圍由程式碼結構保證且提交後即時核驗，不削弱其防護意圖。
 
-### 隔離索引提交的完整性三要件
+### 隔離索引提交的完整性要件
 
 上文配方容易被誤讀為「用了 `GIT_INDEX_FILE` 就已隔離」。實際上完整的隔離提交需同時滿足三個要件，任一項缺失即整體失效：
 
@@ -527,23 +526,23 @@ done
 
 **要件 1 的工作區維度**：清單來源即使不讀共用 index（例如改讀 `git status --porcelain`），仍可能摻入非本次提交對象的檔案——多 PM session 並行的環境下，`git status --porcelain` 反映的是整個工作區，必然包含他 session 尚在撰寫、未完成的檔案。`has_active_background_agents()` 這類「有無活躍背景代理人」的整批跳過判準只擋「本 session 自己派發、追蹤中的代理人」這一種情境，無法涵蓋「他 session 直接 CLI 操作、未經派發追蹤」或「他 session 已完成派發但尚未輪到自身 turn-end」的情形。完整清單來源獨立性因此需要同時滿足兩維：獨立於共用 index（防夾帶他人已 staged 內容）**且**獨立於工作區其他 session（防誤提交他 session 在途工作）。已驗證實作見 `ticket-md-auto-commit-hook.py` 的 `get_session_claimed_ticket_ids`（以 `.claude/lib/pm_registry.py` 的 session 認領清單為正歸屬判準，歸屬無法判定時保守排除）。
 
-上述三要件涵蓋的是**空間維度**——決定「提交了哪些檔案」的三個環節（清單來源、寫入隔離、範圍自檢）。**基準有多新**是另一個獨立維度，三要件對此無鑑別力，見下方「隔離索引 CAS 的時間維度要件」小節。
+上述完整性要件涵蓋的是**空間維度**——決定「提交了哪些檔案」的環節（清單來源、寫入隔離、範圍自檢）。**基準有多新**是另一個獨立維度，上述要件對此無鑑別力，見下方「隔離索引 CAS 的時間維度要件」小節。
 
 ### 隔離索引 CAS 的時間維度要件：基準釘選與收尾清理
 
-**與三要件的關係**：上方三要件回答「提交了哪些檔案」（空間維度），本節回答「基準有多新」（時間維度）。兩者互不重疊，任一項缺失都會使配方整體失效。本節與「規則七核對步驟的版本邊界：過期 index 快照」（見下方）同一根因——index 與 HEAD 是兩個獨立前進的平面——但發生在隔離索引 CAS 路徑本身，而該路徑正是被推薦用來取代共用 index、容易讓人誤以為已經免疫此類風險的做法。
+**與完整性要件的關係**：上方完整性要件回答「提交了哪些檔案」（空間維度），本節回答「基準有多新」（時間維度）。兩者互不重疊，任一項缺失都會使配方整體失效。本節與「規則七核對步驟的版本邊界：過期 index 快照」（見下方）同一根因——index 與 HEAD 是兩個獨立前進的平面——但發生在隔離索引 CAS 路徑本身，而該路徑正是被推薦用來取代共用 index、容易讓人誤以為已經免疫此類風險的做法。
 
 #### 要件 A：基準必須釘選為變數，禁止在配方任一步驟寫 HEAD 符號
 
 **失效機制**：配方步驟 3（`read-tree`）與步驟 6（`commit-tree -p`）分屬不同時刻。若兩處都用 `HEAD` 符號而非釘選的 `$OLD_HEAD` 變數，其間若有並行寫入推進了 HEAD，`read-tree` 讀到的樹狀態與 `commit-tree` 記錄的 parent 便分屬兩個不同基準——tree 內容停留在舊 HEAD，parent 卻指向新 HEAD，形成「未包含新內容、卻聲稱以新內容為 parent」的 commit，效果等同靜默回滾新 HEAD 帶入的變更。Bash 工具的 shell 變數不跨呼叫存活（見本檔開頭「持久狀態意識」），配方若拆成多個 Bash 呼叫執行，每次重新解析 `HEAD` 符號的視窗期尤其大。
 
-**為何三要件擋不住**：要件 2（`GIT_INDEX_FILE`）保護的是寫入端不受外部並行寫入干擾，不保護「基準本身是否夠新」；要件 3（tree 層級自檢）若同樣以 `HEAD` 符號比對，比對的是「此刻已推進的新 HEAD」而非「commit 實際採用的基準」，只要自檢時機晚於基準漂移就會通過——新 HEAD 與新 commit 的差集看起來合理，真正遺失的是介於兩者之間、已被跳過的那次推進。
+**為何完整性要件擋不住**：要件 2（`GIT_INDEX_FILE`）保護的是寫入端不受外部並行寫入干擾，不保護「基準本身是否夠新」；要件 3（tree 層級自檢）若同樣以 `HEAD` 符號比對，比對的是「此刻已推進的新 HEAD」而非「commit 實際採用的基準」，只要自檢時機晚於基準漂移就會通過——新 HEAD 與新 commit 的差集看起來合理，真正遺失的是介於兩者之間、已被跳過的那次推進。
 
 **CAS 舊值是唯一偵測點**：步驟 8 `git update-ref HEAD "$COMMIT_SHA" "$OLD_HEAD"` 帶入的舊值若寫成 `HEAD`，該符號在執行當下自我解析為目前 HEAD，與比較基準恆相等，CAS 檢查形同虛設；寫入釘選的 `$OLD_HEAD` 變數則會在 HEAD 於期間被推進時，因舊值與目前 HEAD 不符而**失敗**，而非覆蓋——這是配方全程唯一能偵測到本情形的環節，其餘步驟即使正確執行也偵測不到。
 
 **實證**（commit `4bd0e2ac`，本專案 2026-09-08）：`read-tree` 與 `commit-tree -p` 分屬兩次 Bash 呼叫，其間並行 session 提交了 `eab601b2`（對某 ticket md 的 `blockedBy` 欄位變更）。`4bd0e2ac` 的 tree 取自舊 HEAD、parent 卻指向新 HEAD，靜默回滾了 `eab601b2` 的變更；由並行代理人以正向 commit `f7bd7fa0` 修復。
 
-**最小重現**（可自行執行驗證，`$D` 為任一臨時 repo；已實測，輸出與註解一致）：
+**最小重現**（可自行執行驗證，`$D` 為任一臨時 repo；已實測，輸出與註解一致。以 Bash 工具執行時，`$D` 要先代入字面絕對路徑：PreToolUse 守衛看不出 `git -C "$D" commit` 作用在哪個 repo，會擋下）：
 
 ```bash
 printf 'v1\n' > "$D/a.txt"; git -C "$D" add a.txt; git -C "$D" commit -q -m base
@@ -631,7 +630,7 @@ git -C "$D" show HEAD:b.txt               # fatal: path 'b.txt' exists on disk, 
 
 **Consequence**：檔案內容退回舊版本並寫入歷史。ticket md 的情形是狀態欄位被回滾（`in_progress` 變回 `pending`）；程式碼檔則是整份退版。歷史外觀完全正常——被覆寫的那個 commit 仍在 `git log` 中，只有比對檔案內容才看得出回滾，無任何異常訊號可供事後歸因。
 
-**最小重現**（可自行執行驗證，`$D` 為任一臨時 repo）：
+**最小重現**（可自行執行驗證，`$D` 為任一臨時 repo。以 Bash 工具執行時，`$D` 要先代入字面絕對路徑：PreToolUse 守衛看不出 `git -C "$D" commit` 作用在哪個 repo，會擋下）：
 
 ```bash
 printf 'v1\n' > "$D/a.txt"; git -C "$D" add a.txt; git -C "$D" commit -q -m base
@@ -908,7 +907,7 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 - `.claude/hooks/bare-commit-guard-hook.py`（規則七的 hook 強制層；其放行裸 commit 的前提「staged 快照可驗證安全性」在過期快照下於內容維度失效，見規則七詳細「版本邊界」）
 - `.claude/error-patterns/process-compliance/PC-139-git-index-lock-source-misattribution-gui-app-fork.md`
 - `.claude/pm-rules/parallel-dispatch.md` — 並行派發 git staging / commit 紀律
-- 框架 issue 34（`tarrragon/claude`）— 規則三情境二實驗來源，consumer `screen_clock` ticket `1.4.0-W2-030`
+- 框架 issue 34（`tarrragon/claude`）— 規則三情境二實驗來源，consumer `screen_clock` 專案的實測
 - `.claude/error-patterns/implementation/IMP-BAL-013-locale-sort-uniq-merges-distinct-cjk-strings.md`（規則八詳細的完整案例來源，含最小重現與防護表）
 - `.claude/rules/core/language-constraints.md` 規則 1（規則八影響面：本框架強制繁體中文輸出，CJK 字串聚合統計皆在射程內）
 
@@ -930,19 +929,19 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 **Last Updated**: 2026-10-07
 **Version**: 1.15.0 — 規則一詳細 uv 方法由不存在的 `-d` 短旗標改為 `--directory`，附 uv 0.8.13 實測錯誤訊息。
 **Last Updated**: 2026-09-08
-**Version**: 1.14.0 — 隔離索引 CAS 配方補步驟 10（CAS 成功後檢查共用 index 過期 entry，附三平面比對可執行版本）；三要件章節後新增平行小節「隔離索引 CAS 的時間維度要件：基準釘選與收尾清理」，含要件 A（基準必須釘選 `$OLD_HEAD` 變數，禁用 `HEAD` 符號，附失效機制、為何三要件擋不住、CAS 舊值為唯一偵測點、已實測最小重現）與要件 B（CAS 後清理過期 entry，附三平面判定準則與處置表）；既有三要件表格與內容未變動。實證：commit `4bd0e2ac`（tree 取舊基準、parent 指新基準，靜默回滾 `eab601b2`）、`f7bd7fa0`（正向修復），三者皆已以 `git cat-file -t` 驗證存在。
+**Version**: 1.14.0 — 隔離索引 CAS 配方補步驟 10（CAS 成功後檢查共用 index 過期 entry，附三平面比對可執行版本）；完整性要件章節後新增平行小節「隔離索引 CAS 的時間維度要件：基準釘選與收尾清理」，含要件 A（基準必須釘選 `$OLD_HEAD` 變數，禁用 `HEAD` 符號，附失效機制、為何完整性要件擋不住、CAS 舊值為唯一偵測點、已實測最小重現）與要件 B（CAS 後清理過期 entry，附三平面判定準則與處置表）；既有完整性要件表格與內容未變動。實證：commit `4bd0e2ac`（tree 取舊基準、parent 指新基準，靜默回滾 `eab601b2`）、`f7bd7fa0`（正向修復），三者皆已以 `git cat-file -t` 驗證存在。
 **Version**: 1.13.0 — 規則七詳細「隔離索引 CAS」適用條件表與「與規則七主文的關係」段改寫：代理人票務提交（`ticket track commit`）已改為預設路徑，規則七三步降為其 fallback；PM 手動／無票務 CLI 之一般低頻 commit，規則七三步仍為預設不變。與 `bash-tool-usage-rules.md` 規則七、`parallel-dispatch.md`、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步。
 **Last Updated**: 2026-09-04
 **Version**: 1.12.0 — 規則二詳細新增「輸出過濾泛化：grep 白名單／`-v` 同樣選擇性移除警告行（第二、三實例）」小節：泛化上一節「截斷方向」的機制——共同根因非 `tail` 本身而是「選擇性過濾依內容特徵挑行，警告行通常較短且措辭不同」，與輸出長度無關；附第二實例（`ticket create --acceptance` 被 `\|` 拆分、grep 白名單濾掉 `[WARNING]` 行）、第三實例（本條款擴充案自身 acceptance 清單被同機制拆散）與 3 行最小重現（`tail -2` 切掉唯一的 `[Error]` 行）；Action 表補齊 `tail`／grep 白名單／`grep -v` 三種過濾方式的風險與修正。主文速查條目與統一檢查清單同步改寫見 `bash-tool-usage-rules.md` 規則二「輸出過濾方向」。
 **Version**: 1.11.0 — 規則二詳細新增「截斷方向：`head` 還是 `tail`（CLI 參數驗證錯誤場景）」小節：argparse 等 CLI 驗證錯誤的 `usage:`/`error:` 前綴固定在頭、被拒的多行參數內容回吐在尾，單取 `tail` 會截掉唯一判別依據使失敗與成功回音同形；附可執行最小重現（`tail -20` 完全看不到前綴 vs `head -5` 前綴清楚可見）、實測後果（ticket CLI append-log 靜默失敗案例）與 Action（不確定輸出結構時改 `head` 或 `head`+`tail` 兩段皆取，穩定尾部結論日誌維持 `tail`）；主文速查條目與統一檢查清單見 `bash-tool-usage-rules.md` 規則二
 **Version**: 1.10.0 — 規則七詳細新增「涵蓋擴充：衝突合併收尾的廣域 staging」小節：`git merge` 衝突後以 `git add -A` / `git add .` / `git commit -a` 收尾會把工作區無關的未暫存編輯寫進 merge commit，四項既有禁令對此路徑全數無效；附實證（merge commit `89c57a1c9`，兩 parent 皆 1020 行 / merge 926 行 / 該檔不在 incoming 變更範圍，三方比對判定內容源自工作區）、正確替代與已發生時的處置表；並記錄與派發骨架 Forbidden 行的涵蓋落差（骨架已擋、規則主文未擋），以及本機制應併入 `PC-BAL-008` 作為新變體的判定與三項依據
 **Version**: 1.9.0 — 規則七詳細新增「核對步驟的版本邊界：過期 index 快照」小節：核對步驟驗證 index 含哪些檔案、不驗證 entry 相對 HEAD 有多新；列兩條產生路徑（A pathspec 提交後不寫回共用 index；B 他方以隔離索引 CAS 提交 / merge / rebase / pull 使 HEAD 前進，雙方皆未違規），附可執行最小重現（核對通過 → 裸 commit → 內容回滾至舊版本，`git log` 外觀正常）、三平面比對偵測法與 `git restore --staged` 處置表；並明示三則邊界失效維度互不重疊（時序窗口 / hunk 粒度 / 版本新舊）、與 `bare-commit-guard-hook.py` 防護標的的差異（範圍過寬 vs 範圍正確而內容過舊）；不改變規則七既有禁止事項
-**Version**: 1.8.0 — 「隔離索引提交的完整性三要件」要件 1 補工作區維度：`git status --porcelain` 反映整個工作區，多 PM session 並行時必然摻入他 session 在途工作，清單來源需同時獨立於共用 index 與其他 session；已驗證實作見 `ticket-md-auto-commit-hook.py` 的 `get_session_claimed_ticket_ids`（以 pm-registry 認領清單為正歸屬判準，歸屬無法判定時保守排除）
+**Version**: 1.8.0 — 「隔離索引提交的完整性要件」要件 1 補工作區維度：`git status --porcelain` 反映整個工作區，多 PM session 並行時必然摻入他 session 在途工作，清單來源需同時獨立於共用 index 與其他 session；已驗證實作見 `ticket-md-auto-commit-hook.py` 的 `get_session_claimed_ticket_ids`（以 pm-registry 認領清單為正歸屬判準，歸屬無法判定時保守排除）
 **Version**: 1.7.0 — 新增「規則八詳細：CJK 資料聚合統計加 LC_ALL=C（locale collation 陷阱）」：`sort`/`uniq` 依 locale collation 而非位元組序比較，系統預設 locale 下會把相異 CJK 字串合併計數且無任何錯誤訊號；附最小重現、失效形狀、實際誤導案例（統計誤差 20 倍以上）、替代寫法對照表；主文速查條目見 `bash-tool-usage-rules.md` 規則八
 **Version**: 1.6.0 — 規則七詳細新增「核對步驟的粒度邊界：檔案內夾帶」小節：`git diff --cached --name-only` 核對粒度為檔案層級，`git add` 最小單位即整個檔案，對同檔案內他人未 stage 的 hunk 無鑑別力；附 append-only 共用檔（`topic-assignments.txt`）處置建議表（`git add --patch` / 單一方提交 / commit 前 `git diff` 自查）；不改變規則七既有禁止事項，與 PC-BAL-008「變體：檔案級共用」同根因但聚焦核對步驟本身的侷限
-**Version**: 1.5.0 — 新增「隔離索引提交的完整性三要件」小節：清單來源獨立於共用 index / GIT_INDEX_FILE 寫入隔離 / tree 層級提交前自檢，三要件缺一不可；補反例（commit `a7caabf4f`，清單改用 `git diff --cached --name-only` 掃入並行 ticket metadata，即使其餘兩要件正確執行仍整體失效）
+**Version**: 1.5.0 — 新增「隔離索引提交的完整性要件」小節：清單來源獨立於共用 index / GIT_INDEX_FILE 寫入隔離 / tree 層級提交前自檢，缺一不可；補反例（commit `a7caabf4f`，清單改用 `git diff --cached --name-only` 掃入並行 ticket metadata，即使其餘兩要件正確執行仍整體失效）
 **Version**: 1.4.0 — 新增「規則七詳細：隔離索引提交（GIT_INDEX_FILE CAS）」：TOCTOU 窗口說明 + read-tree/write-tree/commit-tree/update-ref 完整配方 + 適用條件表 + 與規則七主文關係；已驗證實作標註 `ticket-md-auto-commit-hook.py`（對應歷史 fix commit `bd849894a`）
-**Version**: 1.3.0 — 規則三新增「情境二：唯讀 git 命令本身也會競爭 index.lock」（issue-34 實證：30 次併發 add 命中 1 次），修正「add 不觸發 Hook」的失準因果表述；index.lock 診斷改為「預設短暫重試」優先於「排查串接違規」；補與 PC-BAL-008 / parallel-dispatch.md 的口徑一致性說明（0.2.1-W3-262）
-**Version**: 1.2.0 — 新增規則一即時協議（confabulation 防護四步）+ 規則六詳細（PYTHONUNBUFFERED + tee + 雙層緩衝根因 + 與規則二調和），自 bash-tool-usage-rules.md 主檔外移（1.0.0-W7-004.3 token 收斂）
-**Version**: 1.1.0 — 新增規則五詳細（心理障礙破除 + 後退條件 + 觸發來源）（W15-007）
-**Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、IMP-046（index.lock 競爭根因，含唯讀命令變體）、IMP-056（chpwd）、PC-046（高頻違規）、PC-087（PM /tmp 中介）、PC-139、PC-166（confabulation）、PC-BAL-008、W3-086（PYTHONUNBUFFERED spike）、issue-34
+**Version**: 1.3.0 — 規則三新增「情境二：唯讀 git 命令本身也會競爭 index.lock」（issue-34 實證：30 次併發 add 命中 1 次），修正「add 不觸發 Hook」的失準因果表述；index.lock 診斷改為「預設短暫重試」優先於「排查串接違規」；補與 PC-BAL-008 / parallel-dispatch.md 的口徑一致性說明
+**Version**: 1.2.0 — 新增規則一即時協議（confabulation 防護四步）+ 規則六詳細（PYTHONUNBUFFERED + tee + 雙層緩衝根因 + 與規則二調和），自 bash-tool-usage-rules.md 主檔外移（token 收斂）
+**Version**: 1.1.0 — 新增規則五詳細（心理障礙破除 + 後退條件 + 觸發來源）
+**Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、IMP-046（index.lock 競爭根因，含唯讀命令變體）、IMP-056（chpwd）、PC-046（高頻違規）、PC-087（PM /tmp 中介）、PC-139、PC-166（confabulation）、PC-BAL-008、PYTHONUNBUFFERED spike、issue-34

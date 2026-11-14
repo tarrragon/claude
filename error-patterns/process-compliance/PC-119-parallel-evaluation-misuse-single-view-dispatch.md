@@ -21,7 +21,7 @@ ticket 名稱含「派 parallel-evaluation linux 視角審查」字樣易誤導 
 
 **Why**：parallel-evaluation 的價值在於「視角差異互補」——linux（good taste / 架構）+ bay（品質 / 穩定性）+ thyme（Python 慣例 / DRY）三組獨立審查能揭露單一視角盲區。PM 單派 linux 退化為「強勢評分主導」，違反 memory `parallel_eval_needs_wrap` 警告（linux 強勢評分不可直接轉執行）。
 
-**Consequence**：單一視角審查報告會被誤認為「multi-view review 已完成」，後續決策（如 W17-008.5 group 結案、PC-105 文件補強）建立在不完整證據上。視角獨有發現（如 thyme 識別的 `_classify_argparse_error` index 取 pattern bad smell、bay 識別的 hook marker 跨檔同步風險）會被遺漏。
+**Consequence**：單一視角審查報告會被誤認為「multi-view review 已完成」，後續決策（如某 ticket group 結案、PC-105 文件補強）建立在不完整證據上。視角獨有發現（如 thyme 識別的 `_classify_argparse_error` index 取 pattern bad smell、bay 識別的 hook marker 跨檔同步風險）會被遺漏。
 
 **Action**：
 
@@ -33,11 +33,11 @@ ticket 名稱含「派 parallel-evaluation linux 視角審查」字樣易誤導 
 
 ## 觸發案例
 
-### 案例 1：W17-008.5.6.2 multi-view review 派發
+### 案例 1：某次 multi-view review 派發
 
 **事件**（2026-05-03）：
 
-W17-008.5.6.2 ticket 名稱「派 parallel-evaluation linux 視角審查 W17-008.5 group 錯誤通道設計」，PM 解讀為「ticket acceptance 只要求 linux 視角審查報告」，於是僅派 linux 單人 agent。
+該 ticket 名稱為「派 parallel-evaluation linux 視角審查某 group 錯誤通道設計」，PM 解讀為「ticket acceptance 只要求 linux 視角審查報告」，於是僅派 linux 單人 agent。
 
 PM 在 ticket md 的 Problem Analysis 章節寫了 4 維度審查重點（設計合理性 / 未覆蓋盲區 / Follow-up 建議 / Good taste），但派發時未拆分視角專屬版本。linux agent 完成審查後寫入 ticket md 的 H2 自定義章節（後修為 H3 子章節）。
 
@@ -47,7 +47,7 @@ PM 在 ticket md 的 Problem Analysis 章節寫了 4 維度審查重點（設計
 - bay 獨有：exit_code=0 short-circuit 防護未被測試覆蓋、hook marker 跨檔同步風險詳細評估
 - linux 獨有：integration-test 缺 INVALID_VALUE 場景
 
-若僅依 linux 視角結論，後續 W17-008.5 group 結案會缺以上 P2/P3 follow-up 識別，三視角共識升級項（ErrnoCodes StrEnum 集中升 P1.5）也不會浮現。
+若僅依 linux 視角結論，後續該 group 結案會缺以上 P2/P3 follow-up 識別，三視角共識升級項（ErrnoCodes StrEnum 集中升 P1.5）也不會浮現。
 
 ### 共同特徵
 
@@ -70,7 +70,7 @@ PM 將「ticket 名稱字面範圍」誤解為「ticket 完整意圖範圍」。
 
 1. **skill 用法的隱性約束未硬編碼於 ticket schema**：parallel-evaluation skill 描述「派發三人組（含常駐委員 linux）」屬人類可讀規則，沒有 hook 或 schema 強制 PM 在派發 multi-view ticket 時並行三 agent
 2. **memory feedback 提醒的局限**：`parallel_eval_needs_wrap` memory 提醒「linux 強勢評分需 WRAP」，但未涵蓋「禁止單派 linux」這層更基本的協議
-3. **ticket 名稱命名習慣**：PM 在 W17-117 originally 將此 ticket 命名為「派 parallel-evaluation linux 視角審查」，名稱本身強化了單一視角誤解
+3. **ticket 名稱命名習慣**：PM 原本將此 ticket 命名為「派 parallel-evaluation linux 視角審查」，名稱本身強化了單一視角誤解
 
 ### 為何 PM 自律不可靠
 

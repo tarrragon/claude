@@ -95,4 +95,4 @@
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 - 從 five-document-system-methodology.md 外移：worklog 自給自足範本 + 技術債務評估表格與處理流程 + error-patterns 核心理念框 + 工作流程三階段逐字命令（W8-020.11 方法論瘦身校準）
+**Version**: 1.0.0 - 從 five-document-system-methodology.md 外移：worklog 自給自足範本 + 技術債務評估表格與處理流程 + error-patterns 核心理念框 + 工作流程三階段逐字命令（方法論瘦身校準）

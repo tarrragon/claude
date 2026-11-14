@@ -110,6 +110,75 @@ class TestDoesNotDetect:
         assert kinds(root) == []
 
 
+def hits(root: Path) -> list[tuple[str, int]]:
+    findings = scan_all(root / ".claude" / "skills", root)
+    return [(r.kind, r.line) for items in findings.values() for r in items]
+
+
+_MARK = "  # skill-residue-exempt: 上方 heredoc 建立的暫存腳本"
+
+
+class TestContinuedShellCommand:
+    """反斜線續行命令：標記放在邏輯命令最後一個實體行即豁免整條（3.3.0-W1-033）。"""
+
+    @pytest.mark.parametrize("lang", ["bash", "sh", "shell"])
+    def test_marker_on_last_line_exempts_whole_command(self, project, lang):
+        root = project(
+            f"```{lang}\n"
+            "python3 /tmp/split_symbols.py \\\n"
+            f"  --src a.py{_MARK}\n"
+            "```\n"
+        )
+        assert kinds(root) == []
+
+    def test_marker_on_last_of_three_lines(self, project):
+        root = project(
+            "```bash\n"
+            "diff \\\n"
+            "  <(python3 /tmp/split_symbols.py old.py) \\\n"
+            f"  <(python3 /tmp/split_symbols.py new.py){_MARK}\n"
+            "```\n"
+        )
+        assert kinds(root) == []
+
+    def test_unmarked_continued_command_still_blocks(self, project):
+        """正向對照：沒有標記時仍報 blocking，行號為命中的實體行。"""
+        root = project(
+            "```bash\n"
+            "python3 /tmp/split_symbols.py \\\n"
+            "  --src a.py\n"
+            "```\n"
+        )
+        assert hits(root) == [("MISSING_SCRIPT", 2)]
+
+    def test_marker_does_not_reach_next_command(self, project):
+        """豁免只到邏輯命令結尾：下一條命令的命中照報。"""
+        root = project(
+            "```bash\n"
+            f"echo a \\\n  b{_MARK}\n"
+            "python3 /tmp/split_symbols.py\n"
+            "```\n"
+        )
+        assert hits(root) == [("MISSING_SCRIPT", 4)]
+
+    def test_outside_fence_backslash_lines_are_not_merged(self, project):
+        """對照：fenced block 外以反斜線結尾的行不合併（markdown 硬換行）。"""
+        root = project(
+            "執行 `python3 /tmp/split_symbols.py` \\\n"
+            f"接著看結果{_MARK}\n"
+        )
+        assert hits(root) == [("MISSING_SCRIPT", 1)]
+
+    def test_non_shell_fence_is_not_merged(self, project):
+        root = project(
+            "```python\n"
+            "# python3 /tmp/split_symbols.py \\\n"
+            f"x = 1{_MARK}\n"
+            "```\n"
+        )
+        assert hits(root) == [("MISSING_SCRIPT", 2)]
+
+
 class TestScopeOfScan:
     @pytest.mark.parametrize(
         "rel,expected",

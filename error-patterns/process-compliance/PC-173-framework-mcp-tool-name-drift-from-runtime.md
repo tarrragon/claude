@@ -27,11 +27,11 @@
 
 | 檔案 | 漂移 | 落地 ticket |
 |------|------|-----------|
-| `project-init/.../messages.py:260` | 索引驗證提示引用不存在的 `codegraph_status` | 0.19.1-W1-033 <!-- broken-link-exempt: 省略號縮寫路徑（.../）恰巧含 ../ 子字串，被 broken-link scanner 誤判為相對路徑引用；本行非真實引用 --> |
-| `search-tools-guide/SKILL.md` 速查表 | codegraph 5 名 + cbm `__search` + serena `plugin_serena_serena__` 前綴全錯 | 0.19.1-W1-033 |
-| `templates/settings-local-template.json` | serena 前綴漂移 + 7 個工具名不在實機清單 | 0.19.1-W1-034 |
+| `project-init/.../messages.py:260` | 索引驗證提示引用不存在的 `codegraph_status` | 提示與速查表漂移修復票 <!-- broken-link-exempt: 省略號縮寫路徑（.../）恰巧含 ../ 子字串，被 broken-link scanner 誤判為相對路徑引用；本行非真實引用 --> |
+| `search-tools-guide/SKILL.md` 速查表 | codegraph 5 名 + cbm `__search` + serena `plugin_serena_serena__` 前綴全錯 | 提示與速查表漂移修復票 |
+| `templates/settings-local-template.json` | serena 前綴漂移 + 7 個工具名不在實機清單 | 模板漂移修復票 |
 
-全域 audit 與常駐 hook 評估排入 0.19.1-W1-035（P3 ANA）。
+全域 audit 與常駐 hook 評估排入另一張 P3 ANA ticket。
 
 ## 防護（驗證流程）
 
@@ -71,4 +71,4 @@ bash `grep` / `rg` 輸出會把「實際可呼叫的 MCP 工具名」替換為 `
 
 ## 案例文件來源
 
-codegraph_status 漂移盤點與修復（2026-06-04，commit `d184ccd6` / `862602e2` / `61e588a7`；ticket 0.19.1-W1-033 / W1-034 / W1-035）。
+codegraph_status 漂移盤點與修復（2026-06-04，commit `d184ccd6` / `862602e2` / `61e588a7`）。

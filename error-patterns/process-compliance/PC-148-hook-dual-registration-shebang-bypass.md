@@ -3,7 +3,6 @@ id: PC-148
 title: Hook 雙重註冊：settings.local.json python3 直呼繞過 shebang pep723 deps
 category: process-compliance
 severity: medium
-source_case: 0.18.0-W11-030
 created: 2026-05-16
 ---
 
@@ -58,7 +57,7 @@ created: 2026-05-16
 
 | 層級 | 動作 |
 |------|------|
-| 規則層 | **框架 hook 單一註冊來源原則**：所有 hook 註冊一律寫入 `settings.json`，`settings.local.json` 完全不放任何 hook（僅 permissions / env / mcp / outputStyle）。**Why（U2 實證，1.4.0-W2-013.2）**：CC hooks 跨作用域**累積合併（非覆寫）**，且**無細粒度 null / false / 停用機制**（僅 `disableAllHooks` 全局開關）——故 local 無法「覆寫或停用」base entry，所謂「local override 框架 hook」不存在，舊版本書於此處的「local 完整覆寫並停用 base entry」做法經 U2 證偽，已移除。**Consequence**：兩處並存只會被 runtime 逐一執行（症狀如本 PC），且 `settings.local.json` 是 sync 排除檔，上游 relocate 無法觸及 → 幽靈 hook（見 [[ARCH-TUNL-001]]）。**Action**：enforcement 置於 **sync / 安裝端**（真實變異源頭，非手動 Edit 介面，見 [[PC-V1-012]]）拒絕框架 hook 留在 local；既有 SessionStart `find_local_hook_registrations` / `find_phantom_registrations` 為偵測安全網（WARNING） |
+| 規則層 | **框架 hook 單一註冊來源原則**：所有 hook 註冊一律寫入 `settings.json`，`settings.local.json` 完全不放任何 hook（僅 permissions / env / mcp / outputStyle）。**Why（U2 實證）**：CC hooks 跨作用域**累積合併（非覆寫）**，且**無細粒度 null / false / 停用機制**（僅 `disableAllHooks` 全局開關）——故 local 無法「覆寫或停用」base entry，所謂「local override 框架 hook」不存在，舊版本書於此處的「local 完整覆寫並停用 base entry」做法經 U2 證偽，已移除。**Consequence**：兩處並存只會被 runtime 逐一執行（症狀如本 PC），且 `settings.local.json` 是 sync 排除檔，上游 relocate 無法觸及 → 幽靈 hook（見 [[ARCH-TUNL-001]]）。**Action**：enforcement 置於 **sync / 安裝端**（真實變異源頭，非手動 Edit 介面，見 [[PC-V1-012]]）拒絕框架 hook 留在 local；既有 SessionStart `find_local_hook_registrations` / `find_phantom_registrations` 為偵測安全網（WARNING） |
 | Hook 層 | 新增 `settings-duplicate-hook-registration-check-hook.py` 比對兩檔同事件同 matcher 的命令前綴，重複時啟動 warn |
 | 文件層 | `.claude/references/hook-architect-technical-reference.md` 補「hook 註冊統一以 `$CLAUDE_PROJECT_DIR/.claude/hooks/foo-hook.py`（依 shebang）」章節，明示 `python3 ...` 直呼形式不可作為註冊入口 |
 | 自檢層 | session 啟動 hook 健康檢查補「PreToolUse Agent matcher 註冊數 > 預期」訊號偵測 |
@@ -83,5 +82,5 @@ created: 2026-05-16
 
 ## 案例
 
-- 0.18.0-W11-030 ANA 發現本模式（basil-hook-architect 調查）
-- 0.18.0-W11-030.1 修復 `.claude/settings.local.json:199-209`，commit 0208d13d
+- 某次 ANA 發現本模式（basil-hook-architect 調查）
+- 後續修復 `.claude/settings.local.json:199-209`，commit 0208d13d

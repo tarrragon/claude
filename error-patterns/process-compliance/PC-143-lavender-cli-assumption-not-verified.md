@@ -10,7 +10,7 @@
 
 - **類別**：process-compliance
 - **嚴重度**：中（修正成本隨 TDD Phase 推進而上升；hook 名稱錯誤會導致 Phase 3b 實作直接失敗）
-- **狀態**：reproducible（W10-115 首例；W14-036 二度重現，不同 agent、不同資源類型）
+- **狀態**：reproducible（Phase 1 spec 首例；ANA spawn IMP 二度重現，不同 agent、不同資源類型）
 
 ## 症狀
 
@@ -33,27 +33,27 @@ spec / ANA 規劃者的預設工作流是「閱讀 Context Bundle 設計目標 +
 
 ## 案例重現紀錄
 
-| 案例 | Ticket | 規劃者 | 偏差資源類型 | 假設值 | 實際值 | 發現者 / 時機 |
+| 案例 | 情境 | 規劃者 | 偏差資源類型 | 假設值 | 實際值 | 發現者 / 時機 |
 |------|--------|--------|------------|--------|--------|-------------|
-| 1 | W10-115 | lavender（Phase 1 spec） | CLI `--format` 可選值 | `table/json/list` | `table/ids/yaml` | pepper Phase 3a |
-| 2 | W14-036 | basil（W14-032 ANA spawn IMP 規劃） | hook 檔名 | `decision-quality-guard-hook.py` | `wrap-decision-tripwire-hook.py` | basil 執行 W14-036 時（Phase 3b 實作前 agent 自律對齊） |
-| 3 | 1.0.0-W1-056.12 | saffron（1.0.0-W1-056.1 ANA Solution 方案 B） | model ID | `claude-sonnet-4-5-20250514[1m]` | `claude-sonnet-4-5`（20250514 為 Sonnet 4 日期戳，dated ID 屬拼接） | PM 執行 spawn IMP 時（寫入 settings 前比對日期戳） |
+| 1 | Phase 1 spec | lavender（Phase 1 spec） | CLI `--format` 可選值 | `table/json/list` | `table/ids/yaml` | pepper Phase 3a |
+| 2 | ANA spawn IMP | basil（ANA spawn IMP 規劃） | hook 檔名 | `decision-quality-guard-hook.py` | `wrap-decision-tripwire-hook.py` | basil 執行該 IMP 時（Phase 3b 實作前 agent 自律對齊） |
+| 3 | ANA spawn IMP（model ID） | saffron（ANA Solution 方案 B） | model ID | `claude-sonnet-4-5-20250514[1m]` | `claude-sonnet-4-5`（20250514 為 Sonnet 4 日期戳，dated ID 屬拼接） | PM 執行 spawn IMP 時（寫入 settings 前比對日期戳） |
 
-### 1.0.0-W1-056.12 案例細節
+### 案例 3 細節（model ID）
 
 ANA 規劃 fallbackModel 設定值時，將 Sonnet 4.5 的名稱與 Sonnet 4（`claude-sonnet-4-20250514`）的日期戳拼接成不存在的 dated ID。此類偏差比檔名錯誤更危險：fallbackModel 含無效 ID 不必然立即報錯，可能在 API 過載真正觸發 fallback 時才靜默失效（防護功能形同虛設）。執行端防護：寫入 model ID 前比對日期戳與已知 model 家族，無法驗證時改用無日期 alias（如 `claude-sonnet-4-5[1m]`），並在 spawn IMP 的 Solution 記錄偏離。
 
-### W14-036 案例細節
+### 案例 2 細節（hook 檔名）
 
-**時間**：2026-05-14（W14 Wave）
+**時間**：2026-05-14
 
-**規劃 ticket**：W14-032（ANA，basil 執行）— 分析 `.claude/hooks/` 全部 hook 的 effort 感知遷移範圍與優先級，產出 spawn IMP 規劃表。
+**規劃 ticket**：ANA（basil 執行）— 分析 `.claude/hooks/` 全部 hook 的 effort 感知遷移範圍與優先級，產出 spawn IMP 規劃表。
 
-**實際情境**：basil 在 W14-032 Solution 類別 A 清單中列入 `decision-quality-guard-hook.py`，並在 spawn IMP W14-036 的 `where.files` 繼承此名稱。W14-036 執行時（basil 實作），實際對 `.claude/hooks/` 執行 ls 後確認 `decision-quality-guard-hook.py` 不存在，對應 hook 為 `wrap-decision-tripwire-hook.py`（以 `wrap-decision-tripwire` 語意命名，職責為 WRAP 決策框架觸發偵測）。
+**實際情境**：basil 在該 ANA Solution 類別 A 清單中列入 `decision-quality-guard-hook.py`，並在 spawn IMP 的 `where.files` 繼承此名稱。該 IMP 執行時（basil 實作），實際對 `.claude/hooks/` 執行 ls 後確認 `decision-quality-guard-hook.py` 不存在，對應 hook 為 `wrap-decision-tripwire-hook.py`（以 `wrap-decision-tripwire` 語意命名，職責為 WRAP 決策框架觸發偵測）。
 
-**Agent 自律對齊行為**：basil 在 Phase 3b 實作前自行 ls 確認，主動修正 hook 名稱後繼續實作，未造成 commit 阻擋。但錯誤名稱已傳入 W14-036 `where.files` 且 W14-032 Solution 表格仍含誤記名稱（未回填修正）。
+**Agent 自律對齊行為**：basil 在 Phase 3b 實作前自行 ls 確認，主動修正 hook 名稱後繼續實作，未造成 commit 阻擋。但錯誤名稱已傳入該 IMP 的 `where.files` 且該 ANA Solution 表格仍含誤記名稱（未回填修正）。
 
-**根因分析**：basil ANA 分析時「依檔名語意 + 既有 hook 知識（agent prompt 已內化所有 hook 名稱與職責）分類」（引自 W14-032 Solution「實驗執行」段落）。此描述揭示問題：ANA 規劃者依賴「內化知識」（訓練時習得的名稱）而非實時 ls 驗證，兩者可以不一致。`decision-quality-guard` 是功能語意，`wrap-decision-tripwire` 是實際命名，從功能推名稱在語意上「合理」卻實際不存在。
+**根因分析**：basil ANA 分析時「依檔名語意 + 既有 hook 知識（agent prompt 已內化所有 hook 名稱與職責）分類」（引自該 ANA Solution「實驗執行」段落）。此描述揭示問題：ANA 規劃者依賴「內化知識」（訓練時習得的名稱）而非實時 ls 驗證，兩者可以不一致。`decision-quality-guard` 是功能語意，`wrap-decision-tripwire` 是實際命名，從功能推名稱在語意上「合理」卻實際不存在。
 
 ## 防護
 
@@ -92,8 +92,8 @@ ls <目標目錄>/<預期檔名>
 
 ### 跨 Phase 安全網
 
-- pepper Phase 3a 接手時應例行驗證 Phase 1 spec 對既有 CLI 的描述（W10-115 案例已自然發生）
-- Phase 3b 實作者（或 ANA spawn IMP 執行者）接手時應驗證 `where.files` 中的路徑存在性，發現偏差時在 Problem Analysis 記錄並回填規劃 ticket Solution（W14-036 案例：agent 自律對齊成功，但漏回填規劃 ticket）
+- pepper Phase 3a 接手時應例行驗證 Phase 1 spec 對既有 CLI 的描述（案例 1 已自然發生）
+- Phase 3b 實作者（或 ANA spawn IMP 執行者）接手時應驗證 `where.files` 中的路徑存在性，發現偏差時在 Problem Analysis 記錄並回填規劃 ticket Solution（案例 2：agent 自律對齊成功，但漏回填規劃 ticket）
 
 ### AGENT_PRELOAD 規則 8（非自動送達，需主動 Read）
 
@@ -103,7 +103,7 @@ ls <目標目錄>/<預期檔名>
 
 **選 A 理由**：
 
-W10-115（lavender CLI flag）與 W14-036（basil ANA hook 名稱）共享相同根因結構：
+案例 1（lavender CLI flag）與案例 2（basil ANA hook 名稱）共享相同根因結構：
 
 1. 規劃/spec 撰寫者以「語意推測」取代「grep/ls 驗證」
 2. 偏差對象是「既有資源名稱」（事實陳述，非設計選擇）
@@ -131,6 +131,6 @@ W10-115（lavender CLI flag）與 W14-036（basil ANA hook 名稱）共享相同
 ---
 
 **Created**: 2026-05-12
-**Updated**: 2026-08-17（三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，「AGENT_PRELOAD 通用層防護」章節與相關文件條目改述為非自動送達，需代理人主動 Read；歷史子項見下）；2026-05-14（W14-040：擴充標題涵蓋 ANA 規劃情境；加入 W14-036 案例；加入 AGENT_PRELOAD 通用層防護）
-**Source**: W10-115 Phase 3a pepper 回報的 Spec 偏差（首例）；W14-036 basil ANA spawn IMP hook 名稱誤記（二度重現）
+**Updated**: 2026-08-17（三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，「AGENT_PRELOAD 通用層防護」章節與相關文件條目改述為非自動送達，需代理人主動 Read；歷史子項見下）；2026-05-14（擴充標題涵蓋 ANA 規劃情境；加入案例 2；加入 AGENT_PRELOAD 通用層防護）
+**Source**: Phase 3a pepper 回報的 Spec 偏差（首例）；basil ANA spawn IMP hook 名稱誤記（二度重現）
 **Related**: PC-068（姊妹模式：pepper Phase 3a 既有 utility 掃描）

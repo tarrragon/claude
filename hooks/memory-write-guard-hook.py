@@ -7,7 +7,7 @@
 Memory Write Guard Hook - PreToolUse deny，攔截 Write/Edit 系工具對 memory
 目錄的寫入並改道正規化路徑（Bash 不在攔截範圍，見下方豁免範圍）
 
-本框架排除 Claude Code 原生 memory 作為知識載體（0.2.1-W3-082 用戶裁示）：
+本框架排除 Claude Code 原生 memory 作為知識載體（用戶裁示）：
 memory 存於使用者 home 目錄的專案層級儲存，不納入專案 git、不隨 .claude/
 sync 到其他專案，與「經驗須跨專案複用」的框架目標根本衝突。捕獲時分流的
 判斷時機本身正確——memory 被觸發的那一刻正是判定「值得跨 session 保存」
@@ -31,11 +31,11 @@ Hook 類型: PreToolUse (matcher: Write|Edit|MultiEdit|NotebookEdit)
 - matcher 僅涵蓋 Write/Edit/MultiEdit/NotebookEdit，不含 Bash：Bash 可用
   heredoc（`cat > memory/x.md <<'EOF' ... EOF`，`bash-tool-usage-rules` 規則五
   明文鼓勵此寫法傳長文字）完全繞過本 hook。排除 Bash 是刻意的，為避免擋住
-  0.2.1-W3-085 用 `rm`/`git rm` 清空 memory 目錄的路徑；但這個排除是全稱的，
+  先前清理用 `rm`/`git rm` 清空 memory 目錄的路徑；但這個排除是全稱的，
   同時也放行了寫入，不只放行刪除。此缺口由 `memory-dir-audit-hook.py`
   的 SessionStart+Stop 事後稽核承接（演變史見該檔開頭），Bash 寫入本身
   仍不受本 hook 阻擋，但會在下一次 Stop 前被稽核偵測到
-- NotebookEdit 已於 0.2.1-W3-092 併入本 matcher（與 Write 同構：明確
+- NotebookEdit 已併入本 matcher（與 Write 同構：明確
   `notebook_path` 欄位可直接比對，無命令解析風險）
 
 三層 fail-open（沿用框架既有慣例，非本 hook 專屬設計，於此明文記錄）：
@@ -85,7 +85,7 @@ EXIT_BLOCK = 2
 # 並以 re.IGNORECASE 涵蓋大小寫變體（macOS APFS 預設大小寫不敏感，
 # Memory/MEMORY 與 memory 是同一個實體目錄）。
 # 完整 pattern（含錨定至 home、已 escape）取自 lib/memory_paths.py
-# 的 get_anchored_memory_dir_pattern()（0.2.1-W3-196 SSOT，與
+# 的 get_anchored_memory_dir_pattern()（SSOT，與
 # memory-dir-audit-hook.py 共用同一份結構知識，不共用判定邏輯）——錨定至
 # home 是結構知識的一部分，不在本 hook 內組裝。
 _HOME = os.path.expanduser("~")
@@ -98,7 +98,7 @@ MEMORY_DIR_PATTERN = re.compile(
 # 表），本訊息只放判別問句 + 三個目的地摘要 + 指向權威檔的路徑，不逐字複製
 # 該檔表格——複製的副本會隨權威檔改寫而漂移（已實測發生：多一逗號、
 # 「下方」被誤植為「完整」），單一事實來源才不會漂移。三分流判準本體取自
-# lib/memory_triage_messages.py 的 MemoryTriageMessages（0.2.1-W3-196 SSOT，
+# lib/memory_triage_messages.py 的 MemoryTriageMessages（SSOT，
 # 與 memory-dir-audit-hook.py 共用；語氣前綴各自獨立不合併——本段是拒絕
 # 語氣，對應 audit 的偵測語氣）。
 DENY_REASON = (
@@ -137,7 +137,7 @@ def main() -> int:
         return EXIT_ALLOW
 
     tool_input = input_data.get("tool_input") or {}
-    # NotebookEdit 的路徑欄位是 notebook_path，非 file_path（W3-092 併入）
+    # NotebookEdit 的路徑欄位是 notebook_path，非 file_path
     if tool_name == "NotebookEdit":
         file_path = tool_input.get("notebook_path", "")
     else:

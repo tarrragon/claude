@@ -1,6 +1,6 @@
 # PC-APP-002: sync-pull 孤兒清理超出宣稱範圍刪除，preserve 機制未生效致專案特化檔遺失
 
-> **框架級（canonical-bound）**：本教訓的根因與防護皆屬框架共享工具（`sync-claude-pull.py`）行為，非單一專案特化——每個同步此 sync 機制的專案都會中招。APP 前綴僅記錄發現地。防護應內建進 sync 腳本本體（preserve-aware 孤兒清理 + 宣稱/實際刪除對帳，見 0.32.0-W1-006 spawn 的 IMP 票），並於 sync-push 時由框架賦予 canonical 編號。
+> **框架級（canonical-bound）**：本教訓的根因與防護皆屬框架共享工具（`sync-claude-pull.py`）行為，非單一專案特化——每個同步此 sync 機制的專案都會中招。APP 前綴僅記錄發現地。防護應內建進 sync 腳本本體（preserve-aware 孤兒清理 + 宣稱/實際刪除對帳，由專案內衍生的 IMP 票落實），並於 sync-push 時由框架賦予 canonical 編號。
 
 ## 摘要
 
@@ -29,7 +29,7 @@ sync-pull「框架追平」會以「上游 HEAD 沒有此檔」作為孤兒判�
 
 ## 案例：c014eccf 宣稱清 16 實刪 30（2026-06-15 → 2026-06-16 揭露）
 
-c014eccf「.claude 框架追平至 ce0dcd7（清 16 孤兒 + 框架演進）」commit 訊息描述「16 W10-049 孤兒（14 root D + 2 R100 遷移）」，實際 `diff-filter=D` 刪除 30 檔。超出的 16 個非 root 刪除含 preserve 清單標記的專案特化檔：
+c014eccf「.claude 框架追平至 ce0dcd7（清 16 孤兒 + 框架演進）」commit 訊息描述「16 孤兒（14 root D + 2 R100 遷移）」，實際 `diff-filter=D` 刪除 30 檔。超出的 16 個非 root 刪除含 preserve 清單標記的專案特化檔：
 
 - `error-patterns/process-compliance/PC-177`（防護規則機械套用反噬）、`PC-178`（UI 測試綠但 runtime 不可達）——APP 專案版，與上游同編號不同教訓。
 - `hooks/pre-fix-evaluation-hook.py`（APP 保留的 hook 版修復前評估，432 行）。
@@ -79,4 +79,4 @@ c014eccf「.claude 框架追平至 ce0dcd7（清 16 孤兒 + 框架演進）」c
 
 ---
 
-**Last Updated**: 2026-06-18 | **Version**: 1.2.0 — 新增「push 側變體：--clean 過刪本地重編號的上游 canonical」章節（pull 側過刪的鏡像；--clean 前必查孤兒 slug 是否被本地重編號檔以溯源註解認領）。**Source**: app_tunnel v1.2.0 sync-push 提示刪 PC-177/178 canonical 近失。**Version**: 1.1.0 — 標記框架級（canonical-bound）+ 防護內建 sync 腳本路由（0.32.0-W1-006）；補根因三因素疊加機制句（basil-writing-critic 審查建議）。**Version**: 1.0.0 — 初始建立（c014eccf 宣稱清 16 實刪 30，誤刪 10 個 preserve 標記專案特化檔，2026-06-16 sync-pull 警告揭露 + c014eccf^ 復原）。**Source**: sync-pull 第二輪 preserve 警告 git 考古。
+**Last Updated**: 2026-06-18 | **Version**: 1.2.0 — 新增「push 側變體：--clean 過刪本地重編號的上游 canonical」章節（pull 側過刪的鏡像；--clean 前必查孤兒 slug 是否被本地重編號檔以溯源註解認領）。**Source**: app_tunnel v1.2.0 sync-push 提示刪 PC-177/178 canonical 近失。**Version**: 1.1.0 — 標記框架級（canonical-bound）+ 防護內建 sync 腳本路由；補根因三因素疊加機制句（basil-writing-critic 審查建議）。**Version**: 1.0.0 — 初始建立（c014eccf 宣稱清 16 實刪 30，誤刪 10 個 preserve 標記專案特化檔，2026-06-16 sync-pull 警告揭露 + c014eccf^ 復原）。**Source**: sync-pull 第二輪 preserve 警告 git 考古。

@@ -120,6 +120,9 @@ class TestSamplingEstimate:
 
 
 class TestPerformance:
+    # 以牆鐘上界判 pass-fail，負載下會對正確程式判紅（test-assertion-design 規則 D1），
+    # 移出主套件，由 -m wallclock 的固定執行點跑
+    @pytest.mark.wallclock
     def test_5000_files_completes_quickly(self, hook_logs_dir):
         """上界寬鬆檢查（非效能 SLA）：5000 檔應遠低於秒級，斷言值刻意寬鬆。
 

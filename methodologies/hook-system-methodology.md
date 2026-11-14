@@ -184,7 +184,7 @@ Hook 目錄下建議維護 `hook-lifecycle.yaml`，記錄各 Hook 的 stage、en
 
 設計觀察類 Hook（diagnostic hook、telemetry collector、性能 monitor）時，應主動讓工具能在「日常使用」中持續產出資料，而非只在「實驗模式」下啟動。觀察類工具預設長期 telemetry 身份，非實驗一次性身份。
 
-> **Why**：實驗模式下的觀察只覆蓋設計者預期的場景；日常使用觸發提供「非預期但真實」的對照基底。W3-028.2 案例：diagnostic hook 在實驗開始前的當下 session `/clear` 啟動時就被觸發，這筆「非實驗目的」紀錄證實了 hook 對工作流的零侵入性。
+> **Why**：實驗模式下的觀察只覆蓋設計者預期的場景；日常使用觸發提供「非預期但真實」的對照基底。某次實驗案例：diagnostic hook 在實驗開始前的當下 session `/clear` 啟動時就被觸發，這筆「非實驗目的」紀錄證實了 hook 對工作流的零侵入性。
 > **Consequence 不遵守**：實驗工具僅在實驗模式啟動會失去日常情境對照、被視為一次性而累積為技術債、無法驗證工具本身對工作流的侵入性。
 
 | 設計階段 | 動作 |
@@ -212,4 +212,4 @@ Hook 目錄下建議維護 `hook-lifecycle.yaml`，記錄各 Hook 的 stage、en
 
 **Last Updated**: 2026-10-06
 **Version**: 2.1.0 — 原則 0 補互連：指向 technical-reference「deny 輸出失敗語意」章節。
-**Version**: 2.0.0 — 整併 hook 家族 3 檔為 1 主檔 + 2 衛星檔（W8-020.6）：折入 hook-stage-balance-methodology（階段平衡 4 原則 + 密度表）與 hook-downgrade-observation（生命週期 + 降級機制 + 觀察期標準）核心；operations 詳解外移 `hook-system-operations.md`、降級追蹤外移 `hook-system-downgrade-tracking.md`；emoji 全數清理為純文字（document-format-rules 規則 1）。歷史版本見 git log
+**Version**: 2.0.0 — 整併 hook 家族 3 檔為 1 主檔 + 2 衛星檔：折入 hook-stage-balance-methodology（階段平衡 4 原則 + 密度表）與 hook-downgrade-observation（生命週期 + 降級機制 + 觀察期標準）核心；operations 詳解外移 `hook-system-operations.md`、降級追蹤外移 `hook-system-downgrade-tracking.md`；emoji 全數清理為純文字（document-format-rules 規則 1）。歷史版本見 git log

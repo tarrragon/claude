@@ -10,7 +10,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 from .constants import WORK_LOGS_DIR
-from .paths import get_project_root
+from .paths import get_ticket_state_root
 from .ui_constants import VERSION_PREFIX, VERSION_PREFIX_LENGTH
 
 
@@ -80,7 +80,7 @@ def _find_next_active_version(current_version: str) -> Optional[str]:
     Returns:
         Optional[str]: 版本號（無 v 前綴），若無則 None
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
@@ -120,7 +120,7 @@ def get_active_versions() -> list[str]:
     Returns:
         list[str]: 版本字串列表（如 ["v0.31.0"]），若無則回傳空列表
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
@@ -151,7 +151,7 @@ def _parse_todolist_active_version() -> Optional[str]:
     Returns:
         Optional[str]: 版本字串（如 "v0.31.0"），解析失敗回傳 None
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
@@ -188,7 +188,7 @@ def _scan_worklog_directories() -> Optional[str]:
     Returns:
         Optional[str]: 版本字串（如 "v0.31.0"），若無版本目錄返回 None
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     work_logs = root / WORK_LOGS_DIR
 
     if not work_logs.exists():
@@ -360,7 +360,7 @@ def validate_version_registered(version: str) -> tuple[bool, str]:
     """
     from .messages import ErrorMessages
 
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
@@ -448,7 +448,7 @@ def is_version_registered(version: str) -> bool:
         bool: 已註冊，或 todolist.yaml 不存在（向後相容）時回傳 True；
               版本不在 todolist.yaml 的 versions 列表中則回傳 False
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
@@ -491,7 +491,7 @@ def suggest_version_for_ticket(
     Returns:
         (suggested_version, reason) 或 None（無法判斷）
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
     if not todolist_path.exists():
         return None
@@ -614,7 +614,7 @@ def is_version_scope_frozen(version: str) -> bool:
         版本不存在、scope 缺席、scope 非 "frozen"、或檔案不存在/解析失敗
         時回傳 False
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
@@ -672,7 +672,7 @@ def find_open_successor(base_version: str) -> Optional[str]:
     if base_tuple is None:
         return None
 
-    root = get_project_root()
+    root = get_ticket_state_root()
     todolist_path = root / "docs" / "todolist.yaml"
     if not todolist_path.exists():
         return None

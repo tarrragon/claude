@@ -83,4 +83,4 @@ import 'package:book_overview_app/domains/search/services/search_service.dart';
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 2.0.0 - 瘦身校準首檔（735→核心化）：保留導入本質 + 5 原則（每原則 1 代表範例）+ 開發檢查清單；各語言實踐機制 / 跨語言範例 / 工具配置外移至 `.claude/references/package-import-language-mechanisms.md`（W8-020.1）。歷史完整版見 git log。
+**Version**: 2.0.0 - 瘦身校準首檔（735→核心化）：保留導入本質 + 5 原則（每原則 1 代表範例）+ 開發檢查清單；各語言實踐機制 / 跨語言範例 / 工具配置外移至 `.claude/references/package-import-language-mechanisms.md`。歷史完整版見 git log。

@@ -193,7 +193,7 @@ class TestOriginBehindDenyUnchanged:
             rc = hook.main()
         assert rc == 2
         captured = capsys.readouterr()
-        assert "W4-008 防護" in captured.err
+        assert "origin 落後防護" in captured.err
         assert "禁止派發" in captured.err
         behind.assert_called_once()
 
@@ -232,6 +232,8 @@ class TestTargetTicketSyncCheck:
         captured = capsys.readouterr()
         assert "目標票同步防護" in captured.err
         assert "git push" in captured.err
+        # 3.3.0-W1-216.1：指出派發日誌 commit 為常見來源
+        assert "ticket track dispatch 寫入的派發日誌 commit" in captured.err
 
     def test_ticket_md_no_diff_passes(self, tmp_path):
         fake_root = tmp_path
@@ -242,6 +244,7 @@ class TestTargetTicketSyncCheck:
         with patch.object(hook, "read_json_from_stdin", return_value=self._data()), \
              patch.object(hook, "get_project_root", return_value=fake_root), \
              patch.object(hook, "_check_origin_behind", return_value=0), \
+             patch.object(hook, "get_shared_state_root", return_value=fake_root), \
              patch.object(
                  hook.subprocess, "run",
                  side_effect=[
@@ -273,6 +276,7 @@ class TestTargetTicketSyncCheck:
         with patch.object(hook, "read_json_from_stdin", return_value=self._data()), \
              patch.object(hook, "get_project_root", return_value=fake_root), \
              patch.object(hook, "_check_origin_behind", return_value=0), \
+             patch.object(hook, "get_shared_state_root", return_value=fake_root), \
              patch.object(
                  hook.subprocess, "run",
                  side_effect=[
@@ -283,6 +287,69 @@ class TestTargetTicketSyncCheck:
              ):
             rc = hook.main()
         assert rc == 0
+
+
+class TestSharedStateRootInLinkedWorktree:
+    """真實 linked worktree：票只在 MAIN 時，三處（找票、git cwd、訊息路徑）同用共用狀態根。"""
+
+    TICKET = "0.1.0-W1-001"
+
+    @staticmethod
+    def _git(cwd, *args):
+        import subprocess as sp
+        sp.run(
+            ["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            check=True, capture_output=True,
+        )
+
+    @pytest.fixture
+    def repos(self, tmp_path, monkeypatch):
+        main = (tmp_path / "main").resolve()
+        main.mkdir()
+        self._git(main, "init", "-q", "-b", "main")
+        self._git(main, "commit", "-q", "--allow-empty", "-m", "init")
+        wt = tmp_path / "wt"
+        self._git(main, "worktree", "add", "-q", "-b", "feat", str(wt))
+        wt = wt.resolve()
+        # 票只存在於 MAIN（WT 內沒有 docs/work-logs）
+        md = main / "docs" / "work-logs" / "tickets" / f"{self.TICKET}.md"
+        md.parent.mkdir(parents=True)
+        md.write_text("stub")
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        monkeypatch.chdir(wt)
+        return main, wt
+
+    def _run_main(self, wt, seen):
+        real_run = hook.subprocess.run
+        data = {"tool_input": {"isolation": "worktree", "prompt": f"Ticket: {self.TICKET} x"}}
+
+        def fake_run(cmd, *a, **kw):
+            if cmd[:3] == ["git", "diff", "--name-only"] and "origin/main..main" in cmd:
+                seen.append(kw.get("cwd"))
+                return MagicMock(returncode=0, stdout="docs/work-logs/tickets/x.md\n", stderr="")
+            return real_run(cmd, *a, **kw)
+
+        with patch.object(hook, "read_json_from_stdin", return_value=data), \
+             patch.object(hook, "get_project_root", return_value=wt), \
+             patch.object(hook, "_check_origin_behind", return_value=0), \
+             patch.object(hook.subprocess, "run", side_effect=fake_run):
+            return hook.main()
+
+    def test_ticket_only_in_main_blocks_with_main_root(self, repos, capsys):
+        """正向對照：票只在 MAIN 且未推 -> exit 2，git cwd 為 MAIN 根。"""
+        main, wt = repos
+        seen = []
+        assert self._run_main(wt, seen) == 2
+        assert seen == [main]
+        assert "目標票同步防護" in capsys.readouterr().err
+
+    def test_identity_shared_root_regresses_to_pass(self, repos):
+        """E1 對照：共用狀態根換成恆等函式，WT 內找不到票，回到放行。"""
+        main, wt = repos
+        seen = []
+        with patch.object(hook, "get_shared_state_root", side_effect=lambda r: r):
+            assert self._run_main(wt, seen) == 0
+        assert seen == []
 
 
 class TestOriginBehindWarningEmission:
@@ -301,7 +368,7 @@ class TestOriginBehindWarningEmission:
         assert rc == 0
         emit.assert_called_once()
         assert emit.call_args.kwargs["audience"] == "pm_only"
-        assert "W3-007 警告" in emit.call_args.kwargs["additional_context"]
+        assert "origin 落後警告" in emit.call_args.kwargs["additional_context"]
 
     def test_lag_warning_emitted_when_repo_dirty(self, capsys):
         data = {"tool_input": {"isolation": "worktree"}}
@@ -319,4 +386,4 @@ class TestOriginBehindWarningEmission:
         # WARN_MESSAGE（stderr）與 lag 警告（emit_hook_output/stdout）分道輸出，
         # 不再併入同一則 stderr 訊息（W4-009 的丟棄前提已隨 exit 0 化失效）
         assert "[PC-019 提醒]" in captured.err
-        assert "W3-007 警告" not in captured.err
+        assert "origin 落後警告" not in captured.err

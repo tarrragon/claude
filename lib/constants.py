@@ -68,7 +68,9 @@ EXIT_SUCCESS = 0
 # Hook 執行失敗碼
 EXIT_ERROR = 1
 
-# Hook 日誌根目錄
+# Hook 日誌根目錄（相對路徑字面值；目前全 repo 無引用端，保留僅為相容）。
+# 禁用它拼接寫入路徑：相對路徑依 cwd，linked worktree 內會與主 repo 分處兩地；
+# 取日誌目錄一律用 hook_logging.get_hook_log_dir(<hook 名稱>)。
 HOOK_LOG_DIR = ".claude/hook-logs"
 
 # 專案根目錄標誌檔

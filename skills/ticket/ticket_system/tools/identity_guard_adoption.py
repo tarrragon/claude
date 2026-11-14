@@ -47,9 +47,8 @@ _SKILL_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_SKILL_ROOT) not in sys.path:
     sys.path.insert(0, str(_SKILL_ROOT))
 
-from ticket_system.lib.paths import get_project_root  # noqa: E402
+from ticket_system.lib.identity_guard import resolve_identity_log_path  # noqa: E402
 
-DEFAULT_LOG_RELATIVE_PATH = ".claude/hook-logs/identity-guard/usage.log"
 DEFAULT_WINDOW_DAYS = 7
 
 # 過渡期結束條件（identity_guard.py 模組註解引用同一數值，維持單一事實來源
@@ -182,13 +181,13 @@ def format_report(stats: dict) -> str:
 def _resolve_log_path(cli_value: Optional[str]) -> Path:
     """解析 usage.log 路徑。
 
-    預設路徑由 get_project_root() 推導為絕對路徑，與呼叫時的 cwd 無關
-    （修復：原相對路徑字串經 Path() 解析相對於 cwd，自非專案根目錄執行時
-    指向不存在的路徑）。--log-path 覆蓋值原樣使用，供測試隔離。
+    預設路徑與寫入端共用 identity_guard.resolve_identity_log_path（經
+    get_hook_log_dir，絕對路徑、與 cwd 無關，linked worktree 內為主 repo），
+    讀寫兩端落點一致。--log-path 覆蓋值原樣使用，供測試隔離。
     """
     if cli_value:
         return Path(cli_value)
-    return get_project_root() / DEFAULT_LOG_RELATIVE_PATH
+    return resolve_identity_log_path()
 
 
 def main(argv: Optional[list] = None) -> int:

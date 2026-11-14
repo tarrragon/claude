@@ -161,7 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
     ac_parser = uc_subparsers.add_parser(
         "acceptance-check", help="檢查 ticket acceptance 中 UC 引用的存在性與指紋漂移"
     )
-    ac_parser.add_argument("ticket_id", help="Ticket ID（如 0.38.1-W1-024）")
+    ac_parser.add_argument("ticket_id", help="Ticket ID（格式 <version>-W<wave>-<seq>）")
     ac_parser.add_argument("--json", action="store_true", help="以 JSON 格式輸出（供 dispatch-validate 消費）")
 
     # schema（子命令群組：export）

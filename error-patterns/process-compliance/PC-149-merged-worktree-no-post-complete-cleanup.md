@@ -38,16 +38,16 @@
 
 統計 `book_overview_v1` 倉庫：
 
-| Ticket | 完成時間 | worktree dirty? | branch ahead |
-|--------|---------|----------------|--------------|
-| 0.18.0-W5-015 | 838h29m 前（~35 天） | clean | 0 |
-| 0.18.0-W6-012.2.1 | 22h41m 前 | `?? node_modules` | 0 |
-| 0.18.0-W6-012.2.2.1 | 7h9m 前 | `?? node_modules` | 0 |
-| 0.18.0-W6-012.2.2.2 | 6h55m 前 | `?? node_modules` | 0 |
-| 0.18.0-W6-012.7.1 | 4h8m 前 | `M package-lock.json` | 0 |
-| 0.18.0-W6-012.7.2 | 3h47m 前 | `M package-lock.json` | 0 |
-| 0.18.0-W6-012.7.3 | 3h41m 前 | `M package-lock.json` | 0 |
-| 0.18.0-W6-012.9.1 | 3h41m 前 | clean | 0 |
+| 樣本 | 完成時間 | worktree dirty? | branch ahead |
+|------|---------|----------------|--------------|
+| 樣本 1 | 838h29m 前（~35 天） | clean | 0 |
+| 樣本 2 | 22h41m 前 | `?? node_modules` | 0 |
+| 樣本 3 | 7h9m 前 | `?? node_modules` | 0 |
+| 樣本 4 | 6h55m 前 | `?? node_modules` | 0 |
+| 樣本 5 | 4h8m 前 | `M package-lock.json` | 0 |
+| 樣本 6 | 3h47m 前 | `M package-lock.json` | 0 |
+| 樣本 7 | 3h41m 前 | `M package-lock.json` | 0 |
+| 樣本 8 | 3h41m 前 | clean | 0 |
 
 8 個 worktree 全部「branch fully merged 但目錄殘留」。最久殘留 35 天。
 
@@ -111,7 +111,7 @@ git branch -d <branch>
 
 - `worktree-zombie-cleanup-hook` 處理 cc runtime worktree（PC-149 範圍外）
 - PC-039 系列處理未合併產出不可見問題（**前一步**問題）；PC-149 是**後一步**問題
-- W11-018 完成時 PM 因用戶提醒主動清理 → 暴露系統長期累積（trigger event）
+- 某票完成時 PM 因用戶提醒主動清理 → 暴露系統長期累積（trigger event）
 
 ---
 
@@ -125,4 +125,4 @@ git branch -d <branch>
 
 ---
 
-**Source**: book_overview_v1 2026-05-17 W11-018 完成後審計，發現 8 個 worktree 殘留至 35 天未清
+**Source**: book_overview_v1 2026-05-17 某票完成後審計，發現 8 個 worktree 殘留至 35 天未清

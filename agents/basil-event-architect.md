@@ -282,7 +282,7 @@ saffron-system-analyst（系統分析，識別需要事件通訊的需求）
 **Specialization**: Event-Driven Architecture Design
 
 **Change Log**:
-- v2.0.0 (2026-03-02): 精簡重寫（W28-024）
+- v2.0.0 (2026-03-02): 精簡重寫
   - 修正 YAML frontmatter（tools→allowed-tools, color→metadata）
   - 從 518 行精簡至 ~230 行（-56%）
   - 移除英文重複段落（原 309-489 行）

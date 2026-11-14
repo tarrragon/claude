@@ -8,7 +8,7 @@
 lib/domain/ 禁止 import data/ / presentation/ / flutter/ / riverpod。
 掛載於 PreToolUse:Bash（commit 時觸發），違反 exit 2 阻擋。
 
-Ticket: 0.1.0-W2-015（2026-09-04 遷移至 hook_utils 統一日誌）
+2026-09-04 遷移至 hook_utils 統一日誌
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))  # .claude/ — for `from 
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
 from lib.hook_base import get_project_root, has_parallel_dispatch  # noqa: E402
+from lib.git_utils import get_action_root  # noqa: E402
 from lib.git_command_parse import (  # noqa: E402
     classify_parse_cause,
     contains_git_word,
@@ -82,6 +83,24 @@ def scan_domain_imports(project_root: str) -> list[str]:
     return violations
 
 
+def _resolve_action_root(hook_input: dict) -> str:
+    """lib/domain 掃描的作用根。
+
+    基底取 CLAUDE_PROJECT_DIR，未設定時退回 get_project_root()；payload 帶 cwd
+    時改取 cwd 所屬 checkout（情境 C：env 指向 MAIN、cwd 在 linked worktree）。
+    缺 cwd 不呼叫 get_action_root（其缺 cwd 會寫 stderr），沿用基底。
+    """
+    root = os.environ.get("CLAUDE_PROJECT_DIR", "") or str(get_project_root())
+    if hook_input.get("cwd"):
+        return str(get_action_root(hook_input, Path(root)))
+    return root
+
+
+def _has_domain_dir(root: str) -> bool:
+    """作用根下是否有 lib/domain（掃描與阻擋的前提）。"""
+    return (Path(root) / DOMAIN_DIR).is_dir()
+
+
 def main() -> int:
     logger = setup_hook_logging("domain-import-lint-hook")
 
@@ -92,6 +111,13 @@ def main() -> int:
     tool_name = hook_input.get("tool_name", "")
     if tool_name != "Bash":
         logger.debug("非 Bash 工具，跳過: %s", tool_name)
+        return 0
+
+    # 專案沒有 lib/domain 時沒有可保護的對象：直接放行，連同下方「無法解析」
+    # 的並行期阻擋一起略過（否則非 Flutter 專案在並行期會被擋下而毫無保護作用）
+    action_root = _resolve_action_root(hook_input)
+    if not _has_domain_dir(action_root):
+        logger.debug("專案無 %s，跳過", DOMAIN_DIR)
         return 0
 
     tool_input = hook_input.get("tool_input", {})
@@ -119,18 +145,17 @@ def main() -> int:
         logger.debug("非 commit/merge 命令，跳過")
         return 0
 
-    project_root = os.environ.get("CLAUDE_PROJECT_DIR", "")
-    if not project_root:
+    if not os.environ.get("CLAUDE_PROJECT_DIR", ""):
         logger.info("CLAUDE_PROJECT_DIR 未設定，跳過掃描")
         return 0
 
-    violations = scan_domain_imports(project_root)
+    violations = scan_domain_imports(action_root)
     if violations:
         msg = (
             "[domain-import-lint] domain 層 import 方向違規\n\n"
             + "\n".join(violations)
             + "\n\ndomain/ 禁止 import data/ / presentation/ / flutter/ / riverpod\n"
-            "（ARCH-BAL-001 防護，ticket 0.1.0-W2-015）"
+            "（ARCH-BAL-001 防護）"
         )
         logger.info("domain import lint 阻擋：命中 %d 處違規", len(violations))
         print(msg, file=sys.stderr)

@@ -37,4 +37,4 @@ url.removesuffix(".git")
 
 ## 相關
 
-- 0.3.5-W1-001：sync-push + skill-sync 同時命中
+- 0.3.5 版某次修復：sync-push + skill-sync 同時命中

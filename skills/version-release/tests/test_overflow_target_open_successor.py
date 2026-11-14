@@ -174,7 +174,7 @@ class TestOverflowTargetCrossCheckWithTicketLib:
         with patch.object(vr, "get_project_root", return_value=tmp_path):
             vr_target, vr_reason = vr.compute_overflow_target_version(frozen, ticket_type, action)
 
-        with patch.object(ticket_version, "get_project_root", return_value=tmp_path):
+        with patch.object(ticket_version, "get_ticket_state_root", return_value=tmp_path):
             lib_result = ticket_version.suggest_overflow_version(frozen, ticket_type, action)
 
         assert lib_result is not None

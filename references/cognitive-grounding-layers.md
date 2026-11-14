@@ -2,7 +2,7 @@
 
 本檔為 `pm-rules/decision-tree.md`「認知接地雙層」結構的按需讀取詳細版。涵蓋 L_ground-before（F 軸判斷協議）與 L_ground-truth（D 軸機械閘門）的完整職責、順序、手段差異、軸登錄協議，以及與既有機制的相容對照。
 
-> **來源**：1.2.0-W1-033 ANA（F+D 認知接地雙層架構設計），背書於 1.2.0-W1-032 軸分佈實證（N=326）+ F-drill 子分析。耐久資產是「實證決策軸發現法」（`.claude/methodologies/empirical-decision-axis-discovery-methodology.md`），本檔 F+D 結論為語料快照 2026-06-18 的當前快照，非永久前提。
+> **來源**：F+D 認知接地雙層架構設計 ANA，背書於軸分佈實證（N=326）+ F-drill 子分析。耐久資產是「實證決策軸發現法」（`.claude/methodologies/empirical-decision-axis-discovery-methodology.md`），本檔 F+D 結論為語料快照 2026-06-18 的當前快照，非永久前提。
 
 ---
 
@@ -129,4 +129,4 @@ F+D 雙層**全是既有零件重組，非新發明**。既有機制各歸層如
 
 ---
 
-**Last Updated**: 2026-06-18 | **Version**: 1.0.0 — 從 1.2.0-W1-033 ANA 落地（F+D 認知接地雙層 + 軸登錄協議 + 相容對照）。**Source**: 1.2.0-W1-032 軸分佈實證（N=326）+ F-drill。
+**Last Updated**: 2026-06-18 | **Version**: 1.0.0 — 從 F+D 認知接地 ANA 落地（F+D 認知接地雙層 + 軸登錄協議 + 相容對照）。**Source**: 軸分佈實證（N=326）+ F-drill。

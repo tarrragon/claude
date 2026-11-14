@@ -4,7 +4,6 @@ title: 用「偶發/transient/不可重現」當分析失敗的合理化標籤
 category: process-compliance
 severity: medium
 created: 2026-05-02
-source_ticket: 0.18.0-W17-104
 related_pc:
   - PC-066
   - PC-111
@@ -44,19 +43,19 @@ WRAP R 階段宣稱「成本/收益不對稱不執行」直接結束實驗——
 
 統計上 N≤2 的事件不能支持「偶發」結論，但 LLM 在沒有明示 base rate 要求時，會用 N=1 觀察當作充分證據。
 
-**Why**：base rate 思維不是 LLM 的預設輸出模式。**Consequence**：W17-097.1-.4（N=4 deny）+ W17-099 一次 success 就被歸為「偶發」，跳過 W17-100/101/102 對照實驗。**Action**：分析任務開始時即明示「base rate 觀察次數要求」（最低 3 次獨立觀察）。
+**Why**：base rate 思維不是 LLM 的預設輸出模式。**Consequence**：4 並行 deny（N=4）加一次單發 success 就被歸為「偶發」，跳過後續三組對照實驗。**Action**：分析任務開始時即明示「base rate 觀察次數要求」（最低 3 次獨立觀察）。
 
 ## 觸發案例
 
-W17-098 第一輪 WRAP：
+某次分析票的第一輪 WRAP：
 
-1. 觀察 W17-097.1-.4 4 thyme 全 deny
+1. 觀察 4 個並行 thyme 全 deny
 2. R 階段宣稱「成本/收益不對稱不執行」直接結束實驗
 3. 結論寫「runtime hardcoded deny」進 PC-115 + memory
-4. W17-099 一個簡單實驗（單派 thyme + 簡單 Edit）就推翻
+4. 一個簡單實驗（單派 thyme + 簡單 Edit）就推翻
 5. 推翻後直接改寫「runtime 偶發性 deny」當收場
 6. 用戶質疑「偶發 deny 這種結論是不合理的」
-7. 觸發 W17-103 二輪 WRAP，提出 5 變因 + 設計 E1/E2/Test G 對照實驗
+7. 觸發二輪 WRAP，提出 5 變因 + 設計 E1/E2/Test G 對照實驗
 8. 最終 5 變因 4 個被否證，推進到 Hypothesis K 工作假設
 
 詳見相關反模式分析與實驗記錄。
@@ -75,9 +74,9 @@ W17-098 第一輪 WRAP：
 | 訊號 | 對應 PC |
 |----|----|
 | 寫「偶發 / transient」前無 base rate 數據 | **本 PC-116** |
-| WRAP W 階段不夠廣泛（< 5 候選） | wrap-decision SKILL（W17-106 落地） |
-| 否證後仍 anchor 原框架修補 | wrap-decision SKILL（W17-106 落地） |
-| 推論粒度錯誤（檔案 vs 前綴 vs session 層級） | evidence-driven-bugfix SKILL（W17-107 落地） |
+| WRAP W 階段不夠廣泛（< 5 候選） | wrap-decision SKILL |
+| 否證後仍 anchor 原框架修補 | wrap-decision SKILL |
+| 推論粒度錯誤（檔案 vs 前綴 vs session 層級） | evidence-driven-bugfix SKILL |
 | 論述編造技術機制 | PC-111 |
 | 決策品質自動駕駛 | PC-066 |
 

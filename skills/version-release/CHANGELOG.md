@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 3.0.0（2026-11-12）— `release`／`finish` 標 completed 後預設不再推進下一個 planned 版本：下一版維持 planned，todolist 進入版本空窗，回饋檢查完成後以 `start --version <下一版>` 轉 active。新增 `--activate-next` 保留舊行為。預設行為改變，故升 major；第二次收尾提交在未推進時訊息改為「標記完成」。空窗定義見 `.claude/pm-rules/version-progression.md`〈版本生命週期〉。
+- 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；僅註解與 docstring，行為不變。
+
 **Version**: 2.12.0（2026-11-11）— `check`／`finish` 新增警告：版本已凍結、tickets 目錄內沒有任何一張票帶非空 `scope_blocker`、且至少一張 pending 票時，輸出警告並指出凍結程序第二步 `ticket track set-scope-blocker <id> --reason <契約項>`。只警告，不改結束碼與流程。SKILL.md 的安裝段同步改述 shim 化後的做法（改原始碼即時生效，不需重新安裝）。
 
 **Version**: 2.11.0（2026-10-19）— PreToolUse 提醒類 hook 改走 `additionalContext`；version-release-guard 的警告路徑保留核准決策。

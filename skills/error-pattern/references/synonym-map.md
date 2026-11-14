@@ -4,7 +4,7 @@
 >
 > **維護原則**：只維護已觀察到零字串重疊的高頻根因家族。不追求完美覆蓋——低頻 / 單篇的 PC 不需要同義詞擴展。新增家族時附來源 PC 編號。
 >
-> **來源**：tarrragon/claude issue #14 選項 A（1.5.0-W3-001）。
+> **來源**：tarrragon/claude issue #14 選項 A。
 
 ## 同義詞家族
 
@@ -46,4 +46,4 @@ grep -rli "stale\|過時\|陳舊\|outdated\|obsolete\|drift\|漂移" .claude/err
 ---
 
 **Last Updated**: 2026-07-05
-**Version**: 1.1.0 — 擴充 6 個家族（FAM-006~011：premature decision / false positive / race condition / bypass / missing / assumption），共 11 家族（1.5.0-W5-016）
+**Version**: 1.1.0 — 擴充 6 個家族（FAM-006~011：premature decision / false positive / race condition / bypass / missing / assumption），共 11 家族

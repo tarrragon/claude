@@ -26,7 +26,7 @@
 |------|------|------|
 | (1) 有確定性 schema | 欄位名、格式、排列順序可程式化定義 | multi_view_status: `{status}` + `{reason}` |
 | (2) 多個寫入者 | 2+ agent 或人+agent 共同使用此寫入點 | PM + 各 agent 都寫 Completion Info |
-| (3) 格式錯誤有歷史 | 已觀察到格式錯誤（hook 警告 / 手動修正） | W5-018 multi_view_status heading 錯誤 |
+| (3) 格式錯誤有歷史 | 已觀察到格式錯誤（hook 警告 / 手動修正） | multi_view_status heading 錯誤 |
 
 三條件全滿足 → **應 CLI 化**。僅 (1) 滿足但 (2)(3) 不滿足 → 暫不 CLI 化（收益不足）。
 
@@ -127,10 +127,10 @@ ticket track append-log <id> --section "Exit Status" "$(填好的模板)"
 - `.claude/rules/core/opinionated-default-design.md` — 主張 1 和主張 3
 - `.claude/rules/core/structured-content-generation.md` — 本方法論的規則層速查
 - `.claude/hooks/acceptance_checkers/multi_view_checker.py` — 第 3 層保險範例
-- 1.5.0-W5-018 — 觸發案例（multi_view_status heading 格式錯誤）
+- 觸發案例（multi_view_status heading 格式錯誤）
 
 ---
 
 **Last Updated**: 2026-07-05
-**Version**: 1.0.0 — 初始建立（1.5.0-W5-020）
-**Source**: 用戶設計洞察 + W5-018 根因分析 + opinionated-default-design 原則
+**Version**: 1.0.0 — 初始建立
+**Source**: 用戶設計洞察 + multi_view_status 格式錯誤根因分析 + opinionated-default-design 原則

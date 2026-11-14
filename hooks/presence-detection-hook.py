@@ -8,7 +8,7 @@ Presence-Detection Hook (PreToolUse on Edit / Write) —— language-pluggable �
 
 偵測「應有設施缺席」三類問題（user-facing 字串 / 裸顏色字面 / 魔術數字），
 針對 greenfield 專案從不 bootstrap i18n / theme / 常數設施而使依賴設施缺席的結構盲區
-（來源：1.2.0-W1-015）。本引擎為 language-pluggable 版本（1.2.0-W1-036）：
+。本引擎為 language-pluggable 版本：
 
   - 通用偵測引擎（本檔）只懂「三類偵測 + override marker + 只掃變更內容」的流程，
     不寫死任何語言假設。
@@ -16,6 +16,9 @@ Presence-Detection Hook (PreToolUse on Edit / Write) —— language-pluggable �
     引擎依副檔名選 profile。
   - 無對應副檔名 profile → no-op（exit 0）。這是安全上游的關鍵：非 Flutter 專案
     pull 後對其 .js / .py / .go 等檔案完全不誤觸，profile 集合可安全散佈。
+  - 專案級覆寫：.claude/project-integration/presence-overrides.yaml 可依 profile 名
+    附加 skip_patterns（只加不減，sync 不覆蓋），格式見 presence_profiles.py 的
+    merge_project_overrides。覆寫檔有誤時寫 stderr 與日誌並退回基礎 profile。
 
 防呆（避免癱瘓 remediation）：
   - 只偵測「變更內容」（Edit new_string / Write content / MultiEdit edits），不掃整檔。
@@ -37,8 +40,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "config"))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
-from presence_profiles import get_profile_for_path
+from lib import (
+    emit_hook_output,
+    get_project_root,
+    read_json_from_stdin,
+    run_hook_safely,
+    setup_hook_logging,
+)
+from presence_profiles import get_profile_for_path, merge_project_overrides
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +227,24 @@ def main() -> int:
         logger.debug("跳過: 無對應 profile 的副檔名 %s", file_path)
         return 0
 
+    # 專案級覆寫：只附加 skip_patterns；出錯時退回基礎 profile，錯誤寫 stderr 與日誌
+    base_skip_count = len(profile.skip_patterns)
+    try:
+        profile, override_errors = merge_project_overrides(profile, get_project_root())
+    except Exception as exc:  # noqa: BLE001
+        # 本 hook 非 fail_closed：例外若穿到 run_hook_safely 會回 1 而放行該擋的輸入，
+        # 故在此攔下，退回基礎 profile 照常偵測
+        override_errors = [f"讀取專案覆寫時發生未預期錯誤，忽略覆寫：{type(exc).__name__}: {exc}"]
+    added_skip_count = len(profile.skip_patterns) - base_skip_count
+    if added_skip_count:
+        logger.info(
+            "presence-overrides: profile=%s 附加 %d 條專案 skip_patterns",
+            profile.name, added_skip_count,
+        )
+    for error in override_errors:
+        logger.warning("presence-overrides: %s", error)
+        print(f"[presence-detection] {error}", file=sys.stderr)
+
     if should_skip_file(file_path, profile):
         logger.info("跳過: 範圍外檔案（生成檔/測試/設施本體）%s", file_path)
         return 0
@@ -243,14 +270,9 @@ def main() -> int:
     if mode == "warn":
         logger.info("warn 模式：偵測到 %d 處但不阻擋", len(violations))
         print(message, file=sys.stderr)
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": "presence warn 模式：僅提示不阻擋",
-            }
-        }
-        print(json.dumps(output, ensure_ascii=False))
+        # warn 模式只提醒：訊息走 additionalContext（exit 0 的 stderr 模型看不到），
+        # 不帶 permissionDecision（allow 會略過平台的權限提示，等於代用戶核可）
+        emit_hook_output("PreToolUse", additional_context=message)
         return 0
 
     # block 模式：阻擋並回饋 Claude

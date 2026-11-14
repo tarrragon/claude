@@ -70,13 +70,13 @@
 
 ---
 
-## 派發前檢查：worktree base 同步（W1-035）
+## 派發前檢查：worktree base 同步
 
 PM 用 `isolation: "worktree"` 派發 agent 前，先執行 `git status --porcelain` 確認有無 pending changes，有則先 commit 到 main 再派發。
 
 **Why**：cc runtime 的 `isolation: "worktree"` 在 `git worktree add` 瞬間快照當下 main HEAD 作為 worktree base，之後不再同步。派發後 PM 若繼續 commit，worktree base 與 main 的落差只增不減。
 
-**Consequence**：base 落後會讓 agent 讀不到派發後新增的 ticket 檔、ticket create 因掃描不到新 ticket 而誤分配碰撞 ID、worktree 分支因歷史分叉無法 fast-forward 回 main（W1-035 症狀 1/2/3）。落差越大，收尾時手動整合的成本越高。
+**Consequence**：base 落後會讓 agent 讀不到派發後新增的 ticket 檔、ticket create 因掃描不到新 ticket 而誤分配碰撞 ID、worktree 分支因歷史分叉無法 fast-forward 回 main（症狀 1/2/3）。落差越大，收尾時手動整合的成本越高。
 
 **Action**：派發 `isolation:worktree` agent 前執行一次 `git status --porcelain`，非空則先 commit。此防護成本為一次狀態檢查，與 agent 端的執行中防護（見 `.claude/references/agent-dispatch-template.md`「worktree 派發 base 同步指引」）互補——派發前 commit 縮小初始落差，agent 端 merge 補平殘餘落差。
 
@@ -134,13 +134,13 @@ PM 用 `isolation: "worktree"` 派發 agent 前，先執行 `git status --porcel
 
 ### PM 對話回覆前自檢 checklist（三明示版）
 
-> **來源**：W17-174.4 落地。W17-174.1 L1 審計證實本 session PM 5 次列選項違規 AUQ，通用 4 條 checklist 在 context 高壓場景失效。本節為三明示版自檢題，對齊 W17-170 體例，與 hook 強制層（W17-174.2.1）形成自律 + 強制雙層防護。
+> **來源**：L1 審計證實本 session PM 5 次列選項違規 AUQ，通用 4 條 checklist 在 context 高壓場景失效。本節為三明示版自檢題，對齊既有體例，與 hook 強制層形成自律 + 強制雙層防護。
 
 撰寫每則對話回覆前，依下列 4 題自檢：
 
 #### Q1：本回覆是否含 S1-S6 任一表面 pattern？
 
-**Why**：W17-174.1 F5 證實 hook 偵測盲區在觸發條件層；表面 pattern（Markdown 列表 / 表格 / Recommended 標記 / 隱性推薦 / 問句結尾 / 純文字 A./B.）即為 AUQ 觸發訊號，無論呈現形式。
+**Why**：L1 審計 F5 證實 hook 偵測盲區在觸發條件層；表面 pattern（Markdown 列表 / 表格 / Recommended 標記 / 隱性推薦 / 問句結尾 / 純文字 A./B.）即為 AUQ 觸發訊號，無論呈現形式。
 
 **Consequence**：若以「我用的是表格不是列表」「這是隱性建議不是顯式選項」豁免，會在 hook 強制層擴充前持續累積違規。
 
@@ -156,7 +156,7 @@ PM 用 `isolation: "worktree"` 派發 agent 前，先執行 `git status --porcel
 
 #### Q3：是否傾向用「快速確認」「stakes 低」「選項顯而易見」豁免？
 
-**Why**：W17-174.1 F3 證實低 stakes 感知是 PM 主要違規藉口（PC-064 陷阱模式第一條）。AUQ 觸發條件不區分 stakes 高低。
+**Why**：L1 審計 F3 證實低 stakes 感知是 PM 主要違規藉口（PC-064 陷阱模式第一條）。AUQ 觸發條件不區分 stakes 高低。
 
 **Consequence**：低 stakes 豁免會讓 AUQ 規則的實際覆蓋率遠低於名義覆蓋率，且訓練 PM 把列選項變成預設行為。
 
@@ -164,7 +164,7 @@ PM 用 `isolation: "worktree"` 派發 agent 前，先執行 `git status --porcel
 
 #### Q4：是否剛收到代理人完成回報？
 
-**Why**：W17-174.1 F1 證實 5/5 違規均發生在「代理人完成回報後」的 PM 回覆，此為 PM 最高頻決策點與工作記憶切換點。
+**Why**：L1 審計 F1 證實 5/5 違規均發生在「代理人完成回報後」的 PM 回覆，此為 PM 最高頻決策點與工作記憶切換點。
 
 **Consequence**：若此場景系統性繞過 AUQ，AUQ 規則在 PM 最常用情境形同失效；context 越沉重越易觸發（F2 工作記憶遞減訊號）。
 
@@ -187,6 +187,6 @@ Q1-Q4 任一為「是」 → 必須執行 `ToolSearch("select:AskUserQuestion")`
 ---
 
 **Last Updated**: 2026-05-30
-**Version**: 1.2.0 — 新增「`.claude/` 修改派發決策矩陣（PC-077 升級規則）」章節：三明示主文 + 5 列決策表 + 既有規則邊界表 + 派發前自檢清單；PC-077/ARCH-015/PC-115/PC-137 交叉引用對齊（W3-015.1 落地）
-**Version**: 1.1.0 — 新增「PM 對話回覆前自檢 checklist（三明示版）」章節 Q1-Q4，引用 W17-174.1 共同特徵 F1/F3/F5 + askuserquestion-rules.md S1-S6 訊號表（W17-174.4 落地）
-**Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（W10-076.2 拆分；原檔 v3.7.0 L41-L107）
+**Version**: 1.2.0 — 新增「`.claude/` 修改派發決策矩陣（PC-077 升級規則）」章節：三明示主文 + 5 列決策表 + 既有規則邊界表 + 派發前自檢清單；PC-077/ARCH-015/PC-115/PC-137 交叉引用對齊
+**Version**: 1.1.0 — 新增「PM 對話回覆前自檢 checklist（三明示版）」章節 Q1-Q4，引用 L1 審計共同特徵 F1/F3/F5 + askuserquestion-rules.md S1-S6 訊號表
+**Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（拆分；原檔 v3.7.0 L41-L107）

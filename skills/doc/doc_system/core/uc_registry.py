@@ -53,11 +53,20 @@ VALID_UC_FORMAT_RE = re.compile(GRAPH_NODE_TYPES["UC"]["id_pattern"])
 # 部分，產出偽 token（如 uc-UC），且搜尋游標越過後真正的 UC-01
 # 反而不會被單獨掃到。加上前瞻後，遇到這種情況該候選匹配直接失敗，
 # 讓引擎改在後面真正的 UC- 前綴處重新起始匹配。
+# 檔名副檔名段：子樹段若恰為這些副檔名且其後無字母數字，視為檔名而非偽子樹，
+# 不納入 token（UC-02.md 擷取為 UC-02）。字母子段（UC-03.Login、全形字母）
+# 仍屬偽編號，照舊擷取並判違規。
+FILE_EXTENSION_SEGMENTS = (
+    "md", "markdown", "yaml", "yml", "json", "toml", "txt", "csv", "html",
+    "py", "dart", "js", "ts", "go", "sh",
+)
+
 UC_TOKEN_RE = re.compile(
     r"\b[UuＵｕ][CcＣｃ][-－﹣―]"
     r"(?![UuＵｕ][CcＣｃ][-－﹣―])"
     r"[A-Za-z0-9０-９Ａ-Ｚａ-ｚ]+"
-    r"(?:\.[A-Za-z0-9０-９Ａ-Ｚａ-ｚ]+)*"
+    r"(?:\.(?!(?i:" + "|".join(FILE_EXTENSION_SEGMENTS) + r")(?![A-Za-z0-9０-９Ａ-Ｚａ-ｚ]))"
+    r"[A-Za-z0-9０-９Ａ-Ｚａ-ｚ]+)*"
 )
 
 # UC-Pattern 設計模式標註豁免：UC- 後接大寫字母開頭（非純數字），
@@ -92,6 +101,9 @@ EXEMPT_PATH_PREFIXES = (
     "test/fixtures/",
     "tests/fixtures/",
     "docs/spec/",
+    # 框架資產（hooks、skills、規則）提及 UC- 屬示例或工具自身說明，
+    # 不是專案程式碼對用例的引用，比對專案 SSOT 只會產生誤報
+    ".claude/",
 )
 
 # 豁免路徑：精確相符（SSOT 自身）
@@ -358,8 +370,15 @@ def is_exempt_path(file_path: str, project_root: str) -> bool:
     指向主 repo、但實際編輯的檔案位於同構的 worktree 路徑），relpath 會產生
     `../` 前綴使錨點 1 恆假，改以絕對路徑的路徑片段比對（錨點 2）——
     worktree 鏡射主 repo 目錄結構，子路徑片段相同，僅根目錄不同。
+
+    相對路徑以 project_root 解析，不以行程 cwd 解析：行程 cwd 位於
+    `.claude/` 之下時（如在 `.claude/hooks` 執行），專案程式碼的相對路徑會被
+    解析到 `.claude/hooks/` 之下，落入錨點 2 的 `.claude/` 片段而誤判豁免。
     """
-    abs_path = Path(file_path).resolve()
+    candidate = Path(file_path)
+    if not candidate.is_absolute():
+        candidate = Path(project_root) / candidate
+    abs_path = candidate.resolve()
     abs_str = str(abs_path).replace(os.sep, "/")
 
     try:
@@ -406,9 +425,11 @@ def is_violation_token(token: str, valid: dict[str, str]) -> bool:
     判定一律以 normalize_token() 正規化後的形式為準（大小寫/全形變體
     視為同一 token），確保 `uc-99`、`ＵＣ－99`、`UC-99` 判定一致。
     """
-    if is_pattern_exempt_token(token):
-        return False
+    # 豁免與違規皆以正規化後的形式判定：以原始字面判豁免時，小寫字詞
+    # （uc-unset）不符豁免樣式，正規化後卻成為格式違規的 UC-UNSET
     normalized = normalize_token(token)
+    if is_pattern_exempt_token(normalized):
+        return False
     if VALID_UC_FORMAT_RE.match(normalized):
         return normalized not in valid
     # 格式不符 id_pattern（如單位數、偽子樹 UC-01.4.20 等）一律視為違規

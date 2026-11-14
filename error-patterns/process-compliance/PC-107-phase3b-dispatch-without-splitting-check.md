@@ -31,7 +31,7 @@ PM 將 TDD Phase 3b 視為單一派發單位派發給實作代理人，未評估
 
 ## 實際案例
 
-**W17-002 Phase 3b 派發 thyme-python-developer**（2026-04-20）：
+**某 Phase 3b 派發 thyme-python-developer**（2026-04-20）：
 
 任務範圍：
 - 新建 `context_bundle_extractor.py`（4 公開函式）
@@ -44,10 +44,10 @@ PM 將 TDD Phase 3b 視為單一派發單位派發給實作代理人，未評估
 估計 tool call：18-25 次（Read + Write + Edit + Bash test runs + commit + append-log）→ 超過 subagent ~20 tool call 限制。
 
 **正確拆分應為**：
-- W17-002.a: extractor lib 4 函式 + 單元測試 13 場景（L1）
-- W17-002.b: execute_append_log replace_section flag 擴充（前置）
-- W17-002.c: create.py CLI 整合 + 整合測試 + --quiet/--verbose
-- W17-002.d: track.py claim path 整合
+- 子任務 a: extractor lib 4 函式 + 單元測試 13 場景（L1）
+- 子任務 b: execute_append_log replace_section flag 擴充（前置）
+- 子任務 c: create.py CLI 整合 + 整合測試 + --quiet/--verbose
+- 子任務 d: track.py claim path 整合
 
 ## 防護
 
@@ -95,12 +95,11 @@ Phase 3b 派發前對照 `cognitive-load.md` 閾值表：
 
 ## 修復方向
 
-- **W17-002 個案**：保留 thyme 繼續執行（規則 6）；若 NeedsContext 中斷則拆 .a/.b/.c/.d 續接
+- **該個案**：保留 thyme 繼續執行（規則 6）；若 NeedsContext 中斷則拆子任務 a/b/c/d 續接
 - **框架層**：擴充 Phase 3a 產出 schema；評估 dispatch guard hook 可行性
 
 ## 相關 Ticket
 
-- 0.18.0-W17-002（本 pattern 的動機案例）
 
 ## 相關 error-patterns
 

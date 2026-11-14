@@ -7,7 +7,7 @@ retries:
  - retry3: 確認 permissionMode 是 subagent Edit 的控制欄位
  - retry4: 聲稱 bypassPermissions 為 worktree 場景標準值（後被 retry5 推翻）
  - retry5: 確認 permissionMode 受 subagent cwd 限制，worktree 絕對路徑不可靠
- - retry6: "主 repo cwd 內 `.claude/` 檔案 + thyme `permissionMode: acceptEdits` 仍被拒（W17-088）"
+ - retry6: "主 repo cwd 內 `.claude/` 檔案 + thyme `permissionMode: acceptEdits` 仍被拒"
 related:
  - PC-058
  - IMP-056
@@ -144,7 +144,7 @@ permissionMode: bypassPermissions
 
 **檢測訊號**：代理人具 `permissionMode: bypassPermissions` 但仍回報 `Permission to use Edit has been denied` → 立即懷疑是 worktree cwd 不對齊，切換方案 1。
 
-### retry6 新案例（2026-04-28，W17-088）
+### retry6 新案例（2026-04-28）
 
 **事件**：派發 thyme-documentation-integrator（frontmatter `permissionMode: acceptEdits`）執行 Edit `.claude/agents/basil-writing-critic.md`，cwd 為主 repo（**非 worktree**）。Edit 與 `mcp__serena__replace_content` 兩者皆被拒，agent 回報「Both Edit and mcp__serena__replace_content have been denied」並停止執行。
 
@@ -169,7 +169,7 @@ permissionMode: bypassPermissions
    - 不生效則切換方案 1
 
 3. **避免 subagent Edit `.claude/` 內檔案（保守規則）**
-   - W17-088 證據：即使主 repo cwd + acceptEdits 仍可能被拒
+   - retry6 證據：即使主 repo cwd + acceptEdits 仍可能被拒
    - 實務作法：`.claude/` 內所有 Edit 一律 PM 前台執行；subagent 限定處理 `src/`、`tests/`、`docs/` 等非框架檔案
 
 **檢測訊號（追加）**：subagent 派發後立即回報「Edit/Write 被拒」+ target 在 `.claude/` 內 → 不必嘗試任何修復，直接 PM 前台 Edit。
@@ -193,7 +193,7 @@ PM 派發需要編輯的代理人前，確認：
 - **PC-058**（ANA Ticket metadata 漂移）：在 Ticket 層級缺少設定；本 pattern 在工具權限層級缺少設定。都是「宣告 vs 實際」落差。
 - **IMP-050**（hook_utils 是 Package 非檔案）：相似概念——代理人 prompt 提及的資源（import path / tool name）與實際環境不一致。
 
-## 範圍界定：本 pattern 是「權限模式」問題，非「身份選擇」問題（W4-028.2）
+## 範圍界定：本 pattern 是「權限模式」問題，非「身份選擇」問題
 
 本 pattern 處理的是 subagent 的**權限模式**（能不能 Edit），由 `permissionMode` 控制。它與「派發哪個 agent」（身份選擇）是不同層級，切勿混淆：
 

@@ -44,11 +44,11 @@ Phase 4 發現技術債務
 
 ## TD 清單即時校準（td-status）
 
-> **來源**：PC-094 TD 清單即時校準缺失。W10-083 實作 `ticket track td-status` 子命令提供自動化校準工具。
+> **來源**：PC-094 TD 清單即時校準缺失。後續實作 `ticket track td-status` 子命令提供自動化校準工具。
 
 ### 問題背景
 
-TD 清單視為 Phase 1 一次性產物，未隨 Phase 演進即時更新，導致 Phase 4 評估時將「已完成項」誤認為「待處理項」（PC-094 W10-017.8 案例）。後果：誤判已完成 TD 會造成重複建立 follow-up Ticket 或多視角分析在無效項目上消耗 token。
+TD 清單視為 Phase 1 一次性產物，未隨 Phase 演進即時更新，導致 Phase 4 評估時將「已完成項」誤認為「待處理項」（PC-094 案例）。後果：誤判已完成 TD 會造成重複建立 follow-up Ticket 或多視角分析在無效項目上消耗 token。
 
 ### 呼叫時機
 
@@ -64,10 +64,10 @@ PM 在以下三個節點主動執行 `ticket track td-status <ticket-id>`：
 
 ```bash
 # 校準指定 ticket 的 TD 清單
-ticket track td-status 0.18.0-W10-017
+ticket track td-status {ticket_id}
 
 # 明確指定版本（當自動偵測失敗時）
-ticket track td-status 0.18.0-W10-017 --version 0.18.0
+ticket track td-status {ticket_id} --version {version}
 ```
 
 ### 輸出說明
@@ -191,4 +191,4 @@ original_version: {發現版本}
 ---
 
 **Last Updated**: 2026-05-12
-**Version**: 2.1.0 — 新增「TD 清單即時校準（td-status）」章節：Phase 3a/3b/4 三節點呼叫時機、輸出說明表、校準後動作表（W10-083 / PC-094 落地）
+**Version**: 2.1.0 — 新增「TD 清單即時校準（td-status）」章節：Phase 3a/3b/4 三節點呼叫時機、輸出說明表、校準後動作表（PC-094 落地）

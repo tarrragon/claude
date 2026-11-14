@@ -29,7 +29,7 @@
 | 標準（standard） | 單版本影響 / 1-2 UC 變動 / 功能新增但不改架構 | 中 |
 | 重量（heavy） | 跨版本（跨 2 個以上大版本） / 跨專案（APP / Extension / CLI 任兩者以上） / framework 類（變更規則或方法論） / 3+ UC 結構性變動 / 架構層級改動 | 高 |
 
-**二分制**：evaluation_level 只有 standard / heavy 兩個合法值；探索期 PROP 改用 `status: draft` 搭配實際強度的 `evaluation_level`，hook 自動豁免章節檢查（豁免優先序 P2，見規則 2.5）。**Why**：W3-002 ANA 結論（W10-099 收斂後）11 個 PROP 樣本中 light 真實使用 = 0，屬 PC-093 yagni-deferred 候選。**Action**：存量 PROP 若標有 `evaluation_level: light`，hook 將視為非法值阻擋寫入，需改為 standard 或 heavy（light 已於 2026-05-30 移除）。
+**二分制**：evaluation_level 只有 standard / heavy 兩個合法值；探索期 PROP 改用 `status: draft` 搭配實際強度的 `evaluation_level`，hook 自動豁免章節檢查（豁免優先序 P2，見規則 2.5）。**Why**：ANA 結論（收斂後）11 個 PROP 樣本中 light 真實使用 = 0，屬 PC-093 yagni-deferred 候選。**Action**：存量 PROP 若標有 `evaluation_level: light`，hook 將視為非法值阻擋寫入，需改為 standard 或 heavy（light 已於 2026-05-30 移除）。
 
 ### 分級強制
 
@@ -51,7 +51,7 @@ PROP frontmatter 必須標示 `evaluation_level: standard | heavy`。未標示�
 
 不同分級對應不同評估深度。evaluation_level 必須符合下列要求才能從 draft → discussing → confirmed。
 
-### 2.-1 章節檢查觸發時機：升級閘門，非維護閘門（W2-025）
+### 2.-1 章節檢查觸發時機：升級閘門，非維護閘門
 
 章節完備度檢查屬「**升級閘門**」——只在 PROP 的 `status` 由非 confirmed/approved（draft / discussing / 空 / 新建檔）**升級轉換**為 confirmed/approved 的當下觸發，**不在每次編輯時觸發**。
 
@@ -62,7 +62,7 @@ PROP frontmatter 必須標示 `evaluation_level: standard | heavy`。未標示�
 | confirmed / approved | discussing / withdrawn（降級） | 豁免 |
 | 任意 | draft | 豁免（P2 draft 豁免優先） |
 
-**Why**：章節完備度是「進入 confirmed/approved 的一次性把關」，而非對既已 confirmed 的 PROP 每次維護都重掃。對 confirmed PROP「每次編輯」都掃整檔章節，會凍結 pre-existing 缺章節的 confirmed PROP——連改一段執行策略（如 §7）都被擋（W2-024 §7 修訂被擋實證）。
+**Why**：章節完備度是「進入 confirmed/approved 的一次性把關」，而非對既已 confirmed 的 PROP 每次維護都重掃。對 confirmed PROP「每次編輯」都掃整檔章節，會凍結 pre-existing 缺章節的 confirmed PROP——連改一段執行策略（如 §7）都被擋（§7 修訂被擋實證）。
 
 **Consequence**：若把升級閘門誤實作為維護閘門，所有早於本機制建立、章節不齊的 confirmed PROP（如 PROP-007）將完全無法維護，違反「本規則對既有 PROP 不追溯」（見文末漸進落地）。
 
@@ -70,7 +70,7 @@ PROP frontmatter 必須標示 `evaluation_level: standard | heavy`。未標示�
 
 **與微調豁免的互動**：一行 `status` flip（字元差異 < 30）雖屬微調體量，但若構成升級轉換則**不套用** P1 微調豁免——升級是語意重大變更，升級閘門優先於微調豁免。
 
-### 2.0 Draft 階段豁免（W10-109 新增）
+### 2.0 Draft 階段豁免
 
 PROP 處於 `status: draft` 階段時，由 hook 自動豁免下列檢查：
 
@@ -81,7 +81,7 @@ PROP 處於 `status: draft` 階段時，由 hook 自動豁免下列檢查：
 | 規則 3 Reality Test 章節 | **豁免**（探索期不要求實證） |
 | 規則 4 ticket_refs 綁定 | **豁免**（僅對 confirmed/approved 強制） |
 
-**Why**：Draft 屬探索期，章節通常未完整；強制完整章節會阻擋創意 brainstorming，違反 draft 設計目的，並讓提案者改用 light 規避（W10-099 重現實驗證實的 grandfather 模式）。
+**Why**：Draft 屬探索期，章節通常未完整；強制完整章節會阻擋創意 brainstorming，違反 draft 設計目的，並讓提案者改用 light 規避（重現實驗證實的 grandfather 模式）。
 
 **Consequence**：未明示 draft 豁免會讓提案者以不正確的 level（如把 heavy 改標 standard 以通過章節檢查）繞過強制機制，long-term 治理上 PROP level 與真實強度脫節。
 
@@ -262,7 +262,7 @@ PM 建立 PROP 時，使用 AskUserQuestion 引導分級和評估強度：
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.3.0 — W2-025 修正章節檢查觸發時機：新增規則 2.-1「升級閘門，非維護閘門」（章節檢查僅在 status 由非 confirmed/approved 升級為 confirmed/approved 時觸發；confirmed→confirmed 維護編輯豁免；新建檔直接 confirmed/approved 視為升級）；規則 2.5 豁免優先序表更新為 P1 微調（非升級）/P2 draft/P3 非升級豁免/P4 升級嚴格檢查，並明示「升級轉換優先於微調豁免」。背景：W2-024 §7 修訂被舊 hook（每次編輯掃章節）阻擋，凍結 pre-existing 缺章節的 confirmed PROP-007
-**Version**: 1.2.0 — W3-093 移除 light evaluation_level enum（W3-002 ANA 結論落地）：evaluation_level 收斂為 standard/heavy 二分制；規則 1 分級判定表移除 light 列；規則 2.5 豁免優先序移除 P3 light 列（原 P4 嚴格路徑升為 P3）；規則 3 輕量提案豁免改為微調豁免（< 30 字元）；hook 同步移除 VALID_LEVELS light + level=light 早 return 分支
-**Version**: 1.1.0 — W10-099 多視角審查仲裁採方案 D 落地（W10-109）：規則 1 light 收斂為純語意；規則 2 新增 2.0 Draft 階段豁免與 2.5 豁免優先序總覽（P1 micro_edit / P2 draft / P3 light / P4 嚴格路徑）；hook check_prop_content 同步新增 P2 分支與測試 13 case
+**Version**: 1.3.0 — 修正章節檢查觸發時機：新增規則 2.-1「升級閘門，非維護閘門」（章節檢查僅在 status 由非 confirmed/approved 升級為 confirmed/approved 時觸發；confirmed→confirmed 維護編輯豁免；新建檔直接 confirmed/approved 視為升級）；規則 2.5 豁免優先序表更新為 P1 微調（非升級）/P2 draft/P3 非升級豁免/P4 升級嚴格檢查，並明示「升級轉換優先於微調豁免」。背景：§7 修訂被舊 hook（每次編輯掃章節）阻擋，凍結 pre-existing 缺章節的 confirmed PROP-007
+**Version**: 1.2.0 — 移除 light evaluation_level enum（ANA 結論落地）：evaluation_level 收斂為 standard/heavy 二分制；規則 1 分級判定表移除 light 列；規則 2.5 豁免優先序移除 P3 light 列（原 P4 嚴格路徑升為 P3）；規則 3 輕量提案豁免改為微調豁免（< 30 字元）；hook 同步移除 VALID_LEVELS light + level=light 早 return 分支
+**Version**: 1.1.0 — 多視角審查仲裁採方案 D 落地：規則 1 light 收斂為純語意；規則 2 新增 2.0 Draft 階段豁免與 2.5 豁免優先序總覽（P1 micro_edit / P2 draft / P3 light / P4 嚴格路徑）；hook check_prop_content 同步新增 P2 分支與測試 13 case
 **Version**: 1.0.0 — 初始建立，基於開發流程摩擦力配置倒置結構性問題分析產出

@@ -1037,6 +1037,33 @@ class TestI_YamlFallback:
         err = capsys.readouterr().err
         assert "version mismatch" in err
 
+    @pytest.mark.parametrize("version", ["1.2.0", "1.0.1", "1.9.0"])
+    def test_i3b_same_major_version_writes_no_stderr(self, hook_mod, tmp_path, capsys, version):
+        """同主版號屬相容範圍：不寫 stderr（修正前每個事件寫一行，為紅）"""
+        p = tmp_path / "v.yaml"
+        p.write_text(yaml_fixture(top_overrides={"version": version}), encoding="utf-8")
+        import logging
+        cfg = hook_mod.load_config(p, logging.getLogger("t_i3b"))
+        assert cfg is not None
+        assert capsys.readouterr().err == ""
+
+    def test_i3c_major_mismatch_logs_warning(self, hook_mod, tmp_path, capsys, caplog):
+        """正向對照：主版號不符仍記錄警告"""
+        import logging
+        p = tmp_path / "v.yaml"
+        p.write_text(yaml_fixture(top_overrides={"version": "2.0.0"}), encoding="utf-8")
+        with caplog.at_level(logging.WARNING, logger="t_i3c"):
+            cfg = hook_mod.load_config(p, logging.getLogger("t_i3c"))
+        assert cfg is not None
+        assert "version mismatch" in caplog.text
+        assert "version mismatch" in capsys.readouterr().err
+
+    def test_i3d_repo_config_version_is_compatible(self, hook_mod):
+        """釘住 repo 內 wrap-triggers.yaml 的版號在相容範圍，避免下次升版復發"""
+        raw = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+        config_mod = _module_of(hook_mod, hook_mod.load_config)
+        assert config_mod.is_compatible_version(str(raw["version"]))
+
     def test_i4_disabled_signal_skipped_at_parse(self, hook_mod, tmp_path):
         p = tmp_path / "d.yaml"
         # 把 S1 改成 enabled=false
@@ -1197,6 +1224,7 @@ class TestL_Advisory:
         import logging
         # patch config/state 路徑
         monkeypatch.setattr(hook_mod, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: tmp_path)
         # 將 yaml 放到預期位置
         target_yaml = tmp_path / ".claude" / "config" / "wrap-triggers.yaml"
         target_yaml.parent.mkdir(parents=True, exist_ok=True)
@@ -1221,6 +1249,7 @@ class TestL_Advisory:
     def test_l2_yaml_missing_exits_zero(self, hook_mod, monkeypatch, tmp_path, capsys):
         import logging
         monkeypatch.setattr(hook_mod, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: tmp_path)
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(make_user_prompt("hi"))))
         code = hook_mod.main()
         assert code == 0
@@ -1711,6 +1740,7 @@ class TestSessionScopedState:
         monkeypatch.delenv("TICKET_ID", raising=False)
         monkeypatch.setattr(hook_mod, "is_pytest_environment", lambda: False)
         monkeypatch.setattr(hook_mod, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(hook_mod, "get_code_root", lambda: tmp_path)
         monkeypatch.setattr(
             hook_mod, "derive_ticket",
             lambda ev, cwd, logger: hook_mod._ticket_from_agent_payload(ev))

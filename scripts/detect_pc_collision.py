@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PC 碰撞偵測腳本（1.0.0-W1-022，正式化自 W1-019.5 prototype）。
+"""PC 碰撞偵測腳本（正式化自 prototype）。
 
 跨專案共享 repo 知識庫（.claude/error-patterns/）因各專案獨立累加 error-pattern
 編號，會在 round-trip sync 時產生碰撞。本腳本對單一專案的 error-patterns 目錄掃描，

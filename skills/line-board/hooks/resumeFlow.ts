@@ -6,10 +6,10 @@ import type { EngineInterface } from 'claude-code'
 
 import type { ResumePhase } from '../types'
 import {
-  COORDINATOR_SESSION_NAME,
   RESUME_NOTICE_LOG_MAX_LINES,
   RESUME_NOTICE_LOG_PATH,
   appendCappedLog,
+  coordinatorAddress,
   formatTime,
   messageOf,
   resumeNoticeDecision,
@@ -61,7 +61,8 @@ export async function notifyResumed($: EngineInterface, resumed: ResumedEvent): 
 
 /**
  * 主管道：本 session 的名稱以 sessionId 比對 ~/.claude/sessions 的狀態檔取得，線號以名稱比對協調票的現行佇列行；
- * 比對不到、是主控自身或已收線時不送。每個提早結束的分支都回傳原因，由呼叫端寫入紀錄檔。
+ * 比對不到、是主控自身或已收線時不送。收件主控以本專案 checkout 下名為「主控」的 session 的 sessionId 定址
+ * （coordinatorAddress），沒有或不只一個時不送。每個提早結束的分支都回傳原因，由呼叫端寫入紀錄檔。
  */
 async function sendResumeNotice($: EngineInterface, resumed: ResumedEvent): Promise<ResumeNoticeOutcome> {
   if (!IS_RESUME_NOTICE_SEND_ENABLED) return { step: 'send-disabled' }
@@ -79,8 +80,10 @@ async function sendResumeNotice($: EngineInterface, resumed: ResumedEvent): Prom
     const sessionName = sessions.sessions.find(state => state.sessionId === sessionId)?.name ?? null
     const decision = resumeNoticeDecision({ sessionName, lines: lanes.lines })
     if (decision.kind === 'skip') return { step: 'skipped', reason: decision.reason }
+    const coordinator = coordinatorAddress(sessions.sessions)
+    if (coordinator.kind === 'skip') return { step: 'skipped', reason: coordinator.reason }
     const text = resumeNoticeText(decision.target, formatTime(new Date(resumed.resumedAt)).slice(-8), resumed.source)
-    const sent = await $.session.send({ to: COORDINATOR_SESSION_NAME, text })
+    const sent = await $.session.send({ to: { sessionId: coordinator.sessionId }, text })
     return sent.isDelivered ? { step: 'sent', isDelivered: true } : { step: 'sent', isDelivered: false, reason: String(sent.reason) }
   } catch (error) {
     return { step: 'error', detail: messageOf(error) }

@@ -15,7 +15,7 @@ created: 2026-06-16
 |------|------|
 | 編號 | ARCH-V1-002 |
 | 類別 | architecture |
-| source_ticket | 1.0.0-W1-085（parallel-evaluation 發現） |
+| 發現途徑 | parallel-evaluation |
 | 發現日期 | 2026-06-16 |
 | 風險等級 | 高 |
 

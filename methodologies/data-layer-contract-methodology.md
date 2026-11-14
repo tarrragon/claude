@@ -218,5 +218,5 @@ SQLite/sqflite 專案在「補 CHECK 約束」決策上有三項本質限制，�
 ---
 
 **Last Updated**: 2026-07-26
-**Version**: 1.1.0 — 新增 2.1 節「dormant 表豁免判準」（三軸交叉驗證 + 指令證據記錄 + 重啟條件綁 ticket + 機械偵測條件）；擴充第 6 節為 6.1 條目 schema、6.2 假覆蓋排除判準、6.3 no_test_needed 合法分類（0.2.1-W1-002，source: book_overview_app 0.38.1-W10-004/W10-005 臨場設計成文，去專案化）
-**Version**: 1.0.0 — 初始建立（0.2.0-W2-002，source: PROP-002 In Scope 2）
+**Version**: 1.1.0 — 新增 2.1 節「dormant 表豁免判準」（三軸交叉驗證 + 指令證據記錄 + 重啟條件綁 ticket + 機械偵測條件）；擴充第 6 節為 6.1 條目 schema、6.2 假覆蓋排除判準、6.3 no_test_needed 合法分類（由某 consumer 專案的臨場設計成文，去專案化）
+**Version**: 1.0.0 — 初始建立（source: PROP-002 In Scope 2）

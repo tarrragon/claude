@@ -6,7 +6,6 @@ severity: medium
 created: 2026-08-18
 related:
  - PC-146
- - 0.2.1-W3-623.1
 ---
 
 # DOC-BAL-003: 表格列的行尾豁免標記被下游格式化工具刪除

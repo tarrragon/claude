@@ -8,9 +8,9 @@
 
 四個代理人的「文件品質」職責在概念上容易混淆。本表以 PM 派發角度明示邊界，避免「該派 thyme 還是 basil」的決策摩擦。
 
-**Why**：thyme 的 v2.0 以前 description 含「文件品質檢查」，與 basil-writing-critic 的「文字品質審查」概念交集；W17-066 linux L-W2 審查將此列為 Warning，要求 IMP 階段重寫（W17-069 執行）。
+**Why**：thyme 的 v2.0 以前 description 含「文件品質檢查」，與 basil-writing-critic 的「文字品質審查」概念交集；某次 linux L-W2 審查將此列為 Warning，要求 IMP 階段重寫。
 
-**Consequence**：邊界不明確時 PM 面臨「要派誰」的模糊決策，實測（W17-048）顯示 PM 在壓力情境下傾向略過審查或重複派發，兩者都造成品質下滑或 token 浪費。
+**Consequence**：邊界不明確時 PM 面臨「要派誰」的模糊決策，實測顯示 PM 在壓力情境下傾向略過審查或重複派發，兩者都造成品質下滑或 token 浪費。
 
 **Action**：PM 派發前對照下表，確認任務歸屬後直接派發對應代理人；若任務跨越兩欄，拆分為獨立任務分別派發。
 
@@ -105,4 +105,4 @@ parallel-evaluation 情境的常駐委員分兩類，詳見 `.claude/skills/para
 ---
 
 **Last Updated**: 2026-04-28
-**Version**: 1.1.0 - 新增「basil 前綴群組命名說明」子章節：共用前綴理由、architect vs critic 角色差異表、未來命名指引四步驟（W17-059 / W17-066 saffron warning 1）
+**Version**: 1.1.0 - 新增「basil 前綴群組命名說明」子章節：共用前綴理由、architect vs critic 角色差異表、未來命名指引四步驟（回應 saffron warning 1）

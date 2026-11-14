@@ -3,7 +3,7 @@
 本文件定義 error-pattern（`PC` / `IMP` / `ARCH` / `TEST` / `DOC` / `CQ`）流水號的**編號區段約定**：framework 共享 error-pattern 使用 1–499，專案專屬 error-pattern 使用 500+。
 
 > **定位（必讀）**：本約定為**文件層約定（documentation convention）**，**非強制機制（no enforcement mechanism）**。目前沒有 hook / CLI / validator 在建立 error-pattern 時檢查或阻擋編號落在錯誤區段。約定的價值在於人類維護者建立新 pattern 時依此自律分流，避免 framework sync 將專案專屬 pattern 污染到其他專案。
-> **來源**：0.19.1-W1-018 D2 + 多視角審查 L3（無強制機制）。
+> **來源**：多視角審查 L3（無強制機制）。
 
 ---
 
@@ -71,4 +71,4 @@
 ---
 
 **Last Updated**: 2026-06-03
-**Version**: 1.0.0 — 初版：定義 PC/IMP/ARCH 等 error-pattern 編號區段約定（framework 1–499 / project 500+），明示為文件約定非強制機制（0.19.1-W1-018 D2 + 多視角 L3）
+**Version**: 1.0.0 — 初版：定義 PC/IMP/ARCH 等 error-pattern 編號區段約定（framework 1–499 / project 500+），明示為文件約定非強制機制（多視角 L3）

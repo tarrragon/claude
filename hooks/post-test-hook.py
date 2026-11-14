@@ -29,13 +29,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.test_command_parse import find_test_invocations
+from lib.ticket_command_parse import has_complete_command
+from lib.hook_base import get_shared_state_root
 from lib.test_monitor_path import monitor_key, keyed_monitor_file, legacy_monitor_file
 from lib.bash_tool_response import is_failure_event, parse_failure_error
 from lib import (
+    get_hook_log_dir,
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    get_code_root,
     is_subagent_environment,
 )
 
@@ -53,11 +57,11 @@ except ImportError as _import_err:
 
 EXIT_SUCCESS = 0
 
-# Ticket body 寫入操作關鍵字（W3-041 豁免；W3-066 補齊）
+# Ticket body 寫入操作關鍵字（豁免失敗評估；含 top-level 寫入／回顯命令）
 # 這些 CLI 命令會把含「FAILED / N tests failed」字面的 ticket body 內容
 # 回顯到 tool_response，與真實測試失敗輸出無關，應跳過失敗評估。
 #
-# W3-066 修正：
+# 命令清單修正：
 # - 移除不存在的命令 `ticket track create`、`ticket track update`
 #   （ticket CLI 真實命令為 top-level `ticket create`，無 track 前綴）
 # - 補齊 top-level 寫入 / 回顯命令：ticket create / batch-create / show
@@ -74,7 +78,7 @@ TICKET_WRITE_COMMAND_KEYWORDS = [
     "ticket track claim",
 ]
 
-# Ticket md 檔案路徑樣式（W3-041 豁免，防御性檢查 Edit/Write 觸發場景）
+# Ticket md 檔案路徑樣式（豁免失敗評估，防御性檢查 Edit/Write 觸發場景）
 TICKET_MD_PATH_PATTERNS = [
     re.compile(r"docs/work-logs/v[^/]+/.+/tickets/.+\.md$"),
     re.compile(r"\.claude/skills/[^/]+/tickets/.+\.md$"),
@@ -127,14 +131,19 @@ FAILURE_SUMMARY_PATTERNS = [
     (_p(r"Some tests failed"), "部分測試失敗"),
     (_p(r"(?<![\w-])([1-9]\d*)\s+failed\b"), "{0} 個測試失敗（摘要）"),
     (_p(r"(?<![\w-])([1-9]\d*)\s+errors?\b"), "{0} 個測試錯誤（摘要）"),
+    # Mocha：「N passing」之後另起一行「N failing」；行首錨定，避免一般文字裡的 failing 字樣
+    (_p(r"^\s*([1-9]\d*)\s+failing\b"), "{0} 個測試失敗（Mocha 摘要）"),
+    # pytest 收集錯誤：可能沒有計數摘要（如 -q 被截斷或收集中斷），以行首區塊標題辨識；
+    # 區分大小寫，避免一般文字的 error collecting 誤命中
+    (_p(r"^_*\s*ERROR collecting (\S+)", re.MULTILINE), "測試收集錯誤: {0}"),
 ]
 
 TEST_FAILURE_PATTERNS = [
     (_p(r"Expected:\s*(.+?)\s*Actual:"), "斷言失敗: Expected {0}"),
-    # W1-055: 排除「0 tests failed」/「0 failed」綠燈 summary
+    # 排除「0 tests failed」/「0 failed」綠燈 summary
     # 用 negative lookbehind 確保前面數字不是 0
     (_p(r"(?<![\d])([1-9]\d*)\s+tests?\s+failed\b"), "{0} 個測試失敗"),
-    # W1-055: 縮窄 FAILED pattern
+    # 縮窄 FAILED pattern
     # 舊版 r"FAILED" 會誤命中：
     #   - 「0 failed」「零 failed」綠燈 summary
     #   - 「not failed」「FAILED-CASES」等識別符
@@ -151,7 +160,7 @@ ANALYZER_WARNING_PATTERNS = [
     (_p(r"info\s*-.*?unused"), "未使用的警告"),
     # eslint stylish formatter 格式：縮排 + row:col + warning + 訊息 + rule-name
     # 例：「  12:34  warning  Unused variable  no-unused-vars」
-    # 縮窄理由：W1-059 / W1-048.8 實證舊 regex r"warning\s*-" 誤報 jest console.warn
+    # 縮窄理由：實測舊 regex r"warning\s*-" 誤報 jest console.warn
     # 與含 "warning - ..." 的訊息字串。要求 row:col 起頭 + 結尾 rule name 才屬 lint warning。
     (_p(r"^\s*\d+:\d+\s+warning\s+.+?\s+@?[a-z][a-z0-9-]*(?:/[a-z0-9-]+)*\s*$"), "lint 警告"),
     (_p(r"deprecated\s+(?:function|class|method)"), "已棄用 API"),
@@ -232,7 +241,7 @@ def _classify_duration(duration: float, project_dir: Path) -> Tuple[str, str]:
 
 def check_test_timeout(input_data: dict, tool_input: dict, logger):
     """子邏輯 1: 測試超時監控。回傳訊息或 None。"""
-    project_dir = get_project_root()
+    project_dir = get_shared_state_root(get_project_root())
     key = monitor_key(input_data)
     keyed_file = keyed_monitor_file(project_dir, key) if key else None
     # 有鍵：pre 必寫鍵檔，鍵檔不存在即無計時可收，不退回舊單檔（其內容可能是過期的）
@@ -266,7 +275,8 @@ def check_test_timeout(input_data: dict, tool_input: dict, logger):
     monitor_data["duration_seconds"] = duration
     monitor_data["status"] = "completed"
 
-    action, message = _classify_duration(duration, project_dir)
+    # orphan-test-procs.py 為框架腳本（CR），監控檔路徑（project_dir）維持原根
+    action, message = _classify_duration(duration, get_code_root())
     monitor_data["action"] = action
     is_limit = action == "limit_warning"
     if is_limit:
@@ -279,7 +289,7 @@ def check_test_timeout(input_data: dict, tool_input: dict, logger):
         else:
             with open(monitor_file, "w") as f:
                 json.dump(monitor_data, f, indent=2, ensure_ascii=False)
-        history_file = project_dir / ".claude" / "hook-logs" / "test-duration-history.jsonl"
+        history_file = get_hook_log_dir("") / "test-duration-history.jsonl"
         with open(history_file, "a") as f:
             f.write(json.dumps(monitor_data, ensure_ascii=False) + "\n")
     except OSError as e:
@@ -356,7 +366,7 @@ def _log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger,
                     tool_response=None, event_name: str = "PostToolUse") -> None:
     """記錄評估結果到日誌。"""
     project_root = get_project_root()
-    log_dir = project_root / ".claude" / "hook-logs"
+    log_dir = get_hook_log_dir("")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     report_file = log_dir / f"pre-fix-evaluation-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
@@ -381,7 +391,7 @@ def _log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger,
 
 
 def _is_ticket_body_write(input_data: dict, tool_input: dict) -> bool:
-    """判斷此 PostToolUse 是否為 ticket body 寫入操作（W3-041 豁免）。
+    """判斷此 PostToolUse 是否為 ticket body 寫入操作（豁免失敗評估）。
 
     觸發場景：thyme 透過 ticket CLI append-log 或 Edit/Write 將含「FAILED」
     字面的修復描述寫入 ticket md。tool_response 會回顯該內容，被 regex
@@ -389,7 +399,9 @@ def _is_ticket_body_write(input_data: dict, tool_input: dict) -> bool:
 
     判定條件（任一成立即視為 ticket body 寫入）：
     1. Bash command 含 ticket CLI 寫入子命令
-    2. tool_input.file_path 匹配 ticket md 路徑樣式（防御性，目前 hook
+    2. Bash command 含完成類命令（complete／finish／batch-complete），以 token 位置
+       辨識（lib/ticket_command_parse），與 parallel-dispatch-verification 同一判定
+    3. tool_input.file_path 匹配 ticket md 路徑樣式（防御性，目前 hook
        僅註冊於 Bash/mcp__dart__run_tests，但保留以避免未來重註冊出錯）
     """
     tool_name = input_data.get("tool_name", "")
@@ -397,6 +409,9 @@ def _is_ticket_body_write(input_data: dict, tool_input: dict) -> bool:
     if tool_name == "Bash":
         command = (tool_input or {}).get("command", "")
         if any(kw in command for kw in TICKET_WRITE_COMMAND_KEYWORDS):
+            return True
+        # 解析失敗（None）不豁免：照常評估輸出，維持修改前的行為
+        if has_complete_command(command) is True:
             return True
 
     file_path = (tool_input or {}).get("file_path", "")
@@ -408,7 +423,7 @@ def _is_ticket_body_write(input_data: dict, tool_input: dict) -> bool:
     return False
 
 
-# W1-055: 綠燈 summary 識別 patterns
+# 綠燈 summary 識別 patterns
 # 涵蓋 Jest / Vitest / Mocha / pytest / npm 標準綠燈摘要
 GREEN_SUMMARY_PATTERNS = [
     # Jest / Vitest: "Tests: 4994 passed, 0 failed" 或 "Tests: 4994 passed"
@@ -429,7 +444,7 @@ GREEN_SUMMARY_PATTERNS = [
 
 
 def _is_green_summary(output: str) -> bool:
-    """判斷輸出是否含綠燈測試摘要（W1-055）。
+    """判斷輸出是否含綠燈測試摘要。
 
     若 output 同時含「N passed」且明示「0 failed」（或無 failed 字面），
     視為綠燈，跳過 TEST_FAILURE_PATTERNS 命中（防 FAILED 字面誤判）。
@@ -453,16 +468,38 @@ def _is_green_summary(output: str) -> bool:
     return False
 
 
+def _mcp_failure_output(input_data: dict, logger) -> Optional[str]:
+    """mcp__dart__run_tests 的 PostToolUseFailure：取 error 字串作為評估輸入。
+
+    欄位來源：官方 hooks 文件〈PostToolUseFailure〉，頂層 error 為字串，不含
+    tool_response。MCP 工具的 error 沒有 Bash 的「Exit code N」首行，整段字串
+    即為錯誤內容。此形狀未在 dart consumer 實機確認：error 缺少、非字串或為空
+    時只記日誌並跳過，不輸出、不拋出例外，判定失敗落在不打擾的一側。
+    """
+    error = input_data.get("error")
+    if not isinstance(error, str) or not error.strip():
+        logger.info(
+            "evaluation: mcp__dart__run_tests 失敗事件的 error 不可用（型別 %s，頂層鍵 %s），跳過",
+            type(error).__name__, sorted(input_data.keys()),
+        )
+        return None
+    return error
+
+
 def evaluate_test_failure(input_data: dict, tool_input: dict, logger):
     """子邏輯 2: 測試失敗評估。回傳評估訊息或 None。"""
-    # W3-041: ticket body 寫入豁免（避免 thyme 寫修復描述含「FAILED」字面被誤判）
+    # ticket body 寫入豁免（避免 thyme 寫修復描述含「FAILED」字面被誤判）
     if _is_ticket_body_write(input_data, tool_input):
-        logger.debug("evaluation: ticket body 寫入操作，跳過失敗評估（W3-041）")
+        logger.debug("evaluation: ticket body 寫入操作，跳過失敗評估")
         return None
 
     failure_event = is_failure_event(input_data)
     tool_response = input_data.get("tool_response", "")
-    if failure_event:
+    if failure_event and input_data.get("tool_name") == "mcp__dart__run_tests":
+        output_str = _mcp_failure_output(input_data, logger)
+        if output_str is None:
+            return None
+    elif failure_event:
         # PostToolUseFailure 無 tool_response，改讀 error；只信首行 Exit code N
         parsed = parse_failure_error(input_data.get("error"))
         if parsed is None:
@@ -490,9 +527,9 @@ def evaluate_test_failure(input_data: dict, tool_input: dict, logger):
         output_str = str(tool_response) if not isinstance(tool_response, str) else tool_response
     output_str = _resolve_truncated_output(output_str, logger)
 
-    # W1-055: 強化綠燈識別（Jest/Vitest/pytest/Mocha summary + 0 failed 字面）
+    # 強化綠燈識別（Jest/Vitest/pytest/Mocha summary + 0 failed 字面）
     if _is_green_summary(output_str):
-        logger.debug("evaluation: 偵測到綠燈 summary，跳過（W1-055）")
+        logger.debug("evaluation: 偵測到綠燈 summary，跳過")
         return None
 
     error_type, errors = _classify_errors(output_str, logger)
@@ -532,7 +569,7 @@ def main() -> int:
     if input_data is None:
         return EXIT_SUCCESS
 
-    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（PC-V1-004 入口污染防護）
     # 開 Ticket / 派發代理人等動作性提示屬 PM 決策，注入 subagent context 會誘導越界
     if is_subagent_environment(input_data):
         logger.debug(
@@ -546,13 +583,13 @@ def main() -> int:
 
     tool_input = (input_data.get("tool_input") or {})
 
-    # W3-066: ticket body 寫入豁免提升為 main() 早期 gate（原僅在 evaluate_test_failure
+    # ticket body 寫入豁免提升為 main() 早期 gate（原僅在 evaluate_test_failure
     # 內部豁免），避免 timeout monitor 在 ticket CLI 命令上誤觸發。
     # 觸發場景：ticket track append-log / ticket create 等 ticket body 寫入命令的
     # 內容含 `cd && npm test`、`flutter test` 等字面，被新 word-boundary regex
     # 正確匹配為「statement boundary 後 test command」，但實際非真實測試執行。
     if _is_ticket_body_write(input_data, tool_input):
-        logger.debug("ticket body 寫入操作，跳過所有後續子邏輯（W3-066 補強）")
+        logger.debug("ticket body 寫入操作，跳過所有後續子邏輯")
         return EXIT_SUCCESS
 
     # 背景命令：PostToolUse 在啟動回傳時觸發，此刻既無測試時長也無測試結果；

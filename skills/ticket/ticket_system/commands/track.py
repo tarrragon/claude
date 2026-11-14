@@ -131,7 +131,7 @@ from .track_set_closed_by import execute_set_closed_by
 from .track_set_coordination import execute_set_coordination
 # 導入 restore 子命令（closed 票唯一合法出邊：closed -> pending 還原路徑）
 from .track_restore import execute_restore
-# 導入 set-exit-status / set-completion-info 子命令（1.5.0-W5-021 制式化內容生成）
+# 導入 set-exit-status / set-completion-info 子命令
 from ticket_system.lib.git_utils import EXIT_AUTO_COMMIT_FAILED
 from .track_structured_body import (
     execute_set_exit_status,
@@ -177,47 +177,47 @@ from .track_dispatch_check import (
     execute_dispatch_check,
     register_dispatch_check,
 )
-# Context Bundle 合理性檢查（W17-003 落地，獨立於 dispatch-check）
+# Context Bundle 合理性檢查
 from .track_dispatch_validate import (
     execute_dispatch_validate,
     register_dispatch_validate,
 )
-# 派發前認知負擔閾值檢查（W17-053 落地，獨立於 dispatch-check / dispatch-validate）
+# 派發前認知負擔閾值檢查（獨立於 dispatch-check / dispatch-validate）
 from .track_dispatch_readiness import (
     execute_dispatch_readiness,
     register_dispatch_readiness,
 )
-# 嵌套深度查詢（W1-056.8 落地，協議 v2 D3 層級自覺）
+# 嵌套深度查詢
 from .track_depth import (
     execute_depth,
     register_depth,
 )
-# parallel-check 子任務衝突偵測（W17-203.1 落地）
+# parallel-check 子任務衝突偵測
 from .track_parallel_check import (
     execute_parallel_check,
     register_parallel_check,
 )
-# 統一 scheduler CLI（W17-011.1 / W17-009 落地）
+# 統一 scheduler CLI
 from .track_runqueue import (
     execute_runqueue,
     register_runqueue,
 )
-# dashboard 聚合視圖（W10-114 / W10-113 ANA Solution M1+M4'）
+# dashboard 聚合視圖
 from .track_dashboard import (
     execute_dashboard,
     register_dashboard,
 )
-# stuck-anas 列出卡住的 ANA（W17-008.15 方案 D）
+# stuck-anas 列出卡住的 ANA
 from .track_stuck_anas import (
     execute_stuck_anas,
     register_stuck_anas,
 )
-# stale-list 列舉 stale pending ticket 明細（W17-200）
+# stale-list 列舉 stale pending ticket 明細
 from .track_stale_list import (
     execute_stale_list,
     register_stale_list,
 )
-# hook-health 掃描 .claude/hook-logs/ 評估觸發頻率（W13-018，源自 W13-008 IMP-3）
+# hook-health 掃描 .claude/hook-logs/ 評估觸發頻率
 from .track_hook_health import (
     execute_hook_health,
     register_hook_health,
@@ -227,7 +227,7 @@ from .track_hook_liveness import (
     execute_hook_liveness,
     register_hook_liveness,
 )
-# td-status 校準 TD 清單（W10-083 / PC-094）
+# td-status 校準 TD 清單
 from .track_td_status import (
     execute_td_status,
     register_td_status,
@@ -311,8 +311,8 @@ def _execute_complete(args: argparse.Namespace, version: str) -> int:
         version, args.ticket_id, getattr(args, "as_agent", None)
     )
 
-    # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
-    # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因；
+    # --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
+    # 傳入 command 名稱，使 telemetry 可做 per-command 歸因；
     # 取 args.operation（argparse 實際解析到的子命令名，如 finish）而非寫死
     # "complete"，使別名呼叫的 telemetry 歸因準確，不與原名混記
     from ticket_system.lib.identity_guard import check_identity
@@ -431,7 +431,7 @@ def _execute_reclaim(args: argparse.Namespace, version: str) -> int:
 
 
 def _execute_verify(args: argparse.Namespace, version: str) -> int:
-    """單獨執行 AC 驗證（W4-019：與 claim 解耦）。"""
+    """單獨執行 AC 驗證。"""
     from .lifecycle import TicketLifecycle
     lifecycle = TicketLifecycle(version)
     return lifecycle.verify_only(args.ticket_id)
@@ -439,7 +439,7 @@ def _execute_verify(args: argparse.Namespace, version: str) -> int:
 
 def _create_version_agnostic_handlers() -> dict:
     """
-    建立不需版本資訊的命令處理器字典（W17-014 / W17-008.11 方案 B）
+    建立不需版本資訊的命令處理器字典
 
     這些命令操作專案全局狀態（snapshot / agent-status / handoff-ready /
     checkpoint-status / dispatch-check），不對單一 Ticket 操作，因此
@@ -486,7 +486,7 @@ def _create_command_handlers() -> dict:
         "query": execute_query,
         # 舊票號（migrate 改號前）解析為現行票號
         "resolve": execute_resolve,
-        # W1-056.8 嵌套深度查詢（協議 v2 D3）
+        # 嵌套深度查詢（協議 v2 D3）
         "depth": execute_depth,
         "claim": _execute_claim,
         "complete": _execute_complete,
@@ -500,12 +500,12 @@ def _create_command_handlers() -> dict:
         "release": _execute_release,
         # multi-PM 協調層 Phase 3：僅接受 reclaimable 票，強制 ghost 鑑識三查
         "reclaim": _execute_reclaim,
-        # W4-019: 拆 verify 子命令（單獨執行 AC 驗證，與 claim 解耦）
+        # 拆 verify 子命令（單獨執行 AC 驗證，與 claim 解耦）
         "verify": _execute_verify,
         "chain": execute_chain,
         "deps": execute_deps,
         "full": execute_full,
-        # show 為 full 的 alias（W17-008.2 / W17-004 落差 2：對齊 git/docker/kubectl 慣例）
+        # show 為 full 的 alias（<ticket-id> / <ticket-id> 落差 2：對齊 git/docker/kubectl 慣例）
         "show": execute_full,
         "log": execute_log,
         "batch-claim": execute_batch_claim,
@@ -559,15 +559,15 @@ def _create_command_handlers() -> dict:
         "audit": execute_audit,
         "audit-version": execute_audit_version,
         "board": execute_board,
-        # W17-011.1 / W17-009 統一 scheduler CLI
+        # 統一 scheduler CLI
         "runqueue": execute_runqueue,
-        # W10-114 聚合 dashboard 視圖（in_progress + top N ready + stale）
+        # 聚合 dashboard 視圖（in_progress + top N ready + stale）
         "dashboard": execute_dashboard,
-        # W10-083 / PC-094 TD 清單校準
+        # / PC-094 TD 清單校準
         "td-status": execute_td_status,
-        # W17-003 Context Bundle 合理性檢查（version-aware：需讀取 ticket md）
+        # Context Bundle 合理性檢查（version-aware：需讀取 ticket md）
         "dispatch-validate": execute_dispatch_validate,
-        # W17-053 派發前認知負擔閾值檢查（version-aware：需讀取 ticket md）
+        # 派發前認知負擔閾值檢查（version-aware：需讀取 ticket md）
         "dispatch-readiness": execute_dispatch_readiness,
     }
 
@@ -598,7 +598,7 @@ def execute(args: argparse.Namespace) -> int:
     if operation == "version":
         return execute_version(args, None)
 
-    # version-agnostic 命令優先查找（W17-014 方案 B：雙 dict 消除雙軌）
+    # version-agnostic 命令優先查找
     agnostic_handlers = _create_version_agnostic_handlers()
     if operation in agnostic_handlers:
         return agnostic_handlers[operation](args)
@@ -612,7 +612,7 @@ def execute(args: argparse.Namespace) -> int:
     explicit_version = getattr(args, 'version', None)
     version = None
 
-    # --version all 特殊處理：跨版本查詢（W9-002）
+    # --version all 特殊處理：跨版本查詢
     if explicit_version and explicit_version.lower() == "all":
         if operation in ("list", "search"):
             all_handlers = _create_command_handlers()
@@ -656,15 +656,15 @@ def _register_lifecycle_commands(
         dest="verify",
         action="store_true",
         help=(
-            "W3-046: 明示啟用 AC 自動驗證（預設關閉，避免 npm test 全套件副作用 / "
+            "明示啟用 AC 自動驗證（預設關閉，避免 npm test 全套件副作用 / "
             "PC-078 並行衝突）。僅供除錯場景使用"
         ),
     )
-    # W4-019: --skip-verify 旗標已移除（W3-092 + W4-015 兩輪觀察期累計
+    # --skip-verify 旗標已移除（兩輪觀察期累計
     # 24hr / 75 commits / 5 ticket cycles 驗證：外部依賴 = 0、runtime
     # deprecation 觸發 = 0）。如需單獨執行 AC 驗證（不 claim），改用
     # `ticket track verify <id>`；如需跳過驗證直接 claim，不傳 --verify
-    # 即為預設行為（W3-046 後 claim 預設不驗證）。
+    # 即為預設行為。
     p_claim.add_argument(
         "--yes",
         "-y",
@@ -676,19 +676,19 @@ def _register_lifecycle_commands(
         "--quiet",
         dest="quiet",
         action="store_true",
-        help="Context Bundle 抽取摘要單行輸出（W17-002.2）",
+        help="Context Bundle 抽取摘要單行輸出",
     )
     p_claim.add_argument(
         "--verbose",
         dest="verbose",
         action="store_true",
-        help="Context Bundle 抽取摘要附欄位預覽（W17-002.2）",
+        help="Context Bundle 抽取摘要附欄位預覽",
     )
     p_claim.add_argument(
         "--json",
         dest="json_output",
         action="store_true",
-        help="Context Bundle 抽取結果以 JSON 結構化輸出（W17-002.1）",
+        help="Context Bundle 抽取結果以 JSON 結構化輸出",
     )
     p_claim.add_argument(
         "--acknowledge",
@@ -704,7 +704,7 @@ def _register_lifecycle_commands(
         default=None,
         metavar="AGENT_NAME",
         help="認領時申報執行身份，寫入 who.current（與後續 complete --as 對稱，"
-        "免 set-who 繞過；--as 與 --verify 正交，W2-018）",
+        "免 set-who 繞過；--as 與 --verify 正交）",
     )
 
     # complete 操作（與 finish 別名共用旗標定義，見 _add_complete_arguments：
@@ -722,19 +722,19 @@ def _register_lifecycle_commands(
             "--skip-body-check",
             dest="skip_body_check",
             action="store_true",
-            help="逃生閥：跳過 type-aware body schema 必填章節驗證（W17-016.3；需於 Completion Info 附理由）",
+            help="逃生閥：跳過 type-aware body schema 必填章節驗證",
         )
         target.add_argument(
             "--force",
             dest="force",
             action="store_true",
-            help="逃生閥：父 ticket 有未完成 children 時旁路阻擋強制完成（W11-003.2；會輸出警告）",
+            help="逃生閥：父 ticket 有未完成 children 時旁路阻擋強制完成",
         )
         target.add_argument(
             "--no-stage",
             dest="no_stage",
             action="store_true",
-            help="跳過 complete 後自動 git add metadata 檔案（W11-035 方案 D opt-out）",
+            help="跳過 complete 後自動 git add metadata 檔案",
         )
         target.add_argument(
             "--as",
@@ -742,7 +742,7 @@ def _register_lifecycle_commands(
             default=None,
             metavar="AGENT_NAME",
             help="申報執行身份，與 who.current 對照不符即 deny；未提供亦 deny"
-            "（W1-048；complete/finish 屬 identity_guard.ENFORCED_COMMANDS，"
+            "（complete/finish 屬 identity_guard.ENFORCED_COMMANDS，"
             "已轉強制申報，非 warn-only）",
         )
 
@@ -762,7 +762,7 @@ def _register_lifecycle_commands(
     )
     _add_complete_arguments(p_finish)
 
-    # close 操作（W15-027 / PC-090：--reason 枚舉必填）
+    # close 操作
     from ticket_system.constants import CLOSE_REASONS, CLOSE_REASON_RETROSPECTIVE_UNKNOWN
     _close_reason_choices = sorted(CLOSE_REASONS) + [CLOSE_REASON_RETROSPECTIVE_UNKNOWN]
     p_close = subparsers.add_parser("close", help="關閉 Ticket（已在其他 Ticket 一併解決）")
@@ -857,12 +857,12 @@ def _register_lifecycle_commands(
         "未加此旗標僅印 dry-run 報告",
     )
 
-    # verify 操作（W4-019）：單獨執行 AC 驗證，與 claim 解耦
+    # verify 操作：單獨執行 AC 驗證，與 claim 解耦
     p_verify = subparsers.add_parser(
         "verify",
         help=(
             "單獨執行 AC 驗證（不變更 Ticket 狀態，與 claim 解耦）。"
-            "W4-019：補足 W3-046 後 claim 預設不驗證所造成的查詢缺口"
+            "補足 claim 預設不驗證所造成的查詢缺口"
         ),
     )
     p_verify.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
@@ -905,7 +905,7 @@ def _register_query_commands(
     p_list.add_argument("--status", nargs='+', help=TrackMessages.ARG_STATUS)
     p_list.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
     p_list.add_argument("--version", help=TrackMessages.ARG_VERSION)
-    # W10-115: 預設限制 top 10 + priority 排序，--all 取得全量
+    # 預設限制 top 10 + priority 排序，--all 取得全量
     p_list.add_argument(
         "--top",
         type=_parse_top_arg,
@@ -919,7 +919,7 @@ def _register_query_commands(
         help="取得全量輸出（覆蓋 --top；與 --top 共存時 --all 優先並 emit warning）",
     )
 
-    # search 操作（W9-002: 跨維度查詢）
+    # search 操作
     p_search = subparsers.add_parser("search", help="搜尋 Tickets（依 UC/Spec/Prop 引用或檔案路徑）")
     p_search.add_argument("--ref", help="搜尋引用特定 UC/Spec/Prop 的 Tickets（如 UC-01、SPEC-001、PROP-007）")
     p_search.add_argument("--file", dest="file_path", help="搜尋修改特定檔案的 Tickets（如 src/core/errors/）")
@@ -944,7 +944,7 @@ def _register_query_commands(
     p_full.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_full.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
-    # show 操作（W17-008.2 / W17-004 落差 2：full 的 alias，對齊 git/docker/kubectl 慣例）
+    # show 操作（<ticket-id> / <ticket-id> 落差 2：full 的 alias，對齊 git/docker/kubectl 慣例）
     p_show = subparsers.add_parser(
         "show",
         help=f"{TrackMessages.HELP_FULL}（full 的 alias，對齊 git/docker/kubectl 慣例）",
@@ -956,7 +956,7 @@ def _register_query_commands(
     p_log = subparsers.add_parser("log", help=TrackMessages.HELP_LOG)
     p_log.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_log.add_argument("--version", help=TrackMessages.ARG_VERSION)
-    # W17-008.3: --section 過濾，對齊 append-log 介面對稱性
+    # --section 過濾，對齊 append-log 介面對稱性
     p_log.add_argument("--section", help=TrackMessages.ARG_SECTION, default=None)
 
     # version 操作
@@ -1008,7 +1008,7 @@ def _register_field_write_commands(
     subparsers: argparse._SubParsersAction,
 ) -> None:
     """註冊欄位寫入子命令：set-who, set-what, set-when, set-where, set-why, set-how"""
-    # set-who 操作（value 可省略；--current 提供子欄位寫入路徑，W1-009）
+    # set-who 操作（value 可省略；--current 提供子欄位寫入路徑）
     p_set_who = subparsers.add_parser("set-who", help=TrackMessages.HELP_SET_WHO)
     p_set_who.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_set_who.add_argument(
@@ -1036,7 +1036,7 @@ def _register_field_write_commands(
     p_set_when.add_argument("value", help=TrackMessages.ARG_VALUE)
     p_set_when.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
-    # set-where 操作（value 可省略；--layer/--files 提供子欄位寫入路徑，W1-009）
+    # set-where 操作（value 可省略；--layer/--files 提供子欄位寫入路徑）
     p_set_where = subparsers.add_parser("set-where", help=TrackMessages.HELP_SET_WHERE)
     p_set_where.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_set_where.add_argument(
@@ -1053,7 +1053,7 @@ def _register_field_write_commands(
     p_set_why.add_argument("value", help=TrackMessages.ARG_VALUE)
     p_set_why.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
-    # set-how 操作（value 可省略；--task-type/--strategy 提供子欄位寫入路徑，W1-009）
+    # set-how 操作（value 可省略；--task-type/--strategy 提供子欄位寫入路徑）
     p_set_how = subparsers.add_parser("set-how", help=TrackMessages.HELP_SET_HOW)
     p_set_how.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_set_how.add_argument(
@@ -1164,8 +1164,8 @@ def _register_relation_commands(
         help=TrackMessages.HELP_PHASE,
         epilog=(
             "範例:\n"
-            "  ticket track phase 0.2.0-W3-001 phase1 lavender-interface-designer\n"
-            "  ticket track phase 0.2.0-W3-001 phase3b parsley-flutter-developer\n"
+            "  ticket track phase <ticket-id> phase1 lavender-interface-designer\n"
+            "  ticket track phase <ticket-id> phase3b parsley-flutter-developer\n"
             "\n"
             "Phase 支援簡寫: phase0, phase1, phase2, phase3a, phase3b, phase4"
         ),
@@ -1286,7 +1286,7 @@ def _register_acceptance_commands(
         dest="as_agent",
         default=None,
         metavar="AGENT_NAME",
-        help="申報執行身份，與 who.current 對照不符即 deny（W1-048；未提供僅警告）",
+        help="申報執行身份，與 who.current 對照不符即 deny",
     )
 
     # set-acceptance 操作
@@ -1308,7 +1308,7 @@ def _register_acceptance_commands(
         "--uncheck", nargs="+", action="append", metavar="INDEX",
         help="取消勾選指定 1-based index（可多個，空白分隔或重複旗標）"
     )
-    # --all 攔截：撞 --all-check/--all-uncheck（1.0.0-W1-028）。作用域 scoped 至
+    # --all 攔截：撞 --all-check/--all-uncheck。作用域 scoped 至
     # set-acceptance subparser，不影響 list/stale-list/stuck-anas 的合法 --all
     # （約束 1）；td-status 無 --all 旗標（該命令內部的 --all 是 git log 參數，
     # 非 CLI 旗標，與本攔截無關）。
@@ -1346,14 +1346,14 @@ def _register_acceptance_commands(
         "--force",
         action="store_true",
         default=False,
-        help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
     )
     p_set_acceptance.add_argument(
         "--as",
         dest="as_agent",
         default=None,
         metavar="AGENT_NAME",
-        help="申報執行身份，與 who.current 對照不符即 deny（W1-048；未提供僅警告）",
+        help="申報執行身份，與 who.current 對照不符即 deny",
     )
 
     # validate 操作
@@ -1389,7 +1389,7 @@ def _register_acceptance_commands(
         "--force",
         action="store_true",
         default=False,
-        help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
     )
     p_append_log.add_argument(
         "--replace",
@@ -1423,7 +1423,7 @@ def _register_acceptance_commands(
         "--force",
         action="store_true",
         default=False,
-        help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
     )
 
     # resolve-spawn-request 操作：spawn request 狀態標記 CLI 化，
@@ -1590,7 +1590,7 @@ def _register_acceptance_commands(
         "--json", action="store_true", default=False, help="輸出 JSON 而非人類可讀表格",
     )
 
-    # set-exit-status 操作（1.5.0-W5-021：CLI 生成 Exit Status fenced YAML 區塊）
+    # set-exit-status 操作（CLI 生成 Exit Status fenced YAML 區塊）
     p_set_exit_status = subparsers.add_parser(
         "set-exit-status",
         help="設定 Exit Status 章節（CLI 生成 fenced YAML，取代自由格式撰寫）",
@@ -1618,7 +1618,7 @@ def _register_acceptance_commands(
     p_set_exit_status.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_set_exit_status.add_argument(
         "--force", action="store_true", default=False,
-        help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
     )
     p_set_exit_status.add_argument(
         "--as",
@@ -1627,7 +1627,7 @@ def _register_acceptance_commands(
         help="申報執行身份，與 who.current 比對（未提供時 warn-only，不符則 deny）",
     )
 
-    # set-completion-info 操作（1.5.0-W5-021：CLI 生成 Completion Info 區塊）
+    # set-completion-info 操作（CLI 生成 Completion Info 區塊）
     p_set_completion_info = subparsers.add_parser(
         "set-completion-info",
         help="設定 Completion Info 章節（CLI 生成格式，取代自由格式撰寫）",
@@ -1642,7 +1642,7 @@ def _register_acceptance_commands(
     p_set_completion_info.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_set_completion_info.add_argument(
         "--force", action="store_true", default=False,
-        help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
     )
 
     # audit 操作
@@ -1739,7 +1739,7 @@ def _register_all_subcommands(
 def _register_global_state_commands(
     subparsers: argparse._SubParsersAction,
 ) -> None:
-    """註冊 version-agnostic 全局狀態命令（W17-014 方案 B 群組化）
+    """註冊 version-agnostic 全局狀態命令
 
     對應 `_create_version_agnostic_handlers()` 的 5 個命令：
     snapshot / agent-status / handoff-ready / checkpoint-status / dispatch-check
@@ -1762,7 +1762,7 @@ def _register_snapshot_commands(
 def register(subparsers: argparse._SubParsersAction) -> None:
     """註冊 track 子命令及所有操作
 
-    W17-008.5.4：track parser 與所有操作子 parser 套用 ArgparseFormatErrorParser，
+    track parser 與所有操作子 parser 套用 ArgparseFormatErrorParser，
     讓業務錯誤（invalid choice / invalid type value）改走 format_error 結構化路徑；
     純語法錯誤（unrecognized args / missing required positional）保留 argparse 預設。
     """

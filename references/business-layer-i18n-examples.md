@@ -228,4 +228,4 @@ class BookRepository {
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 - 從 business-layer-i18n-management-methodology.md 外移：三層責任完整程式碼範例 + 參數化訊息完整範例 + 四反模式正反程式碼對照（W8-020.10 方法論瘦身校準）
+**Version**: 1.0.0 - 從 business-layer-i18n-management-methodology.md 外移：三層責任完整程式碼範例 + 參數化訊息完整範例 + 四反模式正反程式碼對照（方法論瘦身校準）

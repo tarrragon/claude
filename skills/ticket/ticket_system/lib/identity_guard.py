@@ -7,9 +7,9 @@ set-acceptance 等）未帶 --as 一律放行，僅 stderr 警告一行，不阻
 過渡期）。身份不符（--as 與 who.current 不一致）則不分命令一律 deny，不受
 本段影響。
 
-背景（PC-V1-002 防護鏈 CLI 層）：W1-045 WRAP 二輪翻案認定威脅模型為「誠實但
+背景（PC-V1-002 防護鏈 CLI 層）：WRAP 二輪翻案認定威脅模型為「誠實但
 誤解的 agent」——generic agent 收到 Ticket ID 即走自律收尾流程，越權勾選 PM
-保留的 acceptance 並 complete（W1-044 探針實證）。規則層（W1-046/047）已用文字
+保留的 acceptance 並 complete（探針實證）。規則層已用文字
 固化防線，本模組在世界平面（CLI exit code）強制：寫入命令可選用 --as <agent-name>
 申報身份，與 frontmatter who.current 精確比對，不符即 deny（exit 1），不寫入任何
 ticket 狀態（純前置檢查）。
@@ -71,11 +71,11 @@ IDENTITY_DENY_EXIT = 1
 # 也能立即判斷下一步。
 ENFORCED_COMMANDS = frozenset({"complete", "finish"})
 
-# --- Telemetry（W1-057 warn/deny + W1-082 pass/exempt 全路徑落盤觀測管線）--------
+# --- Telemetry（warn/deny + pass/exempt 全路徑落盤觀測管線）--------
 #
-# 過渡期（warn-only）需稽核 --as 使用率與 deny/warn 分佈，作為 W1-049 轉強制裁決
+# 過渡期（warn-only）需稽核 --as 使用率與 deny/warn 分佈，作為轉強制裁決
 # 的資料依據；僅寫 stderr 無法事後統計，故每條判定路徑各 append 一行結構化記錄。
-# W1-082 補齊放行路徑（pass/exempt）：只記 warn/deny 會使「使用率指標」分母缺失
+# 補齊放行路徑（pass/exempt）：只記 warn/deny 會使「使用率指標」分母缺失
 # 不可計算，且完美遵循（全 --as 正確）時 log 零增長，10+ 樣本 trigger 永不成立。
 # 基底目錄沿用 force-usage 的 HOOK_LOGS_DIR env 慣例（測試隔離），
 # 子目錄 identity-guard 區隔此管線。
@@ -95,12 +95,19 @@ RESULT_PASS = "pass"
 RESULT_DENY = "deny"
 
 
-def _resolve_identity_log_path() -> Path:
-    """解析 identity-guard usage.log 路徑；HOOK_LOGS_DIR 優先（測試隔離用）。"""
+def resolve_identity_log_path() -> Path:
+    """解析 identity-guard usage.log 路徑，寫入端與 identity_guard_adoption 讀回端共用。
+
+    優先序：HOOK_LOGS_DIR（測試隔離用）> hook_logging.get_hook_log_dir（linked
+    worktree 內為主 repo）> 舊式 git toplevel（.claude/lib/ 不可達時的降級）。
+    """
     env_val = os.environ.get(_HOOK_LOGS_DIR_ENV)
     if env_val:
         base = Path(env_val)
     else:
+        hook_logging = load_claude_lib("hook_logging")
+        if hook_logging is not None:
+            return hook_logging.get_hook_log_dir(_HOOK_NAME) / _IDENTITY_LOG_FILENAME
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
@@ -164,7 +171,7 @@ def _write_telemetry(
     line = json.dumps(record, ensure_ascii=False) + "\n"
 
     try:
-        log_path = _resolve_identity_log_path()
+        log_path = resolve_identity_log_path()
         log_path.parent.mkdir(parents=True, exist_ok=True)
         # POSIX O_APPEND 對 ≤ PIPE_BUF (4096 bytes) 為原子，單行 JSON 遠低於此閾值
         with open(log_path, mode="a", encoding="utf-8") as f:
@@ -201,7 +208,7 @@ def check_identity(
     """
     對照申報身份與 ticket who.current，回傳 deny exit code 或 None（放行）。
 
-    判定邏輯（依序，對應 W1-048 規格表；括號為 telemetry result 列舉）：
+    判定邏輯（依序，對應規格表；括號為 telemetry result 列舉）：
     1a. 未提供 --as，command 屬 ENFORCED_COMMANDS → deny（缺申報，回傳 IDENTITY_DENY_EXIT）
     1b. 未提供 --as，command 不屬 ENFORCED_COMMANDS → 僅 stderr 警告，放行（warn，回傳 None）
     2. --as = PM_AGENT_NAME   → 一律放行（exempt；PM bookkeeping 豁免，回傳 None）
@@ -209,7 +216,7 @@ def check_identity(
     4. --as != who.current    → deny（含 who.current 空值，回傳 IDENTITY_DENY_EXIT）
 
     本函式不寫入任何 ticket 狀態（純前置檢查）。所有提示走 stderr，
-    避免污染 stdout 消費者。四條路徑均 append telemetry（W1-082：全路徑落盤，
+    避免污染 stdout 消費者。四條路徑均 append telemetry（全路徑落盤，
     否則使用率分母缺失不可計算）。
 
     Args:

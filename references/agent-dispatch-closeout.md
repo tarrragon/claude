@@ -46,7 +46,7 @@ ticket track append-log {ticket_id} --section "<section>" "<裁決內容>"
 ---
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-## 收尾 --as 全覆蓋與建票 who 對齊（W1-049 裁決前置）
+## 收尾 --as 全覆蓋與建票 who 對齊
 
 **核心原則**：派發 prompt 的收尾指引必須教 agent 對 `check-acceptance` / `set-acceptance` / `complete` 三命令**一律帶 `--as <自身 agent 名稱>`**；PM 建票（尤其子票）必須以 `--who` 設定預期執行代理人。
 
@@ -65,7 +65,7 @@ ticket track append-log {ticket_id} --section "<section>" "<裁決內容>"
 ---
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-## 收尾義務標準段（W2-003）
+## 收尾義務標準段
 
 > **用途**：派發 prompt 收尾段的標準模板，把「勾選 acceptance」與「填寫 ticket body」兩項收尾義務明文寫入指令，取代僅靠代理人自律（AGENT_PRELOAD 規則 2.4）記得執行。
 >
@@ -119,7 +119,7 @@ ticket track set-acceptance <ticket-id> --check 1 2 --as <自身 agent 名稱>
 兩通道皆由 CLI 自動回填血緣欄位：`create --source-ticket` 在建立當下即回填 `source_ticket` / `spawned_tickets` 雙向欄位；`add-spawn-request` 於 PM 執行 `resolve-spawn-request <id> SR-N --status processed --spawned-ticket <ticket-id>` 時回填。`--related-to` 不具備此機制，僅供無血緣意圖的弱關聯引用（見 field-semantics.md「用戶情境對照表」）。欄位定義以 `.claude/skills/ticket/references/field-semantics.md` 為唯一權威來源，本節不重複定義。
 
 <!-- rule8-exempt: relocation:自 .claude/references/agent-dispatch-template.md 逐字搬移 -->
-### 4. Solution 自檢結果子章節義務（W2-008）
+### 4. Solution 自檢結果子章節義務
 
 收尾段須明示：`complete` 前，Solution 章節必須含 `### 自檢結果` 子章節，依 `.claude/references/agent-self-check-template.md` 執行，且**對照 acceptance 逐項附證據**（非泛稱「已自檢」）。
 

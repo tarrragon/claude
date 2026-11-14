@@ -5,7 +5,7 @@
 # ///
 """framework-rule-edit-skill-trigger-hook — Layer A 事前 SKILL 觸發提示
 
-來源：Ticket 0.18.0-W17-127.2（W17-122 ANA Solution Layer A 落地）
+定位：多層觸發設計中的 Layer A（事前提示層）。
 
 觸發點：PreToolUse Edit / Write
 條件：tool_input.file_path 經 lib.framework_paths.is_framework_path 判定為
@@ -22,7 +22,7 @@
 - 不使用「禁止 / 必須 / 不可」絕對主義詞
 
 cache 設計（acceptance #2）：
-- file-based per-session cache：.claude/hook-logs/skill-trigger-cache-{session_id}.json
+- file-based per-session cache：.claude/hook-logs/framework-rule-edit-skill-trigger/skill-trigger-cache-{session_id}.json
 - key = file_path（已警告路徑同 session 不再警告）
 - session 邊界嚴格隔離：不同 session_id 不共用 cache
 
@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
+    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_hook_log_dir
     from lib import framework_paths
 except ImportError as e:
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
@@ -53,7 +53,7 @@ except ImportError as e:
 # 常數：路徑與檔名
 PROJECT_DIR_ENV = "CLAUDE_PROJECT_DIR"
 STRICT_CONFIG_REL = ".claude/config/skill-trigger-strict.yaml"
-CACHE_DIR_REL = ".claude/hook-logs"
+HOOK_NAME = "framework-rule-edit-skill-trigger"
 CACHE_FILE_PREFIX = "skill-trigger-cache-"
 
 # SKILL 名稱（Skill 工具呼叫的 input.skill 欄位值）
@@ -134,7 +134,7 @@ def _is_strict_mode(logger) -> bool:
 def _cache_path(session_id: str) -> Path:
     """組出 session-scoped cache 檔路徑（嚴格隔離跨 session）。"""
     safe_id = session_id.replace("/", "_").replace("\\", "_") if session_id else "unknown"
-    return _get_project_dir() / CACHE_DIR_REL / f"{CACHE_FILE_PREFIX}{safe_id}.json"
+    return get_hook_log_dir(HOOK_NAME) / f"{CACHE_FILE_PREFIX}{safe_id}.json"
 
 
 def _load_cache(session_id: str, logger) -> Set[str]:
@@ -178,7 +178,7 @@ def _save_cache(session_id: str, warned: Set[str], logger) -> None:
 def _scan_transcript_for_skill(transcript_path: Optional[str], logger) -> bool:
     """掃描 JSONL transcript，判斷是否已呼叫過 Skill compositional-writing。
 
-    純字串 / JSON 解析，禁用 LLM（W17-122 ginger 警示「hook 用純字串 match」）。
+    純字串 / JSON 解析，禁用 LLM（hook 用純字串 match，避免推理延遲與不確定性）。
 
     Returns:
         True 若 transcript 中曾出現 tool_use(name=Skill, input.skill=compositional-writing)
@@ -241,7 +241,7 @@ def _compute_edit_metrics(
 ) -> tuple:
     """計算編輯體量指標：(file_size_before, file_size_after, diff_line_count)。
 
-    用途：協助 W17-198 dry-run 期間誤報分類（typo / 格式 / 語意修訂）。
+    用途：協助 dry-run 期間誤報分類（typo / 格式 / 語意修訂）。
     任何 IO/解析錯誤一律回傳 (0, 0, 0)，不破壞主流程。
 
     - Edit：依 old_string / new_string 估算 size after，diff_line_count 為
@@ -297,9 +297,13 @@ def _compute_edit_metrics(
         return (0, 0, 0)
 
 
-def _normalize_to_relative(file_path: str) -> str:
-    """將絕對路徑轉為相對於專案根目錄的形式（供 framework_paths 比對）。"""
-    project_dir = _get_project_dir()
+def _normalize_to_relative(file_path: str, project_dir: Optional[Path] = None) -> str:
+    """將絕對路徑轉為相對於專案根目錄的形式（供 framework_paths 比對）。
+
+    project_dir 為作用根（get_action_root）；None 時沿用 _get_project_dir()。
+    """
+    if project_dir is None:
+        project_dir = _get_project_dir()
     try:
         p = Path(file_path).resolve()
         return str(p.relative_to(project_dir.resolve()))
@@ -311,7 +315,7 @@ def _normalize_to_relative(file_path: str) -> str:
 
 
 def main() -> int:
-    logger = setup_hook_logging("framework-rule-edit-skill-trigger")
+    logger = setup_hook_logging(HOOK_NAME)
 
     input_data = read_json_from_stdin(logger)
     if input_data is None:
@@ -327,7 +331,12 @@ def main() -> int:
         logger.debug("跳過：tool_input 無 file_path")
         return 0
 
-    rel_path = _normalize_to_relative(file_path)
+    # 編輯目標相對化採作用根；payload 缺 cwd 時不呼叫 helper，沿用原解析
+    action_root = None
+    if input_data.get("cwd"):
+        from lib.git_utils import get_action_root
+        action_root = get_action_root(input_data, _get_project_dir())
+    rel_path = _normalize_to_relative(file_path, action_root)
 
     if not framework_paths.is_framework_path(rel_path):
         logger.debug("跳過：非 framework 路徑 %s", rel_path)

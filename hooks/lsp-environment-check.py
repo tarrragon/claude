@@ -77,8 +77,12 @@ def load_config() -> dict[str, Any]:
 
 # === 專案類型偵測 ===
 
-def detect_project_type(config: dict[str, Any]) -> list[str]:
-    """偵測專案類型（簡化版：只檢查檔案存在）"""
+def detect_project_type(config: dict[str, Any], project_root: Path | None = None) -> list[str]:
+    """偵測專案類型（簡化版：只檢查檔案存在）
+
+    project_root 為作用根；None 時沿用模組常數 PROJECT_ROOT。
+    """
+    root = project_root if project_root is not None else PROJECT_ROOT
     detected_types = []
     project_detection = config.get("project_type_detection", {})
 
@@ -87,7 +91,7 @@ def detect_project_type(config: dict[str, Any]) -> list[str]:
 
         # 只檢查檔案是否存在
         for indicator in indicators:
-            if (PROJECT_ROOT / indicator).exists():
+            if (root / indicator).exists():
                 detected_types.append(project_type)
                 break
 
@@ -240,6 +244,20 @@ def generate_report(
     hook_output("=" * 50, "info")
 
 
+def resolve_action_root() -> Path:
+    """作用根：SessionStart payload.cwd 所屬 checkout；缺 cwd 時沿用 PROJECT_ROOT。"""
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return PROJECT_ROOT
+        payload = json.loads(sys.stdin.read() or "{}")
+    except (OSError, ValueError):
+        return PROJECT_ROOT
+    if not isinstance(payload, dict) or not payload.get("cwd"):
+        return PROJECT_ROOT
+    from lib.git_utils import get_action_root
+    return get_action_root(payload, PROJECT_ROOT)
+
+
 def main() -> int:
     """主程式"""
     logger = setup_hook_logging("lsp-environment-check")
@@ -260,7 +278,7 @@ def main() -> int:
     logger.debug(f"Detected OS type: {os_type}")
 
     # 偵測專案類型
-    project_types = detect_project_type(config)
+    project_types = detect_project_type(config, resolve_action_root())
 
     # 檢查基本 LSP
     basic_results, basic_missing = check_basic_lsp(config, os_type, logger)

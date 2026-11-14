@@ -9,7 +9,7 @@ Canonical Schema 清單一致性檢查 Hook
 觸發時機: SessionStart
 模式: 提醒為主（不阻擋操作），一致時靜默
 
-動機（0.0.1-W1-006，承接 0.0.1-W1-004 成因分析）：`v2.12.0` 於建立端
+動機（承接成因分析）：`v2.12.0` 於建立端
 `CANONICAL_BODY_SECTIONS` 新增 `Spawn Requests` 成員，但 3 份驗證端
 `_SCHEMA_SECTION_NAMES` 清單與 2 份文件的章節清單未同步更新，5 處下游
 定義同時失準並潛伏 15 天未被察覺（PC-BAL-001）。既有 hook 有版本一致性
@@ -29,7 +29,7 @@ Canonical Schema 清單一致性檢查 Hook
 
 已知既有落差（本 hook 的設計目的即讓其可見，非本 hook 待修復範圍）：
 - 3 份驗證端清單目前不含 `Spawn Requests`（方案 A：驗證端直接 import
-  建立端常數，屬上游框架依賴方向決策，已於 0.0.1-W1-006 明確排除）。
+  建立端常數，屬上游框架依賴方向決策，已明確排除）。
 
 檢查邏輯（純文字 regex 擷取，不 import 目標模組，避免觸發套件初始化副作用，
 與 spec-version-consistency-check-hook.py 一致的設計選擇）:
@@ -56,7 +56,7 @@ from typing import List, NamedTuple, Optional, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, get_project_root
+from lib import setup_hook_logging, run_hook_safely, get_code_root
 
 HOOK_NAME = "canonical-schema-consistency-check-hook"
 
@@ -305,7 +305,7 @@ def main() -> int:
     已比照 session-start-gitignore-check-hook 的分流修正。
     """
     logger = setup_hook_logging(HOOK_NAME)
-    project_root = get_project_root()
+    project_root = get_code_root()
 
     drifts = scan_schema_drifts(project_root)
 

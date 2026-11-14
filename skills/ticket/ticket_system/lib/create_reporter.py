@@ -107,10 +107,10 @@ def print_create_checklist(
     # 變更 4：初步認知負擔評估
     _print_cognitive_load_assessment(new_ticket)
 
-    # 變更 5：strategy 完整度檢查（W3-011, PC-040 引導）
+    # 變更 5：strategy 完整度檢查（PC-040 引導）
     _print_strategy_completeness_check(new_ticket)
 
-    # SRP 偵測（W3-002）
+    # SRP 偵測
     if new_ticket:
         what_text = new_ticket.get("what", "") or ""
         acceptance = new_ticket.get("acceptance", []) or []
@@ -119,7 +119,7 @@ def print_create_checklist(
             for warning in srp_warnings:
                 print(format_warning(warning))
 
-    # SPEC 引用驗證（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
+    # SPEC 引用驗證（SPEC-008 誤植跨票傳染防護）
     if new_ticket:
         spec_warnings = detect_unregistered_spec_references(new_ticket)
         if spec_warnings:
@@ -313,7 +313,7 @@ def _print_strategy_completeness_check(
     new_ticket: Optional[Dict[str, Any]],
 ) -> None:
     """
-    檢查 how.strategy 欄位是否已填寫（W3-011, PC-040 引導）。
+    檢查 how.strategy 欄位是否已填寫（PC-040 引導）。
 
     IMP/ADJ 類型的 Ticket 需要在派發代理人前提供 Context Bundle，
     strategy 欄位是其中的關鍵部分。提前提醒 PM 填寫。

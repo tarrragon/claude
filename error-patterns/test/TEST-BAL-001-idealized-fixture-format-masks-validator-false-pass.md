@@ -3,7 +3,6 @@ id: TEST-BAL-001
 title: 測試 fixture 用理想化格式，真實輸入格式不同致 validator 靜默假通過
 severity: high
 category: test
-source_ticket: 0.1.0-W2-016.3
 related:
  - PC-165
  - PC-BAL-010
@@ -15,7 +14,7 @@ related:
 
 一個機械 validator / gate（覆蓋檢查、格式檢查、解析器）對真實目標檔案執行時回傳 exit 0「通過」，但**實際一個項目都沒檢查**——因為它的解析 regex / parser 只認測試 fixture 用的理想化格式，真實檔案用了不同但合法的變體格式，導致抽取結果為空集、差集為空、假通過。
 
-**本案具體樣態**（W2-016.3 check_domain_coverage.py）：
+**本案具體樣態**（check_domain_coverage.py）：
 
 - validator 抽 spec FR：`FR_HEADER_RE = ^###\s+(FR-\d+):`（只認 H3 `### FR-XX:`）。
 - 單元測試的 fixture 全用 H3（對齊 domain-map-template 的 H3 慣例）→ 11 測試全綠。
@@ -46,6 +45,6 @@ related:
 
 ## 相關
 
-- 來源：`0.1.0-W2-016.3`；由 multi-round-review Round 2-C（可執行性 walkthrough 對真實 SPEC-001）抓出——單元測試（理想 fixture）與撰寫者手動整合驗證皆未觸及，證明「對真實輸入執行」是不可省的 frame。
+- 來源：由 multi-round-review Round 2-C（可執行性 walkthrough 對真實 SPEC-001）抓出——單元測試（理想 fixture）與撰寫者手動整合驗證皆未觸及，證明「對真實輸入執行」是不可省的 frame。
 - 上位家族：`PC-BAL-010`（驗證管道對待驗現象不敏感）——本模式屬其恆真側成員，兩向樣態與判別順序見該檔。
 - 相關：`PC-165`（false-positive fix chain，mock 遮蔽 runtime）、quality-baseline 規則 1 邊界（測試綠燈 ≠ Runtime 正確）、`tool-output-trust-rules` 規則 3（固定值交叉驗證）。

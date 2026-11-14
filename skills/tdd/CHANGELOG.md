@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.13.1（2026-11-14）— `hooks/layer-boundary-validator-hook.py` 移除未使用的 `get_project_root` 匯入。hook 行為與 skill 指令內容不變。
+
 **Version**: 2.13.0 — 各 reference 裡的「住在」換成實際的動詞（寫在、放在、位於），照寫作規範「住在一律換」的判定：`doc-handoff.md`、`portable-design-boundary.md`、`test-object-catalogue.md`、`project-integration/traceability-matrix.md`。
 
 **Version**: 2.12.1 — 術語校正：「判準」全數改為「判斷標準」（「停止判準」改「停止條件」）。上一輪全站替換之後這個縮寫又回流，詞面在工程讀者端讀不出來

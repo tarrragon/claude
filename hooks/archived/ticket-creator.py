@@ -444,7 +444,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     parts = args.id.split("-W")
     if len(parts) != 2:
         print(f"❌ 無效的 Ticket ID 格式: {args.id}")
-        print("   正確格式: {VERSION}-W{WAVE}-{SEQ}, 例如: 0.16.0-W1-001")
+        print("   正確格式: {VERSION}-W{WAVE}-{SEQ}, 例如: 0.16.0 版第 1 波第 1 號")
         return 1
 
     version = parts[0]
@@ -529,7 +529,7 @@ def main() -> int:
     create_parser.add_argument("--action", required=True, help="動詞 (實作/修復/新增/重構)")
     create_parser.add_argument("--target", required=True, help="單一目標")
     create_parser.add_argument("--agent", required=True, help="執行代理人")
-    create_parser.add_argument("--parent", help="父任務 ID（建立子任務時使用，如 0.31.0-W3-002）")
+    create_parser.add_argument("--parent", help="父任務 ID（建立子任務時使用，如子票的父票 ID）")
     create_parser.add_argument("--auto-seq", action="store_true",
                               help="自動取得下一個可用序號（忽略 --seq）")
     create_parser.add_argument("--force", "-f", action="store_true",

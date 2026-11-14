@@ -71,20 +71,20 @@ Agent definition frontmatter 應更精確，例如將「Tools: All except Edit, 
 
 ## 觸發案例
 
-### W17-008.7（本 Pattern 首次發現）
+### 首次發現案例（本 Pattern）
 
-情境：並行派發 6 個 Explore 做小型 ANA；其中 W17-008.7 agent 完成完整 8+ 組合矩陣 + 4 歧義點分析，但 return message 宣稱：
+情境：並行派發 6 個 Explore 做小型 ANA；其中一個 agent 完成完整 8+ 組合矩陣 + 4 歧義點分析，但 return message 宣稱：
 
 > 由於當前為只讀模式，無法直接執行 `ticket track append-log` 命令。上述完整分析結果已在系統中生成，可由有編輯權限的代理人執行以下命令追加到 Ticket。
 
-PM 接收回報後察覺 ticket Solution 區段仍空白，代為 `ticket track append-log 0.18.0-W17-008.7 --section "Solution"` 將 agent report 內容寫入。
+PM 接收回報後察覺 ticket Solution 區段仍空白，代為 `ticket track append-log <ticket-id> --section "Solution"` 將 agent report 內容寫入。
 
-**延伸觀察**：W17-008.7 agent 在同一 session 其他 5 個並行 agent（W17-004.1/.2/.3 之前、W17-007、W17-009、W17-008.8/.10/.11）皆成功用 ticket CLI 寫回——**同一 tool 集合，行為卻不一致**，指向 LLM 推理不穩定性而非 tool 真實限制。
+**延伸觀察**：該 agent 在同一 session 其他 5 個並行 agent 皆成功用 ticket CLI 寫回——**同一 tool 集合，行為卻不一致**，指向 LLM 推理不穩定性而非 tool 真實限制。
 
-### 歷史關聯：W17-004.2 vs W17-004.3 結論矛盾
+### 歷史關聯：兩個並行視角結論矛盾
 
-- W17-004.2：`--source-ticket` 存在但副作用未文件化（證據：讀 create.py line 861-862）
-- W17-004.3：`--source-ticket` 缺席，PM 被迫用 `--parent` 繞路（純推理，無讀 create.py 佐證）
+- 視角 2：`--source-ticket` 存在但副作用未文件化（證據：讀 create.py line 861-862）
+- 視角 3：`--source-ticket` 缺席，PM 被迫用 `--parent` 繞路（純推理，無讀 create.py 佐證）
 
 兩案共同模式：agent hallucinate 系統限制 / 邊界，需 PM 實證驗證。
 
@@ -101,4 +101,4 @@ PM 接收回報後察覺 ticket Solution 區段仍空白，代為 `ticket track 
 ---
 
 **Last Updated**: 2026-04-20
-**Version**: 1.0.0 — 從 W17-008.7 agent 誤判唯讀模式案例建立
+**Version**: 1.0.0 — 從 agent 誤判唯讀模式案例建立

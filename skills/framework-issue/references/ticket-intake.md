@@ -145,7 +145,7 @@ IMP 票被 close 後，執行內容住在「待辦與來源」；之後依階段
 
 1. `show <issue-ref>`：建立的區段全部在索引內、「當前結論」第一則。
 2. `check <issue-ref>`：三項警訊皆未命中（剛 init 的 issue 索引一致、無觀測落後）。
-3. 本地擁有登記檔 `.claude/state/framework-issue-owned.json` 含此 issue（區段建立成功即寫入）；缺失時 SessionStart 檢查會退回前綴推導。
+3. 本地擁有登記檔 `.claude/state/framework-issue-owned.json` 含此 issue（區段建立成功即寫入）；缺失時 SessionStart 檢查不執行，以 `rebuild-owned` 重建。
 4. 來源票對照（票 ID、型別、標題、處置、落點區段）以 `ticket track append-log <派發票> --section "Solution"` 寫入派發票——它是「每張票已依範圍規則處置」的驗證證據。表頭含「處置」欄使 acceptance gate 的 spawn 落地檢查自動排除該表格，不誤判為 spawn 規劃（判準見 `.claude/hooks/acceptance_checkers/ana_spawn_consistency_checker.py`）。查重關係判定表與分群「實際落點」欄同寫 Solution。同機器並行 session 各發一份對照表。
 5. 對他方認領主題本方只做了 `observe` 的，觀測內容第一行寫「來自 <session>，對照表在 <派發票 ID>」（首行標記由工具寫入，不重複）。
 

@@ -81,6 +81,14 @@ def _mk_subprocess_side_effect(
         local_branches: git branch --list 輸出（0.2.1-W3-806 新增）
     """
     unmerged_per_branch = unmerged_per_branch or {}
+    # 3.3.0-W1-068：ahead=0 的 worktree 另查分支頭是否有自有提交（rev-parse 對
+    # rev-list --first-parent main）與 worktree 自身的 git status。預設模擬「有自有
+    # 提交、工作區乾淨」，即真正已合併、可清理的 worktree。
+    worktree_paths = {
+        line.split(" ", 1)[1]
+        for line in worktree_porcelain.splitlines()
+        if line.startswith("worktree ")
+    }
 
     def side_effect(cmd, **kwargs):
         result = MagicMock()
@@ -118,8 +126,17 @@ def _mk_subprocess_side_effect(
                 result.stdout = "\n".join(commits)
             return result
 
+        if "rev-parse" in parts:
+            result.stdout = "tip-" + parts[-1]
+            return result
+
+        if "rev-list" in parts:
+            result.stdout = "main-head\nmain-parent"
+            return result
+
         if "status" in parts:
-            result.stdout = status_porcelain
+            in_worktree = str(kwargs.get("cwd") or "") in worktree_paths
+            result.stdout = "" if in_worktree else status_porcelain
             return result
 
         return result

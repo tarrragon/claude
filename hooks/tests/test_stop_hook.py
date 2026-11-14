@@ -23,6 +23,9 @@ def load_stop_hook_module():
     spec = importlib.util.spec_from_file_location("handoff_auto_resume_stop_hook", STOP_HOOK_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # fixture 的票號在 tmp 專案下都查不到，把孤兒判定隔離為「非孤兒」；
+    # 孤兒行為由 test_handoff_auto_resume_stop_hook.py 的孤兒測試覆蓋
+    module._lib_orphan_reason = lambda record, ticket_id, project_root=None: ""
     return module
 
 

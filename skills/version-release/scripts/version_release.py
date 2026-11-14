@@ -34,7 +34,7 @@ from typing import Optional, List, Tuple, Dict
 import yaml
 
 def _resolve_claude_dir() -> Optional[Path]:
-    """定位專案 .claude 目錄（0.38.1-W1-114）。
+    """定位專案 .claude 目錄。
 
     安裝版 CLI（uv tool install）的 __file__ 位於 site-packages，其
     parent.parent.parent 不再是 .claude/skills，source layout 的相對路徑
@@ -1356,7 +1356,7 @@ def print_config_disclosure(root: Path) -> None:
     """
     印出本次執行實際載入的 .version-release.yaml 路徑，或未找到時印出偵測到的專案型別。
 
-    目的：讓 stale CLI 或錯誤 cwd 導致配置靜默未載入時有明確線索可查（0.4.0-W1-005）。
+    目的：讓 stale CLI 或錯誤 cwd 導致配置靜默未載入時有明確線索可查。
     """
     config_path = find_version_release_config_path(root)
     if config_path is not None:
@@ -1933,7 +1933,7 @@ def check_placeholder_implementations(
 def _detect_silent_placeholder(
     dart_file: Path, lines: List[str], hits: List[str]
 ) -> None:
-    """W1-117: 偵測「佔位關鍵字註解 + N 行內 return 空值」的靜默佔位模式。"""
+    """偵測「佔位關鍵字註解 + N 行內 return 空值」的靜默佔位模式。"""
     for i, line in enumerate(lines):
         if not _SILENT_PLACEHOLDER_COMMENT.search(line):
             continue
@@ -3145,6 +3145,42 @@ def activate_next_planned_version(
     return ensure_version_activated(next_version, dry_run, todolist_path=todolist_path)
 
 
+def advance_after_completion(
+    todolist_path: Path,
+    completed_version: str,
+    dry_run: bool = False,
+    activate_next: bool = False,
+    force_cross_major: bool = False,
+) -> bool:
+    """本版標 completed 後處置下一版：預設維持 planned，進入版本空窗。
+
+    下一版要等發版後回饋檢查決定（先發 patch 或直接開下一個 minor），
+    發版時就推進最小的 planned 版本，等於在檢查前選定下一版。空窗定義見
+    `.claude/pm-rules/version-progression.md`〈版本生命週期〉「版本空窗」。
+
+    Args:
+        todolist_path: todolist.yaml 路徑
+        completed_version: 剛標為 completed 的版本
+        dry_run: 預覽模式
+        activate_next: True 時沿用舊行為，立即推進下一個 planned 版本
+        force_cross_major: 傳給 activate_next_planned_version 的跨大版本放行
+
+    Returns:
+        是否成功；不推進時恆為 True
+    """
+    if activate_next:
+        return activate_next_planned_version(
+            todolist_path, completed_version, dry_run, force_cross_major=force_cross_major
+        )
+    print_info(
+        f"下一版維持 planned（版本空窗）：{completed_version} 已完成，"
+        "完成發版後回饋檢查、決定下一版後，以 "
+        "`version-release start --version <下一版>` 轉 active"
+    )
+    print_info("要在發版時直接推進下一個 planned 版本，加 --activate-next")
+    return True
+
+
 def create_worklog_structure(
     version: str, description: str, dry_run: bool = False,
     worklog_path_pattern: Optional[str] = None,
@@ -4325,6 +4361,11 @@ def main():
     release_parser.add_argument("--dry-run", action="store_true", help="預覽模式")
     release_parser.add_argument("--force", action="store_true", help="強制執行")
     release_parser.add_argument("--defer-td", help="將待處理 TD 延後到指定版本 (例如 0.21.0)")
+    release_parser.add_argument(
+        "--activate-next",
+        action="store_true",
+        help="標 completed 後立即推進下一個 planned 版本（預設維持 planned，進入版本空窗）",
+    )
 
     # finish 子命令：發版收尾（前移非阻擋 pending Ticket 後執行既有發布流程）
     finish_parser = subparsers.add_parser("finish", help="發版收尾：前移非阻擋 pending Ticket 並執行發布流程")
@@ -4332,6 +4373,11 @@ def main():
     finish_parser.add_argument("--dry-run", action="store_true", help="預覽模式")
     finish_parser.add_argument("--force", action="store_true", help="強制執行")
     finish_parser.add_argument("--defer-td", help="將待處理 TD 延後到指定版本 (例如 0.21.0)")
+    finish_parser.add_argument(
+        "--activate-next",
+        action="store_true",
+        help="標 completed 後立即推進下一個 planned 版本（預設維持 planned，進入版本空窗）",
+    )
 
     # check 子命令
     check_parser = subparsers.add_parser("check", help="只執行檢查")
@@ -4515,11 +4561,18 @@ def main():
                     f"todolist.yaml 版本 {version} 標記 completed 失敗（不中止發布，請手動確認）"
                 )
 
-            # 自動推進下一個 planned 版本為 active
-            print_section("Step: Activate Next Version")
+            # 下一版處置：預設維持 planned（版本空窗），--activate-next 才推進
+            activate_next = getattr(args, "activate_next", False)
+            print_section(
+                "Step: Activate Next Version" if activate_next else "Step: Keep Next Version Planned"
+            )
             force_cross_major = args.force if hasattr(args, "force") else False
-            activate_ok = activate_next_planned_version(
-                todolist_path, version, dry_run, force_cross_major=force_cross_major
+            activate_ok = advance_after_completion(
+                todolist_path,
+                version,
+                dry_run,
+                activate_next=activate_next,
+                force_cross_major=force_cross_major,
             )
             if not activate_ok:
                 print_warning(
@@ -4542,7 +4595,11 @@ def main():
                 version,
                 dry_run,
                 baseline=finish_baseline,
-                commit_message=f"docs: 版本 {version} 標記完成並啟用下一版本",
+                commit_message=(
+                    f"docs: 版本 {version} 標記完成並啟用下一版本"
+                    if activate_next
+                    else f"docs: 版本 {version} 標記完成"
+                ),
                 extra_paths=resolve_activation_version_paths(finish_root),
             ):
                 print_warning("版本啟用變更提交失敗（請手動確認 todolist.yaml 狀態）")

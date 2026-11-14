@@ -15,7 +15,7 @@ severity: high
 | 編號 | PC-SCLK-006 |
 | 類別 | process-compliance |
 | 風險等級 | 高 |
-| 首發時間 | 2026-07-31（screen_clock 1.4.0-W2-006 Phase 1.5 多視角審查，Phase 1 產出的螢幕判定契約） |
+| 首發時間 | 2026-07-31（screen_clock 專案 Phase 1.5 多視角審查，Phase 1 產出的螢幕判定契約） |
 | 姊妹模式 | PC-165（測試綠燈不等於 runtime 正確）、PC-SCLK-004（推測性歸因取代逐字證據） |
 
 ---
@@ -33,7 +33,7 @@ severity: high
 
 ---
 
-## 實例（2026-07-31，screen_clock 1.4.0-W2-006）
+## 實例（2026-07-31，screen_clock 螢幕判定契約審查）
 
 TDD Phase 1 產出的螢幕判定契約，同一節內：
 
@@ -133,4 +133,4 @@ TDD Phase 1 產出的螢幕判定契約，同一節內：
 
 ---
 
-**Last Updated**: 2026-07-31 | **Version**: 1.0.0 — 初始建立（screen_clock 1.4.0-W2-006 Phase 1.5 審查發現）
+**Last Updated**: 2026-07-31 | **Version**: 1.0.0 — 初始建立（screen_clock Phase 1.5 審查發現）

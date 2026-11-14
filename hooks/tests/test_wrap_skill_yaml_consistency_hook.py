@@ -292,6 +292,64 @@ class TestAlignmentFile:
 
 
 # ============================================================================
+# AC4 main() 判定：缺檔警告放行、無法解析阻擋（正向對照）
+# ============================================================================
+
+class TestMainAc4Decision:
+    """main() 層的放行／阻擋判定。
+
+    缺檔原本阻擋，使 SKILL.md 與 wrap-triggers.yaml 無法以 Edit/Write 修改；
+    改為警告後，以「檔案存在但無法解析」作正向對照，確認阻擋分支仍在。
+    """
+
+    def _run_main(self, hook_module, tmp_path, file_rel):
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {"file_path": str(tmp_path / file_rel)},
+        }
+        with patch.object(hook_module, "read_json_from_stdin", return_value=payload), \
+             patch.object(hook_module, "get_project_root", return_value=tmp_path), \
+             patch.object(hook_module, "setup_hook_logging", return_value=MagicMock()), \
+             patch.object(hook_module, "check_version_no_regress", return_value=[]):
+            return hook_module.main()
+
+    def _alignment_path(self, tmp_path):
+        target = tmp_path / hook_module_alignment_rel()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return target
+
+    def test_missing_alignment_allows_and_tells_model(
+        self, hook_module, tmp_path, capsys
+    ):
+        code = self._run_main(hook_module, tmp_path, hook_module.SKILL_REL_PATH)
+        out = capsys.readouterr()
+        assert code == 0
+        assert "映射檔缺失" in out.err
+        # 模型可見管道：stdout 的 additionalContext JSON
+        assert "additionalContext" in out.out
+        assert "映射檔缺失" in out.out
+
+    def test_unparseable_alignment_still_blocks(self, hook_module, tmp_path):
+        """正向對照：映射檔存在但 YAML 壞掉，仍 exit 2。"""
+        self._alignment_path(tmp_path).write_text(
+            "::: not yaml :::\n  - bad\n bad", encoding="utf-8"
+        )
+        code = self._run_main(hook_module, tmp_path, hook_module.SKILL_REL_PATH)
+        assert code == 2
+
+    def test_unwatched_file_skips(self, hook_module, tmp_path):
+        code = self._run_main(hook_module, tmp_path, "docs/other.md")
+        assert code == 0
+
+
+def hook_module_alignment_rel():
+    return (
+        ".claude/skills/wrap-decision/references/project-integration/"
+        "triggers-alignment.yaml"
+    )
+
+
+# ============================================================================
 # 公用工具：路徑正規化、版本提取
 # ============================================================================
 

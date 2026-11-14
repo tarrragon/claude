@@ -10,8 +10,8 @@ handoff = 純指針 + 必要 metadata。內容明示如下：
 
 | 必含 | 禁含 |
 |------|------|
-| `target_ticket_id`（絕對指向，W17-164） | 任務描述 / what / 動詞 + 受詞 |
-| `from_ticket` + `direction`（相對指向，W17-162） | acceptance criteria |
+| `target_ticket_id`（絕對指向） | 任務描述 / what / 動詞 + 受詞 |
+| `from_ticket` + `direction`（相對指向） | acceptance criteria |
 | `created_at`（建立時間） | 5W1H 任一欄位（who/what/when/where/why/how） |
 | `source_ticket`（任務鏈來源 ticket，可選） | 實作策略 / Solution 草稿 |
 | `auto_generated`（旗標，True/False） | Problem Analysis |
@@ -39,9 +39,9 @@ handoff = 純指針 + 必要 metadata。內容明示如下：
 
 ---
 
-## Schema 落地（W17-164 機制連結）
+## Schema 落地（`target_ticket_id` 機制連結）
 
-W17-164 引入的 `target_ticket_id` 欄位是本原則的 schema 表達：
+`target_ticket_id` 欄位的引入是本原則的 schema 表達：
 
 | 機制元素 | 原則對應 |
 |---------|---------|
@@ -50,7 +50,7 @@ W17-164 引入的 `target_ticket_id` 欄位是本原則的 schema 表達：
 | `resolve_target(record)` 優先序 | target > direction fallback，本質是「指針」優於「相對方位」 |
 | `direction="context-refresh"` 固定 | direction 退為描述符，不再承擔指向責任 |
 
-**詮釋**：W17-164 之前 handoff 用 `from_ticket + direction` 間接表達指向（如 `direction=to-child:X`），讀取端需從 direction 後綴解析；W17-164 後新生 handoff 統一以 `target_ticket_id` 直接寫入，舊 JSON 由 fallback 路徑相容讀取。schema 演進的內在動機，正是本方法論定義的「純指針」原則。
+**詮釋**：`target_ticket_id` 引入之前 handoff 用 `from_ticket + direction` 間接表達指向（如 `direction=to-child:X`），讀取端需從 direction 後綴解析；引入之後新生 handoff 統一以 `target_ticket_id` 直接寫入，舊 JSON 由 fallback 路徑相容讀取。schema 演進的內在動機，正是本方法論定義的「純指針」原則。
 
 ---
 
@@ -71,23 +71,23 @@ W17-164 引入的 `target_ticket_id` 欄位是本原則的 schema 表達：
 
 ## 違反案例
 
-### 案例 1：W17-162 ANA 觀察的設計偏離
+### 案例 1：一次 ANA 觀察到的設計偏離
 
-W17-162 ANA `why` 欄位記載：
+該 ANA 的 `why` 欄位記載：
 
 > 設計初衷：handoff = 對焦指針讓下 session 快速指向「該執行的 ticket」（target），任務細節在 ticket md。
 > 實際運作：handoff JSON 以「剛完成 ticket（source）+ 相對方向 direction」為主，缺絕對 target 指向。
-> 具體偏離：completed ticket 不應被 handoff 指定卻仍出現在 SessionStart「待恢復任務」提示；W10-047.4 案例 direction=to-source 但 sources_declared=0 變孤兒 JSON。
+> 具體偏離：completed ticket 不應被 handoff 指定卻仍出現在 SessionStart「待恢復任務」提示；另一案例 direction=to-source 但 sources_declared=0 變孤兒 JSON。
 
-**偏離本質**：缺乏顯式「指針」欄位，導致讀取端反向從 source + direction 推導，schema 一致性 bug 連環（W17-161 / W10-047.4）。W17-164 引入 `target_ticket_id` 是 schema 修補，本方法論是原則層說明「為何要修」。
+**偏離本質**：缺乏顯式「指針」欄位，導致讀取端反向從 source + direction 推導，schema 一致性 bug 連環。引入 `target_ticket_id` 是 schema 修補，本方法論是原則層說明「為何要修」。
 
 ### 案例 2：本 session（2026-05-09）PM 收尾選項違反
 
-W17-175 ticket why 記載：
+另一張 ticket 的 why 記載：
 
-> 本 session 收尾時 PM 自己寫「handoff JSON 記錄 W17-174 為下 session 首選接手項」違反此原則被用戶察覺。
+> 本 session 收尾時 PM 自己寫「handoff JSON 記錄某 ticket 為下 session 首選接手項」違反此原則被用戶察覺。
 
-**違反本質**：PM 在向用戶提議 handoff 時，於 AskUserQuestion 選項描述中放入「W17-174 為下 session 首選接手項」這種任務優先級判斷——優先級判斷屬 scheduler / runqueue 職責（priority 排序），不屬 handoff 內容。handoff 只該寫「指向 W17-174」，不該寫「為什麼指向它」。
+**違反本質**：PM 在向用戶提議 handoff 時，於 AskUserQuestion 選項描述中放入「某 ticket 為下 session 首選接手項」這種任務優先級判斷——優先級判斷屬 scheduler / runqueue 職責（priority 排序），不屬 handoff 內容。handoff 只該寫「指向某 ticket」，不該寫「為什麼指向它」。
 
 **修正方向**：PM 寫 handoff 時，自問「這句話是指針還是任務說明？」若是後者，移到 ticket md 對應章節；handoff 只留純指針 + 必要 metadata。
 
@@ -107,7 +107,7 @@ W17-175 ticket why 記載：
 
 ## 相關文件
 
-- `.claude/skills/ticket/references/handoff-command.md` — handoff CLI 機制層說明（W17-164 落地細節）
+- `.claude/skills/ticket/references/handoff-command.md` — handoff CLI 機制層說明（`target_ticket_id` 落地細節）
 - `.claude/skills/ticket/references/handoff-command.md`〈設計意圖〉 — 命令層使用指引（原指向 SKILL.md「handoff - 任務鏈管理與 Context 交接」章節，該 H3 已隨拆分移除，設計原則句現住此節）
 - `.claude/methodologies/atomic-ticket-methodology.md`「任務鏈核心哲學」章節 — handoff 在任務鏈中的位置
 - `.claude/rules/core/document-format-rules.md` — handoff JSON 格式規範（檔案命名、frontmatter）
@@ -115,6 +115,6 @@ W17-175 ticket why 記載：
 ---
 
 **Last Updated**: 2026-05-10
-**Version**: 1.0.0 — 從 W17-175 落地（升級 W17-162 ANA why 內文 + W17-164 schema 落地的原則層說明），與機制層（references）+ 命令層（SKILL）形成三層分離：原則層回答「為何如此設計」、機制層回答「schema 如何表達」、命令層回答「如何使用」。
+**Version**: 1.0.0 — 從 ANA why 內文與 `target_ticket_id` schema 落地升級而來（原則層說明），與機制層（references）+ 命令層（SKILL）形成三層分離：原則層回答「為何如此設計」、機制層回答「schema 如何表達」、命令層回答「如何使用」。
 
-**Source**: W17-162 ANA why 欄位（設計初衷觀察）+ W17-164 target_ticket_id schema 落地（機制實證）+ W17-175 升級需求（PM 反覆違反原則案例）
+**Source**: ANA why 欄位（設計初衷觀察）+ `target_ticket_id` schema 落地（機制實證）+ 升級需求（PM 反覆違反原則案例）

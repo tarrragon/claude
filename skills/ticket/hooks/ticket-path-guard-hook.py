@@ -64,8 +64,17 @@ CORRECT_TICKET_PATH = r"^docs/work-logs/v.*/tickets/.*\.md$"
 # ============================================================================
 
 def normalize_path(file_path: str, logger) -> str:
-    """正規化檔案路徑"""
+    """正規化為相對於專案根目錄的路徑。
+
+    Edit／Write 工具傳入絕對路徑；FORBIDDEN_TICKET_PATH 以 ^\\.claude/ 錨定，
+    不剝除專案根時絕對路徑永遠比對不到，守衛恆放行。做法與
+    ticket-file-access-guard 的 normalize_path 相同。相對路徑（含 ./ 前綴，
+    commit 階段由 commit_content_guards 傳入）行為不變。
+    """
     normalized = file_path.replace("\\", "/")
+    project_root = str(get_project_root()).replace("\\", "/")
+    if normalized.startswith(project_root + "/"):
+        normalized = normalized[len(project_root) + 1:]
     if normalized.startswith("./"):
         normalized = normalized[2:]
     return normalized
@@ -111,18 +120,8 @@ def check_edit_permission(file_path: str, logger) -> Tuple[bool, str]:
 # Hook 輸出生成
 # ============================================================================
 
-def generate_hook_output(is_allowed: bool, reason: str, logger) -> Dict[str, Any]:
-    """生成 Hook 輸出"""
-    permission = GateMessages.TICKET_PATH_ALLOWED if is_allowed else GateMessages.TICKET_PATH_DENIED
-    decision = "allow" if is_allowed else "deny"
-
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": decision,
-            "permissionDecisionReason": reason,
-        }
-    }
+# 放行路徑不輸出 permissionDecision：allow 會略過平台的權限提示，等於代用戶
+# 核可；本 hook 只負責擋禁止路徑，放行時交回平台權限流程。
 
 
 
@@ -141,15 +140,8 @@ def main() -> int:
         # 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
         if not input_data:
-            logger.warning("輸入為空或解析失敗，返回預設允許")
-            error_output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "permissionDecisionReason": "輸入為空或解析失敗，預設允許"
-                }
-            }
-            print(json.dumps(error_output, ensure_ascii=False))
+            # fail-open：不輸出 decision，交回平台權限流程（不代為核可）
+            logger.warning("輸入為空或解析失敗，不輸出決策（交回平台權限流程）")
             return EXIT_ALLOW
 
         logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
@@ -160,8 +152,6 @@ def main() -> int:
         # 只檢查 Write, Edit 工具
         if tool_name not in ["Write", "Edit"]:
             logger.debug(f"跳過: 工具類型 {tool_name} 不在檢查範圍內")
-            result = generate_hook_output(True, f"工具 {tool_name} 不在檢查範圍")
-            print(json.dumps(result, ensure_ascii=False))
             return EXIT_ALLOW
 
         file_path = tool_input.get("file_path", "")
@@ -175,13 +165,14 @@ def main() -> int:
         else:
             is_allowed, reason = True, "未知工具類型，預設允許"
 
-        # 經 emit_hook_output：deny 輸出失敗時 SystemExit(2) 不被下方
-        # except Exception 吞成 allow（原行為為 fail-open）
-        emit_hook_output(
-            "PreToolUse",
-            permission_decision="allow" if is_allowed else "deny",
-            permission_decision_reason=reason,
-        )
+        # 只在阻擋時輸出。經 emit_hook_output：deny 輸出失敗時 SystemExit(2)
+        # 不被下方 except Exception 吞成放行
+        if not is_allowed:
+            emit_hook_output(
+                "PreToolUse",
+                permission_decision="deny",
+                permission_decision_reason=reason,
+            )
 
         log_entry = f"""[{datetime.now().isoformat()}]
   Tool: {tool_name}
@@ -196,15 +187,12 @@ def main() -> int:
         return exit_code
 
     except Exception as e:
-        logger.error(f"Hook 執行錯誤: {type(e).__name__}: {e}")
-        error_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": f"Hook 執行錯誤，預設允許: {str(e)}"
-            }
-        }
-        print(json.dumps(error_output, ensure_ascii=False))
+        # fail-open：不輸出 decision，交回平台權限流程；stderr + 日誌雙通道（規則 4）
+        logger.error(f"Hook 執行錯誤: {type(e).__name__}: {e}", exc_info=True)
+        sys.stderr.write(
+            f"[ticket-path-guard] Hook 執行錯誤，未判定即放行（交回平台權限流程）: "
+            f"{type(e).__name__}: {e}\n"
+        )
         return EXIT_ALLOW
 
 

@@ -154,6 +154,21 @@ class TestDispatchLayerFailureStillRunsFailClosedGuards:
         code, cap = self._run_main(tmp_path, monkeypatch, capsys, PASS_PAYLOAD, how)
         assert code == 1 and "分派失敗" in cap.err
 
+    @pytest.mark.parametrize("body,expected", [
+        ("sys.exit(run_hook_safely(main, 'g', fail_closed=True))\n", True),
+        ("sys.exit(run_hook_safely(\n    main,\n    'g',\n    fail_closed=True,\n))\n", True),
+        ("sys.exit(run_hook_safely(main, 'g'))\n", False),
+        # 正向對照（3.3.0-W1-204.4.4）：內部函式的同名引數不是入口宣告
+        ("msg = build_message(target, fail_closed=True)\n"
+         "sys.exit(run_hook_safely(main, 'g'))\n", False),
+        ("def f(fail_closed: bool = False):\n    return f(fail_closed=True)\n"
+         "sys.exit(run_hook_safely(main, 'g'))\n", False),
+    ])
+    def test_is_fail_closed_reads_run_hook_safely_argument_only(self, tmp_path, body, expected):
+        path = tmp_path / "h.py"
+        path.write_text(body, encoding="utf-8")
+        assert disp.is_fail_closed(path) is expected
+
     def test_fallback_list_matches_declared_fail_closed_guards(self):
         reg = json.loads((HOOKS_DIR / "hook-dispatch-registry.json").read_text(encoding="utf-8"))["groups"]
         for group, cfg in reg.items():

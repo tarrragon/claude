@@ -197,4 +197,4 @@ AI 反其道而行屬文化偏誤，非技術限制。本方法論旨在矯正�
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.0.0 - 從 personalized-consultation-methodology.md 外移：羽球選拍實證案例 + 五個跨領域案例 + 五種陷阱完整範例（W8-020.9 方法論瘦身校準）
+**Version**: 1.0.0 - 從 personalized-consultation-methodology.md 外移：羽球選拍實證案例 + 五個跨領域案例 + 五種陷阱完整範例（方法論瘦身校準）

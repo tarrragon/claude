@@ -664,24 +664,37 @@ class TestProcessGroupTermination:
 class TestSigtermForwarding:
     """hook 自身收到 SIGTERM 時須轉送給 start_new_session 的子群組。"""
 
-    _TRAP = "trap 'echo got >> \"{log}\"; exit 0' TERM; sleep 2 & wait"
+    # 子 shell 裝好 trap 後才寫就緒檔；送訊號的執行緒等到就緒檔出現才送，
+    # 不以固定延遲猜子程序何時就緒（負載下 0.6 秒計時器曾在 trap 安裝前觸發而假紅，規則 D1）
+    _TRAP = "trap 'echo got >> \"{log}\"; exit 0' TERM; echo ready > \"{ready}\"; sleep 5 & wait"
+    _READY_WAIT_SECONDS = 30
+
+    def _send_term_when_ready(self, ready, stop):
+        while not stop.is_set():
+            if ready.exists():
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+            stop.wait(0.05)
 
     def _run_with_self_term(self, log, forwarding=True):
         received = []
         previous = signal.signal(signal.SIGTERM, lambda s, f: received.append(s))
-        timer = threading.Timer(0.6, os.kill, (os.getpid(), signal.SIGTERM))
-        args = ["sh", "-c", self._TRAP.format(log=log)]
+        ready = log.with_name(log.name + ".ready")
+        stop = threading.Event()
+        timer = threading.Thread(target=self._send_term_when_ready, args=(ready, stop), daemon=True)
+        args = ["sh", "-c", self._TRAP.format(log=log, ready=ready)]
         try:
             timer.start()
             if forwarding:
                 run_with_graceful_timeout(args, 10, text=True)
             else:
-                with patch("lib.git_utils._forward_sigterm_to_group", lambda p: nullcontext()):
+                with patch("lib.git_utils._forward_sigterm_to_group", lambda: nullcontext(MagicMock())):
                     run_with_graceful_timeout(args, 10, text=True)
         finally:
-            timer.cancel()
+            stop.set()
+            timer.join(self._READY_WAIT_SECONDS)
             signal.signal(signal.SIGTERM, previous)
-        time.sleep(0.3)
+        assert ready.exists(), "子 shell 未寫出就緒檔，訊號未送出"
         return received
 
     def test_child_group_receives_term_and_previous_handler_called(self, tmp_path):
@@ -695,6 +708,26 @@ class TestSigtermForwarding:
         log = tmp_path / "term.log"
         self._run_with_self_term(log, forwarding=False)
         assert not log.exists()
+
+    def test_term_before_popen_is_forwarded_after_spawn(self, tmp_path):
+        """E2 正向對照：Popen 之前收到的 TERM 須在子程序建立後補送給子群組。"""
+        received = []
+        previous = signal.signal(signal.SIGTERM, lambda s, f: received.append(s))
+        real_popen = subprocess.Popen
+
+        def popen_after_term(*a, **kw):
+            os.kill(os.getpid(), signal.SIGTERM)  # 子程序建立前送 TERM
+            return real_popen(*a, **kw)
+
+        # 補送發生在子程序剛建立時（trap 未必已裝），以預設 TERM 動作判定：
+        # 收到轉送 -> returncode == -SIGTERM；未轉送 -> sleep 跑完 returncode 0
+        try:
+            with patch("lib.git_utils.subprocess.Popen", popen_after_term):
+                result = run_with_graceful_timeout(["sleep", "5"], 10, text=True)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        assert result.returncode == -signal.SIGTERM
+        assert received == [signal.SIGTERM]
 
     def test_handler_restored_after_run(self):
         before = signal.getsignal(signal.SIGTERM)

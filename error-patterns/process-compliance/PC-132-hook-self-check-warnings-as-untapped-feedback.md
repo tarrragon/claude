@@ -9,7 +9,7 @@
 | 編號 | PC-132 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-05-05（W17-144.1.1.1 ANA Method 6 落地） |
+| 首發時間 | 2026-05-05（ANA Method 6 落地） |
 | 姊妹模式 | PC-131（外部工具權威性質疑）/ PC-085（CJK codepoint 鄰近性） |
 
 ---
@@ -22,12 +22,12 @@ Hook 系統的 self-check 機制在每次執行時輸出 INFO 級警示（如「
 
 | 案例 | Hook self-check 內容 | 被忽視多久 |
 |------|------|------|
-| W17-144.1.1.1 | `askuserquestion-charset-guard-hook.py` 每次執行警示 12 個漏網簡體字（圖兩譯驛氣樂觀檢權鐵轉廣對應的簡體形式） | ≥ 1 週（2026-04-28 起反覆出現於 hook log） |
+| Method 6 反推案例 | `askuserquestion-charset-guard-hook.py` 每次執行警示 12 個漏網簡體字（圖兩譯驛氣樂觀檢權鐵轉廣對應的簡體形式） | ≥ 1 週（2026-04-28 起反覆出現於 hook log） |
 
 實際過程：
-- W17-144.1（detector 初版）—— 從 PC-072 文件 + 中文常用詞抽取種子，**未檢視 hook log**
-- W17-144.1.1（OpenCC 權威性質疑）—— 質疑工具但仍未檢視 hook log
-- W17-144.1.1.1（Method 6 才發現）—— 用戶質疑「還有沒有別的方法」後才意識到 hook log 是反推資源
+- detector 初版 —— 從 PC-072 文件 + 中文常用詞抽取種子，**未檢視 hook log**
+- OpenCC 權威性質疑 —— 質疑工具但仍未檢視 hook log
+- Method 6 才發現 —— 用戶質疑「還有沒有別的方法」後才意識到 hook log 是反推資源
 
 ---
 
@@ -127,14 +127,13 @@ grep "self-check\|漏網\|missing" .claude/hook-logs/<related-hook>/*.log | head
 
 ## 相關文件
 
-- `.claude/scripts/charset-pollution-detector.py` — W17-144.1.1.1 落地，_ANCHORS_SEED 含 Method 6 反推 12 字
+- `.claude/scripts/charset-pollution-detector.py` — Method 6 落地，_ANCHORS_SEED 含 Method 6 反推 12 字
 - `.claude/hooks/askuserquestion-charset-guard-hook.py` — PC-085 self-check 警示來源
-- `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-144.1.1.1.md` — Method 6 ANA 完整分析
 - `.claude/error-patterns/process-compliance/PC-085-cjk-codepoint-similarity-confusion.md` — 漏網警示的觸發 PC
 
 ---
 
 **Last Updated**: 2026-08-21
 **Version**: 1.1.0 — 標註規則 3 的 `ls .claude/hook-logs/<related-hook>/ | head -3` 因 hook 日誌每日輪替改造而語意窄化：由「最近 3 次觸發」變為「最近 3 個曾觸發的日期」（解析度變化，非結論失效）；補上精確計數時改用 grep 內容或 wc -l 的替代方法。
-**Version**: 1.0.0 — 初始建立：Hook self-check 警示是被忽視的反推資料源（W17-144.1.1.1）
+**Version**: 1.0.0 — 初始建立：Hook self-check 警示是被忽視的反推資料源
 **Source**: 用戶質疑「還有沒有別的方法判斷污染源」+ 即時實證 Hook log 反推 12 簡體字 + 意識到此資料源已被忽視至少 1 週

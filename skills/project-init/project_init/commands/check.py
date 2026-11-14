@@ -360,7 +360,7 @@ def _check_single_package(package, details: list[str]) -> bool:
 
     SHIM_CLIS 成員（以 cli_name 判定）為 cwd-resolving shim（ARCH-APP-002），
     每次呼叫皆從當前 repo 的 skill 目錄執行，恆等同最新原始碼，不套用
-    uv tool staleness 判定（0.2.1-W3-116 ANA）。
+    uv tool staleness 判定。
 
     Args:
         package: PackageInfo 物件。
@@ -437,7 +437,7 @@ def _handle_package_version_check(
 def _count_outdated_packages(result: CheckResult) -> int:
     """計算自製套件區段中 OUTDATED 項目的數量。
 
-    用於 summary 顯眼警示（W1-103 落地，PC-164 第二層防護）。
+    用於 summary 顯眼警示（PC-164 第二層防護）。
     """
     for section in result.sections:
         if section.name != "自製套件":
@@ -465,7 +465,7 @@ def _print_check_result(result: CheckResult) -> None:
 
     print(SEPARATOR)
     # 顯眼警示：自製套件 OUTDATED 時，summary 前加 [WARNING] 一行
-    # （W1-103，配合 PackageMessages.OUTDATED 顯眼前綴強化 stale CLI 沉默問題）
+    # （配合 PackageMessages.OUTDATED 顯眼前綴強化 stale CLI 沉默問題）
     outdated_count = _count_outdated_packages(result)
     if outdated_count > 0:
         print(PackageMessages.OUTDATED_SUMMARY_WARNING.format(count=outdated_count))

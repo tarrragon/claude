@@ -96,6 +96,8 @@ Mitigation 名稱對位 threat 名稱是字面層（defense theater）、必須�
 
 ### Dimension 4：Citation 時效性與精確度（citation accuracy）
 
+稿件引用的是對某個對象的評價（樂評、評測、使用心得、量測、考證或鑑定的結論、排名這類相對比較）而不是標準文件時，照 [source-to-teaching-analysis](source-to-teaching-analysis.md)〈引用評價時留意它評的時間點〉查：那一項是留意項，開 finding 的情形照那一節審查者那幾段，一律列可改。
+
 Citation 涵蓋兩類：**外部** 標準（OWASP / RFC / NIST / CIS）跟 **內部** citation（knowledge-cards 連結 / 跨章引用作為 control-of-record）。兩者都跟一般技術引用不同——外部 best practice 衰退快、原文常被引用扭曲；內部沒版本號 anchor、反而更易 silent drift / broken。Audit checklist：
 
 外部 citation：
@@ -321,7 +323,6 @@ Audit 完成後產出結構化報告——格式比照學術 peer review、但 w
 - [probe-independence-is-not-transferable](principles/probe-independence-is-not-transferable.md)：譯者拿得到作者意圖時，最該被偵測的那一類歧義會被安靜譯對——給這個條件為什麼不可讓渡，與寫作端該留下的是問句而不是譯文。
 - [term-probe-measures-register-not-invention](principles/term-probe-measures-register-not-invention.md)：一個詞是不是通用術語，用多份獨立定義的收斂度量——給控制詞的必要性與回答的四類讀法。
 - [methodology-multi-pass-embedding](principles/methodology-multi-pass-embedding.md)：方法論的 multi-pass 該 embed 在 pillar 裡——給它與獨立章節的差別。
-
 
 ## 快速啟動
 

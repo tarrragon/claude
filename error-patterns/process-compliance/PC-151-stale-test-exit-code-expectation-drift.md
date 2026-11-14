@@ -3,7 +3,6 @@ id: PC-151
 title: Stale 測試 exit code 期望未隨 CLI exit code 規範演進同步
 category: process-compliance
 severity: low
-source_case: 0.18.0-W14-046 / 0.18.0-W14-046.1
 created: 2026-05-18
 ---
 
@@ -21,7 +20,7 @@ E   assert 2 == 1
 或反向（期望 2，實際 1）。失敗訊息單純為數字不符，無錯誤類別差異。被 PM 或代理人遇到時容易被誤判為：
 
 - 「實作 bug：exit code 回錯了」
-- 「代理人虛構：報告中提及的測試名稱不存在於 repo」（W14-045 ↔ W14-046 案例）
+- 「代理人虛構：報告中提及的測試名稱不存在於 repo」（見下方案例 1）
 - 「pre-existing failure 與本 ticket 無關」（baseline 接受，沒人追查）
 
 **Why**：失敗訊息不指向真因（規範演進 vs stale 期望），第一直覺往程式碼動向走。
@@ -52,12 +51,12 @@ E   assert 2 == 1
 
 ## 案例
 
-### 案例 1: W14-045 → W14-046 → W14-046.1（2026-05-18）
+### 案例 1: 實作票完成報告 → 追查 ANA → 修復子票（2026-05-18）
 
 完整鏈：
 
-1. thyme-python-developer 在 W14-045 完成報告寫「預存失敗 `test_check_acceptance_no_criteria` 已 stash-baseline 驗證與本 ticket 無關」
-2. PM 驗證時用 `grep test_check_acceptance_no_criteria` 但範圍漏掃 `.claude/skills/ticket/tests/`，誤判 thyme 虛構，開 W14-046 ANA 派 saffron
+1. thyme-python-developer 在某實作票完成報告寫「預存失敗 `test_check_acceptance_no_criteria` 已 stash-baseline 驗證與本 ticket 無關」
+2. PM 驗證時用 `grep test_check_acceptance_no_criteria` 但範圍漏掃 `.claude/skills/ticket/tests/`，誤判 thyme 虛構，開追查 ANA 派 saffron
 3. saffron grep 全 repo 確認測試存在於 `.claude/skills/ticket/tests/test_track_acceptance.py:81`，pytest 確認失敗為 `assert 2 == 1`
 4. 實作驗收時讀 `track_acceptance.py:292` 註解「用戶輸入錯誤路徑均為業務拒絕（return 2），詳見 cli-exit-code-rules.md 規則 2」，判定實作正確、測試 stale
 5. 同 file 內共 4 個測試同根因 stale（no_criteria / nonexistent_ticket / all_and_index_mutually_exclusive / missing_index_and_all），一次修完
@@ -83,7 +82,7 @@ E   assert 2 == 1
    - PM 驗證 agent 報告的測試名稱時 grep 範圍須含 `.claude/skills/**/tests/`（PC-151 配套）
 
 3. **修 stale test 時順手掃同檔同模式**
-   - 同 file 內常多個測試同根因，一次掃清避免反覆 ticket（W14-046.1 案例：1 個 → 4 個）
+   - 同 file 內常多個測試同根因，一次掃清避免反覆 ticket（案例 1：1 個 → 4 個）
 
 ### 規範層（CLI 設計者）
 
@@ -101,4 +100,3 @@ E   assert 2 == 1
 ## 相關文件
 
 - `.claude/references/cli-exit-code-rules.md` — exit code 規範（規則 2：業務拒絕 = 2）
-- W14-046 ticket / W14-046.1 ticket — 完整案例脈絡

@@ -9,20 +9,20 @@ WRAP SKILL↔YAML 一致性檢查 Hook — wrap-skill-yaml-consistency-hook.py
 觸發時機：
   - PreToolUse(Edit/Write) on:
       .claude/skills/wrap-decision/SKILL.md（portability-allow: 本 skill 自我引用，consumer 共通安裝位置）
-      .claude/config/wrap-triggers.yaml（portability-allow: 此 skill 對消費端環境的硬性依賴——AC4 缺映射檔會 exit 2 阻擋，沿用時需提供對應設定檔）
+      .claude/config/wrap-triggers.yaml（portability-allow: 此 skill 對消費端環境的硬性依賴——AC4 映射檔無法解析時 exit 2 阻擋、缺檔時警告，沿用時需提供對應設定檔）
 
 檢查項目（依 ANA Solution 規格）：
   AC1 Signal orphan：每個 YAML signals[].id 在映射檔 signal_to_skill_triggers 有對應 SKILL 情境（警告）
   AC2 Keyword orphan：每個 YAML keywords[] / failure_detection.keywords[] 在映射檔
                        keyword_to_trigger_category 有 belongs_to 類別（警告）
   AC3 Version 非回退：YAML version 與 SKILL.md footer **Version**: 各自 >= git HEAD 對應值（警告）
-  AC4 映射檔存在性：triggers-alignment.yaml 存在且可解析（阻擋 exit 2）
+  AC4 映射檔：缺檔時警告放行；存在但無法解析時阻擋 exit 2
 
 警告 vs 阻擋策略：
   - 警告：exit 0 + stderr（與 wrap-decision-tripwire-hook 的 advisory 模式一致）
   - 阻擋：exit 2（僅限映射檔缺失或無法解析；其他檢查無前提）
 
-唯一觸發來源：.claude/config/wrap-triggers.yaml + 映射檔（W10-052 約束，portability-allow: 同上硬性依賴）
+唯一觸發來源：.claude/config/wrap-triggers.yaml + 映射檔（portability-allow: 同上硬性依賴）
 觀測性：依 .claude/rules/core/observability-rules.md 規則 1-3（雙通道 stderr + logger）（portability-allow: 架構性橋接至框架 auto-load 規則）
 """
 
@@ -45,6 +45,7 @@ try:
         read_json_from_stdin,
         get_project_root,
         extract_tool_input,
+        emit_model_reminder,
     )
     _LIB_AVAILABLE = True
 except ImportError:
@@ -315,7 +316,22 @@ def main() -> int:
 
     logger.info(f"watched file edit: {watched}")
 
-    # AC4：映射檔存在 + 可解析（阻擋級）
+    # AC4 缺檔分支：映射檔不存在時降為警告並放行。
+    # 映射檔不隨框架發佈，缺檔即阻擋會讓 SKILL.md 與 wrap-triggers.yaml
+    # 無法以 Edit/Write 修改。缺檔時無從比對 AC1/AC2，只提醒建檔；
+    # 檔案存在但解析失敗仍走下方阻擋分支（判定失敗落在保守側）。
+    if not (project_root / ALIGNMENT_REL_PATH).exists():
+        _, missing_msg = load_alignment(project_root, logger)
+        notice = (
+            f"{STDERR_PREFIX} 映射檔缺失（警告，不阻擋）：AC1/AC2 一致性比對未執行。\n"
+            f"{missing_msg}"
+        )
+        sys.stderr.write(notice + "\n")
+        emit_model_reminder("PreToolUse", notice, input_data=input_data)
+        logger.warning("alignment file missing; AC4 downgraded to warning")
+        return 0
+
+    # AC4：映射檔存在但無法解析（阻擋級）
     alignment, err = load_alignment(project_root, logger)
     if alignment is None:
         sys.stderr.write(f"{STDERR_PREFIX} 映射檔錯誤（阻擋）：{err}\n")

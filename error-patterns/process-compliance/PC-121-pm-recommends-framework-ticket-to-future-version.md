@@ -35,7 +35,7 @@ PM 走「規則 6 → 主題吻合度判斷」路徑，跳過「version-progress
 
 **Why**：規則間引用斷裂導致 PM 行為差距。規則 6 意圖明確（框架優先 + 當前 Wave 處理），執行細節漏掉「Wave 必須屬於 active 版本」。當 PM 內心偏好「主題吻合」勝過「立即執行」時，缺乏明文規則禁止延後框架改善至 planned 版本。
 
-**Consequence**：框架改善若放 planned 版本，需等 planned 版本啟用才能執行（時間阻塞而非技術阻塞，違反規則 6 唯一允許延後條件）；framework debt 累積；其他相關 ticket 在等待期間重複支付成本。本 session 案例：W14-019 規則 5 設計若放 v0.20.0 (planned)，則本 session 內所有對話品質決策無強制框架支撐，依賴 PM 自律判斷。
+**Consequence**：框架改善若放 planned 版本，需等 planned 版本啟用才能執行（時間阻塞而非技術阻塞，違反規則 6 唯一允許延後條件）；framework debt 累積；其他相關 ticket 在等待期間重複支付成本。本 session 案例：規則 5 設計 ticket 若放 v0.20.0 (planned)，則本 session 內所有對話品質決策無強制框架支撐，依賴 PM 自律判斷。
 
 **Action**：
 
@@ -54,18 +54,18 @@ PM 建立 `.claude/` 框架改善 ticket 時，必須依以下順序判斷：
 
 ## 觸發案例
 
-### 案例：W14-019 ticket 設計 session（2026-04-17）
+### 案例：規則 5 設計 ticket 的設計 session（2026-04-17）
 
-PM 設計 W14-019（規則 5「權力不對等下的對話品質」設計，修改 `.claude/rules/core/ai-communication-rules.md`）時，內心傾向放 v0.20.0 (planned)，需用戶介入糾正才改放 v0.18.0 W14。
+PM 設計該 ticket（規則 5「權力不對等下的對話品質」設計，修改 `.claude/rules/core/ai-communication-rules.md`）時，內心傾向放 v0.20.0 (planned)，需用戶介入糾正才改放 v0.18.0 當前 Wave。
 
 **決策過程**：
 
-1. PM 確認 W14-019 屬框架改善（修改 `.claude/rules/core/ai-communication-rules.md`）
+1. PM 確認該 ticket 屬框架改善（修改 `.claude/rules/core/ai-communication-rules.md`）
 2. PM 查當前版本狀態：v0.18.0 active（測試重寫）、v0.20.0 planned（Tag 管理）
 3. PM 內心傾向：v0.20.0 W1（理由：v0.20.0 還無 ticket 不會干擾既有規劃）
 4. PM 嘗試 `ticket create --version 0.20.0`，系統回應：「版本 0.20.0 狀態為 planned（非 active）。只能在 active 版本中建立 Ticket。」
 5. PM 透過 AskUserQuestion 將「啟用 v0.20.0 並建在 W1」標 (Recommended) — 違反規則 5 機制 4
-6. 用戶選擇「v0.18.0 W14」（覆蓋 PM 推薦）
+6. 用戶選擇「v0.18.0 當前 Wave」（覆蓋 PM 推薦）
 7. 用戶事後指出：「框架相關的 ticket 也都無條件放在當前版本，避免延後處理，這是規則上的缺失」
 
 **根因分析**：
@@ -99,12 +99,10 @@ PM 設計 W14-019（規則 5「權力不對等下的對話品質」設計，修�
 - `.claude/pm-rules/monorepo-version-strategy.md` — L1 monorepo 版本權威來源
 - `.claude/rules/core/ai-communication-rules.md` 規則 5 機制 4 — 反討好設計
 - `.claude/rules/core/decision-trigger-binding.md` — 決策合法狀態
-- 0.18.0-W14-019 — 規則 5 設計（觸發 session）
-- 0.18.0-W14-020 — 規則 6 補強分析 ticket（本 PC 落地任務）
 - PC-066 — 決策品質自動駕駛（相關 PM 行為偏誤）
 
 ---
 
 **Last Updated**: 2026-09-23
 **Superseded by**: `.claude/pm-rules/version-progression.md`〈版本生命週期〉（scope 凍結模型）— 前提（`lifecycle.py` 對版本狀態零檢查，claim 不查版本狀態）、收件方變更（框架問題改路由至 canonical framework issue）、防護目的（執行資格與版本狀態已解耦）三點取代理由詳見上方「Superseded 註記」。
-**Source**: 0.18.0-W14-020 ANA 落地產出
+**Source**: 規則 6 補強分析 ANA 落地產出

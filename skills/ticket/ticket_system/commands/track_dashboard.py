@@ -1,5 +1,5 @@
 """
-ticket track dashboard 命令（W10-114 落地，W10-113 ANA Solution M1+M4'）
+ticket track dashboard 命令
 
 聚合 in_progress + top N ready + stale warning 三章節為單一視圖，
 讓 PM 接手新 session 時的 /ticket 流程從 7 tool call 降至 3 個
@@ -14,16 +14,16 @@ ticket track dashboard 命令（W10-114 落地，W10-113 ANA Solution M1+M4'）
 
 複用既有：
 - track_runqueue._priority_rank / _is_unblocked_pending / _filter_by_wave
-  / _compute_readiness / _get_pending_handoff_info（0.2.1-W3-220 起同時以
+  / _compute_readiness / _get_pending_handoff_info（同時以
   target_ticket_id 建索引，新增 [Handoff Target] 章節見 load_handoff_targets）
-- lib.staleness.compute_stale_minutes（W10-114 新增分鐘粒度純函式）
+- lib.staleness.compute_stale_minutes
 - lib.ticket_loader.list_tickets
 
 不複用：
 - track_runqueue._render_list / _render_dag / _render_critical_path（格式不同）
 - track_stale_list._days_since_created（粒度為日，不符）
 
-0.2.1-W3-261（issue 42 修復）：
+children 維度過濾（issue 42 修復）：
 - Ready 判定的 blockedBy 維度自初版起即同源 is_fully_unblocked（經
   `_is_unblocked_pending` 間接複用，見 load_top_ready），與 runqueue
   共用同一 predicate，非本次新增。
@@ -134,7 +134,7 @@ def load_in_progress(
 
 
 def _has_incomplete_children(ticket: Dict, ticket_map: Dict[str, Dict]) -> bool:
-    """判斷 ticket 是否有未完成（非 completed/closed）的子任務（0.2.1-W3-261）。
+    """判斷 ticket 是否有未完成（非 completed/closed）的子任務。
 
     children 項目可能是字串 ID 或已嵌入 status 的字典。優先信任 ticket_map
     （同一 wave 全集、狀態即時）；找不到對應 ticket 時 fallback 讀字典內嵌
@@ -166,10 +166,10 @@ def load_top_ready(
     """收集 top N actionable ticket，按 (readiness_rank, priority, trigger_bound, id) 排序。
 
     READY 排前、NO-CB 排後；其他 readiness（NEEDS-CTX/BLOCKED/FAILED）不列入。
-    有未完成 children 的父票不列入（0.2.1-W3-261，見 `_has_incomplete_children`）。
+    有未完成 children 的父票不列入（見 `_has_incomplete_children`）。
     top <= 0 回傳 []。
 
-    排序鍵語意（W3-096 + dashboard NO-CB 修復）：
+    排序鍵語意：
     - readiness_rank 為最高鍵（READY=0, NO-CB=1）；READY 優先於 NO-CB
     - priority 為次要鍵（_priority_rank）
     - trigger_bound 為第三鍵（false=0 / true=1）
@@ -217,7 +217,7 @@ def load_handoff_targets(
 ) -> List[Dict[str, Any]]:
     """收集 handoff 指向的 target 票，獨立於 Ready 的 unblocked-pending 過濾。
 
-    0.2.1-W3-220：來源票 0.2.1-W3-178 實測，target 票若為 in_progress 或
+    實測：target 票若為 in_progress 或
     completed 會完全不出現在 Ready 章節（Ready 只收 unblocked pending）。
     本函式不套用該過濾，故 target 票任何 status 皆顯示，交接目標不再被埋。
 
@@ -322,7 +322,7 @@ def render_text(
     lines.append("")
 
     # --- Handoff Target 區塊（獨立於 Ready 的 unblocked-pending 過濾；
-    #     target 票 in_progress/completed 仍顯示，不編號，見 0.2.1-W3-220）---
+    #     target 票 in_progress/completed 仍顯示，不編號）---
     targets = handoff_targets or []
     lines.append(f"[Handoff Target] {len(targets)} ticket(s)")
     if not targets:
@@ -388,7 +388,7 @@ def render_json(
 
     stale_disabled=True → stale 欄位為 JSON null（None），非 []（D5）。
     ready 欄位加 index（從 1 起算），與 text Ready 章節編號一致。
-    handoff_targets 不編號（獨立於 Ready，見 0.2.1-W3-220），與 text 一致。
+    handoff_targets 不編號（獨立於 Ready），與 text 一致。
     """
     payload = {
         "version": version,
@@ -454,7 +454,7 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
         sys.stderr.write("No active version detected\n")
         return 2
 
-    # W5-005.14: 自動清理已完成 ticket 的 stale handoff（非靜默，stderr 提示）
+    # 自動清理已完成 ticket 的 stale handoff（非靜默，stderr 提示）
     _auto_gc_stale_handoffs()
 
     try:
@@ -549,7 +549,7 @@ def _get_handoff_gc_logger() -> Optional[Any]:
 
 
 def _auto_gc_stale_handoffs() -> None:
-    """自動清理已完成 ticket 的 stale handoff（W5-005.14）。
+    """自動清理已完成 ticket 的 stale handoff。
 
     在 dashboard 載入前執行；清理結果寫 stderr + hook-logs INFO（2026-09
     補齊：原僅寫 stderr、失敗路徑完全靜默，違反可觀測性規則 4）。

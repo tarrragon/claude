@@ -19,12 +19,16 @@ from unittest.mock import MagicMock
 HOOK_PATH = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "handoff-auto-resume-stop-hook.py"
 
 
-def load_hook_module():
+def load_hook_module(isolate_orphan: bool = True):
+    """載入 hook。fixture 的票號在 tmp 專案下都查不到，預設把孤兒判定隔離為「非孤兒」；
+    要驗孤兒行為的測試傳 isolate_orphan=False 走真實 orphan_reason。"""
     spec = importlib.util.spec_from_file_location(
         "handoff_auto_resume_stop_hook", HOOK_PATH
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if isolate_orphan:
+        module._lib_orphan_reason = lambda record, ticket_id, project_root=None: ""
     return module
 
 
@@ -154,7 +158,7 @@ def _write_handoff(pending_dir: Path, ticket_id: str, *,
 
 
 def _setup_scan(monkeypatch, tmp_path, *, stale_map=None,
-                completed_map=None, recent_started=False):
+                completed_map=None, recent_started=False, isolate_orphan=True):
     """
     建立 hook module 並 patch ticket fs 依賴：
     - is_handoff_stale: 依 stale_map[ticket_id] → (bool, str)
@@ -163,7 +167,7 @@ def _setup_scan(monkeypatch, tmp_path, *, stale_map=None,
     """
     stale_map = stale_map or {}
     completed_map = completed_map or {}
-    hook = load_hook_module()
+    hook = load_hook_module(isolate_orphan=isolate_orphan)
 
     def fake_is_handoff_stale(record, project_root=None):
         tid = (record or {}).get("ticket_id", "")
@@ -1074,3 +1078,181 @@ def test_generate_hook_output_pm_session_behavior_unchanged(monkeypatch):
 
     assert scan_called["count"] == 1, "PM session 應正常走 pending 掃描路徑"
     assert output == {"suppressOutput": True}
+
+
+# ===== 孤兒 handoff：判準與 handoff GC 共用 orphan_reason =====
+
+
+def _lib_module_of(hook):
+    """hook 以 sys.path 匯入的 handoff_utils 模組（與 ticket_system.lib.handoff_utils 為不同物件）。"""
+    import sys
+    return sys.modules[hook._lib_orphan_reason.__module__]
+
+
+def _scan_one_old_handoff(monkeypatch, tmp_path, find_ticket_file):
+    """寫一筆非剛建、非 stale、未完成的 handoff，以真實 orphan_reason 掃描。
+
+    find_ticket_file 取代 handoff_utils._find_ticket_file：回 None 代表查無；
+    傳入 None 本身代表票查詢模組載不到。
+    """
+    pending_dir = tmp_path / "pending"
+    _write_handoff(
+        pending_dir, "W9-001",
+        direction="context-refresh",
+        timestamp=datetime.now() - timedelta(hours=2),
+    )
+    hook = _setup_scan(monkeypatch, tmp_path, isolate_orphan=False)
+    monkeypatch.setattr(_lib_module_of(hook), "_find_ticket_file", find_ticket_file)
+    pending, recent = hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
+    return hook, pending, recent, pending_dir
+
+
+def test_orphan_handoff_is_archived_not_blocking(monkeypatch, tmp_path):
+    """正向對照：來源票查無 → 歸檔，不列入 pending（不阻擋退出）。"""
+    _, pending, recent, pending_dir = _scan_one_old_handoff(
+        monkeypatch, tmp_path, lambda tid, root: None,
+    )
+    assert pending == []
+    assert recent == []
+    assert not (pending_dir / "W9-001.json").exists()
+    assert (tmp_path / "archive" / "W9-001.json").exists()
+
+
+def test_existing_ticket_handoff_still_blocks(monkeypatch, tmp_path):
+    """對照組：同一筆 handoff，來源票存在 → 照常列入 pending。"""
+    _, pending, _, pending_dir = _scan_one_old_handoff(
+        monkeypatch, tmp_path, lambda tid, root: tmp_path / "W9-001.md",
+    )
+    assert [t["ticket_id"] for t in pending] == ["W9-001"]
+    assert (pending_dir / "W9-001.json").exists()
+
+
+def test_lookup_module_unavailable_keeps_blocking(monkeypatch, tmp_path):
+    """票查詢模組載不到時不判孤兒，照常阻擋。
+
+    這是不直接用 is_handoff_active 的理由：它在同一條件下回「無效」，
+    套到本 hook 會讓所有 handoff 被歸檔、不再阻擋。
+    """
+    hook, pending, _, pending_dir = _scan_one_old_handoff(monkeypatch, tmp_path, None)
+    assert [t["ticket_id"] for t in pending] == ["W9-001"]
+    assert (pending_dir / "W9-001.json").exists()
+    lib = _lib_module_of(hook)
+    active, _ = lib.is_handoff_active({"ticket_id": "W9-001"}, tmp_path)
+    assert active is False
+
+
+def test_orphan_check_error_keeps_blocking(monkeypatch, tmp_path):
+    """orphan_reason 拋例外 → 不當孤兒，照常列入 pending。"""
+    pending_dir = tmp_path / "pending"
+    _write_handoff(
+        pending_dir, "W9-002",
+        direction="context-refresh",
+        timestamp=datetime.now() - timedelta(hours=2),
+    )
+    hook = _setup_scan(monkeypatch, tmp_path)
+
+    def boom(record, ticket_id, project_root=None):
+        raise RuntimeError("lookup failed")
+
+    monkeypatch.setattr(hook, "_lib_orphan_reason", boom)
+    pending, _ = hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
+    assert [t["ticket_id"] for t in pending] == ["W9-002"]
+
+
+# ===== 只對建立交接檔的 Claude 行程阻擋（3.3.0-W1-218.1）=====
+# 判定走 lib 的 handoff_utils.is_other_claude_process（本檔不 patch 它，測的是實際比對函式）；
+# 只 patch current_claude_process（目前行程），交接檔的 creator_process 由測試寫入。
+
+HERE = {"pid": 4242, "lstart": "Thu Nov 12 10:00:00 2026"}
+
+
+def _write_with_creator(pending_dir: Path, ticket_id: str, creator):
+    """寫一筆一小時前、非 stale 的 active 交接檔；creator 為 None 時不寫欄位（舊格式）。"""
+    path = _write_handoff(pending_dir, ticket_id, timestamp=datetime.now() - timedelta(hours=1))
+    if creator is not None:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["creator_process"] = creator
+        path.write_text(json.dumps(record), encoding="utf-8")
+    return path
+
+
+def _scan_with_current(monkeypatch, tmp_path, current):
+    hook = _setup_scan(monkeypatch, tmp_path, recent_started=False)
+    monkeypatch.setattr(hook, "current_claude_process", lambda start_pid=None: current)
+    return hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
+
+
+def test_same_process_still_blocks(monkeypatch, tmp_path):
+    """E2 正向對照：同一 Claude 行程（pid＋lstart 相同，含空白差異）建立的交接檔照擋。"""
+    _write_with_creator(tmp_path / "pending", "W1-301", {"pid": 4242, "lstart": "Thu Nov 12  10:00:00 2026"})
+    pending, recent = _scan_with_current(monkeypatch, tmp_path, HERE)
+    assert [t["ticket_id"] for t in pending] == ["W1-301"]
+    assert recent == []
+
+
+def test_other_process_not_blocked(monkeypatch, tmp_path):
+    """E1 對照：同一份交接檔，由另一個 Claude 行程建立時不阻擋，改列建議性任務。"""
+    _write_with_creator(tmp_path / "pending", "W1-302", {"pid": 777, "lstart": "Thu Nov 12 09:00:00 2026"})
+    pending, recent = _scan_with_current(monkeypatch, tmp_path, HERE)
+    assert pending == []
+    assert [t["ticket_id"] for t in recent] == ["W1-302"]
+
+
+def test_pid_reuse_with_different_lstart_is_other_process(monkeypatch, tmp_path):
+    """pid 重用：pid 相同、lstart 不同判為不同行程（不阻擋）。"""
+    _write_with_creator(tmp_path / "pending", "W1-303", {"pid": 4242, "lstart": "Wed Nov 11 08:00:00 2026"})
+    pending, recent = _scan_with_current(monkeypatch, tmp_path, HERE)
+    assert pending == []
+    assert [t["ticket_id"] for t in recent] == ["W1-303"]
+
+
+def test_legacy_record_without_creator_still_blocks(monkeypatch, tmp_path):
+    """舊格式交接檔（沒有 creator_process）維持現行阻擋。"""
+    _write_with_creator(tmp_path / "pending", "W1-304", None)
+    pending, _ = _scan_with_current(monkeypatch, tmp_path, HERE)
+    assert [t["ticket_id"] for t in pending] == ["W1-304"]
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("creator", [
+    None,                                       # 欄位為 null（寫入端查不到行程）
+    {"pid": "4242", "lstart": "x"},             # pid 型別錯
+    {"pid": 777},                               # 缺 lstart
+    {"pid": 777, "lstart": "   "},              # lstart 空白
+    {"pid": True, "lstart": "x"},               # bool 不算 pid
+    ["777", "x"],                               # 形狀錯
+    "777",
+])
+def test_corrupted_creator_field_still_blocks(monkeypatch, tmp_path, creator):
+    """判定失敗落點：建立者欄位損毀或缺漏時照擋，不放行。"""
+    path = _write_with_creator(tmp_path / "pending", "W1-305", {"pid": 1, "lstart": "y"})
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["creator_process"] = creator
+    path.write_text(json.dumps(record), encoding="utf-8")
+    pending, _ = _scan_with_current(monkeypatch, tmp_path, HERE)
+    assert [t["ticket_id"] for t in pending] == ["W1-305"]
+
+
+def test_current_process_unknown_still_blocks(monkeypatch, tmp_path):
+    """判定失敗落點：目前行程查不到（ps 失敗、逾時或找不到 claude 祖先）時照擋。"""
+    _write_with_creator(tmp_path / "pending", "W1-306", {"pid": 777, "lstart": "Thu Nov 12 09:00:00 2026"})
+    pending, _ = _scan_with_current(monkeypatch, tmp_path, None)
+    assert [t["ticket_id"] for t in pending] == ["W1-306"]
+
+
+@pytest.mark.parametrize("failure", ["timeout", "oserror"])
+def test_ps_failure_makes_current_process_none(monkeypatch, failure):
+    """ps 逾時或無法執行時 current_claude_process 回 None（上一則測試據此照擋）。"""
+    import subprocess
+
+    hook = load_hook_module()
+
+    def _boom(*args, **kwargs):
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(cmd="ps", timeout=5)
+        raise OSError("ps not found")
+
+    monkeypatch.setattr(subprocess, "run", _boom)
+    assert hook.current_claude_process(start_pid=12345) is None

@@ -47,6 +47,8 @@
 
 **Hook 失敗不可靜默吞掉，必須對用戶可見**（來源：IMP-003）：Hook 異常必須寫入 stderr（用戶端可見）+ 同時寫檔案日誌（保留完整 traceback）；禁止只記錄日誌檔而不通知用戶。
 
+**進程級失敗不吞成 exit 0**：import 期、直譯器啟動等 hook 尚未進入自身錯誤處理的失敗，hook 不得攔截成 exit 0；以非 0 結束由 runtime 記錄，再由框架讀取端轉告模型。各層的負責者與輸出管道見 `.claude/references/hook-system-operations.md`〈輸出規範（stderr 與 exit code）〉。
+
 **提醒類輸出須宣告受眾**（來源：IMP-GPD-004）——hook 輸出提醒前先宣告給誰看：用戶、模型、或營運日誌。受眾含模型時，提醒必須走模型看得到的管道：經 `emit_hook_output`（`.claude/lib/hook_io.py`）輸出 `additionalContext`，或以 exit 2／decision block 使其停手；**exit 0 加 stderr 對模型不可見**，不得作為提醒模型的唯一管道。事件與管道的可見性對照表見 `.claude/references/hook-architect-technical-reference.md`「事件類型與輸出管道的可見性對照表」。
 
 **擴充：一般程式碼異常可觀測性**（來源：IMP-013）——雙通道要求亦適用所有程式碼異常處理。每個 `except` 區塊必須滿足以下至少一項，否則需在註解說明原因：寫入 stderr（`sys.stderr.write` / `logger.error`）、寫入日誌檔（`logger.info/warning/error`）、只做 `return`/`pass` 時在註解說明。Hook 異常 stderr+日誌皆必須；業務邏輯拒絕日誌必須、stderr 建議。Go/Dart 具體要求見 `.claude/references/observability-rules.md`。
@@ -71,7 +73,7 @@
 | 代理人工具清單不含 Bash（無法呼叫 ticket CLI） | 派發階段即不指派 ANA 型 ticket；已誤派者停手上報 NeedsContext 由 PM 改派，不以 `--force` 收尾 |
 | Ticket 執行中辨識為框架問題（非專案問題） | 依 `.claude/skills/framework-issue/SKILL.md`「框架問題升級流程」分流判斷，不當下修 `.claude/` 通用資產 |
 
-> **保證方為執行者**：落地必須在 complete 之前完成——狀態轉換後強制層已無執行時機，PM 事後驗收屬冗餘檢查而非唯一保證。**強制層**：acceptance-gate-hook Step 2.5.2 比對 Solution spawn 規劃數與落地數（`spawned_tickets` + `children` + 已判定 spawn request），缺漏阻擋 complete。**Schema 層**：`ticket-body-schema.md` ANA Solution「Spawn 落地確認」子節。背景與案例（PC-093）見 ticket-body-schema.md。
+> **保證方為執行者**：落地必須在 complete 之前完成——狀態轉換後強制層已無執行時機，PM 事後驗收屬冗餘檢查而非唯一保證。**強制層**：acceptance-gate-hook Step 2.5.2 比對 ANA／DOC Solution spawn 規劃數（落地確認區段不計入）與落地數（`spawned_tickets` + `children` + 已判定 spawn request + 以 `source_ticket`／`discovered_during`／`parent_id` 回指本票的票），落地少於規劃即阻擋 complete，部分落地亦同。**Schema 層**：`ticket-body-schema.md` ANA Solution「Spawn 落地確認」子節。背景與案例（PC-093）見 ticket-body-schema.md。
 
 ### 規則 6：失敗案例學習原則
 
@@ -111,6 +113,8 @@
 - `.claude/skills/framework-issue/SKILL.md` - 規則 5 框架問題升級流程（介入判斷、兩條路徑、issue 關閉協議、回報前查重 SOP）
 
 ---
+**Last Updated**: 2026-11-13 | **Version**: 4.2.0 — 規則 4 補「進程級失敗不吞成 exit 0」一段：import 期、直譯器啟動的失敗由 runtime 記錄、框架讀取端轉告模型，hook 不得攔截成 exit 0；各層負責者路由 hook-system-operations〈輸出規範〉（該節同版改寫，兩處對 hook 異常輸出管道的要求改為一致）。依據：2026-11 runtime 實測。
+**Last Updated**: 2026-11-12 | **Version**: 4.1.1 — 規則 5 強制層註記對齊 checker 現行判定：適用 ANA 與 DOC；規劃數不計落地確認區段；落地數另計回指本票的票；部分落地亦阻擋 complete。
 **Last Updated**: 2026-11-11 | **Version**: 4.1.0 — 規則 5 ANA spawn 情境表第一列加版本維度：本版範圍的落地用 `--parent`，依〈兩期〉排入後續版本的落地在目標版本以 `--source-ticket` 建根票；complete 時點、先登記與放棄回寫路由 ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉。來源：用戶裁定（2026-11-09）。
 **Last Updated**: 2026-11-09 | **Version**: 4.0.0 — 版本兩期與驗收三項固定檢查：規則 2 補「Phase 4 的發現不退件」；規則 3 由「不可延後處理」改為規劃期當期修、執行期立即建票排後續維護版本（讓本版跑不起來者除外）；規則 5 補「建票不等於本版處理」，優先級對應限規劃期；底線總結表同步。主文路由 version-progression〈兩期〉與 verification-framework〈驗收三項固定檢查〉。來源：用戶裁定（2026-11-09）。
 **Last Updated**: 2026-10-15 | **Version**: 3.10.0 — 規則 1 禁令句拆為兩時點：本機提交前該票相關測試檔全綠、合併 main 前全套件全綠（合併閘門執行並讀結束碼），路由 worktree SKILL〈合併前全套件〉；不展開論證，細節在 verification-framework〈合併前全綠與實機驗證票〉。

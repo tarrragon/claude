@@ -6,17 +6,17 @@
 """
 Hooks Test Gate Hook（PreToolUse: Bash）
 
-目標式 hooks 測試 gate（0.2.1-W3-189，source ANA 0.2.1-W3-188）。
+目標式 hooks 測試 gate。
 
 問題背景：
-  0.2.1-W3-181 於 14:52 改動 SKILLS 常數使
-  `test_all_seven_skills_covered` 紅燈，W3-181 與 W3-184 兩次 commit 皆無
-  提示，潛伏 27 分鐘至 W3-091 代理人碰巧跑全套件才撞見。W3-188 實查六個
+  某次 commit 改動 SKILLS 常數使
+  `test_all_seven_skills_covered` 紅燈，該次與後續一次 commit 皆無
+  提示，潛伏 27 分鐘至某代理人碰巧跑全套件才撞見。事後實查六個
   位置（.github/workflows / .pre-commit-config.yaml / .husky / .git/hooks /
   core.hooksPath / settings.json 既有 test hook）後判定：commit 或
   complete 前確無任何機制要求 hooks 測試通過，屬機制缺口。
 
-方案取捨（W3-188 結論，勿重做評估）：
+方案取捨（已評估定案，勿重做評估）：
   全套件 84.56s vs 單一目標測試檔 0.21s，差約 400 倍，而多數 hooks
   commit 只動一至兩檔。故採「目標式子集」而非全套件阻擋：commit 觸及
   `.claude/hooks/*.py` 時，僅跑其對應測試檔（依命名慣例推導，實測覆蓋
@@ -58,8 +58,8 @@ Decision:
 `_fast_reject()` 為第一道便宜判斷：純字串 regex 搜尋 "commit" 字樣，
 非 commit 類命令（Bash 工具最大宗：ls/cat/flutter test/...）於此短路，
 **不執行 `git diff --cached`**。只有偵測到 commit 字樣才會付出後續解析
-與 git 呼叫的成本；成本基準見 W3-188 Context Bundle（全套件 84.56s vs
-單檔 0.21s）。
+與 git 呼叫的成本；成本基準為全套件 84.56s vs
+單檔 0.21s。
 
 ============================================================
 迴圈防護
@@ -68,8 +68,6 @@ Decision:
 並非透過 Claude Code 的 Bash 工具發出命令 —— PreToolUse 只攔截 Bash
 「工具呼叫」，子行程呼叫不會再次觸發本 hook（或任何 PreToolUse hook），
 無遞迴風險。
-
-對應 ticket 0.2.1-W3-189（source ANA 0.2.1-W3-188）。
 """
 
 from __future__ import annotations
@@ -142,13 +140,13 @@ _COMMIT_WORD_RE = re.compile(r"\bcommit\b")
 # 命令是否為真實 git commit 呼叫（統一環境變數前綴，供本檔多個 regex共用）
 _ENV_PREFIX = r"(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*"
 
-# 命令是否為 git commit 呼叫（statement 邊界版，比照 post-test-hook.py 於
-# 0.2.1-W3-066 的修法：要求 "git commit" 位於命令 statement 起頭（^ /
+# 命令是否為 git commit 呼叫（statement 邊界版，比照 post-test-hook.py 的
+# 修法：要求 "git commit" 位於命令 statement 起頭（^ /
 # ;|&(\n / && / ||）之後，可選環境變數前綴。子 shell cd 形式（如
 # `(cd dir && git commit ...)`）的 "git commit" 前有 `&&` 邊界字元仍會
 # 命中，不需另立子 shell 專用 regex。
 #
-# 0.2.1-W3-191 修正：舊版對命令任意位置做 substring 搜尋，導致
+# 修正：舊版對命令任意位置做 substring 搜尋，導致
 # `echo '{"command":"git commit ..."}'` 之類的 JSON payload 字面提及被
 # 誤判為真實 commit（該字面前為引號字元，非 statement 邊界，加上邊界
 # 要求後不再誤觸發）。
@@ -180,7 +178,7 @@ def _iter_literal_pathspec_segments(command: str):
     的區段字串。
 
     只有這些位置提及的 `.claude/hooks/*.py` 字面才會被 `_touched_hook_filenames`
-    採計（0.2.1-W3-191 修正 acceptance 3：字面提及來源限定於 git add 或
+    採計（字面提及來源限定於 git add 或
     commit pathspec 的參數位置，非命令任意位置）。命令先依 statement 邊界
     （`&&` / `||` / `;` / `|` / 換行）切段，逐段判斷開頭是否為 `git add`
     或 `git commit ... --`，非此二者的區段（如 `echo '...'`、JSON payload
@@ -290,7 +288,7 @@ def _touched_hook_filenames(
 
 
 def _candidate_tests(hook_filename: str) -> Set[str]:
-    """依命名慣例推導 hook 檔對應的候選測試檔名（W3-188 實測覆蓋 47/94）。
+    """依命名慣例推導 hook 檔對應的候選測試檔名（實測覆蓋 47/94）。
 
     uv-tool-ownership-guard-hook.py -> {test_uv_tool_ownership_guard_hook.py,
                                           test_uv_tool_ownership_guard.py}

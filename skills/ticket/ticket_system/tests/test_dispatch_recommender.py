@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ticket_system.lib import paths
 from ticket_system.lib.dispatch_recommender import DispatchRecommender
 
 
@@ -38,7 +39,11 @@ def test_registry_path_resolution_follows_claude_project_dir(tmp_path, monkeypat
         "      - \"phase3b\"\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(fake_root))
+    # 204.1.4.3：registry 取 CLI 程式碼所在 checkout（不再跟 env）；以 fake_root 為程式碼 checkout
+    (fake_root / ".claude" / "lib").mkdir(parents=True)
+    monkeypatch.setattr(
+        paths, "_CODE_FILE", fake_root / ".claude" / "skills" / "ticket" / "paths.py"
+    )
 
     recommender = DispatchRecommender()
 

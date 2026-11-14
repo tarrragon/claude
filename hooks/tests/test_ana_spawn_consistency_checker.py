@@ -8,7 +8,7 @@ ANA Spawn Consistency Checker Tests (W17-168)
   (a) W17-162 元反例舊版（complete 前 spawned=[]，Solution 含 4 項規劃）→ block
   (b) W17-167 自身元反例舊版（complete 前 spawned=[]，Solution 含 3 項規劃）→ block
   (c) 豁免宣告數 >= 規劃數 → 跳過（通過）
-  (d) S+C < N（部分漏建）→ warning 不阻擋
+  (d) S+C < N（部分漏建）→ 阻擋（2026-11-12 由警告升級）
   (e) S+C >= N（全建）→ 通過
   (f) Solution 無 spawn 表格行 → 通過
   (g) 非 ANA ticket → 跳過
@@ -16,6 +16,9 @@ ANA Spawn Consistency Checker Tests (W17-168)
   (m) pending / 無理由 dismissed / status 缺失的 SR 不計入
   (n) 豁免宣告逐項扣抵：宣告數少於規劃數時剩餘項目仍受檢
   (o) 阻擋訊息的建票指令為實際存在的 CLI 入口
+  (q) 規劃數只算規劃區段，落地確認區段不計入（#70）
+  (r) DOC 套用同一檢查；反向血緣計入落地；查詢失敗不加嚴
+  (s) collect_reverse_lineage_ids 的回指判準與負向對照
 """
 
 from __future__ import annotations
@@ -139,10 +142,10 @@ def test_exemption_no_spawn_marker_should_skip(logger):
 
 
 # ---------------------------------------------------------------------------
-# (d) 部分漏建：N=3, S+C=2 → warning 不阻擋
+# (d) 部分漏建：N=3, S+C=2 → 阻擋（2026-11-12 由警告升為阻擋）
 # ---------------------------------------------------------------------------
 
-def test_partial_spawn_should_warn_not_block(logger):
+def test_partial_spawn_should_block(logger):
     solution = (
         "| # | Type | Priority | 標題 |\n"
         "|---|------|----------|------|\n"
@@ -160,11 +163,11 @@ def test_partial_spawn_should_warn_not_block(logger):
 
     should_block, msg = check_ana_spawn_consistency(content, fm, logger)
 
-    assert should_block is False
+    assert should_block is True
     assert msg is not None
-    assert "WARNING" in msg or "warning" in msg.lower()
-    assert "3" in msg
-    assert "2" in msg
+    assert "ERROR" in msg
+    assert "待落地 spawn 規劃數: 3" in msg
+    assert "未落地: 1 項" in msg
 
 
 # ---------------------------------------------------------------------------
@@ -600,8 +603,8 @@ def test_mixed_frontmatter_and_spawn_request_sum(logger):
     assert msg is None
 
 
-def test_partial_landing_warning_reports_both_sources(logger):
-    """部分落地時 warning 須分列具名 ticket 與無 ID 已判定兩種來源的數量。"""
+def test_partial_landing_block_reports_both_sources(logger):
+    """部分落地時阻擋訊息須分列具名 ticket 與無 ID 已判定兩種來源的數量。"""
     three_row_table = _TWO_ROW_SPAWN_TABLE + "| 3 | DOC | P2 | C |\n"
     sr = _sr_entry("SR-1", "dismissed（經評估屬既有行為）")
     content = _make_content_with_srs(three_row_table, sr)
@@ -614,9 +617,9 @@ def test_partial_landing_warning_reports_both_sources(logger):
 
     should_block, msg = check_ana_spawn_consistency(content, fm, logger)
 
-    assert should_block is False
+    assert should_block is True
     assert msg is not None
-    assert "WARNING" in msg
+    assert "ERROR" in msg
     assert "具名 ticket 去重後 = 1" in msg
     assert "無 ticket ID 的已判定項 = 1" in msg
 
@@ -631,7 +634,7 @@ def test_partial_landing_warning_reports_both_sources(logger):
 
 
 def test_processed_sr_backfilled_to_frontmatter_counted_once(logger):
-    """4 項規劃、實際只落地 2 項（2 筆 processed SR 且已回填）→ warning 而非放行。"""
+    """4 項規劃、實際只落地 2 項（2 筆 processed SR 且已回填）→ 阻擋而非放行。"""
     four_row_table = (
         _TWO_ROW_SPAWN_TABLE + "| 3 | DOC | P2 | C |\n| 4 | DOC | P2 | D |\n"
     )
@@ -650,10 +653,10 @@ def test_processed_sr_backfilled_to_frontmatter_counted_once(logger):
 
     should_block, msg = check_ana_spawn_consistency(content, fm, logger)
 
-    assert should_block is False
+    assert should_block is True
     assert msg is not None
-    assert "WARNING" in msg
     assert "具名 ticket 去重後 = 2" in msg
+    assert "未落地: 2 項" in msg
 
 
 def test_multiple_ids_in_single_sr_note_each_counted(logger):
@@ -694,9 +697,9 @@ def test_duplicate_id_across_spawned_and_children_counted_once(logger):
 
     should_block, msg = check_ana_spawn_consistency(content, fm, logger)
 
-    assert should_block is False
+    assert should_block is True
     assert msg is not None
-    assert "WARNING" in msg
+    assert "ERROR" in msg
     assert "具名 ticket 去重後 = 1" in msg
 
 
@@ -955,7 +958,389 @@ def test_existing_row_per_spawn_regression_suite_still_passes_with_exclusion_log
 
     should_block, msg = check_ana_spawn_consistency(content, fm, logger)
 
-    assert should_block is False
+    assert should_block is True
     assert msg is not None
-    assert "3" in msg
-    assert "2" in msg
+    assert "待落地 spawn 規劃數: 3" in msg
+    assert "未落地: 1 項" in msg
+
+
+# ---------------------------------------------------------------------------
+# (q) 規劃數只算規劃區段（#70 雙區段重複計數，2026-11-12）
+#
+# 回歸 fixture 取自存量量測的三種誤計票型：規劃表與「用戶裁定與 Spawn 落地確認」
+# 並存、規劃表與「Spawn 落地」並存、規劃標題本身含「落地」而落地區段含逐項豁免。
+# ---------------------------------------------------------------------------
+
+_PLAN_THREE = (
+    "### Spawn 規劃（等用戶裁定）\n\n"
+    "| 預定票 | 型別 | 內容 |\n"
+    "|-------|------|------|\n"
+    "| G1 | IMP | a |\n"
+    "| G2 | IMP | b |\n"
+    "| G3 | DOC | c |\n\n"
+)
+
+
+def _landing_three(heading: str) -> str:
+    return (
+        f"### {heading}\n\n"
+        "| 規劃項 | 落地票 | 型別 |\n"
+        "|-------|-------|------|\n"
+        "| G1 | 0.18.0-W17-955.1 | IMP |\n"
+        "| G2 | 0.18.0-W17-955.2 | IMP |\n"
+        "| G3 | 0.18.0-W17-955.3 | DOC |\n"
+    )
+
+
+_THREE_CHILDREN = {
+    "id": "0.18.0-W17-955",
+    "type": "ANA",
+    "spawned_tickets": [],
+    "children": ["0.18.0-W17-955.1", "0.18.0-W17-955.2", "0.18.0-W17-955.3"],
+}
+
+
+@pytest.mark.parametrize(
+    "landing_heading",
+    ["用戶裁定與 Spawn 落地確認", "Spawn 落地", "Spawn 落地確認"],
+)
+def test_landing_section_not_counted_as_planning(logger, landing_heading):
+    content = _make_content(_PLAN_THREE + _landing_three(landing_heading))
+
+    should_block, msg = check_ana_spawn_consistency(content, dict(_THREE_CHILDREN), logger)
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_landing_section_dedup_still_blocks_real_gap(logger):
+    """正向對照：去重後規劃 3 項、落地 2 項，仍須阻擋。"""
+    fm = dict(_THREE_CHILDREN, children=["0.18.0-W17-955.1", "0.18.0-W17-955.2"])
+    content = _make_content(_PLAN_THREE + _landing_three("Spawn 落地確認"))
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is True
+    assert "待落地 spawn 規劃數: 3" in msg
+    assert "未落地: 1 項" in msg
+
+
+def test_planning_heading_containing_landing_word_is_planning(logger):
+    """規劃標題含「落地」（裁決後落地）仍是規劃區段；逐項落地區段的豁免照常扣抵。"""
+    solution = (
+        "### Spawn 規劃（裁決後落地）\n\n"
+        "| 項目 | 類型 | 條件 |\n"
+        "|------|------|------|\n"
+        "| a | IMP | 三案都需要 |\n"
+        "| b | DOC | 三案都需要 |\n"
+        "| c | IMP | 選 A |\n"
+        "| d | ANA | 選 B |\n"
+        "| e | IMP | 選 C |\n\n"
+        "### Spawn 落地確認\n\n"
+        "| 項目 | 票 | 類型 |\n"
+        "|------|----|------|\n"
+        "| a | 0.18.0-W17-954.1 | IMP |\n"
+        "| b | 0.18.0-W17-954.2 | DOC |\n"
+        "| e | 0.18.0-W17-954.3 | IMP |\n\n"
+        "### Spawn 規劃的逐項落地\n\n"
+        "- 選 A：無需建 ticket：未採用。\n"
+        "- 選 B：無需建 ticket：未採用。\n"
+    )
+    fm = {
+        "id": "0.18.0-W17-954",
+        "type": "ANA",
+        "children": ["0.18.0-W17-954.1", "0.18.0-W17-954.2", "0.18.0-W17-954.3"],
+    }
+
+    should_block, msg = check_ana_spawn_consistency(_make_content(solution), fm, logger)
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_landing_only_single_table_still_counted(logger):
+    """只有落地區段（單表寫法）時照舊計數，不因去重而變成 0。"""
+    content = _make_content(_landing_three("Spawn 落地確認"))
+    fm = dict(_THREE_CHILDREN, children=["0.18.0-W17-955.1"])
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is True
+    assert "待落地 spawn 規劃數: 3" in msg
+
+
+# ---------------------------------------------------------------------------
+# (r) DOC 套用同一檢查；反向血緣計入落地（2026-11-12）
+# ---------------------------------------------------------------------------
+
+def _doc(fm_extra: dict | None = None) -> tuple[str, dict]:
+    content = _make_content(_PLAN_THREE).replace("type: ANA", "type: DOC")
+    fm = {"id": "0.18.0-W17-953", "type": "DOC", "spawned_tickets": [], "children": []}
+    fm.update(fm_extra or {})
+    return content, fm
+
+
+def test_doc_without_landing_blocks(logger):
+    content, fm = _doc()
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is True
+    assert "DOC Ticket" in msg
+
+
+def test_doc_reverse_lineage_counts_as_landing(logger):
+    content, fm = _doc()
+    reverse = {"0.18.0-W17-960", "0.18.0-W17-961", "0.18.0-W17-962"}
+
+    should_block, msg = check_ana_spawn_consistency(
+        content, fm, logger, reverse_lineage_lookup=lambda tid: reverse
+    )
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_reverse_lineage_overlap_with_frontmatter_counted_once(logger):
+    content, fm = _doc({"spawned_tickets": ["0.18.0-W17-960", "0.18.0-W17-961"]})
+
+    should_block, msg = check_ana_spawn_consistency(
+        content,
+        fm,
+        logger,
+        reverse_lineage_lookup=lambda tid: {"0.18.0-W17-960", "0.18.0-W17-961"},
+    )
+
+    assert should_block is True
+    assert "未落地: 1 項" in msg
+
+
+def test_reverse_lineage_found_but_total_still_short_blocks(logger):
+    """放寬面對照：反向血緣有找到（1 張），加 frontmatter（1 張）仍少於規劃 3 項 → 照擋。"""
+    content, fm = _doc({"spawned_tickets": ["0.18.0-W17-960"]})
+
+    should_block, msg = check_ana_spawn_consistency(
+        content,
+        fm,
+        logger,
+        reverse_lineage_lookup=lambda tid: {"0.18.0-W17-970"},
+    )
+
+    assert should_block is True
+    assert "落地證據: 2" in msg
+    assert "未落地: 1 項" in msg
+
+
+def test_reverse_lookup_not_called_when_frontmatter_sufficient(logger):
+    content = _make_content(_PLAN_THREE)
+
+    def _fail(tid):
+        raise AssertionError("不應呼叫反向血緣查詢")
+
+    should_block, msg = check_ana_spawn_consistency(
+        content, dict(_THREE_CHILDREN), logger, reverse_lineage_lookup=_fail
+    )
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_reverse_lookup_receives_ticket_id(logger):
+    content, fm = _doc()
+    seen: list[str] = []
+
+    def _lookup(tid):
+        seen.append(tid)
+        return set()
+
+    check_ana_spawn_consistency(content, fm, logger, reverse_lineage_lookup=_lookup)
+
+    assert seen == ["0.18.0-W17-953"]
+
+
+def _boom(tid):
+    raise OSError("disk read failed")
+
+
+def test_lookup_failure_downgrades_partial_to_warning(logger, capsys):
+    content = _make_content(_PLAN_THREE)
+    fm = dict(_THREE_CHILDREN, children=["0.18.0-W17-955.1"])
+
+    should_block, msg = check_ana_spawn_consistency(
+        content, fm, logger, reverse_lineage_lookup=_boom
+    )
+
+    assert should_block is False
+    assert "WARNING" in msg
+    assert "反向血緣查詢失敗" in capsys.readouterr().err
+
+
+def test_lookup_failure_keeps_legacy_ana_zero_landing_block(logger):
+    content = _make_content(_PLAN_THREE)
+    fm = dict(_THREE_CHILDREN, children=[])
+
+    should_block, msg = check_ana_spawn_consistency(
+        content, fm, logger, reverse_lineage_lookup=_boom
+    )
+
+    assert should_block is True
+
+
+def test_lookup_failure_does_not_block_doc_zero_landing(logger):
+    content, fm = _doc()
+
+    should_block, msg = check_ana_spawn_consistency(
+        content, fm, logger, reverse_lineage_lookup=_boom
+    )
+
+    assert should_block is False
+    assert "WARNING" in msg
+
+
+def test_imp_still_skipped(logger):
+    content = _make_content(_PLAN_THREE).replace("type: ANA", "type: IMP")
+    fm = {"id": "0.18.0-W17-952", "type": "IMP", "spawned_tickets": [], "children": []}
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is False
+    assert msg is None
+
+
+# ---------------------------------------------------------------------------
+# (s) collect_reverse_lineage_ids 掃描判準
+# ---------------------------------------------------------------------------
+
+from acceptance_checkers.ana_spawn_consistency_checker import (  # noqa: E402
+    collect_reverse_lineage_ids,
+)
+
+_TARGET = "0.18.0-W17-950"
+
+
+def _write_ticket(tickets_dir: Path, ticket_id: str, extra: str) -> None:
+    (tickets_dir / f"{ticket_id}.md").write_text(
+        f"---\nid: {ticket_id}\ntype: IMP\n{extra}---\n\n# body\n",
+        encoding="utf-8",
+    )
+
+
+def test_collect_reverse_lineage_ids_matches_each_pointer(tmp_path):
+    tickets = tmp_path / "docs" / "work-logs" / "v0" / "v0.18" / "tickets"
+    tickets.mkdir(parents=True)
+    _write_ticket(tickets, _TARGET, "children: []\n")
+    _write_ticket(tickets, "0.18.0-W17-951", f"source_ticket: {_TARGET}\n")
+    _write_ticket(tickets, "0.18.0-W17-952", f"discovered_during: '{_TARGET}'\n")
+    _write_ticket(tickets, "0.18.0-W17-953", f"parent_id: {_TARGET}\n")
+    _write_ticket(tickets, "0.19.0-W1-001", f"previous_ids:\n- {_TARGET}.5\nchain: {{}}\n")
+    _write_ticket(tickets, f"{_TARGET}.1", "parent_id: null\n")
+
+    found = collect_reverse_lineage_ids(tmp_path, _TARGET)
+
+    assert found == {
+        "0.18.0-W17-951",
+        "0.18.0-W17-952",
+        "0.18.0-W17-953",
+        "0.19.0-W1-001",
+        f"{_TARGET}.1",
+    }
+
+
+def test_collect_reverse_lineage_ids_ignores_unrelated_mentions(tmp_path):
+    """負向對照：blockedBy 列子號、relatedTo 指本票、ID 前綴相同但非子號，皆不計入。"""
+    tickets = tmp_path / "docs" / "work-logs" / "v0" / "tickets"
+    tickets.mkdir(parents=True)
+    _write_ticket(tickets, "0.18.0-W17-940", f"blockedBy:\n- {_TARGET}.2\n")
+    _write_ticket(tickets, "0.18.0-W17-941", f"relatedTo:\n- {_TARGET}\n")
+    _write_ticket(tickets, "0.18.0-W17-9501", "parent_id: null\n")
+    _write_ticket(tickets, "0.18.0-W17-942", f"source_ticket: {_TARGET}.3\n")
+
+    assert collect_reverse_lineage_ids(tmp_path, _TARGET) == set()
+
+
+def test_collect_reverse_lineage_ids_without_work_logs_returns_empty(tmp_path):
+    assert collect_reverse_lineage_ids(tmp_path, _TARGET) == set()
+
+
+def test_collect_reverse_lineage_ids_skips_unreadable_file_and_reports(tmp_path):
+    """單檔非 UTF-8 不使其他票的血緣遺失；掃描結束以例外帶回已找到的 ID。"""
+    from acceptance_checkers.ana_spawn_consistency_checker import (
+        ReverseLineageScanIncomplete,
+    )
+
+    tickets = tmp_path / "docs" / "work-logs" / "v0" / "tickets"
+    tickets.mkdir(parents=True)
+    _write_ticket(tickets, "0.18.0-W17-951", f"source_ticket: {_TARGET}\n")
+    (tickets / "0.18.0-W17-999.md").write_bytes(b"---\nid: x\n\xa4\xa4\n---\n")
+
+    with pytest.raises(ReverseLineageScanIncomplete) as excinfo:
+        collect_reverse_lineage_ids(tmp_path, _TARGET)
+
+    assert excinfo.value.found == {"0.18.0-W17-951"}
+
+
+def test_frontmatter_end_requires_whole_dash_line(tmp_path):
+    """frontmatter 內以 `----` 開頭的行不視為結尾，其後欄位仍可讀到。"""
+    tickets = tmp_path / "docs" / "work-logs" / "v0" / "tickets"
+    tickets.mkdir(parents=True)
+    (tickets / "0.18.0-W17-951.md").write_text(
+        f"---\nid: 0.18.0-W17-951\nnote: |\n----\nsource_ticket: {_TARGET}\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+
+    assert collect_reverse_lineage_ids(tmp_path, _TARGET) == {"0.18.0-W17-951"}
+
+
+def _incomplete(found):
+    from acceptance_checkers.ana_spawn_consistency_checker import (
+        ReverseLineageScanIncomplete,
+    )
+
+    def _lookup(tid):
+        raise ReverseLineageScanIncomplete(set(found), ["bad.md: decode error"])
+
+    return _lookup
+
+
+def test_incomplete_scan_with_enough_evidence_passes(logger):
+    content, fm = _doc()
+    lookup = _incomplete({"0.18.0-W17-960", "0.18.0-W17-961", "0.18.0-W17-962"})
+
+    should_block, msg = check_ana_spawn_consistency(
+        content, fm, logger, reverse_lineage_lookup=lookup
+    )
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_incomplete_scan_with_insufficient_evidence_warns(logger):
+    content, fm = _doc()
+
+    should_block, msg = check_ana_spawn_consistency(
+        content, fm, logger, reverse_lineage_lookup=_incomplete({"0.18.0-W17-960"})
+    )
+
+    assert should_block is False
+    assert "WARNING" in msg
+
+
+def test_non_spawn_heading_with_landing_word_not_stripped(logger):
+    """「### 落地建議」不是 spawn 區段，不因含「落地」被剔除（其中規劃列照計）。"""
+    solution = (
+        _PLAN_THREE
+        + "### 落地建議\n\n"
+        "| # | Type | Priority | 標題 |\n"
+        "|---|------|----------|------|\n"
+        "| 4 | IMP | P1 | d |\n"
+        "| 5 | IMP | P1 | e |\n"
+        "| 6 | IMP | P1 | f |\n"
+        "| 7 | IMP | P1 | g |\n"
+    )
+
+    should_block, msg = check_ana_spawn_consistency(
+        _make_content(solution), dict(_THREE_CHILDREN), logger
+    )
+
+    assert should_block is True
+    assert "待落地 spawn 規劃數: 4" in msg

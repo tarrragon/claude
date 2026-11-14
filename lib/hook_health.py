@@ -1,4 +1,4 @@
-"""Hook health monitoring core engine (W13-016, derived from W13-008).
+"""Hook health monitoring core engine.
 
 Pure-function library providing log aggregation, classification, and
 relative-baseline evaluation for hook trigger frequencies.
@@ -16,8 +16,8 @@ Design principles:
   decides observability surface (stderr / CLI / hook)
 
 Consumed by:
-- .claude/hooks/hook-health-monitor.py (SessionStart hook, W13-017)
-- .claude/skills/ticket/ticket_system/cli.py hook-health subcommand (W13-018)
+- .claude/hooks/hook-health-monitor.py (SessionStart hook)
+- .claude/skills/ticket/ticket_system/cli.py hook-health subcommand
 
 scan_logs() 對 .claude/hook-logs（667k 檔累積，最大單目錄 32k 檔）逐檔 os.stat()
 曾造成 86.4s 端到端耗時（SessionStart hook 逐 session 卡住）。改為純檔名時間戳
@@ -74,7 +74,7 @@ from typing import Dict, List, Optional
 # ---------------------------------------------------------------------------
 
 # Bootstrap absolute lower bound when no 7-day baseline available (1 hit/day
-# conservative threshold; documented in W13-008 Solution §Bootstrap).
+# conservative threshold, so a brand-new hook is not flagged on first hit).
 # Kept as the low_freq_expected member of BOOTSTRAP_THRESHOLD_BY_TYPE below
 # and as the fallback for any hook_type not present in that dict.
 BOOTSTRAP_ABSOLUTE_THRESHOLD = 100
@@ -114,7 +114,7 @@ BOOTSTRAP_THRESHOLD_BY_TYPE = {
 # regression right after a log-directory cleanup emptied all history.
 BASELINE_MIN_COVERAGE_DAYS = 7
 
-# Multiplier N by hook class — see W13-008 量化標準 table.
+# Multiplier N by hook class (alert when count exceeds baseline * N).
 MULTIPLIER_BY_TYPE = {
     "high_freq_ok": 3,
     "low_freq_expected": 2,
@@ -122,7 +122,7 @@ MULTIPLIER_BY_TYPE = {
 
 # Hook names classified as high_freq_ok by design intent. Conservative list;
 # anything not in this set falls back to low_freq_expected (default).
-# Extending the set requires WRAP-like review (W13-008 §觸發判定).
+# Extending the set requires WRAP-like review.
 HIGH_FREQ_HOOK_PATTERNS = (
     "phase4-decision-enforcement",
     "wrap-decision-tripwire",
@@ -458,8 +458,11 @@ def scan_logs(
         neither liveness nor on-disk activity are omitted.
     """
     if logs_root is None:
-        # Default: <repo>/.claude/hook-logs (lib lives at .claude/lib/)
-        logs_root = Path(__file__).resolve().parents[1] / "hook-logs"
+        # Default: 共用狀態根下的 .claude/hook-logs，與 hook_logging 寫入端同根
+        # （linked worktree 內為主 repo；lib lives at .claude/lib/）
+        from lib.hook_logging import get_hook_log_dir
+
+        logs_root = get_hook_log_dir("")
 
     stats: Dict[str, Dict] = {}
     if not logs_root.exists():
@@ -646,7 +649,7 @@ def evaluate(stats: Dict, hook_type: str, baseline: float) -> Verdict:
     threshold = baseline * multiplier
     reasons: List[str] = []
 
-    # Critical: 3 consecutive days above threshold (W13-008 §觸發判定 升級訊號)
+    # Critical: 3 consecutive days above threshold (escalation signal)
     if _has_3_consecutive_over(per_day, threshold):
         reasons.append(
             "3+ consecutive days exceeded baseline*{n}={t:.1f}".format(

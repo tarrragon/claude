@@ -21,7 +21,7 @@ Hook 類型: PostToolUse
 
 使用方式:
     PostToolUse Hook 自動觸發，或手動測試:
-    echo '{"tool_name":"Write","tool_input":{"file_path":"/path/docs/work-logs/v0.30.0/0.30.0-W2-003.md"}}' | python3 phase-completion-gate-hook.py
+    echo '{"tool_name":"Write","tool_input":{"file_path":"/path/docs/work-logs/v0.30.0/<ticket-id>.md"}}' | python3 phase-completion-gate-hook.py
 
 環境變數:
     HOOK_DEBUG: 啟用詳細日誌（true/false）
@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
     extract_tool_input, validate_hook_input, get_project_root,
-    is_subagent_environment, get_effort_level,
+    is_subagent_environment, get_effort_level, get_hook_log_dir,
 )
 from lib.hook_messages import QualityMessages, CoreMessages, AskUserQuestionMessages, format_message
 
@@ -62,7 +62,7 @@ PHASE_COMPLETION_KEYWORDS = [
     "評估報告"
 ]
 
-# W11-017 三層 guard：
+# 三層 guard：
 # Layer 1 狀態 guard — frontmatter status 非完成態時跳過 content 識別
 # Layer 2 章節位置 guard — phase 關鍵字必須出現在 H2/H3 標題行
 # Layer 3 ticket frontmatter id guard — 含 id 欄位的檔案視為 ticket md（非獨立 phase 報告）
@@ -120,8 +120,8 @@ WORKLOG_PATTERNS = [
 ]
 
 # 路徑黑名單（排除非 phase 報告的 worklog 檔案）
-# 1. tickets/ 子目錄：ticket md 不是 phase 完成報告（W10-072.1）
-# 2. worklog 主檔（W10-072.1 + W17-217.1）：以下命名模式視為主檔，不觸發 phase 報告檢查
+# 1. tickets/ 子目錄：ticket md 不是 phase 完成報告
+# 2. worklog 主檔：以下命名模式視為主檔，不觸發 phase 報告檢查
 #    - v{major}.{minor}.{patch}.md         （如 v0.18.0.md）
 #    - v{major}.{minor}.{patch}-main.md    （如 v0.18.0-main.md）
 #    - v{major}.{minor}-main.md            （如 v0.18-main.md）
@@ -182,7 +182,7 @@ def is_worklog_write_operation(tool_name: str, tool_input: Dict[str, Any], logge
         logger.debug(f"檔案路徑不符合 worklog 模式: {file_path}")
         return False
 
-    # 路徑黑名單排除（W10-072.1）：
+    # 路徑黑名單排除：
     # 1. tickets/ 子目錄：ticket md 引用 Phase 字樣不代表是 phase 報告
     for excl in WORKLOG_EXCLUSION_DIR_PATTERNS:
         if excl in file_path:
@@ -227,7 +227,7 @@ def is_phase_completion_report(file_path: str, content: Optional[str], logger) -
     """
     判斷是否為 Phase 完成報告
 
-    W11-017 三層 guard：避免「ticket md 含 Phase 4 文本引用」被誤判為完成報告。
+    三層 guard：避免「ticket md 含 Phase 4 文本引用」被誤判為完成報告。
 
     Args:
         file_path: 檔案路徑
@@ -247,14 +247,14 @@ def is_phase_completion_report(file_path: str, content: Optional[str], logger) -
         logger.debug(f"未識別為 Phase 完成報告（無內容）: {file_path}")
         return False, None
 
-    # W11-017 Layer 3：ticket frontmatter id guard
+    # Layer 3：ticket frontmatter id guard
     # 若內容含 frontmatter `id:` 欄位，視為 ticket md（而非獨立 phase 報告）。
     # ticket md 必須通過更嚴格的 Layer 1 + Layer 2 判定。
     status, ticket_id = _parse_frontmatter(content)
     is_ticket_md = ticket_id is not None
 
     if is_ticket_md:
-        # W11-017 Layer 1：狀態 guard
+        # Layer 1：狀態 guard
         # ticket 處於非完成態（pending / in_progress / blocked / draft）時，
         # 內文 phase 關鍵字視為文本引用（如修復策略中提到 Phase 4），不觸發。
         if status in _NON_COMPLETED_TICKET_STATUSES:
@@ -443,7 +443,8 @@ def save_completion_report(project_dir: str, report: Dict[str, Any], logger) -> 
     Returns:
         str - 報告檔案路徑
     """
-    log_dir = Path(project_dir) / ".claude" / "hook-logs" / "phase-completion-gate"
+    # 報告落點經 get_hook_log_dir：linked worktree 內解析到主 checkout（project_dir 不再參與）
+    log_dir = get_hook_log_dir("phase-completion-gate")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     report_file = log_dir / f"completion-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"

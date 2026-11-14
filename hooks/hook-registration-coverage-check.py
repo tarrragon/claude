@@ -48,6 +48,7 @@ sys.path.insert(0, str(_PROJECT_INIT_DIR))
 from lib import setup_hook_logging, run_hook_safely
 from lib.hook_command_resolver import resolve_hook_script_path
 from lib.hook_registry import merge_dispatch_registry
+from lib.project_hook_registry import manifest_commands
 from project_init.lib.hook_checker import (
     extract_registered_hooks,
     extract_registered_skill_hooks,
@@ -56,6 +57,63 @@ from project_init.lib.hook_checker import (
     scan_hooks_directory,
     scan_skill_hooks,
     should_exclude_file,
+)
+
+
+# ---------------------------------------------------------------------------
+# 建議句（受眾：consumer 操作者）。分流說法與 sync-pull.md〈幽靈註冊處置〉一致：
+# 框架 hook 由上游註冊於 settings.json，consumer 不改 settings.json；專案自有 hook
+# 寫進專案 hook 清冊，由框架產生 settings.local.json 的註冊。
+# ---------------------------------------------------------------------------
+PROJECT_MANIFEST_HINT = (
+    ".claude/project-integration/hook-registry.yaml（格式見 "
+    "references/project-hook-registry-format.md），由框架產生註冊"
+)
+
+ADVICE_UNREGISTERED_HOOKS = (
+    "\n建議: 這些 Hook 若屬框架，回報 framework issue 由主控方在上游補註冊；"
+    "若屬專案自有 hook 且尚未寫進專案 hook 清冊，寫進 " + PROJECT_MANIFEST_HINT + "；"
+    "若已透過其他管道（installer 產生的原生 git hook shim、被其他"
+    "已註冊 hook 匯入的共用模組等）執行，補一筆 hook-exclude-list.json"
+    "「notes」說明，而非視為缺漏"
+)
+
+ADVICE_UNREGISTERED_SKILL_HOOKS = (
+    "\n建議: 這些 Skill Hook 若屬框架，回報 framework issue 由主控方在上游補註冊"
+    "（路徑形式: $CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<file>.py）；"
+    "若屬專案自有 hook 且尚未寫進專案 hook 清冊，寫進 " + PROJECT_MANIFEST_HINT
+)
+
+ADVICE_PHANTOM = (
+    "建議: 執行 --fix 移除 settings.local.json 內 command 指向不存在檔的註冊（hook relocate 後常見）；"
+    "settings.json 內的幽靈，上游原有的註冊由 sync-pull 三方合併處理、自動登記寫入的註冊"
+    "由 sync-pull 收回，若持續出現回報 framework issue"
+)
+
+ADVICE_DUPLICATE = (
+    "建議: 框架 hook 已在上游 settings.json 註冊者，從 settings.local.json 刪除重複那筆，"
+    "避免 auto-resume 類副作用重複觸發；兩處皆屬框架檔的重複，回報 framework issue"
+)
+
+ADVICE_MERGE_VIOLATION = (
+    "建議: 被合併版的註冊在 settings.local.json 者直接從該檔刪除；在上游 settings.json 者"
+    "回報 framework issue 由主控方移除（保留檔案本身供回溯）"
+)
+
+ADVICE_LOCAL_REGISTRATION = (
+    "建議: 框架 hook 上游已註冊者，從 settings.local.json 刪除這筆；"
+    "上游未註冊的框架 hook，回報 framework issue；"
+    "專案自有 hook 寫進 " + PROJECT_MANIFEST_HINT +
+    "（見 sync-pull.md〈幽靈註冊處置〉）"
+)
+
+ADVICE_CONSTANTS = (
+    ADVICE_UNREGISTERED_HOOKS,
+    ADVICE_UNREGISTERED_SKILL_HOOKS,
+    ADVICE_PHANTOM,
+    ADVICE_DUPLICATE,
+    ADVICE_MERGE_VIOLATION,
+    ADVICE_LOCAL_REGISTRATION,
 )
 
 
@@ -252,8 +310,9 @@ def find_local_hook_registrations(
 ) -> List[Tuple[str, str]]:
     """找出 settings.local.json 內的任何 hook 註冊（latent ghost 預防）。
 
-    單一註冊來源原則：hook 註冊一律歸 settings.json，settings.local.json
-    僅放 permissions / env / mcp / outputStyle。即使 local 層的註冊目前
+    註冊分流（與 sync-pull.md〈幽靈註冊處置〉一致）：框架 hook 由上游註冊於
+    settings.json；專案自有 hook 寫進專案 hook 清冊，由框架產生 settings.local.json
+    的註冊（清冊產生的條目不在本函式回報範圍）。其餘 local 註冊即使目前
     合法（檔案存在、未重複），一旦該 hook relocate，local 副本即成幽靈，
     而 sync 排除 local 檔無法自癒。故在註冊「尚未出事」時即示警，把偵測
     時機從 relocate 後提前到註冊當下（對應 hook relocate phantom 根因）。
@@ -264,7 +323,12 @@ def find_local_hook_registrations(
     registrations: List[Tuple[str, str]] = []
     if not settings_local:
         return registrations
+    # 專案 hook 清冊產生的條目是合法的 local 註冊（project-hook-registry-format.md）。
+    # 清冊無法判定（缺 pyyaml、格式錯誤）時回傳 None，一律照「清冊外」示警，不當成合法。
+    legitimate = manifest_commands(project_root) or set()
     for event_type, _matcher, command in extract_registered_commands(settings_local, logger):
+        if command in legitimate:
+            continue
         registrations.append((event_type, command))
     return registrations
 
@@ -280,8 +344,8 @@ def prune_phantom_local_registrations(
     `hooks` key，避免殘留空殼。
 
     僅作用於 settings.local.json：該層為 sync 排除檔，relocate 後無法自癒
-    （ARCH-TUNL-001）；settings.json 的幽靈由 sync overlay 自癒且屬 SSOT，不在此
-    自動改寫範圍。設計依據：settings.local.json 為 sync 外層無法自癒機制、PC-148 固化原則。
+    （ARCH-TUNL-001）；settings.json 屬框架檔，其中上游原有的註冊由 sync-pull 三方
+    合併處理、自動登記寫入的註冊由 sync-pull 收回，不在此自動改寫範圍。設計依據：settings.local.json 為 sync 外層無法自癒機制、PC-148 固化原則。
 
     Returns:
         [(event_type, 解析後不存在的路徑字串), ...]，已移除（或 dry-run 將移除）的 entry。
@@ -537,13 +601,7 @@ def main():
 
             logger.info(log_output)
 
-        log_output = (
-            "\n建議: 這些 Hook 若屬框架，回報 framework issue 由主控方在上游補註冊；"
-            "若屬專案自有 hook，同樣回報 framework issue（框架目前無專案自有 hook 的註冊位置）；"
-            "若已透過其他管道（installer 產生的原生 git hook shim、被其他"
-            "已註冊 hook 匯入的共用模組等）執行，補一筆 hook-exclude-list.json"
-            "「notes」說明，而非視為缺漏"
-        )
+        log_output = ADVICE_UNREGISTERED_HOOKS
 
         print(log_output)
 
@@ -570,7 +628,7 @@ def main():
             log_output = f"  ... 還有 {len(unregistered_skill_hooks) - 15} 個"
             print(log_output)
             logger.info(log_output)
-        log_output = "\n建議: 這些 Skill Hook 若屬框架，回報 framework issue 由主控方在上游補註冊（路徑形式: $CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<file>.py）；若屬專案自有 hook，同樣回報 framework issue"
+        log_output = ADVICE_UNREGISTERED_SKILL_HOOKS
         print(log_output)
         logger.info(log_output)
 
@@ -595,7 +653,7 @@ def main():
             print(line)
             logger.warning(line)
             sys.stderr.write(line + "\n")
-        advice = "建議: 執行 --fix 移除 settings.local.json 內 command 指向不存在檔的註冊（hook relocate 後常見）；settings.json 內的幽靈由 sync overlay 自癒，若持續出現回報 framework issue"
+        advice = ADVICE_PHANTOM
         print(advice)
         logger.warning(advice)
 
@@ -607,7 +665,7 @@ def main():
             line = f"  - {event_type}: {path}（來源: {', '.join(labels)}）"
             print(line)
             logger.warning(line)
-        advice = "建議: 框架 hook 已在上游 settings.json 註冊者，從 settings.local.json 刪除重複那筆，避免 auto-resume 類副作用重複觸發；兩處皆屬框架檔的重複，回報 framework issue"
+        advice = ADVICE_DUPLICATE
         print(advice)
         logger.warning(advice)
 
@@ -627,7 +685,7 @@ def main():
             print(line)
             logger.warning(line)
             sys.stderr.write(line + "\n")
-        advice = "建議: 被合併版的註冊在 settings.local.json 者直接從該檔刪除；在上游 settings.json 者回報 framework issue 由主控方移除（保留檔案本身供回溯）"
+        advice = ADVICE_MERGE_VIOLATION
         print(advice)
         logger.warning(advice)
 
@@ -635,8 +693,8 @@ def main():
     local_hook_regs = find_local_hook_registrations(settings_local, project_root, logger)
     if local_hook_regs:
         header = (
-            "\n[WARNING] settings.local.json 內含 hook 註冊"
-            "（違反單一註冊來源原則，relocate 後會變幽靈）:"
+            "\n[WARNING] settings.local.json 內含不在專案 hook 清冊的 hook 註冊"
+            "（框架 hook 的第二份註冊在 relocate 後會變幽靈；專案 hook 不進清冊則換機器後不存在）:"
         )
         print(header)
         logger.warning(header)
@@ -644,12 +702,7 @@ def main():
             line = f"  - {event_type}: {command}"
             print(line)
             logger.warning(line)
-        advice = (
-            "建議: 框架 hook 上游已註冊者，從 settings.local.json 刪除這筆；"
-            "上游未註冊的框架 hook 或專案自有 hook，回報 framework issue"
-            "（見 sync-pull.md〈幽靈註冊處置〉）；"
-            "settings.local.json 僅放 permissions / env / mcp / outputStyle"
-        )
+        advice = ADVICE_LOCAL_REGISTRATION
         print(advice)
         logger.warning(advice)
 

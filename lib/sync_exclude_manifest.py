@@ -24,8 +24,6 @@
     from sync_exclude_manifest import should_exclude, compute_content_hash
 
 本模組屬框架資產，正常 sync（不在排除清單內）。
-
-來源：0.19.1-W1-027（W1-024 H1/H2/H3）。
 """
 
 from __future__ import annotations
@@ -75,8 +73,8 @@ LOCAL_ONLY_PATTERNS = frozenset({
     # 類型 A - Runtime state
     "pm-status.json",
     "dispatch-active.json",
-    "dispatch-active.lock",    # W1-018.2: dispatch tracker advisory lock（.json 已排除，.lock 補齊）
-    "scheduled_tasks.lock",    # W1-018.2: scheduled tasks runtime lock（session-local）
+    "dispatch-active.lock",    # dispatch tracker advisory lock（.json 已排除，.lock 補齊）
+    "scheduled_tasks.lock",    # scheduled tasks runtime lock（session-local）
     "hook-state",
     # 工具產物（Python 快取，無跨專案共用價值）
     "__pycache__",
@@ -86,21 +84,33 @@ LOCAL_ONLY_PATTERNS = frozenset({
     "sync-skills.yaml",    # 各專案選擇性 skill 同步設定（mode/include/private）
     "sync-preserve.yaml",
     ".sync-state.json",
-    # version-release CLI 專案配置（release workflow / tag 格式 / worklog 路徑
-    # 皆 per-project，跨專案 sync 會以他專案設定覆蓋本專案；本專案 repo 內仍正常 track）
-    ".version-release.yaml",
     ".sync-conflicts",         # 三方合併衝突暫存目錄（pull/push 皆不同步，本地手動解決）
     "settings.local.json",
     ".zhtw-mcp-skip",          # 各專案 opt-out 繁中檢查的 flag，per-project 決定
     ".skill-sync-base",        # skill-sync 同步基準標記，依設計只留本機（寫在 skills/<name>/ 底下）
 })
 
-# 寫在 skills/<name>/ 等巢狀位置的 local-only 名稱：gitignore 條目須用 `.claude/**/<名稱>`，
-# `.claude/<名稱>` 只比對 .claude/ 根層，忽略不了巢狀標記（git 對含中間斜線的條目錨定該目錄）。
-NESTED_LOCAL_ONLY_NAMES = frozenset({".skill-sync-base", "__pycache__"})
+# 可能出現在巢狀位置的 local-only 名稱：gitignore 條目須用 `.claude/**/<名稱>`，
+# `.claude/<名稱>` 只比對 .claude/ 根層，忽略不了巢狀位置（git 對含中間斜線的條目錨定該目錄）。
+#
+# 範圍是 LOCAL_ONLY_PATTERNS 全部：should_exclude 對它們採路徑任一段同名即排除，
+# 等於宣告這些名稱出現在任何深度都是 local-only；.gitignore 的涵蓋範圍須與之一致，
+# 否則檢查判定已涵蓋、git 卻沒忽略（實測 .claude/hooks/hook-logs/、
+# .claude/skills/doc-flow/hook-logs/、各 skill 的 .venv/、.pytest_cache/）。
+# `.claude/**/<名稱>` 也比對根層（** 可為零層），根層的既有用途不受影響。
+# LOCAL_ONLY_ROOT_DIRS 的通用名（logs、state、worktrees）只在根層是 local-only，不在此集合。
+NESTED_LOCAL_ONLY_NAMES = LOCAL_ONLY_PATTERNS
 
-# NESTED_LOCAL_ONLY_NAMES 中屬目錄的名稱：尾斜線形式（`__pycache__/`）同樣涵蓋各層同名目錄。
-NESTED_LOCAL_ONLY_DIR_NAMES = frozenset({"__pycache__"})
+# NESTED_LOCAL_ONLY_NAMES 中屬目錄的名稱：尾斜線形式（`hook-logs/`）同樣涵蓋各層同名目錄。
+NESTED_LOCAL_ONLY_DIR_NAMES = frozenset({
+    "handoff",
+    "hook-logs",
+    "hook-state",
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
+    ".sync-conflicts",
+})
 
 
 def required_gitignore_entry(name: str) -> str:
@@ -127,9 +137,12 @@ def is_nested_name_covered(name: str, gitignore_lines: Iterable[str]) -> bool:
     }
     if name in NESTED_LOCAL_ONLY_DIR_NAMES:
         covering |= {f"{n}/" for n in tuple(covering)}
+    if name.endswith(".lock"):
+        # 副檔名萬用字元同樣不帶中間斜線或以 ** 起頭，涵蓋各層
+        covering |= {"*.lock", "**/*.lock", "/**/*.lock", ".claude/**/*.lock", "/.claude/**/*.lock"}
     return any(line.strip() in covering for line in gitignore_lines)
 
-# 僅 .claude/ 根層的 local-only 目錄（W1-018.2）。
+# 僅 .claude/ 根層的 local-only 目錄。
 #
 # 與 LOCAL_ONLY_PATTERNS 的差異：這些名稱（logs / state）過於通用，作為 part-level
 # 黑名單會誤殺 skill 內部的同名 live 目錄（例：
@@ -146,18 +159,27 @@ LOCAL_ONLY_ROOT_DIRS = frozenset({
     # 具名（無已知 skill 內部同名巢狀目錄，目前 part-level 不會誤殺），但語意上
     # .claude/worktrees/ 必為根層 runtime 產物，root-anchored 對未來新增的巢狀
     # worktrees/ 目錄天然免疫（與 logs / state 同策略）。對應 .gitignore 既有
-    # root-anchored 宣告 .claude/worktrees/。來源：W1-018.3。
+    # root-anchored 宣告 .claude/worktrees/。
     "worktrees",
-    # 專案產物（非框架資產）：以下三者為 per-project 工作產物，框架定義目錄結構但
-    # 目錄內的實例屬各專案私有，跨專案 sync 會把他專案的 ticket 備份 / 分析 / 計畫
-    # 推進公開框架 repo 造成污染（root-anchored，對應 .gitignore 同名宣告）。
-    #
-    # [維護者警告 — 勿於 sync-pull 衝突時還原] 此三條曾於框架 repo 累積大量孤兒
-    # （某下游專案 78 個 migration-backups + 6 analyses + 5 plans 被誤推進公開 repo）。
-    # 本條目即為根除該污染的防護。曾因另一專案 full-overlay sync-push 攜帶舊版 manifest
-    # 而被靜默蓋掉，pull 三方合併再把刪除帶回下游，形成 clobber 循環。若你在 sync
-    # 衝突中看到「刪除這三行」的 delta，那是上游被舊 manifest 覆蓋的結果，非有意移除，
-    # 請採 local（保留本三條），勿還原。根治需框架維護者在 canonical 源頭一併保留本條目。
+})
+
+# 類型 E 的根層錨定版本：不跨專案同步、但專案 repo 可正常 git track 的根層目錄。
+# 與 LOCAL_ONLY_ROOT_DIRS 同為 root-anchored（skills/*/plans/ 等巢狀同名目錄不受影響），
+# 差別在不進 GITIGNORE_EXPECTED：防外洩由 should_exclude 完成（push 複製到遠端前、
+# clean-check 判定 untracked 前皆以它過濾），.gitignore 不是防線；列入 .gitignore
+# 必要清單只會讓 consumer 的計畫、分析與 ticket 備份無法入版控。
+#
+# 專案產物（非框架資產）：以下三者為 per-project 工作產物，框架定義目錄結構但
+# 目錄內的實例屬各專案私有，跨專案 sync 會把他專案的 ticket 備份 / 分析 / 計畫
+# 推進公開框架 repo 造成污染。
+#
+# [維護者警告 — 勿於 sync-pull 衝突時還原] 此三條曾於框架 repo 累積大量孤兒
+# （某下游專案 78 個 migration-backups + 6 analyses + 5 plans 被誤推進公開 repo）。
+# 本條目即為根除該污染的防護。曾因另一專案 full-overlay sync-push 攜帶舊版 manifest
+# 而被靜默蓋掉，pull 三方合併再把刪除帶回下游，形成 clobber 循環。若你在 sync
+# 衝突中看到「刪除這三行」的 delta，那是上游被舊 manifest 覆蓋的結果，非有意移除，
+# 請採 local（保留本三條），勿還原。根治需框架維護者在 canonical 源頭一併保留本條目。
+PER_PROJECT_ROOT_DIRS = frozenset({
     "migration-backups",  # ticket migrate 自動產生的 ticket md 備份
     "analyses",           # 專案分析報告產物
     "plans",              # 專案計畫 / 設計 / 遷移文件
@@ -199,6 +221,9 @@ CREDENTIAL_PATTERNS = frozenset({
 # 與 LOCAL_ONLY_PATTERNS 差異：LOCAL_ONLY 同時要求 .gitignore 涵蓋；本集合不要求。
 PER_PROJECT_PATTERNS = frozenset({
     "project-integration",  # 各 skill 的專案落地層（per-project 案例/Hook 對齊/CLI 接線）
+    # version-release CLI 專案配置（release workflow / tag 格式 / worklog 路徑
+    # 皆 per-project，跨專案 sync 會以他專案設定覆蓋本專案；本專案 repo 內正常 track）
+    ".version-release.yaml",
 })
 
 # 副檔名排除（含憑證副檔名 .pem/.key/.p12/.pfx/.jks，類型 D 最高風險維度）
@@ -226,18 +251,62 @@ SYNC_EXCLUDE_ALL = LOCAL_ONLY_PATTERNS | CREDENTIAL_PATTERNS | PER_PROJECT_PATTE
 #
 # 與 LOCAL_ONLY_PATTERNS 同義：這些是各專案個別管理、不應被 git track 的 runtime
 # state / local-only settings / session log / 工具產物。若 .gitignore 漏列其一，
-# push 端 clean-check 會把未追蹤的本地檔判為 dirty 而 abort（W1-024 缺陷 T）。
+# push 端 clean-check 會把未追蹤的本地檔判為 dirty 而 abort。
 # 故 session-start hook 以此集合交叉驗證 .gitignore 涵蓋度，偵測未來漂移。
 #
 # 不含 CREDENTIAL_PATTERNS：憑證的 gitignore 涵蓋由 .env / secret 等專用 glob
 # 規則處理（且部分為目錄層級），語意與 local-only 名稱比對不同，故分開不混入。
 # 含 LOCAL_ONLY_ROOT_DIRS：logs / state 同須在 .gitignore 宣告（root-anchored 形式），
 # 故併入交叉驗證基準。
+#
+# 不含類型 E（PER_PROJECT_PATTERNS、PER_PROJECT_ROOT_DIRS）：它們不同步但專案 repo 可
+# 正常 track，列入會要求 consumer 忽略自己的計畫、分析與發版設定。
 GITIGNORE_EXPECTED = LOCAL_ONLY_PATTERNS | LOCAL_ONLY_ROOT_DIRS
+
+# 不屬 sync manifest、但同樣必須寫進 .gitignore 的本機產物：專案根層的測試覆蓋率報告，
+# 以及 Claude Code 寫在 .claude/ 下的工具輸出暫存。兩者不在 should_exclude 範圍內，
+# 只要求 .gitignore 宣告，故與 GITIGNORE_EXPECTED 分開列。
+GITIGNORE_EXTRA_ENTRIES = frozenset({"coverage/", ".claude/tool-results/"})
+
+
+def required_gitignore_entries() -> frozenset[str]:
+    """回傳 .gitignore 必要條目的完整集合。
+
+    SessionStart 的 gitignore 檢查與 project-init onboard 都從這裡取清單，
+    兩邊不各自維護副本；清單不同時，照 onboard 補完 .gitignore 的專案仍會
+    在首次 git add .claude 時夾帶 local-only 檔案。
+    """
+    manifest_entries = {required_gitignore_entry(name) for name in GITIGNORE_EXPECTED}
+    return frozenset(manifest_entries) | GITIGNORE_EXTRA_ENTRIES
+
+
+def gitignore_probe_paths(entry: str) -> tuple[str, ...]:
+    """回傳以 git check-ignore 判定條目是否涵蓋時要探測的代表路徑。
+
+    巢狀條目（`.claude/**/<名稱>`）探測根層、一層、二層三個深度，全部被忽略才算涵蓋；
+    目錄名稱在路徑後加 `/_probe`，因為不存在的路徑會被 git 當成檔案，
+    尾斜線形式的目錄規則比對不到。
+    """
+    if entry.startswith(".claude/**/"):
+        name = entry[len(".claude/**/"):]
+        bases = (f".claude/{name}", f".claude/_a/{name}", f".claude/_a/_b/{name}")
+        is_dir = name in NESTED_LOCAL_ONLY_DIR_NAMES
+    else:
+        stripped = entry.rstrip("/")
+        name = stripped.split("/")[-1]
+        bases = (stripped,)
+        is_dir = entry.endswith("/") or name in LOCAL_ONLY_ROOT_DIRS
+    if is_dir:
+        return tuple(f"{base}/_probe" for base in bases)
+    return bases
 
 # 預計算小寫版本，避免每次呼叫 should_exclude 重複計算
 _SYNC_EXCLUDE_ALL_LOWER = frozenset(p.lower() for p in SYNC_EXCLUDE_ALL)
-_LOCAL_ONLY_ROOT_DIRS_LOWER = frozenset(p.lower() for p in LOCAL_ONLY_ROOT_DIRS)
+# should_exclude 規則 5 的根層錨定集合：local-only（須 gitignore）與 per-project（可 track）
+# 兩者在 sync 上同樣排除。
+_SYNC_EXCLUDE_ROOT_DIRS_LOWER = frozenset(
+    p.lower() for p in LOCAL_ONLY_ROOT_DIRS | PER_PROJECT_ROOT_DIRS
+)
 _EXCLUDE_SUFFIXES_LOWER = frozenset(s.lower() for s in EXCLUDE_SUFFIXES)
 _EXCLUDE_NAME_PREFIXES_LOWER = frozenset(p.lower() for p in EXCLUDE_NAME_PREFIXES)
 
@@ -368,8 +437,8 @@ def should_exclude(path: Path) -> bool:
       2. 副檔名命中 EXCLUDE_SUFFIXES（含 .pem/.key 等憑證副檔名）
       3. 檔名前綴命中 EXCLUDE_NAME_PREFIXES（.env. / secret 變體）
       4. 路徑任一目錄段命中名稱黑名單（排除整個 hook-state/ secrets/ 目錄）
-      5. 路徑第一段命中 LOCAL_ONLY_ROOT_DIRS（僅 root-anchored，避免誤殺 skill
-         內部同名目錄如 skills/*/state/）（W1-018.2）
+      5. 路徑第一段命中 LOCAL_ONLY_ROOT_DIRS 或 PER_PROJECT_ROOT_DIRS（僅 root-anchored，避免誤殺 skill
+         內部同名目錄如 skills/*/state/）
 
     規則 1 與規則 4 的關係：規則 1 是規則 4 的嚴格子集，不是第二種比對語意。
     path.name 恆為 path.parts 的末元素（例外僅 Path(".")
@@ -396,7 +465,7 @@ def should_exclude(path: Path) -> bool:
         return True
     # root-anchored：僅第一段命中才排除（logs / state 通用名只在 .claude/ 根層為 runtime）
     parts = path.parts
-    return bool(parts) and parts[0].lower() in _LOCAL_ONLY_ROOT_DIRS_LOWER
+    return bool(parts) and parts[0].lower() in _SYNC_EXCLUDE_ROOT_DIRS_LOWER
 
 
 def should_exclude_on_pull(path: Path) -> bool:

@@ -11,7 +11,7 @@ created: 2026-06-17
 
 - **Pattern ID**: ARCH-TUNL-001
 - **分類**: 架構設計
-- **來源版本**: v1.0.0（1.0.0-W9-001 ANA）
+- **來源版本**: v1.0.0（ANA）
 - **發現日期**: 2026-06-17
 - **風險等級**: 中
 
@@ -74,7 +74,6 @@ python3 -c "import json; d=json.load(open('.claude/settings.local.json')); print
 
 ## 關聯
 
-- **Ticket**: 1.0.0-W9-001
 - **相關規則**: `.claude/references/hook-system-operations.md`
 - **概念同源**: `tool-output-trust-rules` 規則 5（記錄平面 vs 世界平面二相性）——本案是該二相性在配置層的翻版。
 

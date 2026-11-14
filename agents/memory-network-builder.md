@@ -24,4 +24,4 @@ model: haiku
 ---
 
 *Deprecated: 2026-03-02*
-*Superseded by: continuous-learning Skill (0.31.0-W28-004)*
+*Superseded by: continuous-learning Skill*

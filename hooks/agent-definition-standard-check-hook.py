@@ -42,7 +42,7 @@ EXEMPT_FILENAMES = {
 }
 
 # 內容錯置啟發式：本應在 rules/methodologies 層的全文被塞進 agent 定義檔。
-# 設計取捨（W8-016 dogfooding）：限 H2 (`## `) 層級命中，排除 H3+ 的 agent 領域專屬
+# 設計取捨（dogfooding 實測）：限 H2 (`## `) 層級命中，排除 H3+ 的 agent 領域專屬
 # 子清單（如 cinnamon 的「### 重構品質指標」、TDD 流程內「### Step N: 品質檢查清單」），
 # 避免高 false positive 使 WARNING 訊號失效（規範表的存在即病史 → 僅標 H2 級全文搬運）。
 _MISPLACEMENT_PATTERNS = (

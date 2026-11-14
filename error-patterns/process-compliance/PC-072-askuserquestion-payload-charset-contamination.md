@@ -9,7 +9,7 @@
 | 編號 | PC-072 |
 | 類別 | process-compliance |
 | 風險等級 | 中 |
-| 首發時間 | 2026-04-17（W12-001.1 執行 session） |
+| 首發時間 | 2026-04-17（首次事件執行 session） |
 | 姊妹模式 | PC-064（AskUserQuestion 相關，根因互異） |
 
 ---
@@ -112,31 +112,31 @@ PM 主線程生成 `AskUserQuestion` 工具呼叫的 JSON payload 時，在 `que
 
 ---
 
-## 再現紀錄（W12-002 調查 completed 後仍再現）
+## 再現紀錄（污染調查 ANA 完成後仍再現）
 
 | 日期 | Session 情境 | 污染字元 | 備註 |
 |------|-------------|---------|------|
-| 2026-04-17 W12-001.1 | 首發，AUQ label「独立」「⚡扯」 | 独/违/决/⚡ | PC-072 v1.0.0 來源 |
-| 2026-04-17 W12-002 | ANA 調查過程多次復現 | 同上 | W12-002 建立 4 個子 IMP Ticket（Hook + 字串清洗）並 completed |
-| 2026-04-17 W11-005 收尾 | AUQ label `\u8865 spawned_tickets` 用戶收到顯示為「补 spawned_tickets」 | 补 | **W12-002 completed 後仍再現**，防護未落實 |
-| 2026-04-17 W12-001 完結（本次） | AUQ description `\u96b6\u5c6c`（本應「隸屬」）、`\u9057\u7559`（本應「遺留」） | 隶 (\u96B6)、遗 (\u9057) | **PC-072 發表後仍再現**；新建 W13-003 IMP 補強檢測清單 |
+| 2026-04-17 首次事件 session | 首發，AUQ label「独立」「⚡扯」 | 独/违/决/⚡ | PC-072 v1.0.0 來源 |
+| 2026-04-17 污染調查 ANA | ANA 調查過程多次復現 | 同上 | 該 ANA 建立 4 個子 IMP Ticket（Hook + 字串清洗）並 completed |
+| 2026-04-17 另一收尾 session | AUQ label `\u8865 spawned_tickets` 用戶收到顯示為「补 spawned_tickets」 | 补 | **調查 ANA completed 後仍再現**，防護未落實 |
+| 2026-04-17 第四次再現 session（本次） | AUQ description `\u96b6\u5c6c`（本應「隸屬」）、`\u9057\u7559`（本應「遺留」） | 隶 (\u96B6)、遗 (\u9057) | **PC-072 發表後仍再現**；新建 IMP 補強檢測清單 |
 
 **訊號強度升級**：從「token 偶發」升級為「系統性污染持續存在」。
 
 **解讀**：
-- W12-002 雖 completed，但 4 個子 IMP Ticket（W12-002.1-.4 PreToolUse Hook / emoji 清洗 / language-constraints 範例修正）**皆為 pending 狀態**，防護層未實作
-- W11-005 收尾屬「W12-002 completed 後」時間線，再現符合「調查完成但修復未落地」的推論
+- 調查 ANA 雖 completed，但 4 個子 IMP Ticket（PreToolUse Hook / emoji 清洗 / language-constraints 範例修正）**皆為 pending 狀態**，防護層未實作
+- 另一收尾 session 屬「調查 ANA completed 後」時間線，再現符合「調查完成但修復未落地」的推論
 - 需另起 ANA 追蹤「completed ANA 下游 IMP 未實作也算污染未根除」的落差
 
 ---
 
-## 真根因確認：H3 假設（W17-144.1.1.1.1 收斂 + 外部佐證）
+## 真根因確認：H3 假設（五層 ANA 鏈收斂 + 外部佐證）
 
-W17-144 系列五層 ANA 鏈經實證收斂於 **H3 假設**：
+五層 ANA 鏈經實證收斂於 **H3 假設**：
 
 > **模型在生成 AUQ JSON 時切換到「結構化資料 mode」，繁體 prime 被簡體中文網站 / SaaS 訓練樣本稀釋，短 label 中 token 預測偶爾挑簡體形。**
 
-### 本專案實證（W17-144.1.1.1.1）
+### 本專案實證
 
 | 載體 | 簡體字命中率 |
 |------|-----------|
@@ -157,7 +157,7 @@ W17-144 系列五層 ANA 鏈經實證收斂於 **H3 假設**：
 
 ### Follow-up 追蹤
 
-由 W17-144.2（本檔對應 follow-up tracker ticket）追蹤 Anthropic 修復進度。Issue 修復前本 PC 持續適用。
+由本檔對應的 follow-up tracker ticket 追蹤 Anthropic 修復進度。Issue 修復前本 PC 持續適用。
 
 ---
 
@@ -180,6 +180,6 @@ W17-144 系列五層 ANA 鏈經實證收斂於 **H3 假設**：
 ---
 
 **Last Updated**: 2026-05-05
-**Version**: 1.2.0 — W17-144 五層 ANA 鏈收斂於 H3 假設「AUQ JSON 結構化資料 mode 繁體 prime 弱化」+ 外部佐證 Anthropic Issue #46846 / 3 duplicate（已知 OPEN bug，logographic script family pattern-matching confusion）；新增 W17-144.2 follow-up tracker
-**Version**: 1.1.0 — 新增 W12-001 完結 session 再現紀錄（隶/遗 兩字元），檢查清單補充常見簡體字
+**Version**: 1.2.0 — 五層 ANA 鏈收斂於 H3 假設「AUQ JSON 結構化資料 mode 繁體 prime 弱化」+ 外部佐證 Anthropic Issue #46846 / 3 duplicate（已知 OPEN bug，logographic script family pattern-matching confusion）；新增 follow-up tracker
+**Version**: 1.1.0 — 新增第四次再現 session 紀錄（隶/遗 兩字元），檢查清單補充常見簡體字
 **Source**: 用戶即時指出 session 中 AUQ payload 的簡體字「独立」與 emoji「⚡扯」失誤

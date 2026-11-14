@@ -56,6 +56,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely  # noqa: E402
 from lib.git_utils import get_project_root  # noqa: E402
+from lib.hook_io import emit_model_reminder  # noqa: E402
 
 SHIM_MARKER = "# git-ref-transaction-content-guard shim"
 HOOK_FILENAME = "reference-transaction"
@@ -180,8 +181,9 @@ def _install_reference_transaction(hooks_dir: Path, logger) -> None:
 # - 使用者自訂的 pre-commit（不含 PRECOMMIT_MARKER）-> 改名為 pre-commit.local，
 #   由 shim 在檢查後串接呼叫，不覆蓋其內容；pre-commit.local 已存在時無法串接，
 #   跳過安裝並寫可見警告
-# - core.hooksPath 有設定時 git 不讀 .git/hooks，安裝無效，跳過並寫可見警告
-#   （hooksPath 常指向受版控的目錄，如 husky，不寫入以免汙染專案檔案）
+# - core.hooksPath 有設定時 git 不讀 .git/hooks，安裝無效：本 shim 與
+#   reference-transaction shim 一併跳過，由 main() 的 _skip_for_hooks_path 統一判斷
+#   並寫可見警告（hooksPath 常指向受版控的目錄，如 husky，不寫入以免汙染專案檔案）
 # 移除方式見 .claude/references/hook-architect-technical-reference.md
 # 〈git 原生 hook 的安裝與移除〉。
 PRECOMMIT_FILENAME = "pre-commit"
@@ -232,18 +234,44 @@ def _core_hooks_path(project_root: Path) -> Optional[str]:
     return value if result.returncode == 0 and value else None
 
 
-def _install_precommit(hooks_dir: Path, project_root: Path, logger) -> None:
-    hooks_path = _core_hooks_path(project_root)
-    if hooks_path:
-        sys.stderr.write(
-            f"[settings-json-syntax-precommit-install] core.hooksPath 已設為 {hooks_path}，"
-            "git 不讀 .git/hooks，跳過安裝；settings.json 語法閘門未生效，"
-            "如需啟用請在該 hooks 目錄的 pre-commit 呼叫 "
-            ".claude/hooks/settings-json-syntax-precommit.py。\n"
-        )
-        logger.warning("core.hooksPath=%s，跳過 pre-commit 安裝", hooks_path)
-        return
+def _points_to_default_hooks_dir(hooks_path: str, project_root: Path, common_dir: Path) -> bool:
+    """hooksPath 解析後是否就是 common_dir/hooks（相對路徑以 project_root 為基準）。
+    解析失敗回傳 False，由呼叫端維持跳過並警告。"""
+    try:
+        candidate = Path(hooks_path).expanduser()
+        if not candidate.is_absolute():
+            candidate = project_root / candidate
+        return candidate.resolve() == (common_dir / "hooks").resolve()
+    except (OSError, RuntimeError):
+        # 解析失敗：視為非預設目錄，交由呼叫端跳過並寫可見警告
+        return False
 
+
+def _skip_for_hooks_path(project_root: Path, common_dir: Path, logger) -> bool:
+    """core.hooksPath 指向預設目錄以外的位置時回傳 True，並對用戶（stderr）與模型
+    （additionalContext）發出警告：git 只讀 hooksPath 目錄，裝在 .git/hooks 的兩支
+    shim 不會被執行。hooksPath 就是預設目錄時視同未設定，照常安裝。"""
+    hooks_path = _core_hooks_path(project_root)
+    if not hooks_path:
+        return False
+    if _points_to_default_hooks_dir(hooks_path, project_root, common_dir):
+        logger.debug("core.hooksPath=%s 指向預設 hooks 目錄，照常安裝", hooks_path)
+        return False
+    text = (
+        f"[git-ref-transaction-guard-install] core.hooksPath 已設為 {hooks_path}，"
+        "git 不讀 .git/hooks，跳過 reference-transaction 與 pre-commit 安裝。"
+        "commit-tree、update-ref、merge --continue 等路徑的內容掃描與 settings.json "
+        "語法閘門都未生效。如需啟用，請在該 hooks 目錄的 reference-transaction 呼叫 "
+        ".claude/hooks/git-ref-transaction-content-guard.py，pre-commit 呼叫 "
+        ".claude/hooks/settings-json-syntax-precommit.py。"
+    )
+    sys.stderr.write(text + "\n")
+    logger.warning("core.hooksPath=%s，跳過 reference-transaction 與 pre-commit 安裝", hooks_path)
+    emit_model_reminder("SessionStart", text)
+    return True
+
+
+def _install_precommit(hooks_dir: Path, logger) -> None:
     target = hooks_dir / PRECOMMIT_FILENAME
     body = _precommit_shim_body()
     if target.exists():
@@ -281,6 +309,9 @@ def main() -> int:
         logger.debug("非 git repo 或無法解析 git-common-dir，略過安裝")
         return 0
 
+    if _skip_for_hooks_path(project_root, common_dir, logger):
+        return 0
+
     hooks_dir = common_dir / "hooks"
     try:
         hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -290,7 +321,7 @@ def main() -> int:
         return 0
 
     _install_reference_transaction(hooks_dir, logger)
-    _install_precommit(hooks_dir, project_root, logger)
+    _install_precommit(hooks_dir, logger)
     return 0
 
 

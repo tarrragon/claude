@@ -73,7 +73,7 @@ _CREDENTIAL_EXACT_NAMES = frozenset({
 })
 
 # 標記檔存在即宣告該 skill 的本地內容為刻意客製，`pull`（全量）分歧檢查略過回報
-# （0.2.1-W3-124 acceptance 4 的宣告式 local override 決策：見 update_sync_manifest
+# （宣告式 local override 決策：見 update_sync_manifest
 # 與 _classify_sync_status 的 docstring）。
 SKILL_SYNC_OVERRIDE_MARKER = ".skill-sync-override"
 
@@ -776,7 +776,7 @@ def compute_content_hash(skill_dir: Path) -> str | None:
     對 (相對路徑, 檔案位元組) 依路徑排序後逐一雜湊，雜湊值只反映內容與檔案樹結構，
     與 mtime、掃描順序、檔案系統無關：相同內容不論何處產生都得到相同雜湊，內容不同
     則版本字串相同也得到不同雜湊。這修正的是版本字串同時被當內容同一性與演化祖先關係
-    使用、卻兩者都擔不起的機制缺陷（0.2.1-W3-124 §11.2：blog 與發佈庫的 2.5.0
+    使用、卻兩者都擔不起的機制缺陷（blog 與發佈庫的 2.5.0
     號碼相同、內容不同，曾被判為 up_to_date）。回傳 None 表示目錄不存在。
     """
     if not skill_dir.is_dir():
@@ -1257,7 +1257,7 @@ def update_sync_manifest(repo_dir: Path) -> None:
 
     版本字串不再進入同步決策：舊實作以版本字串相等判定內容同一性、以 semver 大小
     判定覆蓋方向，但兩個獨立演化的分支可能巧合共用同一版本號卻內容不同，semver
-    比較亦預設線性演進，對分支式分歧失準（0.2.1-W3-124 §11.2）。版本字串保留於本檔
+    比較亦預設線性演進，對分支式分歧失準。版本字串保留於本檔
     供人類於 changelog 對照，內容同一性判定改用 hash 欄位。
     """
     _warn_skill_md_case_mismatch(repo_dir)
@@ -1820,7 +1820,7 @@ def _classify_sync_status(
 
     不再嘗試自動判定覆蓋方向：舊實作以 semver 大小決定「該推或該拉」，但這預設了
     線性演進，對分支式分歧（兩個獨立演化的副本巧合共用同一版本號）必定失準
-    （0.2.1-W3-124 §11.2）。內容雜湊只能證明「相同或不同」，方向留給人工判斷。
+    內容雜湊只能證明「相同或不同」，方向留給人工判斷。
     """
     excluded = frozenset(excluded_skills)
     up_to_date: list[str] = []
@@ -2215,7 +2215,7 @@ def build_parser() -> argparse.ArgumentParser:
     Separated from main() so callers can inspect the available subcommands and
     flags without executing anything — consumers that print "run skill-sync X"
     guidance can assert X exists instead of the string silently going stale
-    (0.2.1-W3-351: sync-claude-push advertised a `pull-all` subcommand that
+    (a past sync-claude-push advertised a `pull-all` subcommand that
     never existed).
     """
     parser = argparse.ArgumentParser(

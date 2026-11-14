@@ -92,7 +92,7 @@ PM 行為（誤判）：
 |------|------|------|
 | 流程 | 遇 index.lock 失敗時，依檢查順序判別來源（見下方檢查清單） | 行為準則 |
 | 規則 | `bash-tool-usage-rules.md` 規則三維持「禁止串接」；本 PC 處理「乖乖拆分後仍失敗」剩餘情境，補充「GUI app」為另一合法來源 | 邊界澄清 |
-| 工具 | 強化 hook 訊息加入「若已拆分仍失敗，檢查外部 git GUI app fork process」（待 W17-194 落地） | 建議實施（W17-194） |
+| 工具 | 強化 hook 訊息加入「若已拆分仍失敗，檢查外部 git GUI app fork process」（待後續 IMP 落地） | 建議實施 |
 
 ---
 
@@ -125,7 +125,7 @@ PM 行為（誤判）：
 ## 相關文件
 
 - `.claude/rules/core/bash-tool-usage-rules.md` — 規則三「禁止串接多個 git 寫入操作」（hook/Bash 來源）
-- W17-194（pending）— 強化 hook 訊息加入 GUI app 外部進程偵測
+- 後續 IMP（pending）— 強化 hook 訊息加入 GUI app 外部進程偵測
 
 ---
 

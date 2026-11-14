@@ -27,7 +27,7 @@ from typing import List, Optional, Tuple, Union
 
 import yaml
 
-from .hook_base import get_project_root, get_shared_state_root
+from .hook_base import get_shared_state_root
 
 # ============================================================================
 # 快取變數（模組級，用於效能改善）
@@ -351,7 +351,7 @@ def get_current_version_from_todolist(
 ) -> "Optional[str]":
     """從 docs/todolist.yaml 讀取當前活躍版本號
 
-    行為契約（0.2.1-W3-213 修復）：
+    行為契約：
     - 主要格式：解析 `versions` 清單，尋找 `status` 為 `active` 的項目，回傳其
       `version` 欄位。此為 todolist.yaml 第 5 行註解宣告的行為，也是本 repo
       實際採用的格式（頂層已無 current_version 欄位）
@@ -558,7 +558,7 @@ def find_ticket_file(
     5. 如果上述路徑都不存在 → fallback 到 find_ticket_files() 全量掃描
 
     Args:
-        ticket_id: Ticket ID（如 "0.1.0-W1-001" 或非標準格式）
+        ticket_id: Ticket ID（標準格式 {version}-W{wave}-{seq}，或非標準格式）
         project_root: 專案根目錄（可選，若為 None 則自動取得）
         logger: 日誌物件（可選）
 
@@ -570,7 +570,7 @@ def find_ticket_file(
         project_root = get_shared_state_root()
 
     # 嘗試解析 ticket_id 中的版本號（格式：{version}-W{wave}-{seq}）
-    # 範例：0.1.0-W31-003 → version="0.1.0"
+    # 取出其中 {version} 段（如 "0.1.0"）
     version = extract_version_from_ticket_id(ticket_id)
 
     # Strategy 1: 直接構建路徑（如果能解析出版本號）
@@ -739,7 +739,7 @@ def extract_where_files(
     3. 透過 extract_where_files_from_frontmatter 提取清單
 
     Args:
-        ticket_id: Ticket ID（如 "0.18.0-W11-004"）
+        ticket_id: Ticket ID（標準格式 {version}-W{wave}-{seq}）
         project_root: 專案根目錄；None 時呼叫 get_shared_state_root()
         logger: 可選 Logger 實例
         intent / canonical: 見 extract_where_files_from_frontmatter
@@ -783,7 +783,7 @@ def extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:
     """從 Ticket ID 中提取版本號
 
     Ticket ID 標準格式：{version}-W{wave}-{seq}
-    範例：0.1.0-W31-003 → "0.1.0"
+    回傳 {version} 段（如 "0.1.0"）
 
     Args:
         ticket_id: Ticket ID 字串
@@ -806,7 +806,7 @@ def extract_wave_from_ticket_id(ticket_id: str) -> Optional[int]:
     """從 Ticket ID 中提取 Wave 號
 
     Ticket ID 標準格式：{version}-W{wave}-{seq}
-    範例：0.1.0-W31-003 → 31
+    回傳 {wave} 段的整數（W 後的數字）
 
     Args:
         ticket_id: Ticket ID 字串
@@ -874,8 +874,8 @@ def validate_ticket_unified(
     的完整驗證流程，供 agent-ticket-validation-hook 等 Hook 使用。
 
     Args:
-        ticket_id: Ticket ID，如 "0.1.0-W39-001"
-        project_root: 專案根目錄；若為 None 則自動呼叫 get_project_root()
+        ticket_id: Ticket ID，標準格式 {version}-W{wave}-{seq}
+        project_root: 專案根目錄；若為 None 則呼叫 get_shared_state_root()
         logger: 可選 Logger 實例
 
     Returns:
@@ -884,14 +884,14 @@ def validate_ticket_unified(
             - (False, "錯誤訊息"): 驗證失敗及原因
 
     Examples:
-        >>> is_valid, error_msg = validate_ticket_unified("0.1.0-W39-001", logger=logger)
+        >>> is_valid, error_msg = validate_ticket_unified("<ticket-id>", logger=logger)
         >>> if not is_valid:
         ...     logger.error(error_msg)
         ...     return False, error_msg
     """
     # 取得 project_root
     if project_root is None:
-        project_root = get_project_root()
+        project_root = get_shared_state_root()
 
     # 步驟 1：尋找 Ticket 檔案
     ticket_path = find_ticket_file(ticket_id, project_root=project_root, logger=logger)
@@ -928,7 +928,7 @@ def validate_ticket_unified(
 
 
 # ============================================================================
-# Active In-Progress Ticket 共用入口（W11-021）
+# Active In-Progress Ticket 共用入口
 # ============================================================================
 
 # Ticket md 掃描的排除路徑片段（archive / backup 目錄統一排除）
@@ -953,14 +953,14 @@ def find_active_in_progress_ticket(
 ) -> Optional[dict]:
     """掃描 docs/work-logs/ 找出最新一筆 in_progress ticket 的 frontmatter dict。
 
-    W11-021 統一入口：
+    統一入口：
     - process-skip-guard / commit-handoff / file-ownership-guard 共用此函式
     - 使用 hook_utils.get_project_root（支援 worktree / CLAUDE_PROJECT_DIR）
     - glob pattern 限定 docs/work-logs/v*/**/tickets/*.md 並排除 archive/backup
     - 依 mtime 由新到舊排序，遇第一個 in_progress 立即返回（hot path 命中第一個 << 100ms）
 
     Args:
-        project_root: 專案根目錄；None 時呼叫 get_project_root()
+        project_root: 專案根目錄；None 時呼叫 get_shared_state_root()
         logger: 可選 Logger 實例
 
     Returns:
@@ -969,7 +969,7 @@ def find_active_in_progress_ticket(
     """
     if project_root is None:
         try:
-            project_root = get_project_root()
+            project_root = get_shared_state_root()
         except Exception as e:
             if logger:
                 logger.warning("無法取得 project_root: {}".format(e))

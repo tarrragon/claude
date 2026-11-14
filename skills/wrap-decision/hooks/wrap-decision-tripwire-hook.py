@@ -27,7 +27,7 @@ category 分流：
 （config / state / signals / render），原頂層名稱由本檔 re-export。pyyaml 依賴由
 tripwire/config.py 實際 import，PEP 723 宣告須保留。
 
-唯一觸發條件來源：.claude/config/wrap-triggers.yaml（W10-052 約束，portability-allow: 此 skill 對消費端環境的選用性依賴——缺該設定檔時 advisory 模式優雅降級為不觸發，非硬性中止；沿用時如需啟用訊號偵測，需提供對應設定檔）
+唯一觸發條件來源：.claude/config/wrap-triggers.yaml（portability-allow: 此 skill 對消費端環境的選用性依賴——缺該設定檔時 advisory 模式優雅降級為不觸發，非硬性中止；沿用時如需啟用訊號偵測，需提供對應設定檔）
 禁止在本檔案中硬編碼 triggers / keywords / thresholds。
 """
 
@@ -56,9 +56,11 @@ try:
         run_hook_safely,
         read_json_from_stdin,
         get_project_root,
+        get_code_root,
         get_effort_level,
         emit_hook_output,
     )
+    from lib.hook_base import get_shared_state_root
     _LIB_AVAILABLE = True
 except ImportError:
     # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
@@ -214,13 +216,13 @@ def main() -> int:
     logger.info("effort=%s，wrap-decision-tripwire 維持完整偵測（advisory，不依 effort 放行）", effort)
 
     project_root = get_project_root()
-    config_path = project_root / CONFIG_REL_PATH
+    config_path = get_code_root() / CONFIG_REL_PATH  # 設定檔屬框架（CR）
 
     config = load_config(config_path, logger)
     if config is None:
         return 0
 
-    base_state_path = project_root / config.state_file
+    base_state_path = get_shared_state_root(project_root) / config.state_file
     state_path = resolve_state_path(base_state_path, event, logger)
     prune_stale_state_files(base_state_path, state_path, logger)
     state = load_state(state_path, logger)

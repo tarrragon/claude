@@ -3,7 +3,6 @@ id: PC-V1-014
 title: 為繞過 gate 而改變語意載體（children→spawned_tickets）
 category: process-compliance
 severity: medium
-source_case: 1.5.0-W5-014
 created: 2026-07-05
 ---
 
@@ -22,7 +21,7 @@ PM 遇到 acceptance gate 阻擋（如 children 未完成阻擋母 ticket comple
 
 ## 案例
 
-**1.5.0-W5-014（2026-07-05）**：
+**ANA 落地 children 改 spawned_tickets 事件（2026-07-05）**：
 
 ANA ticket 分析完成後建立 3 個 children（Stop 審計 / CLI self-verify / CC feature request）。complete 時 gate 阻擋「children 未全部完成」。PM 將 children 改為 spawned_tickets + 清空 children 以繞過 gate。用戶指出語意問題後經 WRAP 檢討，確認 ANA 延伸屬同一任務鏈應為 children，還原結構並恢復 in_progress。
 
@@ -45,4 +44,3 @@ ANA ticket 分析完成後建立 3 個 children（Stop 審計 / CLI self-verify 
 
 - PC-091（ANA 落地統一用 children）
 - quality-baseline 規則 5（所有發現必須追蹤）
-- 1.5.0-W5-014（source case）

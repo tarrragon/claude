@@ -23,8 +23,8 @@ Acceptance Gate Hook - 驗收流程完整引導（Orchestrator）
 - 5W1H 完整性
 - Execution log 填寫
 - 同 Wave pending sibling tickets（場景 #9）
-- Ticket 規模（C1 移植，0.2.1-W3-052.1，警告不阻擋）
-- 檔案範圍職責邊界（C3 移植，0.2.1-W3-052.1，警告不阻擋）
+- Ticket 規模（C1 移植）
+- 檔案範圍職責邊界（C3 移植）
 - 實驗器材殘留（阻擋）
 
 Exit Code：
@@ -36,7 +36,7 @@ Hook 類型: PreToolUse
 觸發時機: Bash 工具執行前，命令含 "ticket track complete" 或 "ticket track batch-complete"
 
 使用方式:
-    echo '{"tool_name":"Bash","tool_input":{"command":"ticket track complete 0.31.0-W4-036"}}' | python3 acceptance-gate-hook.py
+    echo '{"tool_name":"Bash","tool_input":{"command":"ticket track complete <ticket-id>"}}' | python3 acceptance-gate-hook.py
 """
 
 import sys
@@ -73,6 +73,10 @@ from lib.hook_messages import GateMessages, CoreMessages, AskUserQuestionMessage
 from lib.git_command_parse import parse_command_statements
 from lib.ticket_command_parse import (
     COMPLETE_VERBS,
+    SCOPE_MIXED,
+    SCOPE_OTHER,
+    SCOPE_UNKNOWN,
+    classify_ticket_command_scope,
     find_complete_invocations,
     find_ticket_track_invocations,
     is_complete_statement,
@@ -95,6 +99,7 @@ from acceptance_checkers import (
     check_custom_h2_sections,
     check_self_check_visibility,
     check_ana_spawn_consistency,
+    collect_reverse_lineage_ids,
     check_spawn_requests,
     check_phase4_review_evidence,
     check_god_ticket_scale,
@@ -102,7 +107,7 @@ from acceptance_checkers import (
     check_hook_protection_acceptance,
     check_experiment_artifact_residual,
 )
-# W17-120.2 / PC-091: ana_spawned_checker 退場
+# / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
 # 本版範圍落地用 --parent <ANA-ID>；排入後續版本者用 --version <目標版本>
 # --source-ticket <ANA-ID>；spawned_tickets 由步驟 2.5.2 計入）。
@@ -143,30 +148,34 @@ class AcceptanceCheckResult(NamedTuple):
     incomplete_5w1h_fields: List[str] = []
     has_empty_execution_log: bool = False
     multi_view_warning: Optional[str] = None
-    # W12-004 Phase 1：ANA spawned 非 terminal 警告專用欄位
+    # Phase 1：ANA spawned 非 terminal 警告專用欄位
     # 獨立於 `message` 避免抑制 scene #9/#1 gate（`not check_result.message`）
     spawned_non_terminal_warning: Optional[str] = None
-    # W17-072：非 Schema H2 章節清單（偵測 agent 自定義 H2 違規，warning 不阻擋）
+    # 非 Schema H2 章節清單（偵測 agent 自定義 H2 違規，warning 不阻擋）
     custom_h2_sections: List[str] = []
-    # W17-064：Layer 1 自檢可觀測性 warning（缺 `### 自檢結果` 時非 None，warning 不阻擋）
+    # Layer 1 自檢可觀測性 warning（缺 `### 自檢結果` 時非 None，warning 不阻擋）
     self_check_warning: Optional[str] = None
-    # W1-080.1：Phase 4 審查證據 warning（IMP 缺 Phase 4 證據時非 None，warning 不阻擋）
+    # Phase 4 審查證據 warning（IMP 缺 Phase 4 證據時非 None，warning 不阻擋）
     phase4_review_warning: Optional[str] = None
-    # 0.2.1-W3-052.1：規模判準（C1 移植）違規清單，warning 不阻擋
+    # 規模判準（C1 移植）違規清單，warning 不阻擋
     god_ticket_scale_violations: List[str] = []
-    # 0.2.1-W3-052.1：職責邊界判準（C3 移植）違規清單，warning 不阻擋
+    # 職責邊界判準（C3 移植）違規清單，warning 不阻擋
     responsibility_scope_violations: List[str] = []
     # complete --force 旁路的未完成 children 清單（每項一行文字；空清單代表未旁路）
     force_bypassed_children: List[str] = []
     # 觸發旁路的命令全文（稽核用）
     force_bypass_command: str = ""
-    # 0.4.1-W2-006：complete 與 git merge / set-acceptance / append-log 等寫入操作
+    # complete 與 git merge / set-acceptance / append-log 等寫入操作
     # 串接於同一 Bash 呼叫時為 True，代表 acceptance / execution log 檢查因讀檔
     # 時序早於同鏈操作執行而略過（避免滯後誤報，見 detect_chained_pre_complete_write）
     chained_write_detected: bool = False
     # 阻擋來源識別碼（should_block=True 時填入，供 WARNING 行寫出原因）；
     # 取值見 BLOCK_REASONS。空字串代表來源未標示，log 退回通用文字。
     block_source: str = ""
+    # False 代表檢查流程提前回傳（前序阻擋、找不到票、例外），其餘欄位是
+    # 預設值而非判定結果；清單據此把未執行的項目標為未評估，不以預設值
+    # 渲染成 [x] 或「不適用」。
+    evaluated: bool = True
 
 
 # 阻擋來源 -> WARNING 行原因文字（鍵即 AcceptanceCheckResult.block_source）
@@ -175,7 +184,6 @@ BLOCK_REASONS = {
     "hook_protection": "防護類 hook ticket 缺必含項目",
     "unpaired_user_todos": "協調票帶未配對用戶待辦",
     "ana_spawn": "ANA Solution spawn 規劃未落地",
-    "multi_view_status": "multi_view_status 值非法",
     "experiment_artifact": "實驗器材殘留未處置",
 }
 
@@ -198,16 +206,21 @@ TICKET_ID_PATTERN = r'\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*'
 # Error-pattern 衝突提醒訊息模板
 ERROR_PATTERN_CONFLICT_WARNING = (
     "[WARNING] error-pattern 衝突檢查（Step 2.7）\n"
-    "本 Ticket 修改的模組與以下 error-pattern 相關，請確認是否已考慮這些已知問題：\n"
+    "本 Ticket 修改的模組與 {total} 個 error-pattern 相關，依相關度列出前 {shown} 個，"
+    "請確認是否已考慮這些已知問題：\n"
     "{conflict_list}\n"
     "建議：complete 前確認修改未引入已知的錯誤模式。"
 )
 
-# W17-072：自定義 H2 警告訊息模板
+# 衝突清單顯示上限：完整清單已依相關度排序，超過上限只列前段並附總數，
+# 避免數百筆清單淹沒 additionalContext 中的其他警告
+ERROR_PATTERN_CONFLICT_DISPLAY_LIMIT = 10
+
+# 自定義 H2 警告訊息模板
 # 對應 `.claude/rules/core/agent-definition-standard.md` v1.2.0「禁止自定義 H2」條款
 # 與 PC-110 根因 B 防護。
 CUSTOM_H2_WARNING = (
-    "[WARNING] 偵測到非 Schema H2 章節（W17-072）\n"
+    "[WARNING] 偵測到非 Schema H2 章節\n"
     "本 Ticket body 含以下非 Schema H2 章節：\n"
     "{h2_list}\n"
     "依 `.claude/rules/core/agent-definition-standard.md` v1.2.0「禁止自定義 H2」條款，\n"
@@ -217,35 +230,35 @@ CUSTOM_H2_WARNING = (
 )
 
 
-# W17-064：Layer 1 自檢可觀測性 warning 訊息由 checker 直接組裝（含 ticket type 條件性說明），
+# Layer 1 自檢可觀測性 warning 訊息由 checker 直接組裝（含 ticket type 條件性說明），
 # 此處不另定義模板，warning 字串透過 `check_self_check_visibility` 回傳。
 
 
-# 0.2.1-W3-052.1：規模判準警告訊息模板（C1 God Ticket 移植）
+# 規模判準警告訊息模板（C1 God Ticket 移植）
 GOD_TICKET_SCALE_WARNING = (
-    "[WARNING] Ticket 規模偏大（0.2.1-W3-052.1）\n"
+    "[WARNING] Ticket 規模偏大\n"
     "本 Ticket 的 where.files 檔案數已超過建議拆分閾值：\n"
     "{violation_list}\n"
     "建議：依 `.claude/rules/core/cognitive-load.md` 任務拆分閾值評估是否拆分為子 Ticket。"
 )
 
-# 0.2.1-W3-052.1：職責邊界警告訊息模板（C3 Ambiguous Responsibility 移植）
+# 職責邊界警告訊息模板（C3 Ambiguous Responsibility 移植）
 RESPONSIBILITY_SCOPE_WARNING = (
-    "[WARNING] Ticket 檔案範圍跨越多個 domain（0.2.1-W3-052.1）\n"
+    "[WARNING] Ticket 檔案範圍跨越多個 domain\n"
     "本 Ticket 的 where.files 涵蓋的頂層路徑 domain 數已超過建議閾值：\n"
     "{violation_list}\n"
     "建議：確認是否屬單一職責，或依 domain 拆分為子 Ticket。"
 )
 
 
-# 0.4.1-W2-006：滯後讀檔誤報提示訊息模板
-# 對應 0.4.0-W3-006（merge 與 complete 同鏈）/ 0.4.1-W1-001（set-acceptance +
-# append-log 與 complete 同鏈）兩起實證：PreToolUse Hook 在整個 Bash 命令字串
+# 滯後讀檔誤報提示訊息模板
+# 對應 merge 與 complete 同鏈、set-acceptance + append-log 與 complete 同鏈
+# 兩起實證：PreToolUse Hook 在整個 Bash 命令字串
 # 執行前觸發一次，若 complete 前段串接會改變驗收狀態的操作，Hook 讀檔當下這些
 # 操作尚未真正執行，讀到的必然是執行前（滯後）狀態。
 CHAINED_WRITE_INFO_NOTE = (
     "[INFO] 偵測到同一命令鏈於 complete 前包含 git merge / set-acceptance / "
-    "append-log（0.4.1-W2-006）\n"
+    "append-log\n"
     "本次 Hook 讀檔時機早於同鏈操作實際執行，acceptance、execution log、"
     "Layer 1 自檢、Phase 4 審查證據（ANA 另含 multi_view_status）判定"
     "已略過以避免滯後誤報（清單項目標記為 [--]）；\n"
@@ -311,13 +324,13 @@ def with_chained_block_note(
 # ============================================================================
 
 def _strip_quoted_spans(command: str) -> str:
-    """移除命令字串中單/雙引號包住的內容（0.2.1-W3-020）。
+    """移除命令字串中單/雙引號包住的內容。
 
     `ticket track create` 常帶 `--why "..."` 等長文字參數，內容可能引用
     「ticket track complete」字面（例如描述本 Hook 行為的 why 文字）。
     is_complete_command 若直接對整串命令做子字串比對，會把這段引號內文字
     誤判為真正的 complete 呼叫，導致 create 命令被連帶擋下，形成死鎖
-    （PM 於 0.2.1-W3-016 / 0.2.1-W3-019 兩度實證）。
+    （PM 兩度實證）。
 
     移除引號內容後再比對，可保留「真正的 complete 呼叫」偵測能力
     （不在引號內，仍會被找到），只排除引號內的字面引用。
@@ -432,6 +445,94 @@ def _resolve_force_bypass(
         return None
 
 
+def chained_completes_before(command: str, ticket_id: str) -> List[str]:
+    """同一命令中排在 ticket_id 之前的完成類目標票號（保序）。
+
+    閘門在整條命令執行前評估一次，讀到的是鏈前票面：同鏈先 complete 的
+    子票此時仍是 in_progress。回傳這些票號，供 children 檢查略過。
+    命令無法解析或 ticket_id 不在完成類目標中時回傳空清單（不略過任何
+    子票，維持阻擋）。
+    """
+    invocations = find_complete_invocations(command) if command else None
+    if not invocations:
+        return []
+    before: List[str] = []
+    for _verb, args in invocations:
+        for token in args:
+            for part in token.split(","):
+                if not re.fullmatch(TICKET_ID_PATTERN, part):
+                    continue
+                if part == ticket_id:
+                    return before
+                if part not in before:
+                    before.append(part)
+    return []
+
+
+def _parent_single_complete_without_force(command: str, ticket_id: str) -> bool:
+    """本票是否以單張 complete／finish 完成且未帶 --force。
+
+    同鏈略過依賴 ticket CLI 單張 complete 的執行期 children 檢查作為補償，
+    以下兩種情況補償不成立，不套用同鏈略過：
+    - batch-complete：CLI 批次路徑不檢查 children，批次內子票失敗後迴圈
+      照常往下，父票仍會被標為 completed。
+    - --force：CLI 遇 --force 只發警告；且 --force 應走既有旁路，保留
+      FORCE_BYPASS 稽核日誌與給模型的旁路清單。
+    """
+    if has_force_flag_on_complete(command, ticket_id):
+        return False
+    invocations = find_complete_invocations(command) if command else None
+    if not invocations:
+        return False
+    for verb, args in invocations:
+        ids = [p for token in args for p in token.split(",")]
+        if ticket_id in ids:
+            return verb != "batch-complete"
+    return False
+
+
+def _children_block_cleared_by_chain(
+    command: str,
+    ticket_id: str,
+    ticket_file: Path,
+    frontmatter: dict,
+    project_dir: Path,
+    logger,
+) -> bool:
+    """children 擋下時，判斷未完成後代是否全部在同鏈中先被 complete。
+
+    全部在鏈內先 complete 才回傳 True（放行 children 檢查）；任一未完成後代
+    不在鏈內、或判斷過程出錯，回傳 False（維持阻擋，fail-closed）。
+    鏈內子票的 complete 本身也經本閘門逐張檢查，且 ticket CLI 執行
+    complete 時另會檢查 children，鏈內子票實際執行失敗時父票仍會被擋。
+    """
+    try:
+        if not _parent_single_complete_without_force(command, ticket_id):
+            return False
+        chained = set(chained_completes_before(command, ticket_id))
+        if not chained:
+            return False
+        incomplete = collect_incomplete_descendants_from_frontmatter(
+            ticket_file, frontmatter, project_dir, ticket_id, logger
+        )
+        remaining = [cid for cid, _title, _status in incomplete if cid not in chained]
+        if remaining:
+            logger.info(
+                f"Ticket {ticket_id}：同鏈先 complete {sorted(chained)}，"
+                f"仍有不在鏈內的未完成後代 {remaining}，維持 children 阻擋"
+            )
+            return False
+        logger.info(
+            f"Ticket {ticket_id}：未完成後代 {[c for c, _t, _s in incomplete]} "
+            f"皆於同鏈先 complete，略過 children 阻擋（鏈前票面滯後）"
+        )
+        return True
+    except Exception as e:  # noqa: BLE001 — 判斷失敗一律維持阻擋
+        sys.stderr.write(f"[acceptance-gate] 同鏈 children 判斷失敗，維持阻擋: {e}\n")
+        logger.error(f"同鏈 children 判斷失敗，維持 deny（fail-closed）: {e}", exc_info=True)
+        return False
+
+
 def _legacy_complete_substring(command: str) -> bool:
     """解析失敗時的保守後備：沿用字面比對（含 finish 別名），維持 fail-closed。"""
     stripped = _strip_quoted_spans(command)
@@ -453,7 +554,7 @@ def is_complete_command(command: str) -> bool:
     return bool(invocations)
 
 
-# 0.4.1-W2-006：complete 前段串接後可能改變驗收狀態的寫入操作。
+# complete 前段串接後可能改變驗收狀態的寫入操作。
 # 命中任一 pattern 即代表「Hook 讀檔當下該操作尚未執行」，見
 # detect_chained_pre_complete_write 說明。
 _CHAINED_WRITE_TRIGGERS = (
@@ -470,7 +571,7 @@ def detect_chained_pre_complete_write(command: str) -> bool:
     complete 之前包含 git merge / set-acceptance / append-log，這些操作在
     Hook 讀檔當下尚未真正執行（Bash 尚未開始執行任何一段），讀到的必然是
     執行前（滯後）狀態，導致 acceptance 未勾選、execution log 未填寫等
-    warning 級誤報（0.4.0-W3-006 / 0.4.1-W1-001 實證，見 0.4.1-W2-006）。
+    warning 級誤報。
 
     只檢查 complete 命令「之前」的片段：出現在 complete 之後的寫入操作
     （例如同鏈接續的收尾動作）不影響本次 complete 讀到的檔案狀態，不列入判定。
@@ -511,6 +612,28 @@ def detect_chained_multi_view_write(command: str) -> bool:
 # 主協調函式
 # ============================================================================
 
+def _early_block_result(
+    message: Optional[str], block_source: str, frontmatter: Optional[dict]
+) -> AcceptanceCheckResult:
+    """前序檢查阻擋而提前回傳的結果：只帶阻擋訊息與票型，其餘檢查未執行。
+
+    票型照實帶入，清單才能正確判斷各項是否適用該票型；evaluated=False
+    讓清單把適用但未執行的項目標為未評估。
+    """
+    frontmatter = frontmatter or {}
+    return AcceptanceCheckResult(
+        should_block=True,
+        has_acceptance=False,
+        message=message,
+        has_new_error_patterns=False,
+        new_error_pattern_files=[],
+        task_type=frontmatter.get("type", "") or "",
+        priority=frontmatter.get("priority", "") or "",
+        block_source=block_source,
+        evaluated=False,
+    )
+
+
 def check_acceptance_status(
     ticket_id: str, project_dir: Path, logger, command: str = ""
 ) -> AcceptanceCheckResult:
@@ -530,14 +653,14 @@ def check_acceptance_status(
     Args:
         command: 觸發本次檢查的完整 Bash 命令字串（選填）。用於偵測 complete
             是否與 git merge / set-acceptance / append-log 串接於同一呼叫
-            （0.4.1-W2-006），偵測到時略過 acceptance / execution log 的
+，偵測到時略過 acceptance / execution log 的
             滯後誤報判定。空字串時行為與未偵測相同（向後相容）。
     """
     ticket_file = find_ticket_file(ticket_id, project_dir, logger)
 
     if not ticket_file:
         logger.error(f"找不到 Ticket 檔案: {ticket_id}")
-        return AcceptanceCheckResult(False, False, None, False, [])
+        return AcceptanceCheckResult(False, False, None, False, [], evaluated=False)
 
     try:
         content = ticket_file.read_text(encoding="utf-8")
@@ -548,17 +671,16 @@ def check_acceptance_status(
             ticket_file, frontmatter, project_dir, ticket_id, logger
         )
         force_bypassed_children: List[str] = []
+        if should_block and _children_block_cleared_by_chain(
+            command, ticket_id, ticket_file, frontmatter, project_dir, logger
+        ):
+            should_block = False
         if should_block:
             bypassed = _resolve_force_bypass(
                 command, ticket_id, ticket_file, frontmatter, project_dir, logger
             )
             if bypassed is None:
-                # task_type 帶入，供 deny 時 checklist 第 5 項正確判斷 ANA
-                return AcceptanceCheckResult(
-                    True, False, error_msg, False, [], [],
-                    frontmatter.get("type", ""), "", [], [], False,
-                    block_source="children",
-                )
+                return _early_block_result(error_msg, "children", frontmatter)
             force_bypassed_children = bypassed
 
         # 步驟 1.5：防護類 hook ticket 的必含項目（前三項命中 acceptance，
@@ -568,22 +690,16 @@ def check_acceptance_status(
             frontmatter, logger, content
         )
         if hook_protection_should_block:
-            return AcceptanceCheckResult(
-                True, False, hook_protection_msg, False, [], [], "", "", [], [], False,
-                block_source="hook_protection",
-            )
+            return _early_block_result(hook_protection_msg, "hook_protection", frontmatter)
 
         # 步驟 1.6：協調票帶未配對用戶待辦（U1）不得 complete
         todo_should_block, todo_msg = check_unpaired_user_todos(
             content, frontmatter, ticket_id, logger
         )
         if todo_should_block:
-            return AcceptanceCheckResult(
-                True, False, todo_msg, False, [], [], "", "", [], [], False,
-                block_source="unpaired_user_todos",
-            )
+            return _early_block_result(todo_msg, "unpaired_user_todos", frontmatter)
 
-        # 0.4.1-W2-006：偵測 complete 是否與同鏈寫入操作串接
+        # 偵測 complete 是否與同鏈寫入操作串接
         # 偵測本身拋例外時視為未命中（fail-toward-warn：照常輸出警告，不讓整個
         # 檢查因偵測失敗而中止、連同其他警告一起消失）
         try:
@@ -622,54 +738,55 @@ def check_acceptance_status(
                 else:
                     warning_msg = ana_warning_msg
 
-        # 步驟 2.5.1：[已退場 W17-120.2 / PC-091]
+        # 步驟 2.5.1：[已退場 / PC-091]
         # 原 ana_spawned_checker 阻擋邏輯已移除。ANA complete 的阻擋判斷統一由
         # children_checker（步驟 1）負責——落地票屬本版範圍用 `--parent <ANA-ID>` 建 children，
         # 排入後續版本用 `--version <目標版本> --source-ticket <ANA-ID>` 建根票。
         # spawned_tickets 本步驟不阻擋父 complete（一致性由步驟 2.5.2 判定）。
         spawned_non_terminal_warning: Optional[str] = None  # 保留欄位向後相容
 
-        # 步驟 2.5.2：ANA Solution spawn 規劃 vs spawned+children 一致性檢查（W17-168）
-        # 對應 W17-167 ANA L2 設計：解析 Solution spawn 規劃表格（IMP/DOC/ANA + P0-P3），
-        # 與 frontmatter spawned_tickets + children 比對。N>0 且 S+C==0 → 阻擋；
-        # N>0 且 S+C<N → warning；含豁免標記（「無需建 ticket」「不 spawn」）→ 跳過。
-        if is_ana_type(frontmatter.get("type")):
+        # 步驟 2.5.2：ANA／DOC Solution spawn 規劃 vs 落地證據一致性檢查
+        # 解析 Solution spawn 規劃表格（落地確認區段不計入規劃數），與 spawned_tickets
+        # + children + 已判定 SR + 回指本票的票比對。N>0 且落地 < N → 阻擋；
+        # 豁免宣告逐項扣抵。反向血緣查詢失敗時不加嚴（見 checker 檔頭）。
+        if is_ana_type(frontmatter.get("type")) or (
+            str(frontmatter.get("type") or "").strip().upper() == "DOC"
+        ):
             spawn_should_block, spawn_msg = check_ana_spawn_consistency(
-                content, frontmatter, logger
+                content,
+                frontmatter,
+                logger,
+                reverse_lineage_lookup=lambda tid: collect_reverse_lineage_ids(
+                    project_dir, tid
+                ),
             )
             if spawn_should_block:
-                return AcceptanceCheckResult(
-                    True, False, spawn_msg, False, [], [], "", "", [], [], False,
-                    block_source="ana_spawn",
-                )
+                return _early_block_result(spawn_msg, "ana_spawn", frontmatter)
             if spawn_msg:
                 if warning_msg:
                     warning_msg = warning_msg + "\n\n" + spawn_msg
                 else:
                     warning_msg = spawn_msg
 
-        # 步驟 2.6：ANA Ticket Solution 必須含 multi_view_status 標註（W10-051）
-        # 非法值（值不在 reviewed/skipped/n_a 之列）升級為阻擋，修正途徑由
-        # `ticket track fix-multi-view-status` CLI 提供。「未標註」（缺欄位／
-        # 缺子欄位）維持警告——存量掃描顯示 ANA 票中缺標註佔比遠高於非法值，
-        # 全面阻擋會癱瘓既有票收尾，兩情況相容性風險不對稱，分別處置（詳見 Solution）。
+        # 步驟 2.6：ANA Ticket Solution 必須含 multi_view_status 標註
+        # 非法值（值不在 reviewed/skipped/n_a 之列）與「未標註」（缺欄位／缺子欄位）
+        # 同為警告，不阻擋：多視角審查的結論不影響收退（verification-framework
+        # 〈驗收三項固定檢查〉），標註格式也不構成退件；非法值的警告附
+        # `ticket track fix-multi-view-status` 修正途徑。
         multi_view_warning: Optional[str] = None
         if is_ana_type(frontmatter.get("type")):
             mv_should_warn, mv_msg = check_multi_view_status(
                 content, frontmatter, project_dir, logger
             )
-            if mv_should_warn and mv_msg:
-                is_illegal_value = "值非法" in mv_msg
-                if is_illegal_value:
-                    fix_hint = (
-                        "\n\n修正途徑：ticket track fix-multi-view-status "
-                        f"{ticket_id} --value <reviewed|skipped|n_a> "
-                        "--reason \"<修正理由，至少 10 字元>\""
-                    )
-                    return AcceptanceCheckResult(
-                        True, False, mv_msg + fix_hint, False, [], [], "", "", [], [], False,
-                        block_source="multi_view_status",
-                    )
+            if mv_should_warn and mv_msg and "值非法" in mv_msg:
+                # 非法值不套同鏈略過：同鏈滯後只會讓「未標註」誤報，非法值是已寫入的內容
+                mv_msg = mv_msg + (
+                    "\n\n修正途徑：ticket track fix-multi-view-status "
+                    f"{ticket_id} --value <reviewed|skipped|n_a> "
+                    "--reason \"<修正理由，至少 10 字元>\""
+                )
+                logger.warning(f"Ticket {ticket_id}：multi_view_status 值非法，輸出警告（不阻擋）")
+            elif mv_should_warn and mv_msg:
                 try:
                     mv_chained = chained_write_detected and detect_chained_multi_view_write(command)
                 except Exception as mv_exc:
@@ -691,7 +808,7 @@ def check_acceptance_status(
                 else:
                     warning_msg = mv_msg
 
-        # 步驟 2.6.1：檢查 Spawn Requests 章節是否有未處理條目（1.5.0-W5-024）
+        # 步驟 2.6.1：檢查 Spawn Requests 章節是否有未處理條目
         spawn_request_should_warn, spawn_request_msg = check_spawn_requests(
             content, frontmatter, logger
         )
@@ -741,7 +858,7 @@ def check_acceptance_status(
         # 步驟 5：檢查 5W1H 完整性
         incomplete_5w1h = check_5w1h_completeness(frontmatter, logger)
 
-        # 步驟 6：檢查 execution log 填寫（W8-007：ANA type 額外查重現實驗結果）
+        # 步驟 6：檢查 execution log 填寫
         has_empty_log = check_execution_log_filled(
             content, logger, ticket_type=frontmatter.get("type", "")
         )
@@ -750,10 +867,10 @@ def check_acceptance_status(
         if chained_write_detected:
             has_empty_log = False
 
-        # 步驟 7：檢查自定義 H2 章節（W17-072，warning 不阻擋）
+        # 步驟 7：檢查自定義 H2 章節
         custom_h2 = check_custom_h2_sections(content, logger)
 
-        # 步驟 8：檢查 Layer 1 自檢可觀測性（W17-064，warning 不阻擋）
+        # 步驟 8：檢查 Layer 1 自檢可觀測性
         self_check_warning = check_self_check_visibility(
             content, frontmatter.get("type", ""), logger
         )
@@ -764,7 +881,7 @@ def check_acceptance_status(
         if chained_write_detected:
             self_check_warning = None
 
-        # 步驟 9：檢查 Phase 4 審查證據（W1-080.1，warning 不阻擋）
+        # 步驟 9：檢查 Phase 4 審查證據
         phase4_warning = check_phase4_review_evidence(
             content, frontmatter.get("type", ""), logger
         )
@@ -773,10 +890,10 @@ def check_acceptance_status(
         if chained_write_detected:
             phase4_warning = None
 
-        # 步驟 10：檢查規模判準（0.2.1-W3-052.1，C1 移植，warning 不阻擋）
+        # 步驟 10：檢查規模判準
         god_ticket_scale_violations = check_god_ticket_scale(frontmatter, logger)
 
-        # 步驟 11：檢查職責邊界判準（0.2.1-W3-052.1，C3 移植，warning 不阻擋）
+        # 步驟 11：檢查職責邊界判準
         responsibility_scope_violations = check_file_scope_diversity(frontmatter, logger)
 
         # 步驟 12：檢查實驗器材殘留（阻擋）
@@ -787,10 +904,7 @@ def check_acceptance_status(
             ticket_id, project_dir, logger
         )
         if exp_should_block:
-            return AcceptanceCheckResult(
-                True, False, exp_msg, False, [], [], "", "", [], [], False,
-                block_source="experiment_artifact",
-            )
+            return _early_block_result(exp_msg, "experiment_artifact", frontmatter)
 
         task_type = frontmatter.get("type", "")
         priority = frontmatter.get("priority", "")
@@ -822,12 +936,46 @@ def check_acceptance_status(
     except Exception as e:
         logger.error(f"檢查驗收狀態失敗: {e}", exc_info=True)
         sys.stderr.write(f"ERROR: 檢查驗收狀態失敗: {e}\n")
-        return AcceptanceCheckResult(False, False, None, False, [])
+        return AcceptanceCheckResult(False, False, None, False, [], evaluated=False)
 
 
 # ============================================================================
 # 輸出生成
 # ============================================================================
+
+# 清單項目：(編號, 名稱, 適用票型)；適用票型為 None 代表全票型適用，
+# 與 generate_hook_output 各項的票型判斷一致。
+_CHECKLIST_ITEMS = (
+    (1, "acceptance", None),
+    (2, "5W1H", None),
+    (3, "error-pattern", None),
+    (4, "execution log", None),
+    (5, "ANA 後續 ticket", ("ANA",)),
+    (6, "multi_view_status", ("ANA",)),
+    (7, "body Schema 章節", None),
+    (8, "Layer 1 自檢", ("IMP", "ANA", "DOC")),
+    (9, "Phase 4 審查證據", ("IMP",)),
+    (10, "規模判準", ("IMP", "ADJ")),
+    (11, "職責邊界判準", ("IMP", "ADJ")),
+)
+
+
+def build_unevaluated_checklist(task_type: str, should_block: bool) -> List[str]:
+    """提前回傳時的清單：未執行的項目標為未評估，不以預設值標 [x]。
+
+    票型已知時，不適用該票型的項目照常標「不適用」；票型未知（找不到票、
+    例外）時無從判斷適用性，全部標未評估。
+    """
+    reason = "前序檢查已阻擋" if should_block else "檢查未完成"
+    type_upper = (task_type or "").upper()
+    items = []
+    for number, label, applicable in _CHECKLIST_ITEMS:
+        if type_upper and applicable is not None and type_upper not in applicable:
+            items.append(f"[--] {number}. {label}（{type_upper}，不適用）")
+        else:
+            items.append(f"[--] {number}. {label}（未評估：{reason}）")
+    return items
+
 
 def generate_hook_output(
     ticket_id: str,
@@ -845,12 +993,10 @@ def generate_hook_output(
             error-pattern 衝突、H2、自檢、Phase 4、規模/職責判準等）不受
             影響，維持對 subagent 生效。
     """
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny" if check_result.should_block else "allow"
-        }
-    }
+    output = {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+    # 放行不帶 permissionDecision：allow 會略過平台的權限提示，等於代用戶核可
+    if check_result.should_block:
+        output["hookSpecificOutput"]["permissionDecision"] = "deny"
 
     context_parts = []
 
@@ -886,7 +1032,7 @@ def generate_hook_output(
     else:
         checklist_items.append("[WARNING] 4. execution log 未填寫")
 
-    # 項目 5: ANA 後續 ticket（W17-120.2 / PC-091）
+    # 項目 5: ANA 後續 ticket
     # 路線：本版範圍用 children（`--parent <ANA-ID>`），後續版本用
     # `--version <目標版本> --source-ticket <ANA-ID>`；本步驟不阻擋。本項僅檢查「ANA 是否缺後續 ticket」（warning 層）。
     ticket_type_upper_for_checklist = (check_result.task_type or "").upper()
@@ -904,7 +1050,7 @@ def generate_hook_output(
     else:
         checklist_items.append("[--] 5. ANA 後續 ticket(非 ANA，不適用)")
 
-    # 項目 6: multi_view_status（W10-051，只對 ANA 顯示）
+    # 項目 6: multi_view_status
     if ticket_type_upper_for_checklist == "ANA":
         if check_result.chained_write_detected:
             checklist_items.append("[--] 6. multi_view_status（同命令鏈偵測，略過本次判定）")
@@ -915,7 +1061,7 @@ def generate_hook_output(
     else:
         checklist_items.append("[--] 6. multi_view_status(非 ANA，不適用)")
 
-    # 項目 7: 自定義 H2 章節（W17-072）
+    # 項目 7: 自定義 H2 章節
     if check_result.custom_h2_sections:
         h2_count = len(check_result.custom_h2_sections)
         checklist_items.append(
@@ -924,7 +1070,7 @@ def generate_hook_output(
     else:
         checklist_items.append("[x] 7. body 僅使用 Schema 章節")
 
-    # 項目 8: Layer 1 自檢可觀測性（W17-064，僅對 IMP/ANA/DOC 顯示）
+    # 項目 8: Layer 1 自檢可觀測性
     if ticket_type_upper_for_checklist in ("IMP", "ANA", "DOC"):
         if check_result.chained_write_detected:
             checklist_items.append("[--] 8. Layer 1 自檢（同命令鏈偵測，略過本次判定）")
@@ -937,7 +1083,7 @@ def generate_hook_output(
     else:
         checklist_items.append("[--] 8. Layer 1 自檢(非 IMP/ANA/DOC，不適用)")
 
-    # 項目 9: Phase 4 審查證據（W1-080.1，僅對 IMP 顯示）
+    # 項目 9: Phase 4 審查證據
     if ticket_type_upper_for_checklist == "IMP":
         if check_result.chained_write_detected:
             checklist_items.append("[--] 9. Phase 4 審查證據（同命令鏈偵測，略過本次判定）")
@@ -950,7 +1096,7 @@ def generate_hook_output(
     else:
         checklist_items.append("[--] 9. Phase 4 審查(非 IMP，不適用)")
 
-    # 項目 10: 規模判準（0.2.1-W3-052.1，C1 移植，僅對 IMP/ADJ 顯示，ANA/DOC 豁免）
+    # 項目 10: 規模判準（C1 移植，僅對 IMP/ADJ 顯示，ANA/DOC 豁免）
     if ticket_type_upper_for_checklist in ("ANA", "DOC"):
         checklist_items.append("[--] 10. 規模判準(ANA/DOC，不適用)")
     elif check_result.god_ticket_scale_violations:
@@ -958,7 +1104,7 @@ def generate_hook_output(
     else:
         checklist_items.append("[x] 10. Ticket 規模在建議範圍內")
 
-    # 項目 11: 職責邊界判準（0.2.1-W3-052.1，C3 移植，僅對 IMP/ADJ 顯示，ANA/DOC 豁免）
+    # 項目 11: 職責邊界判準（C3 移植，僅對 IMP/ADJ 顯示，ANA/DOC 豁免）
     if ticket_type_upper_for_checklist in ("ANA", "DOC"):
         checklist_items.append("[--] 11. 職責邊界判準(ANA/DOC，不適用)")
     elif check_result.responsibility_scope_violations:
@@ -966,13 +1112,19 @@ def generate_hook_output(
     else:
         checklist_items.append("[x] 11. 檔案範圍 domain 分散度在建議範圍內")
 
+    # 提前回傳時上方各項讀到的是預設值而非判定結果，整份改為未評估清單
+    if not check_result.evaluated:
+        checklist_items = build_unevaluated_checklist(
+            check_result.task_type, check_result.should_block
+        )
+
     checklist_text = "[Complete 清單]\n" + "\n".join(checklist_items)
     context_parts.append(checklist_text)
 
-    # 0.4.1-W2-006：同鏈寫入偵測提示（緊接清單，優先於其他訊息）
+    # 同鏈寫入偵測提示（緊接清單，優先於其他訊息）
     if check_result.chained_write_detected:
         context_parts.append(CHAINED_WRITE_INFO_NOTE)
-        logger.info("新增同命令鏈滯後讀檔提示（0.4.1-W2-006）")
+        logger.info("新增同命令鏈滯後讀檔提示")
 
     # complete --force 旁路 children：列出被旁路的未完成 children（已寫稽核日誌）
     if check_result.force_bypassed_children:
@@ -989,7 +1141,7 @@ def generate_hook_output(
     if check_result.message:
         context_parts.append(check_result.message)
 
-    # 優先級 1.5：[已退場 W17-120.2 / PC-091] 原 ANA spawned 非 terminal 警告已移除
+    # 優先級 1.5：[已退場 / PC-091] 原 ANA spawned 非 terminal 警告已移除
     # spawned_tickets 對 ANA 為弱 metadata，不再產生阻擋或專用警告
     if check_result.spawned_non_terminal_warning:
         # 保留輸出邏輯防呼叫端外掛行為，但 orchestrator 已不再 set 此欄位
@@ -1010,16 +1162,18 @@ def generate_hook_output(
 
     # 優先級 2.5：error-pattern 衝突提醒（Step 2.7，WARNING 不阻擋）
     if check_result.error_pattern_conflicts:
-        conflict_list_formatted = "\n".join(
-            f"  - {f}" for f in check_result.error_pattern_conflicts
-        )
+        all_conflicts = check_result.error_pattern_conflicts
+        shown = all_conflicts[:ERROR_PATTERN_CONFLICT_DISPLAY_LIMIT]
+        conflict_list_formatted = "\n".join(f"  - {f}" for f in shown)
         conflict_msg = ERROR_PATTERN_CONFLICT_WARNING.format(
-            conflict_list=conflict_list_formatted
+            total=len(all_conflicts),
+            shown=len(shown),
+            conflict_list=conflict_list_formatted,
         )
         context_parts.append(conflict_msg)
         logger.info(f"新增 error-pattern 衝突提醒，衝突數量: {len(check_result.error_pattern_conflicts)}")
 
-    # 優先級 2.6：自定義 H2 警告（W17-072，WARNING 不阻擋）
+    # 優先級 2.6：自定義 H2 警告
     if check_result.custom_h2_sections:
         h2_list_formatted = "\n".join(
             f"  - `## {h2}`" for h2 in check_result.custom_h2_sections
@@ -1030,17 +1184,17 @@ def generate_hook_output(
             f"新增自定義 H2 警告，違規章節數: {len(check_result.custom_h2_sections)}"
         )
 
-    # 優先級 2.7：Layer 1 自檢可觀測性 warning（W17-064，WARNING 不阻擋）
+    # 優先級 2.7：Layer 1 自檢可觀測性 warning
     if check_result.self_check_warning:
         context_parts.append(check_result.self_check_warning)
         logger.info("新增 Layer 1 自檢可觀測性 warning")
 
-    # 優先級 2.8：Phase 4 審查證據 warning（W1-080.1，WARNING 不阻擋）
+    # 優先級 2.8：Phase 4 審查證據 warning
     if check_result.phase4_review_warning:
         context_parts.append(check_result.phase4_review_warning)
         logger.info("新增 Phase 4 審查證據 warning")
 
-    # 優先級 2.9：規模判準 warning（0.2.1-W3-052.1，C1 移植，WARNING 不阻擋）
+    # 優先級 2.9：規模判準 warning
     if check_result.god_ticket_scale_violations:
         violation_list_formatted = "\n".join(
             f"  - {v}" for v in check_result.god_ticket_scale_violations
@@ -1052,7 +1206,7 @@ def generate_hook_output(
             f"新增規模判準 warning，違規數量: {len(check_result.god_ticket_scale_violations)}"
         )
 
-    # 優先級 2.10：職責邊界判準 warning（0.2.1-W3-052.1，C3 移植，WARNING 不阻擋）
+    # 優先級 2.10：職責邊界判準 warning
     if check_result.responsibility_scope_violations:
         scope_violation_list_formatted = "\n".join(
             f"  - {v}" for v in check_result.responsibility_scope_violations
@@ -1129,23 +1283,70 @@ def generate_hook_output(
 # 主入口點輔助函式
 # ============================================================================
 
-def _output_allow_json() -> None:
-    """輸出允許執行的 Hook 應答 JSON。"""
-    print(json.dumps({
-        "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}
-    }, ensure_ascii=False, indent=2))
+def _pass_without_decision() -> None:
+    """不檢查的路徑：不輸出任何內容，交回平台權限流程。
+
+    輸出 allow 會略過平台的權限提示，等於代用戶核可，故放行不帶 decision。
+    """
+
+
+# 本 hook 會讀票判定的動詞（complete 類與 close）
+_SCOPE_VERBS = COMPLETE_VERBS + ("close",)
+
+
+def _route_by_command_scope(input_data: Optional[Dict[str, Any]], logger) -> Optional[int]:
+    """依 ticket 命令實際作用的 repo 分流；回傳結束碼代表已處理，None 代表照常判定。
+
+    - 作用在其他 repo：放行並寫日誌。其他 repo 的票由該 repo 自己的 session 與
+      hook 管，不再讀 session repo 的同 ID 票（用戶裁定 2026-11-13）。
+    - 目錄含變數、命令替換、`cd -` 等無法靜態解析：擋下，要求改用字面路徑。
+    - 同時作用在 session repo 與其他 repo：沿用修改前的判定（讀 session repo）。
+    - 其餘（含判不出 repo）：照常判定，讀票根與修改前相同。
+    """
+    if not input_data or input_data.get("tool_name") != "Bash":
+        return None
+    tool_input = input_data.get("tool_input") or {}
+    command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+    if not command:
+        return None
+    scope = classify_ticket_command_scope(command, _SCOPE_VERBS, input_data.get("cwd") or None)
+    if scope == SCOPE_OTHER:
+        logger.info("ticket 命令作用在其他 repo，由該 repo 的 session 與 hook 管，放行：%s", command[:200])
+        _pass_without_decision()
+        return EXIT_SUCCESS
+    if scope == SCOPE_UNKNOWN:
+        logger.warning("ticket 命令的目錄無法靜態解析，阻擋：%s", command[:200])
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": _UNKNOWN_DIR_MESSAGE,
+            }
+        }, ensure_ascii=False, indent=2))
+        return EXIT_BLOCK
+    if scope == SCOPE_MIXED:
+        logger.info("ticket 命令同時作用在 session repo 與其他 repo，沿用修改前的判定：%s", command[:200])
+    return None
+
+
+_UNKNOWN_DIR_MESSAGE = (
+    "[acceptance-gate] ticket 命令的執行目錄無法靜態解析\n"
+    "`cd` 的目錄含變數、命令替換、`cd -` 等，hook 在命令執行前看不出 complete／close "
+    "會作用在哪個 repo 的票，也就無法檢查驗收條件。\n"
+    "請改用展開後的字面絕對路徑重新執行，例如：(cd /abs/path && ticket track complete <id>)"
+)
 
 
 def _parse_and_validate_input(input_data: Dict[str, Any], logger) -> Optional[Tuple[str, str]]:
     """解析並驗證輸入資料。"""
     if input_data is None:
         logger.debug("輸入資料為 None，跳過驗證")
-        _output_allow_json()
+        _pass_without_decision()
         return None
 
     if not validate_hook_input(input_data, logger, ("tool_name", "tool_input")):
         logger.error("輸入格式錯誤")
-        _output_allow_json()
+        _pass_without_decision()
         return None
 
     tool_name = input_data.get("tool_name", "")
@@ -1300,7 +1501,7 @@ def _handle_close_command(command: str, logger) -> int:
         project_dir = get_shared_state_root(get_project_root())
         blocked = check_close_coordination_todos(close_ids, project_dir, logger)
     if blocked is None:
-        _output_allow_json()
+        _pass_without_decision()
         return EXIT_SUCCESS
     ticket_id, message = blocked
     logger.warning(f"協調票 {ticket_id} close 被阻擋：未配對用戶待辦")
@@ -1326,7 +1527,7 @@ def _check_wave_coordination(selectors, logger) -> List[str]:
         coord_ids, project_dir, logger, action="complete"
     ) if coord_ids else None
     if blocked is None:
-        _output_allow_json()
+        _pass_without_decision()
         return []
     ticket_id, message = blocked
     logger.warning(f"協調票 {ticket_id} 經 batch-complete --wave 被阻擋：未配對用戶待辦")
@@ -1408,12 +1609,12 @@ def _extract_ticket_ids_or_skip(tool_name: str, command: str, logger) -> List[st
     """識別 complete 命令並提取全部 Ticket ID；非 complete 或無 ID 時輸出 allow 並回空清單。"""
     if tool_name != "Bash":
         logger.debug(f"非 Bash 工具: {tool_name}，直接放行")
-        _output_allow_json()
+        _pass_without_decision()
         return []
 
     if not is_complete_command(command):
         logger.debug(f"非 ticket track complete 命令: {command}")
-        _output_allow_json()
+        _pass_without_decision()
         return []
 
     logger.info(f"識別到 ticket track complete 命令: {command}")
@@ -1426,7 +1627,7 @@ def _extract_ticket_ids_or_skip(tool_name: str, command: str, logger) -> List[st
         if selectors:
             return _check_wave_coordination(selectors, logger)
         logger.error("無法從命令中提取 Ticket ID")
-        _output_allow_json()
+        _pass_without_decision()
         return []
 
     logger.info(f"提取 Ticket ID: {ticket_ids}")
@@ -1453,14 +1654,20 @@ def main() -> int:
         # 步驟 1: 解析驗證輸入
         input_data = read_json_from_stdin(logger)
 
-        # 降級 fast-path（W10-047.1）：
-        # ANA W10-035.3 觀察 3d 觸發 1667 次僅 36 Action（2.2%）。
+        # 命令作用在其他 repo 時不讀 session repo 的同 ID 票（2026-11-13 起；
+        # 原本子 shell cd 到他 repo 時會以 session repo 的同 ID 票誤擋或誤放）
+        scope_exit = _route_by_command_scope(input_data, logger)
+        if scope_exit is not None:
+            return scope_exit
+
+        # 降級 fast-path：
+        # ANA 觀察 3d 觸發 1667 次僅 36 Action（2.2%）。
         # 在執行 subagent 偵測 / 完整輸入驗證 / Ticket 提取 / 驗收檢查等
         # 重操作前，先以最低成本判斷命令是否為 ticket track complete；
         # 不是即直接放行，避免每次 Bash 命令都跑完整流程。
-        # 此判斷必須先於 effort 短路（0.2.1-W3-018）：effort=low 不可豁免
+        # 此判斷必須先於 effort 短路：effort=low 不可豁免
         # complete 命令的驗收檢查，否則 acceptance-gate 形同虛設
-        # （0.2.1-W3-014 實證：非法 multi_view_status 值藉此成功 complete）。
+        # （實證：非法 multi_view_status 值藉此成功 complete）。
         _fp_is_complete = False
         if input_data is not None:
             _fp_tool_input = input_data.get("tool_input") or {}
@@ -1471,12 +1678,12 @@ def main() -> int:
             if not _fp_is_complete:
                 logger.debug("非 complete 命令：僅檢查 close 的協調票待辦")
                 if input_data.get("tool_name") != "Bash":
-                    _output_allow_json()
+                    _pass_without_decision()
                     return EXIT_SUCCESS
                 return _handle_close_command(_fp_command, logger)
 
-        # Effort 感知（v2.1.133+，W14-034）：僅記錄 effort 供除錯，
-        # 不再作為短路放行條件（0.2.1-W3-018）。此處已確定為
+        # Effort 感知（v2.1.133+）：僅記錄 effort 供除錯，
+        # 不再作為短路放行條件。此處已確定為
         # ticket track complete 命令（上方 fast-path 保證），故一律
         # 執行完整驗收檢查，effort=low 不豁免。
         effort = get_effort_level(input_data)
@@ -1564,10 +1771,11 @@ def main() -> int:
 
     except Exception as e:
         logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
+        sys.stderr.write(f"[acceptance-gate] Hook 執行錯誤: {e}\n")
+        # fail-open 不帶 permissionDecision：交回平台權限流程，不代用戶核可
         print(json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
                 "additionalContext": "Hook 執行錯誤，詳見日誌: .claude/hook-logs/acceptance-gate/"
             },
             "error": {"type": type(e).__name__, "message": str(e)}

@@ -14,10 +14,10 @@ created: 2026-04-13
 - **來源版本**: v0.18.0
 - **發現日期**: 2026-04-13
 - **更新日期**:
-  - 2026-04-15（W10-049.4）修正：主 repo 內 subagent 也被擋（本結論 **2026-04-18 驗證後部分推翻**，見下方 v2.1.114 實證章節）
-  - 2026-04-18（W5-050.1/2/3）重新實證：**真正分界線是 target 是否在主 repo 樹內，非「.claude/ 一律被擋」**
+  - 2026-04-15 修正：主 repo 內 subagent 也被擋（本結論 **2026-04-18 驗證後部分推翻**，見下方 v2.1.114 實證章節）
+  - 2026-04-18 重新實證：**真正分界線是 target 是否在主 repo 樹內，非「.claude/ 一律被擋」**
 - **風險等級**: 中（影響範圍收斂到「外部 worktree 內 .claude/」，主 repo 內 .claude/ 實測 subagent Write/Edit 通行）
-- **CC 版本基準**: v2.1.114（W5-050 實證）
+- **CC 版本基準**: v2.1.114（2026-04-18 實證）
 
 ## 問題描述
 
@@ -33,7 +33,7 @@ this action using other tools that might naturally be used to accomplish this go
 關鍵特徵：
 - Read 操作不受影響（讀寫權限不對稱）
 - 同 subagent 對 worktree 內**非 .claude/** 路徑（docs/、src/）Edit **可成功**
-- 同 subagent 對主 session cwd 內 `.claude/` Edit **也被擋**（W10-049.4 案例修正：thyme-documentation-integrator 在主 repo 嘗試 Edit `.claude/README.md` 仍被 CC runtime 拒絕，hook log 顯示 hook 已正確跳過 subagent，但 CC runtime 在 hook 之前就擋了）
+- 同 subagent 對主 session cwd 內 `.claude/` Edit **也被擋**（2026-04-15 案例修正：thyme-documentation-integrator 在主 repo 嘗試 Edit `.claude/README.md` 仍被 CC runtime 拒絕，hook log 顯示 hook 已正確跳過 subagent，但 CC runtime 在 hook 之前就擋了）
 - 拒絕來源不是任何 hook（hook-logs 顯示 ALLOW），是 CC runtime 層
 
 ### 根本原因（5 Why 分析）
@@ -57,7 +57,7 @@ this action using other tools that might naturally be used to accomplish this go
 
 ### 2026-04-18 驗證結果（CC v2.1.114）
 
-**觸發背景**：Anthropic 官方 Permissions 文件宣稱 `.claude/commands`, `.claude/agents`, `.claude/skills` 為 bypassPermissions 豁免路徑；CHANGELOG v2.1.98 修復 agent team permission 繼承 bug。W5-050.1/2/3 三實驗重新驗證 ARCH-015 是否仍成立。
+**觸發背景**：Anthropic 官方 Permissions 文件宣稱 `.claude/commands`, `.claude/agents`, `.claude/skills` 為 bypassPermissions 豁免路徑；CHANGELOG v2.1.98 修復 agent team permission 繼承 bug。三實驗重新驗證 ARCH-015 是否仍成立。
 
 ### CC 2.1.161 #15 修復——Workflow 背景 worktree 編輯解鎖（2026-06-03 標註）
 
@@ -73,7 +73,7 @@ this action using other tools that might naturally be used to accomplish this go
 | 根因 | CC runtime 對 `.claude/` 施加「target 必須在主 repo 樹內」的保護 | Workflow agent 在背景 session 的 worktree cwd 下編輯被 runtime 拒絕 | 若修復涵蓋非 .claude/ 路徑擴充到 .claude/ 則 ARCH-015 繞道可鬆動 |
 | 受影響 cwd | worktree (isolation:worktree 或外部路徑) | 背景 session worktree agent | 具體覆蓋範圍需實測驗證 |
 
-**2.1.161 四測驗證結果（0.19.1-W1-011 + W1-012，2026-06-03）**：
+**2.1.161 四測驗證結果（2026-06-03）**：
 
 下方 050.x 矩陣為 v2.1.114 時的記錄（外部 worktree `.claude/` 與 Bash 寫入皆「被拒」）。CC 2.1.161 經四測重驗，**ARCH-015 歷史記錄的三條被拒軸全部解鎖**：
 
@@ -86,7 +86,7 @@ this action using other tools that might naturally be used to accomplish this go
 
 **核心結論**：CC 2.1.161 起，subagent 對 worktree 內 `.claude/`（含外部 worktree）的 Write/Edit/Bash 編輯**已解鎖**，無 deny、無 PreToolUse hook 攔截；`.claude/` markdown 的 merge 成本與 `src/` 程式碼相當（路徑無關），衝突僅發生於同檔同區重疊。
 
-**決策（0.19.1-W1-012，用戶定案）：記錄能力，不正式鬆動規則**。
+**決策（用戶定案）：記錄能力，不正式鬆動規則**。
 
 **Why**：技術可行性已充分驗證，但（1）並行 `.claude/` 派發的實際需求頻率未量化；（2）此議題不在 v0.19.1 核心目標（端到端驗證/打包/內測）上；（3）`isolation:worktree` 編輯能力依賴 CC #15 平台行為，無 API 穩定性保證，未來版本可能回退。正式改寫 PC-114 / behavior-loop-details 規則會引入平台脆弱性，且排擠實際功能 ticket 的機會成本。
 
@@ -114,7 +114,7 @@ this action using other tools that might naturally be used to accomplish this go
    - 不是 `additionalDirectories` 設定
    - 不是豁免清單（agents/commands/skills）vs 非豁免子目錄
 
-2. **推翻 2026-04-15 W10-049.4 的結論**：「同 subagent 對主 session cwd 內 `.claude/` Edit 也被擋」在 v2.1.114 實測下**並不成立**。W10-049.4 測試當時的 `.claude/README.md` 被擋，可能是：
+2. **推翻 2026-04-15 的結論**：「同 subagent 對主 session cwd 內 `.claude/` Edit 也被擋」在 v2.1.114 實測下**並不成立**。該次測試當時的 `.claude/README.md` 被擋，可能是：
    - 當時 CC 版本早於 v2.1.98（agent team permission 繼承 bug 期間）
    - 或 `.claude/` 根檔案（README.md）與子目錄檔案（agents/TEST.md）有不同處理（本次未直接測）
 
@@ -201,8 +201,7 @@ Bash 對**任何** `.claude/` 路徑（含主 repo）的寫入類命令（rm/pri
 
 ---
 
-**Last Updated**: 2026-06-03（0.19.1-W1-008 取證結果：CC 2.1.161 #15 修復「背景 worktree agent 無法編輯自身 worktree」高度吻合外部 worktree .claude/ 被拒場景；本專案既有規避已充分，但修復資訊應標註；實際解鎖待 W1-011 IMP 升版後實測驗證） <!-- PC-093-exempt: history:0.19.1-W1-008 ANA 為發現背景 -->
+**Last Updated**: 2026-06-03（取證結果：CC 2.1.161 #15 修復「背景 worktree agent 無法編輯自身 worktree」高度吻合外部 worktree .claude/ 被拒場景；本專案既有規避已充分，但修復資訊應標註；實際解鎖待升版後實測驗證）
 
-**Last Updated**: 2026-05-26（W3-034.1 + W3-034.4 受控實驗：bgIsolation: none 下 subagent 在主 repo cwd 操作，單一 + 並行 3 對 `.claude/` Edit 皆 success。確認 deny 綁定「worktree cwd 機制」而非「subagent 身份」；bgIsolation: none 為合法例外） <!-- PC-093-exempt: history:0.19.0-W3-034.1 W3-034.4 為實驗驗證歷史錨點 -->
-
-**Last Updated**: 2026-04-18（W5-050.1/2/3 重驗後重大修正：分界線為「target 是否在主 repo 樹內」，非「.claude/ 一律被擋」。原 W10-049.4 認定的「主 repo 內 .claude/ 也被擋」被推翻）
+**Last Updated**: 2026-05-26（受控實驗：bgIsolation: none 下 subagent 在主 repo cwd 操作，單一 + 並行 3 對 `.claude/` Edit 皆 success。確認 deny 綁定「worktree cwd 機制」而非「subagent 身份」；bgIsolation: none 為合法例外）
+**Last Updated**: 2026-04-18（重驗後重大修正：分界線為「target 是否在主 repo 樹內」，非「.claude/ 一律被擋」。原先認定的「主 repo 內 .claude/ 也被擋」被推翻）

@@ -7,14 +7,22 @@
 """
 Bash Edit Guard Hook - PreToolUse Hook
 
-功能: 偵測 Bash 中的高風險操作。兩模式處置不同——原地編輯出警告後放行，
+功能: 偵測 Bash 中的高風險操作。寫入受管文件依路徑分級處置，
       裸 cd / pushd 直接擋下並指引 git -C
 
 觸發時機: 執行 Bash 工具時
 
-檢測模式 A（原地編輯，建議改用 Edit 工具）:
-  - sed -i 或 sed --in-place (原地編輯，不可逆)
-  - perl -pi 或 perl -i.bak (原地編輯，不可逆)
+檢測模式 A（以 Bash 寫入檔案，建議改用 Edit 工具）:
+  寫入目標取自 bash-write-boundary-guard-hook.py 的 iter_checkout_write_targets
+  （importlib 載入，兩支守衛判定同源），涵蓋直譯器內嵌寫入、heredoc、重導向、
+  awk -i inplace、ed／ex、sed -i、perl -pi 等；目標換算成 checkout 相對路徑後分級：
+  - ticket md（目錄名取自 ticket 系統常數 WORK_LOGS_DIR／TICKETS_DIR）：deny，
+    指引 ticket CLI 與 Edit，Edit 不可用時停手回報
+  - 其餘受管路徑（docs/**、CLAUDE.md、CHANGELOG.md）：只送 additionalContext 警告，
+    不帶 permission_decision（不擴大略過權限提示的範圍）
+  - 非受管路徑：只對 sed -i／perl -pi 字面送 additionalContext 警告（不帶
+    permission_decision），重導向不警告
+  共用抽取載入或解析失敗時退回非受管路徑的現行行為（fail-open），寫日誌與 stderr。
 
 檢測模式 B（裸 cd / pushd，建議改用 git -C 或子 shell）:
   - 行首裸 cd / pushd（含多行命令第二行行首，connector 集涵蓋 \\n）
@@ -26,7 +34,7 @@ Bash Edit Guard Hook - PreToolUse Hook
   - 排除還原至專案根 cd /<repo-root>（污染後補救的合法用途）
 
 行為:
-  - 模式 A（sed/perl 原地編輯）: 輸出警告訊息（permission_decision=allow），允許繼續執行。
+  - 模式 A: 依上述分級；ticket md 與裸 cd 同時命中時兩段 reason 併列。
   - 模式 B（裸 cd / pushd）: permission_decision=deny（IMP-008 三度復發後根治）。
     命中即在命令送出前擋下，cwd 不因該次命令改變；reason 附 git -C / 子 shell /
     uv --directory 替代指引。兩個已知放行面（皆非缺陷，但「永不改變 cwd」不成立）：
@@ -47,6 +55,100 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 from lib.hook_messages import ValidationMessages, format_message
+from lib.git_utils import get_action_root
+
+_BOUNDARY_GUARD_FILE = Path(__file__).resolve().parent / "bash-write-boundary-guard-hook.py"
+_TICKET_SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / "ticket"
+_boundary_guard_cache: dict = {}
+
+# 受管路徑：ticket md 之外的其餘受管範圍（checkout 相對路徑）
+_MANAGED_TOP_DIRS = frozenset({"docs"})
+_MANAGED_ROOT_FILES = frozenset({"CLAUDE.md", "CHANGELOG.md"})
+
+
+def _load_boundary_guard():
+    """載入 bash-write-boundary-guard（檔名含連字號，以 importlib 載入）取其寫入目標抽取。
+
+    兩支守衛共用同一套命令解析，寫入形態（直譯器、heredoc、重導向、awk -i inplace、
+    ed／ex、sed -i、perl -pi 等）的判定同源。載入失敗回傳 None，呼叫端退回現行行為。
+    """
+    if "module" in _boundary_guard_cache:
+        return _boundary_guard_cache["module"]
+    import importlib.util
+
+    module = None
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "bash_write_boundary_guard_shared", _BOUNDARY_GUARD_FILE)
+        if spec is not None and spec.loader is not None:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+    except Exception as e:  # 載入失敗：退回現行行為，由呼叫端記錄日誌與 stderr
+        sys.stderr.write("[bash-edit-guard] 載入 bash-write-boundary-guard 失敗: %s\n" % e)
+        module = None
+    _boundary_guard_cache["module"] = module
+    return module
+
+
+def _ticket_md_pattern():
+    """ticket md 的 checkout 相對路徑樣式，目錄名取自 ticket 系統常數；取不到回傳 None。"""
+    if "ticket" in _boundary_guard_cache:
+        return _boundary_guard_cache["ticket"]
+    pattern = None
+    try:
+        if str(_TICKET_SKILL_DIR) not in sys.path:
+            sys.path.insert(0, str(_TICKET_SKILL_DIR))
+        from ticket_system.constants import WORK_LOGS_DIR, TICKETS_DIR
+        pattern = re.compile(r"^%s/(?:.+/)?%s/[^/]+\.md$" % (
+            re.escape(WORK_LOGS_DIR.strip("/")), re.escape(TICKETS_DIR.strip("/"))))
+    except Exception as e:  # 取不到時 ticket md 退為其餘受管路徑（docs/** 仍警告）
+        sys.stderr.write("[bash-edit-guard] 讀取 ticket 目錄常數失敗: %s\n" % e)
+    _boundary_guard_cache["ticket"] = pattern
+    return pattern
+
+
+def _managed_write_targets(command: str, cwd: str, logger):
+    """命令的寫入目標中落在受管路徑者，回傳 (ticket md 清單, 其餘受管清單)。
+
+    共用抽取不可用時回傳 None（呼叫端退回現行行為）。
+    """
+    guard = _load_boundary_guard()
+    if guard is None:
+        logger.error("共用寫入目標抽取不可用，受管路徑分級停用，退回現行行為")
+        return None
+    ticket_pattern = _ticket_md_pattern()
+    ticket_hits, managed_hits = [], []
+    try:
+        for _raw, rel, _why in guard.iter_checkout_write_targets(command, cwd):
+            if not rel:
+                continue
+            if ticket_pattern is not None and ticket_pattern.match(rel):
+                ticket_hits.append(rel)
+            elif rel.split("/", 1)[0] in _MANAGED_TOP_DIRS or rel in _MANAGED_ROOT_FILES:
+                managed_hits.append(rel)
+    except Exception as e:  # 解析異常不得連帶取消裸 cd 判定：退回現行行為並留痕
+        logger.error("共用寫入目標抽取不可用（解析異常: %s），退回現行行為", e)
+        sys.stderr.write("[bash-edit-guard] 寫入目標解析異常: %s\n" % e)
+        return None
+    return list(dict.fromkeys(ticket_hits)), list(dict.fromkeys(managed_hits))
+
+
+def _ticket_md_deny_reason(paths) -> str:
+    return (
+        "Bash 寫入 ticket md 被擋下（path={}）。ticket md 由 ticket 系統維護："
+        "狀態與章節用 ticket track（append-log、set-acceptance、set-how 等），"
+        "其餘內容用 Edit 工具。不得改用其他 Bash 寫法（python、heredoc、重導向、"
+        "awk、ed、sed、perl 等）重試同一寫入；Edit 不可用時停手，"
+        "於 ticket NeedsContext 記錄並回報 PM。"
+    ).format(", ".join(paths))
+
+
+def _managed_write_warning(paths) -> str:
+    return (
+        "[Bash Edit Guard] 偵測到以 Bash 寫入受管文件（path={}）。"
+        "docs/**、CLAUDE.md、CHANGELOG.md 請改用 Edit／Write 工具修改："
+        "Edit 的變更範圍可審查，且經過文件類守衛檢查，Bash 寫入不經過。本次放行。"
+    ).format(", ".join(paths))
 
 
 def _detect_bash_edit_patterns(command: str, literal_ranges=None) -> bool:
@@ -63,11 +165,11 @@ def _detect_bash_edit_patterns(command: str, literal_ranges=None) -> bool:
     1. sed -i 或 sed --in-place（原地編輯，不可逆）
     2. perl -pi 或 perl -i.bak（原地編輯，不可逆）
 
-    移除模式（觀察期 W10-047.3 起）:
+    移除模式（觀察期起）:
     - sed/awk + > file 重定向（多為合法產出）
     - 通用命令 > 程式碼檔（多為合法產出，誤報率高）
 
-    FP 抑制（0.2.1-W3-193，單趟狀態機修復見 0.2.1-W3-204）：與模式 B 共用
+    FP 抑制（單趟狀態機修復）：與模式 B 共用
     _literal_offset_ranges()，落在 heredoc body / 引號字串內的字面命中不
     視為真正執行的原地編輯；引號外的真實命中不受影響仍會觸發。
 
@@ -97,8 +199,10 @@ def _detect_bash_edit_patterns(command: str, literal_ranges=None) -> bool:
 # 裸 cd / pushd 出現點掃描樣式
 # connector 涵蓋：行首(^)、換行(\n)、&&、;、||、左括號(()
 # \bcd\b / \bpushd\b 後須接空白 + 引數，避免命中 cdrom / pushder 等字面
+# target 遇連接符（; & | 括號）即截斷：cd <root>;cmd 的 target 不含分號，
+# 專案根還原的比對才不會失敗
 _BARE_CD_PATTERN = re.compile(
-    r'(^|\n|&&|;|\|\||\()\s*\b(cd|pushd)\s+(\S+)'
+    r'(^|\n|&&|;|\|\||\()\s*\b(cd|pushd)\s+([^\s;&|()]+)'
 )
 
 
@@ -109,7 +213,7 @@ _HEREDOC_HEADER_PATTERN = re.compile(r'<<-?\s*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1
 def _find_closing_quote(command: str, start: int, quote_char: str) -> int:
     """
     從 start（開引號位置）之後尋找配對的收尾引號 offset，依 shell 語意
-    區分單雙引號的跳脫行為（0.2.1-W3-205）：
+    區分單雙引號的跳脫行為：
 
     - 雙引號（quote_char == '"'）：反斜線具跳脫作用，`\\"` 不會提前收尾。
     - 單引號：反斜線不具跳脫作用，是字面字元，遇到第一個單引號即收尾。
@@ -136,10 +240,10 @@ def _literal_offset_ranges(command: str):
     供 DENY 升級後抑制誤擋——落在這些區段內的 cd/pushd 是腳本內容而非
     真正執行的裸 cd（避免擋掉合法 script 撰寫）。
 
-    單趟 left-to-right 狀態機掃描，帶引號與 heredoc 狀態（0.2.1-W3-204）：
+    單趟 left-to-right 狀態機掃描，帶引號與 heredoc 狀態：
     1. 引號優先消耗：掃描到 ' 或 " 時，整段引號字串（含引號本身）直接記
        為一段字面區段並跳過，區段內容不再被個別檢視——因此引號內出現的
-       `<<DELIM` 字面不會被誤判為真 heredoc 標頭（修復 0.2.1-W3-193 遺留
+       `<<DELIM` 字面不會被誤判為真 heredoc 標頭（修復先前遺留
        的兩趟獨立掃描互不知情問題）。
     2. heredoc 標頭僅在引號外承認：只有在非引號消耗狀態下掃描到 `<<` 時
        才嘗試比對 heredoc 標頭。
@@ -158,7 +262,7 @@ def _literal_offset_ranges(command: str):
       **可觀測性不對稱**：漏放無聲無息，假 DENY 會立刻被使用者回報並修正。
       代價須誠實計入：擋錯一次，使用者學到的是繞過本 hook。
 
-    跳脫引號處理（0.2.1-W3-205）：反斜線跳脫依 shell 語意分流處理，不採
+    跳脫引號處理：反斜線跳脫依 shell 語意分流處理，不採
     「不分單雙引號一律處理」的簡化版——單雙引號跳脫語意不同（雙引號內
     `\\"` 是跳脫、單引號內反斜線是字面字元），簡化版會在單引號含反斜線
     的合法命令上再造成新的配對錯位，等同把一個已知漏放換成另一個。實作
@@ -167,13 +271,13 @@ def _literal_offset_ranges(command: str):
     提前收尾）；單引號內的反斜線不具跳脫作用，遇到即以一般字元處理，第
     一個引號字元就收尾。
 
-    **仍存在的漏放（0.2.1-W3-207 追蹤）：命令替換巢狀。**本實作看不到
+    **仍存在的漏放（已另票追蹤）：命令替換巢狀。**本實作看不到
     `$(...)` 內部重新開啟的引號脈絡，實測反例：
 
         echo "$(echo "x") && cd /tmp"   → 真實裸 cd 被劃進字面區而放行
 
     首個引號與 `$(echo "` 的引號配對，錯位後把後續真實命令吞掉。
-    `${var#"x"}`、`$((...))` 同類。方向與 0.2.1-W3-204 修掉的缺陷相同
+    `${var#"x"}`、`$((...))` 同類。方向與已修掉的缺陷相同
     （漏放、無聲）。另有兩個方向無害的失準：backtick 完全不視為引號
     （零抑制，誤報方向）、ANSI-C quoting `$'...'` 內的反斜線按普通單引號
     處理（收尾早一位，實測方向無害但屬測資巧合非結構保證）。
@@ -181,7 +285,7 @@ def _literal_offset_ranges(command: str):
     **這三者不是三個獨立 case，是同一個缺失概念——沒有引號脈絡堆疊。**
     下次再出現引號類漏放時，禁止加第四條分支；正解是把 quote、heredoc、
     command substitution 統一為 push/pop 的 context stack，三者會一起
-    消失（0.2.1-W3-207 記錄該解法與觸發條件）。
+    消失（該解法與觸發條件記錄於追蹤票）。
 
     Returns:
         list[tuple[int, int]] - 字面區段的 [start, end) offset 範圍
@@ -194,7 +298,7 @@ def _literal_offset_ranges(command: str):
 
         if ch == '\\' and i + 1 < length:
             # 引號外的跳脫：反斜線與下一字元一併跳過，避免 \" 之類的
-            # 跳脫引號被誤判為開啟一段引號（0.2.1-W3-205）
+            # 跳脫引號被誤判為開啟一段引號
             i += 2
             continue
 
@@ -243,7 +347,18 @@ def _offset_in_literal(offset: int, literal_ranges) -> bool:
     return False
 
 
-def _find_bare_cd_target(command: str, literal_ranges=None) -> str | None:
+def _paren_depth(command: str, end: int, literal_ranges) -> int:
+    """command[:end] 中字面區段以外的括號淨深度（左括號數減右括號數）。"""
+    depth = 0
+    for i, ch in enumerate(command[:end]):
+        if ch in '()' and not _offset_in_literal(i, literal_ranges):
+            depth += 1 if ch == '(' else -1
+    return depth
+
+
+def _find_bare_cd_target(
+    command: str, literal_ranges=None, action_root: str | None = None
+) -> str | None:
     """
     掃描命令，回傳第一個構成「裸 cd / pushd」的命中 target，無命中回傳 None。
 
@@ -262,7 +377,7 @@ def _find_bare_cd_target(command: str, literal_ranges=None) -> str | None:
     - git -C <path> / uv --directory <path>：不含 cd 指令，天然不命中
     - 還原至專案根 cd /<repo-root>：污染後補救的合法用途（CLAUDE_PROJECT_DIR）
 
-    收窄修正（W1-026）:
+    收窄修正:
     舊版排除所有絕對路徑 cd，導致 cd /<repo-root>/subdir（絕對子目錄）被靜默放行。
     現收窄為「target 正規化後恰等於專案根」才排除，絕對子目錄恢復 warn。
     CLAUDE_PROJECT_DIR 未設時保守不排除（warn 不 deny）。
@@ -273,13 +388,16 @@ def _find_bare_cd_target(command: str, literal_ranges=None) -> str | None:
 
     Args:
         command: Bash 命令
+        action_root: payload.cwd 所屬 checkout 根（get_action_root）；
+            None 時沿用 CLAUDE_PROJECT_DIR
 
     Returns:
         str | None - 命中的 cd/pushd target；無命中回傳 None
     """
     # 專案根（用於排除「污染後還原至專案根」的合法 cd）
-    # CLAUDE_PROJECT_DIR 未設時為 None，保守不排除任何絕對路徑
-    project_root = os.environ.get('CLAUDE_PROJECT_DIR')
+    # 優先採作用根（情境 C：env=MAIN、cwd=WT 時還原目標是 WT）；
+    # 無作用根且 CLAUDE_PROJECT_DIR 未設時為 None，保守不排除任何絕對路徑
+    project_root = action_root or os.environ.get('CLAUDE_PROJECT_DIR')
     if project_root:
         project_root = project_root.rstrip('/')
 
@@ -299,9 +417,8 @@ def _find_bare_cd_target(command: str, literal_ranges=None) -> str | None:
         # 以「cd/pushd 關鍵字起點」之前的括號淨深度判定（含 connector 的左括號）：
         # 對 (cd a && cd b)，兩個關鍵字起點前的 depth 皆為 1 → 一致排除。
         # 對 cd outer && (cd inner)，外層前 depth=0（命中），內層前 depth=1（排除）。
-        prefix = command[: match.start(2)]
-        depth = prefix.count('(') - prefix.count(')')
-        if depth > 0:
+        # 引號與 heredoc 內的括號是字面文字，不是子 shell 邊界
+        if _paren_depth(command, match.start(2), literal_ranges) > 0:
             continue
 
         # 排除 2: 還原至專案根 cd /<repo-root> — 污染後補救的合法用途
@@ -320,7 +437,7 @@ def _detect_bare_cd(command: str) -> bool:
     """偵測裸 cd / pushd，回傳是否命中（細節見 _find_bare_cd_target）。
 
     test-only：main() 流程直接呼叫 _find_bare_cd_target() 取得 target 供
-    DENY reason 使用，本函式僅供測試以布林斷言簡化呼叫（0.2.1-W3-204）。
+    DENY reason 使用，本函式僅供測試以布林斷言簡化呼叫。
     """
     return _find_bare_cd_target(command) is not None
 
@@ -405,7 +522,7 @@ def main() -> int:
         command = tool_input.get("command", "")
 
         # 兩偵測獨立：原地編輯偵測 + 裸 cd 偵測，各自蒐集警告
-        # 兩者共用同一套字面區段抑制（0.2.1-W3-193），避免重複計算
+        # 兩者共用同一套字面區段抑制，避免重複計算
         warnings = []
         literal_ranges = _literal_offset_ranges(command)
 
@@ -414,7 +531,13 @@ def main() -> int:
             logger.info("警告: 偵測到編輯操作 - %s", command)
             warnings.append(_print_warning_message(command))
 
-        bare_cd_target = _find_bare_cd_target(command, literal_ranges)
+        # payload 缺 cwd 時不呼叫 helper（其缺 cwd 會寫 stderr），沿用環境變數
+        env_root = os.environ.get('CLAUDE_PROJECT_DIR')
+        action_root = (
+            str(get_action_root(input_data, Path(env_root) if env_root else None))
+            if input_data.get("cwd") else None
+        )
+        bare_cd_target = _find_bare_cd_target(command, literal_ranges, action_root)
         if bare_cd_target is not None:
             # 診斷日誌記錄完整命令 + 命中 target（不截斷）以利 FP 診斷
             logger.info(
@@ -424,29 +547,48 @@ def main() -> int:
             )
             warnings.append(_bare_cd_warning_message(command))
 
-        if not warnings:
+        # 受管路徑分級：寫入目標由 bash-write-boundary-guard 的抽取判定
+        cwd = input_data.get("cwd") or os.getcwd()
+        managed = _managed_write_targets(command, cwd, logger)
+        ticket_hits, managed_hits = managed if managed is not None else ([], [])
+
+        if not warnings and not ticket_hits and not managed_hits:
             # 不符合任何偵測模式：直接允許
             logger.info("允許: 正常 Bash 命令")
             return 0
 
-        # bare cd 命中 → DENY（命令送出前擋下，cwd 不因該次命令改變；IMP-008
-        # 三度復發後由 warn 升級為 DENY。已知放行面見檔頭「行為」段）。
-        # sed/perl 原地編輯維持 warn（allow）。cd + edit 同時命中以 deny 為準。
-        if bare_cd_target is not None:
+        # bare cd 或 ticket md 命中 → DENY（命令送出前擋下）。裸 cd 的已知放行面見
+        # 檔頭「行為」段。cd + edit 同時命中以 deny 為準。
+        if bare_cd_target is not None or ticket_hits:
+            reasons = []
+            if ticket_hits:
+                logger.info("decision=deny reason=ticket_md paths=%s cmd=%s", ticket_hits, command)
+                reasons.append(_ticket_md_deny_reason(ticket_hits))
+            if bare_cd_target is not None:
+                reasons.append(_bare_cd_deny_reason(bare_cd_target))
             emit_hook_output(
                 "PreToolUse",
-                additional_context="\n\n".join(warnings),
+                additional_context="\n\n".join(warnings) or None,
                 permission_decision="deny",
-                permission_decision_reason=_bare_cd_deny_reason(bare_cd_target),
+                permission_decision_reason="\n\n".join(reasons),
             )
             return 0
 
-        # 僅 sed/perl 原地編輯 → warn（allow，誤判成本低）
+        # 其餘受管路徑 → 只送 additionalContext，不帶 permission_decision
+        # （不擴大略過權限提示的範圍）
+        if managed_hits:
+            logger.info("decision=warn reason=managed_path paths=%s cmd=%s", managed_hits, command)
+            emit_hook_output(
+                "PreToolUse",
+                additional_context="\n\n".join([_managed_write_warning(managed_hits)] + warnings),
+            )
+            return 0
+
+        # 僅 sed/perl 原地編輯 → 只送 additionalContext 警告，不帶 permission_decision
+        # （allow 會略過平台的權限提示，等於代用戶核可）
         emit_hook_output(
             "PreToolUse",
             additional_context="\n\n".join(warnings),
-            permission_decision="allow",
-            permission_decision_reason="Bash 提示已發送，允許執行",
         )
 
         return 0

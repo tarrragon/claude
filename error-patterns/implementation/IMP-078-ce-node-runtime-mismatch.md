@@ -16,7 +16,7 @@ related:
 
 **Why**：Jest 在 Node.js + jsdom 執行，`global`/`process`/`require` 天然可用，差異對測試套件完全透明；esbuild `platform: browser, format: iife` 不 polyfill Node.js API，CE runtime 立即拋出 `ReferenceError`。
 
-**Consequence**：CE runtime 功能 100% 不可用；測試「全綠 = 可發布」承諾被打破；單一根因引發 8+ ticket 連鎖回溯（W1-047.1~.5 → W1-001.2.1 → W1-050 → W1-050.1~.6），阻塞版本里程碑。
+**Consequence**：CE runtime 功能 100% 不可用；測試「全綠 = 可發布」承諾被打破；單一根因引發 8+ ticket 連鎖回溯（五個修復票 → 實機驗證票 → 全域盤點 ANA → 六個修復票），阻塞版本里程碑。
 
 **Action**：三層防護（見「防護方向」）：ESLint 靜態檢查 + esbuild define + bundle scan。
 
@@ -27,7 +27,7 @@ related:
 - **Pattern ID**: IMP-078
 - **分類**: 實作（implementation）
 - **來源版本**: v0.19.0
-- **發現日期**: 2026-05-23（W1-050 ANA 全 src 盤點）
+- **發現日期**: 2026-05-23（全 src 盤點 ANA）
 - **風險等級**: 高
 - **標籤**: `chrome-extension` `nodejs-api` `esbuild` `runtime-mismatch` `jest-false-positive` `eslint` `ce-runtime`
 
@@ -37,7 +37,7 @@ related:
 
 | Error Pattern | 關聯性 | 說明 |
 |--------------|--------|------|
-| PC-165（false-positive-fix-chain） | 並列關係（共通表層症狀）| 共享「測試綠燈但 runtime 失效」表層症狀，但根因領域正交：PC-165 聚焦「修復鏈 + mock 替代 + 後續信任」三層共振（流程層）；IMP-078 聚焦「Jest jsdom Node globals vs 瀏覽器 esbuild bundle API 可用性差異」（實作層）。交集案例為 W1-047.1~.5（既觸發 IMP-078 API 誤用，也具備 PC-165 acceptance 全勾 + commit + 後續推進的修復鏈特徵）|
+| PC-165（false-positive-fix-chain） | 並列關係（共通表層症狀）| 共享「測試綠燈但 runtime 失效」表層症狀，但根因領域正交：PC-165 聚焦「修復鏈 + mock 替代 + 後續信任」三層共振（流程層）；IMP-078 聚焦「Jest jsdom Node globals vs 瀏覽器 esbuild bundle API 可用性差異」（實作層）。交集案例為一組五連鎖修復（既觸發 IMP-078 API 誤用，也具備 PC-165 acceptance 全勾 + commit + 後續推進的修復鏈特徵）|
 | ARCH-013（ESM/CJS 混合匯出）| 弱相關（同屬建置環境差異類） | ARCH-013 聚焦 ESM/CJS 模組格式差異；IMP-078 聚焦 Node.js API 與瀏覽器 API 可用性差異；兩者共同根因是「建置環境差異未被靜態防護」|
 | ARCH-021（模組組裝遺漏靜默斷裂） | 弱相關（同屬靜默失效類） | 共通機制：問題在 unit test 層不可見，只在端到端執行時暴露；觸發維度不同（ARCH-021 是組裝遺漏，IMP-078 是 API 環境差異）|
 
@@ -177,16 +177,16 @@ grep -rn "require\(['\"]crypto['\"]\)\|\.randomBytes\b\|\.createHash\b" "$DIST_D
 
 ---
 
-<!-- PC-093-exempt: history:W1-050 + W1-001.2.1 + W1-047.1~.5 為已完成歷史錨點，非延後決策 -->
+<!-- PC-093-exempt: history:本節所述的修復票、實機驗證票與全域盤點票為已完成歷史錨點，非延後決策 -->
 ## 動機案例
 
-### W1-050 ANA + W1-047.1~.5（2026-05-23，v0.19.0）
+### 全域盤點 ANA + 五連鎖修復（2026-05-23，v0.19.0）
 
-W1-047.1~.5（BookFileImporter 五個連鎖修復）acceptance 全勾 + npm test 通過 + commit 完成 → W1-001.2.1 實機驗證：UC-04 JSON 匯入，overview runtime 立即崩潰（`ReferenceError: global is not defined` at `file-reader-factory.js:24`）→ W1-050 全域盤點 ANA：致命 21 處（`global` 裸用 6、`process.env.NODE_ENV` 13、`process.*` 多、`require('crypto')` 6）→ W1-050.1~.4 修復 IMP → W1-050.5 本 error-pattern。
+BookFileImporter 五個連鎖修復 acceptance 全勾 + npm test 通過 + commit 完成 → 實機驗證 UC-04 JSON 匯入，overview runtime 立即崩潰（`ReferenceError: global is not defined` at `file-reader-factory.js:24`）→ 全域盤點 ANA：致命 21 處（`global` 裸用 6、`process.env.NODE_ENV` 13、`process.*` 多、`require('crypto')` 6）→ 四個修復 IMP → 本 error-pattern。
 
 **代價量化**：單一根因（CE-Node 環境前提未防護）引發 8+ ticket 連鎖，阻塞版本里程碑。
 
-### W1-001.2.1 觸發細節（`src/utils/file-reader-factory.js` L24）
+### 實機驗證觸發細節（`src/utils/file-reader-factory.js` L24）
 
 ```javascript
 const FileReader = global.FileReader || window.FileReader; // 錯誤：global 裸用，CE runtime ReferenceError
@@ -239,13 +239,10 @@ queueMicrotask(() => { ... });               // Web API
 
 ### 相關資源
 
-<!-- PC-093-exempt: history:W1-050 + W1-001.2.1 + W1-047.1~.5 為已完成歷史錨點，非延後決策 -->
-- `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W1-050.md` — W1-050 ANA 全 src 盤點（致命 21 處完整表格 + 修復 IMP 拆分）
-- `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W1-001.2.1.md` — 觸發案例（file-reader-factory global 裸用實機崩潰）
 - `docs/chrome-extension-dev-guide.md` — CE 開發規範（含 Manifest V3 API 限制完整說明）
 - `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md` — 上位 pattern（測試綠燈不等於 runtime 正確）
 
 ---
 
 **Last Updated**: 2026-05-30
-**Version**: 1.1.0 — W1-122 認知負擔重構（363→≤270 行 / 10→7 H2 / §觸發條件+§問題描述+§根本原因合併為§問題分析 / API 對照表 SSOT 整併 / §標籤+§相關資源併入相關章節）
+**Version**: 1.1.0 — 認知負擔重構（363→≤270 行 / 10→7 H2 / §觸發條件+§問題描述+§根本原因合併為§問題分析 / API 對照表 SSOT 整併 / §標籤+§相關資源併入相關章節）

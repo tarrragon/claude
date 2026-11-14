@@ -13,7 +13,12 @@ Session 結束時檢查 confabulation 常見副作用指標：
 輸出差異報告到 stderr + hook-logs。
 不預防 confabulation（無法），僅提供事後可觀測性。
 
-Source: 1.5.0-W5-014.1 / PC-166 防護 B 延伸
+受眾：用戶與營運日誌，不含模型。Stop 事件的 additionalContext 會讓模型續跑；
+本 hook 的兩個指標在多線並行時幾乎每輪都成立（共用 checkout 常有他線未提交檔、
+本線常有 in_progress 票），送給模型會讓每次 Stop 都續跑一輪。故維持 exit 0 stderr
+加日誌，不經 emit_model_reminder。
+
+Source: PC-166 防護 B 延伸
 """
 
 import logging
