@@ -19,6 +19,7 @@ merge_branch_cas 產生合併 commit 之前取得、update-ref 完成或中止�
 套件執行器可注入（SuiteRunner），單元測試不真的跑 hooks 或 flutter 全套件。
 """
 
+import hashlib
 import os
 import re
 import shutil
@@ -37,10 +38,22 @@ from lib import slot_gate  # noqa: E402
 from lib.flutter_launcher import launch_argv  # noqa: E402
 
 try:
-    from .merge_cas import CheckResult
+    from .merge_cas import BatchHooks, BatchItem, CheckResult, MergeOutcome
 except ImportError:
     # Fallback when running with scripts/ on sys.path (test 與直接執行情境)
-    from merge_cas import CheckResult
+    from merge_cas import BatchHooks, BatchItem, CheckResult, MergeOutcome
+
+# 批次合併：一次候選含領導者最多這麼多張；環境變數 MERGE_GATE_BATCH_MAX 覆寫，設 1 即停用批次
+BATCH_MAX_DEFAULT = 4
+BATCH_MAX_ENV = "MERGE_GATE_BATCH_MAX"
+_QUEUE_FIELDS = ("repo", "branch", "branch_sha", "target", "message")
+
+
+def batch_max() -> int:
+    try:
+        return max(int(os.environ[BATCH_MAX_ENV]), 1)
+    except (KeyError, ValueError):
+        return BATCH_MAX_DEFAULT
 
 # 閘門允許的 CAS 重試次數（不含首次嘗試）；超過即中止並回報最後一次失敗原因
 GATE_MAX_RETRIES = 3
@@ -779,9 +792,15 @@ def gate_result_label(error: str) -> str:
     return GATE_ABORTED
 
 
-def gate_line(phase: str, target: str, branch: str, commit: str, result: Optional[str] = None) -> str:
-    """閘門開始／結束行。commit：開始行為 base HEAD，結束行寫入時為合併 commit、其餘仍為 base HEAD。"""
+def gate_line(phase: str, target: str, branch: str, commit: str, result: Optional[str] = None,
+              batch: str = "") -> str:
+    """閘門開始／結束行。commit：開始行為 base HEAD，結束行寫入時為合併 commit、其餘仍為 base HEAD。
+
+    batch 非空：本票屬該批次（領導者與跟隨者共用同一識別字串）。
+    """
     tail = f"｜結果 {result}" if result else ""
+    if batch:
+        tail += f"｜批次 {batch}"
     return f"{GATE_LINE_PREFIX} {phase}｜target {target}｜分支 {branch}｜commit {commit[:12]}{tail}"
 
 
@@ -838,6 +857,169 @@ class MergeGate:
         self.project_root = project_root or repo
         self.verified_suites: dict = {}  # 套件 -> 該套件最近一次確認綠燈（含沿用）的合併 commit
         self.suite_runs = 0
+        self._held = None  # 持有中的 SlotHold（未取得名額時為 None）
+        self._own: Optional[tuple] = None  # (內容鍵, 本票分支 sha)：follower 讀認領與裁決用
+        self._message: Optional[str] = None  # 本票合併訊息（batch_hooks 登記）
+        self.batch_id = ""  # 本票所屬批次（領導者組成批次或被認領時才有值）
+
+    # ----- 批次合併：排隊欄位、候選組成、follower 端判定 -----
+
+    def _resolve_sha(self, branch: str) -> Optional[str]:
+        """以完整 refs/heads/<名> 逐筆查詢（不用 for-each-ref 的部分名稱 pattern：對不到會靜默回空集合）。"""
+        proc = _git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}^{{commit}}"], self.repo)
+        return proc.stdout.decode().strip() if proc.returncode == 0 else None
+
+    def _content_key(self, branch: str, sha: str) -> str:
+        raw = f"{os.path.realpath(self.repo)}\0{branch}\0{sha}"
+        return hashlib.sha1(raw.encode("utf-8", "surrogateescape")).hexdigest()[:16]
+
+    def _changed_files(self, branch: str, base: str) -> Optional[list]:
+        """merge-base(base, branch)..branch 的改動檔（豁免清單檔不計）；git 失敗回 None。"""
+        proc = _git(["merge-base", f"refs/heads/{base}", f"refs/heads/{branch}"], self.repo)
+        if proc.returncode != 0:
+            return None
+        paths = changed_paths_between(self.repo, proc.stdout.decode().strip(), f"refs/heads/{branch}")
+        return None if paths is None else [p for p in paths if not is_reuse_exempt(p)]
+
+    def queue_extra(self, branch: str, base: str, message: Optional[str]) -> Optional[dict]:
+        """排隊檔附加欄位，供領導者判斷可否併入；取不到分支 sha 時回 None（不可被併）。"""
+        sha = self._resolve_sha(branch)
+        if sha is None:
+            self._own = None
+            return None
+        self._own = (self._content_key(branch, sha), sha)
+        return {"repo": os.path.realpath(self.repo), "branch": branch, "branch_sha": sha, "target": base,
+                "message": message or f"Merge branch '{branch}'"}
+
+    def _candidate(self, waiter: dict, base: str, taken: set, directory: str) -> Optional[BatchItem]:
+        """排隊者可否併入：欄位齊全、同 repo 同 target、分支 head 未變、未被認領、改動檔不重疊且不含宣告。"""
+        if not all(isinstance(waiter.get(f), str) and waiter[f] for f in _QUEUE_FIELDS):
+            return None  # 舊格式或欄位缺漏：不可併
+        pid = waiter.get("pid")
+        if not isinstance(pid, int) or pid == os.getpid():
+            return None
+        if os.path.realpath(waiter["repo"]) != os.path.realpath(self.repo) or waiter["target"] != base:
+            return None
+        sha = self._resolve_sha(waiter["branch"])
+        if sha is None or sha != waiter["branch_sha"]:
+            return None
+        key = self._content_key(waiter["branch"], sha)
+        if slot_gate.read_sidecar(directory, "claim", pid, key) is not None:
+            return None
+        files = self._changed_files(waiter["branch"], base)
+        if not files or DECLARATION_PATH in files or taken.intersection(files):
+            return None
+        taken.update(files)
+        return BatchItem(waiter["branch"], sha, waiter["message"],
+                         {"pid": pid, "key": key, "name": waiter["name"], "files": files})
+
+    def collect_batch(self, branch: str, base: str) -> list:
+        """領導者取得名額後組候選（不含自己）；任何失敗回空清單，行為退回單票。"""
+        limit = batch_max() - 1
+        if limit <= 0 or self._held is None:
+            return []
+        try:
+            return self._collect(branch, base, limit)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            sys.stderr.write(f"merge-gate: 批次組成失敗，改單票合併：{exc}\n")
+            return []
+
+    def _collect(self, branch: str, base: str, limit: int) -> list:
+        leader_files = self._changed_files(branch, base)
+        if not leader_files or DECLARATION_PATH in leader_files:
+            return []
+        directory = slot_gate.slot_dir()
+        slot_gate.sweep_sidecars(directory)
+        taken, items = set(leader_files), []
+        for waiter in slot_gate.list_waiting(directory):
+            if len(items) >= limit:
+                break
+            item = self._candidate(waiter, base, taken, directory)
+            if item is not None:
+                items.append(item)
+        if not items:
+            return []
+        self.batch_id = f"b{os.getpid()}-{int(time.time())}"
+        for item in items:
+            slot_gate.write_sidecar(directory, "claim", item.ref["pid"], item.ref["key"],
+                                    {"batch": self.batch_id, "leader_pid": os.getpid()})
+        self._reestimate(set(leader_files).union(*(i.ref["files"] for i in items)))
+        _emit_result(self.repo, f"{GATE_LINE_PREFIX} 批次｜batch {self.batch_id}｜領導 {branch}｜成員 "
+                                f"{', '.join(i.branch for i in items)}")
+        return items
+
+    def _reestimate(self, paths: set) -> None:
+        """整批只持一個名額：預估改為候選改動檔聯集的套件耗時加總。"""
+        try:
+            self._held.set_estimate(suite_estimate_seconds(select_suites(sorted(paths), self.repo), self.repo))
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            sys.stderr.write(f"merge-gate: 批次預估更新失敗，沿用原值：{exc}\n")
+
+    def _merge_commit_of(self, sha: str, base: str) -> str:
+        proc = _git(["rev-list", "--merges", "--parents", "-n", "200", f"refs/heads/{base}"], self.repo)
+        for line in proc.stdout.decode().splitlines():
+            fields = line.split()
+            if sha in fields[2:]:
+                return fields[0]
+        tip = _git(["rev-parse", f"refs/heads/{base}"], self.repo)
+        return tip.stdout.decode().strip()
+
+    def landed_outcome(self, base: str, require_claim: bool) -> Optional[MergeOutcome]:
+        """本票分支已是 target 祖先時的成功結果（世界平面事實）；來源標明批次或「未經本閘門」。
+
+        require_claim：True 時必須持有領導者的認領檔（取得名額後路徑，無認領者維持既有的已包含錯誤）；
+        False 用於逾時與取消路徑（認領檔有則標批次，無則標未經本閘門）。
+        """
+        if self._own is None:
+            return None
+        key, sha = self._own
+        directory = slot_gate.slot_dir()
+        claim = slot_gate.read_sidecar(directory, "claim", os.getpid(), key)
+        if require_claim and claim is None:
+            return None
+        if _git(["merge-base", "--is-ancestor", sha, f"refs/heads/{base}"], self.repo).returncode != 0:
+            return None
+        slot_gate.remove_sidecar(directory, "claim", os.getpid(), key)
+        if claim:
+            self.batch_id = str(claim.get("batch", ""))
+        via = f"批次 {self.batch_id}" if claim else "未經本閘門"
+        return MergeOutcome(True, "", self._merge_commit_of(sha, base), via=via)
+
+    def followed_outcome(self, branch: str, base: str) -> Optional[MergeOutcome]:
+        """取得名額後先看領導者是否已處理本票：紅燈裁決、已寫入皆直接回報，否則 None（自己合併）。"""
+        if self._held is None or self._own is None:
+            return None
+        key, _sha = self._own
+        directory = slot_gate.slot_dir()
+        verdict = slot_gate.read_sidecar(directory, "verdict", os.getpid(), key)
+        if verdict is not None:
+            self.batch_id = str(verdict.get("batch", ""))
+            slot_gate.remove_sidecar(directory, "verdict", os.getpid(), key)
+            slot_gate.remove_sidecar(directory, "claim", os.getpid(), key)
+            return MergeOutcome(False, str(verdict.get("reason", "批次紅燈")), via=f"批次 {self.batch_id}")
+        landed = self.landed_outcome(base, require_claim=True)
+        if landed is not None:
+            return landed
+        slot_gate.remove_sidecar(directory, "claim", os.getpid(), key)  # 領導者未寫入本票：自己單跑
+        return None
+
+    def _refuse(self, item: BatchItem, reason: str) -> None:
+        slot_gate.write_sidecar(slot_gate.slot_dir(), "verdict", item.ref["pid"], item.ref["key"],
+                                {"batch": self.batch_id, "result": GATE_REFUSED, "reason": reason})
+
+    def _drop(self, item: BatchItem) -> None:
+        slot_gate.remove_sidecar(slot_gate.slot_dir(), "claim", item.ref["pid"], item.ref["key"])
+
+    def _follower_alive(self, item: BatchItem) -> bool:
+        return slot_gate.queue_entry_alive(slot_gate.slot_dir(), item.ref["name"])
+
+    def batch_hooks(self, branch: str, base: str, message: Optional[str] = None) -> BatchHooks:
+        self._message = message
+        return BatchHooks(
+            followed=lambda: self.followed_outcome(branch, base),
+            collect=lambda: self.collect_batch(branch, base),
+            alive=self._follower_alive, on_refused=self._refuse, on_dropped=self._drop,
+            batch_id=lambda: self.batch_id)
 
     def _needs_slot(self, branch: str, base: str) -> bool:
         """分支相對 base 的改動是否可能需跑全套件；git 失敗時保守視為需要。"""
@@ -868,6 +1050,7 @@ class MergeGate:
         """持有 heavy 名額的區段：進入時排隊取得，離開（成功、中止、例外、中斷）一律釋放。
 
         改動不在任何全套件範圍內者不取得，免得文件合併排在他方全套件之後。
+        本票合併訊息取自 batch_hooks 登記的 message，隨排隊檔公開供領導者組批時逐票使用。
         """
         if not self._needs_slot(branch, base):
             yield
@@ -875,17 +1058,20 @@ class MergeGate:
         with _sigterm_as_interrupt():
             held, early = slot_gate.acquire_slot(
                 ["merge-gate", branch], lambda: None, label="merge-gate",
-                estimate_seconds=self._estimate_hold_seconds(branch, base))
+                estimate_seconds=self._estimate_hold_seconds(branch, base),
+                queue_extra=self.queue_extra(branch, base, self._message))
             if early is not None:
                 raise SlotWaitRefused(early)
             if held is None:  # 名額閘門失效（目錄不可用）：與 run-with-timeout 一致，略過不擋
                 yield
                 return
+            self._held = held
             self.on_event("slot_acquired")
             try:
                 with slot_gate.export_hold(held):
                     yield
             finally:
+                self._held = None
                 held.release()
                 self.on_event("slot_released")
 

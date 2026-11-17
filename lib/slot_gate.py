@@ -312,8 +312,8 @@ def _live_queue(directory: str) -> List[Tuple[int, str]]:
     return entries
 
 
-def _enqueue(directory: str, command: List[str], estimate: float) -> str:
-    """建立自己的排隊檔，回檔名；序號 = 現有最大序號 + 1，撞名即重試。"""
+def _enqueue(directory: str, command: List[str], estimate: float, extra: Optional[dict] = None) -> str:
+    """建立自己的排隊檔，回檔名；序號 = 現有最大序號 + 1，撞名即重試。extra 為額外欄位（批次合併用）。"""
     while True:
         seq = max([s for s, _ in _live_queue(directory)] + [0]) + 1
         name = f"queue-{seq:012d}-{os.getpid()}.json"
@@ -322,9 +322,85 @@ def _enqueue(directory: str, command: List[str], estimate: float) -> str:
         except FileExistsError:
             continue  # 他人同時取得同一序號
         with os.fdopen(fd, "w") as fh:
-            json.dump({"pid": os.getpid(), "command": command, "estimate": estimate,
+            json.dump({**(extra or {}), "pid": os.getpid(), "command": command, "estimate": estimate,
                        "arrived": time.strftime("%Y-%m-%d %H:%M:%S")}, fh)
         return name
+
+
+def list_waiting(directory: str) -> List[dict]:
+    """依序號排序的存活且心跳未過期的排隊者：排隊檔內容加 seq、name；不可讀者略過。唯讀（只清 pid 已不存在者）。"""
+    stall = _env_seconds("CLAUDE_SLOT_STALL_SECONDS", SLOT_STALL_SECONDS)
+    out = []
+    for seq, name in _live_queue(directory):
+        if _is_stalled(directory, name, stall):
+            continue
+        try:
+            with open(os.path.join(directory, name)) as fh:
+                info = json.load(fh)
+        except (OSError, ValueError):
+            continue  # 剛被清除或寫入中：不列入
+        if isinstance(info, dict):
+            out.append({**info, "seq": seq, "name": name})
+    return out
+
+
+def queue_entry_alive(directory: str, name: str) -> bool:
+    """排隊檔仍存在且其 pid 存活。"""
+    m = _QUEUE_RE.match(name)
+    return m is not None and os.path.exists(os.path.join(directory, name)) and not _pid_gone(int(m.group(2)))
+
+
+# 批次合併旁置檔：claim（領導者認領）與 verdict（紅燈裁決），以排隊者 pid 加內容鍵命名，不改寫排隊檔
+_SIDECAR_RE = re.compile(r"^(claim|verdict)-(\d+)-([0-9a-f]{16})\.json$")
+
+
+def _sidecar_path(directory: str, kind: str, pid: int, key: str) -> str:
+    return os.path.join(directory, f"{kind}-{pid}-{key}.json")
+
+
+def write_sidecar(directory: str, kind: str, pid: int, key: str, data: dict) -> bool:
+    path = _sidecar_path(directory, kind, pid, key)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            json.dump(data, fh)
+        os.replace(tmp, path)
+        return True
+    except OSError as exc:
+        _warn(f"旁置檔 {kind} 寫入失敗（不影響命令）：{exc}", "merge-gate")
+        return False
+
+
+def read_sidecar(directory: str, kind: str, pid: int, key: str) -> Optional[dict]:
+    try:
+        with open(_sidecar_path(directory, kind, pid, key)) as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None  # 不存在或損毀：視為無
+
+
+def remove_sidecar(directory: str, kind: str, pid: int, key: str) -> None:
+    try:
+        os.unlink(_sidecar_path(directory, kind, pid, key))
+    except OSError:
+        pass  # 已被清除
+
+
+def sweep_sidecars(directory: str) -> None:
+    """清除排隊者 pid 已不存在的旁置檔。"""
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return
+    for name in names:
+        m = _SIDECAR_RE.match(name)
+        if m and _pid_gone(int(m.group(2))):
+            try:
+                os.unlink(os.path.join(directory, name))
+            except OSError:
+                pass  # 已被清除
 
 
 def _dequeue(directory: str, name: str) -> None:
@@ -474,11 +550,28 @@ class SlotHold:
                 pass  # 資訊檔已不存在；鎖由 close 釋放，不影響正確性
         os.close(self.fd)
 
+    def set_estimate(self, seconds: float) -> None:
+        """改寫持有者檔的預估持有秒數（批次合併後依候選套件聯集重估）；失敗只警告。"""
+        if self.holder_path is None:
+            return
+        tmp = f"{self.holder_path}.{os.getpid()}.tmp"
+        try:
+            with open(self.holder_path) as fh:
+                info = json.load(fh)
+            info["estimate"] = float(seconds)
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                json.dump(info, fh)
+            os.replace(tmp, self.holder_path)
+        except (OSError, ValueError) as exc:
+            _warn(f"無法更新持有者預估（不影響命令）：{exc}", "merge-gate")
+
 
 def acquire_slot(command: List[str],
                  interrupted: Callable[[], Optional[int]],
                  label: str = "run-with-timeout",
-                 estimate_seconds: Optional[float] = None) -> Tuple[Optional[SlotHold], Optional[int]]:
+                 estimate_seconds: Optional[float] = None,
+                 queue_extra: Optional[dict] = None) -> Tuple[Optional[SlotHold], Optional[int]]:
     """排隊取得名額；回 (SlotHold 或 None, 提前結束碼或 None)。
 
     interrupted 回傳等待期間收到的訊號編號（無則 None）。label 為提示行前綴，讓不同呼叫端的等待提示可區分來源。estimate_seconds 為本次預計持有秒數（未傳用命令預設值），供後方排隊者估算等待。持有者為 None 且無結束碼表示閘門失效而略過。
@@ -492,7 +585,7 @@ def acquire_slot(command: List[str],
     queue_name = None  # type: Optional[str]
     try:
         _prepare_dir(directory)
-        queue_name = _enqueue(directory, command, estimate)
+        queue_name = _enqueue(directory, command, estimate, queue_extra)
         ahead_count, expected = estimate_wait(directory, queue_name)
         if ahead_count or expected > 0:  # 進場即告知順位與預估；佇列總等待不設上限，由呼叫端決定是否放棄
             _warn(f"進場排隊：{_queue_text(directory, queue_name, ahead_count + 1)}；預估等待 {expected:.0f} 秒"
@@ -506,7 +599,7 @@ def acquire_slot(command: List[str],
                 _heartbeat(directory, queue_name)
                 position = _queue_position(directory, queue_name, stall, stalled_reported, label)
                 if position == 0:  # 排隊檔被他人清除：重新排到隊尾
-                    queue_name = _enqueue(directory, command, estimate)
+                    queue_name = _enqueue(directory, command, estimate, queue_extra)
                     position = _queue_position(directory, queue_name, stall, stalled_reported, label)
                 got = _try_acquire(directory) if position == 1 else None
             except OSError as exc:

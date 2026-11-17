@@ -99,6 +99,8 @@ def repo(tmp_path, monkeypatch):
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-q", "-m", "seed")
     monkeypatch.setattr(git_utils, "_COMMIT_RETRY_BUDGET_SECONDS", 0.0)
+    # 重試迴圈的等待走 git_utils._sleep 接縫（git_ops.time.sleep 不涵蓋），須單獨替換
+    monkeypatch.setattr(git_utils, "_sleep", lambda _s: None)
     monkeypatch.setattr(git_ops.time, "sleep", lambda _s: None)
     return tmp_path
 

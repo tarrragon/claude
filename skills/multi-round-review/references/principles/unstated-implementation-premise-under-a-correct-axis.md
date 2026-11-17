@@ -50,3 +50,4 @@
 
 - [軸名取了次好的代理變數](axis-named-by-proxy-not-mechanism.md)：那張是命名選錯，這張是容器選了而沒說。兩者可同時發生，修法順序是先讓前提顯形、再檢查軸名。
 - [多次局部正確的修法會合成缺陷](./sequential-fixes-compose-into-defects.md)：前提顯形之後為了繞開它而長出來的結構要一起拆，而拆的過程會在相鄰段落留下接縫。
+- [判斷標準漏掉元件被放進去的環境](criteria-describe-the-component-and-miss-its-environment.md)：前提是「元件獨佔它的環境」時，那個前提不在正文裡，數分支找不到它；那張卡給出往共用的資源、並排的鄰居、宿主的路徑三個方向問的偵測入口。

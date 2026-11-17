@@ -254,7 +254,7 @@ class TestReplacePreservesManagedH3:
     def test_no_managed_subsection_result_unchanged(
         self, tmp_ticket_dir, patch_paths
     ):
-        """E1：無管理子節時結果與修正前逐字相同（header + 新內容 + 換行）。"""
+        """E1：無管理子節時：header + 新內容 + 保留章節尾分隔線。"""
         tid = "0.0.0-W0-REPL7"
         path = tmp_ticket_dir / f"{tid}.md"
         body = "## Problem Analysis\n舊平文\n\n---\n\n## Solution\n既有方案\n"
@@ -262,6 +262,6 @@ class TestReplacePreservesManagedH3:
 
         _call_append_log(tid, "Problem Analysis", "新分析", replace=True)
 
-        assert "## Problem Analysis\n新分析\n\n## Solution\n既有方案\n" in path.read_text(
+        assert "## Problem Analysis\n新分析\n\n---\n\n## Solution\n既有方案\n" in path.read_text(
             encoding="utf-8"
         )

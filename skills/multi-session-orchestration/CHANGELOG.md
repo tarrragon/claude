@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.27.0（2026-11-17）— `references/shared-resources.md` §3 由〈批次合併〉改為〈閘門自動批次〉，對應 worktree 1.9.0：PM 一律逐票各自 `worktree merge`，不再開整合 worktree、不手動列票號、不自行歸因紅燈。新內容列出閘門自動判斷的可共存條件、每票的紀錄方式（各自的 merge commit、合併訊息與帶同一批次識別字串的日誌行）、紅燈由閘門以前綴對半定位，以及被併入的票如何回報。
+
 **Version**: 1.26.1（2026-11-13）— `references/line-continuity.md` §4 送出紀錄檔的 skipped reason 補兩個值：`coordinator-not-found`（本專案 checkout 下沒有帶 sessionId 的存活主控）與 `coordinator-ambiguous`（不只一個主控），並註明收件主控以 sessionId 定址；`references/session-naming.md`〈主控的定址〉的「程式的同型路徑」改寫為現行做法。對應 line-board 0.15.0 恢復開工通知改以 sessionId 寄送；1.22.0 記為「開啟送出前的前提」的裸名稱定址問題由此解除。
 
 **Version**: 1.26.0（2026-11-13）— 佇列行解析收斂為單一 Python 模組：新增 `scripts/queue_line.py`（`parse_lanes`、`ended_form`、`is_current_lane`、`ticket_prefix_of` 等），`statusline_lane.py` 與 `.claude/hooks/coordination-queue-line-check-hook.py` 改用它，兩者不再各自持有佇列行 regex。狀態列的線號只顯示現行線：附說明的收線寫法（以（無）、（結束）或「無（」開頭）與拆不出票號的行（空白、只有分隔符、只有文字）不再照常顯示為現行線，與看板同一判定；前綴由協調票檔名推導，供 `W<波次>-<序號>` 寫法辨識。`line-board/tests/queue-line-cases.json` 的 expect 加 `ended` 欄並新增五筆案例，`tests/test_queue_line.py` 與 lanes.test.ts 讀同一份案例斷言分類相同。`references/session-naming.md` §〈狀態列〉同步。

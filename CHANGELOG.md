@@ -1,3 +1,36 @@
+## [3.3.1] - 2026-11-17
+
+### Summary
+本版處理合併閘門的吞吐：多條線並行時，全機一個名額、每次合併都跑整個所選套件，吞吐約每小時 4 筆且與線數無關。本版讓閘門自動把可共存的分支併成一批只測一次，並縮短 skill:ticket 套件的執行時間。另修兩則承諾未達成的回報：派發位置判定與判準表不一致（tarrragon/claude#101），寫入票的章節時刪掉章節尾的分隔線（tarrragon/claude#33）。合併 main 前跑全套件的規則不變：量測顯示只跑受影響的測試可省約九成閘門時間，但測試之間的行程內汙染只有 ticket、worktree 兩個套件有部分防護，只跑子集會漏抓，因此不採用。
+
+### 對 consumer 的影響
+
+#### 預設改變
+- **合併閘門預設自動批次**（worktree 1.9.0）：輪到名額的一筆把佇列中可共存的分支併成一個候選，全批只跑一次所選套件，每批最多 4 張。紅燈時閘門以前綴對半找出造成紅燈的分支並只拒絕它，其餘照寫入。每票仍各有自己的 merge commit 與合併訊息。要恢復逐筆送閘，設環境變數 `MERGE_GATE_BATCH_MAX=1`。多條線並行時，PM 不再手動開整合 worktree 組批，一律逐票 `worktree merge`（multi-session-orchestration 1.27.0）。
+- **被併入的票回報成功的條件**：等待名額時逾時、被取消或中斷，只要分支已是 target 的祖先就回報成功，並標明寫入來源（批次識別字串，或「未經本閘門」）。原本這些情況一律回報失敗。
+- **閘門日誌行多一個欄位**：屬於批次的開始行與結束行，在結果欄之後多 `｜批次 <識別字串>`。自行解析 `.claude/logs/worktree-merge.log` 的工具要容許這個欄位。
+
+#### 放寬
+- **派發目標全為豁免路徑時免 worktree**（tarrragon/claude#101）：agent-dispatch-validation-hook 原本只放行純 `.claude/` 的派發目標，`docs/` 等在保護分支上豁免的路徑被歸為非豁免而要求 worktree。現在豁免判定與 branch-verify 共用同一集合，與 `.claude/pm-rules/parallel-dispatch.md`〈派發位置判準〉第 2 列一致。判定本身失敗時仍落在要求 worktree 的一側。
+
+### Fixed
+- `ticket_system/lib/section_locator.py`：章節範圍排除章節尾的 `---` 分隔線，`append-log`、`add-spawn-request` 等寫入章節時不再刪掉它；`track acceptance` 的寫入同樣在分隔線之前截止（tarrragon/claude#33）。ticket skill 為 2.54.1。
+- `agent-dispatch-validation-hook.py`：豁免路徑判定改載入 branch-verify 的 `is_exempt_path_on_protected_branch`，專案外的絕對路徑先去掉專案根前綴（tarrragon/claude#101）。
+
+### Changed
+- 合併閘門：`merge_gate.py`、`merge_cas.py`、`worktree_manager.py` 實作自動批次；框架 lib 的 `slot_gate.py` 新增列出存活排隊者、排隊檔額外欄位與 claim／verdict 旁置檔，供領導者與被併入的票交換入選與裁決。
+- skill:ticket 測試套件：9 個測試檔停用 git 提交重試的實際等待，套件時間縮短約兩成，測試數與斷言不變。
+- `.claude/pm-rules/parallel-dispatch.md` 4.37.1：派發位置判準表第 2 列改為「放行豁免路徑目標」，對齊 hook。
+- 框架外開發 skill 回流：compositional-writing 1.65.0、multi-round-review 2.46.0。
+
+### Known issues
+- 批次的領導者寫入與被併入者等待逾時之間的競態，目前只有單行程測試涵蓋，尚無雙行程測試。排入 3.4.0。
+- 紅燈的候選 merge commit 沒有 ref 指向，`git gc` 之後無法回放當次紅燈。排入 3.4.0。
+- 測試之間的行程內汙染：只有 ticket、worktree 兩個套件在每個測試後還原 cwd，所有套件都不還原未點名的環境變數、模組屬性與 `sys.path`。全套件閘門下，汙染會以「與改動無關的測試紅燈」出現。排入 3.4.0。
+- 合併提醒類 hook 會把刻意保留到後續版本的分支，列為當次代理人須先合併的進度。排入 3.4.0。
+
+---
+
 ## [3.3.0] - 2026-11-14
 
 ### Summary

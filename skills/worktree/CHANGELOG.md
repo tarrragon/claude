@@ -2,6 +2,14 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.9.0（2026-11-17）— 合併閘門自動批次：
+- 取得名額的一筆（領導者）把佇列中可共存的分支併成一個候選，全批只跑一次所選套件（各成員套件的聯集）。每批最多 4 張，環境變數 `MERGE_GATE_BATCH_MAX` 可覆寫，設 1 即停用批次、恢復逐筆。可共存條件：同專案、同 target；改動檔（merge-base 到分支）與已入選者互不重疊，票面與 topic-assignments 不計；不含專案宣告檔；分支 head 與排隊時記錄的一致，且排隊者仍存活。
+- 候選以 commit-tree 依序組成鏈，每票各有自己的 merge commit 與合併訊息，整批以單次 CAS 寫入。鏈尾紅燈時對前綴對半測試：綠燈前綴先寫入，單一分支仍紅者拒絕並附失敗輸出，其餘照寫，整批不退回。
+- 被併入的票讀領導者的裁決：已寫入就回報成功並標明來源，不重跑套件、不重複同步共用 checkout。等待逾時、被取消或中斷時，分支已是 target 的祖先也回報成功，來源標為批次識別字串，或標為「未經本閘門」（由閘門外的合併寫入）。
+- 閘門日誌的開始行與結束行，屬於批次時在結果欄之後多一個 `｜批次 <識別字串>` 欄位，領導者與被併入的票共用同一字串。自行解析 `worktree-merge.log` 的工具要容許這個欄位。
+- 名額排隊檔可帶額外欄位，名額目錄新增 claim 與 verdict 旁置檔，供領導者與被併入的票交換入選與裁決；排隊者行程不存在時清除。
+- 測試：新增 `tests/test_merge_gate_batch.py`（組批條件、前綴對半、被併入者的回報與逾時），框架 lib 的名額測試同步補上旁置檔案例。
+
 **Version**: 1.8.0（2026-11-14）— 合併閘門支援不使用 FVM 的 Flutter 專案，另有守衛與 SessionStart 稽核的修正：
 - 合併閘門的 Flutter 呼叫方式改由框架 lib 的 `flutter_launcher.launch_argv` 依快照判定：快照有 `.fvmrc` 或 `.fvm/fvm_config.json` 時為 `fvm flutter test`／`fvm flutter pub get`，否則為 `flutter test`／`flutter pub get`。原本寫死 `fvm`，未使用 FVM 的專案無法通過閘門。宣告檔中的 `command`、`generate` 由專案寫定，閘門不補 `fvm` 前綴。SKILL.md 套件表與產物生成段同步。
 - SKILL.md 補一段：`worktree merge` 不可再以 `run-with-timeout.py` 包裝（外層計時會把閘門內的排隊時間算進逾時），需長時間等待時改用背景執行並把輸出寫檔。

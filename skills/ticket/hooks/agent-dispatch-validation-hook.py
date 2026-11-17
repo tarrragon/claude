@@ -17,7 +17,8 @@ Hook 類型：PreToolUse
 
 | Prompt 路徑分類 | isolation=worktree | Hook 行為 |
 |---------------|--------------------|----------|
-| 僅主 repo .claude/ | 不要求 | 放行（豁免 worktree） |
+| 僅豁免路徑（.claude/、docs/、頂層文件，以 branch-verify 豁免清單為準） | 不要求 | 放行（豁免 worktree） |
+| 豁免判定失敗（載入失敗、例外） | 無 | 阻擋（落阻擋側） |
 | 主 repo .claude/ + 非 .claude/ | 要求 | 放行 |
 | 主 repo .claude/ + 非 .claude/ | 無 | 阻擋（強制 worktree） |
 | 僅非 .claude/ | 要求 | 放行 |
@@ -388,9 +389,51 @@ def _classify_paths(paths: List[str], project_root_str: str) -> Tuple[bool, bool
         if norm.startswith(".claude/") or "/.claude/" in norm:
             has_main = True
             continue
-        # 其他路徑 → has_other（不過濾特定 prefix，ticket where.files 已是具體路徑）
-        has_other = True
+        # 其他路徑：與派發位置判準表一致，豁免路徑（docs/、頂層文件等）視同主 repo 內可寫，
+        # 非豁免或判定失敗一律 has_other（阻擋側）
+        if _is_exempt_dispatch_path(norm, project_root_str):
+            has_main = True
+        else:
+            has_other = True
     return has_main, has_ext, has_other
+
+
+def _load_exempt_checker() -> Optional[Callable[..., bool]]:
+    """載入 branch-verify-hook 的豁免判定（豁免清單唯一來源）；失敗回 None。"""
+    import importlib.util
+    path = Path(_FRAMEWORK_HOOKS) / "branch-verify-hook.py"
+    spec = importlib.util.spec_from_file_location("_branch_verify_exempt_src", path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return getattr(mod, "is_exempt_path_on_protected_branch", None)
+
+
+def _is_exempt_dispatch_path(norm: str, project_root_str: Optional[str]) -> bool:
+    """非 .claude/ 路徑是否屬豁免路徑（免 worktree）。
+
+    外部絕對路徑須先判歸屬：豁免函式對 host_root 外的絕對路徑回傳 True，
+    不可直接餵入。任何例外、空根、讀不到清單皆回 False（阻擋側）。
+    """
+    try:
+        if not project_root_str:
+            return False
+        rel = norm
+        if is_absolute_path(norm):
+            rel = strip_root_prefix(norm, project_root_str)
+            if rel is None:
+                mr = _main_root_str(project_root_str)
+                rel = strip_root_prefix(norm, mr) if mr else None
+            if rel is None:
+                return False
+        checker = _load_exempt_checker()
+        if checker is None:
+            return False
+        return bool(checker(rel, host_root=project_root_str))
+    except Exception as e:  # 判定失敗落阻擋側；寫 stderr 使失敗可見
+        sys.stderr.write(f"[agent-dispatch-validation] 豁免判定失敗，改阻擋: {e}\n")
+        return False
 
 
 def _classify_prompt_paths(prompt: str) -> Tuple[bool, bool, bool]:

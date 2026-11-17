@@ -109,6 +109,9 @@ def _collect_h2_headers(masked_body: str) -> list[str]:
     return [h.strip() for h in re.findall(r"^##\s+.+$", masked_body, re.MULTILINE)]
 
 
+_TRAILING_SEPARATOR = re.compile(r"\n+---[ \t]*\n*\Z")
+
+
 def find_section(
     body: str,
     name: str,
@@ -154,6 +157,10 @@ def find_section(
     content_start = header_match.end()
     next_match = re.search(r"\n## ", masked[content_start:])
     end = content_start + next_match.start() if next_match else len(body)
+    # 章節尾的 `---` 是章節間分隔線，不屬章節內容；範圍排除它，寫入者重組章節時才不會丟掉（#33）
+    separator = _TRAILING_SEPARATOR.search(body, content_start, end)
+    if separator:
+        end = separator.start()
 
     return SectionMatch(
         found=True,

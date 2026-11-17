@@ -209,7 +209,6 @@
 
 - [criteria-fold-away-the-condition-that-produces-the-symptom](principles/criteria-fold-away-the-condition-that-produces-the-symptom.md)：判斷標準只收表徵、把產生表徵的條件從輸入端折疊掉——給便宜的自查指標（分支數與種類數的落差）與驗收要挑哪種個案。支撐本檔的出口盤點。
 
-
 ## 判讀徵兆
 
 - 讀者的提問是「什麼情況會需要這個」「什麼樣的系統會這樣做」——缺情境的直接訊號，不是讀者不夠用功。

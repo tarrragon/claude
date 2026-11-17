@@ -2,6 +2,11 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
+**Version**: 2.54.1（2026-11-17）— 修正與測試加速：
+- 寫入章節不再刪掉章節尾的 `---` 分隔線（tarrragon/claude#33）：`ticket_system/lib/section_locator.py` 的章節範圍排除尾端分隔線，`append-log`、`add-spawn-request` 等經此定位寫入的命令保留分隔線；`track acceptance` 的寫入同樣在分隔線之前截止。
+- `hooks/agent-dispatch-validation-hook.py`（tarrragon/claude#101）：派發目標全為豁免路徑時放行、不要求 worktree，豁免判定改用 branch-verify 的保護分支豁免集合。原本只放行純 `.claude/`，`docs/` 等豁免路徑被歸為非豁免，與派發位置判準表不一致。專案外的絕對路徑先去掉專案根前綴再判定；判定本身失敗（載入或例外）時落在阻擋側。
+- 測試：9 個測試檔以 monkeypatch 停用 git 提交重試的實際等待，skill:ticket 套件時間縮短約兩成，測試數與斷言不變；新增分隔線保留與豁免路徑的測試。
+
 **Version**: 2.54.0（2026-11-14）— 新增與行為變更，補記 2.50.0 之後未列入本檔的改動（2.51.0 至 2.53.0 已記者不重複）：
 - 父子關係：父票已是 completed／closed 時，`create --parent`、`track add-child`、`track set-parent` 拒絕寫入（errno `PARENT_TERMINAL`，不提供 `--force` 旁路），訊息指向 `--source-ticket` 或重開父票。原本可把未完成子票掛到已結案父票下。
 - `track claim`：成功後以 complete 閘門同一比對函式列出前 10 筆相關 error-pattern 與總數，知識在動手前送達；where.files 為空或 DOC／ANA／REF 豁免型別時不輸出，比對失敗不影響 claim（寫 stderr 與 hook-logs）。

@@ -94,3 +94,33 @@ def test_h3_only_with_default_levels_not_found():
     body = "## Parent\n### Solution\ncontent\n"
     result = find_section(body, "Solution")
     assert not result.found
+
+
+def test_range_excludes_trailing_separator():
+    """章節尾的 --- 是章節間分隔線，不在 text/content/end 內（#33）。"""
+    body = "## A\n\ncontent\n\n---\n\n## B\n\nx\n"
+    result = find_section(body, "A")
+    assert "---" not in result.text
+    assert "---" not in result.content
+    assert body[result.end :].startswith("\n\n---\n\n## B")
+
+
+def test_range_excludes_separator_at_eof():
+    body = "## A\n\ncontent\n\n---\n"
+    result = find_section(body, "A")
+    assert result.text.endswith("content")
+    assert body[result.end :] == "\n\n---\n"
+
+
+def test_range_without_separator_unchanged():
+    """對照：無分隔線的章節範圍維持到下一個 ## 之前。"""
+    body = "## A\n\ncontent\n\n## B\n\nx\n"
+    result = find_section(body, "A")
+    assert result.text == "## A\n\ncontent\n"
+    assert body[result.end :].startswith("\n## B")
+
+
+def test_inline_dashes_in_content_kept():
+    """章節中段的 --- 不是尾端分隔線，不被排除。"""
+    body = "## A\n\nfoo\n\n---\n\nbar\n\n## B\n"
+    assert "---" in find_section(body, "A").content

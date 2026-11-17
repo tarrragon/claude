@@ -656,3 +656,61 @@ def test_polling_head_is_not_skipped(monkeypatch, tmp_path):
     finally:
         _stop_proc(head)
         blocker.release()
+
+
+# ===== 批次合併支援：排隊欄位、list_waiting、旁置檔、set_estimate =====
+
+
+def test_queue_extra_is_stored_and_listed(monkeypatch, tmp_path):
+    """acquire_slot 的 queue_extra 寫入排隊檔，list_waiting 回傳（排隊期間讀得到）。"""
+    monkeypatch.setenv("CLAUDE_SLOT_LOCK_DIR", str(tmp_path))
+    blocker, _ = slot_gate.acquire_slot(["blocker"], lambda: None)
+    seen = {}
+
+    def peek():
+        if "w" not in seen:
+            seen["w"] = slot_gate.list_waiting(str(tmp_path))
+        return signal.SIGTERM
+
+    try:
+        slot_gate.acquire_slot(["merge-gate", "b"], peek, queue_extra={"branch": "feat/b", "branch_sha": "abc"})
+    finally:
+        blocker.release()
+    assert len(seen["w"]) == 1
+    assert seen["w"][0]["branch"] == "feat/b" and seen["w"][0]["pid"] == os.getpid()
+
+
+def test_list_waiting_skips_stalled_and_dead(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_SLOT_LOCK_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_SLOT_STALL_SECONDS", "5")
+    live = tmp_path / f"queue-{1:012d}-{os.getpid()}.json"
+    stalled = tmp_path / f"queue-{2:012d}-{os.getppid()}.json"
+    live.write_text(json.dumps({"branch": "a"}))
+    stalled.write_text(json.dumps({"branch": "b"}))
+    old = time.time() - 60
+    os.utime(stalled, (old, old))
+    assert [w["branch"] for w in slot_gate.list_waiting(str(tmp_path))] == ["a"]
+
+
+def test_sidecar_roundtrip_and_sweep(tmp_path):
+    key = "0123456789abcdef"
+    d = str(tmp_path)
+    assert slot_gate.write_sidecar(d, "claim", os.getpid(), key, {"batch": "b1"})
+    assert slot_gate.read_sidecar(d, "claim", os.getpid(), key) == {"batch": "b1"}
+    assert slot_gate.read_sidecar(d, "verdict", os.getpid(), key) is None
+    slot_gate.write_sidecar(d, "verdict", 2 ** 22 + 12345, key, {"x": 1})  # pid 不存在
+    slot_gate.sweep_sidecars(d)
+    assert slot_gate.read_sidecar(d, "verdict", 2 ** 22 + 12345, key) is None
+    assert slot_gate.read_sidecar(d, "claim", os.getpid(), key) is not None
+    slot_gate.remove_sidecar(d, "claim", os.getpid(), key)
+    assert slot_gate.read_sidecar(d, "claim", os.getpid(), key) is None
+
+
+def test_set_estimate_rewrites_holder(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_SLOT_LOCK_DIR", str(tmp_path))
+    hold, _ = slot_gate.acquire_slot(["merge-gate", "x"], lambda: None, estimate_seconds=100)
+    try:
+        hold.set_estimate(777)
+        assert json.loads(Path(hold.holder_path).read_text())["estimate"] == 777.0
+    finally:
+        hold.release()

@@ -65,6 +65,8 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("TICKET_SYSTEM_TEST_ISOLATION", "1")
     monkeypatch.setattr(git_utils, "_COMMIT_RETRY_BUDGET_SECONDS", 0.0)
+    # 重試迴圈的等待走 git_utils._sleep 接縫（git_ops.time.sleep 不涵蓋），須單獨替換
+    monkeypatch.setattr(git_utils, "_sleep", lambda _s: None)
     monkeypatch.setattr(git_ops.time, "sleep", lambda _s: None)
     monkeypatch.setattr(git_ops, "_prevalidate_guard_env", lambda *a, **k: None, raising=False)
     _git(tmp_path, "init", "-q", "-b", "main")

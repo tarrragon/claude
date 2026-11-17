@@ -600,6 +600,13 @@ def _strip_visible_placeholder_lines(section_text: str) -> str:
     return "\n".join(kept)
 
 
+def _trim_before_separator(updated_section: str, rest_of_body: str) -> str:
+    """章節後緊接 `---` 分隔線時，去掉新章節尾端多餘換行，維持分隔線前一個空行。"""
+    if rest_of_body.lstrip("\n").startswith("---"):
+        return updated_section.rstrip("\n")
+    return updated_section
+
+
 def _replace_or_append_section_content(
     *,
     section_text: str,
@@ -885,6 +892,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
             )
 
         # 更新 body
+        updated_section = _trim_before_separator(updated_section, body[section_end:])
         new_body = body[:section_start] + updated_section + body[section_end:]
 
     # Layer 2：寫回前 idempotent dedupe 重複 Schema H2，避免歷史殘留 placeholder
@@ -1041,6 +1049,7 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
             section_content=section_content,
             new_entry=new_entry,
         )
+        updated_section = _trim_before_separator(updated_section, body[section_end:])
         new_body = body[:section_start] + updated_section + body[section_end:]
 
     # 寫回前 idempotent dedupe 重複 Schema H2（與 append-log 同防護，PC-110）

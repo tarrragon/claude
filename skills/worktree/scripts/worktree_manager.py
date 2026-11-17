@@ -1400,6 +1400,9 @@ def _compose_merge_message(branch_name: str, message: Optional[str], ticket: Opt
     return None
 
 
+_BATCH_LANDED = "[合併] 分支已由 {via} 寫入 {commit}；本行程不重複同步共用 checkout"
+
+
 def _merge_through_gate(
     gate: MergeGate, branch_name: str, cleanup_args: str, max_retries: Optional[int],
     message: Optional[str] = None,
@@ -1414,7 +1417,7 @@ def _merge_through_gate(
     base_head = base_head if ok else "未知"
 
     def record(phase: str, commit: str, result: Optional[str] = None) -> None:
-        emit_gate_line(root, gate_line(phase, DEFAULT_BASE_BRANCH, branch_name, commit, result))
+        emit_gate_line(root, gate_line(phase, DEFAULT_BASE_BRANCH, branch_name, commit, result, gate.batch_id))
 
     record("開始", base_head)
     try:
@@ -1425,10 +1428,20 @@ def _merge_through_gate(
             return 1
         record("預檢", base_head, GATE_PRECHECK_CLEAR)
         outcome = merge_branch_cas(branch_name, repo=root, pre_merge_check=gate, max_retries=max_retries,
-                                   message=message, hold=gate.hold(branch_name, DEFAULT_BASE_BRANCH))
+                                   message=message, batch=gate.batch_hooks(branch_name, DEFAULT_BASE_BRANCH, message),
+                                   hold=gate.hold(branch_name, DEFAULT_BASE_BRANCH))
     except SlotWaitRefused as refused:
-        record("結束", base_head, GATE_REFUSED if refused.exit_code == 125 else GATE_ABORTED)
-        return refused.exit_code
+        # 等待逾時或被取消時，領導者可能已寫入本票：以「分支是 target 祖先」為準，不回報失敗
+        outcome = gate.landed_outcome(DEFAULT_BASE_BRANCH, require_claim=False)
+        if outcome is None:
+            record("結束", base_head, GATE_REFUSED if refused.exit_code == 125 else GATE_ABORTED)
+            return refused.exit_code
+    except KeyboardInterrupt:
+        landed = gate.landed_outcome(DEFAULT_BASE_BRANCH, require_claim=False)
+        if landed is not None:
+            print(_BATCH_LANDED.format(via=landed.via, commit=landed.commit_sha))
+        record("結束", landed.commit_sha if landed else base_head, GATE_WRITTEN if landed else GATE_ABORTED)
+        raise
     except BaseException:  # 非預期例外與中斷：留一行紀錄後原樣再拋
         record("結束", base_head, GATE_ABORTED)
         raise
@@ -1443,6 +1456,10 @@ def _print_merge_outcome(outcome: MergeOutcome, cleanup_args: str) -> int:
     if not outcome.ok:
         print(MergeMessages.MERGE_FAILED.format(error=outcome.error))
         return 1
+    if outcome.via:  # 他方已寫入並同步共用 checkout：不重複同步與核對
+        print(_BATCH_LANDED.format(via=outcome.via, commit=outcome.commit_sha))
+        print(MergeMessages.MERGE_SUCCESS.format(cleanup_args=cleanup_args))
+        return 0
     bad = _verify_three_planes(get_project_root(), outcome.synced, outcome.commit_sha)
     print(MergeMessages.CAS_RESULT.format(
         commit=outcome.commit_sha, attempts=outcome.attempts, synced=len(outcome.synced), bad=len(bad)))

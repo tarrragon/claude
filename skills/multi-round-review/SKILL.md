@@ -4,7 +4,7 @@ description: "寫多篇章節後做多輪 agent reviewer audit 的標準流程�
 license: MIT
 metadata:
   portable: true
-  version: 2.39.0
+  version: 2.46.0
   category: writing-methodology
 ---
 
@@ -30,7 +30,7 @@ metadata:
 1. **每輪用不同 frame**（per [multi-pass frame 顆粒度盲點](references/principles/multi-pass-frame-granularity.md)，那裡分 design gap 與 execution gap）：同 reviewer / 同 frame 跑多輪 catch 高度相同。多輪價值在 frame 切換、不在重複加深。
 2. **跨輪 finding 互不重疊**：若新一輪 finding 跟上一輪重疊、代表 frame 沒換、再跑無增益。
 3. **停止訊號是 frame 涵蓋、不是 finding 遞減**（per [跨輪 review 停止訊號](references/principles/cross-round-stopping-signal.md)，那裡給七軸的清單）：多輪 review 通常 finding 不遞減、Round 3 可能比 Round 1 / 2 多。停止判讀看七軸有沒有都動過，程序在 `references/planning-and-stopping.md`〈Round N 規劃判讀〉；審查對象是文章時，同一節另有〈大綱稽核〉，規則類文件是〈設計稽核〉，觸發條件與檢查項目寫在那裡，它們排在七軸之前；「想不出新 frame」量的是判斷者、不作必要條件。
-4. **至少三輪是硬底線**（per [多輪審查至少三輪](references/principles/minimum-three-rounds.md)，那裡有逐輪的實測數字）：Round 3 的 steelman / outbound frame 覆蓋 Round 1-2 結構性盲區（漏選項、反向引用、搜尋落點、知識卡缺口），歷次實測每輪都找出 10+ 項。Round 1-2 從「已寫的內容」裡找錯，Round 3 從「沒寫的東西」出發——這類問題在前兩輪的 frame 下結構性不可見。「要不要跑 Round 3」不是判讀問題、是執行紀律。停止判讀從 Round 3 結束後才開始；唯一的例外是大綱稽核或設計稽核在同一批裡第二次成立時的停點（定義在 `references/planning-and-stopping.md`〈Round N 規劃判讀〉開頭）。
+4. **至少三輪是硬底線**（per [多輪審查至少三輪](references/principles/minimum-three-rounds.md)，那裡有逐輪的實測數字）：Round 3 的 steelman / outbound frame 覆蓋 Round 1-2 結構性盲區（漏選項、反向引用、搜尋落點、知識卡缺口），歷次實測每輪都找出 10+ 項。Round 1-2 從「已寫的內容」裡找錯，Round 3 從「沒寫的東西」出發——這類問題在前兩輪的 frame 下結構性不可見。「要不要跑 Round 3」不是判讀問題、是執行紀律。停止判讀從 Round 3 結束後才開始；唯一的例外是大綱稽核與設計稽核的停點（定義在 `references/planning-and-stopping.md`〈Round N 規劃判讀〉開頭）。
 5. **規模與來源是兩件事**（per [規模買不到異源視角](references/principles/review-scale-does-not-buy-independent-origin.md)，那裡有兩則實測與「犯規的是編輯動作」這個機制）：一個 session 派出的所有 reviewer 與探針構成單一來源——同一份稿、同一個人寫的 prompt、同一個 context 的框架。增加數量提高的是覆蓋的面，不是視角的來源數，而 register 與用詞搭配這一類的偵測依賴的正是來源。**最便宜的異源視角是併行的另一個執行者，交換的單位是掃描而不是評價。**
 
 ## 誰做哪一段
@@ -92,7 +92,14 @@ metadata:
 
 Round 1-3 是硬底線，但每一輪裡的 frame 不是全部都跑。主 session 在派發前先過這張表，把結果寫下來——**判定為不跑的也要寫，並寫出理由——理由要指出該篇哪一段構成或不構成觸發條件；只寫類型標籤（「非操作型」「本批無可疑詞」）是關機鍵、不算理由（per [判定型規則要規定判定的痕跡](references/principles/judgment-rules-must-specify-their-trace.md)，那裡給痕跡的驗收形式）**，否則「沒跑」與「判定不需要」在產物裡分不開。
 
-**先看這三組，再進表。** 無條件跑的：1-A / 1-B / 1-C、2-B′ / 2-B⁗ / 2-C / 2-D、3-A / 3-B / 3-C。看批次規模的（單篇一律不跑）：2-A / 2-B / 3-D / 3-E / 3-G。其餘各列看內容性質，逐列判定。**表是拿來逐列查的，不是拿來線性讀完的**——判定的時候一列一列對，判完把三組的結果寫下來。
+**先看下面這幾組，再進表。**
+
+- 無條件跑的：1-A / 1-B / 1-C、2-B′ / 2-B⁗ / 2-C / 2-D、3-A / 3-B / 3-C。
+- 稿件有給人讀的散文段落就跑的：2-B⁹。
+- 看批次規模的（單篇一律不跑）：2-A / 2-B / 3-D / 3-E / 3-G。
+- 其餘各列看內容性質，逐列判定。
+
+**表是拿來逐列查的，不是拿來線性讀完的**——判定的時候一列一列對，判完把各組的結果寫下來。
 
 | frame                                  | 什麼時候跑                                                 | 判定依據                                                                                                             |
 | -------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -110,13 +117,14 @@ Round 1-3 是硬底線，但每一輪裡的 frame 不是全部都跑。主 sessi
 | 2-B⁶ 術語探針                          | 有可疑的高頻用詞、口語譬喻，或 1-A 拿不準的譯名            | 沒有可疑詞不跑；同批沒有控制詞的結果不採用；定義在 `references/round-2-probes.md`                                    |
 | 2-B⁷ 類型探針                          | 定位是人類教材、而內容帶操作性材料時                       | 同批沒有兩份控制文件的結果不採用；定義在 `references/round-2-probes.md`                                              |
 | 2-B⁸ 集合探針                          | 審查對象是一份拆成多檔的文件、或一組互相引用的檔案         | 單檔不適用（交界是拆分造出來的）；入口檔要另外跑一批只餵入口檔；定義在 `references/round-2-probes.md`                |
+| 2-B⁹ 主謂抽取探針                      | 稿件有給人讀的散文段落就跑                                 | 看稿件有沒有散文段落；探針只抽取主詞與動詞，判定由主 session 照 compositional-writing SKILL.md〈每一句先填槽位再成句（生成端規格）〉那一問做；定義在 `references/round-2-probes.md` |
 | 2-C 題目範圍 + 跨 surface              | 一律跑                                                     | 無條件；標題是寬泛傘狀詞時範圍分不開、先收窄標題；所屬分類的範圍另開一欄判，不併進標題那一欄                         |
 | 2-D 體例與定位一致                     | 一律跑                                                     | 無條件；派發前的定位宣告是它的輸入，缺宣告就跑不了                                                                   |
 | 3-A 自審 / 3-B Steelman / 3-C Outbound | 一律跑                                                     | 無條件                                                                                                               |
 | 3-D Persona / 3-E Search landing       | 對象是教材或模組                                           | 單篇不適用                                                                                                           |
 | 3-F 誤用梯度                           | 審查對象是規則 / 協議 / 規範 / 流程                        | 對象本身要被別人照著執行就跑                                                                                         |
 | 3-G 共同前提                           | 一批三篇以上                                               | 單篇不適用                                                                                                           |
-| 3-H 個案實跑                           | 內容含判斷標準（判定序、分類法、選型三問）                 | 判斷標準型必跑                                                                                                       |
+| 3-H 個案實跑                           | 內容含判斷標準（判定序、分類法、選型三問）                 | 判斷標準型必跑；派發前另照 3-H 裡「判斷標準以單一元件（或並排比較的幾個候選）為主角時」那一段的留意項判一次，判成是時請 3-H reviewer 寫環境個案 |
 | 3-I 規則類文件的職責稽核               | 審查對象是會持續累積的規則檔（規範、agent 指令、skill 檔） | 看對象有沒有版本歷史、是不是一直有人加條目；一次性的規則文件不跑                                                     |
 
 ## 每個 reviewer 的 prompt 都要指定的事
@@ -143,9 +151,9 @@ Round 1-3 是硬底線、直接跑不問（例外見〈基本原則〉「至少�
 | --------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | 派 Round 1（compliance / 基線）的 reviewer 之前                       | `references/round-1-compliance.md`       | 1-A 到 1-F 各一節、〈預期 finding 類型〉                                                                                |
 | 派 Round 2（cadence / 讀者旅程）的 reviewer 之前                      | `references/round-2-cadence.md`          | 2-A、2-B、2-B′、2-B″、2-B‴、2-C、2-D 各一節、〈預期 finding 類型〉                                                      |
-| 派 Round 2 的探針（理解 / 翻譯 / 術語 / 類型）之前——探針不是 reviewer | `references/round-2-probes.md`           | 2-B⁗、2-B⁵、2-B⁶、2-B⁷ 各一節、〈探針的派發契約〉、〈預期 finding 類型〉                                                |
+| 派 Round 2 的探針（理解 / 翻譯 / 術語 / 類型 / 集合 / 主謂抽取）之前——探針不是 reviewer | `references/round-2-probes.md`           | 2-B⁗、2-B⁵、2-B⁶、2-B⁷、2-B⁸、2-B⁹ 各一節、〈探針的派發契約〉、〈預期 finding 類型〉                                    |
 | 派 Round 3 之前；拆章 / 併章 / 大幅改寫之後                           | `references/round-3-self-application.md` | 3-A 到 3-I 各一節、〈預期 finding 類型〉、〈重組後遺症 frame（拆章 / 併章 / 大幅改寫之後專用）〉                        |
-| 規劃任何一輪之前對照〈反模式〉；每一輪整合完、派下一輪之前查〈大綱稽核〉（規則類文件是〈設計稽核〉）的觸發；Round 3 跑完、判定要不要 Round 4 時 | `references/planning-and-stopping.md`    | 〈Round N 規劃判讀〉（含〈大綱稽核〉〈設計稽核〉〈停止訊號〉）、〈收尾清單〉、〈反模式〉                                                                          |
+| 規劃任何一輪之前對照〈反模式〉；每一輪整合完、派下一輪之前查〈大綱稽核〉的觸發（規則類文件是〈設計稽核〉，在照 finding 修之前查）；Round 3 跑完、判定要不要 Round 4 時 | `references/planning-and-stopping.md`    | 〈Round N 規劃判讀〉（含〈大綱稽核〉〈設計稽核〉〈停止訊號〉）、〈收尾清單〉、〈反模式〉                                                                          |
 | 寫 reviewer 的 prompt 時                                              | `references/reviewer-prompt.md`          | 〈每個 frame 的產出契約〉、〈Reviewer prompt 結構〉                                                                     |
 | 拿到 finding 清單準備修時；修完要驗證時                               | `references/integrating-findings.md`     | 〈整合 finding 跟 fix 工作流〉、〈修法的反模式〉、〈register 違規的異源複核操作〉、〈判斷兩個維度該不該合併：隔離實驗〉 |
 

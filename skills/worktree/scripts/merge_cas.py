@@ -9,6 +9,7 @@ MergeOutcome 為結果。_sleep／_clock 是測試接縫，只在本模組替換
 import contextlib
 import os
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Callable, ContextManager, Optional
@@ -71,6 +72,40 @@ class MergeOutcome:
     synced: list = field(default_factory=list)
     skipped: list = field(default_factory=list)
     attempts: int = 0
+    via: str = ""  # 非空：由批次領導者（或閘門外的合併）寫入，本行程不重複同步；內容為來源說明
+
+
+@dataclass
+class BatchItem:
+    """批次候選中的一張：分支、排隊時記錄的 head sha 與該票自己的合併訊息；ref 供掛點辨識（不透明）。"""
+
+    branch: str
+    branch_sha: str
+    message: str
+    ref: object = None
+
+
+def _no_followed() -> Optional["MergeOutcome"]:
+    return None
+
+
+@dataclass
+class BatchHooks:
+    """merge_branch_cas 的批次掛點（全部由閘門端提供）。
+
+    followed：取得名額後先呼叫，回 MergeOutcome 表示本票已被領導者處理，直接回報；None 表示自己合併。
+    collect：領導者取得名額後呼叫，回可併入的 BatchItem（不含自己）。
+    alive：每次寫入 ref 前確認該 follower 仍在排隊。
+    on_refused／on_dropped：follower 被拒（紅燈，附理由）／退回單跑（衝突、已離場、批次失敗）。
+    batch_id：本批識別字串。
+    """
+
+    followed: Callable[[], Optional["MergeOutcome"]] = _no_followed
+    collect: Callable[[], list] = lambda: []
+    alive: Callable[[BatchItem], bool] = lambda _item: True
+    on_refused: Callable[[BatchItem, str], None] = lambda _item, _reason: None
+    on_dropped: Callable[[BatchItem], None] = lambda _item: None
+    batch_id: Callable[[], str] = lambda: ""
 
 
 def _git_raw(args: list, repo: str, input_bytes: Optional[bytes] = None):
@@ -297,6 +332,179 @@ def _verify_three_planes(repo: str, synced: list, new_head: str) -> list:
     return bad
 
 
+BATCH_RETRY_LIMIT = "CAS 重試超過上限 {limit} 次，批次已中止；最後一次失敗原因：{error}"
+BATCH_REF_UNRESOLVED = "批次合併無法解析 {ref}"
+BATCH_LEADER_FAILED = "批次合併例外，領導者與跟隨者各自退回單跑：{error}"
+
+
+class _BatchRun:
+    """批次合併：在 base 上為每張建一個 merge commit 成鏈（各用自己的訊息），先測後寫。
+
+    鏈尾綠燈即單次 CAS 推到鏈尾；紅燈時對前綴對半測試：綠燈前綴先寫入，單一分支仍紅者拒絕，
+    其餘以新的 ref 重建鏈繼續。沒有「先寫後測」路徑。units[0] 為領導者（呼叫端自己的票）。
+    """
+
+    def __init__(self, units: list, repo: str, base: str, check: Optional[PreMergeCheck],
+                 hooks: BatchHooks, max_retries: Optional[int]):
+        self.pending = list(units)
+        self.leader = units[0]
+        self.repo, self.ref, self.check, self.hooks = repo, f"refs/heads/{base}", check, hooks
+        self.max_retries = max_retries
+        self.written: dict = {}
+        self.leader_error = ""
+        self.last_error = ""
+        self.first_old = ""
+        self.tip = ""
+        self.attempts = 0
+
+    def attempt(self) -> tuple:
+        self.attempts += 1
+        if self.max_retries is not None and self.attempts > self.max_retries + 1:
+            return "abort", BATCH_RETRY_LIMIT.format(limit=self.max_retries, error=self.last_error)
+        while self.pending:
+            status = self._round()
+            if status != "next":
+                return status, self.last_error
+        return "done", ""
+
+    def release_pending(self) -> None:
+        """批次結束仍未處理的跟隨者退回單跑（認領撤除）。"""
+        for unit in self.pending:
+            if unit is not self.leader:
+                self.hooks.on_dropped(unit)
+        self.pending = []
+
+    def _round(self) -> str:
+        ok, head = _resolve_commit(self.ref, self.repo)
+        if not ok:
+            self.last_error = BATCH_REF_UNRESOLVED.format(ref=self.ref)
+            return "abort"
+        self._prune_dead()
+        chain = self._build(head)
+        if chain is None:
+            return "abort"
+        if not chain:
+            self.pending = []
+            return "next"
+        return self._settle([u for u, _ in chain], [head] + [c for _, c in chain])
+
+    def _prune_dead(self) -> None:
+        alive = []
+        for unit in self.pending:
+            if unit is self.leader or self.hooks.alive(unit):
+                alive.append(unit)
+            else:
+                self.hooks.on_dropped(unit)
+        self.pending = alive
+
+    def _link(self, cur: str, unit: BatchItem) -> tuple:
+        """以 cur 為親代併入 unit；回 (True, merge commit) 或 (False, 說明)。"""
+        if _git_raw(["merge-base", "--is-ancestor", unit.branch_sha, cur], self.repo).returncode == 0:
+            return False, MergeMessages.CAS_ALREADY_MERGED.format(base=self.ref, branch=unit.branch)
+        ok, tree = _compute_merge_tree(cur, unit.branch_sha, self.repo)
+        if not ok:
+            return False, tree
+        _, cur_tree = _git_out(["rev-parse", f"{cur}^{{tree}}"], self.repo)
+        if tree == cur_tree:
+            return False, MergeMessages.CAS_EMPTY_MERGE
+        ok, commit = _git_out(["commit-tree", tree, "-p", cur, "-p", unit.branch_sha, "-m", unit.message], self.repo)
+        return (True, commit) if ok else (False, MergeMessages.CAS_COMMIT_TREE_FAILED.format(error=commit))
+
+    def _build(self, head: str) -> Optional[list]:
+        """依序成鏈；跟隨者衝突或空合併者剔除退回單跑。領導者失敗回 None（跟隨者全數退回）。"""
+        cur, chain = head, []
+        for unit in self.pending:
+            ok, commit = self._link(cur, unit)
+            if ok:
+                chain.append((unit, commit))
+                cur = commit
+            elif unit is self.leader:
+                self.leader_error = commit
+                self.last_error = commit
+                self.release_pending()
+                return None
+            else:
+                self.hooks.on_dropped(unit)
+        self.pending = [u for u, _ in chain]
+        return chain
+
+    def _check(self, commits: list, idx: int, lo: int) -> str:
+        return _run_pre_merge_check(self.check, commits[idx], self.ref, commits[lo], self.attempts)
+
+    def _settle(self, units: list, commits: list) -> str:
+        """測鏈尾；紅燈則前綴對半，回 next／retry。"""
+        lo, hi = 0, len(units)
+        red = self._check(commits, hi, lo)
+        if not red:
+            return self._write(units, commits, lo, hi)
+        while True:
+            if hi == lo + 1:
+                return self._reject(units, hi, red)
+            mid = (lo + hi) // 2
+            reason = self._check(commits, mid, lo)
+            if reason:
+                hi, red = mid, reason
+                continue
+            status = self._write(units, commits, lo, mid)
+            if status != "ok":
+                return status
+            lo = mid
+
+    def _reject(self, units: list, hi: int, reason: str) -> str:
+        unit = units[hi - 1]
+        if unit is self.leader:
+            self.leader_error = reason
+        else:
+            self.hooks.on_refused(unit, reason)
+        self.pending = units[hi:]
+        return "next"
+
+    def _write(self, units: list, commits: list, lo: int, hi: int) -> str:
+        """綠燈前綴 units[lo:hi] 單次 CAS 寫入；回 ok（續測）、next（有人離場，重建）、retry（CAS 失敗）。"""
+        dead = [u for u in units[lo:hi] if u is not self.leader and not self.hooks.alive(u)]
+        if dead:
+            for unit in dead:
+                self.hooks.on_dropped(unit)
+            self.pending = [u for u in units[lo:] if all(u is not d for d in dead)]
+            return "next"
+        proc = _git_raw(["update-ref", self.ref, commits[hi], commits[lo]], self.repo)
+        if proc.returncode != 0:
+            self.last_error = proc.stderr.decode("utf-8", "replace").strip()
+            self.pending = units[lo:]
+            return "retry"
+        self.first_old = self.first_old or commits[lo]
+        self.tip = commits[hi]
+        for offset, unit in enumerate(units[lo:hi]):
+            self.written[unit.branch] = commits[lo + 1 + offset]
+        self.pending = units[hi:]
+        if not self.pending:
+            return "next"
+        return "ok"
+
+
+def _merge_batch(leader: BatchItem, followers: list, repo: str, base: str,
+                 check: Optional[PreMergeCheck], hooks: BatchHooks, max_retries: Optional[int]) -> Optional[MergeOutcome]:
+    """領導者批次合併；批次機制拋例外且尚未寫入時回 None，由呼叫端退回單票路徑。"""
+    run = _BatchRun([leader] + followers, repo, base, check, hooks, max_retries)
+    try:
+        status, error, attempts = _run_with_retry(run.attempt)
+    except Exception as exc:  # 批次機制故障：未寫入則全部退回單跑，已寫入則如實回報
+        sys.stderr.write(f"[WARNING] merge-gate 批次例外：{exc}\n")
+        run.leader_error = BATCH_LEADER_FAILED.format(error=exc)
+        status, error, attempts = "abort", run.leader_error, run.attempts
+        if not run.written:
+            run.release_pending()
+            return None
+    run.release_pending()
+    synced, skipped = [], []
+    if run.written:
+        synced, skipped = _sync_shared_checkout(repo, base, run.first_old, run.tip)
+    if leader.branch in run.written:
+        return MergeOutcome(True, "", run.written[leader.branch], synced, skipped, attempts)
+    reason = run.leader_error or error or MergeMessages.CAS_CHECK_FAILED
+    return MergeOutcome(False, reason, "", synced, skipped, attempts)
+
+
 def merge_branch_cas(
     branch: str,
     repo: Optional[str] = None,
@@ -305,6 +513,7 @@ def merge_branch_cas(
     message: Optional[str] = None,
     max_retries: Optional[int] = None,
     hold: "Optional[ContextManager]" = None,
+    batch: Optional[BatchHooks] = None,
 ) -> MergeOutcome:
     """以 CAS 把 branch 合併進 base（--no-ff 等價：雙親代 commit）。合併主流程的唯一入口。
 
@@ -328,6 +537,20 @@ def merge_branch_cas(
     msg = message or f"Merge branch '{branch}'"
     box: dict = {"max_retries": max_retries}
     with (hold if hold is not None else contextlib.nullcontext()):
+        if batch is not None:
+            followed = batch.followed()
+            if followed is not None:
+                return followed
+            followers = batch.collect()
+            ok, sha = _resolve_commit(f"refs/heads/{branch}", repo)
+            if followers and ok:
+                outcome = _merge_batch(BatchItem(branch, sha, msg), followers, repo, base,
+                                       pre_merge_check, batch, max_retries)
+                if outcome is not None:
+                    return outcome
+            elif followers:  # 領導者分支無法解析：不批次，認領撤除
+                for unit in followers:
+                    batch.on_dropped(unit)
         status, error, attempts = _run_with_retry(
             lambda: _cas_attempt(branch, base, repo, pre_merge_check, msg, box)
         )

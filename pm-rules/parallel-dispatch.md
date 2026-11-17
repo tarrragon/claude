@@ -81,7 +81,7 @@
 | 派發類型 | isolation 值 | 派發前置 | 收尾指令 | 禁止事項 |
 |---------|-------------|---------|---------|---------|
 | 實作派發，`where.files` 含非豁免路徑 | `isolation: "worktree"`（`.claude/references/parallel-dispatch-worktree-details.md`〈風險分級表〉高風險列） | `git push origin main`（同檔〈worktree 派發注意事項〉worktree base 條；`.claude/references/agent-dispatch-template.md`〈worktree 派發 base 同步指引〉） | 代理人止於 `ticket track commit`（`--worktree`，只提交產品檔）並回報 PM，不執行 complete 與 finish；PM 合併並驗證後於主 checkout `set-who` 再 `complete`（template〈worktree 派發收尾指引：complete 由 PM 於合併後執行〉；`.claude/references/agent-dispatch-decision.md`〈isolation:worktree 派發的 complete 收尾限制〉）；PM 合入依本檔〈PM 側 worktree 合入與驗收三軸（強制）〉 | 不帶 isolation 派到共用主工作樹；代理人或 PM 在共用主工作樹切換或建立分支（下節） |
-| 實作派發，`where.files` 全為豁免路徑 | 不帶（主 repo cwd，`agent-dispatch-validation-hook.py` 放行純主 repo `.claude/` 目標）；同時修改 `.claude/` 的派發數上限見 worktree-details〈`.claude/` 修改類並行數限 ≤ 2〉 | 無 | 代理人 `ticket track complete <id> --as <agent>`（主 repo cwd 維持原名） | 在共用主工作樹切換或建立分支（下節） |
+| 實作派發，`where.files` 全為豁免路徑 | 不帶（主 repo cwd，`agent-dispatch-validation-hook.py` 放行豁免路徑目標）；同時修改 `.claude/` 的派發數上限見 worktree-details〈`.claude/` 修改類並行數限 ≤ 2〉 | 無 | 代理人 `ticket track complete <id> --as <agent>`（主 repo cwd 維持原名） | 在共用主工作樹切換或建立分支（下節） |
 | 唯讀審查／分析派發 | 不帶；prompt 首行宣告 `Dispatch-Mode: readonly`（template〈唯讀派發豁免 worktree 強制〉） | 無 | 無 commit；PM 讀取報告後自行落地 | 寫入任何檔案；以 prompt 內文的審查類字眼代替首行宣告 |
 
 PM 前台自己修改檔案時同樣適用本表的禁止事項：豁免路徑直接在 main 編輯；非豁免路徑用 `/worktree create <ticket-id>` 建立獨立工作樹，不在主工作樹開分支。
@@ -572,6 +572,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
+**Last Updated**: 2026-11-17
+**Version**: 4.37.1 - 〈派發位置判準〉第二列括號內 hook 放行範圍由「純主 repo `.claude/` 目標」改為豁免路徑目標，與 hook 實作對齊（來源：#101）
 **Last Updated**: 2026-10-14
 **Version**: 4.37.0 - 〈派發位置判準〉worktree 列收尾欄與〈PM 側 worktree 合入與驗收三軸〉開頭改為代理人止於 `ticket track commit`、PM 合併並驗證後 `set-who` 再 `complete`，移除隔離代理人以 `finish` 收尾的條文（收尾時點在合併之前，票面領先程式碼；來源：用戶裁決，2026-10-14）
 **Last Updated**: 2026-10-08
