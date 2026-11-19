@@ -1,11 +1,9 @@
 """
 Unit tests for wrap-skill-yaml-consistency-hook.py
 
-驗收項目（W10-055 acceptance）：
-  AC1 Signal orphan：YAML signal id 在映射檔有對應 SKILL 情境（警告級）
-  AC2 Keyword orphan：YAML keyword 在映射檔有 belongs_to 類別（警告級）
+驗收項目：
   AC3 Version 非回退：YAML version 與 SKILL footer Version 各自 >= git HEAD（警告級）
-  AC4 映射檔存在性：triggers-alignment.yaml 存在且可解析（阻擋級 exit 2）
+  （AC1/AC2/AC4 與映射檔依賴已移除）
 
 測試策略：
   - 直接 import hook module 測純函式（不需 stdin / settings.json）
@@ -43,97 +41,6 @@ def hook_module():
 @pytest.fixture
 def logger():
     return MagicMock()
-
-
-# ============================================================================
-# AC1：Signal orphan 檢查
-# ============================================================================
-
-class TestSignalOrphan:
-    def test_all_signals_have_mapping_no_warning(self, hook_module, logger):
-        yaml_data = {
-            "signals": [
-                {"id": "consecutive_failures"},
-                {"id": "restrictive_keywords"},
-            ]
-        }
-        alignment = {
-            "signal_to_skill_triggers": {
-                "consecutive_failures": ["連續失敗"],
-                "restrictive_keywords": ["被困住"],
-            }
-        }
-        warnings = hook_module.check_signal_orphan(yaml_data, alignment, logger)
-        assert warnings == []
-
-    def test_signal_missing_from_mapping_warns(self, hook_module, logger):
-        yaml_data = {"signals": [{"id": "new_orphan_signal"}]}
-        alignment = {"signal_to_skill_triggers": {}}
-        warnings = hook_module.check_signal_orphan(yaml_data, alignment, logger)
-        assert len(warnings) == 1
-        assert "new_orphan_signal" in warnings[0]
-        assert "AC1" in warnings[0]
-
-    def test_signal_with_empty_situations_warns(self, hook_module, logger):
-        yaml_data = {"signals": [{"id": "sig_x"}]}
-        alignment = {"signal_to_skill_triggers": {"sig_x": []}}
-        warnings = hook_module.check_signal_orphan(yaml_data, alignment, logger)
-        assert len(warnings) == 1
-
-
-# ============================================================================
-# AC2：Keyword orphan 檢查
-# ============================================================================
-
-class TestKeywordOrphan:
-    def test_all_keywords_mapped_no_warning(self, hook_module, logger):
-        yaml_data = {
-            "signals": [
-                {
-                    "id": "restrictive_keywords",
-                    "keywords": ["做不到", "無法"],
-                }
-            ]
-        }
-        alignment = {
-            "keyword_to_trigger_category": {
-                "做不到": "限制性解法",
-                "無法": "限制性解法",
-            }
-        }
-        warnings = hook_module.check_keyword_orphan(yaml_data, alignment, logger)
-        assert warnings == []
-
-    def test_orphan_direct_keyword_warns(self, hook_module, logger):
-        yaml_data = {
-            "signals": [
-                {"id": "sig_a", "keywords": ["新關鍵字"]}
-            ]
-        }
-        alignment = {"keyword_to_trigger_category": {}}
-        warnings = hook_module.check_keyword_orphan(yaml_data, alignment, logger)
-        assert len(warnings) == 1
-        assert "新關鍵字" in warnings[0]
-        assert "AC2" in warnings[0]
-
-    def test_orphan_failure_detection_keyword_warns(self, hook_module, logger):
-        yaml_data = {
-            "signals": [
-                {
-                    "id": "consecutive_failures",
-                    "failure_detection": {"keywords": ["panic"]},
-                }
-            ]
-        }
-        alignment = {
-            "keyword_to_trigger_category": {
-                "error": "stuck",
-            }
-        }
-        warnings = hook_module.check_keyword_orphan(yaml_data, alignment, logger)
-        assert len(warnings) == 1
-        assert "panic" in warnings[0]
-        assert "failure_detection" in warnings[0]
 
 
 # ============================================================================
@@ -214,139 +121,58 @@ class TestVersionNoRegress:
 
 
 # ============================================================================
-# AC4：映射檔存在性（阻擋級）
+# main() 判定：不讀映射檔；AC3 警告放行（正向對照）
 # ============================================================================
 
-class TestAlignmentFile:
-    def test_missing_file_returns_error(self, hook_module, logger, tmp_path):
-        data, err = hook_module.load_alignment(tmp_path, logger)
-        assert data is None
-        assert err is not None
-        assert "映射檔不存在" in err
+class TestMainDecision:
+    """main() 層判定：映射檔不再參與，僅 AC3 Version 回退警告（exit 0）。"""
 
-    def test_missing_file_error_contains_self_contained_yaml_example(
-        self, hook_module, logger, tmp_path
-    ):
-        """0.2.1-W3-1204：訊息不再指引「見 SKILL.md」，改內嵌可直接複製建檔的最小
-        yaml 範例（含 schema 的兩個頂層必要欄位），讓新 consumer 無需外部文件即可自救。
-        """
-        data, err = hook_module.load_alignment(tmp_path, logger)
-        assert data is None
-        assert err is not None
-        assert "SKILL.md" not in err
-        assert "signal_to_skill_triggers:" in err
-        assert "keyword_to_trigger_category:" in err
-
-    def test_invalid_yaml_returns_error(self, hook_module, logger, tmp_path):
-        target = (
-            tmp_path
-            / ".claude"
-            / "skills"
-            / "wrap-decision"
-            / "references"
-            / "project-integration"
-            / "triggers-alignment.yaml"
-        )
-        target.parent.mkdir(parents=True)
-        target.write_text("::: not yaml :::\n  - bad\n bad", encoding="utf-8")
-        data, err = hook_module.load_alignment(tmp_path, logger)
-        assert data is None
-        assert err is not None
-
-    def test_valid_file_loads(self, hook_module, logger, tmp_path):
-        target = (
-            tmp_path
-            / ".claude"
-            / "skills"
-            / "wrap-decision"
-            / "references"
-            / "project-integration"
-            / "triggers-alignment.yaml"
-        )
-        target.parent.mkdir(parents=True)
-        target.write_text(
-            'version: "1.0.0"\nsignal_to_skill_triggers:\n  a: ["x"]\n',
-            encoding="utf-8",
-        )
-        data, err = hook_module.load_alignment(tmp_path, logger)
-        assert err is None
-        assert data["version"] == "1.0.0"
-
-    def test_top_level_non_mapping_returns_error(
-        self, hook_module, logger, tmp_path
-    ):
-        target = (
-            tmp_path
-            / ".claude"
-            / "skills"
-            / "wrap-decision"
-            / "references"
-            / "project-integration"
-            / "triggers-alignment.yaml"
-        )
-        target.parent.mkdir(parents=True)
-        target.write_text("- 1\n- 2\n", encoding="utf-8")
-        data, err = hook_module.load_alignment(tmp_path, logger)
-        assert data is None
-        assert "頂層非 mapping" in err
-
-
-# ============================================================================
-# AC4 main() 判定：缺檔警告放行、無法解析阻擋（正向對照）
-# ============================================================================
-
-class TestMainAc4Decision:
-    """main() 層的放行／阻擋判定。
-
-    缺檔原本阻擋，使 SKILL.md 與 wrap-triggers.yaml 無法以 Edit/Write 修改；
-    改為警告後，以「檔案存在但無法解析」作正向對照，確認阻擋分支仍在。
-    """
-
-    def _run_main(self, hook_module, tmp_path, file_rel):
+    def _run_main(self, hook_module, tmp_path, file_rel, check_result=None, check_exc=None):
         payload = {
             "tool_name": "Edit",
             "tool_input": {"file_path": str(tmp_path / file_rel)},
         }
+        check_mock = MagicMock(return_value=check_result or [], side_effect=check_exc)
         with patch.object(hook_module, "read_json_from_stdin", return_value=payload), \
              patch.object(hook_module, "get_project_root", return_value=tmp_path), \
              patch.object(hook_module, "setup_hook_logging", return_value=MagicMock()), \
-             patch.object(hook_module, "check_version_no_regress", return_value=[]):
+             patch.object(hook_module, "check_version_no_regress", check_mock):
             return hook_module.main()
 
-    def _alignment_path(self, tmp_path):
-        target = tmp_path / hook_module_alignment_rel()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        return target
-
-    def test_missing_alignment_allows_and_tells_model(
-        self, hook_module, tmp_path, capsys
-    ):
+    def test_missing_alignment_no_alignment_output(self, hook_module, tmp_path, capsys):
         code = self._run_main(hook_module, tmp_path, hook_module.SKILL_REL_PATH)
         out = capsys.readouterr()
         assert code == 0
-        assert "映射檔缺失" in out.err
-        # 模型可見管道：stdout 的 additionalContext JSON
-        assert "additionalContext" in out.out
-        assert "映射檔缺失" in out.out
+        assert "映射檔" not in out.err
+        assert "映射檔" not in out.out
 
-    def test_unparseable_alignment_still_blocks(self, hook_module, tmp_path):
-        """正向對照：映射檔存在但 YAML 壞掉，仍 exit 2。"""
-        self._alignment_path(tmp_path).write_text(
-            "::: not yaml :::\n  - bad\n bad", encoding="utf-8"
+    def test_removed_alignment_symbols(self, hook_module):
+        for name in ("load_alignment", "check_signal_orphan",
+                     "check_keyword_orphan", "ALIGNMENT_REL_PATH"):
+            assert not hasattr(hook_module, name)
+
+    def test_version_regress_input_still_warns(self, hook_module, tmp_path, capsys):
+        """正向對照：Version 回退輸入仍輸出 AC3 警告。"""
+        code = self._run_main(
+            hook_module, tmp_path, hook_module.SKILL_REL_PATH,
+            check_result=["AC3 Version 回退：x"],
         )
-        code = self._run_main(hook_module, tmp_path, hook_module.SKILL_REL_PATH)
-        assert code == 2
+        out = capsys.readouterr()
+        assert code == 0
+        assert "AC3 Version 回退" in out.err
+        assert "映射檔" not in out.err
+
+    def test_check_exception_allows(self, hook_module, tmp_path, capsys):
+        code = self._run_main(
+            hook_module, tmp_path, hook_module.SKILL_REL_PATH,
+            check_exc=RuntimeError("boom"),
+        )
+        assert code == 0
+        assert "boom" in capsys.readouterr().err
 
     def test_unwatched_file_skips(self, hook_module, tmp_path):
         code = self._run_main(hook_module, tmp_path, "docs/other.md")
         assert code == 0
-
-
-def hook_module_alignment_rel():
-    return (
-        ".claude/skills/wrap-decision/references/project-integration/"
-        "triggers-alignment.yaml"
-    )
 
 
 # ============================================================================

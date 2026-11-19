@@ -288,7 +288,28 @@ def _execute_claim(args: argparse.Namespace, version: str) -> int:  # type: igno
     # EXIT_AUTO_COMMIT_FAILED：claim 已寫入、僅未入庫，lease 仍須寫入（與 complete 對稱）
     if rc in (0, EXIT_AUTO_COMMIT_FAILED):
         claim_lease(version, args.ticket_id)
+        _print_self_modification_hint(version, args.ticket_id)
     return rc
+
+
+def _print_self_modification_hint(version: str, ticket_id: str) -> None:
+    """claim 成功後若 where.files 命中自我修改類路徑，輸出授權提醒（不阻擋）。
+
+    判定例外寫 stderr 後放行（quality-baseline 規則 4）。
+    """
+    try:
+        from ticket_system.lib.parser import load_ticket
+        from ticket_system.lib.self_modification_paths import (
+            find_self_modification_paths,
+            format_reminder,
+        )
+        ticket = load_ticket(version, ticket_id) or {}
+        hits = find_self_modification_paths(ticket)
+        if hits:
+            print(format_reminder(hits))
+    except Exception as exc:  # 提醒屬附加動作，失敗不影響已成功的 claim
+        import sys
+        sys.stderr.write(f"[Warning] 自我修改路徑提醒判定失敗：{exc}\n")
 
 
 def _execute_complete(args: argparse.Namespace, version: str) -> int:

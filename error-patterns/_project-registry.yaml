@@ -41,10 +41,16 @@ projects:
   - code: LLM
     dir: llm-dev
     note: 框架上游（主控方），發佈到 tarrragon/claude
+  - code: PM
+    dir: personal-manager
+    note: 個人 ERP（Go 後端 + Flutter 用戶端，Tailscale 連回家用主機）
 
 # 新專案代號規則：
 #   1. 短大寫英數（2-5 字元），語意可辨識專案。
 #   2. 全域唯一——不得與本檔既有 code 重複（含已退役專案）。
-#   3. 新專案首次需新增 error-pattern 前，先於本檔登錄 code + dir，再 sync-push 傳播。
+#   3. 新專案首次需新增 error-pattern 前，先於本檔本地登錄 code + dir（配號工具依本檔
+#      辨識專案，未登錄即報錯），並開 framework issue 附上同一列原文，請主控方原樣收錄；
+#      主控方發版後經 sync-pull 帶回。consumer 不 sync-push。收錄前全量 overlay 會移除
+#      本地這一列，依 issue 原文重寫即可（見 .claude/references/sync-mechanism-guide.md §5.3）。
 #   4. dir 須與專案 git toplevel basename 完全一致（tooling 自我識別依賴此欄）。
 reserved_codes: []  # 已退役但保留不可重用的 code（防止 ID 指涉漂移）

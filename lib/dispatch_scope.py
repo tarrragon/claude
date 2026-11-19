@@ -108,9 +108,9 @@ def exclude_orphan_confirmed(
     佔用判定。回合結束（turn_ended_at）不構成排除依據：回合結束後代理人
     仍可能經背景工作或 SendMessage 恢復而寫檔。
 
-    已知限制：/clear 也會讓 session 以 graceful release 結束，但其子代理
-    與背景命令仍在執行並寫檔（實測：背景命令在 /clear 後 3 分鐘仍寫入）。
-    orphan_confirmed 因此不保證「無人再寫檔」。只有誤判時方向為多提醒、
+    /clear 結束的 session 其 entry 保留並標記 ended_reason=clear，
+    classify_ownership 回傳 ended_by_clear（非 orphan_confirmed），
+    因此維持佔用，不被本函式排除。其餘 graceful release 仍為 orphan_confirmed。只有誤判時方向為多提醒、
     不放行寫入的呼叫端（process-skip 的提醒靜音判定）採用本函式；
     會因排除而放行破壞性操作的守衛（workspace-wipe）不採用。bare-commit
     守衛目前仍經 `_exclude_orphan_confirmed` 採用，存在同一暴露面。

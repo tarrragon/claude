@@ -166,3 +166,29 @@ def test_reconcile_fewer_than_declared_also_flagged(capsys):
     assert excess == []
     out = capsys.readouterr().out
     assert "宣稱" in out
+
+
+def test_reconcile_ignores_empty_dir_entries(capsys):
+    """刪檔後產生空目錄：對帳相符、無紅字，空目錄數另列一行。"""
+    removed = ["a.md", "b.md", f"skills/x{pull.EMPTY_DIR_SUFFIX}"]
+
+    matched, excess = pull.reconcile_declared_deletions(
+        declared_count=2, actual_removed=removed
+    )
+
+    assert (matched, excess) == (True, [])
+    out = capsys.readouterr().out
+    assert "數量不符" not in out
+    assert "另移除 1 個變空的目錄" in out
+
+
+def test_reconcile_excess_files_still_flagged_without_empty_dirs(capsys):
+    """正向對照：檔案多於宣稱仍不符，超出清單不含空目錄條目。"""
+    removed = ["a.md", "b.md", f"skills/x{pull.EMPTY_DIR_SUFFIX}", "c.md"]
+
+    matched, excess = pull.reconcile_declared_deletions(
+        declared_count=2, actual_removed=removed
+    )
+
+    assert matched is False
+    assert excess == ["c.md"]

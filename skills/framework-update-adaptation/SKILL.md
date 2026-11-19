@@ -2,7 +2,7 @@
 name: framework-update-adaptation
 description: "Aligns a consumer project after a framework sync-pull: reads the last-adapted version, lists the delta, classifies each item with judgment questions, files tickets per class. Triggers: 框架更新適應, sync-pull 後, 框架 delta, 本地特化被覆寫, 上游廢除."
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # 框架更新適應
@@ -91,10 +91,10 @@ A 或 B 為空時，代表本地沒有寫入該版號的紀錄，改向用戶確
 
 | 順序 | 分類 | 範圍 | 判別問句 | 動作 |
 |------|------|------|---------|------|
-| 1 | 本地特化被覆寫 | 只限本專案曾提交的內容，被這次 pull 改掉或刪掉 | 這個檔案在本次 pull 之前，有沒有本專案自己的 commit（不是 `chore(sync)`）？那些修改在 pull 之後還在嗎？ | 建復原票，或建改走容納機制（`project-integration/`、`settings.local.json`）的票 |
+| 1 | 本地特化被覆寫 | 只限本專案曾提交的內容，被這次 pull 改掉或刪掉（本地特化的定義見 `.claude/references/sync-mechanism-guide.md`〈本地特化的定義〉） | 這個檔案在本次 pull 之前，有沒有本專案自己的 commit（不是 `chore(sync)`）？那些修改在 pull 之後還在嗎？ | 建復原票，或建改走容納機制（`project-integration/`、`settings.local.json`）的票 |
 | 2 | 上游廢除或改名 | 上游刪除或改名的檔案、hook、skill、命令；改註冊歸這一類 | 被刪除或改名的舊名稱，本專案還有沒有引用、註冊或依賴（`settings.local.json`、本專案文件、票、程式碼）？上游的版本紀錄有沒有寫明職責由誰接手？ | 建去留或改註冊的票；版本紀錄沒寫接手者時，回報上游 |
 | 3 | 新增守衛或啟用設定需要配合 | 上游新增或改動的內容，需要本專案做出回應 | 新的 hook、守衛或檢查，會不會擋住本專案既有的內容？新功能需要的啟用設定，是不是放在 sync 排除檔（上游不會帶來）？本專案的 sync 排除檔（如 `settings.local.json`）裡，有沒有同一個設定的舊值，優先序較高而遮住上游的新設定？ | 建配合票；啟用設定放在 sync 排除檔時，回報上游 |
-| 4 | consumer 產物要重驗 | skill 判準、方法論、範本或 schema 有變更 | 本專案有沒有依舊版產出、至今仍在用的規格、守衛定義、基準或生成檔？ | 建重驗票，列出受影響的產物 |
+| 4 | consumer 產物要重驗 | skill 判準、方法論、範本或 schema 有變更；流程、命令或路徑被刪除、改名或改變語意 | 本專案有沒有依舊版產出、至今仍在用的規格、守衛定義、基準或生成檔？有沒有 pending 或 in_progress 的票，其 how.strategy 或 where.files 依賴這次被刪除、改名或改變語意的流程、命令或路徑？ | 建重驗票，列出受影響的產物；待辦票命中時，在重驗票裡列出票號，改寫其策略 |
 | 5 | 不需動作 | 問句 1 到 4 都答「沒有」 | — | 寫一句理由，說明為什麼不觸及本專案 |
 
 判別要讀本專案的產物，skill 只提供問句，不自動判定。每個問句的第一個查證動作：
@@ -106,6 +106,7 @@ A 或 B 為空時，代表本地沒有寫入該版號的紀錄，改向用戶確
 | 3：新守衛會擋住既有內容嗎 | 讀新守衛的判定條件，用 grep 或它提供的 CLI 檢查模式掃一次本專案既有檔案；守衛只有 hook 形態、沒有掃描入口時，在分類表記下判讀依據（依哪條條件、查了哪些檔案） |
 | 3：某個檔案在不在 sync 排除範圍 | `python3 -c "import sys; sys.path.insert(0,'.claude'); from pathlib import Path; from lib.sync_exclude_manifest import should_exclude; print(should_exclude(Path(sys.argv[1])))" <相對 .claude 的路徑>`，印出 `True` 即被排除 |
 | 4：本專案有依舊版產出的東西嗎 | `grep -rln '<變更的 skill 名、範本名或 schema 檔名>' docs/ CLAUDE.md`，再加上本專案的程式碼、測試與資源目錄；找到副本時，以同一個新增鍵名在兩邊 `grep -c` 比對計數（範例第 2 列即此法） |
+| 4：待辦票依賴舊流程嗎 | `grep -rlE '<被刪除、改名或改變語意的命令、流程關鍵字或路徑>' docs/work-logs/ --include='*.md' \| xargs grep -lE '^status: (pending\|in_progress)'`；命中的票逐張讀 how.strategy 與 where.files 確認（範例的「流程變更」一列即此法） |
 
 ### Step 4：各類建票
 
@@ -138,6 +139,12 @@ A 或 B 為空時，代表本地沒有寫入該版號的紀錄，改向用戶確
 | feat：GRAPH_EDGE_TYPES 新增 proposed 層 `closed_by` 邊 | 問句 4：本專案 App 消費這份型別表，另有一份 build 內嵌的副本；兩份的 `closed_by` 計數一致（皆為 2，等於上游） | consumer 產物要重驗 | 已完成：內嵌副本與上游一致，不建票 |
 | `statusline_lane.py`（status 為 modified，變更行數 0） | 只改了權限位 | 不需動作 | 理由：僅權限位，內容不變 |
 | docs：新增 error-pattern IMP-GPD-025 | 四問都沒有：純知識庫新增，不觸及本專案的產物、設定或註冊 | 不需動作 | 理由：純知識庫新增 |
+
+下表取自另一次適應：上游改為 consumer 不再 sync-push、框架修改改開 issue。當時只看產物，此項被歸為不需動作，事後才發現有待辦票仍依舊流程。
+
+| 項目 | 判別過程 | 分類 | 動作 |
+|------|---------|------|------|
+| 流程變更：consumer 不再 sync-push，框架修改改開 issue | 問句 4：以 `sync-push` 與 `error-patterns/` grep 待辦票，命中 2 張 pending 票：一張 how.strategy 寫以 `/sync-push` 推送本地框架內容，一張打算在本地直接改框架檔 | consumer 產物要重驗 | 建重驗子票，列出這 2 張票，策略改寫為開 issue 請上游收錄 |
 
 ---
 

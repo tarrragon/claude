@@ -152,6 +152,34 @@ def test_htmlcov_file_excluded():
     assert _should_exclude_file("htmlcov/index.html") is True
 
 
+# 3.4.0-W1-307.1：EXCLUDE_DIRS 拆為工具產物與政策兩個具名集合，聯集與拆分前逐項相同。
+def test_exclude_dirs_split_preserves_original_members():
+    import skill_sync.cli as cli_module
+
+    original = {
+        "project-integration", ".venv", "__pycache__", ".pytest_cache",
+        ".ruff_cache", ".mypy_cache", "htmlcov", "build", "hook-logs",
+    }
+    assert cli_module.TOOL_ARTIFACT_DIRS.isdisjoint(cli_module.POLICY_EXCLUDE_DIRS)
+    assert EXCLUDE_DIRS == cli_module.TOOL_ARTIFACT_DIRS | cli_module.POLICY_EXCLUDE_DIRS
+    assert EXCLUDE_DIRS == original
+    assert cli_module.POLICY_EXCLUDE_DIRS == {"project-integration"}
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "references/project-integration/a.md",
+        "build/lib/x.py",
+        "foo.egg-info/PKG-INFO",
+        ".egg-info/PKG-INFO",
+        "hook-logs/x.log",
+    ],
+)
+def test_exclude_dirs_split_keeps_judgment(rel):
+    assert _should_exclude_file(rel) is True
+
+
 # ---------- 憑證檔排除（0.2.1-W3-481：公開 repo 外洩防護） ----------
 
 def test_credential_dotenv_excluded():
@@ -1213,8 +1241,10 @@ def test_cmd_push_without_force_rejects_and_skips_deletion(tmp_path, monkeypatch
     monkeypatch.setattr("builtins.input", lambda *_: "n")
 
     args = _RecordingArgs(name="demo-skill", prune=True, force=False)
-    cmd_push(args)
+    with pytest.raises(SystemExit) as exc:
+        cmd_push(args)
 
+    assert exc.value.code != 0
     assert (remote_skill / "obsolete.py").exists()
     assert not any(call and call[0] == "commit" for call in git_calls)
     assert not any(call and call[0] == "push" for call in git_calls)
@@ -2309,6 +2339,36 @@ def test_extract_version_string_none_when_no_frontmatter_block():
     assert _extract_version_string(text) is None
 
 
+# --- _extract_version_string（frontmatter 優先、**Version** 行只取 semver） -----
+
+
+def test_extract_version_string_prefers_frontmatter_over_body_changelog_example():
+    """正文以 changelog 範例引用 `**Version**:` 行時，仍取 frontmatter 的版號。"""
+    text = (
+        "---\nname: demo\nmetadata:\n  version: 2.3.1\n---\n\n# demo\n\n"
+        "CHANGELOG 條目寫法：\n\n```markdown\n**Version**: 1.0.0 — 範例\n```\n"
+    )
+
+    assert _extract_version_string(text) == "2.3.1"
+
+
+def test_extract_version_string_body_line_strips_fullwidth_date_suffix():
+    """frontmatter 無版號、正文舊格式行帶全形日期尾綴：只取 semver。"""
+    text = "---\nname: demo\n---\n\n# demo\n\n**Version**: 1.3.5（2026-11-19）— 說明\n"
+
+    assert _extract_version_string(text) == "1.3.5"
+
+
+def test_extract_version_string_body_line_skips_inline_mention():
+    """行內提到 `**Version**:` 字面的說明句不算版號行。"""
+    text = (
+        "---\nname: demo\n---\n\n# demo\n\n"
+        "版號寫在 `**Version**:` 條目。\n\n**Version**: 0.4.2\n"
+    )
+
+    assert _extract_version_string(text) == "0.4.2"
+
+
 # --- 增量禁用詞掃描（0.2.1-W3-1304） ------------------------------------------
 #
 # 詞表與豁免規則字面複製自 .claude/hooks/skill-banned-term-scan-hook.py（見
@@ -2462,7 +2522,8 @@ def test_cmd_push_warns_when_local_lags_remote(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda *_: "n")  # 不套用，只看 preview
 
     args = _RecordingArgs(name="demo-skill", prune=False, force=False)
-    cmd_push(args)
+    with pytest.raises(SystemExit):
+        cmd_push(args)
 
     err = capsys.readouterr().err
     assert "WARNING" in err
@@ -2492,7 +2553,8 @@ def test_cmd_pull_warns_when_local_leads_remote(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda *_: "n")  # 不套用，只看 preview
 
     args = argparse.Namespace(name="demo-skill", force=False)
-    cmd_pull(args)
+    with pytest.raises(SystemExit):
+        cmd_pull(args)
 
     err = capsys.readouterr().err
     assert "WARNING" in err
@@ -2518,7 +2580,8 @@ def test_cmd_push_silent_when_no_base_recorded(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda *_: "n")
 
     args = _RecordingArgs(name="demo-skill", prune=False, force=False)
-    cmd_push(args)
+    with pytest.raises(SystemExit):
+        cmd_push(args)
 
     err = capsys.readouterr().err
     assert "WARNING" not in err
@@ -2546,7 +2609,8 @@ def test_cmd_push_silent_when_direction_matches_push(tmp_path, monkeypatch, caps
     _write_sync_base(local_skill, base_hash)
 
     args = _RecordingArgs(name="demo-skill", prune=False, force=False)
-    cmd_push(args)
+    with pytest.raises(SystemExit):
+        cmd_push(args)
 
     err = capsys.readouterr().err
     assert "WARNING" not in err
@@ -2734,6 +2798,42 @@ def test_update_sync_manifest_writes_hash_matching_extract_local_manifest(tmp_pa
     written = json.loads((tmp_path / "versions.json").read_text())
     assert written["wrap-decision"]["version"] == "2.5.0"
     assert written["wrap-decision"]["hash"] == compute_content_hash(skill_dir)
+
+
+# 3.4.0-W1-307.5：不可雜湊的 skill 不得靜默略過。
+def test_update_sync_manifest_warns_when_skill_hash_unavailable(tmp_path, monkeypatch, capsys):
+    _write_skill(tmp_path, "good-skill", "1.0.0", "ok")
+    _write_skill(tmp_path, "bad-skill", "1.0.0", "unhashable")
+    monkeypatch.setattr(
+        "skill_sync.cli.subprocess.run",
+        lambda *a, **k: _FakeCompletedProcess(returncode=0),
+    )
+    real_hash = compute_content_hash
+    monkeypatch.setattr(
+        "skill_sync.cli.compute_content_hash",
+        lambda d: None if d.name == "bad-skill" else real_hash(d),
+    )
+
+    update_sync_manifest(tmp_path)
+
+    err = capsys.readouterr().err
+    assert "skipped 'bad-skill'" in err
+    assert "1 entries but 2 SKILL.md were scanned" in err
+    assert "skipped: bad-skill" in err
+    written = json.loads((tmp_path / "versions.json").read_text())
+    assert set(written) == {"good-skill"}
+
+
+def test_update_sync_manifest_silent_when_all_skills_hashable(tmp_path, monkeypatch, capsys):
+    _write_skill(tmp_path, "good-skill", "1.0.0", "ok")
+    monkeypatch.setattr(
+        "skill_sync.cli.subprocess.run",
+        lambda *a, **k: _FakeCompletedProcess(returncode=0),
+    )
+
+    update_sync_manifest(tmp_path)
+
+    assert "versions.json" not in capsys.readouterr().err
 
 
 # --- Portability check (W3-621) -------------------------------------------------

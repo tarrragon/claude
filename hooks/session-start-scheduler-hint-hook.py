@@ -35,7 +35,6 @@ SessionStart 事件觸發時，呼叫 `ticket track runqueue` 取得排程提示
 """
 
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -52,6 +51,7 @@ from lib import (  # noqa: E402
     parse_ticket_frontmatter,
     scan_ticket_files_by_version,
     find_ticket_file,
+    get_current_version_from_todolist,
 )
 from lib.hook_base import get_shared_state_root  # noqa: E402
 
@@ -79,12 +79,6 @@ EXIT_STATUS_NEEDS_CONTEXT = "needs_context"
 # Terminal 狀態（spawned 視為「已推進完成」的集合，不列入 pending 清單）
 # 與 ticket_system.constants.TERMINAL_STATUSES 對齊（uv script 單檔 dependencies=[]，硬編一致副本）
 TERMINAL_STATUSES = {"completed", "closed"}
-
-# todolist.yaml active version 偵測 regex
-_TODOLIST_ACTIVE_VERSION_RE = re.compile(
-    r"-\s*version:\s*[\"']?(\S+?)[\"']?\s*\n\s*status:\s*active",
-    re.MULTILINE,
-)
 
 
 def _run_ticket_cli(args: list, logger) -> Optional[str]:
@@ -148,12 +142,8 @@ def fetch_scheduler_context(logger) -> Optional[str]:
 def _detect_active_version(project_root: Path, logger) -> Optional[str]:
     """從 docs/todolist.yaml 偵測 status=active 的版本字串（不含 v 前綴）。
 
-    優先順序：
-    1. 解析 todolist.yaml 的 versions: 列表找 status: active
-    2. 若找不到 → 回傳 None（掃描降級，上層靜默忽略）
-
-    與 ticket CLI `_parse_todolist_active_version` 行為一致，但改用輕量 regex
-    避免引入 yaml 依賴（uv script dependencies=[]）。
+    委派 lib 的共用解析（逐項找 status，容許欄位間隔與帶引號的值）；
+    找不到回 None，上層跳過 spawned pending 掃描。
 
     Args:
         project_root: 專案根目錄
@@ -162,22 +152,8 @@ def _detect_active_version(project_root: Path, logger) -> Optional[str]:
     Returns:
         版本字串（例如 "0.18.0"）或 None
     """
-    todolist = project_root / "docs" / "todolist.yaml"
-    if not todolist.exists():
-        logger.debug("todolist.yaml 不存在: %s", todolist)
-        return None
-    try:
-        content = todolist.read_text(encoding="utf-8")
-        m = _TODOLIST_ACTIVE_VERSION_RE.search(content)
-        if m:
-            version = m.group(1).strip()
-            logger.debug("偵測到 active version: %s", version)
-            return version
-        logger.debug("todolist.yaml 中未找到 status=active 版本")
-        return None
-    except Exception as e:  # noqa: BLE001 — 掃描失敗降級不阻塞
-        logger.warning("讀取 todolist.yaml 失敗: %s", e)
-        return None
+    version = get_current_version_from_todolist(project_root, logger)
+    return version.lstrip("v") if version else None
 
 
 def _extract_spawned_list(frontmatter: dict) -> List[str]:

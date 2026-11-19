@@ -347,7 +347,12 @@ import json  # noqa: E402
 
 
 def _state(claude: Path) -> dict:
-    return json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
+    """本機 .sync-state.json 疊上入版控 sync-base.json（base 已移至後者）的合併視圖。"""
+    state = json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
+    base_file = claude / "sync-base.json"
+    if base_file.exists():
+        state.update(json.loads(base_file.read_text(encoding="utf-8")))
+    return state
 
 
 def _conflict_round(tmp_path: Path):

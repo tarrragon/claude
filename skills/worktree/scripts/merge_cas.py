@@ -22,6 +22,19 @@ except ImportError:
     from constants import DEFAULT_BASE_BRANCH
     from messages import MergeMessages
 
+def resolve_main_checkout_root(active_root: str) -> str:
+    """merge 與 cleanup 共用的主 checkout 根（MR）：由 active_root（AR）推得，解析失敗退回 AR。
+
+    CAS repo、MergeGate 根與 worktree-merge.log 都取 MR，sibling WT 內執行時兩端才落在同一份日誌。
+    lib 載入來源（sys.path 的 .claude）刻意維持 AR：它是「執行中的框架程式碼」，
+    隨呼叫端所在 checkout 決定；MR 是「共用的 git 狀態與日誌」，兩者語意不同，不一併改動。
+    """
+    from lib.hook_base import get_main_checkout_root  # 延後匯入：scripts 載入時 .claude 尚未進 sys.path
+
+    main_root = get_main_checkout_root(active_root)
+    return str(main_root) if main_root else active_root
+
+
 # ===== 隔離索引 CAS 合併 =====
 #
 # 為何不用 `git merge`：它先寫共用 index 與工作區、最後才 update_ref；HEAD 被並行推進時
@@ -96,6 +109,7 @@ class BatchHooks:
     followed：取得名額後先呼叫，回 MergeOutcome 表示本票已被領導者處理，直接回報；None 表示自己合併。
     collect：領導者取得名額後呼叫，回可併入的 BatchItem（不含自己）。
     alive：每次寫入 ref 前確認該 follower 仍在排隊。
+    seize／restore：寫入 ref 前搶下 follower 的認領（False＝follower 已撤回，不得寫入它）／寫入後歸還。
     on_refused／on_dropped：follower 被拒（紅燈，附理由）／退回單跑（衝突、已離場、批次失敗）。
     batch_id：本批識別字串。
     """
@@ -105,6 +119,8 @@ class BatchHooks:
     alive: Callable[[BatchItem], bool] = lambda _item: True
     on_refused: Callable[[BatchItem, str], None] = lambda _item, _reason: None
     on_dropped: Callable[[BatchItem], None] = lambda _item: None
+    seize: Callable[[BatchItem], bool] = lambda _item: True
+    restore: Callable[[BatchItem], None] = lambda _item: None
     batch_id: Callable[[], str] = lambda: ""
 
 
@@ -459,6 +475,13 @@ class _BatchRun:
         self.pending = units[hi:]
         return "next"
 
+    def _seize(self, followers: list) -> tuple:
+        """寫入前逐個搶下跟隨者的認領；回 (搶到的, 已被撤回的)。"""
+        seized, lost = [], []
+        for unit in followers:
+            (seized if self.hooks.seize(unit) else lost).append(unit)
+        return seized, lost
+
     def _write(self, units: list, commits: list, lo: int, hi: int) -> str:
         """綠燈前綴 units[lo:hi] 單次 CAS 寫入；回 ok（續測）、next（有人離場，重建）、retry（CAS 失敗）。"""
         dead = [u for u in units[lo:hi] if u is not self.leader and not self.hooks.alive(u)]
@@ -467,7 +490,19 @@ class _BatchRun:
                 self.hooks.on_dropped(unit)
             self.pending = [u for u in units[lo:] if all(u is not d for d in dead)]
             return "next"
-        proc = _git_raw(["update-ref", self.ref, commits[hi], commits[lo]], self.repo)
+        seized, lost = self._seize([u for u in units[lo:hi] if u is not self.leader])
+        if lost:  # 跟隨者已先撤回認領：不寫入它，其餘重建
+            for unit in seized:
+                self.hooks.restore(unit)
+            for unit in lost:
+                self.hooks.on_dropped(unit)
+            self.pending = [u for u in units[lo:] if all(u is not d for d in lost)]
+            return "next"
+        try:
+            proc = _git_raw(["update-ref", self.ref, commits[hi], commits[lo]], self.repo)
+        finally:
+            for unit in seized:  # 寫入完成或失敗都歸還認領，跟隨者以祖先判定回報
+                self.hooks.restore(unit)
         if proc.returncode != 0:
             self.last_error = proc.stderr.decode("utf-8", "replace").strip()
             self.pending = units[lo:]

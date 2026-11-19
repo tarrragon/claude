@@ -151,6 +151,15 @@ def _collect_gitignore_items(gitignore_info) -> list[TodoItem]:
         missing_rules = ", ".join(gitignore_info.missing_rules[:3])
         hint = f"缺失: {missing_rules}{'...' if len(gitignore_info.missing_rules) > 3 else ''} — 新增到 .gitignore"
         items.append(TodoItem(description=".gitignore 缺失必須的框架規則", hint=hint))
+    if gitignore_info.undetermined_rules:
+        hint = f"{gitignore_info.undetermined_reason} — 升級框架後重跑 onboard"
+        items.append(TodoItem(
+            description=f".gitignore 無法判定: {', '.join(gitignore_info.undetermined_rules)}",
+            hint=hint,
+        ))
+    if gitignore_info.retired_rules:
+        hint = f"移除: {', '.join(gitignore_info.retired_rules)}，再把宣告檔 git add"
+        items.append(TodoItem(description=".gitignore 有可移除的舊規則（宣告檔已改為進版控）", hint=hint))
     return items
 
 
@@ -592,8 +601,18 @@ def _print_gitignore_section(gitignore_info) -> None:
             _print_status_line(STATUS_TODO, "缺失以下規則:")
             for rule in gitignore_info.missing_rules:
                 print(f"      - {rule}")
+        if gitignore_info.retired_rules:
+            _print_status_line(STATUS_TODO, "可移除以下舊規則（宣告檔已改為進版控）:")
+            for rule in gitignore_info.retired_rules:
+                print(f"      - {rule}")
     else:
         _print_status_line(STATUS_TODO, "檔案不存在")
+    if gitignore_info.undetermined_rules:
+        _print_status_line(
+            STATUS_TODO,
+            f"無法判定以下規則：{', '.join(gitignore_info.undetermined_rules)}"
+            f"（{gitignore_info.undetermined_reason}）",
+        )
     print()
 
 

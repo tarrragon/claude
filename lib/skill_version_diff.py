@@ -10,9 +10,13 @@
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import sys
+import tomllib
 from pathlib import Path
+from typing import NamedTuple
 
 from lib.skill_case_guard import warn_skill_md_case_mismatch
 from lib.sync_exclude_manifest import load_sync_skills_config
@@ -21,8 +25,14 @@ from lib.sync_exclude_manifest import load_sync_skills_config
 SKILL_DRIFT_PREVIEW_LIMIT = 10
 
 # 全格式一致的 **Version**: X 行（CHANGELOG.md 頂端條目與舊格式 SKILL.md
-# body 皆用此字面）。
-_VERSION_LINE_RE = re.compile(r"\*\*Version\*\*:\s*(\S+)")
+# body 皆用此字面）。只認行首的條目、只擷取 semver 本體：條目常寫成
+# 「**Version**: 1.3.5（日期）— 說明」，取到第一個空白會把全形日期尾綴帶進
+# 版號；CHANGELOG 開頭說明句也會以行內字面提到 `**Version**:`，不錨定行首
+# 會先命中說明句。可選的前綴 v 不計入擷取值。
+_VERSION_LINE_RE = re.compile(
+    r"^\*\*Version\*\*:[ \t]*v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)",
+    re.MULTILINE,
+)
 # SKILL.md frontmatter 內巢狀於 `metadata:` 區塊的 `version:` 欄位（新格式）。
 _METADATA_BLOCK_RE = re.compile(r"^metadata:[ \t]*\n((?:[ \t]+\S.*\n?)*)", re.MULTILINE)
 _METADATA_VERSION_RE = re.compile(r"^[ \t]+version:\s*(\S+)", re.MULTILINE)
@@ -34,7 +44,8 @@ _TOPLEVEL_VERSION_RE = re.compile(r"^version:\s*(\S+)", re.MULTILINE)
 
 def _extract_changelog_version(skill_dir: Path) -> str | None:
     """讀取同目錄 CHANGELOG.md 最上方（新到舊排序，見各檔頂部說明）的
-    **Version** 條目——本輪版本紀錄外移後，此為多數 skill 的權威版本來源。
+    **Version** 條目。這是衍生住址，權威來源是 frontmatter 的
+    `metadata.version`（見 extract_skill_versions）。
     """
     changelog = skill_dir / "CHANGELOG.md"
     if not changelog.is_file():
@@ -122,13 +133,13 @@ def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
     版本無關的 `os.scandir` 判準告警大小寫不符項——即使該版本的 glob 折疊
     命中，仍讓維護者知道檔名不精確、日後換掃描實作可能再度漏收。
 
-    四層優先序（版本紀錄外移後，單一來源已無法涵蓋全部 skill；優先序依
-    「權威性 + 涵蓋率」排列，見遷移紀錄的實測數據）：
-      1. 同目錄 CHANGELOG.md 最上方 **Version** 條目（新格式，多數已遷移
-         的 skill 的權威來源；部分 skill 未在 frontmatter 重複記錄版本，
-         此為唯一來源）
-      2. SKILL.md frontmatter 巢狀的 `metadata.version`（新格式，兩個住址
-         之一，未必所有已遷移 skill 皆有此欄位）
+    四層優先序：
+      1. SKILL.md frontmatter 巢狀的 `metadata.version`——skill 版號的唯一
+         權威來源。skill-sync 的版號讀取與 sync-claude-pull 的版號衝突解決
+         都以它為準；此處若改讀其他住址，住址之間一旦分歧，同一個 skill
+         在兩邊會顯示不同版號
+      2. 同目錄 CHANGELOG.md 最上方 **Version** 條目（衍生住址；只在權威
+         欄位缺漏時退回，值應與權威相等，見 find_version_mismatches）
       3. SKILL.md body 內的 **Version**: 行（舊格式，向後相容尚未遷移者）
       4. SKILL.md frontmatter 頂層 `version:` 欄位（既有 fallback，涵蓋
          frontmatter schema 與本專案慣例不同的第三方 skill）
@@ -151,9 +162,9 @@ def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
         except (OSError, UnicodeDecodeError):
             continue
 
-        version = _extract_changelog_version(skill_md.parent)
+        version = extract_frontmatter_metadata_version(text)
         if not version:
-            version = extract_frontmatter_metadata_version(text)
+            version = _extract_changelog_version(skill_md.parent)
         if not version:
             m = _VERSION_LINE_RE.search(text)
             version = m.group(1) if m else None
@@ -164,6 +175,199 @@ def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
         if version:
             versions[skill_name] = version
     return versions
+
+
+class VersionMismatch(NamedTuple):
+    """一筆版號住址分歧：`location` 的值 `found` 不等於權威值 `expected`。
+
+    `expected` 為 None 代表該 skill 缺權威欄位 `metadata.version`，
+    但有衍生住址帶著版號（無從判斷誰對，一律回報）。
+    """
+
+    skill: str
+    location: str
+    found: str
+    expected: str | None
+
+
+# 衍生住址的顯示名稱（回報給維護者看，指出該改哪一處）
+LOC_CHANGELOG = "CHANGELOG.md 首條 **Version**"
+LOC_BODY = "SKILL.md 正文 **Version**"
+LOC_PYPROJECT = "pyproject.toml [project].version"
+LOC_DUNDER = "__version__"
+LOC_PLUGIN = ".claude-plugin/plugin.json version"
+
+# 掃描 `__version__` 時略過的目錄：測試與第三方安裝產物不屬於 skill 本體
+_DUNDER_SKIP_DIRS = frozenset({"tests", ".venv", "node_modules", "__pycache__", ".git"})
+_CODE_FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+_DUNDER_RE = re.compile(r"^__version__\s*=\s*[\"']([^\"']+)[\"']", re.MULTILINE)
+
+
+class SkippedLocation(NamedTuple):
+    """一個存在但讀不出版號的住址。讀不出不等於一致：擋閘門的呼叫端必須把它當失敗。"""
+
+    skill: str
+    location: str
+    reason: str
+
+
+class VersionCheck(NamedTuple):
+    """skills 目錄的版號住址檢查結果；三個清單皆空才代表全部一致。"""
+
+    mismatches: list[VersionMismatch]
+    skipped: list[SkippedLocation]
+    missing_authority: list[str]  # 缺 metadata.version 的 skill 名稱
+
+    @property
+    def ok(self) -> bool:
+        return not (self.mismatches or self.skipped or self.missing_authority)
+
+
+# 擷取結果：(版號, 略過原因)。版號與原因至多一個非 None；兩者皆 None 代表住址不存在。
+_Probe = tuple[str | None, str | None]
+
+
+def _read_text(path: Path) -> tuple[str | None, str | None]:
+    """讀檔，回傳 (內容, 失敗原因)。"""
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except (OSError, UnicodeDecodeError) as exc:
+        # 不寫 stderr：原因隨回傳值進入 VersionCheck.skipped，由呼叫端列出（閘門測試即紅燈）
+        return None, f"無法讀取：{exc}"
+
+
+def _probe_changelog(skill_dir: Path) -> _Probe:
+    """CHANGELOG.md 是每個 skill 的必備住址（skill-residue-check 的慣例），缺檔也算略過。"""
+    path = skill_dir / "CHANGELOG.md"
+    if not path.is_file():
+        return None, "缺 CHANGELOG.md"
+    text, err = _read_text(path)
+    if err:
+        return None, err
+    m = _VERSION_LINE_RE.search(text)
+    return (m.group(1), None) if m else (None, "首條取不到行首 **Version**: 版號")
+
+
+def _probe_pyproject(skill_dir: Path) -> _Probe:
+    path = skill_dir / "pyproject.toml"
+    if not path.is_file():
+        return None, None
+    text, err = _read_text(path)
+    if err:
+        return None, err
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        return None, f"無法解析：{exc}"
+    version = data.get("project", {}).get("version")
+    return (version, None) if isinstance(version, str) else (None, "[project].version 不是字串（含 dynamic）")
+
+
+def _probe_plugin_json(skill_dir: Path) -> _Probe:
+    path = skill_dir / ".claude-plugin" / "plugin.json"
+    if not path.is_file():
+        return None, None
+    text, err = _read_text(path)
+    if err:
+        return None, err
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, f"不是合法 JSON：{exc}"
+    version = data.get("version") if isinstance(data, dict) else None
+    return (version, None) if isinstance(version, str) else (None, "version 欄位缺漏或不是字串")
+
+
+def _probe_dunders(skill_dir: Path) -> list[tuple[str, _Probe]]:
+    """skill 目錄內（略過測試與安裝產物）每個 `__init__.py` 的 (住址名, 擷取結果)。
+
+    沒有 `__version__` 的 `__init__.py` 不是版號住址，不列入。
+    """
+    probes: list[tuple[str, _Probe]] = []
+    for root, dirs, files in os.walk(skill_dir):
+        dirs[:] = sorted(d for d in dirs if d not in _DUNDER_SKIP_DIRS)
+        if "__init__.py" not in files:
+            continue
+        init = Path(root) / "__init__.py"
+        location = f"{LOC_DUNDER}（{init.relative_to(skill_dir).as_posix()}）"
+        text, err = _read_text(init)
+        if err:
+            probes.append((location, (None, err)))
+            continue
+        m = _DUNDER_RE.search(text)
+        if m:
+            probes.append((location, (m.group(1), None)))
+    return probes
+
+
+def _probe_body(skill_md_text: str) -> _Probe:
+    front_end = skill_md_text.find("\n---", 3) if skill_md_text.startswith("---") else -1
+    body = skill_md_text[front_end + 4:] if front_end != -1 else skill_md_text
+    # 正文常以 code fence 示範 CHANGELOG 條目格式，fence 內的版號行不是本 skill 的版號
+    m = _VERSION_LINE_RE.search(_CODE_FENCE_RE.sub("", body))
+    return (m.group(1), None) if m else (None, None)
+
+
+def _probe_all(skill_dir: Path, skill_md_text: str) -> list[tuple[str, _Probe]]:
+    return [
+        (LOC_CHANGELOG, _probe_changelog(skill_dir)),
+        (LOC_BODY, _probe_body(skill_md_text)),
+        (LOC_PYPROJECT, _probe_pyproject(skill_dir)),
+        *_probe_dunders(skill_dir),
+        (LOC_PLUGIN, _probe_plugin_json(skill_dir)),
+    ]
+
+
+def check_skill_versions(skills_dir: Path) -> VersionCheck:
+    """檢查 skills/*/ 每個衍生住址是否等於權威 `metadata.version`。
+
+    權威來源是 SKILL.md frontmatter 的 `metadata.version`；衍生住址為
+    CHANGELOG 首條、SKILL.md 正文 **Version** 行、pyproject.toml、
+    `__version__`、`.claude-plugin/plugin.json`。住址存在卻讀不出版號時列入
+    skipped，不當成一致——擋閘門的呼叫端以 `VersionCheck.ok` 判定。
+    """
+    result = VersionCheck([], [], [])
+    if not skills_dir.is_dir():
+        return result
+    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+        skill_dir = skill_md.parent
+        skill = skill_dir.name
+        text, err = _read_text(skill_md)
+        if err:
+            result.skipped.append(SkippedLocation(skill, "SKILL.md", err))
+            continue
+        authority = extract_frontmatter_metadata_version(text)
+        if authority is None:
+            result.missing_authority.append(skill)
+        for location, (value, reason) in _probe_all(skill_dir, text):
+            if reason:
+                result.skipped.append(SkippedLocation(skill, location, reason))
+            elif value is not None and value != authority:
+                result.mismatches.append(VersionMismatch(skill, location, value, authority))
+    return result
+
+
+def find_version_mismatches(skills_dir: Path) -> list[VersionMismatch]:
+    """只回報分歧（略過與缺權威另見 check_skill_versions）。保留給只需分歧清單的呼叫端。"""
+    return check_skill_versions(skills_dir).mismatches
+
+
+def format_version_check_failure(check: VersionCheck) -> str:
+    """閘門紅燈時的訊息：列出每筆問題，並寫明處置。"""
+    lines = ["skill 版號住址不一致（權威：SKILL.md frontmatter 的 metadata.version）："]  # i18n-exempt
+    for skill in check.missing_authority:
+        lines.append(f"  - {skill}: 缺 metadata.version")  # i18n-exempt
+    for m in check.mismatches:
+        lines.append(f"  - {m.skill}: {m.location} 為 {m.found}，應為 {m.expected}")  # i18n-exempt
+    for s in check.skipped:
+        lines.append(f"  - {s.skill}: {s.location} 讀不出版號（{s.reason}）")  # i18n-exempt
+    lines += [
+        "處置：以 metadata.version 為準，補齊衍生住址——CHANGELOG 首條 **Version**、"  # i18n-exempt
+        "pyproject.toml [project].version、__version__、.claude-plugin/plugin.json version。",  # i18n-exempt
+        "sync-pull 自動解版號衝突後只改 metadata.version，也會出現這種分歧，處置相同。",  # i18n-exempt
+        "規則見 .claude/skills/skill-design-guide/references/writing-the-body.md〈版號規則：合併時才取號〉。",  # i18n-exempt
+    ]
+    return "\n".join(lines)
 
 
 def format_skill_version_diff(

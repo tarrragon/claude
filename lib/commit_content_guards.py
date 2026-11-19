@@ -620,11 +620,10 @@ def _check_ticket_path(sf: StagedFile, logger) -> List[Finding]:
 
 
 def _check_wrap_skill_yaml(sf: StagedFile, logger, project_root: Path) -> List[Finding]:
-    """轉呼 wrap-skill-yaml-consistency-hook（skills/wrap-decision）：完整
-    重用 `_is_watched` / `load_alignment` / `load_yaml_config` /
-    `check_signal_orphan` / `check_keyword_orphan` / `check_version_no_regress`
-    ——皆讀磁碟現況與 git HEAD，不依賴 tool_input，於此階段語意與原
-    PreToolUse 語境等價。
+    """轉呼 wrap-skill-yaml-consistency-hook（skills/wrap-decision）：只重用
+    `_is_watched` 與 `check_version_no_regress`（AC3，warn 級，讀磁碟現況與
+    git HEAD）。映射檔（triggers-alignment.yaml）屬 project-integration、不隨
+    同步，故提交階段不呼叫 load_alignment / orphan 檢查。
     """
     m = _load_module(
         "commit_gate_wrap_skill_yaml",
@@ -636,16 +635,14 @@ def _check_wrap_skill_yaml(sf: StagedFile, logger, project_root: Path) -> List[F
     if not watched:
         return []
 
-    alignment, err = m.load_alignment(project_root, logger)
-    if alignment is None:
-        return [Finding("deny", "wrap-skill-yaml-consistency", f"[WRAP Consistency] 映射檔錯誤（阻擋）：{err}")]
-
-    yaml_data = m.load_yaml_config(project_root, logger)
-    warnings: List[str] = []
-    if yaml_data:
-        warnings.extend(m.check_signal_orphan(yaml_data, alignment, logger))
-        warnings.extend(m.check_keyword_orphan(yaml_data, alignment, logger))
-    warnings.extend(m.check_version_no_regress(project_root, logger))
+    try:
+        warnings: List[str] = list(m.check_version_no_regress(project_root, logger))
+    except Exception as exc:
+        # 不讓 AC3 例外中止整批檢查（同批其他 guard 的 deny 會連帶失效）
+        msg = f"[WRAP Consistency] wrap-skill-yaml-consistency AC3 檢查例外：{type(exc).__name__}: {exc}"
+        logger.error(msg)
+        sys.stderr.write(msg + "\n")
+        return [Finding("warn", "wrap-skill-yaml-consistency", msg)]
     if not warnings:
         return []
     return [

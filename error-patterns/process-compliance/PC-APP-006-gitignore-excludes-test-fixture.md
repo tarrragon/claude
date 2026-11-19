@@ -4,7 +4,6 @@ title: .gitignore 排除測試 fixture 導致新環境測試失敗
 category: process-compliance
 severity: medium
 created: "2026-07-01"
-related_tickets: []
 ---
 
 # PC-APP-006: .gitignore 排除測試 fixture 導致新環境測試失敗

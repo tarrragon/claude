@@ -48,7 +48,8 @@ try:
         is_allowed_branch,
         is_in_worktree,
         run_git_command,
-        get_uncommitted_files,
+        GitStatusError,
+        get_uncommitted_files_strict,
     )
 except ImportError as e:
     # #11 修復：ImportError 不應 exit(1) 阻斷整個 session
@@ -79,7 +80,9 @@ except ImportError as e:
         return branch in ["main", "master", "develop"]
     def run_git_command(args, cwd=None, timeout=10):
         return False, "git_utils not available"
-    def get_uncommitted_files():
+    class GitStatusError(RuntimeError):
+        pass
+    def get_uncommitted_files_strict(cwd=None):
         return []
 
 
@@ -120,7 +123,13 @@ def _report_uncommitted_changes(logger) -> None:
     2. 上限 50；超過則顯示「完整清單請執行 git status」提示
     3. 雙通道：hook_output（用戶可見）+ stderr（避免被遮蔽）+ logger.warning（持久化）
     """
-    files = get_uncommitted_files()
+    try:
+        files = get_uncommitted_files_strict()
+    except GitStatusError as exc:
+        message = f"git status 失敗，未提交變更檢查已跳過（cwd={Path.cwd()}）: {exc}"
+        logger.warning(message)
+        sys.stderr.write(f"[branch-status-reminder] {message}\n")
+        return
     if not files:
         return
 

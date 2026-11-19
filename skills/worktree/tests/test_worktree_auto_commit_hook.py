@@ -240,18 +240,18 @@ class TestGetChangedFiles:
             hook.FileStatus(status=" M", file_path="src/a.py"),
             hook.FileStatus(status="??", file_path="new.txt"),
         ]
-        with patch.object(hook, "get_uncommitted_files", return_value=statuses):
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=statuses):
             files = hook.get_changed_files(logger)
         assert files == ["src/a.py", "new.txt"]
 
     def test_parses_rename(self, logger):
         statuses = [hook.FileStatus(status="R ", file_path="old.py -> new.py")]
-        with patch.object(hook, "get_uncommitted_files", return_value=statuses):
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=statuses):
             files = hook.get_changed_files(logger)
         assert files == ["new.py"]
 
     def test_empty_when_clean(self, logger):
-        with patch.object(hook, "get_uncommitted_files", return_value=[]):
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=[]):
             assert hook.get_changed_files(logger) == []
 
 

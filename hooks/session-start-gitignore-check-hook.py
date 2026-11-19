@@ -23,7 +23,6 @@ SessionStart 事件觸發時，檢查專案 .gitignore 是否涵蓋 .claude/ run
 
 """
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -46,6 +45,13 @@ from lib.sync_exclude_manifest import (  # noqa: E402
     NESTED_LOCAL_ONLY_NAMES,
     is_nested_name_covered,
     required_gitignore_entries,
+    retired_gitignore_lines,
+)
+# 票庫 lock 必要項推導與 project-init onboard 共用（resolve_ticket_root_dir 須留在本模組命名空間，
+# 測試以 patch.object(hook, "resolve_ticket_root_dir") 替換）
+from lib.ticket_lock_gitignore import (  # noqa: E402
+    resolve_ticket_root_dir,
+    ticket_lock_required_entry,
 )
 
 EXIT_SUCCESS = 0
@@ -61,7 +67,7 @@ REQUIRED_GITIGNORE_ENTRIES = required_gitignore_entries()
 #
 # [刻意不 derive 自 GITIGNORE_EXPECTED] REQUIRED 問的是「.gitignore 有沒有寫」，本清單
 # 問的是「已被 track 會不會出事」，後者只限 runtime state：被 track 會讓工作區持續 dirty、
-# 阻擋 worktree fork（PC-019）。settings.local.json、sync-skills.yaml 等 local-only 設定
+# 阻擋 worktree fork（PC-019）。settings.local.json、.sync-state.json 等 local-only 設定
 # 檔雖在 GITIGNORE_EXPECTED，被 track 不致如此，故不列入。
 # 不同步但可 track 的 plans、analyses、migration-backups、.version-release.yaml 屬 manifest
 # 類型 E，已不在 GITIGNORE_EXPECTED，也不在本清單。本清單刻意手動維護。
@@ -141,43 +147,11 @@ def check_missing_entries(gitignore_entries: Set[str], logger) -> List[str]:
     return missing
 
 
-# ticket 票庫根目錄的框架預設（與 ticket_system/constants.py 的 WORK_LOGS_DIR 預設一致；
-# 僅在無法讀取 constants 時作 fail-open 退路）
-DEFAULT_TICKET_ROOT_DIR = "docs/work-logs"
-_TICKET_CONSTANTS_RELATIVE = ".claude/skills/ticket/ticket_system/constants.py"
-
 # 無目錄前綴、可涵蓋任意位置票庫 *.md.lock 的全域寫法（前導 `/` 可選）。
 # 不用 _normalize_ignore_token：它為 .claude 內項目設計，會把 `.claude/**/*.lock`
 # 剝成 `*.lock` 而誤判為全域涵蓋。
 _LOCK_GLOBAL_PATTERNS = frozenset({"*.lock", "*.md.lock", "**/*.lock", "**/*.md.lock"})
 _LOCK_SUFFIXES = ("/**/*.md.lock", "/**/*.lock")
-
-
-def resolve_ticket_root_dir(project_root: Path, logger) -> str:
-    """由 ticket skill 的 constants.py（WORK_LOGS_DIR）推導票庫根目錄。
-
-    以檔案路徑載入 constants.py（該模組無 yaml 依賴），與 hook 跨 skill 讀取常數的
-    既有慣例一致。任何失敗退回框架預設並寫日誌（fail-open）。
-    """
-    const_path = project_root / _TICKET_CONSTANTS_RELATIVE
-    try:
-        spec = importlib.util.spec_from_file_location("_ticket_constants_probe", const_path)
-        if spec is None or spec.loader is None:
-            raise ImportError("無法建立 spec")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        value = str(getattr(module, "WORK_LOGS_DIR")).strip().strip("/")
-        if not value:
-            raise ValueError("WORK_LOGS_DIR 為空")
-        logger.info("gitignore-check: 票庫根目錄取自 constants: %s", value)
-        return value
-    except Exception as e:  # noqa: BLE001
-        logger.info(
-            "gitignore-check: 讀取票庫設定失敗，退回預設 %s: %s",
-            DEFAULT_TICKET_ROOT_DIR,
-            e,
-        )
-        return DEFAULT_TICKET_ROOT_DIR
 
 
 def check_ticket_lock_entry(gitignore_entries: Set[str], project_root: Path, logger) -> List[str]:
@@ -188,10 +162,7 @@ def check_ticket_lock_entry(gitignore_entries: Set[str], project_root: Path, log
     回傳缺失清單（0 或 1 項）。
     """
     root_dir = resolve_ticket_root_dir(project_root, logger)
-    required = f"{root_dir}/**/*.md.lock"
-    if root_dir == ".claude" or root_dir.startswith(".claude/"):
-        logger.info("gitignore-check: 票庫在 .claude/ 下，既有規則已涵蓋 (%s)", required)
-        return []
+    required = ticket_lock_required_entry(root_dir)
     covered = False
     for raw in gitignore_entries:
         e = raw[1:] if raw.startswith("/") else raw
@@ -254,8 +225,9 @@ def build_warning_section(
     missing: List[str],
     tracked: List[str],
     gitignore_exists: bool,
+    retired: Optional[List[str]] = None,
 ) -> str:
-    """組裝 markdown 警告區塊。"""
+    """組裝 markdown 警告區塊。retired 為可移除的舊條目原始行。"""
     lines: List[str] = [
         "## Gitignore 必要 entry 檢查（gitignore-check）",
         "",
@@ -298,6 +270,13 @@ def build_warning_section(
         lines.append("```")
         lines.append("")
 
+    if retired:
+        lines.append("可移除的 `.gitignore` 條目（這些宣告檔已改為進版控，忽略它們會讓新 clone 讀不到）：")
+        lines.append("")
+        for line in retired:
+            lines.append(f"- [INFO] gitignore-check: `{line}` 可移除，移除後把宣告檔 git add")
+        lines.append("")
+
     lines.append(
         "背景：PC-019 死循環——commit 後 AUQ 觸發 hook 寫入 runtime state，"
         "若被 git tracked 會造成 dirty tree 阻擋 worktree fork。"
@@ -309,6 +288,7 @@ def build_hook_output(
     missing: List[str],
     tracked: List[str],
     gitignore_exists: bool,
+    retired: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """組裝 SessionStart hook JSON 輸出。
 
@@ -316,15 +296,15 @@ def build_hook_output(
     列出缺項與已追蹤的檔案（additionalContext 使用者看不到，只寫在那裡等於使用者
     照 onboard 補完 .gitignore 後仍不知道還缺什麼）。
     """
-    if gitignore_exists and not missing and not tracked:
+    if gitignore_exists and not missing and not tracked and not retired:
         return {"suppressOutput": True}
-    section = build_warning_section(missing, tracked, gitignore_exists)
+    section = build_warning_section(missing, tracked, gitignore_exists, retired)
     return {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": section + "\n",
         },
-        "systemMessage": build_user_message(missing, tracked, gitignore_exists),
+        "systemMessage": build_user_message(missing, tracked, gitignore_exists, retired),
         "suppressOutput": False,
     }
 
@@ -333,8 +313,9 @@ def build_user_message(
     missing: List[str],
     tracked: List[str],
     gitignore_exists: bool,
+    retired: Optional[List[str]] = None,
 ) -> str:
-    """組裝給使用者看的摘要：缺哪些 .gitignore 條目、哪些檔案已被追蹤。"""
+    """組裝給使用者看的摘要：缺哪些 .gitignore 條目、哪些檔案已被追蹤、哪些舊條目可移除。"""
     lines: List[str] = []
     if not gitignore_exists:
         lines.append("[gitignore-check] 專案根目錄沒有 .gitignore。")
@@ -344,7 +325,27 @@ def build_user_message(
     if tracked:
         lines.append(f"[gitignore-check] {len(tracked)} 個本機狀態檔已被 git 追蹤，請 git rm --cached：")
         lines.extend(f"  {path}" for path in tracked)
+    if retired:
+        lines.append(
+            f"[gitignore-check] .gitignore 有 {len(retired)} 條舊規則可移除（宣告檔已改為進版控）："
+        )
+        lines.extend(f"  {line}" for line in retired)
     return "\n".join(lines)
+
+
+def check_retired_entries(project_root: Path, logger) -> List[str]:
+    """回傳 .gitignore 中可移除的舊條目原始行；沒有 .gitignore 或讀取失敗回空清單。"""
+    gitignore_path = project_root / ".gitignore"
+    if not gitignore_path.is_file():
+        return []
+    try:
+        text = gitignore_path.read_text(encoding="utf-8")
+    except OSError as e:
+        logger.warning("讀取 .gitignore 失敗（略過可移除條目檢查）: %s", e)
+        return []
+    retired = retired_gitignore_lines(text.splitlines())
+    logger.info("gitignore-check: retired %d entry(ies)", len(retired))
+    return retired
 
 
 def run_checks(
@@ -367,7 +368,7 @@ def run_checks(
     if gitignore_exists:
         missing = missing + check_ticket_lock_entry(entries, code_root, logger)
     else:
-        missing = missing + [f"{resolve_ticket_root_dir(code_root, logger)}/**/*.md.lock"]
+        missing = missing + [ticket_lock_required_entry(resolve_ticket_root_dir(code_root, logger))]
     tracked = check_tracked_runtime_state(project_root, logger)
     return missing, tracked, gitignore_exists
 
@@ -392,12 +393,14 @@ def main() -> int:
     missing, tracked, gitignore_exists = run_checks(
         project_root, logger, code_root=get_code_root()
     )
-    output = build_hook_output(missing, tracked, gitignore_exists)
+    retired = check_retired_entries(project_root, logger)
+    output = build_hook_output(missing, tracked, gitignore_exists, retired)
     print(json.dumps(output, ensure_ascii=False, indent=2))
     logger.info(
-        "gitignore-check hook 完成（missing=%d, tracked=%d, gitignore_exists=%s）",
+        "gitignore-check hook 完成（missing=%d, tracked=%d, retired=%d, gitignore_exists=%s）",
         len(missing),
         len(tracked),
+        len(retired),
         gitignore_exists,
     )
     return EXIT_SUCCESS

@@ -43,3 +43,23 @@ def test_modified_legacy_github_kept_with_hint(tmp_path, capsys):
 
 def test_no_legacy_dir_noop(tmp_path):
     assert pull.cleanup_legacy_github_dir(tmp_path / ".claude", tmp_path / "clone") == []
+
+
+def _removal_message(tmp_path, with_git, capsys):
+    claude, temp = tmp_path / ".claude", tmp_path / "clone"
+    _write(temp, f".github/{REL}", "canonical")
+    _write(claude, f".github/{REL}", "canonical")
+    if with_git:
+        (claude / ".git").mkdir()
+    pull.cleanup_legacy_github_dir(claude, temp)
+    captured = capsys.readouterr()
+    return captured.out + captured.err
+
+
+def test_removal_message_differs_by_origin(tmp_path, capsys):
+    cloned = _removal_message(tmp_path / "a", True, capsys)
+    plain = _removal_message(tmp_path / "b", False, capsys)
+    assert cloned != plain
+    assert "直接 clone" in cloned
+    assert "直接 clone" not in plain
+    assert "2.x 帶入" not in cloned + plain

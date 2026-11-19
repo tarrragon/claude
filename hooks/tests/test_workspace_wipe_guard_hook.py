@@ -70,7 +70,7 @@ def _run_hook(
     monkeypatch.setattr(
         hook_module,
         "_has_main_repo_uncommitted_tracked_changes",
-        lambda root, logger: main_repo_dirty,
+        lambda root, logger, failure_sink=None: main_repo_dirty,
     )
     return main()
 
@@ -493,7 +493,7 @@ class TestHasMainRepoUncommittedTrackedChanges:
     def test_tracked_change_returns_true(self, monkeypatch):
         monkeypatch.setattr(
             hook_module,
-            "get_uncommitted_files",
+            "get_uncommitted_files_strict",
             lambda cwd=None: [hook_module.FileStatus(status=" M", file_path="foo.py")],
         )
         logger = logging.getLogger("test-main-repo-dirty-tracked")
@@ -506,7 +506,7 @@ class TestHasMainRepoUncommittedTrackedChanges:
         """只有未追蹤新檔案（`??`）不算 tracked 變更，不觸發本條件。"""
         monkeypatch.setattr(
             hook_module,
-            "get_uncommitted_files",
+            "get_uncommitted_files_strict",
             lambda cwd=None: [hook_module.FileStatus(status="??", file_path="new.txt")],
         )
         logger = logging.getLogger("test-main-repo-dirty-untracked-only")
@@ -516,7 +516,7 @@ class TestHasMainRepoUncommittedTrackedChanges:
         assert result is False
 
     def test_clean_returns_false(self, monkeypatch):
-        monkeypatch.setattr(hook_module, "get_uncommitted_files", lambda cwd=None: [])
+        monkeypatch.setattr(hook_module, "get_uncommitted_files_strict", lambda cwd=None: [])
         logger = logging.getLogger("test-main-repo-dirty-clean")
 
         result = hook_module._has_main_repo_uncommitted_tracked_changes(Path("/fake/project"), logger)
@@ -529,7 +529,7 @@ class TestHasMainRepoUncommittedTrackedChanges:
         def _raise(cwd=None):
             raise OSError("cannot read git status")
 
-        monkeypatch.setattr(hook_module, "get_uncommitted_files", _raise)
+        monkeypatch.setattr(hook_module, "get_uncommitted_files_strict", _raise)
         logger = logging.getLogger("test-main-repo-dirty-read-failure")
 
         result = hook_module._has_main_repo_uncommitted_tracked_changes(Path("/fake/project"), logger)
@@ -542,7 +542,7 @@ class TestHasMainRepoUncommittedTrackedChanges:
         def _raise(cwd=None):
             raise OSError("cannot read git status")
 
-        monkeypatch.setattr(hook_module, "get_uncommitted_files", _raise)
+        monkeypatch.setattr(hook_module, "get_uncommitted_files_strict", _raise)
         logger_name = "test-main-repo-dirty-log-warning"
         logger = logging.getLogger(logger_name)
 
@@ -1251,3 +1251,40 @@ class TestUnparseableOperationLabel:
         """對照：可切詞的真實 git stash 仍標成 git stash。"""
         assert _run_hook(monkeypatch, "git stash", dispatch_count=1) == 2
         assert "[全工作區破壞性操作被阻擋：git stash]" in capsys.readouterr().err
+
+
+# ============================================================================
+# 3.4.0-W1-328：git status 失敗改用 strict API，fail-closed 並說明原因
+# ============================================================================
+
+
+class TestGitStatusFailureFailClosed:
+    def _setup(self, monkeypatch, command):
+        payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: Path("/fake/project"))
+        monkeypatch.setattr(
+            hook_module, "_get_active_dispatch_count", lambda root, logger: 0
+        )
+
+    def test_status_failure_denies_with_reason_and_retry(self, monkeypatch, capsys):
+        self._setup(monkeypatch, "git reset --hard")
+
+        def _raise(cwd=None):
+            raise hook_module.GitStatusError("fatal: index file corrupt")
+
+        monkeypatch.setattr(hook_module, "get_uncommitted_files_strict", _raise)
+
+        assert main() == 2
+        err = capsys.readouterr().err
+        assert "git status 執行失敗" in err
+        assert "fatal: index file corrupt" in err
+        assert "重試" in err
+
+    def test_status_success_clean_still_warns_not_blocks(self, monkeypatch):
+        """反向對照：git status 成功且無變更、非並行期，仍僅 WARN 放行。"""
+        self._setup(monkeypatch, "git stash")
+        monkeypatch.setattr(
+            hook_module, "get_uncommitted_files_strict", lambda cwd=None: []
+        )
+        assert main() == 0

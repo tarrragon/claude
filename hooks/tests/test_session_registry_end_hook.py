@@ -120,3 +120,36 @@ class TestMain:
 
         assert result == EXIT_SUCCESS
         assert "registry 釋放失敗" in capsys.readouterr().err
+
+
+class TestClearReason:
+    def _run(self, reason):
+        with patch.object(hook, "setup_hook_logging") as mock_log, patch.object(
+            hook, "read_json_from_stdin"
+        ) as mock_stdin, patch.object(
+            hook, "is_subagent_environment", return_value=False
+        ), patch.object(
+            hook, "get_project_root", return_value=Path("/repo")
+        ), patch.object(
+            hook,
+            "get_registry_paths",
+            return_value=(Path("/repo/.git/r.json"), Path("/repo/.git/r.lock")),
+        ), patch.object(
+            hook, "release_session"
+        ) as mock_release, patch.object(
+            hook, "mark_session_ended", create=True
+        ) as mock_mark:
+            mock_log.return_value = MagicMock()
+            mock_stdin.return_value = {"session_id": "s1", "reason": reason}
+            assert hook.main() == EXIT_SUCCESS
+        return mock_release, mock_mark
+
+    def test_clear_marks_and_does_not_release(self):
+        mock_release, mock_mark = self._run("clear")
+        mock_release.assert_not_called()
+        assert mock_mark.call_args.kwargs["reason"] == "clear"
+
+    def test_other_reason_releases(self):
+        mock_release, mock_mark = self._run("logout")
+        mock_release.assert_called_once()
+        mock_mark.assert_not_called()

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.26.3（2026-11-19）— 對齊版號住址：`pyproject.toml` 的 `version` 與 `doc_system/__init__.py` 的 `__version__` 由 1.0.0 改為與 `metadata.version` 相同。CLI 行為不變。
+
 **Version**: 1.26.2（2026-11-14）— `doc_system/core/uc_registry.py` 的 UC 引用判定修正誤報與漏報：
 - 豁免與違規都以正規化後的形式判定。原本以原始字面判豁免，`uc-unset` 這類小寫字詞不符豁免樣式，正規化後卻成為格式違規的 `UC-UNSET`。
 - 子樹段恰為已知副檔名（`FILE_EXTENSION_SEGMENTS`：md、yaml、json 等）且其後無字母數字時視為檔名，不納入 token（`UC-02.md` 擷取為 `UC-02`）。字母偽子段（`UC-03.Login`）與數字偽子樹（`UC-01.4.20`）照舊擷取並判違規。

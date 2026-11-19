@@ -152,7 +152,7 @@ def test_write_base_sha_single_field(tmp_path: Path):
     claude.mkdir()
     sync_mod.write_base_sha(claude, "deadbeef" * 5)
 
-    state = json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
+    state = json.loads((claude / "sync-base.json").read_text(encoding="utf-8"))
     assert state["last_synced_base_sha"] == "deadbeef" * 5
     # 禁雙欄位：不得出現 upstream_base_sha / last_pull_base_sha 等
     assert "upstream_base_sha" not in state
@@ -168,9 +168,10 @@ def test_write_base_sha_preserves_existing(tmp_path: Path):
     )
     sync_mod.write_base_sha(claude, "f" * 40)
 
+    base = json.loads((claude / "sync-base.json").read_text(encoding="utf-8"))
+    assert base == {"last_synced_base_sha": "f" * 40}
     state = json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
-    assert state["last_synced_base_sha"] == "f" * 40
-    assert state["last_push_hash"] == "abc123"  # 既有欄位保留
+    assert state["last_push_hash"] == "abc123"  # 本機欄位保留在原檔
 
 
 def test_read_base_sha_missing_returns_none(tmp_path: Path):

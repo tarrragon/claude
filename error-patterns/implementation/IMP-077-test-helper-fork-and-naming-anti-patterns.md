@@ -91,13 +91,13 @@ tests/unit/scripts/validate-manifest.test.js:29:  const createMockFsAdapter = (e
 - **背景**：某次修復 cross-device-sync-workflow.test.js flaky，採方向 C 重設計 mock data。原本使用 `tests/helpers/test-data-generator.js:385` 的 `generateBooksWithProgress`（含 `randomInt` 微擾 + 最後一本補差，1000-seed sweep 顯示 5.1% flaky 機率）。
 - **修復**：在測試檔內聯 `buildScenarioBooks`（46 行確定性建構器），未動共用 helper。
 - **後果**：共用 helper 變死碼且 1000-seed sweep 證明的 flaky 風險仍存在，未來新測試引用會重蹈覆轍。
-- **追蹤**：後續票處理（標 `@deprecated` + 評估 `buildScenarioBooks` 抽出共用）
+- **處置**：共用 helper 標 `@deprecated`；`buildScenarioBooks` 出現第二個使用處時抽出共用；單一使用處維持測試檔內聯
 
 ### 案例 2：createMockFsAdapter 同名異介面
 
 - **背景**：另一次為 `scripts/build.js` 加版號 sanity check，測試需要 mock fs adapter 支援 `readFile/readdir/stat`，新建 `createMockFsAdapter(files: Map)`。但既有 `validate-manifest.test.js` 已有 `createMockFsAdapter(existingFiles: string[])` 只支援 `fileExists`。
 - **後果**：兩個 helper 同名異介面共存，第三個 scripts 測試需重新實作。
-- **追蹤**：後續票處理（抽 `tests/unit/scripts/script-test-helpers.js` 提供 `createMinimalFsAdapter` 與 `createFullFsAdapter` 兩個命名明確工廠）
+- **處置**：抽 `tests/unit/scripts/script-test-helpers.js` 提供 `createMinimalFsAdapter` 與 `createFullFsAdapter` 兩個命名明確工廠
 
 ---
 
@@ -122,8 +122,8 @@ tests/unit/scripts/validate-manifest.test.js:29:  const createMockFsAdapter = (e
 
 ## 後續行動
 
-- [ ] 案例 1 的後續票落地時驗證子模式 A 修復路徑（標 deprecated + 評估抽出）
-- [ ] 案例 2 的後續票落地時驗證子模式 B 修復路徑（命名差異化 + 共用工廠）
+- [ ] 套用案例 1 處置（標 deprecated；`buildScenarioBooks` 第二個使用處出現時抽出共用，單一使用處維持內聯）後，驗證共用 helper 無新引用（子模式 A）
+- [ ] 套用案例 2 處置（命名差異化 + 共用工廠）後，驗證兩個工廠介面各自單一且無同名異介面（子模式 B）
 - [ ] 若再有第三案例（同 session pattern）→ 升級為方法論層（於 methodologies/ 新增對應方法論）
 
 ---

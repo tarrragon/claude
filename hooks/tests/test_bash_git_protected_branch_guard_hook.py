@@ -1232,3 +1232,116 @@ class TestScenarioCHostFollowsActionRoot:
         """payload 缺 cwd：沿用 get_project_root（MAIN），-C MAIN allow，且不新增 stderr。"""
         assert self._decision(monkeypatch, capsys, repos["main"], cwd=None) == "allow"
         assert capsys.readouterr().err == ""
+
+
+# ============================================================================
+# 主 checkout 改變 HEAD 的 checkout／switch
+# ============================================================================
+
+
+class TestMainCheckoutHeadChange:
+    """本專案 repo 的主 checkout（git-dir 等於 common-dir）內，建立或切換到 main／master 以外的分支、
+    detach、orphan 一律 deny；linked worktree、還原檔案、切回 main 放行。"""
+
+    @pytest.fixture
+    def repos(self, monkeypatch, tmp_path):
+        main = tmp_path / "main_checkout"
+        main.mkdir()
+        _init_git_repo(main)
+        (main / "README.md").write_text("r")
+        subprocess.run(["git", "add", "README.md"], cwd=main, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=main, check=True)
+        subprocess.run(["git", "branch", "feat/x"], cwd=main, check=True)
+        wt = tmp_path / "wt_feat"
+        subprocess.run(["git", "worktree", "add", "-q", "-b", "feat/wt", str(wt)], cwd=main, check=True)
+        external = tmp_path / "external"
+        external.mkdir()
+        _init_git_repo(external)
+        (external / "a.txt").write_text("a")
+        subprocess.run(["git", "add", "a.txt"], cwd=external, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=external, check=True)
+        monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(main))
+        sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=main, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        return {"main": main, "wt": wt, "external": external, "sha": sha}
+
+    def _run(self, monkeypatch, capsys, command: str, cwd: Path):
+        payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(cwd)}
+        exit_code, out = _run_main(monkeypatch, capsys, payload)
+        assert exit_code == 0
+        if not out.strip():
+            return "allow", ""
+        spec = json.loads(out)["hookSpecificOutput"]
+        return spec["permissionDecision"], spec.get("permissionDecisionReason", "")
+
+    @pytest.mark.parametrize("command", [
+        "git checkout -b feat/new",
+        "git checkout -B feat/new",
+        "git switch -c feat/new",
+        "git switch -C feat/new",
+        "git switch --create feat/new",
+        "git checkout feat/x",
+        "git switch feat/x",
+        "git checkout --detach",
+        "git switch --detach",
+        "git switch -d HEAD",
+        "git checkout --orphan o",
+        "git switch --orphan o",
+        "git checkout -",
+        "git fetch -q . && git checkout -b feat/new",
+    ])
+    def test_main_checkout_head_change_denied(self, repos, monkeypatch, capsys, command):
+        """正向對照：主 checkout 內改變 HEAD 的形式全部 deny，訊息給 git worktree add"""
+        decision, reason = self._run(monkeypatch, capsys, command, repos["main"])
+        assert decision == "deny", command
+        assert "git worktree add" in reason
+
+    def test_checkout_sha_detach_denied(self, repos, monkeypatch, capsys):
+        decision, _ = self._run(monkeypatch, capsys, f"git checkout {repos['sha']}", repos["main"])
+        assert decision == "deny"
+
+    @pytest.mark.parametrize("form", ["git -C {main} checkout -b y", "(cd {main} && git checkout -b y)"])
+    def test_dash_c_or_subshell_into_main_from_worktree_denied(self, repos, monkeypatch, capsys, form):
+        """cwd 在 linked worktree，但 -C 或子 shell cd 指向主 checkout：同樣 deny"""
+        decision, _ = self._run(monkeypatch, capsys, form.format(main=repos["main"]), repos["wt"])
+        assert decision == "deny"
+
+    @pytest.mark.parametrize("command", [
+        "git checkout main",
+        "git switch main",
+        "git checkout -- README.md",
+        "git checkout HEAD -- README.md",
+        "git checkout README.md",
+        "git checkout .",
+        "git checkout",
+        "git status",
+    ])
+    def test_main_checkout_non_head_change_allowed(self, repos, monkeypatch, capsys, command):
+        decision, _ = self._run(monkeypatch, capsys, command, repos["main"])
+        assert decision == "allow", command
+
+    def test_linked_worktree_branch_ops_allowed(self, repos, monkeypatch, capsys):
+        for command in ("git checkout -b z", "git switch --detach", "git checkout feat/x"):
+            decision, _ = self._run(monkeypatch, capsys, command, repos["wt"])
+            assert decision == "allow", command
+
+    def test_dash_c_into_worktree_from_main_allowed(self, repos, monkeypatch, capsys):
+        decision, _ = self._run(monkeypatch, capsys, f"git -C {repos['wt']} checkout --detach", repos["main"])
+        assert decision == "allow"
+
+    def test_external_repo_main_checkout_not_checked(self, repos, monkeypatch, capsys):
+        """範圍：只管本專案 repo 的主 checkout，其他 repo 不判定"""
+        decision, _ = self._run(monkeypatch, capsys, f"git -C {repos['external']} checkout -b f", repos["main"])
+        assert decision == "allow"
+
+    def test_unknown_dir_fails_open(self, repos, monkeypatch, capsys):
+        """目錄含變數無法靜態判定：放行（記日誌），不擋所有帶變數的命令"""
+        decision, _ = self._run(monkeypatch, capsys, 'git -C "$X" checkout -b f', repos["main"])
+        assert decision == "allow"
+
+    def test_e1_same_command_main_vs_worktree(self, repos, monkeypatch, capsys):
+        """E1：同一命令，cwd 在主 checkout deny、在 linked worktree allow"""
+        assert self._run(monkeypatch, capsys, "git switch -c e1", repos["main"])[0] == "deny"
+        assert self._run(monkeypatch, capsys, "git switch -c e1", repos["wt"])[0] == "allow"

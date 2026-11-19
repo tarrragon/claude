@@ -226,27 +226,6 @@
         ]
       },
       {
-        "matcher": "MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/reference-stability-rule8-guard-hook.py"
-          },
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
-          },
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
-          },
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-description-length-check-hook.py"
-          }
-        ]
-      },
-      {
         "matcher": "NotebookEdit",
         "hooks": [
           {
@@ -363,6 +342,10 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/canonical-schema-consistency-check-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/sync-exclusion-channel-parity-check-hook.py"
           },
           {
             "type": "command",
@@ -556,6 +539,16 @@
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-residue-check-hook.py"
           }
         ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-context-guard-hook.py",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [
@@ -737,26 +730,6 @@
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
             "timeout": 30
           },
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
-            "timeout": 40
-          },
-          {
-            "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/coordination-queue-line-check-hook.py",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "MultiEdit",
-        "hooks": [
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",

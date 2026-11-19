@@ -11,7 +11,7 @@ Format: 5W1H-{YYYYMMDD}-{HHMMSS}-{random}
 Example: 5W1H-20250925-191735-a7b3c2
 
 Usage:
-    uv run .claude/skills/5w1h-decision/scripts/generate_token.py
+    uv run scripts/generate_token.py
 """
 
 import os
@@ -37,13 +37,21 @@ def generate_token() -> str:
     return f"5W1H-{date_part}-{time_part}-{random_part}"
 
 
+def resolve_token_dir() -> Path:
+    """框架 lib 可匯入時沿用其解析（linked worktree 落主 checkout）；否則退回 cwd 下的同構目錄。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    try:
+        from lib import get_hook_log_dir
+    except ImportError:
+        fallback = Path.cwd() / ".claude" / "hook-logs" / "5w1h-tokens"
+        sys.stderr.write(f"[5w1h-decision] 找不到框架 lib，token 目錄退回：{fallback}\n")
+        return fallback
+    return get_hook_log_dir("5w1h-tokens")
+
+
 def save_token(token: str) -> Path:
     """Save token to session file."""
-    # Resolve token directory (linked worktree -> main repo hook-logs)
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from lib import get_hook_log_dir
-
-    token_dir = get_hook_log_dir("5w1h-tokens")
+    token_dir = resolve_token_dir()
     token_dir.mkdir(parents=True, exist_ok=True)
 
     # Save token file

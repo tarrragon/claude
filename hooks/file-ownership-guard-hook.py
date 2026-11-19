@@ -38,7 +38,7 @@ from lib.hook_ticket import (
     extract_where_files_from_frontmatter,
     scan_ticket_files_by_version,
 )
-from lib.ticket_id_pattern import MATCH_GROUPED_STR
+from lib.ticket_id_pattern import MATCH_GROUPED_STR, extract_ticket_id_anchored
 
 # 讀寫意圖標記剝離改 import ticket_system 共用實作（比照
 # parallel-suggestion-hook.py 的落地方式）：PEP 723 單檔限制的是依賴解析，
@@ -86,8 +86,9 @@ CONFLICT_TYPE_UNRELATED = "unrelated"
 CONFLICT_TYPE_PARENT = "parent"
 CONFLICT_TYPE_NONE = "none"
 
-# 活躍狀態
-ACTIVE_STATUSES = {"pending", "in_progress"}
+# 計入衝突的狀態：只有正在改的票（in_progress）才會和派發目標搶同一批檔案；
+# pending 的票還沒有人在改，派發時不算衝突。
+ACTIVE_STATUSES = {"in_progress"}
 
 
 # ============================================================================
@@ -265,11 +266,11 @@ def _ensure_file_list(where_value: object) -> list[str]:
 
 
 def extract_ticket_id(input_data: dict) -> Optional[str]:
-    """從派發指令中提取 Ticket ID
+    """從派發 prompt 首行提取 Ticket ID；非 ticket 派發（首行無 ID）回 None
 
-    支援多種格式：
-    - toolInput.target_id: "<ticket-id>"
-    - toolInput.ticket_id: "<ticket-id>"
+    Agent 工具輸入沒有承載 Ticket ID 的欄位（只有 prompt、description、
+    subagent_type 等），派發目標只能從 prompt 首行解析。解析規則與派發身份
+    綁定一致：首行同時含多個票號時優先採『Ticket』標籤錨定的 ID。
 
     Args:
         input_data: PreToolUse Hook 的 stdin JSON
@@ -284,13 +285,11 @@ def extract_ticket_id(input_data: dict) -> Optional[str]:
     if not isinstance(tool_input, dict):
         return None
 
-    # 嘗試多個可能的欄位名稱
-    ticket_id = (
-        tool_input.get("target_id")
-        or tool_input.get("ticket_id")
-        or tool_input.get("id")
-    )
+    prompt = tool_input.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        return None
 
+    ticket_id = extract_ticket_id_anchored(prompt.strip().splitlines()[0])
     if not ticket_id:
         return None
 

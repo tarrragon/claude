@@ -809,5 +809,26 @@ class TestIndexLockEffect:
             proc.wait()
 
 
+class TestGitStatusFailureDistinction:
+    """3.4.0-W1-327：新 API 可區分 git status 失敗與無變更"""
+
+    def test_strict_raises_on_failure(self, tmp_path):
+        from lib.git_utils import get_uncommitted_files_strict, GitStatusError
+        with pytest.raises(GitStatusError):
+            get_uncommitted_files_strict(cwd=str(tmp_path / "missing"))
+
+    def test_legacy_returns_empty_and_warns_on_failure(self, tmp_path, capsys):
+        files = get_uncommitted_files(cwd=str(tmp_path / "missing"))
+        assert files == []
+        assert "[Warning] git status failed cwd=" in capsys.readouterr().err
+
+    def test_clean_repo_both_return_empty(self, tmp_path, capsys):
+        from lib.git_utils import get_uncommitted_files_strict
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        assert get_uncommitted_files_strict(cwd=str(tmp_path)) == []
+        assert get_uncommitted_files(cwd=str(tmp_path)) == []
+        assert "git status failed" not in capsys.readouterr().err
+
+
 if __name__ == "__main__":
     unittest.main()

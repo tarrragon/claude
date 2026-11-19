@@ -13,7 +13,8 @@ transcript 新增部分，以 additionalContext 轉告模型。
   - 去重：同一 uuid 不重複提醒；transcript 變短時從頭讀但不重複
   - 端到端：同一 transcript 第一次執行有提醒、第二次無提醒（正向對照）
   - 無錯誤時不輸出提醒（反向對照）
-  - fail-open：讀取端自身例外 exit 0，寫 stderr
+  - 讀取端自身例外 exit 1，寫 stderr（3.4.0-W1-159.1）；transcript 不存在 exit 0
+  - 自身失敗經 runtime 記錄後，下一次執行轉告一次（自我轉告）
   - 每筆轉送寫一行紀錄到 records 目錄，供 hook-liveness 統計
 """
 
@@ -279,12 +280,41 @@ def test_e2e_fail_open_on_unreadable_transcript(tmp_path):
     assert _context_of(proc) == ""
 
 
-def test_e2e_fail_open_on_internal_exception(tmp_path):
-    """讀取端自身例外：exit 0，stderr 有訊息（不可靜默）。"""
+def test_e2e_internal_exception_exits_1(tmp_path):
+    """讀取端自身例外：exit 1 讓 runtime 記為 non-blocking error，stderr 有摘要。"""
     t = tmp_path / "t.jsonl"
     _write_lines(t, [_error_entry("e1")])
     blocker = tmp_path / "state"
     blocker.write_text("不是目錄", encoding="utf-8")  # state 目錄無法建立
     proc = _run_hook(tmp_path, _payload(t))
-    assert proc.returncode == 0
+    assert proc.returncode == 1
     assert "hook-nonblocking-error-relay" in proc.stderr
+    assert _context_of(proc) == ""
+
+
+def test_e2e_relays_own_failure_once_after_recovery(tmp_path):
+    """自身失敗經 runtime 寫入 transcript 後，恢復的第一次執行轉告一次，之後去重。"""
+    t = tmp_path / "t.jsonl"
+    _write_lines(t, [_plain_entry("u0")])
+    blocker = tmp_path / "state"
+    blocker.write_text("不是目錄", encoding="utf-8")
+    failed = _run_hook(tmp_path, _payload(t))
+    assert failed.returncode == 1
+    # 模擬 runtime 以該次 stderr 寫入的 attachment
+    _write_lines(
+        t,
+        [
+            _error_entry(
+                "self1",
+                command=f"uv run --quiet {HOOK_PATH}",
+                stderr=RUNTIME_PREFIX + failed.stderr.strip().splitlines()[0],
+            )
+        ],
+        mode="a",
+    )
+    blocker.unlink()
+    recovered = _run_hook(tmp_path, _payload(t, "PostToolUse"))
+    assert recovered.returncode == 0, recovered.stderr
+    assert "hook-nonblocking-error-relay-hook.py" in _context_of(recovered)
+    again = _run_hook(tmp_path, _payload(t, "PostToolUse"))
+    assert _context_of(again) == ""

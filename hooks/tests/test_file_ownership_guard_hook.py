@@ -73,7 +73,7 @@ def make_ticket_yaml():
     def _factory(
         ticket_id,
         where_files=None,
-        status="pending",
+        status="in_progress",
         parent_id=None,
     ):
         # 格式化 where.files 為 YAML 清單格式
@@ -113,7 +113,7 @@ def make_ticket_file(make_ticket_yaml):
         temp_root,
         ticket_id,
         where_files=None,
-        status="pending",
+        status="in_progress",
         parent_id=None,
     ):
         tickets_dir = temp_root / "docs" / "work-logs" / "v0.1.2" / "tickets"
@@ -213,25 +213,52 @@ class TestNormalizePath:
 class TestExtractTicketId:
     """extract_ticket_id 函式測試"""
 
-    def test_extract_from_target_id(self):
-        """提取 toolInput.target_id"""
+    # Agent 工具輸入只有 prompt、description、subagent_type、model、name、
+    # isolation、run_in_background；Ticket ID 只能從 prompt 首行解析。
+
+    def test_extract_from_prompt_first_line(self):
+        """prompt 首行的 Ticket ID"""
         input_data = {
-            "tool_input": {"target_id": "0.1.2-W2-003"}
+            "tool_input": {
+                "prompt": "Ticket: 0.1.2-W2-003\n執行任務",
+                "description": "x",
+                "subagent_type": "thyme-python-developer",
+            }
         }
         assert extract_ticket_id(input_data) == "0.1.2-W2-003"
 
-    def test_extract_from_ticket_id(self):
-        """提取 toolInput.ticket_id"""
+    def test_extract_child_ticket_from_prompt(self):
+        """子票後綴一併保留"""
+        input_data = {"tool_input": {"prompt": "執行 0.1.2-W2-001.2 的實作"}}
+        assert extract_ticket_id(input_data) == "0.1.2-W2-001.2"
+
+    def test_label_anchor_wins_over_earlier_reference(self):
+        """首行同時提到參考票與目標票時，以『Ticket』標籤為準"""
         input_data = {
-            "tool_input": {"ticket_id": "0.1.2-W2-001"}
+            "tool_input": {"prompt": "延續 0.1.2-W2-001，Ticket: 0.1.2-W2-004"}
         }
-        assert extract_ticket_id(input_data) == "0.1.2-W2-001"
+        assert extract_ticket_id(input_data) == "0.1.2-W2-004"
+
+    def test_id_only_after_first_line_is_ignored(self):
+        """只看首行；後續行提到的票號不算派發目標"""
+        input_data = {"tool_input": {"prompt": "整理文件\n參考 0.1.2-W2-001"}}
+        assert extract_ticket_id(input_data) is None
+
+    def test_fields_absent_from_agent_input_are_ignored(self):
+        """target_id／ticket_id／id 不在 Agent 輸入內，不作為來源"""
+        input_data = {
+            "tool_input": {
+                "target_id": "0.1.2-W2-003",
+                "ticket_id": "0.1.2-W2-003",
+                "id": "0.1.2-W2-003",
+                "prompt": "整理文件",
+            }
+        }
+        assert extract_ticket_id(input_data) is None
 
     def test_reject_invalid_format(self):
-        """拒絕非法 Ticket ID 格式"""
-        input_data = {
-            "tool_input": {"target_id": "invalid-id"}
-        }
+        """首行沒有合法 Ticket ID 形狀"""
+        input_data = {"tool_input": {"prompt": "Ticket: invalid-id"}}
         assert extract_ticket_id(input_data) is None
 
     def test_no_tool_input(self):
@@ -375,7 +402,7 @@ class TestGetActiveTickets:
         """篩選活躍狀態"""
         make_ticket_file(
             temp_project_root, "0.1.2-W2-001",
-            where_files=["lib/create.py"], status="pending"
+            where_files=["lib/create.py"], status="in_progress"
         )
         make_ticket_file(
             temp_project_root, "0.1.2-W2-002",
@@ -385,12 +412,27 @@ class TestGetActiveTickets:
         result = get_active_tickets("0.1.2-W2-001", temp_project_root, mock_logger)
         assert len(result) == 0
 
+    def test_pending_ticket_not_counted(self, temp_project_root, make_ticket_file, mock_logger):
+        """pending 的票還沒有人在改，不列入衝突來源；in_progress 才列入"""
+        make_ticket_file(temp_project_root, "0.1.2-W2-001", where_files=["lib/create.py"])
+        make_ticket_file(
+            temp_project_root, "0.1.2-W2-002",
+            where_files=["lib/create.py"], status="pending"
+        )
+        make_ticket_file(
+            temp_project_root, "0.1.2-W2-003",
+            where_files=["lib/create.py"], status="in_progress"
+        )
+
+        result = get_active_tickets("0.1.2-W2-001", temp_project_root, mock_logger)
+        assert [t.ticket_id for t in result] == ["0.1.2-W2-003"]
+
     def test_normalize_paths(self, temp_project_root, make_ticket_file, mock_logger):
         """where.files 規範化"""
         make_ticket_file(temp_project_root, "0.1.2-W2-001", where_files=["lib/create.py"])
         make_ticket_file(
             temp_project_root, "0.1.2-W2-002",
-            where_files=["./Lib/Delete.py"], status="pending"
+            where_files=["./Lib/Delete.py"], status="in_progress"
         )
 
         result = get_active_tickets("0.1.2-W2-001", temp_project_root, mock_logger)
@@ -418,7 +460,7 @@ class TestFindFileOwnershipConflicts:
         make_ticket_file(temp_project_root, "0.1.2-W2-001", where_files=["lib/create.py"])
         make_ticket_file(
             temp_project_root, "0.1.2-W2-002",
-            where_files=["lib/create.py"], status="pending"
+            where_files=["lib/create.py"], status="in_progress"
         )
 
         result = find_file_ownership_conflicts("0.1.2-W2-001", temp_project_root, mock_logger)
@@ -431,11 +473,11 @@ class TestFindFileOwnershipConflicts:
         make_ticket_file(temp_project_root, "0.1.2-W2-001", where_files=["lib/create.py"])
         make_ticket_file(
             temp_project_root, "0.1.2-W2-001.1",
-            where_files=["lib/create.py"], status="pending", parent_id="0.1.2-W2-001"
+            where_files=["lib/create.py"], status="in_progress", parent_id="0.1.2-W2-001"
         )
         make_ticket_file(
             temp_project_root, "0.1.2-W2-001.2",
-            where_files=["lib/create.py"], status="pending", parent_id="0.1.2-W2-001"
+            where_files=["lib/create.py"], status="in_progress", parent_id="0.1.2-W2-001"
         )
 
         result = find_file_ownership_conflicts("0.1.2-W2-001.1", temp_project_root, mock_logger)
@@ -448,7 +490,7 @@ class TestFindFileOwnershipConflicts:
         make_ticket_file(temp_project_root, "0.1.2-W2-001", where_files=["lib/create.py"])
         make_ticket_file(
             temp_project_root, "0.1.2-W2-001.1",
-            where_files=["lib/create.py"], status="pending", parent_id="0.1.2-W2-001"
+            where_files=["lib/create.py"], status="in_progress", parent_id="0.1.2-W2-001"
         )
 
         result = find_file_ownership_conflicts("0.1.2-W2-001.1", temp_project_root, mock_logger)
@@ -529,7 +571,7 @@ class TestHookIntegration:
             mock_read_stdin.return_value = {
                 "hook_event_name": "PreToolUse",
                 "tool_name": "Agent",
-                "tool_input": {"target_id": "0.1.2-W2-001"},
+                "tool_input": {"prompt": "Ticket: 0.1.2-W2-001\n執行任務"},
             }
 
             mock_get_root.return_value = temp_project_root

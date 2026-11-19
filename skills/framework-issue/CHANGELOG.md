@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.12.2（2026-11-19）— 測試輔助：`tests/conftest.py` 新增逐測試還原 cwd 與環境變數的 fixture（載入框架 lib 的 `process_state_restore`）；`scripts/feedback.py` 與 `scripts/rebuild_owned.py` 補上可執行位（100644 改 100755，內容不變）。skill 指令內容不變。
+
 **Version**: 2.12.1 — 命令總表 `rebuild-owned` 列補寫登記檔位置（主 repo 的 `.claude/state/framework-issue-owned.json`，worktree 內執行也寫到主 repo），並寫明 SessionStart 檢查只查登記檔內的 issue 編號、不送專案名，`rebuild-owned` 是唯一會把專案目錄名送到 GitHub 的命令。框架 README〈導入後會多出什麼〉的對外連線列同步改寫。只改文件。
 - 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；僅註解與文件，行為不變。
 

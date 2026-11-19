@@ -179,7 +179,7 @@ class TestVersionOnlyCommitLoop:
             repo, last_time = _init_repo_with_claude_dir(tmp_path)
             claude_dir = repo / ".claude"
 
-            # 模擬 push 完成當下：write_local_version 已把 VERSION 改為 1.1.0，
+            # 測試以手動寫入模擬 VERSION 已是 1.1.0 的狀態（現行 push 不回寫 VERSION），
             # last_push_hash 是「VERSION 已是 1.1.0」時的內容指紋。
             (claude_dir / "VERSION").write_text("1.1.0\n", encoding="utf-8")
             current_hash = sync_mod._compute_content_hash(claude_dir)

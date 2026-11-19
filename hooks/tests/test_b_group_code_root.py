@@ -195,9 +195,16 @@ def _alternating_setup(tmp_path, script_prefix):
     for root in (main, wt):
         _checkout(root, SYNC, True)
         src = (root / ".claude/hooks" / SYNC).read_text(encoding="utf-8")
-        # 上一版行為：所有 code root 共用單一 generated.json
-        _write(root, ".claude/hooks/shared-" + SYNC, src.replace(
-            '"generated-{}.json".format(_root_digest(root))', '"generated.json"'))
+        _write(root, ".claude/hooks/shared-" + SYNC, src)
+        if script_prefix == "shared-":
+            # 上一版行為：所有 code root 共用單一 generated.json。
+            # 產生紀錄檔名定義在 lib（3.4.0-W1-009 自 hook 搬入），改這一份副本；
+            # 先斷言字面存在，避免定義再搬家時替換靜默落空、對照組變成新行為
+            lib = root / ".claude/lib/project_hook_registry.py"
+            lib_src = lib.read_text(encoding="utf-8")
+            per_root = '"generated-{}.json".format(_root_digest(root))'
+            assert per_root in lib_src, "上一版行為模擬失效：產生紀錄檔名寫法已變更"
+            lib.write_text(lib_src.replace(per_root, '"generated.json"'), encoding="utf-8")
     _checkout(project, SYNC, False)
     _manifest(main, "m1.sh")
     _manifest(wt, "m1.sh")

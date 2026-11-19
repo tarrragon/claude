@@ -22,14 +22,35 @@ from typing import NamedTuple
 
 DEFAULT_REPO = "https://github.com/tarrragon/claude-skills.git"
 
+# pull／push 的 [y/N] 確認被取消（回答非 y、EOF、Ctrl-C）時的結束碼。
+# 非零讓呼叫端能從結束碼分辨「已套用」與「未套用」；非互動呼叫端
+# stdin 已關閉時落在 EOF 分支，同樣以此碼結束。
+ABORT_EXIT_CODE = 1
+
+# 行首的 `**Version**: X` 版號行，只擷取 semver 本體。條目常寫成
+# 「**Version**: 1.3.5（日期）— 說明」，取到第一個空白會把日期尾綴帶進版號；
+# 說明句以行內字面提到 `**Version**:` 時，不錨定行首會先命中說明句。
+_VERSION_LINE_RE = re.compile(
+    r"^\*\*Version\*\*:[ \t]*v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)",
+    re.MULTILINE,
+)
+
 # 取遠端 manifest（fetch_remote_manifest，淺 clone）的等待上限。正常約 1.8 秒
 # （實測對發佈庫），比改走 git clone 之前的 HTTP 直接 GET（0.5-1.2 秒）
 # 慢，故上限沿用同一顆常數但放寬，避免正常網路延遲被誤判為逾時；被防火牆
 # 黑洞時仍會用滿整個上限，這份資料只影響一段資訊性報告，不值得讓呼叫端無限
 # 等待。
 REMOTE_FETCH_TIMEOUT_SECONDS = 15
-EXCLUDE_DIRS = {
-    "project-integration",
+# 排除目錄分兩類，判定取聯集（EXCLUDE_DIRS）。分開具名是為了讓「命中排除」可分辨：
+# 工具產物命中是預期的過濾；政策命中代表該目錄刻意不隨 skill 同步（per-project
+# 落地層），改名即脫離同步、上游同名目錄下次 pull 會回歸並存。
+#
+# 與 .claude/lib/sync_exclude_manifest.py 的對應：本模組不 import manifest（零框架
+# 依賴的獨立套件，安裝後沒有 .claude/ 樹），兩邊各自宣告。對應關係：
+#   TOOL_ARTIFACT_DIRS  ↔ manifest LOCAL_ONLY_PATTERNS 的工具產物段 + TOOL_ARTIFACT_PATTERNS
+#   POLICY_EXCLUDE_DIRS ↔ manifest PER_PROJECT_PATTERNS 的 project-integration
+# `.egg-info` 目錄以名稱後綴比對（見 _should_exclude_file），不列在集合內。
+TOOL_ARTIFACT_DIRS = frozenset({
     ".venv",
     "__pycache__",
     ".pytest_cache",
@@ -37,9 +58,12 @@ EXCLUDE_DIRS = {
     ".mypy_cache",
     "htmlcov",
     "build",
-    ".egg-info",
     "hook-logs",
-}
+})
+POLICY_EXCLUDE_DIRS = frozenset({
+    "project-integration",
+})
+EXCLUDE_DIRS = TOOL_ARTIFACT_DIRS | POLICY_EXCLUDE_DIRS
 
 # --force 繞過可攜性閘門的記錄檔位置。env var 名稱沿用專案既有慣例
 # （ticket_system.lib.precondition 的 HOOK_LOGS_DIR），純為命名一致，不 import
@@ -72,9 +96,15 @@ _CREDENTIAL_EXACT_NAMES = frozenset({
     "id_ed25519",
 })
 
-# 標記檔存在即宣告該 skill 的本地內容為刻意客製，`pull`（全量）分歧檢查略過回報
-# （宣告式 local override 決策：見 update_sync_manifest
-# 與 _classify_sync_status 的 docstring）。
+# 標記檔（skill 根層）存在即宣告該 skill 的本地內容為刻意分叉，有兩個後果：
+# 1. `pull <name>` 拒絕並以結束碼 1 停下，不覆蓋本地客製；逃生閥是專屬旗標
+#    `--discard-local`（仍進確認，加 `--force` 才略過確認）。不沿用 `--force`：
+#    `--force` 的語意是略過互動確認且被非互動腳本慣用，讓它同時解除保護會使最
+#    依賴自動化的使用者靜默失去保護（見 _reject_override_pull）。
+# 2. `pull`（不帶名字）的狀態報告把該 skill 列在 [OVERRIDE]，不做分歧判定（見
+#    _classify_sync_status）。
+# `push <name>` 對帶標記的 skill 只警告不阻擋：推送是作者自己的決定，標記保護的
+# 是本地內容不被上游覆蓋，不是上游不被本地覆蓋。
 SKILL_SYNC_OVERRIDE_MARKER = ".skill-sync-override"
 
 # 記錄「上次成功 pull/push 時」該 skill 的內容雜湊（見 _record_sync_base，pull/push
@@ -85,6 +115,15 @@ SKILL_SYNC_OVERRIDE_MARKER = ".skill-sync-override"
 # _resolve_diverge_direction）。從未走過本機制的既有 skill 無此檔，維持現行
 # diverged 輸出（方向 "unknown"，向後相容）。
 SKILL_SYNC_BASE_MARKER = ".skill-sync-base"
+
+# 加法式排除標記：skill 子目錄內放此檔（內容不讀，只看存在），該目錄整棵子樹
+# 不進 push／pull／內容雜湊／prune。只增加排除、不減少：名稱式排除（EXCLUDE_DIRS、
+# 憑證判準）照常生效，標記遺失或被刪時退化為「排除較少」，不會讓名稱式成員外流。
+# 合法放置層級為 skill 子目錄（深度 >= 1）。skill 根層不合法：根層標記等於整個
+# skill 不同步，雜湊會等同空輸入（sha256 e3b0c442…）而對任何遠端判 diverged；
+# 整個 skill 不同步屬 sync-skills.yaml private 清單的職責，故 push／pull 遇根層
+# 標記拒絕並非零退出（見 _reject_root_ignore_marker），不改用空雜湊。
+SKILL_SYNC_IGNORE_MARKER = ".skill-sync-ignore"
 
 
 class DivergedSkill(NamedTuple):
@@ -178,9 +217,14 @@ def _should_exclude_file(rel_path: str) -> bool:
     publish-repo hash, see _record_sync_base), and letting it into the content
     hash would make writing it change the hash it is meant to describe — a
     self-referential loop where every write invalidates itself.
+
+    SKILL_SYNC_IGNORE_MARKER is excluded by name for the override marker's
+    reason: it is a single consumer's local declaration. Excluding the marker
+    file is name-based and lives here; excluding the subtree it marks needs a
+    filesystem root, so that part lives in _ignored_dirs / _is_ignored.
     """
     path = Path(rel_path)
-    if path.name in (SKILL_SYNC_OVERRIDE_MARKER, SKILL_SYNC_BASE_MARKER):
+    if path.name in (SKILL_SYNC_OVERRIDE_MARKER, SKILL_SYNC_BASE_MARKER, SKILL_SYNC_IGNORE_MARKER):
         return True
     for part in path.parts:
         if part in EXCLUDE_DIRS or part.endswith(".egg-info"):
@@ -193,6 +237,56 @@ def _should_exclude_file(rel_path: str) -> bool:
     if any(name_lower.startswith(prefix) for prefix in _CREDENTIAL_NAME_PREFIXES):
         return True
     return False
+
+
+def _ignored_dirs(root: Path) -> frozenset[str]:
+    """回傳 root 之下帶 SKILL_SYNC_IGNORE_MARKER 的子目錄相對路徑（posix）。
+
+    根層標記不列入：根層不是合法放置層級，由 push／pull 入口以
+    _reject_root_ignore_marker 拒絕，而不在這裡把整個 skill 收成空集合（空集合的
+    雜湊等同空輸入，會對任何遠端判 diverged）。已被名稱式排除的目錄內的標記不列
+    入，該目錄本來就不同步。root 不存在時回傳空集合。
+    """
+    if not root.is_dir():
+        return frozenset()
+    found: set[str] = set()
+    for marker in root.rglob(SKILL_SYNC_IGNORE_MARKER):
+        if not marker.is_file():
+            continue
+        rel_dir = marker.parent.relative_to(root).as_posix()
+        if rel_dir == "." or _should_exclude_file(rel_dir):
+            continue
+        found.add(rel_dir)
+    return frozenset(found)
+
+
+def _is_ignored(rel_path: str, ignored_dirs: frozenset[str]) -> bool:
+    """名稱式排除（_should_exclude_file）之外，再加上標記目錄的子樹排除。
+
+    只能增加排除：先走名稱式判定，標記只在其上多擋一層，任何標記都無法讓名稱式
+    排除的路徑回到同步。
+    """
+    if _should_exclude_file(rel_path):
+        return True
+    return any(rel_path == d or rel_path.startswith(d + "/") for d in ignored_dirs)
+
+
+def _reject_root_ignore_marker(skill_dir: Path, name: str) -> None:
+    """skill 根層帶 SKILL_SYNC_IGNORE_MARKER 時寫 stderr 並以 1 結束。
+
+    拒絕而非略過標記：略過會把整個 skill 照常推上公開 repo，與放標記的意圖相反
+    且不可撤回；拒絕只讓這次操作停下，是可補救的一側。
+    """
+    if (skill_dir / SKILL_SYNC_IGNORE_MARKER).is_file():
+        print(
+            f"Error: {skill_dir / SKILL_SYNC_IGNORE_MARKER} sits at the root of skill "
+            f"'{name}'. {SKILL_SYNC_IGNORE_MARKER} is only valid inside a subdirectory "
+            "of a skill (it excludes that subtree). To keep a whole skill out of sync, "
+            "list it as private in sync-skills.yaml and do not push or pull it by name; "
+            "then remove the root-level marker.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 
@@ -500,11 +594,12 @@ def check_portability(skill_dir: Path) -> list[PortabilityViolation]:
     violations: list[PortabilityViolation] = []
     if not skill_dir.is_dir():
         return violations
+    ignored = _ignored_dirs(skill_dir)
     for path in sorted(skill_dir.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(skill_dir).as_posix()
-        if _should_exclude_file(rel):
+        if _is_ignored(rel, ignored):
             continue
         if path.suffix == ".md":
             try:
@@ -523,19 +618,69 @@ def check_portability(skill_dir: Path) -> list[PortabilityViolation]:
     return violations
 
 
+def _resolve_shared_state_root(purpose: str) -> Path:
+    """回傳共用狀態根：linked worktree 內為主倉庫根，其餘情形為 git toplevel。
+
+    主倉庫根取 `git rev-parse --git-common-dir` 的父目錄（common dir 須名為
+    `.git`；bare repo、submodule 的 `.git/modules/<name>` 不符，退回 toplevel）。
+    不用 `--path-format=absolute`：舊版 git 不支援時輸出會錯位，改以 toplevel
+    為基準解析相對路徑。
+
+    與 `.claude/lib` 的 get_shared_state_root 同一判準，但在套件內自行解析：
+    skill-sync 是零框架依賴的獨立套件，散佈到沒有 `.claude/lib` 的環境時 import
+    會失敗（同 ticket CLI 的 get_ticket_state_root 前例）。查詢失敗時寫 stderr
+    並退回 toplevel，不中斷呼叫端。
+    """
+    toplevel = _resolve_project_root(purpose)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=toplevel,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        print(
+            f"Warning: git rev-parse --git-common-dir failed ({type(e).__name__}: {e}); "
+            f"using {toplevel} for {purpose}",
+            file=sys.stderr,
+        )
+        return toplevel
+    if result.returncode != 0:
+        print(
+            f"Warning: git rev-parse --git-common-dir failed in {toplevel}; "
+            f"using it for {purpose}",
+            file=sys.stderr,
+        )
+        return toplevel
+    common = Path(result.stdout.strip())
+    if not common.is_absolute():
+        common = toplevel / common
+    common = common.resolve()
+    # bare repo 或 submodule 的 common dir 不叫 .git，其父目錄不是 checkout 根
+    if common.name != ".git":
+        return toplevel
+    return common.parent
+
+
 def _resolve_hook_logs_dir() -> Path:
-    """解析 hook-logs 目錄；env var 優先（測試隔離用），否則錨定專案根目錄。
+    """解析 hook-logs 目錄；env var 優先（測試隔離用），否則錨定共用狀態根。
 
     改為呼叫 _resolve_project_root() 前，此函式用未錨定的相對路徑
     `.claude/hook-logs`，經由已安裝的全域 shim（`uv run --directory
     <skill_dir>`，cwd 恆等於 skill 自身目錄）執行時，稽核紀錄會寫到
     `<repo>/.claude/skills/skill-sync/.claude/hook-logs/`，而非本函式
     文件承諾的 `<repo>/.claude/hook-logs/`。
+
+    錨定共用狀態根而非 toplevel：linked worktree 的 `.claude/hook-logs` 被
+    gitignore 忽略、隨 worktree 清理刪除，force-log 寫在那裡等於遺失。
+    get_skills_dir 仍用 toplevel——push／pull 的對象是當前 checkout 的 skills。
     """
     env_value = os.environ.get(_HOOK_LOGS_DIR_ENV)
     if env_value:
         return Path(env_value)
-    return _resolve_project_root("hook-logs resolution") / _DEFAULT_HOOK_LOGS_DIR
+    return _resolve_shared_state_root("hook-logs resolution") / _DEFAULT_HOOK_LOGS_DIR
 
 
 def _write_portability_force_log(
@@ -744,21 +889,31 @@ def _extract_version_string(text: str) -> str | None:
     多數 SKILL.md 把版本寫在 frontmatter 的 metadata.version（縮排兩格），
     原本只認行首 `^version:` 的寫法會漏抓這些縮排寫法；若不限定區塊，正文
     （含本函式自身的說明文字）出現的 `version:` 字樣又會被誤抓，使抽取結果
-    依賴巧合而非結構。`**Version**:` 形式（工作日誌／規則文件慣用）仍在全文
-    搜尋，不受此限——本專案實測沒有 SKILL.md 使用此形式，收窄範圍無實際
-    行為變更，維持全文搜尋以免影響其他消費端可能存在的既有用法。
+    依賴巧合而非結構。
+
+    先取 frontmatter，再退回全文的 `**Version**:` 行：SKILL.md 正文常以
+    changelog 範例引用 `**Version**:` 行，若先搜全文，範例會蓋過 frontmatter
+    宣告的版號。退回時只認行首、只取 semver 本體，判準與框架
+    `skill_version_diff._VERSION_LINE_RE` 相同（本套件不 import 框架 lib，
+    故在此保留一份同義的 `_VERSION_LINE_RE`）。
     """
-    m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-    if m:
-        return m.group(1)
+    front = _frontmatter_block(text)
+    if front is not None:
+        m = re.search(r"^\s*version:\s*(\S+)", front, re.MULTILINE)
+        if m:
+            return m.group(1)
+    m = _VERSION_LINE_RE.search(text)
+    return m.group(1) if m else None
+
+
+def _frontmatter_block(text: str) -> str | None:
+    """回傳首尾 `---` 之間的 frontmatter 內文；沒有完整區塊時回傳 None。"""
     if not text.startswith("---"):
         return None
     end = text.find("\n---", 3)
     if end == -1:
         return None
-    front = text[3:end]
-    m = re.search(r"^\s*version:\s*(\S+)", front, re.MULTILINE)
-    return m.group(1) if m else None
+    return text[3:end]
 
 
 def compute_content_hash(skill_dir: Path) -> str | None:
@@ -768,8 +923,8 @@ def compute_content_hash(skill_dir: Path) -> str | None:
     不可互相比較：本函式的作用域是單一 skill 目錄（該檔是整個 `.claude/`）、
     摘要以 (路徑 bytes, 內容 bytes) 直接餵入單一 hasher（該檔先組
     `"路徑:sha256"` 文字再雜湊）、輸出完整 64 字（該檔截斷 16 字）、目錄不存在
-    回傳 None（該檔無此語意），排除集亦不同（本函式另排除
-    SKILL_SYNC_OVERRIDE_MARKER）。本函式的雜湊值已持久化於遠端 versions.json，
+    回傳 None（該檔無此語意），排除集亦不同（本函式依 _should_exclude_file 與
+    _ignored_dirs 判定）。本函式的雜湊值已持久化於遠端 versions.json，
     改動摘要形式會讓全部遠端 hash 失效，故兩者不合併。
 
 
@@ -782,12 +937,13 @@ def compute_content_hash(skill_dir: Path) -> str | None:
     if not skill_dir.is_dir():
         return None
 
+    ignored = _ignored_dirs(skill_dir)
     rel_paths: list[str] = []
     for f in skill_dir.rglob("*"):
         if not f.is_file():
             continue
         rel = f.relative_to(skill_dir).as_posix()
-        if _should_exclude_file(rel):
+        if _is_ignored(rel, ignored):
             continue
         rel_paths.append(rel)
     rel_paths.sort()
@@ -800,8 +956,45 @@ def compute_content_hash(skill_dir: Path) -> str | None:
 
 
 def _has_local_override(skill_dir: Path) -> bool:
-    """標記檔存在即宣告本地內容為刻意客製，`pull`（全量）分歧檢查略過此 skill。"""
+    """skill 根層有 SKILL_SYNC_OVERRIDE_MARKER 即為刻意分叉：`pull <name>` 拒絕、
+    狀態報告略過分歧判定（兩個後果見常數註解）。"""
     return (skill_dir / SKILL_SYNC_OVERRIDE_MARKER).is_file()
+
+
+def _confirm_or_abort() -> None:
+    """詢問 [y/N]；回答不是 y（含 EOF、Ctrl-C）時寫 stderr 並以 ABORT_EXIT_CODE 結束。
+
+    在 tempfile 的 with 區塊內呼叫也安全：SystemExit 照常觸發區塊清理。
+    """
+    print("\n  Use --force to apply changes without confirmation.")
+    try:
+        answer = input("  Apply changes? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        # EOF 是非互動呼叫端的常態（stdin 已關閉），與回答 n 同樣視為取消
+        answer = ""
+    if answer != "y":
+        print("  Aborted. No changes applied.", file=sys.stderr)
+        sys.exit(ABORT_EXIT_CODE)
+
+
+def _reject_override_pull(skill_dir: Path, name: str, discard_local: bool) -> None:
+    """本地 skill 帶 override 標記且未給 `--discard-local` 時，寫 stderr 並以 1 結束。
+
+    在 clone 前判定：標記是本地宣告，不需遠端資料；早停也讓被擋的 pull 不付網路
+    往返。`--force` 不參與判定，見 SKILL_SYNC_OVERRIDE_MARKER 的註解。
+    """
+    if discard_local or not _has_local_override(skill_dir):
+        return
+    print(
+        f"Error: {skill_dir / SKILL_SYNC_OVERRIDE_MARKER} declares '{name}' a deliberate "
+        "local fork, so pull will not overwrite it (--force alone does not change this).\n"
+        "  To discard the local customization and take the remote copy:\n"
+        f"    skill-sync pull {name} --discard-local          # asks for confirmation\n"
+        f"    skill-sync pull {name} --discard-local --force  # no confirmation\n"
+        "  The marker stays in place afterwards; delete it if the fork has ended.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def _read_sync_base(skill_dir: Path) -> str | None:
@@ -1262,10 +1455,20 @@ def update_sync_manifest(repo_dir: Path) -> None:
     """
     _warn_skill_md_case_mismatch(repo_dir)
     manifest: dict[str, dict[str, str]] = {}
-    for skill_md in sorted(repo_dir.glob("*/SKILL.md")):
+    skill_mds = sorted(repo_dir.glob("*/SKILL.md"))
+    skipped: list[str] = []
+    for skill_md in skill_mds:
         name = skill_md.parent.name
         content_hash = compute_content_hash(skill_md.parent)
         if content_hash is None:
+            # 不可雜湊的 skill 不寫入 versions.json；靜默略過會讓推送端與使用者
+            # 都看不出遠端少了一筆條目，故逐筆列出並計數。
+            skipped.append(name)
+            print(
+                f"[WARNING] versions.json skipped '{name}': content hash unavailable "
+                f"({skill_md.parent} not readable as a directory)",
+                file=sys.stderr,
+            )
             continue
         entry: dict[str, str] = {"hash": content_hash}
         try:
@@ -1276,6 +1479,17 @@ def update_sync_manifest(repo_dir: Path) -> None:
         if version:
             entry["version"] = version
         manifest[name] = entry
+
+    # 條目數與掃描到的 SKILL.md 數不等，代表有 skill 未進 manifest（上方逐筆告警
+    # 之外的任何漏寫路徑也會在此現形）。只告警不中止：versions.json 是資訊性
+    # 同步索引，中止 push 的代價高於少一筆條目。
+    if len(manifest) != len(skill_mds):
+        print(
+            f"[WARNING] versions.json has {len(manifest)} entries but "
+            f"{len(skill_mds)} SKILL.md were scanned"
+            + (f" (skipped: {', '.join(skipped)})" if skipped else ""),
+            file=sys.stderr,
+        )
 
     vf = repo_dir / "versions.json"
     existing = {}
@@ -1386,11 +1600,14 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
         "dst_only": [],
     }
 
+    # 標記取兩側聯集：push 時標記在 src（本地），pull 時在 dst（本地）；遠端不會
+    # 有標記（名稱式排除使它推不上去），取聯集讓兩個方向都由本地宣告決定。
+    ignored = _ignored_dirs(src) | _ignored_dirs(dst)
     src_files: set[str] = set()
     for f in src.rglob("*"):
         if f.is_file():
             rel = f.relative_to(src).as_posix()
-            if _should_exclude_file(rel):
+            if _is_ignored(rel, ignored):
                 continue
             src_files.add(rel)
             dst_file = dst / rel
@@ -1405,7 +1622,7 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
         for f in dst.rglob("*"):
             if f.is_file():
                 rel = f.relative_to(dst).as_posix()
-                if _should_exclude_file(rel):
+                if _is_ignored(rel, ignored):
                     continue
                 if rel not in src_files:
                     diff["dst_only"].append(rel)
@@ -1610,6 +1827,15 @@ def cmd_pull(args: argparse.Namespace) -> None:
     repo_url = get_repo_url()
     skills_dir = get_skills_dir()
     target = skills_dir / name
+    _reject_root_ignore_marker(target, name)
+    discard_local: bool = getattr(args, "discard_local", False)
+    _reject_override_pull(target, name, discard_local)
+    if discard_local and _has_local_override(target):
+        print(
+            f"  [DISCARD-LOCAL] '{name}' carries {SKILL_SYNC_OVERRIDE_MARKER}; its local "
+            "customization will be overwritten by the remote copy.",
+            file=sys.stderr,
+        )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir) / "repo"
@@ -1643,14 +1869,7 @@ def cmd_pull(args: argparse.Namespace) -> None:
             print(f"\n  Note: {len(diff['dst_only'])} local-only file(s) will be preserved.")
 
         if not force:
-            print("\n  Use --force to apply changes without confirmation.")
-            try:
-                answer = input("  Apply changes? [y/N] ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                answer = ""
-            if answer != "y":
-                print("  Aborted.")
-                return
+            _confirm_or_abort()
 
         copied = overlay_copy(source, target, diff)
         _record_sync_base(target)
@@ -1669,6 +1888,14 @@ def cmd_push(args: argparse.Namespace) -> None:
     if not source.is_dir():
         print(f"Error: local skill '{name}' not found at {source}", file=sys.stderr)
         sys.exit(1)
+    _reject_root_ignore_marker(source, name)
+    if _has_local_override(source):
+        print(
+            f"  [WARNING] '{name}' carries {SKILL_SYNC_OVERRIDE_MARKER} (a deliberate local "
+            "fork). Pushing replaces the shared copy with this fork for every consumer; "
+            "the marker itself is not pushed.",
+            file=sys.stderr,
+        )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir) / "repo"
@@ -1740,14 +1967,7 @@ def cmd_push(args: argparse.Namespace) -> None:
             print(f"\n  Note: {len(diff['dst_only'])} remote-only file(s) will be preserved (not deleted).")
 
         if not force:
-            print("\n  Use --force to apply changes without confirmation.")
-            try:
-                answer = input("  Apply changes? [y/N] ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                answer = ""
-            if answer != "y":
-                print("  Aborted.")
-                return
+            _confirm_or_abort()
 
         overlay_copy(source, target, diff)
         if prunable:
@@ -2072,8 +2292,9 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
         return
 
     if status.overridden:
-        print(f"[OVERRIDE] {len(status.overridden)} skill(s) declared local override "
-              f"(skipped from divergence check):")
+        print(f"[OVERRIDE] {len(status.overridden)} skill(s) declared a deliberate local fork "
+              f"(skipped from divergence check; 'skill-sync pull <name>' refuses them "
+              f"unless given --discard-local):")
         for name in status.overridden:
             print(f"  {name}")
 
@@ -2237,7 +2458,12 @@ def build_parser() -> argparse.ArgumentParser:
              "already up to date)",
     )
     pull_parser.add_argument("--force", "-f", action="store_true",
-                             help="Apply changes without confirmation")
+                             help="Apply changes without confirmation (does not lift the "
+                                  f"{SKILL_SYNC_OVERRIDE_MARKER} protection; see --discard-local)")
+    pull_parser.add_argument("--discard-local", action="store_true",
+                             help=f"Pull a skill that carries {SKILL_SYNC_OVERRIDE_MARKER}, "
+                                  "overwriting its deliberate local customization; still asks "
+                                  "for confirmation unless --force is also given")
 
     push_parser = sub.add_parser("push", help="Push a local skill to remote repo")
     push_parser.add_argument("name", help="Skill name to push")

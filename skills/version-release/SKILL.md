@@ -2,7 +2,7 @@
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 metadata:
-  version: 3.0.0
+  version: 3.1.0
 ---
 
 # Version Release Skill
@@ -11,7 +11,7 @@ metadata:
 
 ## 三步驟發布流程
 
-1. **Pre-flight 檢查** - 驗證 Ticket 完成度、技術債務、版本同步
+1. **Pre-flight 檢查** - 驗證 Ticket 完成度、技術債務、版本同步；另列出本地尚未推送到 framework canonical 的 `.claude/` commit 數（資訊，不阻擋，錨點為最後一次寫入 `.claude/sync-base.json` 的 commit）
 2. **文件更新** - 清理 todolist、更新 CHANGELOG、確認版本號
 3. **Git 操作** - 合併、建立 Tag、推送、清理分支
 

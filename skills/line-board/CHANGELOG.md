@@ -4,6 +4,7 @@
 
 **Version**: 0.15.0（2026-11-13）— 恢復開工通知改以 sessionId 寄給本專案的主控，不再以裸名稱「主控」寄送。本機同時有多個專案時，每個專案的主控都叫「主控」，裸名稱可能送到別的專案。新增 `coordinatorAddress`（`hooks/resumeNotice.ts`）：從已依 checkout 路徑過濾的存活 session 中，取名稱為「主控」且帶 sessionId 的那一個；沒有時不送並記 `coordinator-not-found`，不只一個時不送並記 `coordinator-ambiguous`。送出紀錄檔的 skipped reason 型別同步擴充。測試：恰好一個、沒有、缺 sessionId、多個四種輸入，以及名稱不符的對照。multi-session-orchestration `references/line-continuity.md` §4 的 reason 欄同步。
 - 移除框架檔內的專案層級票號（規則 8 存量清理）：一處註解的票號範例改為 `<版號>-W<波次>-<序號>` 佔位符；行為不變。
+- 對齊版號住址：`.claude-plugin/plugin.json` 的 `version` 由 0.11.0 改為 0.15.0。skills 目錄 plugin 原地載入，版號不作快取鍵，下次 `/reload-plugins` 或新 session 才讀到新值。
 
 **Version**: 0.14.1（2026-11-12）— compact 後不再以 compact 前的用量標［待 compact］。實測 compact 完成時用量檔在同一毫秒寫入 phase compacted，tokens 與百分比仍是 compact 前的值，下一次回應前不更新；原本 `contextMarkOf` 不看 phase，line_status 因此對剛 compact 過的線顯示「ctx 61%（29 分前）［待 compact］」。新增 `isPreCompactMeasure`（phase 為 compacted 且 measuredAt 不晚於 phase.at）：成立時不判待 compact／待 clear，用量字尾寫「ctx compact 前 <百分比>%」。看板線標題與 line_status 共用同一判定。`contextUsage.ts` 檔頭原寫「compact 後記為 null」與實測不符，改寫；`references/board-screens.md` 同步。測試：3.2.0 實測形狀的 E2 正向對照與量測晚於 compact 的 E1 對照。
 

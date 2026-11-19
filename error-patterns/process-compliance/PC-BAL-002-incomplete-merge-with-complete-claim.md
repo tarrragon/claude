@@ -18,7 +18,7 @@
 
 ## 案例
 
-flutter_balance 專案的 hook 合併刪除票與其後的移植票。
+BAL 專案的 hook 合併刪除票與其後的移植票。
 
 `cli-error-feedback-hook.py:12` 檔頭載明「合併自 `skill-cli-error-feedback-hook.py`（ticket/skill CLI 錯誤偵測）」。實際比對函式清單：
 
@@ -39,7 +39,7 @@ flutter_balance 專案的 hook 合併刪除票與其後的移植票。
 
 ## 案例二：比對通過的對照組，以及介面比對的失效（2026-07-27）
 
-flutter_balance 專案的另一次 hook 合併刪除前比對。
+BAL 專案的另一次 hook 合併刪除前比對。
 
 `post-test-hook.py:9-12` 檔頭宣稱「合併以下 2 個 Hook：1. test-timeout-post.py — 測試超時監控」，原檔 `test-timeout-post.py` 未於 settings.json 註冊，形態與案例一完全相同。依本 pattern 防護執行刪除前比對，結果為**吸收完整**，刪除放行。
 
@@ -97,4 +97,4 @@ flutter_balance 專案的另一次 hook 合併刪除前比對。
 
 ---
 
-Last Updated: 2026-07-27 | Source: flutter_balance 刪除前驗證、移植執行、比對通過對照組與介面比對失效
+Last Updated: 2026-07-27 | Source: BAL 刪除前驗證、移植執行、比對通過對照組與介面比對失效

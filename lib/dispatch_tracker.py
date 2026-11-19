@@ -972,8 +972,9 @@ def release_dispatch(
     - turn_ended_at 為空：代理人回合仍在進行，釋放會讓守衛立刻看不到它。
       卡住不結束的回合由 cleanup_expired 的回合中 TTL（以 dispatched_at 起算）回收。
 
-    已知缺口：代理人因背景工作完成而恢復時不經 SendMessage，條目不會被
-    `restore_released` 放回。代理人仍有背景工作時不要釋放。
+    背景工作完成而恢復的代理人不經 SendMessage：條目在它第一次呼叫 Bash 時由
+    `restore_released_by_agent_id`（released-dispatch-restore-hook）放回；之前只用
+    Edit／Write 的期間仍不在派發清單上。
 
     key 先經 `normalize_agent_key` 去除 `[ref]` 後綴。
 
@@ -1029,15 +1030,35 @@ def restore_released(
     """
     if not target or not session_id:
         return None
+    return _restore_first(
+        project_root,
+        lambda record: record.get("session_id") == session_id and _matches_agent_key(record, target),
+    )
+
+
+def restore_released_by_agent_id(project_root: Path, agent_id: str) -> Optional[Dict]:
+    """子代理人自身的工具呼叫帶著 agent_id 時，把該代理人的釋放紀錄放回 dispatches。
+
+    涵蓋不經 SendMessage 的恢復路徑（背景工作完成後代理人自行恢復）。比對為
+    agent_id 完全相等（實機觀測：子代理人 payload 的 agent_id 與 spawn 回傳 ID 逐字相同）；
+    不比對 session_id，因為 agent_id 本身全域唯一，且子代理人 payload 的 session_id
+    在背景恢復路徑上未經觀測。放回欄位處理同 `restore_released`。
+
+    Returns:
+        放回的條目；沒有匹配的釋放紀錄時回傳 None，且不寫入狀態檔。
+    """
+    if not agent_id:
+        return None
+    return _restore_first(project_root, lambda record: record.get("agent_id") == agent_id)
+
+
+def _restore_first(project_root: Path, matches) -> Optional[Dict]:
+    """取第一筆 matches(record) 為真的釋放紀錄放回 dispatches；無匹配時不寫入。"""
     with _state_lock(project_root):
         state = _read_state(project_root)
         now = datetime.now(timezone.utc)
         for record in state.get("released", []):
-            if (
-                isinstance(record, dict)
-                and record.get("session_id") == session_id
-                and _matches_agent_key(record, target)
-            ):
+            if isinstance(record, dict) and matches(record):
                 state["released"].remove(record)
                 _prune_released(state, now)
                 entry = {k: v for k, v in record.items() if k != "released_at"}

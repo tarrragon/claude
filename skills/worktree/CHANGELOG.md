@@ -2,6 +2,12 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.10.0（2026-11-18）— 合併閘門加選匯入改動套件的其他 skill：
+- 改動落在某 skill 的頂層套件（skill 根或 `scripts/` 下帶 `__init__.py` 的目錄，如 `ticket_system`）時，掃描合併快照內其他帶 `tests/` 的 skill，有 .py 以行首（含縮排）`from`／`import` 匯入該套件者加選其套件。原本只掃 hooks／scripts，3.3.0 一次 `ticket_system/lib/version.py` 改動讓 version-release 的交叉核對測試紅燈，閘門沒跑到。
+- 閘門輸出新增一行 `[合併前測試] 跨 skill 匯入加選套件：skill:<名稱>（匯入 <套件名>）`。只比對套件不比對單檔模組；改動不在套件內時選擇結果不變。
+- 測試：`tests/test_merge_gate.py` 補 E1 對照（同一改動，有／無匯入者選出的套件不同）、閘門實跑印出理由，以及單檔同名、前綴相似名、無 pytest 測試的匯入者三個不加選的對照。
+- 對齊版號住址：`pyproject.toml` 的 `version` 由 1.0.0 改為 1.10.0。
+
 **Version**: 1.9.0（2026-11-17）— 合併閘門自動批次：
 - 取得名額的一筆（領導者）把佇列中可共存的分支併成一個候選，全批只跑一次所選套件（各成員套件的聯集）。每批最多 4 張，環境變數 `MERGE_GATE_BATCH_MAX` 可覆寫，設 1 即停用批次、恢復逐筆。可共存條件：同專案、同 target；改動檔（merge-base 到分支）與已入選者互不重疊，票面與 topic-assignments 不計；不含專案宣告檔；分支 head 與排隊時記錄的一致，且排隊者仍存活。
 - 候選以 commit-tree 依序組成鏈，每票各有自己的 merge commit 與合併訊息，整批以單次 CAS 寫入。鏈尾紅燈時對前綴對半測試：綠燈前綴先寫入，單一分支仍紅者拒絕並附失敗輸出，其餘照寫，整批不退回。

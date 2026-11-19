@@ -114,7 +114,7 @@ created: 2026-07-31
 |------|-----------|
 | `.claude/handoff/pending/` | 空目錄（`ls -la` 只有 `.` 與 `..`） |
 | `ticket resume --list` | 輸出「沒有下 session 建議項目」 |
-| worklog 最新下一站 | 停在 `v0.2.1-main.md:664`，指向的六張票中兩張已 completed |
+| worklog 最新下一站 | 停在 `v0.2.1-main.md` 的最新「下一站」段，指向的六張票中兩張已 completed |
 | commit `b530248` | subject 為「寫入交接 context 並更正 Context Bundle 的失效快照」，交接意圖在**內文首句**「交接準備」，非 subject |
 
 該票的 ticket body 同時具備完整交接章節（五項已查證事實表附重現指令、前提誤判史、執行前必答的三選項比較、範圍邊界、共用 repo 寫入注意事項）。內容完整度與指標存在與否完全無關，正是本模式的核心。

@@ -14,7 +14,7 @@ related: [PC-BAL-039]
 |------|-----|
 | 類別 | process-compliance |
 | 風險等級 | medium |
-| 發現時點 | 2026-08-10（flutter_balance 追查 canonical repo pattern 檔遺失時） |
+| 發現時點 | 2026-08-10（BAL 追查 canonical repo pattern 檔遺失時） |
 | 關聯 | PC-APP-002（宣稱與實際刪除脫節）、tarrragon/claude#63 |
 
 ## 摘要

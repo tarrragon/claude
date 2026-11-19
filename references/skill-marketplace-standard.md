@@ -116,7 +116,6 @@ your-skill/
 │   ├── core-concepts.md               # 通用深度內容（上架內容）
 │   └── project-integration/           # 專案落地層（不隨 skill 上架）
 │       ├── pm-rules-map.md            # 專案任務系統整合
-│       ├── triggers-alignment.yaml    # 專案 Hook 對齊
 │       └── case-studies.md            # 專案特定案例
 ```
 
@@ -181,7 +180,6 @@ wrap-decision skill 是獨立上架設計的參考實作。
 |------|------|------|
 | `SKILL.md` | 通用 | WRAP 框架定義、觸發條件、執行步驟 |
 | `references/project-integration/pm-rules-map.md` | 落地 | 本專案 PM 規則與 WRAP 步驟的對應表 |
-| `references/project-integration/triggers-alignment.yaml` | 落地 | 本專案 Hook 觸發與 WRAP 情境的對齊設定 |
 | `references/project-integration/case-studies.md` | 落地 | 本專案實際案例（含專案 ticket ID） |
 
 ### 5.3 缺席降級示範

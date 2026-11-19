@@ -105,7 +105,7 @@ List<Book> searchBooks(SearchCriteria criteria) { /* ... */ }
 | 規格文件 | `【規格】docs/spec/xxx.md#section`   | 連回設計細節           |
 | 相依模組 | `【相依】[ModuleA], [ModuleB]`       | 用命名引用，不解釋實作 |
 
-**禁止**：註解內放 ticket ID（如 `v1.2.3-W5-001`、`TKT-1234`），ticket 是臨時追蹤編號，會被搬移歸檔；需求編號（UC/BR）才是穩定索引。<!-- portability-allow: educational example of prohibited pattern -->
+**禁止**：註解內放 ticket ID（如 `v1.2.3-W5-001`、`TKT-1234`），ticket 是臨時追蹤編號，會被搬移歸檔；需求編號（UC/BR）才是穩定索引。<!-- portability-allow: educational example of prohibited pattern --> <!-- rule8-exempt: illustration:禁止寫法的反例 -->
 
 ---
 

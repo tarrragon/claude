@@ -2,7 +2,7 @@
 name: asd-ste100
 description: "Applies ASD-STE100 controlled-language principles (one term per concept, short sentences, active voice, can/will/must) as a language-agnostic core, then loads the en or zh-TW pack by output language. zh-TW discourse structure: compositional-writing."
 metadata:
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # ASD-STE100 受控寫作

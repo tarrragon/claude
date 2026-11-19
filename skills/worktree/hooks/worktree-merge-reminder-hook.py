@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.9"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Worktree Merge Reminder Hook - PostToolUse (Bash)
@@ -32,10 +32,11 @@ from lib import (
     read_json_from_stdin,
     is_subagent_environment,
     get_worktree_list,
-    get_uncommitted_files,
     FileStatus,
 )
+from lib.git_utils import GitStatusError, get_uncommitted_files_strict
 from lib.ticket_command_parse import has_complete_command
+from lib.reserved_branch import find_reservation, format_reserved_lines
 from lib.bash_tool_response import (
     FAILURE_EVENT_NAME, is_failure_event, auto_commit_failure_as_success,
 )
@@ -202,15 +203,23 @@ def get_dirty_files(path: str, logger) -> List[Tuple[str, str]]:
 
     Returns:
         (status_code, filename) tuple 列表；``git status --porcelain`` 的原始
-        兩字元狀態碼（如 ``"??"``、``" M"``、``"A "``）與檔名。無法判斷或無
-        變更時回傳空列表。
+        兩字元狀態碼（如 ``"??"``、``" M"``、``"A "``）與檔名。無變更時回傳
+        空列表；git status 失敗時回傳單筆哨兵項（保守視為 dirty）。
 
-    改用共用層 lib.git_utils.get_uncommitted_files(cwd=...)，
-    取代自行 subprocess + porcelain 解析；FileStatus 已封裝相同的
-    (status, file_path) 結構，取捨與 worktree-remove-deliverable-check-hook
-    的 _dirty_status 一致（不再區分 git 失敗與無變更，皆回傳空清單）。
+    改用共用層 lib.git_utils.get_uncommitted_files_strict(cwd=...)，
+    失敗拋 GitStatusError，本函式轉為哨兵項並寫 stderr 與日誌，
+    使失敗與乾淨不同形。
     """
-    return [(fs.status, fs.file_path) for fs in get_uncommitted_files(cwd=path)]
+    try:
+        statuses = get_uncommitted_files_strict(cwd=path)
+    except GitStatusError as exc:
+        # 失敗保守視為 dirty，不列為可清理（失敗與乾淨不可同形）；
+        # 哨兵項隨 dirty 清單進入 additionalContext 提醒（平常的提醒管道）
+        message = f"git status 失敗，dirty 判定已保守視為 dirty（cwd={path}）: {exc}"
+        logger.warning(message)
+        sys.stderr.write(f"[worktree-merge-reminder] {message}\n")
+        return [("??", f"(git status 失敗，無法判定是否 dirty: {exc})")]
+    return [(fs.status, fs.file_path) for fs in statuses]
 
 
 def is_worktree_dirty(path: str, logger) -> bool:
@@ -277,11 +286,27 @@ def main() -> int:
     # 分類：未合併 vs 已合併（ahead=0）
     unmerged, merged, in_progress = classify_worktrees(worktrees, logger)
 
-    if not unmerged and not merged and not in_progress:
+    # 保留中的分支（票為 pending）改列資訊，不進強制合併區塊
+    reserved = {}
+    still_unmerged = []
+    for item in unmerged:
+        ticket_id = find_reservation(item[1], None, logger)
+        if ticket_id:
+            reserved[item[1]] = ticket_id
+        else:
+            still_unmerged.append(item)
+    unmerged = still_unmerged
+
+    if not unmerged and not merged and not in_progress and not reserved:
         logger.info("所有 worktree 已合併且無需清理")
         return 0
 
     lines: List[str] = []
+
+    if reserved:
+        lines.append("[Worktree 保留分支資訊] 以下分支刻意保留，非本次須合併的進度：")
+        lines.extend(format_reserved_lines(reserved))
+        lines.append("")
 
     # 進行中派發：明示不建議清理，避免移除代理人進行中的工作區
     if in_progress:

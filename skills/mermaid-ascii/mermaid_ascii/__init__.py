@@ -6,4 +6,4 @@
 from .mermaid_ascii_renderer import MermaidAsciiRenderer, render_mermaid
 
 __all__ = ["MermaidAsciiRenderer", "render_mermaid"]
-__version__ = "1.0.0"
+__version__ = "1.1.2"

@@ -46,7 +46,7 @@ from typing import Iterable
 #
 # 類型 B - Local-only settings（各專案個別設定，不應跨專案同步）
 #   特徵：每個專案 preserve/狀態/覆蓋設定獨立管理
-#   範例：settings.local.json、sync-preserve.yaml、.sync-state.json
+#   範例：settings.local.json、.sync-state.json
 #
 # 類型 C - Session-bound log（本地產生的日誌/交接檔案）
 #   特徵：只對本機 session 有意義，無跨專案共用價值
@@ -57,12 +57,22 @@ from typing import Iterable
 #         push 時不推到框架/skills repo，pull 時亦不被上游覆蓋或當 stale 刪除。
 #         per-project 落地層本就不該被任一方向的同步動作觸碰。
 #   與類型 A/B/C 差異：A/B/C 不 git track（在 .gitignore 中）；E 要 git track
-#   範例：skills/*/references/project-integration/（per-project 落地層）
+#   範例：skills/*/references/project-integration/（per-project 落地層）、
+#         sync-preserve.yaml、sync-skills.yaml（consumer 的同步宣告）
 #
 # 新增機制時的 checklist 與決策流程見 .claude/references/sync-exclusion-guide.md
 
+# 要求 .gitignore 涵蓋的工具產物（Python 快取與虛擬環境）。具名拆出是為了讓
+# 「全部工具產物」可由本集合與 TOOL_ARTIFACT_PATTERNS 推導（見
+# ALL_TOOL_ARTIFACT_PATTERNS），sync-claude-pull 的備份排除即由此推導。
+GITIGNORED_TOOL_ARTIFACT_PATTERNS = frozenset({
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
+})
+
 # 本地專有名稱（類型 A/B/C + 工具產物）：sync 時不推送、不覆蓋、不納入 hash
-LOCAL_ONLY_PATTERNS = frozenset({
+LOCAL_ONLY_PATTERNS = GITIGNORED_TOOL_ARTIFACT_PATTERNS | frozenset({
     # 類型 C - Session-bound log
     "handoff",
     "hook-logs",
@@ -76,13 +86,9 @@ LOCAL_ONLY_PATTERNS = frozenset({
     "dispatch-active.lock",    # dispatch tracker advisory lock（.json 已排除，.lock 補齊）
     "scheduled_tasks.lock",    # scheduled tasks runtime lock（session-local）
     "hook-state",
-    # 工具產物（Python 快取，無跨專案共用價值）
-    "__pycache__",
-    ".pytest_cache",
-    ".venv",
+    # 工具產物（Python 快取）見 GITIGNORED_TOOL_ARTIFACT_PATTERNS，以聯集併入
     # 類型 B - Local-only settings
-    "sync-skills.yaml",    # 各專案選擇性 skill 同步設定（mode/include/private）
-    "sync-preserve.yaml",
+    # sync-skills.yaml、sync-preserve.yaml 已改歸類型 E（PER_PROJECT_PATTERNS），見該處
     ".sync-state.json",
     ".sync-conflicts",         # 三方合併衝突暫存目錄（pull/push 皆不同步，本地手動解決）
     "settings.local.json",
@@ -224,7 +230,45 @@ PER_PROJECT_PATTERNS = frozenset({
     # version-release CLI 專案配置（release workflow / tag 格式 / worklog 路徑
     # 皆 per-project，跨專案 sync 會以他專案設定覆蓋本專案；本專案 repo 內正常 track）
     ".version-release.yaml",
+    # consumer 的同步宣告：人寫的設定，要跟著 commit 走。gitignore 會讓它只存在建立它的
+    # checkout，新 clone 或 linked worktree 讀不到，preserve 保護與 private 排除因此失效。
+    "sync-skills.yaml",    # 選擇性 skill 同步設定（mode/include/private）
+    "sync-preserve.yaml",  # pull 不覆蓋、push 不推送的本地特化檔清單
+    # 同步基準點與版本 pin（lib/sync_base_store.py）：描述已提交內容對應的上游版本，
+    # 要跟著 commit 走；新 clone 讀得到 base 才能三方合併。
+    "sync-base.json",
 })
+
+# 前版要求 .gitignore 涵蓋、現已改歸類型 E 的名稱。consumer 的 .gitignore 若仍忽略它們，
+# 宣告檔就進不了版控；SessionStart gitignore 檢查與 project-init onboard 據此提示可移除。
+RETIRED_GITIGNORE_NAMES = frozenset({"sync-skills.yaml", "sync-preserve.yaml"})
+
+# 工具產物（不要求 .gitignore 涵蓋）：linter／typechecker 快取與覆蓋率報告。
+# push 以 git archive 只取 tracked 樹，這些產物本就推不出去；排除它們是讓
+# push clean-check 不把未追蹤的快取判為 dirty 而 abort、content hash 不把
+# 本機快取算進指紋、pull 不把本機快取當孤兒清理。
+# 刻意不進 GITIGNORE_EXPECTED：進了就會讓每個 consumer 的 SessionStart
+# gitignore 檢查多出缺項提示，而這些產物漏寫 .gitignore 也不會外洩。
+# 與 skill-sync cli.py TOOL_ARTIFACT_DIRS 的對應：
+#   - `build` 不列：本集合以路徑段比對、作用域是整個 .claude/，`build` 是通用
+#     目錄名，會誤排除 skill 內同名的正常目錄；skill-sync 作用域只到單一 skill
+#     目錄，誤傷面較小。
+#   - `<套件>.egg-info/` 以路徑段後綴比對（TOOL_ARTIFACT_DIR_SUFFIXES），不列在本集合。
+#   - `.venv`／`__pycache__`／`.pytest_cache` 在 LOCAL_ONLY_PATTERNS（已要求
+#     .gitignore 涵蓋，維持不動）；`hook-logs` 在 LOCAL_ONLY_PATTERNS 類型 C。
+TOOL_ARTIFACT_PATTERNS = frozenset({
+    ".ruff_cache",
+    ".mypy_cache",
+    "htmlcov",
+})
+
+# 以路徑段後綴比對的工具產物目錄（pip／uv build 產生的 <套件>.egg-info/）。
+TOOL_ARTIFACT_DIR_SUFFIXES = frozenset({".egg-info"})
+
+# 全部以名稱比對的工具產物（不論是否要求 .gitignore 涵蓋）。供只該排除工具產物、
+# 不該排除本地狀態的消費端推導，例如 sync-claude-pull 的備份：備份是給使用者
+# 手動還原用的，排除 LOCAL_ONLY 全集會讓還原時遺失 settings.local.json 等本地狀態。
+ALL_TOOL_ARTIFACT_PATTERNS = GITIGNORED_TOOL_ARTIFACT_PATTERNS | TOOL_ARTIFACT_PATTERNS
 
 # 副檔名排除（含憑證副檔名 .pem/.key/.p12/.pfx/.jks，類型 D 最高風險維度）
 EXCLUDE_SUFFIXES = frozenset({".pyc", ".pem", ".key", ".p12", ".pfx", ".jks"})
@@ -240,12 +284,14 @@ EXCLUDE_NAME_PREFIXES = frozenset({
 # ============================================================================
 
 # content hash 與 copy 共用的完整名稱黑名單：local-only + 敏感憑證 +
-# per-project tracked layer 皆須排除。經 should_exclude 消費後於 push
+# per-project tracked layer + 工具產物皆須排除。經 should_exclude 消費後於 push
 # （sync-claude-push.py / sync-claude-status.py）與 pull（sync-claude-pull.py
-# 的三方合併與 full overlay）雙向生效。三個成員集合各自的方向語意是否隨此
+# 的三方合併與 full overlay）雙向生效。四個成員集合各自的方向語意是否隨此
 # 組合保留，已個別於各自定義處註明（LOCAL_ONLY_PATTERNS/CREDENTIAL_PATTERNS
-# 本就雙向排除；PER_PROJECT_PATTERNS 見上方註解，同樣雙向）。
-SYNC_EXCLUDE_ALL = LOCAL_ONLY_PATTERNS | CREDENTIAL_PATTERNS | PER_PROJECT_PATTERNS
+# 本就雙向排除；PER_PROJECT_PATTERNS、TOOL_ARTIFACT_PATTERNS 見上方註解，同樣雙向）。
+SYNC_EXCLUDE_ALL = (
+    LOCAL_ONLY_PATTERNS | CREDENTIAL_PATTERNS | PER_PROJECT_PATTERNS | TOOL_ARTIFACT_PATTERNS
+)
 
 # .gitignore 必須涵蓋的 local-only 名稱（gitignore↔manifest 交叉驗證基準）。
 #
@@ -278,6 +324,26 @@ def required_gitignore_entries() -> frozenset[str]:
     """
     manifest_entries = {required_gitignore_entry(name) for name in GITIGNORE_EXPECTED}
     return frozenset(manifest_entries) | GITIGNORE_EXTRA_ENTRIES
+
+
+def retired_gitignore_lines(lines: Iterable[str]) -> list[str]:
+    """回傳 .gitignore 中仍在忽略 RETIRED_GITIGNORE_NAMES 的原始行（原樣、依出現順序）。
+
+    比對去掉前導 `/`、`.claude/`、`**/` 後的末段名稱，故 `.claude/**/sync-preserve.yaml`、
+    `.claude/sync-preserve.yaml`、`sync-preserve.yaml` 都算。註解、空行與 `!` 反向規則不算。
+    """
+    found = []
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith(("#", "!")):
+            continue
+        token = line.lstrip("/")
+        for prefix in (".claude/", "**/"):
+            if token.startswith(prefix):
+                token = token[len(prefix):]
+        if token in RETIRED_GITIGNORE_NAMES:
+            found.append(line)
+    return found
 
 
 def gitignore_probe_paths(entry: str) -> tuple[str, ...]:
@@ -436,7 +502,8 @@ def should_exclude(path: Path) -> bool:
       1. 檔名命中名稱黑名單（SYNC_EXCLUDE_ALL）——規則 4 的效能快速路徑，見下方說明
       2. 副檔名命中 EXCLUDE_SUFFIXES（含 .pem/.key 等憑證副檔名）
       3. 檔名前綴命中 EXCLUDE_NAME_PREFIXES（.env. / secret 變體）
-      4. 路徑任一目錄段命中名稱黑名單（排除整個 hook-state/ secrets/ 目錄）
+      4. 路徑任一目錄段命中名稱黑名單（排除整個 hook-state/ secrets/ 目錄），
+         或以 TOOL_ARTIFACT_DIR_SUFFIXES 結尾（<套件>.egg-info/）
       5. 路徑第一段命中 LOCAL_ONLY_ROOT_DIRS 或 PER_PROJECT_ROOT_DIRS（僅 root-anchored，避免誤殺 skill
          內部同名目錄如 skills/*/state/）
 
@@ -463,9 +530,50 @@ def should_exclude(path: Path) -> bool:
         return True
     if any(part.lower() in _SYNC_EXCLUDE_ALL_LOWER for part in path.parts):
         return True
+    if any(
+        part.lower().endswith(suffix)
+        for part in path.parts
+        for suffix in TOOL_ARTIFACT_DIR_SUFFIXES
+    ):
+        return True
     # root-anchored：僅第一段命中才排除（logs / state 通用名只在 .claude/ 根層為 runtime）
     parts = path.parts
     return bool(parts) and parts[0].lower() in _SYNC_EXCLUDE_ROOT_DIRS_LOWER
+
+
+def is_preserved(rel: str, preserve: set[str] | frozenset[str]) -> bool:
+    """判定相對 .claude/ 的檔案路徑是否受 sync-preserve.yaml 保護（push、pull 共用）。
+
+    清單項目有兩種寫法：
+    - 檔案路徑：與 rel 完全相同才命中。
+    - 目錄路徑（含或不含結尾 /）：rel 位於該目錄之下即命中。比對以 `<項目>/`
+      為前綴，`skills/foo` 不會誤命中 `skills/foobar/...`。
+
+    改前 push、pull 各處比對點都是 `rel in preserve` 精確比對，目錄項對其下檔案
+    永不命中（tarrragon/claude#50）。兩端共用本函式，判定不再分歧：pull 不覆寫、
+    push 不推送的是同一組檔案。
+    """
+    if rel in preserve:
+        return True
+    for entry in preserve:
+        prefix = entry.rstrip("/")
+        if prefix and rel.startswith(prefix + "/"):
+            return True
+    return False
+
+
+def preserve_touches_dir(rel_dir: str, preserve: set[str] | frozenset[str]) -> bool:
+    """preserve 清單是否有項目等於、位於其下或涵蓋 rel_dir 目錄。
+
+    供整批複製新目錄的捷徑判斷是否須改走逐檔判定（否則捷徑會繞過 is_preserved）。
+    """
+    for entry in preserve:
+        prefix = entry.rstrip("/")
+        if not prefix:
+            continue
+        if prefix == rel_dir or prefix.startswith(rel_dir + "/") or rel_dir.startswith(prefix + "/"):
+            return True
+    return False
 
 
 def should_exclude_on_pull(path: Path) -> bool:

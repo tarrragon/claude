@@ -2,19 +2,19 @@
 
 > **錯誤類別**：流程合規（代理人對既有規則的內化失敗）
 > **嚴重度**：中（不阻擋執行但污染框架文件，需手動修正）
-> **發現案例**：某次 DOC 票（mint 在 search-tools-guide SKILL.md 三刀流決策樹 ASCII 圖中用 ✓ 標記推薦工具）
+> **發現案例**：某次 DOC 票（mint 在 search-tools-guide SKILL.md 三刀流決策樹 ASCII 圖中用勾號類符號（U+2713）標記推薦工具）
 
 ---
 
 ## 症狀
 
-mint-format-specialist 派發完成 DOC 類 ticket 後，產出的 markdown 文件含 emoji 字元（如 ✓ U+2713），違反 `.claude/rules/core/language-constraints.md` 規則 3 禁用 emoji。具體場景：
+mint-format-specialist 派發完成 DOC 類 ticket 後，產出的 markdown 文件含 emoji 字元（如勾號類符號 U+2713），違反 `.claude/rules/core/language-constraints.md` 規則 3 禁用 emoji。具體場景：
 
 | 違規位置 | 違規字元 | mint 原意 |
 |---------|---------|----------|
-| ASCII 流程圖 `→ tool ✓` | ✓ (U+2713) | 標記推薦/支援工具 |
-| 表格 `[x] / ✅` | ✅ | 視覺完成標記 |
-| 標題或章節 `🎯 / 🔧 / ⚠️` | 各類 emoji | 視覺重點標記 |
+| ASCII 流程圖 `→ tool` 後接勾號 | 勾號類符號 (U+2713) | 標記推薦/支援工具 |
+| 表格 `[x]` 旁加勾選 emoji | 勾選方塊 emoji (U+2705) | 視覺完成標記 |
+| 標題或章節開頭加裝飾 emoji | 目標符號 (U+1F3AF)、工具符號 (U+1F527)、警告符號 (U+26A0) 等 | 視覺重點標記 |
 
 PM merge 前用 ripgrep 偵測（`rg "[\x{1F300}-\x{1F9FF}]|[\x{2600}-\x{27BF}]"`）才能發現，否則 emoji 進主線並污染框架文件。
 
@@ -28,9 +28,9 @@ mint-format-specialist 的職責定位是「format 修正與品質優化」，�
 
 | 行號 | 違規內容 | 替換為 |
 |------|---------|--------|
-| 103 | `→ codebase-memory-mcp (cbm) ✓` | `→ codebase-memory-mcp (cbm) [推薦]` |
-| 118 | `→ Serena ✓ （唯一支援）` | `→ Serena [唯一支援]` |
-| 123 | `→ codebase-memory-mcp ✓` | `→ codebase-memory-mcp [推薦]` |
+| 103 | `→ codebase-memory-mcp (cbm)` 後接勾號 (U+2713) | `→ codebase-memory-mcp (cbm) [推薦]` |
+| 118 | `→ Serena` 後接勾號 (U+2713) 與「（唯一支援）」 | `→ Serena [唯一支援]` |
+| 123 | `→ codebase-memory-mcp` 後接勾號 (U+2713) | `→ codebase-memory-mcp [推薦]` |
 
 PM 在 merge 前 emoji guard 偵測 3 處違規，用 Edit 工具替換並 fix commit（0847928b）。
 
@@ -49,7 +49,7 @@ PM 在 merge 前 emoji guard 偵測 3 處違規，用 Edit 工具替換並 fix c
 PreToolUse:Bash 偵測 `git commit` 命令時，若 staged diff 含 emoji range 字元且檔案在 `.claude/` 或 `docs/` 下，立即 warn / block。
 
 實作要點：
-- 偵測 unicode range：U+1F300-U+1F9FF (Misc Symbols + Pictographs) + U+2600-U+27BF (Dingbats，含 ✓)
+- 偵測 unicode range：U+1F300-U+1F9FF (Misc Symbols + Pictographs) + U+2600-U+27BF (Dingbats，含勾號 U+2713)
 - 豁免機制：commit message 含 `--allow-emoji` 或 ticket type 為實驗性（如 ANA + 引用第三方原文）
 - 對既有 emoji（如歷史 commit 留下的）：only block new additions in diff
 

@@ -152,25 +152,38 @@ class TestFileSizeGuardianState:
         return _load("file-size-guardian-hook.py")
 
     @pytest.mark.parametrize("start", ["main", "wt"])
-    def test_budget_state_path_under_main(self, repos, monkeypatch, mod, start):
+    def test_budget_state_path_under_main_split_by_scan_root(self, repos, monkeypatch, mod, start):
+        """狀態檔放在主 checkout 的 hook-logs，但依掃描根分檔：MAIN 與 WT 各一份。"""
         main, wt = repos
         _enter(monkeypatch, {"main": main, "wt": wt}[start])
-        assert mod._get_budget_state_path(wt) == (
-            _hook_logs(main) / "file-size-guardian" / "auto-load-budget-state.json")
+        state_dir = _hook_logs(main) / "file-size-guardian"
+        wt_path, main_path = mod._get_budget_state_path(wt), mod._get_budget_state_path(main)
+        assert wt_path.parent == state_dir and main_path.parent == state_dir
+        assert wt_path != main_path
+        assert wt_path.name.startswith("auto-load-budget-state-") and wt_path.suffix == ".json"
 
-    def test_delta_read_back_across_checkouts(self, repos, monkeypatch, mod, capsys):
-        """MAIN 先存總量；WT 啟動超標時讀到該值並輸出差值。"""
+    def test_e1_alternating_checkouts_compare_only_with_same_root(self, repos, monkeypatch, mod, capsys):
+        """E1：A（MAIN）與 B（WT）交替量測，差值只與同一掃描根的上次量測比較。
+
+        修改前兩根共用一份狀態檔：WT 第一次就讀到 MAIN 的 1000 並輸出差值（跨 checkout 汙染）。
+        """
         main, wt = repos
+        over = mod.AUTO_LOAD_BUDGET_TOKENS + 500
+        monkeypatch.setattr(mod, "measure_auto_load_budget", lambda root: (over, [("f.md", 1)]))
         _enter(monkeypatch, main)
         mod.save_budget_state(mod._get_budget_state_path(main), 1000)
+
         _enter(monkeypatch, wt)
-        monkeypatch.setattr(
-            mod, "measure_auto_load_budget",
-            lambda root: (mod.AUTO_LOAD_BUDGET_TOKENS + 500, [("f.md", 1)]))
         mod.report_auto_load_budget(wt, LOGGER)
-        out = capsys.readouterr().out
-        assert f"差值: +{mod.AUTO_LOAD_BUDGET_TOKENS + 500 - 1000} tokens" in out
-        assert (_hook_logs(main) / "file-size-guardian" / "auto-load-budget-state.json").exists()
+        assert "差值" not in capsys.readouterr().out  # WT 首次量測：沒有同根的上次值
+
+        _enter(monkeypatch, main)
+        mod.report_auto_load_budget(main, LOGGER)
+        assert f"差值: +{over - 1000} tokens" in capsys.readouterr().out  # 只比 MAIN 自己的 1000
+
+        _enter(monkeypatch, wt)
+        mod.report_auto_load_budget(wt, LOGGER)
+        assert "差值: +0 tokens" in capsys.readouterr().out  # WT 第二次：比 WT 自己的上次
         assert not (_hook_logs(wt) / "file-size-guardian").exists()
 
     def test_main_writes_report_log_to_main(self, repos, monkeypatch, mod, capsys):

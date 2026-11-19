@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.7.9（2026-11-19）— 測試輔助：`tests/conftest.py` 新增逐測試還原 cwd 與環境變數的 fixture（載入框架 lib 的 `process_state_restore`）。腳本與 skill 指令內容不變。
+
 **Version**: 1.7.8（2026-11-15）— 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；行為不變
 
 **Version**: 1.7.7（2026-11-11）— Step 6 補「票的關係」一行：規劃波建的執行期票為本版根票，不用 `--parent` 掛在規劃票下；理由與 `scope_blocker` 時點放在新增的 `references/step-rationale.md`〈規劃波票的關係〉（必要票由凍結程序回溯 `scope_blocker`，規劃票於凍結時結案）。SKILL.md 正文只加一行路由，論證外移以守 5000 tokens 門檻。來源：用戶裁定（2026-11-09），PC-091 落地路線加版本維度。

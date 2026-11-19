@@ -56,6 +56,10 @@ from lib.ticket_completed_verifier import make_completed_verifier, is_complete_t
 from lib.constants import SESSION_COMPLETED_TICKETS_COUNTER_TEMPLATE
 from lib.session_state_key import session_state_path
 
+# 主控辨識沿用 master_resume_hint 的 session 名稱解析（~/.claude/sessions 的 name 欄位，驗行程存活）
+sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "multi-session-orchestration" / "scripts"))
+from master_resume_hint import MASTER_NAME, session_name  # noqa: E402
+
 # ============================================================================
 # 常數定義
 # ============================================================================
@@ -86,6 +90,8 @@ SESSION_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 # 持有進行中的票時達 45% 建議 /compact；沒有進行中的票時達 30% 可 /clear
 LANE_T_COMPACT = 45
 LANE_T_CLEAR = 30
+# 主控的 /compact 門檻（同 contextJudge.ts 的 COORDINATOR_T_COMPACT）：主控長駐，不判 /clear
+COORDINATOR_T_COMPACT = 60
 
 # 完成成功標記（ticket CLI 輸出）
 COMPLETE_SUCCESS_MARKER = "已完成"
@@ -116,6 +122,27 @@ def read_counter(input_data: dict, logger=None) -> int:
         return int(counter_file.read_text().strip())
     except (ValueError, IOError):
         return 0
+
+
+def reset_counter_after_compact(input_data: dict, logger) -> None:
+    """SessionStart source=compact：刪除本 session 的計數檔，compact 後重新起算。
+
+    /compact 沿用同一 session_id，計數檔不刪會讓沒有用量檔的 session 在 compact 後每完成一張票都提醒；
+    /clear 會換新 session_id，計數本來就重新起算，不在此處理。刪除失敗時保留原計數（只是多提醒）。
+    """
+    counter_file = get_counter_file(input_data, logger)
+    if counter_file is None:
+        logger.info("compact 後：session_id 缺失，無計數器可清除")
+        return
+    try:
+        counter_file.unlink()
+    except FileNotFoundError:
+        logger.info("compact 後：無計數器檔，不需清除: %s", counter_file)
+        return
+    except OSError as e:
+        logger.warning("compact 後計數器刪除失敗，保留原計數: %s (%s)", counter_file, e)
+        return
+    logger.info("compact 後計數器已清除: %s", counter_file)
 
 
 def increment_counter(input_data: dict, logger=None) -> int:
@@ -187,6 +214,17 @@ def read_usage_record(input_data: dict, logger) -> Optional[dict]:
     return record
 
 
+def is_coordinator_session(input_data: dict, logger) -> bool:
+    """本 session 名為「主控」（同 line-board laneContextLabel 以名稱判定角色）；名稱解析不到或拋例外皆視為一般線。"""
+    try:
+        name = session_name(str(input_data.get("session_id") or ""))
+    except Exception as exc:  # 名稱解析失敗不得讓提醒整支失效：退回一般線門檻（較常提醒的一側）
+        logger.warning("session 名稱解析失敗，視為一般線: %s: %s", type(exc).__name__, exc)
+        return False
+    logger.info("session 名稱: %s", name)
+    return name == MASTER_NAME
+
+
 def is_pre_compact_measure(record: dict) -> bool:
     """用量是 compact 前的量測：phase 為 compacted 且 measuredAt 不晚於 phase.at（同 line-board isPreCompactMeasure）。
 
@@ -220,17 +258,26 @@ def usage_percent(record: dict, logger) -> Optional[float]:
 _RULE = "============================================================"
 
 
-def build_usage_warning(percent: float) -> Optional[str]:
-    """依實測用量建立提醒；未達 LANE_T_CLEAR 回傳 None（不提醒）。"""
+def _compact_warning(shown: int, threshold: int) -> str:
+    return (
+        f"{_RULE}\n"
+        f"[Session Context Guard] context 用量 {shown}%，已達 /compact 門檻（{threshold}%）\n"
+        f"{_RULE}\n"
+        f"建議：目前的票做到可交接點後，在本 session 執行 /compact，不換新 session。\n"
+        f"{_RULE}"
+    )
+
+
+def build_usage_warning(percent: float, is_coordinator: bool = False) -> Optional[str]:
+    """依實測用量建立提醒；不提醒時回傳 None。
+
+    主控只判 /compact（門檻 COORDINATOR_T_COMPACT）；一般線依 LANE_T_COMPACT／LANE_T_CLEAR。
+    """
     shown = round(percent)
+    if is_coordinator:
+        return _compact_warning(shown, COORDINATOR_T_COMPACT) if percent >= COORDINATOR_T_COMPACT else None
     if percent >= LANE_T_COMPACT:
-        return (
-            f"{_RULE}\n"
-            f"[Session Context Guard] context 用量 {shown}%，已達 /compact 門檻（{LANE_T_COMPACT}%）\n"
-            f"{_RULE}\n"
-            f"建議：目前的票做到可交接點後，在本 session 執行 /compact，不換新 session。\n"
-            f"{_RULE}"
-        )
+        return _compact_warning(shown, LANE_T_COMPACT)
     if percent >= LANE_T_CLEAR:
         return (
             f"{_RULE}\n"
@@ -302,6 +349,14 @@ def main() -> int:
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
+    # SessionStart（settings.json 以 matcher compact 註冊）：只清計數器，不輸出
+    if input_data.get("hook_event_name") == "SessionStart":
+        if input_data.get("source") == "compact":
+            reset_counter_after_compact(input_data, logger)
+        else:
+            logger.info("SessionStart source=%s，不清計數器", input_data.get("source"))
+        return EXIT_SUCCESS
+
     # PostToolUseFailure：僅結束碼 75（動作完成、auto-commit 失敗）沿用完成後處理
     event_name = "PostToolUse"
     if is_failure_event(input_data):
@@ -342,8 +397,12 @@ def main() -> int:
         return EXIT_SUCCESS
     percent = usage_percent(record, logger) if record is not None else None
     if percent is not None:
-        warning = build_usage_warning(percent)
-        logger.info("以用量判定：%s%%，%s", percent, "提醒" if warning else "未達門檻")
+        # 未達一般線最低門檻時兩種角色都不提醒，不必解析名稱（解析要跑 ps）
+        coordinator = percent >= LANE_T_CLEAR and is_coordinator_session(input_data, logger)
+        warning = build_usage_warning(percent, coordinator)
+        logger.info(
+            "以用量判定：%s%%（%s），%s", percent, "主控" if coordinator else "一般線", "提醒" if warning else "未達門檻"
+        )
     else:
         warning = build_count_warning(count)
         logger.info("以票數判定：%d 個 Ticket，%s", count, "提醒" if warning else "未達門檻")

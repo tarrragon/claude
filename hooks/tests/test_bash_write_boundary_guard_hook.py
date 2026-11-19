@@ -881,12 +881,12 @@ class TestReviewFixes:
     def test_cd_inside_subshell_still_applies_inside(self, checkout, logger):
         assert _scope("(cd lib && echo > x)", checkout, logger) == "lib/x"
 
-    # #6 pushd 視同 cd；cd - 無法判定
+    # #6 pushd 視同 cd；cd - 無法判定位移，相對字面落在受限頂層時判命中（TestCdVariableShift）
     def test_pushd_acts_like_cd(self, checkout, logger):
         assert _scope("pushd lib && echo > a", checkout, logger) == "lib/a"
 
     def test_cd_dash_is_undecidable(self, checkout, logger):
-        assert _scope("cd - && echo > lib/a", checkout, logger) is None
+        assert _scope("cd - && echo > a", checkout, logger) is None
 
     # #8 脫困指引
     def test_deny_message_has_escape_hint(self, monkeypatch, capsys):
@@ -1824,3 +1824,83 @@ class TestNodeEvalTargets:
     ])
     def test_allowed(self, cmd, checkout, logger):
         assert _scope(cmd, checkout, logger) is None
+
+
+class TestCdVariableShift:
+    """cd 目標為變數時的位移判定。
+
+    同命令字面賦值的變數展開為實際目錄；展開不了時，相對候選若字面落在受限頂層，
+    改判命中（不再整條判為 unresolvable 而放行）。"""
+
+    def test_cd_to_literal_assigned_var_then_python_write_denied(self, checkout, logger):
+        # 事發形態：heredoc 結束符獨占一行，子殼 ) 在下一行
+        cmd = "W=%s; (cd $W; %s\n)" % (checkout, _heredoc(
+            "p='.claude/skills/x/y.py'\nopen(p, 'w').write('x')"))
+        assert _scope(cmd, checkout, logger) == ".claude/skills/x/y.py"
+
+    def test_cd_to_literal_assigned_var_redirect_denied(self, checkout, logger):
+        assert _scope("W=%s; cd $W && echo x > lib/a" % checkout, checkout, logger) == "lib/a"
+
+    def test_cd_var_resolves_relative_to_its_value(self, checkout, logger):
+        # 變數值指向受限目錄時，相對的非受限字面也照實際位置判定
+        (checkout / ".claude" / "skills").mkdir(parents=True)
+        cmd = "S=%s/.claude/skills; cd $S && echo x > foo.py" % checkout
+        assert _scope(cmd, checkout, logger) == ".claude/skills/foo.py"
+
+    def test_cd_var_outside_checkout_relative_plain_allowed(self, checkout, logger):
+        assert _scope("W=/tmp; cd $W && echo x > out.txt", checkout, logger) is None
+
+    @pytest.mark.parametrize("cmd", [
+        "cd \"$(git rev-parse --show-toplevel)\" && echo x > .claude/a.py",
+        "cd $UNKNOWN && echo x > lib/a",
+        "cd - && echo > lib/a",
+    ])
+    def test_unresolved_cd_with_restricted_literal_denied(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is not None
+
+    @pytest.mark.parametrize("cmd", [
+        "cd $UNKNOWN && echo x > out.txt",
+        "cd $UNKNOWN && echo x > ../lib/a",
+        "cd $UNKNOWN && echo x > .claude/tool-results/a.txt",  # 豁免項
+    ])
+    def test_unresolved_cd_without_restricted_literal_allowed(self, cmd, checkout, logger):
+        assert _scope(cmd, checkout, logger) is None
+
+
+_OPAQUE_ARGV_WRITE = (
+    "import sys, pathlib\n"
+    "w = pathlib.Path(sys.argv[1])\n"
+    "def sub(rel, old, new):\n"
+    "    p = w / rel; t = p.read_text(encoding='utf-8')\n"
+    "    p.write_text(t.replace(old, new), encoding='utf-8')\n"
+    "sub('skills/x/a.md', 'a', 'b')"
+)
+
+
+class TestAssignmentValueAsClue:
+    """寫入目標無法常數化而改走命令 token 線索時，賦值 token 取 value 並展開同命令變數。
+
+    事發形態：W=<root>/.claude 換行後 python3 - "$W" heredoc，腳本在函式內以 w / rel 寫檔。"""
+
+    def _incident(self, value, sep="\n", body=_OPAQUE_ARGV_WRITE):
+        return "W=%s%spython3 - \"$W\" <<'PY'\n%s\nPY" % (value, sep, body)
+
+    @pytest.mark.parametrize("sep", ["\n", "; "])
+    def test_assignment_into_claude_denied(self, sep, checkout, logger):
+        assert _scope(self._incident("%s/.claude" % checkout, sep), checkout, logger) == ".claude"
+
+    def test_assignment_outside_checkout_allowed(self, checkout, logger):
+        assert _scope(self._incident("/tmp/scratch/.claude"), checkout, logger) is None
+
+    def test_read_only_script_allowed(self, checkout, logger):
+        body = "import sys, pathlib\nprint(pathlib.Path(sys.argv[1]).read_text())"
+        assert _scope(self._incident("%s/.claude" % checkout, body=body), checkout, logger) is None
+
+    def test_clue_via_other_variable_expanded(self, checkout, logger):
+        cmd = "R=%s; W=$R/.claude\npython3 - \"$W\" <<'PY'\n%s\nPY" % (checkout, _OPAQUE_ARGV_WRITE)
+        assert _scope(cmd, checkout, logger) == ".claude"
+
+    def test_log_targets_have_no_assignment_prefix(self, checkout):
+        targets = hook_module._extract_candidate_paths(self._incident("%s/.claude" % checkout))
+        assert not any(t.startswith("W=") for t in targets)
+        assert "%s/.claude" % checkout in targets

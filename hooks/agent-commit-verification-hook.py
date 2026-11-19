@@ -51,13 +51,17 @@ from lib import (
     get_hook_log_dir,
     read_json_from_stdin,
     get_worktree_list as shared_get_worktree_list,
-    get_uncommitted_files as shared_get_uncommitted_files,
     run_hook_safely,
 )
 # dispatch-active.json 查詢與 worktree/分支掃描皆為跨 worktree 全域狀態，
 # 用 git_utils 版 get_project_root（CLAUDE_PROJECT_DIR 導向，恆指主 repo），
 # 而非 lib.hook_base 的 worktree 感知版本（見 ARCH-BAL-020）
-from lib.git_utils import get_action_root, get_project_root
+from lib.git_utils import (
+    GitStatusError,
+    get_action_root,
+    get_project_root,
+    get_uncommitted_files_strict,
+)
 
 from lib.dispatch_tracker import get_active_dispatches
 
@@ -130,6 +134,9 @@ MSG_FEATURE_BRANCH_BODY = (
     "代理人的變更可能在這些分支上，請先合併再驗收：\n"
 )
 
+# 保留分支資訊訊息（刻意保留的跨版本分支，非本次須合併的進度）
+MSG_RESERVED_BRANCH_TITLE = "[保留分支資訊] 以下分支刻意保留，非本次須合併的進度"
+
 # PM 立即動作摘要訊息
 MSG_PM_ACTION_TITLE = "[PM 立即動作]"
 
@@ -182,6 +189,18 @@ class WorktreeItems(NamedTuple):
 # ============================================================================
 
 
+def _report_git_status_failure(
+    cwd: str, error: Exception, logger: logging.Logger
+) -> None:
+    """git status 失敗留痕（stderr + 日誌）；本 hook 為提醒類，失敗時跳過該項檢查。
+
+    失敗與「無未提交變更」不可同形：漏報時使用者須能看見原因。
+    """
+    message = f"git status 失敗，未提交檔案檢查已跳過（cwd={cwd}）: {error}"
+    logger.warning(message)
+    sys.stderr.write(f"[{HOOK_NAME}] {message}\n")
+
+
 def get_uncommitted_files(project_root: str, logger: logging.Logger) -> list[str]:
     """取得未 commit 的檔案清單（排除豁免路徑）
 
@@ -192,14 +211,17 @@ def get_uncommitted_files(project_root: str, logger: logging.Logger) -> list[str
 
     Args:
         project_root: 專案根目錄路徑
-        logger: Logger 實例（共用層失敗時內部靜默回傳空列表，不再區分
-            timeout/not-found/非零退出碼，三者皆與「無變更」同歸空列表——
-            對本 hook 而言結果一致：無檔案清單即不觸發警告）
+        logger: Logger 實例（git status 失敗時寫 warning 並同步 stderr，
+            回傳空列表跳過本項檢查，不阻擋其餘檢查）
 
     Returns:
         list[str]: 未 commit 的檔案路徑清單
     """
-    file_statuses = shared_get_uncommitted_files(cwd=project_root)
+    try:
+        file_statuses = get_uncommitted_files_strict(cwd=project_root)
+    except GitStatusError as exc:
+        _report_git_status_failure(project_root, exc, logger)
+        return []
     files = []
     for fs in file_statuses:
         if any(fs.file_path.startswith(prefix) for prefix in EXCLUDED_PATH_PREFIXES):
@@ -303,7 +325,11 @@ def get_worktree_uncommitted_files(
     """
     result: list[WorktreeItems] = []
     for wt_path, branch in worktrees:
-        file_statuses = shared_get_uncommitted_files(cwd=wt_path)
+        try:
+            file_statuses = get_uncommitted_files_strict(cwd=wt_path)
+        except GitStatusError as exc:
+            _report_git_status_failure(wt_path, exc, logger)
+            continue
         files = [
             fs.file_path
             for fs in file_statuses
@@ -510,6 +536,36 @@ def build_feature_branch_message(
         "先執行 git merge --abort 清理 MERGE_HEAD 殘局，再依 stderr 訊息修正"
         "後重試（合併本身已對 branch-verify 豁免，仍被擋通常是其他內容 guard）。"
     )
+    lines.append(MSG_SEPARATOR)
+    return "\n".join(lines)
+
+
+def _drop_reserved(
+    items: list,
+    branch_of: Callable,
+    reserved_out: dict[str, str],
+    logger: logging.Logger,
+) -> list:
+    """濾掉保留中的分支項目（票為 pending），保留者記入 reserved_out。"""
+    from lib.reserved_branch import find_reservation
+
+    kept = []
+    for item in items:
+        branch = branch_of(item)
+        ticket_id = find_reservation(branch, None, logger)
+        if ticket_id:
+            reserved_out[branch] = ticket_id
+        else:
+            kept.append(item)
+    return kept
+
+
+def build_reserved_branch_message(reserved: dict[str, str]) -> str:
+    """建構保留分支資訊訊息（資訊行，無強制字樣與合併建議）。"""
+    from lib.reserved_branch import format_reserved_lines
+
+    lines = [MSG_SEPARATOR, MSG_RESERVED_BRANCH_TITLE, MSG_SEPARATOR, ""]
+    lines.extend(format_reserved_lines(reserved))
     lines.append(MSG_SEPARATOR)
     return "\n".join(lines)
 
@@ -841,6 +897,11 @@ def main() -> None:
     # 檢查 worktree 未合併 commit
     unmerged_worktrees = get_unmerged_worktrees(str(action_root), logger, all_worktrees)
     worktree_branch_names = {wt.branch for wt in unmerged_worktrees}
+    # 保留中的分支（票為 pending）不列強制合併，另列資訊行
+    reserved_branches: dict[str, str] = {}
+    unmerged_worktrees = _drop_reserved(
+        unmerged_worktrees, lambda wt: wt.branch, reserved_branches, logger,
+    )
     if unmerged_worktrees:
         has_unmerged_worktrees = True
         first_unmerged_branch = unmerged_worktrees[0].branch
@@ -855,6 +916,11 @@ def main() -> None:
     unmerged_branches = get_unmerged_feature_branches(
         str(action_root), logger, worktree_branch_names,
     )
+    unmerged_branches = _drop_reserved(
+        unmerged_branches, lambda item: item[0], reserved_branches, logger,
+    )
+    if reserved_branches:
+        messages.append(build_reserved_branch_message(reserved_branches))
     if unmerged_branches:
         has_unmerged_branches = True
         if not first_unmerged_branch:

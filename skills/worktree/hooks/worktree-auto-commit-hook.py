@@ -46,7 +46,8 @@ _CLAUDE_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_CLAUDE_DIR))
 sys.path.insert(0, str(_CLAUDE_DIR / "hooks"))
 
-from lib import setup_hook_logging, run_hook_safely, get_uncommitted_files, FileStatus
+from lib import setup_hook_logging, run_hook_safely, FileStatus
+from lib.git_utils import GitStatusError, get_uncommitted_files_strict
 # 逾時溫和終止（行程群組 SIGTERM 後 SIGKILL）的單一實作在 lib；沿用原名使測試可 patch 本模組屬性
 from lib.git_utils import run_with_graceful_timeout as _run_with_graceful_timeout
 
@@ -221,7 +222,7 @@ def get_changed_files(logger) -> "list[str]":
     （特殊字元路徑）為本 hook 特有需求，收斂後保留於此層。
     """
     try:
-        file_statuses = get_uncommitted_files()
+        file_statuses = get_uncommitted_files_strict()
         files = []
         for fs in file_statuses:
             path = fs.file_path.strip()
@@ -232,6 +233,11 @@ def get_changed_files(logger) -> "list[str]":
             if path:
                 files.append(path)
         return files
+    except GitStatusError as exc:
+        message = f"git status 失敗，自動提交已跳過（cwd={Path.cwd()}）: {exc}"
+        logger.warning(message)
+        sys.stderr.write(f"[{HOOK_NAME}] {message}\n")
+        return []
     except subprocess.TimeoutExpired:
         logger.warning("git status 逾時")
         return []

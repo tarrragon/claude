@@ -42,12 +42,10 @@ from typing import Optional, Set
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_hook_log_dir
-    from lib import framework_paths
-except ImportError as e:
-    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    sys.exit(0)
+# import 期失敗不攔截：例外照常拋出，直譯器以 exit 1 結束（不阻擋），
+# runtime 記為 non-blocking error、relay 轉告模型（hook-system-operations〈輸出規範〉）
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_hook_log_dir
+from lib import framework_paths
 
 
 # 常數：路徑與檔名

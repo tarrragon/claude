@@ -51,8 +51,9 @@ def _setup(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     monkeypatch.setattr(pull, "_validate_environment", lambda _p: None)
     monkeypatch.setattr(
         pull, "_clone_and_backup",
-        lambda root, confirm_overlay=False: (
-            upstream, pull._sync_with_backup(root, upstream, confirm_overlay)
+        lambda root, confirm_overlay=False, bump_target=pull._BUMP_NOT_SET: (
+            upstream,
+            pull._sync_with_backup(root, upstream, confirm_overlay, bump_target),
         ),
     )
     monkeypatch.setattr(pull, "_update_project_templates", lambda *_a, **_k: None)
@@ -87,7 +88,7 @@ def _run_main(capsys) -> tuple[int, str]:
 
 
 def _base_written(project_root: Path) -> bool:
-    state = project_root / ".claude" / ".sync-state.json"
+    state = project_root / ".claude" / "sync-base.json"
     return state.exists() and "last_synced_base_sha" in json.loads(state.read_text("utf-8"))
 
 
@@ -101,7 +102,8 @@ def test_eof_aborts_nonzero_without_success_or_base(tmp_path, monkeypatch, capsy
     monkeypatch.setattr("builtins.input", _eof)
     rc, out = _run_main(capsys)
 
-    assert rc != 0
+    assert rc == 1
+    assert rc != pull.EXIT_CONFIRM_REQUIRED
     assert SUCCESS_MSG not in out
     assert "拉取已中止" in out and "重跑" in out
     assert not _base_written(project_root)
@@ -127,7 +129,7 @@ def test_declined_answers_abort_nonzero(tmp_path, monkeypatch, capsys, answer) -
     _tty(monkeypatch, True)
     monkeypatch.setattr("builtins.input", lambda *_a, **_k: answer)
     rc, out = _run_main(capsys)
-    assert rc != 0
+    assert rc == 1
     assert SUCCESS_MSG not in out
     # 互動終端機拒絕不是「等確認」，command 不得據此帶旗標重跑
     assert CONFIRM_NEEDED_SIGNATURE not in out
@@ -148,7 +150,7 @@ def test_non_tty_without_flag_errors_naming_flag(tmp_path, monkeypatch, capsys) 
     )
     rc, out = _run_main(capsys)
 
-    assert rc != 0
+    assert rc == pull.EXIT_CONFIRM_REQUIRED
     assert CONFIRM_NEEDED_SIGNATURE in out
     assert "--confirm-overlay" in out
     assert SUCCESS_MSG not in out
@@ -189,7 +191,7 @@ def test_non_tty_flag_vs_no_flag_products_differ(tmp_path, monkeypatch, capsys) 
         )
 
     assert results["no_flag"] != results["flag"]
-    assert results["no_flag"] == (1, False, False, "old\n")
+    assert results["no_flag"] == (pull.EXIT_CONFIRM_REQUIRED, False, False, "old\n")
     assert results["flag"] == (0, True, True, "keep\n")
 
 
@@ -205,4 +207,21 @@ def test_tty_without_flag_still_prompts(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setattr("builtins.input", _record)
     rc, _ = _run_main(capsys)
     assert prompts and "[y/N]" in prompts[0]
-    assert rc != 0
+    assert rc == 1
+
+
+def test_confirm_required_exit_code_is_dedicated() -> None:
+    """專屬碼避開 0（成功）、1（其他中止）、2（argparse 參數錯誤）。"""
+    assert pull.EXIT_CONFIRM_REQUIRED not in (0, 1, 2)
+
+
+def test_other_abort_stays_exit_1(tmp_path, monkeypatch, capsys) -> None:
+    """E1 對照：非確認類中止（BaseBlobReadError）維持 1。"""
+    _setup(tmp_path, monkeypatch)
+
+    def _boom(*_a, **_k):
+        raise pull.BaseBlobReadError("a" * 40, "rules/keep.md", b"read failed")
+
+    monkeypatch.setattr(pull, "_clone_and_backup", _boom)
+    rc, _ = _run_main(capsys)
+    assert rc == 1

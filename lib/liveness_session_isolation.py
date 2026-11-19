@@ -39,6 +39,8 @@ SHARED_ROOT_KEY = "__shared_root__"
 REAL_ROOT_KEY = "__real_root__"
 TEST_RUN_KEY = "__test_run__"
 ENV_TEST_RUN = "HOOK_LIVENESS_TEST_RUN"
+# 與 hook_logging.WRITE_LEDGER_NAME 同值（本模組不 import hook_logging，避免循環依賴）
+WRITE_LEDGER_STEM = "_write-ledger"
 
 
 def _resolve_shared_root(real_root: Path) -> Path:
@@ -162,6 +164,8 @@ def diff_snapshots(before: dict, after: dict, real_session_id) -> List[str]:
             continue
         stem = bare[len("_liveness/"):].rsplit(".", 1)[0]
         if stem.startswith(SESSION_ID_PREFIX):
+            leaks.append(key)
+        elif stem == WRITE_LEDGER_STEM and _appended_has_test_run(key, before, after):
             leaks.append(key)
         elif real_session_id and stem == real_session_id and _appended_has_test_run(key, before, after):
             leaks.append(key)

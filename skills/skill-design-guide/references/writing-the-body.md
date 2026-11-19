@@ -1,4 +1,4 @@
-# 嚴禁清單 / Body 寫作 / Claude Code 特有功能 / 一則完整走查
+# 嚴禁清單 / Body 寫作 / 版號規則 / Claude Code 特有功能 / 一則完整走查
 
 > 何時讀：寫或修 SKILL.md 正文時——骨架、內容品質、什麼不該放進去、引用形式（skill 內用相對路徑、指向外部用指名身分）、字串替換與動態 context 注入。**亦由此進入**——`SKILL.md`〈發布前檢查清單〉的「結構」與「Body」兩組（尤其外部引用的機械檢查）；`creating-and-adopting-skills.md`〈Step 4：撰寫內容〉的 4c（寫 body）；`splitting-an-existing-skill.md` 的結構約定（拆完要照本檔的引用規則重寫指標）。
 >
@@ -6,7 +6,7 @@
 >
 > 溯源：自 SKILL.md 搬移（v1.6.0，因兩個官方門檻皆超標）。
 
-本檔章節：〈嚴禁清單 — 什麼不該放進 Skill〉〈Body 寫作〉（內含〈外部引用：指名身分，不用檔案路徑〉）〈Claude Code 特有功能〉〈一則完整走查：兩個判斷標準只有一個附了可執行動作〉。
+本檔章節：〈嚴禁清單 — 什麼不該放進 Skill〉〈Body 寫作〉（內含〈外部引用：指名身分，不用檔案路徑〉）〈版號規則：合併時才取號〉〈Claude Code 特有功能〉〈一則完整走查：兩個判斷標準只有一個附了可執行動作〉。
 
 ## 嚴禁清單 — 什麼不該放進 Skill
 
@@ -19,14 +19,14 @@
 | `README.md`（任何層級，含 `references/` 子目錄） | 給人看的入口；AI 經 SKILL.md 進入，README 只是冗餘 | 資料夾用途透過檔名自說明，或在 SKILL.md「參考文件」段落索引 |
 | `INSTALLATION_GUIDE.md` | 安裝是平台職責，非 skill 工作 | 放專案根目錄文件 |
 | `QUICK_REFERENCE.md` | 與 SKILL.md 必有重複 | 直接寫進 SKILL.md 或 reference 檔 |
-| `CHANGELOG.md` | **本專案不禁止**——見下方查證段 | 保留；版號協定見專案的 skill 同步規範 |
+| `CHANGELOG.md` | **本專案不禁止**——見下方查證段 | 保留；版號住址與取號時點見本檔〈版號規則：合併時才取號〉 |
 | 設計過程紀錄 / 測試報告 | 開發 artifact，非 runtime 需要 | 放專案 worklog 系統 |
 
 **Why**：SKILL.md 是 Claude 進入 skill 的唯一入口，與它平行的檔案若無路由訊號就不會被讀到，卻仍佔目錄的辨識成本；給人看而 AI 不會讀的文件屬此類。
 
 **本表的官方依據到哪為止（2026-09-04 查證）**：官方 best-practices **未禁止**任何額外檔案，且明文相反——「Reference files, data, or documentation don't consume context tokens until actually read」「Bundle comprehensive resources: include complete API docs, extensive examples, large datasets; no context penalty until accessed」；其示範目錄即為 `SKILL.md` 與 `FORMS.md`／`reference.md`／`examples.md` 平鋪。故本表是**本地判斷**，理由是目錄辨識成本而非 context 成本，且僅對「AI 不會讀到的檔案」成立。
 
-`CHANGELOG.md` 因此不在禁止之列：本專案的 skill 走 git 同步、有跨 consumer 版號協定（版號有兩個住址——CHANGELOG 首條與 frontmatter 的 `metadata.version`），它是該協定的載體而非給人看的附錄。本庫的 skill 一律帶著它，缺漏由 `skill-residue-check-hook.py` 在 SessionStart 掃出。
+`CHANGELOG.md` 因此不在禁止之列：本專案的 skill 走 git 同步、有跨 consumer 版號協定（權威是 frontmatter 的 `metadata.version`，CHANGELOG 首條是必備的衍生住址，見本檔〈版號規則：合併時才取號〉），它是該協定的載體而非給人看的附錄。本庫的 skill 一律帶著它，缺漏由 `skill-residue-check-hook.py` 在 SessionStart 掃出。
 
 ### 禁止的內容
 
@@ -138,6 +138,38 @@ description: [...]
 > 本節條文寫成後隨即套回本文件自身，抓到三處違規（Opinionated Defaults 的詳細版路由、延伸閱讀表兩列），已改為指名。**寫完條文與用條文掃過自己是兩個動作**，`SKILL.md`〈發布前檢查清單〉的機械檢查即為此而設。
 >
 > **但這一次的自我套用只跑了本節這一條規則。** 後續審查在同一份文件裡另抓到多處違反**其他**條文的地方（本節起手句原寫「三類例外」而底下實列四項、本檔 100+ 行卻無 TOC）。自我套用的單位不是「我剛寫的那一條」，是**這份文件的全部條文 × 這份文件的全部內容**；留下一句自我套用的宣告，會讓後續審查不再查這一節，其餘條文對它的違規因此拿到永久豁免。
+
+## 版號規則：合併時才取號
+
+**原則：版號的大小順序必須等於內容的包含順序。** 版號較大的版本，必須包含所有版號較小版本的變更。同步工具與讀者都依「版號較大即較新、較完整」判斷該取哪一份；這個前提一旦不成立，較大的版號會蓋掉較小版號才有的變更，而且外觀上看不出來。
+
+**版號住址：一個權威，其餘是衍生。** 權威是 SKILL.md frontmatter 的 `metadata.version`；同步工具顯示的版號、sync-pull 解版號衝突時讀寫的版號都取這一處。衍生住址必須與權威相等：
+
+| 衍生住址 | 何時存在 |
+|---------|---------|
+| `CHANGELOG.md` 最上方條目的行首 `**Version**:` | 每個 skill 都有，條目以行首 `**Version**: <版號>` 開頭 |
+| `pyproject.toml` 的 `[project].version` | 帶 Python 套件的 skill |
+| 套件 `__init__.py` 的 `__version__` | 套件有宣告時 |
+| `.claude-plugin/plugin.json` 的 `version` | skills 目錄 plugin |
+
+- **Why**：住址各自維護時，只改其中一處就會分歧，而且分歧讀起來都像合法版號。讀不同住址的工具會對同一個 skill 顯示不同版號，「內容變了、版號沒升」的推送警告也會讀到錯的那一份。
+- **Consequence**：分歧或讀不出版號（缺 CHANGELOG、首條不是行首 `**Version**:`、檔案無法解析）都會讓框架測試 `lib/tests/test_skill_version_diff.py` 的真實目錄一致性檢查紅燈，合併閘門擋下。
+- **Action**：進版號時，權威與所有衍生住址在同一次變更中一起改。紅燈時以 `metadata.version` 為準補齊衍生住址。sync-pull 自動解版號衝突後只改 `metadata.version`，也會出現這種分歧，處置相同。
+
+**取號時點**：並行修改同一個 skill 時，不在派發或開工時預留版號，要在合併進主線時才取號。
+
+| 做法 | 後果 |
+|------|------|
+| 派發時預留版號（甲票取 1.5.0、乙票取 1.6.0） | 乙先合併時，主線上 1.6.0 不含甲的變更；甲之後以 1.5.0 合入，版號倒退，或者兩者都留下，但 1.6.0 不是 1.5.0 的超集 |
+| 合併時才取號（後合併者以主線當下的版號為基準再進一號） | 版號順序等於合併順序，也等於內容包含順序 |
+
+**Action**：
+
+1. 開工時照常在分支內進版號，讓分支內的版號一致性測試可以跑。
+2. 合併前先把最新的主線合進自己的分支。如果主線上同一 skill 的版號已經前進，就以主線的版號為基準重新取號，重寫自己那一條 CHANGELOG 條目的版號，並把所有住址一起改。
+3. CHANGELOG 條目依合併順序排列：後合併的條目放在最上方。
+
+**與批次合併的關係**：改同一個 skill 的多張票，一定都會改到 CHANGELOG 首條與 `metadata.version`，所以這兩處在檔案層級必然重疊。這類「只有版號與 CHANGELOG 重疊」的票能否合成一批、衝突怎麼解，由專案的並行派發規則（同檔排程與批次合併條件）判定；本節只規定版號取哪個值。
 
 ## Claude Code 特有功能
 

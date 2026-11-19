@@ -547,3 +547,39 @@ class TestPerDriftFixGuidance:
         guard_hook.print_warnings(_lines_for("ghosts", ["0.0.1"]))
         out = capsys.readouterr().out
         assert "建議：校準 docs/todolist.yaml，或補建缺漏版本條目" not in out
+
+
+class TestLegacyClosedTicketConfig:
+    """豁免名單由專案設定提供（E1：有設定與無設定對照）"""
+
+    EXEMPT_ID = "9.9.9-W1-001"
+    CLOSED = [{"id": "9.9.9-W1-001", "close_reason": "completed"}]
+
+    @staticmethod
+    def _config_path(root):
+        cfg_dir = root / ".claude" / "project-integration"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        return cfg_dir / "version-tracking-legacy-closed-tickets.txt"
+
+    def test_with_config_ticket_is_exempt_without_config_it_is_flagged(self, tmp_path, logger):
+        self._config_path(tmp_path).write_text("# 註解\n\n9.9.9-W1-001\n", encoding="utf-8")
+        exempt = guard_hook.load_legacy_closed_ticket_ids(tmp_path, logger)
+        assert exempt == frozenset({self.EXEMPT_ID})
+        assert guard_hook.detect_closed_ticket_anomalies(self.CLOSED, exempt) == []
+
+        empty_root = tmp_path / "empty"
+        empty_root.mkdir()
+        none = guard_hook.load_legacy_closed_ticket_ids(empty_root, logger)
+        assert none == frozenset()
+        assert guard_hook.detect_closed_ticket_anomalies(self.CLOSED, none) != []
+
+    def test_missing_file_is_silent(self, tmp_path, logger, capsys):
+        assert guard_hook.load_legacy_closed_ticket_ids(tmp_path, logger) == frozenset()
+        captured = capsys.readouterr()
+        assert captured.err == "" and captured.out == ""
+
+    def test_unreadable_file_falls_back_to_empty_with_warning(self, tmp_path, logger, capsys):
+        cfg = self._config_path(tmp_path)
+        cfg.write_bytes(b"\xff\xfe\x00bad")
+        assert guard_hook.load_legacy_closed_ticket_ids(tmp_path, logger) == frozenset()
+        assert str(cfg) in capsys.readouterr().err

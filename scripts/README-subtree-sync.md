@@ -42,7 +42,7 @@ push 以 `git archive HEAD -- .claude` 取 git tracked 樹，再依 `should_excl
 |-----|------|------|------|
 | `.claude/` 一般檔案 | 推送 | 拉取覆蓋 | 跨專案共用框架資產 |
 | `settings.local.json` | **排除**（`EXCLUDE_PATTERNS`） | **不覆蓋**（`LOCAL_ONLY`） | 各專案個別權限設定，自行管理 |
-| `sync-preserve.yaml`、`.sync-state.json` | 排除 | 不覆蓋 | 各專案本地同步狀態 |
+| `sync-preserve.yaml`、`sync-base.json`、`.sync-state.json` | 排除 | 不覆蓋 | 各專案同步狀態（前兩者進 git，`.sync-state.json` 只在本機） |
 | Runtime state（`dispatch-active.json`、`hook-state/` 等） | 排除 | 不覆蓋 | 本 session 狀態，跨專案會污染 |
 | Session log（`hook-logs/`、`handoff/` 等） | 排除 | 不覆蓋 | 僅本機有意義 |
 | 敏感憑證（`.env*`、`secrets.*`、`.keys` 等） | 排除 | — | 嚴禁推送至公開 repo |
@@ -65,7 +65,7 @@ push 以 `git archive HEAD -- .claude` 取 git tracked 樹，再依 `should_excl
 
 | 項目 | 說明 |
 |------|------|
-| 儲存位置 | 各專案本地 `.sync-state.json` 的 `last_synced_base_sha` 欄位 |
+| 儲存位置 | 各專案 `.claude/sync-base.json` 的 `last_synced_base_sha` 欄位（進 git，與 `pinned_version` 同檔）；該檔缺值時回退讀舊位置 `.sync-state.json`，下次成功的 pull 或 push 搬過去 |
 | 語意 | 上次成功同步時的上游（遠端 `.claude` repo）HEAD commit SHA，作為下次三方合併的共同祖先（base） |
 | 單一欄位約束 | push / pull / status 三腳本共用**單一** `last_synced_base_sha`，**禁雙欄位**（不分 push/pull 各記一個），**禁對 commit SHA 用 `max()`**（commit SHA 非單調可比較）。多視角審查 H1 防護 |
 | 同步範圍 | 此欄位列於本地同步狀態，**不推送、不被覆蓋**（屬各專案本地狀態，見上方排除表） |
@@ -191,7 +191,7 @@ Windows 執行 sync-push 時 git 對新增檔案的 mode 處理與 macOS/Linux �
 ### 前置確認
 
 - [ ] 確認 sync-pull 腳本本身可執行（bootstrap 問題：腳本自身 import 可能已斷裂，需先手動修正）
-- [ ] 確認 `.claude/.sync-state.json` 含 `last_synced_base_sha`（缺少時 sync-pull 退化為 full overlay）
+- [ ] 確認 `.claude/sync-base.json`（或舊位置 `.claude/.sync-state.json`）含 `last_synced_base_sha`（缺少時 sync-pull 退化為 full overlay）
 - [ ] 備份：`git stash` 或確認 working tree 乾淨
 
 ### sync-pull 後驗證

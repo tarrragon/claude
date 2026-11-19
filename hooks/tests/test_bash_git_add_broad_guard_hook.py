@@ -68,7 +68,7 @@ def _run_hook(
     stdin_buffer = io.StringIO(json.dumps(payload))
     monkeypatch.setattr(sys, "stdin", stdin_buffer)
     monkeypatch.setattr(
-        hook_module, "get_uncommitted_files", lambda cwd=None: uncommitted or []
+        hook_module, "get_uncommitted_files_strict", lambda cwd=None: uncommitted or []
     )
     monkeypatch.setattr(hook_module, "_is_target_worktree", lambda cwd: is_worktree)
     return main()
@@ -550,3 +550,30 @@ class TestTargetRepoResolution:
         plain.mkdir()
         assert self._run(monkeypatch, dirty, f"(cd {plain} && git add -A)") == 2
         assert self._run(monkeypatch, clean, f"(cd {plain} && git add -A)") == 0
+
+
+# ============================================================================
+# 3.4.0-W1-328：git status 失敗時 fail-closed（正向對照）與成功無變更放行（反向對照）
+# ============================================================================
+
+
+class TestGitStatusFailureFailClosed:
+    def test_status_failure_denies_with_reason_and_retry(self, monkeypatch, capsys):
+        payload = {"tool_name": "Bash", "tool_input": {"command": "git add ."}}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        monkeypatch.setattr(hook_module, "_is_target_worktree", lambda cwd: False)
+
+        def _raise(cwd=None):
+            raise hook_module.GitStatusError("fatal: not a git repository")
+
+        monkeypatch.setattr(hook_module, "get_uncommitted_files_strict", _raise)
+
+        assert main() == 2
+        err = capsys.readouterr().err
+        assert "git status 執行失敗" in err
+        assert "fatal: not a git repository" in err
+        assert "重試" in err
+
+    def test_status_success_clean_still_allows(self, monkeypatch):
+        """反向對照：git status 成功且無變更仍放行。"""
+        assert _run_hook(monkeypatch, "git add .", uncommitted=[]) == 0

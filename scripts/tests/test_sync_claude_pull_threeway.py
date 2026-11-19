@@ -85,9 +85,10 @@ def test_write_base_sha_merges_existing(tmp_path):
         json.dumps({"last_push_hash": "keepme"}), encoding="utf-8"
     )
     pull.write_base_sha(claude, "newsha999")
+    base = json.loads((claude / "sync-base.json").read_text(encoding="utf-8"))
+    assert base["last_synced_base_sha"] == "newsha999"
     data = json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
-    assert data["last_synced_base_sha"] == "newsha999"
-    assert data["last_push_hash"] == "keepme"  # 既有欄位保留
+    assert data == {"last_push_hash": "keepme"}  # 本機欄位保留在原檔
 
 
 # ============================================================================

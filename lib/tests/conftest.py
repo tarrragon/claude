@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from lib import liveness_session_isolation as _liveness_iso
+from lib.process_state_restore import process_state_guard  # noqa: F401  逐測試還原 cwd/environ
 
 _STATE = {"root": None, "patch": None}
 

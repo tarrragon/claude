@@ -1,6 +1,12 @@
 # ticket 版本紀錄
 
-新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
+新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
+
+**Version**: 2.54.2（2026-11-18）— append-log 補寫不再落進 CLI 寫入的子節：
+- `append-log`（非 `--replace`）在章節已有實質內容時，原本把新內容附加在章節尾端。章節尾端是 dispatch 寫入的〈派發日誌〉〈Commit 規範〉或 create 寫入的〈查重紀錄〉時，沒有自己標題的補寫落進該子節：分析先行檢查點判定前剝除整個子節，補寫不被計入，照 deny 訊息的指引補寫後仍持續被擋；dispatch 冪等覆寫〈Commit 規範〉時，落在其中的補寫也會被刪除。改為插在第一個這類子節之前，與 `--replace` 的排列一致；章節沒有這類子節時仍附加在尾端。只對 Problem Analysis 生效（CLI 只在此章節寫入這三個子節），其他章節即使有人寫的同名標題也照舊附加在尾端。既有票中已落進子節的補寫不會遷移，仍會被檢查點剝除；要救回須以 `append-log --replace` 重寫該章節。
+- 插入邏輯放在 `ticket_system/lib/managed_subsections.py` 的 `insert_before_generated`，與子節清單同處，hook 環境可匯入。`references/track-command-update.md` 的 append-log 說明同步。
+- 測試：新增 `tests/test_append_log_inserts_before_generated.py`（dispatch 形態、查重紀錄形態、無子節的 E1 對照、連續兩次補寫的順序）；hooks 的檢查點測試補「補寫後放行、舊落點仍 deny」對照。
+- 對齊版號住址：`SKILL.md` frontmatter 的 `metadata.version` 由 2.54.1 補到 2.54.2，`pyproject.toml` 的 `version` 與 `ticket_system/__init__.py` 的 `__version__` 由 1.0.0 改為 2.54.2。本檔開頭「frontmatter 版號由後續收尾票統一處理」的說明移除：版號住址須同時相等，見 skill-design-guide〈版號規則〉。
 
 **Version**: 2.54.1（2026-11-17）— 修正與測試加速：
 - 寫入章節不再刪掉章節尾的 `---` 分隔線（tarrragon/claude#33）：`ticket_system/lib/section_locator.py` 的章節範圍排除尾端分隔線，`append-log`、`add-spawn-request` 等經此定位寫入的命令保留分隔線；`track acceptance` 的寫入同樣在分隔線之前截止。

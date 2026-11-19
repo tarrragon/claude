@@ -18,9 +18,9 @@ first_seen: 2026-04-14
    - 遷移 `.4 → .2` 後，`.2` 的 `blockedBy` 仍包含舊 `.1/.2/.3/.5`，其中 `.2` 是自己的 ID（自環）
    - 父 Ticket 的 `children: [.1, .2, .3, .4, .5]` 未更新為新 ID
 
-## 根因（待確認）
+## 根因（初始推測，已由〈修正記錄〉取代）
 
-未進入原始碼驗證，根據觀察推測：
+初次記錄時未進入原始碼驗證，根據觀察推測：
 
 1. **parent_id typo**：migrate 邏輯中可能用正則表達式解析 wave 編號，regex 未保留前導 0。可能類似 `r"W(\d+)"` 匹配後直接用 `str(int("10"))` 產生字串，丟失 "010" 或 "10" 的固定寬度格式
 2. **依賴欄位未同步**：CLI 只處理 ID 本身和 `parent_id` 欄位，忽略 `blockedBy` / `relatedTo` / 父的 `children`
@@ -60,9 +60,9 @@ grep parent_id *.md
 3. **自環檢查**：若 `blockedBy` 或 `relatedTo` 包含自己的 ID，遷移時移除
 4. **驗證工具**：建議新增 `ticket validate` 命令，檢查整個 Ticket 樹的 parent_id/children/blockedBy 是否形成合法有向圖（無斷鏈、無自環、無循環依賴）
 
-### 使用者防護（修復前的手動流程）
+### 使用者防護（歷史手動流程，現況見〈修正記錄〉，兩項症狀已修，不再必要）
 
-執行 migrate 後必須檢查：
+修復前，執行 migrate 後需檢查：
 
 ```bash
 # 檢查 parent_id 格式
@@ -79,7 +79,14 @@ grep -A3 "blockedBy:\|relatedTo:" docs/work-logs/v*/tickets/<migrated>.md
 
 ## 修正記錄
 
-（待 ticket migrate CLI 修復完成後更新）
+兩項症狀在現行 CLI 皆已修復。
+
+| 症狀 | 現況 | 證據 |
+|------|------|------|
+| 1 parent_id 前導 0 被剝除 | 已修：`calculate_chain_info` 以原始字串 split 組回 root 與 parent，保留各層前導 0；`_migrate_ticket_files` 以其 `parent` 寫入 `parent_id`。實測 `<version>-W<wave>-036.1` 的 parent 為 `<version>-W<wave>-036`。該函式目前無專屬單元測試 | `.claude/skills/ticket/ticket_system/lib/id_parser.py` 的 `calculate_chain_info`；`.claude/skills/ticket/ticket_system/commands/migrate.py` 的 `_migrate_ticket_files` |
+| 2 依賴欄位未同步 | 已修：migrate 把指向舊 ID 的 blockedBy、relatedTo、children、source_ticket、parent_id 改成新 ID，並同步新舊父票 children | `migrate.py` 的 `_update_ticket_id_references`、`_update_cross_references_collecting`、`_sync_parent_children`；測試 `.claude/skills/ticket/ticket_system/tests/test_migrate_reverse_refs.py` |
+
+〈根因〉的推測（regex 轉整數、CLI 只處理 ID 與 parent_id）已由上述修復取代。〈修復方向〉第 4 點（`ticket validate`）是獨立的新功能，不屬本記錄的修復範圍。
 
 ---
 

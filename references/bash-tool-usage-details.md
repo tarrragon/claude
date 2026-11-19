@@ -54,11 +54,20 @@ session 開始
 **方法 3：絕對路徑還原**
 
 ```bash
-# 若已污染，每次命令前加絕對路徑 cd
-cd /your/project/root && ./scripts/sync-push.sh
+# 若已污染，每次命令前加作用根的絕對路徑 cd
+cd /your/action/root && ./scripts/sync-push.sh
 ```
 
-這是補救做法，不是預防做法。若工作目錄已被污染，每次命令都必須先 cd 回根目錄。長期使用會累積技術債，應改用方法 1 或 2。
+這是補救做法，不是預防做法。若工作目錄已被污染，每次命令都必須先 cd 回作用根。長期使用會累積技術債，應改用方法 1 或 2。
+
+**還原目標是作用根，不一定是 CLAUDE_PROJECT_DIR**：作用根是 payload `cwd` 所屬 checkout 的根。bash-edit-guard 只把「cd 到作用根」視為還原放行，其他裸 cd 一律 deny。session 從主 checkout 啟動後在 linked worktree 內工作時（env=MAIN、cwd=WT），兩者不同：
+
+| 情境 | `cd <worktree 根> && …` | `cd <主 checkout 根> && …` |
+|------|------------------------|---------------------------|
+| cwd 在主 checkout（env=MAIN、cwd=MAIN） | deny（不是作用根） | 放行（還原） |
+| cwd 在 linked worktree（env=MAIN、cwd=WT） | 放行（還原） | deny（不是作用根） |
+
+在 worktree 內照舊習慣 `cd <主 checkout 根>` 會被擋，而且會把後續命令帶離 worktree；應改為 `cd <worktree 根>`，或直接用方法 1、2 避免裸 cd。
 
 ### chpwd Shell Hook 深度說明（IMP-056）
 

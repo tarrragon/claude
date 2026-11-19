@@ -45,7 +45,7 @@
 | Hook | 在工具呼叫前後檢查規則，違規時擋下或提醒 | 規則由程式執行，不依賴模型記得 |
 | 多 session 協作 | 一個主控 session 協調多條工作線；線狀態面板（line-board 在終端機內另開的畫面）依線列出佇列與票的狀態 | 多個 session 同時推進同一個 repo，不互相覆蓋 |
 
-框架有兩種角色：**主控方**維護框架本身（`tarrragon/claude` 發佈的內容），並負責發版；**consumer** 是使用框架的專案。你的專案是 consumer：用框架開發自己的產品，框架本身的問題回報 issue（見〈回報框架問題〉），不修改 `.claude/` 的通用內容。專案自己的設定與本地特化除外：本地特化是專案在 `.claude/` 內新增、並列進 `sync-preserve.yaml` 的檔案，例如自建的代理人；拉取時原地保留，連以上游內容整份覆蓋 `.claude/` 的拉取（還沒有同步基準點時就是這種拉取，見〈首次安裝〉第 6 步）也不動它們。兩者的位置見〈設定檔分工〉。
+框架有兩種角色：**主控方**維護框架本身（`tarrragon/claude` 發佈的內容），並負責發版；**consumer** 是使用框架的專案。你的專案是 consumer：用框架開發自己的產品，框架本身的問題回報 issue（見〈回報框架問題〉），不修改 `.claude/` 的通用內容。專案自己的設定與自己新增的檔案除外：在 `.claude/` 內新增的檔案（例如自建的代理人）要列進 `sync-preserve.yaml`，列入的檔案拉取時原地保留，連以上游內容整份覆蓋 `.claude/` 的拉取（還沒有同步基準點時就是這種拉取，見〈首次安裝〉第 6 步）也不動它們。兩者的位置見〈設定檔分工〉。「本地特化」一詞的定義見 `.claude/references/sync-mechanism-guide.md`〈本地特化的定義〉。
 
 ### 適用前提
 
@@ -93,7 +93,7 @@
 
 | 工具 | 用途 |
 |------|------|
-| Claude Code | 執行環境 |
+| Claude Code（當前版本） | 執行環境。框架以當前版本的 Claude Code 為準開發與驗證，不保證舊版相容；舊版缺少的工具或事件，對應的 hook 註冊不會保留。請先把 Claude Code 更新到最新版 |
 | git 2.28 以上 | 版本控制、worktree；`reference-transaction` hook 從 2.28 開始提供 |
 | Python 3.11 以上 | 工具腳本（`sync-claude-pull.py` 宣告 `>=3.11`）。`project-init check` 只回報偵測到的版本，不判斷是否足夠 |
 | uv | 執行 Hook、skill 的 CLI 與測試。沒有 uv 時 Hook 與 `project-init` 都無法執行 |
@@ -122,14 +122,14 @@ rm -rf .claude/.github
 2. **檢查環境**：`project-init check` 檢查 Python、uv、ripgrep 等項目，git 與 gh 要自己確認。
 3. **建立 `CLAUDE.md`**：複製 `.claude/templates/CLAUDE-template.md` 到專案根目錄，填入專案身份、技術選型與 Phase 3b 的實作代理人。有備份時，把舊 `CLAUDE.md` 的內容併進來。
 4. **建立 `settings.local.json`**：複製 `.claude/templates/settings-local-template.json` 為 `.claude/settings.local.json`，依檔內說明刪除註解：`_README`、`_INSTRUCTIONS` 兩個鍵，以及 `permissions.allow` 清單內以 `_COMMENT` 開頭的字串；再移除不適用的語言權限。有備份時，把舊 `settings.local.json` 的權限與 MCP 設定併進來。接著執行 `project-init onboard`：它檢查設定是否完整，檢查的項目由前面幾步建立，所以排在這裡；並列出 Flutter 專屬與專案專屬的 Hook 清單（分類見 `.claude/config/hook-language-classification.yaml`）。
-5. **提交**：先把框架要求的條目加進專案根目錄的 `.gitignore`，讓 `settings.local.json`、`hook-logs/` 等本機狀態與本機設定不進版控。下面的命令印出 `.claude/` 內的條目，把每一行加進 `.gitignore`；另外加上 `coverage/` 與 `docs/work-logs/**/*.md.lock`（票檔的鎖）。SessionStart 的 `.gitignore` 檢查以同一份清單比對。名稱層級的條目寫成 `.claude/**/<名稱>`：`.claude/<名稱>` 只忽略 `.claude/` 根層，`.claude/hooks/hook-logs/` 這類巢狀位置不會被忽略。舊的 `.gitignore` 若用根層寫法，檢查會列為缺項，改成命令印出的寫法即可。`.claude/plans/`、`.claude/analyses/`、`.claude/migration-backups/` 與 `.claude/.version-release.yaml` 不在清單內：它們不會隨 sync 推到框架 repo，但可以進專案的版控，要不要忽略由專案決定（分類見 [references/sync-exclusion-guide.md](./references/sync-exclusion-guide.md)〈類型 E〉）。
+5. **提交**：先把框架要求的條目加進專案根目錄的 `.gitignore`，讓 `settings.local.json`、`hook-logs/` 等本機狀態與本機設定不進版控。下面的命令印出必要條目（含 `coverage/` 與票庫的 lock 項），把每一行加進 `.gitignore`。命令以非 0 結束代表舊版框架缺模組，stderr 會說明，先更新 `.claude` 再重跑。SessionStart 的 `.gitignore` 檢查以同一份清單比對。名稱層級的條目寫成 `.claude/**/<名稱>`：`.claude/<名稱>` 只忽略 `.claude/` 根層，`.claude/hooks/hook-logs/` 這類巢狀位置不會被忽略。舊的 `.gitignore` 若用根層寫法，檢查會列為缺項，改成命令印出的寫法即可。`.claude/plans/`、`.claude/analyses/`、`.claude/migration-backups/` 與 `.claude/.version-release.yaml` 不在清單內：它們不會隨 sync 推到框架 repo，但可以進專案的版控，要不要忽略由專案決定（分類見 [references/sync-exclusion-guide.md](./references/sync-exclusion-guide.md)〈類型 E〉）。
 
    ```bash
-   python3 -c 'import sys; sys.path.insert(0, ".claude/lib"); import sync_exclude_manifest as m; print("\n".join(sorted(m.required_gitignore_entry(n) for n in m.GITIGNORE_EXPECTED)))'
+   uv run --project .claude/skills/project-init project-init gitignore-entries
    ```
 
    接著 `git add .gitignore .claude CLAUDE.md` 後 commit，訊息建議用 `chore(sync): install .claude <版號>`（版號取 `.claude/VERSION`）。換機器時判斷某個檔是不是框架裝進來的，會以這筆提交辨認（見〈在另一台機器接手〉第 4 步）。
-6. **建立同步基準點**：在 Claude Code 內執行 `/sync-pull`，或到自己的終端機執行 `python3 .claude/scripts/sync-claude-pull.py`，記錄同步基準點（`.claude/.sync-state.json`）。這次拉取沒有基準點，會走全量 overlay，拉取中可能出現確認：`/sync-pull` 先不帶旗標執行取得 dry-run 清單，把清單附在詢問裡，你同意後才帶 `--confirm-overlay` 重跑；終端機則在印出清單後詢問 `Apply full overlay? [y/N]`。兩條路都照〈更新到新版本〉核對 dry-run 清單再回答。執行後以 `grep -q last_synced_base_sha .claude/.sync-state.json 2>/dev/null && echo Y || echo N` 確認。有了基準點，之後的更新才會做三方合併，保留你本地的修改；沒有基準點時，更新會以上游內容整份覆蓋 `.claude/`（本機設定與 `sync-preserve.yaml` 列出的檔案除外），本地修改會被蓋掉。剛安裝、尚未做任何本地修改時，最適合建立基準點。
+6. **建立同步基準點**：在 Claude Code 內執行 `/sync-pull`，或到自己的終端機執行 `python3 .claude/scripts/sync-claude-pull.py`，記錄同步基準點（`.claude/sync-base.json`，進 git，拉取後與其他變更一起 commit）。這次拉取沒有基準點，會走全量 overlay，拉取中可能出現確認：`/sync-pull` 先不帶旗標執行取得 dry-run 清單，把清單附在詢問裡，你同意後才帶 `--confirm-overlay` 重跑；終端機則在印出清單後詢問 `Apply full overlay? [y/N]`。兩條路都照〈更新到新版本〉核對 dry-run 清單再回答。執行後以 `grep -qs last_synced_base_sha .claude/sync-base.json .claude/.sync-state.json && echo Y || echo N` 確認。有了基準點，之後的更新才會做三方合併，保留你本地的修改；沒有基準點時，更新會以上游內容整份覆蓋 `.claude/`（本機設定與 `sync-preserve.yaml` 列出的檔案除外），本地修改會被蓋掉。剛安裝、尚未做任何本地修改時，最適合建立基準點。
 7. **放回自訂的 command 與 agent**：有備份時，做三個動作：
    - 把自訂的 command、agent 放回 `.claude/commands/`、`.claude/agents/`，與框架同名時改名。
    - 把每個檔案相對於 `.claude/` 的路徑列進 `.claude/sync-preserve.yaml`：
@@ -152,16 +152,16 @@ rm -rf .claude/.github
 1. **clone**：`git clone <專案 repo>`。`.claude/` 已在專案的 git 裡，不需要再 clone 框架。
 2. **啟動並信任**：在專案根目錄啟動 Claude Code，接受 workspace trust；SessionStart 會自動安裝 CLI shim（做法與驗證見〈首次安裝〉第 1 步）。
 3. **建立 `settings.local.json`**：複製 `.claude/templates/settings-local-template.json` 為 `.claude/settings.local.json`（做法見〈首次安裝〉第 4 步）。專案專屬權限與 MCP 設定從原機器的檔案自行帶過來。
-4. **複製同步狀態**：從原機器複製 `.claude/.sync-state.json` 與 `.claude/sync-preserve.yaml` 到這台機器的 `.claude/`，兩個檔案都不進 git。兩檔記錄的是上游 commit 與檔案清單，內容不隨機器改變；複製後第一次更新就走三方合併，`.sync-state.json` 內的固定版本（`pinned_version`）也一併帶過來。不複製這個檔，這台機器就沒有固定版本。
+4. **確認同步狀態**：同步基準點與固定版本（`.claude/sync-base.json`）、拉取時原地保留的檔案清單（`.claude/sync-preserve.yaml`）都在 git 裡，clone 下來就有，第一次更新就走三方合併。以 `grep -qs last_synced_base_sha .claude/sync-base.json && echo Y || echo N` 確認；N 表示原機器還沒把這兩個檔 commit（較舊的版本把它們放在 git 之外，基準點記在 `.claude/.sync-state.json`）。這時從原機器複製 `.claude/.sync-state.json` 與 `.claude/sync-preserve.yaml` 過來，第一次更新會把基準點與固定版本移進 `sync-base.json`，之後與其他變更一起 commit。
 
    原機器取不到這兩個檔時，在這台機器重建：
    - 執行 `python3 .claude/scripts/sync-claude-pull.py --audit` 列出「本地有上游無」的檔案。它是唯讀稽核，不改 `.claude/` 的檔案內容，只會產生 Python 的 `__pycache__`。列出的檔逐一判斷是不是自己建的，自建的就把相對於 `.claude/` 的路徑列進 `.claude/sync-preserve.yaml`：
      - 已追蹤的檔：以 `git log --format='%h %s' -- .claude/<路徑>` 看最早那筆提交（輸出的最後一行）。它是安裝框架的提交或 `chore(sync)` 開頭的拉取提交，就是框架裝進來的；是其他提交，就是自建。安裝提交沒有用 `chore(sync)` 開頭時，以 `git log --diff-filter=A --format='%h %s' -- .claude/VERSION` 查出是哪一筆。自建檔與安裝在同一筆提交時，這個方法分不出來，改看檔名與內容判斷。
      - 未追蹤的檔（`git log` 沒有輸出）：是這台機器上自己放進去的，視為自建；不想保留就先刪除。
 
-     不要照 `--audit` 輸出的「可忽略此提醒」做：沒有基準點時，下次拉取會刪除或轉存這些檔案。
-   - 基準點留到第一次更新時建立：照〈更新到新版本〉沒有基準點的做法，並以 `--bump v$(cat .claude/VERSION)` 先固定在專案目前的版本。沒有固定版本就直接拉，目標是上游最新版，等於同時升級框架。固定版本會記在 `.sync-state.json`，之後的拉取都停在這一版；要升級時執行不帶版號的 `python3 .claude/scripts/sync-claude-pull.py --bump` 解除固定。
-5. **補回其他只在本機的狀態**：`.claude/sync-skills.yaml`（選擇性同步的設定）從原機器複製；不使用 zhtw-mcp 時重建 `.claude/.zhtw-mcp-skip`。`.claude/handoff/` 不跨機器，在原機器交接的票改用 `ticket track full <票號>` 讀票面接手，不用 `ticket resume`。
+     `--audit` 在沒有基準點時會提示列入 `.claude/sync-preserve.yaml`：照該提示做，因為下次拉取會刪除或轉存未列入的檔案。
+   - 基準點留到第一次更新時建立：照〈更新到新版本〉沒有基準點的做法，並以 `--bump v$(cat .claude/VERSION)` 先固定在專案目前的版本。沒有固定版本就直接拉，目標是上游最新版，等於同時升級框架。固定版本會記在 `sync-base.json`，之後的拉取都停在這一版；要升級時執行不帶版號的 `python3 .claude/scripts/sync-claude-pull.py --bump` 解除固定。
+5. **補回其他只在本機的狀態**：不使用 zhtw-mcp 時重建 `.claude/.zhtw-mcp-skip`。`.claude/sync-skills.yaml`（選擇性同步的設定）在 git 裡；原機器還沒 commit 它時才從原機器複製。`.claude/handoff/` 不跨機器，在原機器交接的票改用 `ticket track full <票號>` 讀票面接手，不用 `ticket resume`。
 
 ---
 
@@ -186,7 +186,7 @@ rm -rf .claude/.github
 **拉取前確認基準點**：
 
 ```bash
-grep -q last_synced_base_sha .claude/.sync-state.json 2>/dev/null && echo Y || echo N   # Y 是有基準點，N 是沒有
+grep -qs last_synced_base_sha .claude/sync-base.json .claude/.sync-state.json && echo Y || echo N   # Y 是有基準點，N 是沒有
 ```
 
 沒有基準點的情況（舊版安裝、另一台機器、新 clone）下，拉取會以上游內容整份覆蓋 `.claude/`：不在上游、也沒列進 `sync-preserve.yaml` 的本地檔案，未追蹤的被刪除，已追蹤的被移到 `.sync-conflicts/`。這種情況先備好 `sync-preserve.yaml`（做法見〈在另一台機器接手〉），再執行 `/sync-pull` 或到自己的終端機直接執行腳本。腳本先印 dry-run 清單，再詢問 `Apply full overlay? [y/N]`；`/sync-pull` 則把清單附在 AskUserQuestion 裡詢問，回答方式相同。清單裡的 `- delete:`（未追蹤，會直接刪除）或 `-> conflict:`（已追蹤，會轉存到 `.sync-conflicts/`）出現自己建的檔時，回答 N，把該檔列進 `sync-preserve.yaml` 後重跑。回答 N 之後發生什麼，取決於你本地腳本的版本（拉取時執行的是目前 `.claude/` 裡的腳本，版本看 `.claude/VERSION`）：3.2.0 起中止且不改任何檔案；3.1.0 以前收尾照跑，可能刪除 `.claude/.github/` 而留下未提交的刪除，這時重跑會被拒，先執行 `git restore -- .claude/.github` 再重跑。沒有固定版本（`pinned_version`）而不想連帶升級時，用下面的 `--bump v<版號>` 先固定在目前的版本，版號取 `.claude/VERSION`；之後要升級再以不帶版號的 `--bump` 解除固定。
@@ -199,11 +199,12 @@ python3 .claude/scripts/sync-claude-pull.py --bump           # 解除固定，�
 ```
 
 - `/sync-pull` 在 Claude Code 內執行腳本，腳本讀不到你的輸入。沒有基準點而有本地差異時的行為依本地 `.claude/` 的版本（`.claude/VERSION`）而定：
-  - 3.2.1 起：`/sync-pull` 先不帶旗標執行，腳本印出 dry-run 清單後以結束碼 1 中止、不改任何檔案；清單附在 AskUserQuestion 裡詢問，你同意後才帶 `--confirm-overlay` 重跑套用。
+  - 3.4.0 起：等待確認的中止改用專屬結束碼 10（其他中止與回答 N 仍為 1），`/sync-pull` 依結束碼判斷，不再比對輸出文字。
+  - 3.2.1 起：`/sync-pull` 先不帶旗標執行，腳本印出 dry-run 清單後以結束碼 1 中止（3.4.0 起為 10）、不改任何檔案；清單附在 AskUserQuestion 裡詢問，你同意後才帶 `--confirm-overlay` 重跑套用。
   - 3.2.0：確認詢問無法回答，等同回答 N。以結束碼 1 結束，印出中止原因與處置，不印「成功拉取」，不跑收尾、不寫入基準點。
   - 3.1.0 以前：仍印「成功拉取」、結束碼 0。收尾照跑，可能已刪除 `.claude/.github/`（見〈首次安裝〉），留下未提交的刪除。先 `git restore -- .claude/.github`（或提交），再到終端機重跑；工作區有未提交的刪除時，下一次更新會被拒絕。
 
-`tarrragon/claude` 只接受發版推送，每次推送對應一個 `v<版號>` tag。因此沒有固定版本時，拉到的就是最新發版的版本。固定了版本時（`.sync-state.json` 的 `pinned_version` 是某個版號，例如以〈在另一台機器接手〉第 4 步的做法建立基準點之後），拉取停在該版，輸出會印「版本 pin：<版號> → 對齊上游 <sha>（非最新 HEAD）」；要升級時以不帶版號的 `--bump` 解除固定。
+`tarrragon/claude` 只接受發版推送，每次推送對應一個 `v<版號>` tag。因此沒有固定版本時，拉到的就是最新發版的版本。固定了版本時（`sync-base.json` 的 `pinned_version` 是某個版號，例如以〈在另一台機器接手〉第 4 步的做法建立基準點之後），拉取停在該版，輸出會印「版本 pin：<版號> → 對齊上游 <sha>（非最新 HEAD）」；要升級時以不帶版號的 `--bump` 解除固定。
 
 **拉取被拒，而未提交的變更只有 `.pyc`**：`.claude/` 下的 `__pycache__/*.pyc` 曾被提交進版控時（例如照較早的〈首次安裝〉第 5 步以 `git add .claude` 提交），同步腳本與 Hook 執行時會重寫這些檔，已提交的 `.pyc` 就成了未提交的修改，腳本以「警告: .claude 有未提交的變更」拒絕拉取。`git status --porcelain -- .claude/` 只列出 `__pycache__` 下的檔時，清除一次即可：
 
@@ -223,7 +224,7 @@ commit 之後再拉取。
    - 其二，輸出中「本地獨有 git 追蹤檔已轉存 .sync-conflicts/」底下列出的檔案：它們也會出現在其一，可同樣以 `git restore` 放回。轉存的副本在 `.claude/.sync-conflicts/`，檔名是把路徑的 `/` 換成 `__`（`agents/my-agent.md` 存為 `agents__my-agent.md`）。
    - 其三，輸出中「刪除 N 個非 git 追蹤的過時檔案」底下列出的檔案：已從磁碟刪除，變空的目錄也一併刪除。從輸出中「備份位置」那一行所列的目錄取回，先建回所在目錄：`mkdir -p .claude/<所在目錄>`，再 `cp <備份位置>/.claude/<路徑> .claude/<路徑>`。
 
-   最後執行 `grep -q last_synced_base_sha .claude/.sync-state.json 2>/dev/null && echo Y || echo N`，確認基準點已建立。
+   最後執行 `grep -qs last_synced_base_sha .claude/sync-base.json .claude/.sync-state.json && echo Y || echo N`，確認基準點已建立。
 2. **處理衝突**：衝突區塊以標記寫回原檔，對照副本在 `.claude/.sync-conflicts/`。逐檔決定採本地、採上游或手動合併後，執行 `python3 .claude/scripts/sync-claude-pull.py --resolve-done` 推進基準點。
 3. **提交**：把這次拉取的變更提交成單一 commit（訊息格式 `chore(sync): pull .claude 更新（上游 <short-sha>）`），不與其他工作混在一起。提交後，刪除 `.claude/.sync-conflicts/`，殘留會在下次拉取時與新衝突混在一起；全量 overlay 的更新要先處理完第 1 步列出的轉存檔再刪。
 4. **處理幽靈註冊**：拉取收尾若出現「settings.local.json 含 hook 註冊」的警告，先不帶參數執行 `.claude/hooks/hook-registration-coverage-check.py` 看命中哪幾筆，再加 `--fix` 執行，從 `settings.local.json` 移除指向已不存在檔案的註冊。
@@ -242,9 +243,11 @@ commit 之後再拉取。
 | `.claude/settings.local.json` | 回應格式（`outputStyle`）、MCP server、環境變數、專案專屬權限；`hooks` 區段由框架依專案 hook 清冊產生，不手寫 | 專案 | 不同步 | 否，每台機器各自從範本建立 |
 | `CLAUDE.md`（專案根目錄） | 專案身份、技術選型、實作代理人 | 專案 | 不同步 | 是 |
 | `.claude/project-integration/` | 專案對框架的宣告，例如合併閘門要跑哪些測試、專案自有 hook 的清冊 `hook-registry.yaml`（格式見 [references/project-hook-registry-format.md](./references/project-hook-registry-format.md)） | 專案 | 不同步 | 是 |
-| `.claude/sync-preserve.yaml` | 本地特化的清單：拉取時要原地保留的檔案 | 專案 | 本身不同步；列入的檔案不被覆蓋或刪除 | 否 |
+| `.claude/sync-preserve.yaml` | 拉取時要原地保留的本地特化清單 | 專案 | 本身不同步；列入的檔案不被覆蓋或刪除 | 是 |
+| `.claude/sync-skills.yaml` | 選擇性同步的設定（同步哪些 skill、哪些 skill 不推送） | 專案 | 不同步 | 是 |
+| `.claude/sync-base.json` | 同步基準點（`last_synced_base_sha`）與固定版本（`pinned_version`） | 拉取、推送腳本寫入 | 不同步；拉取、推送成功後更新，與其他變更一起 commit | 是 |
 
-`.claude/.sync-state.json`（同步基準點）、`.claude/sync-skills.yaml` 與 `hook-logs/` 等本機狀態與本機設定也不進 git。`.gitignore` 要加的條目以〈首次安裝〉第 5 步的命令輸出為準，分類見 [references/sync-exclusion-guide.md](./references/sync-exclusion-guide.md)〈五類分類定義〉。
+`.claude/.sync-state.json`（上次推送紀錄、衝突輪的待確認基準點）與 `hook-logs/` 等本機狀態與本機設定不進 git。`.gitignore` 要加的條目以〈首次安裝〉第 5 步的命令輸出為準，分類見 [references/sync-exclusion-guide.md](./references/sync-exclusion-guide.md)〈五類分類定義〉。
 
 這些不進 git 的檔案不會跟著 clone 到另一台機器；換機器或新 clone 後怎麼補回，見〈在另一台機器接手〉。
 

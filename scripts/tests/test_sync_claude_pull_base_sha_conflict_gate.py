@@ -69,6 +69,10 @@ def _write_base_sha(claude_dir: Path, base_sha: str) -> None:
 
 
 def _read_base_sha(claude_dir: Path) -> str:
+    """base 存於入版控的 sync-base.json；未推進時仍是舊位置的 fixture 值。"""
+    base_file = claude_dir / "sync-base.json"
+    if base_file.exists():
+        return json.loads(base_file.read_text(encoding="utf-8"))["last_synced_base_sha"]
     data = json.loads((claude_dir / ".sync-state.json").read_text(encoding="utf-8"))
     return data["last_synced_base_sha"]
 

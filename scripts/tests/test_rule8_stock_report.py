@@ -61,8 +61,8 @@ def test_lists_only_unexempted_hits_grouped_by_dir(repo):
     out = result.stdout
     # 守衛對版本化 ID 同時命中完整形與裸形（W3-777），每檔 2 個 ID；與守衛現行計數一致
     assert "受掃檔 5｜有未豁免命中的檔 2｜ID 總數 4｜豁免路徑 1" in out
-    assert f"- .claude/references/a.md: {HIT_ID}, W3-777" in out
-    assert f"- .claude/rules-note.md: {HIT_ID}, W3-777" in out
+    assert f"- .claude/references/a.md: {HIT_ID} (L1), W3-777 (L1)" in out
+    assert f"- .claude/rules-note.md: {HIT_ID} (L1), W3-777 (L1)" in out
     assert "## references" in out and "## (根目錄)" in out
     for excluded in ("marker.md", "fence.md", "test_x.py", "old.md", "clean.md", "untracked.md", "outside.md"):
         assert excluded not in out
@@ -93,6 +93,95 @@ def test_non_git_root_fails_visibly(tmp_path):
     assert "git ls-files 失敗" in result.stderr
 
 
+def test_path_track_listed_separately_from_ticket_ids(tmp_path):
+    """E1 對照：同一檔含兩類命中，ticket ID 軌與專案路徑軌各自列出；ID 軌計數不含路徑。"""
+    root = tmp_path / "repo"
+    (root / ".claude/methodologies").mkdir(parents=True)
+    _git(["init", "-q"], root)
+    rel = ".claude/methodologies/x-methodology.md"
+    (root / rel).write_text(f"見 docs/spec/billing/SPEC-012.md 與 {HIT_ID}\n", encoding="utf-8")
+    _git(["add", "--", rel], root)
+
+    result = _run("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    out = result.stdout
+    assert "有未豁免命中的檔 1｜ID 總數 2" in out
+    assert f"- {rel}: {HIT_ID} (L1), W3-777 (L1)" in out
+    assert "[專案路徑軌] 有未豁免路徑的檔 1｜路徑總數 1（只提示）" in out
+    assert f"- {rel}: docs/spec/billing/SPEC-012.md" in out
+
+
+def test_path_track_summary_line_present_when_no_path_hits(repo):
+    """無路徑命中時仍印路徑軌總數行（0），讀者知道該軌有被掃。"""
+    result = _run("--root", str(repo))
+    assert "[專案路徑軌] 有未豁免路徑的檔 0｜路徑總數 0（只提示）" in result.stdout
+
+
 def test_group_key():
     assert report.group_key(".claude/skills/x/y.py") == "skills"
     assert report.group_key(".claude/settings.json") == "(根目錄)"
+
+
+# ---------------------------------------------------------------------------
+# 豁免可見性與行號：被 marker 遮住的命中要能被數到、找到
+# ---------------------------------------------------------------------------
+
+MARKED = {
+    ".claude/references/reloc.md": (
+        "前言\n"
+        f"引用 {HIT_ID} <!-- rule8-exempt: relocation:自 .claude/references/src.md 逐字搬移 -->\n"
+    ),
+    ".claude/references/multi.md": f"{HIT_ID}\n中段\n{HIT_ID}\n",
+}
+
+
+@pytest.fixture()
+def marked_repo(repo):
+    for rel, text in MARKED.items():
+        (repo / rel).write_text(text, encoding="utf-8")
+    _git(["add", "--", *MARKED], repo)
+    return repo
+
+
+def test_summary_counts_exempt_hits_per_category(marked_repo):
+    """正向對照：illustration 與 relocation 各遮住 2 個命中（完整形與裸形），摘要要數到。"""
+    out = _run("--root", str(marked_repo), "--summary").stdout
+    assert "經 marker 豁免的命中：illustration 2／relocation 2／testdata 0" in out
+
+
+def test_summary_shows_zero_counts_when_nothing_exempted(tmp_path):
+    """反向對照：沒有 marker 時三類都印 0，讀者知道豁免有被計算。"""
+    root = tmp_path / "repo"
+    (root / ".claude").mkdir(parents=True)
+    _git(["init", "-q"], root)
+    (root / ".claude/a.md").write_text(f"{HIT_ID}\n", encoding="utf-8")
+    _git(["add", "--", ".claude/a.md"], root)
+    out = _run("--root", str(root)).stdout
+    assert "經 marker 豁免的命中：illustration 0／relocation 0／testdata 0" in out
+
+
+def test_same_id_on_multiple_lines_lists_every_line(marked_repo):
+    out = _run("--root", str(marked_repo)).stdout
+    assert f"- .claude/references/multi.md: {HIT_ID} (L1, L3), W3-777 (L1, L3)" in out
+
+
+def test_show_exempt_flag_controls_exempt_detail(marked_repo):
+    """E1 對照：同一 fixture 傳與不傳 --show-exempt，豁免明細只在傳旗標時出現。"""
+    plain = _run("--root", str(marked_repo)).stdout
+    shown = _run("--root", str(marked_repo), "--show-exempt").stdout
+    assert plain != shown
+    assert "## 經 marker 豁免的命中" not in plain
+    assert "## 經 marker 豁免的命中" in shown
+    assert f"- .claude/references/reloc.md: {HIT_ID} (L2, relocation), W3-777 (L2, relocation)" in shown
+    assert f"- .claude/references/marker.md: {HIT_ID} (L2, illustration)" in shown
+    # 豁免的命中不進未豁免明細
+    assert "- .claude/references/reloc.md:" not in plain
+
+
+def test_unexempted_ids_match_guard_blocked_set(marked_repo):
+    """行號定位只用於顯示：有行號的 ID 集合等於守衛判定的未豁免集合。"""
+    guard = report.load_guard()
+    rels = list(FILES) + list(MARKED)
+    result = report.scan(marked_repo, guard, [r for r in rels if r.startswith(".claude/")])
+    for fh in result.files:
+        assert [v for v, _ in fh.lines] == fh.ids

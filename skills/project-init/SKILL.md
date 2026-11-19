@@ -4,7 +4,7 @@ description: "Use this skill whenever the user needs to check or set up developm
 argument-hint: "<subcommand>"
 allowed-tools: Bash(project-init *), Read, Write, Edit
 metadata:
-  version: 1.4.0
+  version: 1.7.0
 ---
 
 # Project Init Tool v1.0
@@ -98,6 +98,16 @@ project-init check — 環境狀態報告
 總結: 6/6 項目正常
 ============================================================
 ```
+
+### project-init gitignore-entries
+
+逐行印出專案 `.gitignore` 的必要條目（唯讀）。條目與 SessionStart gitignore 檢查同源：manifest 的必要條目（含 `coverage/`）加上票庫 lock 項。
+
+```bash
+project-init gitignore-entries
+```
+
+結束碼：0 = 條目完整；非 0 = 無法取得完整清單，stderr 說明原因。manifest 載入失敗（舊版框架）時不印清單；只缺 lock 模組時印出 manifest 條目，stderr 註明 lock 項無法判定。
 
 ### project-init setup
 

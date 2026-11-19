@@ -350,8 +350,10 @@ def queue_entry_alive(directory: str, name: str) -> bool:
     return m is not None and os.path.exists(os.path.join(directory, name)) and not _pid_gone(int(m.group(2)))
 
 
-# 批次合併旁置檔：claim（領導者認領）與 verdict（紅燈裁決），以排隊者 pid 加內容鍵命名，不改寫排隊檔
-_SIDECAR_RE = re.compile(r"^(claim|verdict)-(\d+)-([0-9a-f]{16})\.json$")
+# 批次合併旁置檔：claim（領導者認領）、verdict（紅燈裁決）、committing（領導者寫入 ref 前搶下認領）、
+# withdrawn（跟隨者撤離前撤回認領），以排隊者 pid 加內容鍵命名，不改寫排隊檔。
+# claim -> committing 與 claim -> withdrawn 都是 rename：同一個 claim 只有一方成功，作為寫入與撤離的互斥。
+_SIDECAR_RE = re.compile(r"^(claim|verdict|committing|withdrawn)-(\d+)-([0-9a-f]{16})\.json$")
 
 
 def _sidecar_path(directory: str, kind: str, pid: int, key: str) -> str:
@@ -379,6 +381,15 @@ def read_sidecar(directory: str, kind: str, pid: int, key: str) -> Optional[dict
         return data if isinstance(data, dict) else None
     except (OSError, ValueError):
         return None  # 不存在或損毀：視為無
+
+
+def rename_sidecar(directory: str, pid: int, key: str, src_kind: str, dst_kind: str) -> bool:
+    """原子改名旁置檔；來源已不存在（被他方先改名或清除）回 False，其餘 OSError 同樣視為未取得。"""
+    try:
+        os.rename(_sidecar_path(directory, src_kind, pid, key), _sidecar_path(directory, dst_kind, pid, key))
+        return True
+    except OSError:
+        return False  # ENOENT：他方已先 rename，互斥落敗
 
 
 def remove_sidecar(directory: str, kind: str, pid: int, key: str) -> None:

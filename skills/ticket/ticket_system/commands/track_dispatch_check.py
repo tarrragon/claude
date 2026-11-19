@@ -255,9 +255,11 @@ _RELEASE_REFUSAL_MESSAGES = {
     ),
 }
 
-# 背景工作完成而恢復的代理人不經 SendMessage，條目不會放回（已知缺口）。
+# 背景工作完成而恢復的代理人不經 SendMessage：條目在它第一次呼叫 Bash 時才放回
+# （released-dispatch-restore-hook），只用 Edit／Write 的期間仍不在派發清單上。
 _RELEASE_BACKGROUND_WARNING = (
-    "代理人仍有背景工作時不要釋放：背景工作完成而恢復時不經 SendMessage，條目不會重新登記"
+    "代理人仍有背景工作時，背景工作完成而恢復後，條目要等它第一次呼叫 Bash 才重新登記；"
+    "只用 Edit／Write 的期間守衛看不到它"
 )
 
 
@@ -448,8 +450,8 @@ def register_dispatch_check(
             "明示放棄恢復某個本 session 的無票代理人：移除其派發條目並留下釋放紀錄；"
             "之後以 SendMessage 恢復該代理人時條目會重新登記。"
             "有票號條目請用 complete；isolation=worktree 與回合進行中的條目拒絕。"
-            "代理人仍有背景工作時不要釋放：背景工作完成而恢復時不經 SendMessage，"
-            "條目不會重新登記"
+            "代理人仍有背景工作時，背景工作完成而恢復後，條目要等它第一次呼叫 Bash"
+            "才重新登記；只用 Edit／Write 的期間守衛看不到它"
         ),
     )
     return p

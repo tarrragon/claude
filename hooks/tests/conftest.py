@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from lib import liveness_session_isolation as _liveness_iso
+from lib.process_state_restore import process_state_guard  # noqa: F401  逐測試還原 cwd/environ
 
 
 _ISOLATED = {"root": None, "patch": None}

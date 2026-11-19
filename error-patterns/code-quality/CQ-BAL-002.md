@@ -62,7 +62,7 @@ def validate_who_field(ticket, expected_agent):
 # 逐一核對確認為專案既定的正確分工，非漂移。
 ```
 
-驗證環境：flutter_balance 專案，`ana-ticket-metadata-validation-hook.py` 的
+驗證環境：BAL 專案，`ana-ticket-metadata-validation-hook.py` 的
 `validate_who_field()` 遷移至 `ticket create` CLI 前，對全庫 1410 個既有
 ticket 檔案執行該函式並統計，發現上述比例。
 

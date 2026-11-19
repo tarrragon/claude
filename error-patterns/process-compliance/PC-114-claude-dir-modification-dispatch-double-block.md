@@ -66,13 +66,13 @@ PM 後續走 fallback：直接前台執行（10 分鐘完成），同時 commit 
 
 ## 既有追蹤
 
-本 PC **不另開新 ANA ticket**，事件附 trigger case 證據至既有追蹤：
+本 PC **不另開新 ANA ticket**，事件附 trigger case 證據至專案票庫中已存在、屬下列三類的追蹤 ticket（各專案以自身票庫的對應票為準；框架不點名專案票號）：
 
-| Ticket | 狀態 | 用途 |
+| 追蹤類別 | 狀態 | 用途 |
 |--------|------|------|
-| 診斷票 A | pending | 診斷 subagent .claude/ Edit 受阻 + Bash sed/awk 攔截雙向阻塞 |
-| 審查票 B | pending | 審查 IMP/DOC 類 Hook 對純文件編輯任務的識別與訊息 |
-| 審查票 C | pending | 審查所有 75+ hooks 單維度強制邏輯與 ARCH-018 風險 |
+| 診斷類（雙向阻塞） | pending | 診斷 subagent .claude/ Edit 受阻 + Bash sed/awk 攔截雙向阻塞 |
+| 審查類（Hook 對純文件編輯的識別與訊息） | pending | 審查 IMP/DOC 類 Hook 對純文件編輯任務的識別與訊息 |
+| 審查類（hooks 單維度強制邏輯） | pending | 審查所有 75+ hooks 單維度強制邏輯與 ARCH-018 風險 |
 
 ## 修復方式
 
@@ -96,7 +96,7 @@ PM 後續走 fallback：直接前台執行（10 分鐘完成），同時 commit 
 | C | 兩階段派發：worktree 派改 tests/non-`.claude/`，PM 主 repo 改 `.claude/` | 低（程序複雜，PCB 拆分成本高） |
 | D | 維持現狀，累積 3-5 次同類事件再評估 | 低投入，長觀察 |
 
-當前選 D（維持現狀），事件案例累積至上表三張 ANA 進場時統一決策。
+當前選 D（維持現狀），事件案例累積至上表三類追蹤 ticket 的 ANA 進場時統一決策。
 
 ## 防護
 
@@ -112,7 +112,7 @@ PM 後續走 fallback：直接前台執行（10 分鐘完成），同時 commit 
 
 每次踩到此雙重阻擋：
 
-1. append trigger case 至上表既有追蹤 ticket 之一的 Problem Analysis
+1. append trigger case 至上表三類中既有追蹤 ticket 之一的 Problem Analysis
 2. 不另開新 ticket（避免追蹤膨脹）
 3. 累積到 5 個 trigger case 後評估是否升級為框架修改
 

@@ -17,8 +17,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from lib.skill_version_diff import (
+    LOC_BODY,
+    LOC_CHANGELOG,
+    LOC_PLUGIN,
+    LOC_PYPROJECT,
+    VersionCheck,
+    VersionMismatch,
+    check_skill_versions,
     extract_skill_versions,
+    find_version_mismatches,
     format_skill_version_diff,
+    format_version_check_failure,
 )
 
 
@@ -126,6 +135,66 @@ def test_no_version_anywhere_excluded(tmp_path: Path) -> None:
 
 
 # ============================================================================
+# 版號行的格式變體：擷取值只取 semver 本體
+# 條目常見寫法「**Version**: X（日期）— 說明」，以及 CHANGELOG 開頭說明句
+# 以行內字面提到 `**Version**:`；擷取值不得帶入尾綴或說明句字元
+# ============================================================================
+
+
+def test_changelog_fullwidth_date_suffix_stripped(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", "---\nname: demo\n---\n")
+    _write(
+        tmp_path / "demo" / "CHANGELOG.md",
+        "# demo\n\n**Version**: 1.3.5（2026-11-19）— 新增一節\n",
+    )
+    assert extract_skill_versions(tmp_path).get("demo") == "1.3.5"
+
+
+def test_changelog_preamble_literal_is_skipped(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", "---\nname: demo\n---\n")
+    _write(
+        tmp_path / "demo" / "CHANGELOG.md",
+        "# demo\n\n新到舊。版號住址是本檔最上方的 `**Version**:` 條目。\n\n"
+        "**Version**: 1.28.0 — 最新\n",
+    )
+    assert extract_skill_versions(tmp_path).get("demo") == "1.28.0"
+
+
+def test_changelog_inline_mention_mid_line_is_skipped(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", "---\nname: demo\n---\n")
+    _write(
+        tmp_path / "demo" / "CHANGELOG.md",
+        "# demo\n\n說明：條目寫成 **Version**: 9.9.9 這種形式。\n\n"
+        "**Version**: 2.0.1 — 最新\n",
+    )
+    assert extract_skill_versions(tmp_path).get("demo") == "2.0.1"
+
+
+def test_changelog_plain_entry_unchanged(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", "---\nname: demo\n---\n")
+    _write(tmp_path / "demo" / "CHANGELOG.md", "# demo\n\n**Version**: 4.2.0\n")
+    assert extract_skill_versions(tmp_path).get("demo") == "4.2.0"
+
+
+def test_real_skills_dir_versions_are_semver() -> None:
+    import re
+
+    import pytest
+
+    skills_dir = Path(__file__).resolve().parents[2] / "skills"
+    if not skills_dir.is_dir():
+        pytest.skip("此環境無 .claude/skills/ 目錄，略過實測")
+
+    semver = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+    bad = {
+        name: value
+        for name, value in extract_skill_versions(skills_dir).items()
+        if not semver.match(value)
+    }
+    assert bad == {}, f"以下 skill 擷取值不是 semver：{bad}"
+
+
+# ============================================================================
 # 對本專案實際 .claude/skills/ 目錄實測，驗證擷取涵蓋率
 # （0.2.1-W3-1202 acceptance：58 個 skill 實測零缺漏，格式導致的落空歸零）
 # ============================================================================
@@ -187,3 +256,223 @@ def test_extraction_failure_would_have_caused_false_removal() -> None:
 
     assert diff is not None
     assert "移除" in diff
+
+
+# ============================================================================
+# 權威來源：metadata.version 優先於 CHANGELOG（與 skill-sync 讀取順序一致）
+# ============================================================================
+
+
+def _skill_md(version: str | None, body: str = "# demo\n") -> str:
+    meta = f"metadata:\n  version: {version}\n" if version else ""
+    return f"---\nname: demo\n{meta}---\n{body}"
+
+
+def test_metadata_version_wins_over_changelog_when_they_differ(tmp_path: Path) -> None:
+    """兩處分歧時讀權威欄位；改回 CHANGELOG 優先時本測試轉紅。"""
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("2.54.1"))
+    _write(tmp_path / "demo" / "CHANGELOG.md", "# demo\n\n**Version**: 2.54.2 — 新\n")
+    assert extract_skill_versions(tmp_path).get("demo") == "2.54.1"
+
+
+def test_changelog_used_only_when_metadata_missing(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md(None))
+    _write(tmp_path / "demo" / "CHANGELOG.md", "# demo\n\n**Version**: 3.0.0 — 新\n")
+    assert extract_skill_versions(tmp_path).get("demo") == "3.0.0"
+
+
+# ============================================================================
+# find_version_mismatches：正向對照（分歧要報出）
+# ============================================================================
+
+
+def _locations(mismatches: list[VersionMismatch]) -> set[str]:
+    return {m.location for m in mismatches}
+
+
+def test_mismatch_changelog(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.0.0"))
+    _write(tmp_path / "demo" / "CHANGELOG.md", "# demo\n\n**Version**: 1.0.1 — x\n")
+    assert find_version_mismatches(tmp_path) == [
+        VersionMismatch("demo", LOC_CHANGELOG, "1.0.1", "1.0.0")
+    ]
+
+
+def test_mismatch_body_version_line(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.1.0", "# demo\n\n**Version**: 1.0.0\n"))
+    assert _locations(find_version_mismatches(tmp_path)) == {LOC_BODY}
+
+
+def test_mismatch_pyproject(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.7.0"))
+    _write(tmp_path / "demo" / "pyproject.toml", '[project]\nname = "demo"\nversion = "1.1.0"\n')
+    assert _locations(find_version_mismatches(tmp_path)) == {LOC_PYPROJECT}
+
+
+def test_mismatch_dunder_version_reports_relative_path(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.7.0"))
+    _write(tmp_path / "demo" / "demo_pkg" / "__init__.py", '__version__ = "0.1.0"\n')
+    [m] = find_version_mismatches(tmp_path)
+    assert (m.found, m.expected) == ("0.1.0", "1.7.0")
+    assert "demo_pkg/__init__.py" in m.location
+
+
+def test_mismatch_plugin_json(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("0.15.0"))
+    _write(tmp_path / "demo" / ".claude-plugin" / "plugin.json", '{"name": "demo", "version": "0.11.0"}')
+    assert _locations(find_version_mismatches(tmp_path)) == {LOC_PLUGIN}
+
+
+def test_missing_authority_with_derived_version_is_reported(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md(None))
+    _write(tmp_path / "demo" / "CHANGELOG.md", "# demo\n\n**Version**: 1.0.0 — x\n")
+    assert find_version_mismatches(tmp_path) == [
+        VersionMismatch("demo", LOC_CHANGELOG, "1.0.0", None)
+    ]
+
+
+# ============================================================================
+# find_version_mismatches：反向對照（一致、住址不存在或不屬 skill 本體時不報）
+# ============================================================================
+
+
+def test_all_locations_consistent_reports_nothing(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("2.0.0", "# demo\n\n**Version**: 2.0.0\n"))
+    _write(tmp_path / "demo" / "CHANGELOG.md", "# demo\n\n**Version**: 2.0.0 — x\n")
+    _write(tmp_path / "demo" / "pyproject.toml", '[project]\nname = "demo"\nversion = "2.0.0"\n')
+    _write(tmp_path / "demo" / "pkg" / "__init__.py", '__version__ = "2.0.0"\n')
+    _write(tmp_path / "demo" / ".claude-plugin" / "plugin.json", '{"version": "2.0.0"}')
+    assert find_version_mismatches(tmp_path) == []
+
+
+def test_only_authority_present_reports_nothing(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.0.0"))
+    assert find_version_mismatches(tmp_path) == []
+
+
+def test_fenced_changelog_example_in_body_is_ignored(tmp_path: Path) -> None:
+    body = "# demo\n\n```markdown\n**Version**: 9.9.9 — 範例\n```\n"
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.0.0", body))
+    assert find_version_mismatches(tmp_path) == []
+
+
+def test_dunder_in_tests_and_venv_is_ignored(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.0.0"))
+    _write(tmp_path / "demo" / "tests" / "__init__.py", '__version__ = "0.0.1"\n')
+    _write(tmp_path / "demo" / ".venv" / "lib" / "x" / "__init__.py", '__version__ = "5.0.0"\n')
+    assert find_version_mismatches(tmp_path) == []
+
+
+def test_dynamic_pyproject_version_is_not_compared(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.0.0"))
+    _write(tmp_path / "demo" / "pyproject.toml", '[project]\nname = "demo"\ndynamic = ["version"]\n')
+    assert find_version_mismatches(tmp_path) == []
+
+
+# ============================================================================
+# check_skill_versions：讀不出版號的住址列入 skipped，不當成一致
+# （擋閘門的呼叫端以 ok 判定；只看 mismatches 會讓讀不到的住址放行）
+# ============================================================================
+
+
+def _consistent_skill(root: Path, version: str = "1.0.0") -> Path:
+    skill = root / "demo"
+    _write(skill / "SKILL.md", _skill_md(version))
+    _write(skill / "CHANGELOG.md", f"# demo\n\n**Version**: {version} — x\n")
+    return skill
+
+
+def _skipped_locations(root: Path) -> set[str]:
+    return {s.location for s in check_skill_versions(root).skipped}
+
+
+def test_check_consistent_skill_is_ok(tmp_path: Path) -> None:
+    _consistent_skill(tmp_path)
+    check = check_skill_versions(tmp_path)
+    assert check.ok
+    assert check == VersionCheck([], [], [])
+
+
+def test_check_missing_changelog_is_skipped(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", _skill_md("1.0.0"))
+    assert _skipped_locations(tmp_path) == {LOC_CHANGELOG}
+    assert not check_skill_versions(tmp_path).ok
+
+
+def test_check_changelog_without_version_line_is_skipped(tmp_path: Path) -> None:
+    """`## 1.1.0 — 日期` 標題格式不是慣例格式，擷取不到即略過，不當成一致。"""
+    skill = _consistent_skill(tmp_path)
+    _write(skill / "CHANGELOG.md", "# CHANGELOG\n\n## 1.0.0 — 2026-10-30\n\n- 初始\n")
+    assert _skipped_locations(tmp_path) == {LOC_CHANGELOG}
+
+
+def test_check_unparseable_pyproject_is_skipped(tmp_path: Path) -> None:
+    skill = _consistent_skill(tmp_path)
+    _write(skill / "pyproject.toml", "[project\nversion = \n")
+    assert _skipped_locations(tmp_path) == {LOC_PYPROJECT}
+
+
+def test_check_dynamic_pyproject_is_skipped(tmp_path: Path) -> None:
+    skill = _consistent_skill(tmp_path)
+    _write(skill / "pyproject.toml", '[project]\nname = "demo"\ndynamic = ["version"]\n')
+    assert _skipped_locations(tmp_path) == {LOC_PYPROJECT}
+
+
+def test_check_invalid_plugin_json_is_skipped(tmp_path: Path) -> None:
+    skill = _consistent_skill(tmp_path)
+    _write(skill / ".claude-plugin" / "plugin.json", "{not json")
+    assert _skipped_locations(tmp_path) == {LOC_PLUGIN}
+
+
+def test_check_plugin_json_without_version_is_skipped(tmp_path: Path) -> None:
+    skill = _consistent_skill(tmp_path)
+    _write(skill / ".claude-plugin" / "plugin.json", '{"name": "demo"}')
+    assert _skipped_locations(tmp_path) == {LOC_PLUGIN}
+
+
+def test_check_unreadable_init_is_skipped(tmp_path: Path) -> None:
+    skill = _consistent_skill(tmp_path)
+    (skill / "pkg").mkdir()
+    (skill / "pkg" / "__init__.py").write_bytes(b"\xff\xfe__version__ = '1.0.0'\n")
+    [s] = check_skill_versions(tmp_path).skipped
+    assert "pkg/__init__.py" in s.location
+
+
+def test_check_unreadable_skill_md_is_skipped(tmp_path: Path) -> None:
+    skill = _consistent_skill(tmp_path)
+    (skill / "SKILL.md").write_bytes(b"\xff\xfe---\n")
+    [s] = check_skill_versions(tmp_path).skipped
+    assert s.location == "SKILL.md"
+
+
+def test_check_missing_authority_is_reported_even_without_derived(tmp_path: Path) -> None:
+    _write(tmp_path / "demo" / "SKILL.md", "---\nname: demo\n---\n# demo\n")
+    _write(tmp_path / "demo" / "CHANGELOG.md", "# demo\n\n**Version**: 1.0.0 — x\n")
+    check = check_skill_versions(tmp_path)
+    assert check.missing_authority == ["demo"]
+    assert not check.ok
+
+
+def test_failure_message_states_remedy(tmp_path: Path) -> None:
+    skill = _consistent_skill(tmp_path, "1.1.0")
+    _write(skill / "pyproject.toml", '[project]\nname = "demo"\nversion = "1.0.0"\n')
+    message = format_version_check_failure(check_skill_versions(tmp_path))
+    assert "demo: pyproject.toml [project].version 為 1.0.0，應為 1.1.0" in message
+    assert "以 metadata.version 為準，補齊衍生住址" in message
+    assert "sync-pull 自動解版號衝突後" in message
+
+
+# ============================================================================
+# 閘門：本專案 .claude/skills/ 每個 skill 的版號住址必須一致
+# （用戶裁定 2026-11-19：分歧、讀不出版號、缺權威欄位皆紅燈）
+# ============================================================================
+
+
+def test_real_skills_dir_version_locations_consistent() -> None:
+    import pytest
+
+    skills_dir = Path(__file__).resolve().parents[2] / "skills"
+    if not skills_dir.is_dir():
+        pytest.skip("此環境無 .claude/skills/ 目錄，略過實測")
+    check = check_skill_versions(skills_dir)
+    assert check.ok, format_version_check_failure(check)

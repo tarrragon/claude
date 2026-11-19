@@ -128,7 +128,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_table_na, re.IG
 ## 相關規則 / 文件
 
 - PC-113：原始 word boundary 修復
-- ticket_validator.py:_is_placeholder（line 312-383）
+- ticket_validator.py 的 `_is_placeholder` 函式
 
 ## 範本：發現後的處理
 

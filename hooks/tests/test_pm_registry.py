@@ -355,6 +355,79 @@ class TestUpdateHeartbeat:
         assert after["heartbeat_ts"] != old_ts
 
 
+class TestClearEndedOwnership:
+    def test_mark_session_ended_keeps_entry_with_reason(self, registry_paths):
+        from lib.pm_registry import mark_session_ended
+
+        registry_file, lock_file = registry_paths
+        register_session(registry_file, lock_file, "s-clr", "n", "/p")
+        assert mark_session_ended(registry_file, lock_file, "s-clr", "clear") is True
+        data = read_registry(registry_file)
+        assert data["sessions"]["s-clr"]["ended_reason"] == "clear"
+
+    def test_classify_clear_ended_is_not_orphan(self):
+        from lib.pm_registry import classify_ownership
+
+        sessions = {"s-clr": {"heartbeat_ts": "2000-01-01T00:00:00+00:00", "ended_reason": "clear"}}
+        assert classify_ownership("s-clr", "s-self", sessions) == "ended_by_clear"
+
+    def test_classify_missing_entry_still_orphan_confirmed(self):
+        from lib.pm_registry import classify_ownership
+
+        assert classify_ownership("s-gone", "s-self", {"x": {}}) == "orphan_confirmed"
+
+    def test_resume_clears_ended_marker(self, registry_paths):
+        from lib.pm_registry import mark_session_ended
+
+        registry_file, lock_file = registry_paths
+        register_session(registry_file, lock_file, "s-r", "n", "/p")
+        mark_session_ended(registry_file, lock_file, "s-r", "clear")
+        register_session(registry_file, lock_file, "s-r", "n", "/p", source="resume")
+        assert "ended_reason" not in read_registry(registry_file)["sessions"]["s-r"]
+
+
+class TestPruneEndedClear:
+    OLD = "2000-01-01T00:00:00+00:00"
+
+    def _seed(self, registry_file, lock_file, ts):
+        from lib.pm_registry import mark_session_ended
+
+        register_session(registry_file, lock_file, "s-old", "n", "/p")
+        mark_session_ended(registry_file, lock_file, "s-old", "clear")
+        data = read_registry(registry_file)
+        data["sessions"]["s-old"]["heartbeat_ts"] = ts
+        write_registry(registry_file, data)
+
+    def _new(self, registry_file, lock_file, live):
+        register_session(
+            registry_file, lock_file, "s-new", "n", "/p",
+            live_dispatch_session_ids=live,
+        )
+        return read_registry(registry_file)["sessions"]
+
+    def test_stale_and_no_live_dispatch_is_removed(self, registry_paths):
+        rf, lf = registry_paths
+        self._seed(rf, lf, self.OLD)
+        assert "s-old" not in self._new(rf, lf, set())
+
+    def test_live_dispatch_keeps_entry(self, registry_paths):
+        rf, lf = registry_paths
+        self._seed(rf, lf, self.OLD)
+        assert "s-old" in self._new(rf, lf, {"s-old"})
+
+    def test_fresh_heartbeat_keeps_entry(self, registry_paths):
+        from lib.pm_registry import _now_iso
+
+        rf, lf = registry_paths
+        self._seed(rf, lf, _now_iso())
+        assert "s-old" in self._new(rf, lf, set())
+
+    def test_unknown_dispatches_keeps_entry(self, registry_paths):
+        rf, lf = registry_paths
+        self._seed(rf, lf, self.OLD)
+        assert "s-old" in self._new(rf, lf, None)
+
+
 class TestReleaseSession:
     def test_release_removes_entry(self, registry_paths):
         registry_file, lock_file = registry_paths

@@ -79,7 +79,7 @@ class TestGetChangedTicketMdFiles:
             hook.FileStatus(status=" M", file_path="lib/main.dart"),
             hook.FileStatus(status="??", file_path="docs/work-logs/v1/tickets/b.md"),
         ]
-        with patch.object(hook, "get_uncommitted_files", return_value=statuses), \
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=statuses), \
                 patch.object(hook, "get_session_claimed_ticket_ids", return_value={"a", "b"}):
             files = hook.get_changed_ticket_md_files(logger)
         assert files == [
@@ -94,18 +94,18 @@ class TestGetChangedTicketMdFiles:
                 file_path="docs/work-logs/v1/tickets/old.md -> docs/work-logs/v1/tickets/new.md",
             )
         ]
-        with patch.object(hook, "get_uncommitted_files", return_value=statuses), \
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=statuses), \
                 patch.object(hook, "get_session_claimed_ticket_ids", return_value={"new"}):
             files = hook.get_changed_ticket_md_files(logger)
         assert files == ["docs/work-logs/v1/tickets/new.md"]
 
     def test_empty_when_no_ticket_md(self, logger):
         statuses = [hook.FileStatus(status=" M", file_path="lib/main.dart")]
-        with patch.object(hook, "get_uncommitted_files", return_value=statuses):
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=statuses):
             assert hook.get_changed_ticket_md_files(logger) == []
 
     def test_empty_when_clean(self, logger):
-        with patch.object(hook, "get_uncommitted_files", return_value=[]):
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=[]):
             assert hook.get_changed_ticket_md_files(logger) == []
 
 
@@ -121,7 +121,7 @@ class TestSessionAttributionFilter:
     def test_only_session_claimed_ticket_included(self, logger):
         """工作區同時存在他 session 在途的 ticket md：僅本 session 認領的納入。"""
         with patch.object(
-            hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+            hook, "get_uncommitted_files_strict", return_value=self._TWO_CANDIDATES
         ), patch.object(
             hook, "get_session_claimed_ticket_ids", return_value={"mine"}
         ):
@@ -131,7 +131,7 @@ class TestSessionAttributionFilter:
     def test_all_excluded_when_attribution_source_unavailable(self, logger):
         """歸屬判定來源不可用（回傳 None）時，保守排除全部候選（acceptance 第 2 項）。"""
         with patch.object(
-            hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+            hook, "get_uncommitted_files_strict", return_value=self._TWO_CANDIDATES
         ), patch.object(hook, "get_session_claimed_ticket_ids", return_value=None):
             files = hook.get_changed_ticket_md_files(logger)
         assert files == []
@@ -139,7 +139,7 @@ class TestSessionAttributionFilter:
     def test_all_excluded_when_session_has_no_claims(self, logger):
         """本 session 合法地未認領任何票（空集合，非 None）：候選皆排除。"""
         with patch.object(
-            hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+            hook, "get_uncommitted_files_strict", return_value=self._TWO_CANDIDATES
         ), patch.object(hook, "get_session_claimed_ticket_ids", return_value=set()):
             files = hook.get_changed_ticket_md_files(logger)
         assert files == []
@@ -150,7 +150,7 @@ class TestSessionAttributionFilter:
 
         with caplog.at_level(_logging.INFO, logger=logger.name):
             with patch.object(
-                hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+                hook, "get_uncommitted_files_strict", return_value=self._TWO_CANDIDATES
             ), patch.object(
                 hook, "get_session_claimed_ticket_ids", return_value={"mine"}
             ):
@@ -391,3 +391,35 @@ class TestMainFlow:
         ), patch.object(hook, "auto_commit_ticket_md", return_value=True) as ac:
             assert hook.main() == 0
             ac.assert_called_once()
+
+
+# ============================================================================
+# git status 失敗須有可見訊號（3.4.0-W1-329）
+# ============================================================================
+
+
+class TestGitStatusFailureSignal:
+    """git status 失敗與「無未提交票檔」不可同形：自動提交走既有失敗路徑
+    （回空清單、本輪不提交），但須 stderr + 日誌留痕。"""
+
+    def test_failure_writes_stderr_and_log_and_returns_empty(self, logger, capsys, caplog):
+        import logging as _logging
+
+        with caplog.at_level(_logging.WARNING, logger=logger.name), patch.object(
+            hook, "get_uncommitted_files_strict",
+            side_effect=hook.GitStatusError("fatal: not a git repository"),
+        ):
+            files = hook.get_changed_ticket_md_files(logger)
+        assert files == []
+        err = capsys.readouterr().err
+        assert "[ticket-md-auto-commit] git status 失敗" in err
+        assert "fatal: not a git repository" in err
+        assert any("fatal: not a git repository" in r.getMessage() for r in caplog.records)
+
+    def test_success_unchanged_and_silent(self, logger, capsys):
+        statuses = [hook.FileStatus(status=" M", file_path="docs/work-logs/v1/tickets/a.md")]
+        with patch.object(hook, "get_uncommitted_files_strict", return_value=statuses), \
+                patch.object(hook, "get_session_claimed_ticket_ids", return_value={"a"}):
+            files = hook.get_changed_ticket_md_files(logger)
+        assert files == ["docs/work-logs/v1/tickets/a.md"]
+        assert capsys.readouterr().err == ""

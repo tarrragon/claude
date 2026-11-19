@@ -25,14 +25,15 @@ from pathlib import Path
 # 指紋不一致）。manifest 位於 .claude/lib/。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.sync_exclude_manifest import should_exclude, compute_content_hash  # noqa: E402, F401
+from lib.sync_base_store import BASE_SHA_FIELD, read_sync_base_field  # noqa: E402
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
 
+# 本機同步狀態檔（last_push_*）。base 存於入版控的 sync-base.json。
 SYNC_STATE_FILENAME = ".sync-state.json"
 
 # 單一 base snapshot 欄位（多視角 H1：禁雙欄位 push/pull + 禁對 SHA 用 max()）。
 # commit SHA 為字典序字串，max(SHA) 會選錯共同祖先；push/pull 成功皆覆寫此同一欄位。
-BASE_SHA_FIELD = "last_synced_base_sha"
 NO_RECORD = "（無記錄）"
 
 
@@ -42,6 +43,11 @@ def resolve_base_sha_display(sync_state: dict) -> str:
     僅認 BASE_SHA_FIELD 單一鍵，不接受 push/pull 雙欄位 schema（H1 防護）。
     """
     return sync_state.get(BASE_SHA_FIELD) or NO_RECORD
+
+
+def read_base_sha_display(claude_dir: Path) -> str:
+    """讀 sync-base.json 的 base 供顯示（缺值回退舊位置），不遷移、不寫檔。"""
+    return read_sync_base_field(claude_dir, BASE_SHA_FIELD) or NO_RECORD
 
 
 def print_color(msg: str, color: str = "yellow") -> None:
@@ -159,7 +165,7 @@ def main() -> None:
     current_hash = compute_content_hash(claude_dir)
     sync_state = load_sync_state(claude_dir)
     last_push_hash = sync_state.get("last_push_hash", NO_RECORD)
-    base_sha = resolve_base_sha_display(sync_state)
+    base_sha = read_base_sha_display(claude_dir)
 
     if last_push_hash == NO_RECORD:
         content_status = "無推送記錄"

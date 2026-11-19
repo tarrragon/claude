@@ -33,7 +33,7 @@ try:
     from .messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
     from .merge_cas import (
         CheckResult, MergeOutcome, PreMergeCheck, _git_out, _verify_three_planes, merge_branch_cas,
-        precheck_merge_conflict,
+        precheck_merge_conflict, resolve_main_checkout_root,
     )
     from .merge_gate import (
         GATE_MAX_RETRIES, GATE_ABORTED, GATE_PRECHECK_CLEAR, GATE_PRECHECK_CONFLICT, GATE_REFUSED, GATE_WRITTEN, MergeGate,
@@ -55,7 +55,7 @@ except ImportError:
     from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
     from merge_cas import (
         CheckResult, MergeOutcome, PreMergeCheck, _git_out, _verify_three_planes, merge_branch_cas,
-        precheck_merge_conflict,
+        precheck_merge_conflict, resolve_main_checkout_root,
     )
     from merge_gate import (
         GATE_MAX_RETRIES, GATE_ABORTED, GATE_PRECHECK_CLEAR, GATE_PRECHECK_CONFLICT, GATE_REFUSED, GATE_WRITTEN, MergeGate,
@@ -190,6 +190,11 @@ except ImportError as e:
     def is_allowed_branch(branch: str) -> bool:
         """Fallback: 檢查允許編輯分支（降級模式）"""
         return any(branch.startswith(p) for p in _fallback_allowed_patterns)
+
+
+def _main_root() -> str:
+    """合併路徑的主 checkout 根（MR）：CAS repo、MergeGate 根、閘門日誌都用它，與 cleanup 同一份日誌。"""
+    return resolve_main_checkout_root(str(get_project_root()))
 
 
 # ===== 核心函式 =====
@@ -729,7 +734,7 @@ def _cleanup_failed_create(branch_name: str, worktree_path: str) -> None:
 
     前置驗證已確保分支與路徑在 add 前不存在，故兩者若存在皆為本次所建。
     """
-    root = str(get_project_root())
+    root = _main_root()  # 僅作日誌根；git 步驟仍在呼叫端 cwd 執行
     # 逾時被殺的 worktree 會停在 locked initializing，需雙 --force 才能移除
     _run_cleanup_step(root, "worktree remove", worktree_path,
                       ["worktree", "remove", "--force", "--force", worktree_path])
@@ -1281,7 +1286,7 @@ def _merge_log_pre_acceptance(label: str, reason: str, tag: str = "合併前驗�
     line = f"[{tag}] target={label} reason={reason}"
     print(line)
     try:
-        log_dir = Path(get_project_root()) / ".claude" / "logs"
+        log_dir = Path(_main_root()) / ".claude" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         with open(log_dir / "worktree-merge.log", "a", encoding="utf-8") as fh:
             fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {line}\n")
@@ -1371,12 +1376,12 @@ def cmd_merge(
                 return 1
             _merge_log_pre_acceptance(label, skip_gate_reason, tag="略過合併前測試")
         else:
-            pre_merge_check = MergeGate(get_project_root(), runner=gate_runner)
+            pre_merge_check = MergeGate(_main_root(), runner=gate_runner)
             max_retries = GATE_MAX_RETRIES
     cleanup_args = cleanup_suggestion_args(ticket_id, branch)
     if isinstance(pre_merge_check, MergeGate):
         return _merge_through_gate(pre_merge_check, branch_name, cleanup_args, max_retries, merge_message)
-    outcome = merge_branch_cas(branch_name, repo=get_project_root(), pre_merge_check=pre_merge_check,
+    outcome = merge_branch_cas(branch_name, repo=_main_root(), pre_merge_check=pre_merge_check,
                                max_retries=max_retries, message=merge_message)
     return _print_merge_outcome(outcome, cleanup_args)
 
@@ -1412,7 +1417,7 @@ def _merge_through_gate(
     名額未取得（預估拒絕、等待逾時、訊號）是預期內結果：說明行已由名額閘門輸出，這裡只回傳
     其結束碼（拒絕／逾時為 125）；其餘例外記一行「中止」後原樣再拋，保留 traceback。
     """
-    root = get_project_root()
+    root = _main_root()
     ok, base_head = _git_out(["rev-parse", DEFAULT_BASE_BRANCH], root)
     base_head = base_head if ok else "未知"
 
@@ -1460,7 +1465,7 @@ def _print_merge_outcome(outcome: MergeOutcome, cleanup_args: str) -> int:
         print(_BATCH_LANDED.format(via=outcome.via, commit=outcome.commit_sha))
         print(MergeMessages.MERGE_SUCCESS.format(cleanup_args=cleanup_args))
         return 0
-    bad = _verify_three_planes(get_project_root(), outcome.synced, outcome.commit_sha)
+    bad = _verify_three_planes(_main_root(),outcome.synced, outcome.commit_sha)
     print(MergeMessages.CAS_RESULT.format(
         commit=outcome.commit_sha, attempts=outcome.attempts, synced=len(outcome.synced), bad=len(bad)))
     for path in outcome.skipped:

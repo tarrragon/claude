@@ -46,11 +46,11 @@ from lib import (
     get_project_root,
     parse_ticket_frontmatter,
     get_worktree_list,
-    get_uncommitted_files,
     get_current_branch,
     is_protected_branch,
     run_git,
 )
+from lib.git_utils import GitStatusError, get_uncommitted_files_strict
 from lib.hook_base import get_shared_state_root
 
 
@@ -337,7 +337,7 @@ def collect_orphan_agent_branches(
 def collect_modified_ticket_paths(project_root: Path, logger) -> Optional[List[str]]:
     """從 git status --porcelain 取出所有 modified / added 的 ticket md 相對路徑。
 
-    改用 lib.git_utils.get_uncommitted_files(cwd=...)，
+    改用 lib.git_utils.get_uncommitted_files_strict(cwd=...)，
     以 FileStatus.is_modified / is_added 取代自行判斷 status_code。
 
     Returns:
@@ -347,9 +347,11 @@ def collect_modified_ticket_paths(project_root: Path, logger) -> Optional[List[s
         非 None 清單（可為空）→ 判定成功。
     """
     try:
-        file_statuses = get_uncommitted_files(cwd=str(project_root))
-    except Exception as exc:
-        logger.warning("git status 執行失敗，無法判定 modified 檔案清單: %s", exc)
+        file_statuses = get_uncommitted_files_strict(cwd=str(project_root))
+    except Exception as exc:  # GitStatusError 為主；其餘意外例外同樣判定失敗
+        message = f"git status 失敗，metadata orphan 稽核已跳過: {exc}"
+        logger.warning(message)
+        sys.stderr.write(f"[session-start-merged-worktree-audit] {message}\n")
         return None
 
     paths: List[str] = []

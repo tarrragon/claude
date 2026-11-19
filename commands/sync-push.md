@@ -19,6 +19,14 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 1. **發版前置：更新版號與變更紀錄**
    - 更新 `.claude/CHANGELOG.md`（腳本不產生條目，遠端內容即本地檔）
    - 更新 `.claude/VERSION` 為新版號，須數值上高於遠端 VERSION，且遠端不得已有 `v<版號>` tag；否則腳本 exit 1 拒絕推送
+   - 例外：帶 `--clean` 且版號等於遠端時，視為同版號清理推送，只接受僅含刪除的內容，完成後把同名 tag 移到新 commit；遠端 tag 不指向遠端 main HEAD、或內容含新增或修改時 exit 1。移動 tag 以 force-with-lease 推送，屬 force push，依 CLAUDE.md〈常駐操作授權〉執行前須逐次取得用戶確認
+   - 推送前先跑 `python3 ./.claude/scripts/sync-claude-push.py --dry-run`，看〈--clean 刪除預覽〉段決定首次推送是否帶 `--clean`
+   - dry-run 與正式推送在 clone 後都會比對 `.claude/sync-base.json` 的 base 與 canonical HEAD，不阻擋推送：
+     - canonical 在上次同步後前進：印 `[WARNING]` 與前進的 commit 數。推送會以本地內容覆蓋同路徑檔案，把他方的修改蓋回，先 `/sync-pull` 收入再推送。
+     - base 不在 canonical 歷史中：印 `[WARNING]`。
+     - 讀不到 base：印 `[INFO]` 說明原因，照常推送。
+   - dry-run 另列出本地尚未推送的 `.claude/` commit 數（錨點為最後一次寫入 `.claude/sync-base.json` 的 commit）。不為 0 代表 consumer 尚未取得這些變更；只列出，不阻擋。`/version-release check` 也會列出同一個數字。
+   - 推送前 rule8 檢查：待推送內容含未豁免的專案 ticket ID，或掃描失敗、有檔案無法讀取（非 UTF-8）時，正式推送 exit 1，遠端不寫入；dry-run 會印「正式推送會被擋」。處置是移除、改寫該 ID，或依規則 8 加 marker。確認需照常推送時帶 `--rule8-override "<理由>"`，理由寫進推送 commit 訊息的 body；例行推送不帶此旗標。專案路徑軌只提示，不擋。
 
 2. **確認變更已提交到主專案**
    - 檢查 `.claude` 是否已提交（含上一步的 VERSION 與 CHANGELOG）
@@ -27,18 +35,24 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 3. **執行推送腳本**（推送版號 = 本地 `.claude/VERSION`，腳本不遞增、不回寫）
    - 自動分析模式（推薦）：腳本自動分析 .claude/ 相關 commit 生成 commit 訊息（僅作訊息，與版號無關）
      ```bash
-     python3 ./.claude/scripts/sync-claude-push.py
+     python3 ./.claude/scripts/sync-claude-push.py --expect-head <dry-run 印出的預覽 commit> --clean   # 或 --no-clean
      ```
    - 手動訊息模式：用戶指定 commit 訊息（覆蓋自動生成）
      ```bash
-     python3 ./.claude/scripts/sync-claude-push.py "提交訊息"
+     python3 ./.claude/scripts/sync-claude-push.py "提交訊息" --expect-head <預覽 commit> --clean   # 或 --no-clean
      ```
+   - `--expect-head`（選用，建議帶）：要推送的 commit 與 dry-run 預覽的 commit 不一致時，在 clone 前以 1 結束並列出差異 commit，避免查證後他方合入的內容一併推出
+   - `--clean`／`--no-clean`：偵測到真孤兒（本地已刪除、遠端仍有）而兩者都沒帶時，推送前以 1 結束；要一併刪除遠端孤兒帶 `--clean`，只推送不刪除帶 `--no-clean`。沒有真孤兒時兩者都可省略
 
 4. **驗證推送結果**
    - 確認腳本輸出最後出現「成功推送 .claude 到獨立 repo！」訊息
    - 確認輸出含「已打並推送版本 tag v<版號>」（tag 失敗時腳本 exit 非 0，須補推 tag）
    - 確認腳本輸出包含 `To https://github.com/tarrragon/claude.git` 推送記錄
    - 注意：腳本使用臨時目錄操作，主專案沒有 `claude-shared` remote，**禁止**執行 `git fetch claude-shared`
+
+5. **commit 同步基準點**
+   - 推送成功後腳本把遠端 HEAD 寫進 `.claude/sync-base.json`（進版控），以 `git add .claude/sync-base.json` 後 commit
+   - 不 commit 時，下一次 `/sync-pull` 的未提交變更檢查會擋下（exit 1），新 clone 與其他 worktree 也讀不到新基準點
 
 ## 自動 commit 訊息生成
 

@@ -153,6 +153,8 @@ ticket track conflicts --for <id>                # 列出該票與其他 pending
 | 兩票 `where.files` 有交集，內容不可拆分 | 改序列派發：待前票 commit 完成後才派後票 |
 | 上列序列化的兩票是同一父票下的兄弟票 | 只在派發排程處理（等前票 commit），不要寫進 `blockedBy`：同檔排序不是語意依賴，寫成兄弟 `blockedBy` 會觸發 ARCH-017 多兄弟依賴檢查，後票連 claim 都會被擋 |
 
+**同一 skill 的版號行重疊**：改同一個 skill 的票必然都改 CHANGELOG 首條與 `metadata.version`；帶套件的 skill 另有 `pyproject.toml`、`__version__`、`uv.lock` 等衍生住址，同一次重新取號要一起改，否則框架測試的版號一致性檢查會讓分支閘門紅燈。派發時不預留版號，各票在合併前以主線當下版號重新取號，判準見 `.claude/skills/skill-design-guide/references/writing-the-body.md`〈版號規則：合併時才取號〉。
+
 exit code 0（無衝突）時方可依原計畫並行派發。指令用法、判定規則、`[heuristic]` 標記語意見 `.claude/skills/ticket/references/track-command.md`「track conflicts 子命令」；完整案例與根因見 `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`「變體：檔案級共用」章節。
 
 **隔離索引不豁免同檔序列化**：`ticket track commit` 的隔離索引只隔離「不觸碰共用 git index」，不隔離「同一檔案的工作區內容」——兩票 `where.files` 皆宣告同一檔案時，即使雙方都改用 `ticket track commit`，先提交者仍會整檔取用工作區當下內容，把後提交者尚未 commit 的同檔編輯一併寫入（機制見 `.claude/skills/ticket/references/track-command.md`「track commit 子命令」同檔邊界說明）。上表「兩票 `where.files` 有交集，內容不可拆分 -> 改序列派發」不因改用隔離索引而變成可選項。
@@ -572,6 +574,9 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
+**Last Updated**: 2026-11-19
+**Version**: 4.39.0 - 〈派發前 where.files 交集檢查〉「同一 skill 的版號行重疊」補一句：帶套件的 skill 另有 `pyproject.toml`、`__version__`、`uv.lock` 等衍生住址，重新取號時一起改，否則版號一致性檢查讓分支閘門紅燈；住址表在 skill-design-guide〈版號規則：合併時才取號〉
+**Version**: 4.38.0 - 〈派發前 where.files 交集檢查〉交集處置表後補一段路由：同一 skill 的版號行重疊不在派發時預留版號，合併前以主線當下版號重新取號，判準在 skill-design-guide〈版號規則：合併時才取號〉
 **Last Updated**: 2026-11-17
 **Version**: 4.37.1 - 〈派發位置判準〉第二列括號內 hook 放行範圍由「純主 repo `.claude/` 目標」改為豁免路徑目標，與 hook 實作對齊（來源：#101）
 **Last Updated**: 2026-10-14

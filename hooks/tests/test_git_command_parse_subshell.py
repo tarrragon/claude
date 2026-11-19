@@ -178,7 +178,8 @@ def _run_wipe(
     monkeypatch.setattr(hook, "get_project_root", lambda: root)
     monkeypatch.setattr(hook, "_get_active_dispatch_count", lambda root, logger: dispatch_count)
     monkeypatch.setattr(
-        hook, "_has_main_repo_uncommitted_tracked_changes", lambda root, logger: False
+        hook, "_has_main_repo_uncommitted_tracked_changes",
+        lambda root, logger, failure_sink=None: False,
     )
     return hook.main()
 

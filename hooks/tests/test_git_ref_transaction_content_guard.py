@@ -793,5 +793,73 @@ class TestDocValidateOnRefTransaction:
         assert "不一致" in result.stderr
 
 
+class TestWrapSkillYamlAc3Only:
+    """提交階段只保留 AC3（warn），映射檔缺失不再 deny。"""
+
+    _SKILL = ".claude/skills/wrap-decision/SKILL.md"
+
+    class _ErrLogger(_Logger):
+        def error(self, *a, **k): pass
+
+    def _repo_with_skill(self, tmp_path, head_v, new_v):
+        _run_git(["init", "-q"], tmp_path)
+        _run_git(["config", "user.email", "t@t"], tmp_path)
+        _run_git(["config", "user.name", "t"], tmp_path)
+        p = tmp_path / self._SKILL
+        p.parent.mkdir(parents=True)
+        p.write_text(f"# s\n\n**Version**: {head_v}\n", encoding="utf-8")
+        _run_git(["add", "."], tmp_path)
+        _run_git(["commit", "-q", "-m", "init"], tmp_path)
+        p.write_text(f"# s\n\n**Version**: {new_v}\n", encoding="utf-8")
+
+    def _sf(self):
+        from lib import commit_content_guards as ccg
+        return ccg, ccg.StagedFile(self._SKILL, "", "", "")
+
+    def test_missing_alignment_file_not_denied(self, tmp_path):
+        self._repo_with_skill(tmp_path, "1.0.0", "1.0.1")
+        ccg, sf = self._sf()
+        assert ccg._check_wrap_skill_yaml(sf, self._ErrLogger(), tmp_path) == []
+
+    def test_version_regress_still_warns(self, tmp_path):
+        self._repo_with_skill(tmp_path, "1.2.0", "1.1.0")
+        ccg, sf = self._sf()
+        findings = ccg._check_wrap_skill_yaml(sf, self._ErrLogger(), tmp_path)
+        assert [f.severity for f in findings] == ["warn"]
+        assert "AC3" in findings[0].message
+
+    def test_ac3_exception_does_not_void_other_deny(self, tmp_path, monkeypatch):
+        self._repo_with_skill(tmp_path, "1.0.0", "1.0.1")
+        ccg, sf = self._sf()
+
+        def _boom(self_or_root, *a, **k):
+            raise PermissionError("denied")
+
+        real_load = ccg._load_module
+
+        def _patched_load(name, path):
+            m = real_load(name, path)
+            if name == "commit_gate_wrap_skill_yaml" and m is not None:
+                m.check_version_no_regress = _boom
+            return m
+
+        monkeypatch.setattr(ccg, "_load_module", _patched_load)
+        deny = ccg.Finding("deny", "fake-guard", "blocked", "other.txt")
+        monkeypatch.setattr(
+            ccg, "_PER_FILE_CHECKS",
+            [lambda s, lg: [deny] if s.rel_path == "other.txt" else []],
+        )
+        monkeypatch.setattr(ccg, "_check_branch_verify", lambda *a, **k: [])
+        monkeypatch.setattr(ccg, "_check_doc_validate", lambda *a, **k: [])
+        other = ccg.StagedFile("other.txt", "", "", "x")
+        findings = ccg._run_all_checks([other, sf], tmp_path, self._ErrLogger())
+        assert any(f.severity == "deny" for f in findings)
+        assert any(
+            f.severity == "warn" and f.source == "wrap-skill-yaml-consistency"
+            and "PermissionError" in f.message
+            for f in findings
+        )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

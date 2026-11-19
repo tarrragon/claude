@@ -2,6 +2,9 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 3.1.0 — `check` 的 Pre-flight 新增步驟 1.8：列出本地尚未推送到 framework canonical 的 `.claude/` commit 數（錨點為 git 歷史中最後一次寫入 `.claude/sync-base.json` 的 commit，計數為其後動到 `.claude/` 的非 merge commit）。只輸出資訊，不計入通過判定；無法計算時說明原因。
+- 對齊版號住址：`pyproject.toml` 的 `version` 由 1.0.0 改為 3.1.0。
+
 **Version**: 3.0.0（2026-11-12）— `release`／`finish` 標 completed 後預設不再推進下一個 planned 版本：下一版維持 planned，todolist 進入版本空窗，回饋檢查完成後以 `start --version <下一版>` 轉 active。新增 `--activate-next` 保留舊行為。預設行為改變，故升 major；第二次收尾提交在未推進時訊息改為「標記完成」。空窗定義見 `.claude/pm-rules/version-progression.md`〈版本生命週期〉。
 - 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；僅註解與 docstring，行為不變。
 

@@ -132,9 +132,9 @@ def test_bump_updates_pin_latest(tmp_path: Path):
     claude = tmp_path / ".claude"
     _write_state(claude, pinned_version="v1.0.1", last_synced_base_sha="abc")
     pull_mod.update_pinned_version(claude, None)
-    data = json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
+    data = json.loads((claude / "sync-base.json").read_text(encoding="utf-8"))
     assert data["pinned_version"] == "latest"
-    # 保留既有欄位
+    # 舊位置的 base 一併遷移到入版控檔
     assert data["last_synced_base_sha"] == "abc"
 
 
@@ -143,14 +143,14 @@ def test_bump_updates_pin_specific(tmp_path: Path):
     claude = tmp_path / ".claude"
     _write_state(claude, pinned_version="v1.0.1")
     pull_mod.update_pinned_version(claude, "v1.2.0")
-    data = json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
+    data = json.loads((claude / "sync-base.json").read_text(encoding="utf-8"))
     assert data["pinned_version"] == "v1.2.0"
 
 
 def test_bump_creates_state_when_absent(tmp_path: Path):
-    """無 .sync-state.json 時 --bump 建立檔案並寫入 pin。"""
+    """無狀態檔時 --bump 建立 sync-base.json 並寫入 pin。"""
     claude = tmp_path / ".claude"
     claude.mkdir()
     pull_mod.update_pinned_version(claude, "latest")
-    data = json.loads((claude / ".sync-state.json").read_text(encoding="utf-8"))
+    data = json.loads((claude / "sync-base.json").read_text(encoding="utf-8"))
     assert data["pinned_version"] == "latest"

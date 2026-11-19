@@ -68,27 +68,34 @@ def test_load_preserve_list_missing_file_returns_empty(tmp_path: Path):
     assert sync_mod.load_preserve_list(tmp_path) == set()
 
 
-def test_load_preserve_list_warns_on_trailing_slash_entry(tmp_path: Path, capsys):
-    """目錄項以斜線結尾時，讀入階段輸出 stderr 警告（preserve 比對維度為完整檔案路徑）。"""
-    _write_preserve(tmp_path, ["skills/my-private-skill/"])
-
-    sync_mod.load_preserve_list(tmp_path)
-
-    captured = capsys.readouterr()
-    assert "preserve 項目為目錄" in captured.err
-    assert "skills/my-private-skill/" in captured.err
-
-
-def test_load_preserve_list_warns_on_actual_directory_entry(tmp_path: Path, capsys):
-    """目錄項未以斜線結尾但本地路徑實際為目錄時，仍輸出 stderr 警告。"""
+# 3.4.0-W1-307.4：目錄項改為以前綴比對生效（push、pull 共用 is_preserved），
+# 原「目錄項不生效」的讀入警告移除。
+@pytest.mark.parametrize("entry", ["skills/my-private-skill/", "skills/my-private-skill"])
+def test_load_preserve_list_dir_entry_no_warning_and_effective(tmp_path: Path, capsys, entry):
     (tmp_path / "skills" / "my-private-skill").mkdir(parents=True)
-    _write_preserve(tmp_path, ["skills/my-private-skill"])
+    _write_preserve(tmp_path, [entry])
 
-    sync_mod.load_preserve_list(tmp_path)
+    preserve = sync_mod.load_preserve_list(tmp_path)
 
-    captured = capsys.readouterr()
-    assert "preserve 項目為目錄" in captured.err
-    assert "skills/my-private-skill" in captured.err
+    assert capsys.readouterr().err == ""
+    assert sync_mod.is_preserved("skills/my-private-skill/SKILL.md", preserve)
+    assert not sync_mod.is_preserved("skills/my-private-skill-2/SKILL.md", preserve)
+
+
+def test_copy_filtered_from_staging_skips_files_under_dir_entry(tmp_path: Path):
+    """push：目錄項之下的檔案不被複製到推送目標；目錄外照常複製。"""
+    src = tmp_path / "staging"
+    dst = tmp_path / "remote"
+    for rel in ("skills/private/SKILL.md", "skills/private/ref/a.md", "skills/public/SKILL.md"):
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text("x", encoding="utf-8")
+    dst.mkdir()
+
+    sync_mod.copy_filtered_from_staging(src, dst, {"skills/private/"})
+
+    assert not (dst / "skills/private/SKILL.md").exists()
+    assert not (dst / "skills/private/ref/a.md").exists()
+    assert (dst / "skills/public/SKILL.md").exists()
 
 
 def test_load_preserve_list_no_warning_for_file_entry(tmp_path: Path, capsys):

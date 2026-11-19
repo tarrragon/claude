@@ -1,3 +1,113 @@
+## [3.4.0] - 2026-11-19
+
+### Summary
+本版主題是同步管道與 hook 前提：兌現 3.3.0、3.3.1 Known issues 的全部承諾，並收斂 sync-pull／sync-push 的確認、基準點與孤兒處理。主要變更有六組：同步基準點與固定版本改存入版控的 `sync-base.json`，新 clone 與 linked worktree 讀得到基準點；sync-pull 的全量 overlay 確認可綁定上游 commit、完整清單寫檔、等待確認改用專屬結束碼，三方合併補上三處誤判；sync-push 推送前 rule8 檢查改為阻擋，並新增 `--expect-head`、`--no-clean`、base 落後與未推送 commit 提示；十餘支讀錯 payload 欄位、regex 失效或以 exit 0 吞掉 import 失敗的 hook 改為判定正確，讓原本從未執行的檢查開始運作；skill 版號以 SKILL.md frontmatter 的 `metadata.version` 為唯一權威，一致性測試隨 `lib/tests` 送達 consumer；各測試套件逐測試還原 cwd 與環境變數。
+
+### 對 consumer 的影響
+
+#### 預設改變
+- **同步基準點與固定版本改存入版控的 `.claude/sync-base.json`**：`last_synced_base_sha` 與 `pinned_version` 從 gitignore 的 `.claude/.sync-state.json` 移到這個新檔。
+  - 新檔跟著 commit 走，新 clone 與 linked worktree 讀得到基準點，`sync-pull` 走三方合併，不再退回全量 overlay。
+  - 新檔屬類型 E：進版控，`sync-pull` 和 `sync-push` 都不同步它，也不需要加進 `.gitignore`。
+  - `.sync-state.json` 只保留本機狀態：上次推送紀錄、衝突輪的待確認基準點、hook 自動登記紀錄。
+- **第一次成功的 pull 自動遷移**：`sync-base.json` 沒有值時，腳本讀舊位置 `.sync-state.json`。第一次成功的 `sync-pull`、`sync-push` 或 `--bump`，會把基準點與固定版本一起搬進 `sync-base.json`，並從舊檔移除。
+  - 遷移時 stderr 印出「[sync-base] 已將 … 從 .sync-state.json 遷移到 sync-base.json（此檔進版控，請一併 commit）」。
+  - 新檔要和該次 pull 的變更一起 commit。
+  - 只讀不寫的情況（`sync-status`、中止的 pull）不遷移，也不改任何檔。
+- **`sync-preserve.yaml`、`sync-skills.yaml` 改為進專案版控**（manifest 類型 E）：`sync-push`／`sync-pull` 仍不同步它們；新 clone 與 linked worktree 從此讀得到 preserve 保護與 private 排除。`.gitignore` 必要清單少兩條，SessionStart 的 `.gitignore` 檢查與 `project-init onboard` 不再要求忽略這兩個檔。`.gitignore` 仍忽略它們時，檢查會列出「可移除的 `.gitignore` 條目」，onboard 報告與待辦各列一則，只提示不阻擋；移除條目後把宣告檔 `git add`。project-init 為 1.5.0。
+- **sync-pull 的全量 overlay 確認改為三處**：
+  - `--confirm-overlay` 可帶 dry-run 印出的 target SHA；上游在兩次執行之間移動時，以結束碼 10 中止並重印清單與新 SHA。裸旗標維持相容。
+  - dry-run 的四段清單原本各截斷 50 條；現在完整清單寫入備份目錄的 `overlay-dry-run-list.txt`（含 target SHA），stdout 多一行 `[dry-run] 完整清單檔: <路徑>`，`/sync-pull` 步驟 3 引用該行。
+  - 全量 overlay 等待確認（stdin 非互動且未帶 `--confirm-overlay`）改以結束碼 10 中止，其他中止仍為 1；`/sync-pull` 判斷表改依結束碼，不再比對 stdout 文字。以結束碼判斷「是否等待確認」的腳本，要把 10 納入。
+- **sync-pull 輸出中 preserve 相關訊息改稱「sync-preserve 列入的檔案」**（原稱「本地特化檔案」）：分類與結束碼不變。「本地特化」的定義統一放在 `references/sync-mechanism-guide.md`〈本地特化的定義〉：相對同步基準點的新增或修改；`sync-preserve.yaml` 是保護機制，README 不再自下定義。framework-update-adaptation 為 1.1.0，第 4 類問句涵蓋依舊流程寫成的待辦票（tarrragon/claude#140）。
+- **skill 版號以 SKILL.md frontmatter 的 `metadata.version` 為唯一權威**：CHANGELOG 首條、pyproject、`__version__`、plugin.json 為衍生住址，必須相等。框架測試新增真實 skills 目錄的一致性檢查：分歧、讀不出版號、缺權威欄位都會紅燈，失敗訊息附處置。`.claude/lib/tests` 隨同步送達 consumer，consumer 自己的 skill 若有住址分歧，套件也會紅燈；處置為以 `metadata.version` 補齊衍生住址。
+- **version-tracking-consistency-guard 的「closed 票延後承諾稽核」豁免名單改讀檔案**：不再寫死在 hook 內，改讀 `.claude/project-integration/version-tracking-legacy-closed-tickets.txt`（每行一個 ticket ID；檔案不存在時視為空名單）。原本靠內建名單豁免的專案，升級後該稽核會多出警告；要維持豁免，把原本的票號寫進上述檔案。這個目錄不參與同步，各專案自行維護。
+- **原本從未執行的檢查開始運作**：下列 hook 讀錯 payload 欄位、或以失效的 regex 判定前提，原本每次都提前退出，現在改為正確判定（皆不阻擋、結束碼 0）。
+  - comment-qa-hook：編輯 Dart（`lib/domains`、`lib/presentation`、`lib/use_cases` 下）或 JS／TS 原始檔時，PM 開始收到「註解品質檢查報告」additionalContext，`hook-logs/comment-qa-reports/` 開始產生報告檔。原本以 Write／Edit 回應中不存在的 `success` 欄位判定成敗，判定恆為失敗。dart-comment-traceability 為 1.0.2。
+  - file-ownership-guard：派發目標與 in_progress 票的 `where.files` 重疊時，PM 收到 `[檔案所有權衝突警告]`（subagent 不收），有票號的派發每次多約 0.5 秒。Ticket ID 改從 Agent `tool_input.prompt` 首行解析，衝突來源只計 in_progress 的票。
+  - stop-worklog-handoff-sync-check：session 起點改取 `transcript_path` 指向檔案的首筆 timestamp（原讀不存在的 `session_start_timestamp`，恆為 0）。mtime 過濾與增量掃描因此生效，跨 session 歷史交接段造成的「缺失／孤立」警告減少；worklog 與 pending 都沒有交接、但本 session 有票活動且有交接語意 commit 時，Stop 出現新的 systemMessage 建議。
+  - stop-worklog-handoff-sync-check 與 session-start-scheduler-hint：active 版本改用 lib 的 `get_current_version_from_todolist` 解析（原正則要求 status 緊接 version 且不帶引號，現行 todolist 永不命中）。Stop 交接同步檢查開始執行；SessionStart 的 additionalContext 多一段 Spawned 推進清單，啟動多約 1 秒。todolist 的 `versions:` 採零縮排時偵測不到，見 Known issues。
+- **session-context-guard 對名為「主控」的 session 改用 60% 的 /compact 門檻**，且不再提示 /clear，與 line-board 看板的判定一致；原本主控在 30%～59% 會收到看板沒有的提醒。名稱解析拋例外時判為一般線，記 warning。
+- **session-context-guard 在 /compact 後把完成票計數歸零重新起算**：原本沒有 context 用量檔的 session，compact 後每完成一張票都會收到整理提醒。`settings.json` 新增 SessionStart（`compact`）註冊。
+- **skill-sync 的確認被取消時結束碼由 0 改為 1**：`pull <name>` 與 `push` 的 `[y/N]` 確認被取消（回答非 y、EOF、Ctrl-C）時以 1 結束，`Aborted. No changes applied.` 改寫到 stderr。結束碼 0 只代表已套用，或沒有需要套用的變更。腳本若寫成 `echo n | skill-sync … && 下一步`，下一步將不再執行；`echo n` 預覽以 1 結束屬預期結果，預覽與套用請拆成兩個獨立命令。
+- **`.skill-sync-override` 讓 `skill-sync pull <name>` 以結束碼 1 拒絕**（skill-sync 1.27.0）：逃生閥為 `--discard-local`。`/sync-pull` 的整樹 overlay 尚未尊重這個標記，見 Known issues。
+
+#### 收緊
+- **sync-push 推送前 rule8 檢查改為阻擋**：待推送內容含未豁免的專案 ticket ID、有檔案無法讀取（非 UTF-8 或讀取失敗，未經掃描），或掃描失敗時，推送以 1 結束；確需推送時帶 `--rule8-override "<理由>"`，理由寫進推送 commit 訊息。dry-run 顯示正式推送會被擋。專案路徑軌（見 Changed）仍只提示（tarrragon/claude#84）。
+- **sync-push 偵測到真孤兒且未明示 `--clean`／`--no-clean` 時，在推送前以 1 結束**：真孤兒指本地已刪除、遠端仍有的 tracked `.claude/` 檔。原本只在推送後提醒。沒有真孤兒時行為不變；腳本或例行步驟裡不帶旗標的推送，有孤兒時會被擋下，請明示 `--clean`（一併刪除）或 `--no-clean`（只推送）。兩者同時給時以 2 結束。
+- **bash-git-protected-branch-guard 新增阻擋**：在專案主 checkout 內以 checkout／switch 建立分支、切到 main／master 以外的分支或 commit、detach、orphan，改提示使用 `git worktree add`。linked worktree、還原檔案與切回 main 不受影響。
+- **settings.local.json 範本不再預先放行 `Bash(git checkout:*)`**：改為四條窄允許項：`Bash(git checkout -- *)`（前綴比對）、`Bash(git checkout .)`、`Bash(git checkout main)`、`Bash(git switch main)`（後三條完全相等）。照範本新建設定的專案，還原檔案與切回 main 不詢問；取檔（`<ref> -- <paths>`）、切到其他分支會出現權限詢問。既有的 `settings.local.json` 不受影響。
+- **bash-write-boundary-guard 補兩種繞過形態**：`cd $變數` 後以相對路徑寫 `.claude/`、`lib/`、`test/`、`integration_test/` 的命令，原本因 cd 位移無法判定而放行，現在字面以這些目錄開頭的寫入目標視為命中而阻擋；命令前綴賦值（`W=<路徑>`）連同前綴被當成路徑而判為範圍外的情形，改為取賦值的值並展開變數，先賦值再以 python heredoc 經 argv 寫受限路徑的命令由放行改為阻擋（exit 2）。共用路徑抽取的 bash-edit-guard 同步生效。
+
+#### 放寬
+- **版本凍結閘在 `todolist.yaml` 不存在或無法解析時仍放行**，但改為寫 stderr 與日誌檔（`.claude/hook-logs/version-scope-gate.log`），不再無聲放行。
+- **合併提醒類 hook 對刻意保留到後續版本的分支改列資訊**：分支 `feat/<票號>` 只有經 `previous_ids` 命中、且現行票 status 為 pending 時才算保留，列為資訊並附「保留給票 <ID>」，不再出現「[強制] 合併後才能進行 ticket complete」字樣；直接命中票檔者不論 status 一律強制；查無票、解析失敗或查票例外時退回強制並寫 stderr 與日誌。共用判定在 `lib/reserved_branch.py`。
+
+### Fixed
+- **sync-pull 三方合併三處誤判**：
+  - 上游已修改、本地從未取得的檔不再被誤判為本地刪除而永久略過，改為自上游帶入並提示；無法判定（非 git 專案）時略過並於結尾列出檔名（tarrragon/claude#88）。`--resolve-done` 推進基準點前，列出上一輪衝突中本地仍缺的上游新增或修改檔（只警示，不阻擋）；`.sync-state.json` 衝突輪新增欄位 `pending_delta_files`，`--resolve-done` 時清除，舊狀態檔無此欄位視為空。
+  - 讀取 base 版本檔案失敗（如 partial clone 的 promisor 不可達）時，不再誤判為 base 無此檔而使 local 與 base 相同的檔案被判整檔衝突；改為 fail-loud 回滾並提示處置。
+  - 衝突輪由上游新增、本地再增補的檔案，未 `--resolve-done` 重跑 pull 時不再被判整檔衝突（以 pending base 作合併基準）；base 推進語意與 exit code 不變。pending base 讀不到時中止並 exit 1，訊息標明 pending base 與恢復方式（`.claude/` 同步內容不變；同一輪先處理的衝突檔，其 `.sync-conflicts/` 對照副本可能殘留）：網路暫時不可達時重跑；pending base 已不存在於上游時，先確認無衝突標記，再從 `.sync-state.json` 刪除 `pending_base_sha` 與 `pending_delta_files` 後重跑（以舊 base 合併），不要執行 `--resolve-done`。
+- **sync-pull 本輪改由較新的上游腳本執行**：上游 `sync-claude-pull.py` 較本地新時，本輪改由上游腳本執行；本地特化或 preserve 時沿用本地並說明。
+- **sync-pull 的 hook import 煙霧測試逾時時不再與通過同形**：逾時常數由 120 秒改 300 秒；逾時或 OSError 寫 stderr「未驗證」加原因與處置，pull 在 post-sync 檢查全跑完後印末行摘要（INCOMPLETE 分支亦列入）。回傳碼仍為 0。
+- **sync-push `--clean` 的刪除判定改為只看目前分支（HEAD）上該路徑最近一次的新增或刪除**（tarrragon/claude#63）：刪除只出現在其他分支、stash 或遠端追蹤 ref 上，或刪除後又加回、之後才從 tracked 樹移出，不再刪除 canonical 的檔。改名照舊不算刪除。查詢失敗或沒有 HEAD 時，一律保留檔案。已知未涵蓋：pull 拿到 canonical 復原的檔但尚未 commit 時，帶 `--clean` 推送仍會再刪一次。
+- **復原被未宣告的 sync-push `--clean` 刪除的四份 error-pattern**（tarrragon/claude#63）：flat 號屬凍結核心，改用前綴號：PC-171 → PC-LLM-008（AUQ 派發選項未先驗 blockedBy）、PC-181 → PC-LLM-009（防護規則機械套用反噬，上游原號 PC-177）、PC-182 → PC-LLM-010（UI 測試綠但 runtime 不可達，上游原號 PC-178）、PC-183 → PC-LLM-011（並行代理人建立重疊後續票）。舊條目「新增 PC-171」與「新增 PC-178 UI 功能測試綠但 runtime 不可達」所指的檔已不存在，內容分別由 PC-LLM-008 與 PC-LLM-010 承接。仍保有 PC-171、181、182、183 同名副本的專案，可以刪除副本，改用新號。
+- **skill 版號擷取只取行首 `**Version**:` 行的 semver 本體**：sync-push／sync-pull 的 skill 版本對照、skill-sync 的版號顯示，原本會把全形日期尾綴（如 `1.3.5（2026-11-19）—`）或 CHANGELOG 說明句中的字面當成版號。skill-sync 改為先取 frontmatter 版號，SKILL.md 正文引用 changelog 範例時不再蓋過 frontmatter。
+- **sync push 的 commit 摘要不再把框架自身版本號（如 `v3.3.1`）剝成「某版本」**：保留範圍是推送方 `.claude/VERSION` 與 CHANGELOG 標題中，主版號與 VERSION 相同的版本；consumer 版本號與 ticket ID 照常剝除。
+- **skill-sync 在 linked worktree 內產生的 force-log 改寫到主倉庫的 `.claude/hook-logs/`**，不再隨 worktree 清理而遺失（skill-sync 1.27.1）。
+- **重裝 skill CLI 前判定主 checkout 時不再依賴 git 2.31 才有的 `--path-format=absolute`**：舊版 git 上主 checkout 不再被誤報為 linked worktree。
+- **hook 自身失敗的可見性**：
+  - 框架內 14 支以 `except ImportError` 加 `sys.exit(0)` 吞掉 import 期失敗的 hook，改寫為讓例外照常拋出（exit 1），runtime 會記錄、relay 會轉告模型；放行與阻擋結果不變。IMP-053 的舊判斷已補更正註記，PC-135 的舊建議（ImportError 時退回 stub、以 exit 0 繼續）已改寫為必要依賴不攔截。
+  - hook-nonblocking-error-relay 自身發生執行期例外時，改以 exit 1 結束，由 runtime 記為 non-blocking error，下一次 relay 執行時轉告模型（同一筆不重複）；relay 持續失敗時仍無法自我轉告。
+- **已釋放的代理人恢復後第一次呼叫 Bash 即放回派發條目**：`ticket track dispatch-check --release` 之後，背景工作完成而自行恢復的代理人，原本不經 SendMessage 就不會放回派發條目。新增 PreToolUse:Bash 分派群組第一位的 `released-dispatch-restore-hook.py`，以 payload 的 `agent_id` 完全比對釋放紀錄，bare-commit-guard 與 workspace-wipe-guard 判定時看得到它。剩餘範圍：恢復後只用 Edit／Write、尚未呼叫 Bash 的期間，守衛看不到它，`--release` 的警告已改為寫明這一點。放回失敗時 fail-open，寫 stderr 與日誌。
+- **hook-registration-coverage-check 不再把專案清冊已註冊的 hook 報為未註冊**：已註冊集合併入清冊（`hook-registry.yaml`）解析出的主層 hook 與 skill hook；清冊無法判定時列為未註冊並輸出警告；報告新增清冊計數行。
+- **file-size-guardian 的 auto-load 預算差值依掃描根分開記錄**：從 worktree 啟動的 session 不再與主 checkout 的上次量測比較。
+- **worktree merge 與 cleanup 的主 checkout 根改取同一個根**：merge 路徑的 CAS repo、MergeGate 根、閘門日誌與 cleanup 的閘門日誌根，一起改取主 checkout 根（lib 載入來源仍取呼叫端所在 checkout）。sibling worktree 內執行 merge 與 cleanup 時，`worktree-merge.log` 落在同一份。
+- **合併閘門批次寫入與跟隨者逾時撤離之間的競態已修正**：不再出現「已寫入卻回報失敗」；新增兩個子行程實跑 `worktree merge` 的併發測試。
+- **合併閘門紅燈時保留合併 commit**：套件紅燈（exit 非 124／125）時，閘門在主 repo 建 `refs/merge-gate-failures/<完整合併 commit sha>`，讓 `.claude/logs/merge-gate-failures/` 旁置檔對應的 commit 在 `git gc` 後仍可回放；失敗理由多印一行「合併 commit 回放 ref」。保留期 30 天（以 committer date 判定），每次建立新 ref 時順手清理過期者；手動清理用 `git update-ref -d`。建立或清理失敗只寫 stderr 與 `worktree-merge.log`，不改變閘門結果。
+- **各測試套件逐測試還原 cwd 與環境變數**：各套件（含帶 tests 的 skill）使用共用的 `process_state_guard` fixture（框架 lib 的 `process_state_restore`），一個測試造成的行程內汙染不再讓之後的無關測試紅燈。
+- **5w1h-decision 的 `generate_token.py --save` 在框架 lib 無法匯入時改退回 cwd 下的 hook-logs 目錄**（只以 skill-sync 安裝該 skill 的專案），並在 stderr 說明，不再 ImportError；有 lib 時行為不變。腳本用法說明不再寫死 consumer 專案路徑，使 skill-sync push 的可攜性閘門通過。
+- **wrap-decision 映射檔相關阻擋解除**：`wrap-triggers.yaml` 註解移除 2 個專案票號與指向 project-integration 的路徑，rule8 守衛不再擋此檔；wrap-decision 映射檔（triggers-alignment）撤除後，`skill-marketplace-standard.md` 不再將其列為標準落地檔，commit-stage-guard-gate-hook.py 檔頭盤點表第 12 列同步為現行重用函式。
+- **`settings.json` 移除 7 筆已失效的 MultiEdit matcher**：MultiEdit 工具自 Claude Code 2.0.0 起不存在，這些註冊從未觸發，放行與阻擋結果不變。框架以當前 Claude Code 版本為準，不保證對舊版相容（README 已寫明）。
+
+### Added
+- **`.skill-sync-ignore` 子目錄排除標記**（skill-sync 1.26.0）：放在 skill 子目錄內的標記檔，該子目錄不納入同步（只增加排除）。
+- **sync-push 的 base 落後提示**：`--dry-run` 與正式推送在 clone 後比對 `sync-base.json` 的 base 與 canonical HEAD，不阻擋推送。canonical 在上次同步後前進時，印 `[WARNING]`，列出前進的 commit 數並建議先 sync-pull（推送會以本地內容整樹覆蓋同路徑檔案，他方的修改會被蓋回）；base 不在 canonical 歷史中時印 `[WARNING]`；讀不到 base 時印 `[INFO]` 說明原因。
+- **未推送 commit 提示**：`sync-push --dry-run` 與 `/version-release check` 會列出本地尚未推送到 framework canonical 的 `.claude/` commit 數，錨點是最後一次寫入 `sync-base.json` 的 commit；只列出，不阻擋；無法計算時說明原因。
+- **sync-push `--expect-head <sha>`**：要推送的 commit 與給定值不一致時，在 clone 前以 1 結束並列出差異 commit；dry-run 會印出預覽 commit 供這個旗標使用。另新增 `--no-clean`（見收緊）。
+- **sync-push `--clean` 實際刪檔時，推送 commit 訊息 body 列出刪除清單**：首行維持 `v<版號>: <摘要>` 不變，body 為「--clean 刪除 N 個檔案:」加逐行 `- <路徑>`；未帶 `--clean` 或無刪除時訊息不變。
+- **`lib/skill_version_diff.find_version_mismatches`**：列出 CHANGELOG 首條、SKILL.md 正文版號行、pyproject、`__version__`、plugin.json 與 `metadata.version` 不相等的住址（只回報）。
+- **`project-init gitignore-entries`**：把專案 `.gitignore` 的必要條目逐行印到 stdout，取代 README 以 `python3 -c` 匯入內部模組的寫法；條目與 SessionStart 的 `.gitignore` 檢查同源，含票庫 lock 必要項。README〈首次安裝〉第 5 步改用此命令（project-init 1.7.0）。
+- **`project-init onboard` 檢查票庫 lock 條目**：`<票庫>/**/*.md.lock` 為必要項，`.gitignore` 有 `.claude/**/*.lock` 等祖先前綴規則時判為涵蓋；推導移到 `lib/ticket_lock_gitignore.py`，SessionStart 檢查與 onboard 共用。受檢專案的框架太舊、沒有該模組時，onboard 寫 stderr 並於報告印「無法判定以下規則」加待辦，不影響必要項是否齊全的判定。
+- **rule8 存量報告**（`.claude/scripts/rule8-stock-report.py`）：摘要固定列出經 rule8-exempt marker 豁免的命中數，依 category 分列；逐檔明細每個 ID 附行號；新增 `--show-exempt` 列出豁免明細（檔案、行號、category）。仍只報告、不阻擋。
+- **error-pattern**：PC-LLM-007（長 session 中手寫時刻取自 context 裡的推估而非工具輸出）；IMP-LLM-013（Edit 以空字串刪除行尾片段時連同換行一起刪除，下一行接到上一行）；PC-LLM-012（確認點從被呼叫端搬到呼叫端時，確認與預覽的先後被對調，以 sync-pull 全量 overlay 確認為案例）；ARCH-PM-001（邊緣觸發的衍生資料在多裝置合併下逐輪補規則，審查不收斂，由 consumer 回報收錄）及其索引列；`_project-registry.yaml` 收錄 consumer 專案代號 `PM`。
+- **skill-design-guide 1.25.0 在 `references/writing-the-body.md` 新增〈版號規則：合併時才取號〉**：說明 skill 版號的權威（frontmatter 的 `metadata.version`）、衍生住址與取號時點；parallel-dispatch 加一行路由，並新增〈同一 skill 的版號行重疊〉。
+
+### Changed
+- **sync-push／sync-pull 的 skill 版本對照改以 SKILL.md frontmatter 的 `metadata.version` 為準**（原本先讀 CHANGELOG 首條）：兩處分歧時，顯示的版號與 skill-sync 一致。12 個 skill 的版號住址對齊（含 7 個套件的 pyproject、`__version__`、uv.lock；line-board 的 plugin.json；asd-ste100、dart-domain-modeling、project-analysis 的 CHANGELOG 改為慣例格式或補建）。
+- **sync-push 推送前 rule8 報告與 rule8 存量報告加專案路徑軌**：`docs/`、`lib/` 等專案目錄開頭的路徑，與 ticket ID 軌分開列出，只提示不阻擋；只有路徑命中時不再報成「無未豁免命中」（tarrragon/claude#84）。
+- **規則 8 新增「consumer 專案名」一列**，框架檔改用分域前綴；reference-stability-rules 規則 8 補三點判準：relocation marker 屬過渡豁免，存量清理時依五類分類處置；不帶序號的專案波次編號同屬禁引；清理改標題時同步〈〉指向。守衛與存量報告的行為不變。
+- **`.claude/` 檔案權限位依 `lib/executable_bits.py` 的 shebang 判準對齊**：240 個無 shebang 的 `.py`（hooks 下的模組與測試）由 100755 改為 100644，14 個有 shebang 的腳本由 100644 改為 100755；與發佈庫一致，只改模式、不改內容。settings 一律以直譯器明確呼叫，沒有執行路徑受影響。SessionStart HookCheck 仍以可執行位判定，對無 shebang 的模組會報缺可執行位，依 shebang 判準的調整尚未進本版。
+- **bash 規則一的 cd 還原目標改寫為「作用根」**，與 bash-edit-guard 的實際判定一致：在 linked worktree 內還原到該 worktree 的根，`cd <主 checkout 根>` 會被擋。
+- **文件**：
+  - `sync-pull.md` 補〈從 3.1.0 以前升級的第一輪〉：`--resolve-done` 回報沒有 pending base 時，再跑一次一般 `/sync-pull` 收斂 base；`sync-claude-pull.py` 本身衝突時先解為上游版本。
+  - `sync-pull.md`〈注意事項〉不再寫「完全替換本地 .claude」，改為三方合併與全量 overlay 兩種情況；步驟 8 先導向〈pull 後檢查清單〉與 framework-update-adaptation，onboard 描述改為現行輸出。
+  - `.claude/README-subtree-sync.md` 改正兩處過時內容：〈其他專案如何使用〉改指 README〈安裝〉與〈更新到新版本〉；移除已不存在的 `project-templates/`。
+  - `sync-mechanism-guide.md` 新增 §5.3，說明 consumer error-pattern 的去處（不可攜進 `docs/`、可攜經 framework issue 收錄）與等待收錄期間索引列、代號列在全量 overlay 後的恢復步驟；`_project-registry.yaml` 新專案規則 3 改為經 issue 登錄。
+- **合併閘門**：worktree 1.10.0 起，改動落在某 skill 的頂層套件時，加選匯入該套件的其他 skill 的測試套件（原本只掃 hooks 與 scripts）；閘門輸出新增一行 `[合併前測試] 跨 skill 匯入加選套件：…`。
+- **skill 版號**：本版另有 broken-link-check 2.5.2、dart-comment-traceability 1.0.2、framework-issue 2.12.2、multi-session-orchestration 1.27.1、spec 1.9.12、strategic-compact 1.1.2、version-bootstrap 1.7.9。
+
+### Known issues
+- git 2.31 以下，workspace-wipe-guard 會把 linked worktree 或其他 repo 當成主 repo 判定，可能擋下原本應放行的清除（應擋的不會漏放）。
+- `/sync-pull` 的整樹 overlay 不讀 `.skill-sync-override` 標記：被標記的 skill 仍會被 overlay 覆蓋。
+- `docs/todolist.yaml` 的 `versions:` 清單若寫成零縮排（`versions:` 的下一行直接是「- version:」），active 版本偵測不到。受影響的是 stop-worklog-handoff-sync-check、session-start-scheduler-hint，以及使用同一共用解析的其他 hook（commit-handoff、command-entrance-gate、post-git-commit、tech-debt-reminder）。原本採零縮排、且 status 緊接 version、不帶引號的專案，前兩支 hook 會從偵測得到變成偵測不到；改用 todolist 範本的縮排形式（`versions` 下的清單項目縮排兩格）即可避開。
+- 框架檔內仍有 consumer 專案名存量，尚未清理。
+- 沒有對應 checkout 的安裝形態（例如 uv tool 全域安裝）讀框架設定時退回 cwd 的 git 頂層，在 worktree 內載入該 worktree 的 lib。wrap-decision tripwire 缺 session_id 時的退路檔所有 checkout 共用一份。
+- plugin 版 serena 的 matcher 列的是精確工具名，plugin 名稱不是 `serena` 時（`mcp__plugin_<plugin-name>_serena__` 形式）仍不會觸發寫入守衛。
+- `mcp__dart__run_tests` 的 PostToolUseFailure payload 形狀未經實機確認，也未確認 dart MCP 測試失敗時走 PostToolUseFailure 還是 PostToolUse；形狀不符時 hook 只記日誌、不輸出。請 dart consumer 回報實際形狀（tarrragon/claude#35）。
+
+---
+
 ## [3.3.1] - 2026-11-17
 
 ### Summary
@@ -211,9 +321,9 @@
 - sync-pull 的 hook import 煙霧測試逾時時印黃字跳過並回 0；高負載下整體可能超過 sync-pull 的 120 秒逾時。排入 3.4.0。
 - 在共用主 checkout 建立或切換分支仍只有 SessionStart 提醒，`.claude/templates/settings-local-template.json` 仍預先放行 `git checkout`；阻擋與範本調整排入 3.4.0。
 - session-context-guard 對主控也套一般線的門檻；退回票數路徑時計數不隨 /compact 歸零。排入 3.4.0。
-- commit-stage-guard-gate 在 wrap-decision 映射檔（`.claude/skills/wrap-decision/references/project-integration/triggers-alignment.yaml`，不隨框架發佈）不存在時，仍阻擋提交 `wrap-decision/SKILL.md` 與 `.claude/config/wrap-triggers.yaml`；PreToolUse 的 wrap-skill-yaml-consistency 已降為警告，兩者不一致。本版未改這兩個檔，拉取 3.3.0 的提交不受影響；自行修改這兩個檔的 consumer 提交時會被擋。wrap-decision 在 skill 發佈庫維持 2.17.0。排入 3.4.0。
+- commit-stage-guard-gate 在 wrap-decision 映射檔（`.claude/skills/wrap-decision/references/project-integration/triggers-alignment.yaml`，不隨框架發佈）不存在時，仍阻擋提交 `wrap-decision/SKILL.md` 與 `.claude/config/wrap-triggers.yaml`；PreToolUse 的 wrap-skill-yaml-consistency 已降為警告，兩者不一致。本版未改這兩個檔，拉取 3.3.0 的提交不受影響；自行修改這兩個檔的 consumer 提交時會被擋。wrap-decision 在 skill 發佈庫維持 2.17.0。排入 3.4.0。（3.4.0 已解除：映射檔撤除，commit-stage-guard-gate 不再因此阻擋。）
 - `/sync-pull` 的兩段式確認（3.2.1 已知問題）：兩次執行之間上游若有新提交，套用的清單可能多於確認時看到的。排入 3.4.0。
-- `.claude/config/wrap-triggers.yaml` 仍有 2 個專案層級票號：commit-stage-guard-gate 因 `triggers-alignment.yaml` 不存在而擋下對該檔的修改，rule8 存量清理未能處理。
+- `.claude/config/wrap-triggers.yaml` 仍有 2 個專案層級票號：commit-stage-guard-gate 因 `triggers-alignment.yaml` 不存在而擋下對該檔的修改，rule8 存量清理未能處理。（3.4.0 已解除：票號已移除，映射檔相關阻擋已不存在。）
 - version-tracking-consistency-guard 內判定歷史票號的資料保留原值，未納入 rule8 存量清理。
 
 ---

@@ -43,7 +43,7 @@ def _capture_outputs(hook, files, branch_state):
     """以指定的 git 狀態執行 main()，回傳 stdout、stderr、logger 紀錄。"""
     logger_mock = MagicMock()
 
-    with patch.object(hook, "get_uncommitted_files", return_value=files), \
+    with patch.object(hook, "get_uncommitted_files_strict", return_value=files), \
          patch.object(hook, "get_current_branch", return_value=branch_state["branch"]), \
          patch.object(hook, "is_in_worktree", return_value=branch_state["in_worktree"]), \
          patch.object(hook, "is_allowed_branch", return_value=branch_state["allowed"]), \

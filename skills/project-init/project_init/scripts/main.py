@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from project_init.commands.check import run_check
+from project_init.commands.gitignore_entries import run_gitignore_entries
 from project_init.commands.onboard import run_onboard
 from project_init.commands.setup import run_setup
 
@@ -69,6 +70,8 @@ def main() -> int:
         elif args.command == "onboard":
             result = run_onboard(project_root)
             return 0 if result.all_ok else 1
+        elif args.command == "gitignore-entries":
+            return run_gitignore_entries(project_root)
         elif args.command == "setup":
             result = run_setup(project_root)
             return 0 if result.all_ok else 1
@@ -97,6 +100,7 @@ def _create_parser() -> argparse.ArgumentParser:
   project-init check              掃描環境狀態
   project-init onboard            框架定制引導
   project-init setup              完整安裝/更新環境
+  project-init gitignore-entries  印出專案 .gitignore 必要條目
         """.strip(),
     )
 
@@ -123,6 +127,12 @@ def _create_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "onboard",
         help="框架定制引導（偵測專案語言並建議需要的設定）",
+    )
+
+    # gitignore-entries 子指令
+    subparsers.add_parser(
+        "gitignore-entries",
+        help="印出專案 .gitignore 必要條目（與 SessionStart 檢查同源）",
     )
 
     # setup 子指令

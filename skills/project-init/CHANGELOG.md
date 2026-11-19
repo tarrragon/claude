@@ -2,6 +2,13 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.7.0（2026-11-18）— 新增子命令 `project-init gitignore-entries`：逐行印出專案 `.gitignore` 必要條目，與 SessionStart gitignore 檢查同源（manifest 的 `required_gitignore_entries()` 加票庫 lock 項）。manifest 載入失敗（舊版框架）時不印清單、stderr 說明、非 0 結束；只缺 lock 模組時印出 manifest 條目、stderr 註明 lock 項無法判定、非 0 結束。`.claude/README.md` 安裝第 5 步改用 `uv run --project .claude/skills/project-init project-init gitignore-entries`，取代 `python3 -c` 匯入內部模組；同時拿掉「另外加上 `coverage/` 與 `docs/work-logs/**/*.md.lock`」的手動補充，因為子命令已包含這兩項。`onboard_checker` 新增 `collect_required_gitignore_entries()` 供子命令使用。
+- 對齊版號住址：`pyproject.toml` 的 `version`（1.1.0）與 `project_init/__init__.py` 的 `__version__`（0.1.0）改為 1.7.0。
+
+**Version**: 1.6.0（2026-11-18）— onboard 的 `.gitignore` 檢查新增報缺票庫 lock 項 `{票庫}/**/*.md.lock`（票庫路徑取自受檢專案的 ticket `WORK_LOGS_DIR`，預設 `docs/work-logs`；票庫在 `.claude/` 下、`.gitignore` 沒涵蓋時同樣報缺，因為必要規則清單沒有 `.claude/**/*.lock`，有 `.claude/**/*.lock` 才算涵蓋）。推導移到 `.claude/lib/ticket_lock_gitignore.py`，與 SessionStart gitignore 檢查共用，同一份 `.gitignore` 下兩邊缺項清單一致；涵蓋判定走 git check-ignore，git 無法判定時退回字面比對。受檢專案沒有該模組（舊版框架）時寫 stderr，報告本文另列「無法判定以下規則」並加一則待辦（新欄位 `GitignoreCheckInfo.undetermined_rules`、`undetermined_reason`）；無法判定不算缺漏，不影響 `all_required_complete`。
+
+**Version**: 1.5.0（2026-11-18）— onboard 的 `.gitignore` 檢查另列可移除的舊規則：`sync-preserve.yaml`、`sync-skills.yaml` 改為進版控後，`.gitignore` 仍忽略它們會讓新 clone 讀不到宣告檔。判定取受檢專案 manifest 的 `retired_gitignore_lines()`（與 SessionStart 檢查同源），結果放在 `GitignoreCheckInfo.retired_rules`，報告與待辦各列一則；舊規則不算缺漏，不影響 `all_required_complete`。受檢專案的 manifest 沒有該函式（舊版框架）時不報。
+
 **Version**: 1.4.0（2026-11-13）— onboard 的 `.gitignore` 必要規則改與 SessionStart 檢查同源：以檔案路徑載入受檢專案的 `.claude/lib/sync_exclude_manifest.py`，取 `required_gitignore_entries()` 為必要規則，涵蓋判定以 `gitignore_probe_paths()` 的代表路徑跑 git check-ignore（巢狀名稱探測根層、一層、二層），git 無法判定時退回字面比對。原本的手寫清單只有 8 項，缺 `settings.local.json`、`.sync-state.json` 等 local-only 名稱，照 onboard 補完 `.gitignore` 後首次 `git add .claude` 仍會夾帶本機設定。受檢專案沒有該函式（舊版框架）時寫 stderr 並退回原清單。根層 `__pycache__/` 改為 `.claude/**/__pycache__`、不再單獨要求 `htmlcov/`，與 SessionStart 檢查一致。
 - 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；僅註解與 docstring，行為不變。
 

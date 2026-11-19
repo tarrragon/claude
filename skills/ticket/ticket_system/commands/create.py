@@ -74,6 +74,7 @@ from ticket_system.lib.constants import (
     DEFAULT_UNDEFINED_VALUE,
 )
 from ticket_system.lib import dedup_runner
+from ticket_system.lib.where_overlap import print_where_overlap_hint
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
 from ticket_system.lib.ticket_builder import (
     TicketConfig,
@@ -905,6 +906,11 @@ def _persist_and_report(
             version, args.parent, ticket_id, getattr(args, "scope_blocker", None)
         )
     hint_blocked_by_ana(version, config.get("blocked_by") or [], ticket_id)
+
+    # 步驟 4.6：where.files 與未完成票重疊提示（查重輔助，不阻擋）
+    print_where_overlap_hint(
+        ticket_id, ((ticket.get("where") or {}).get("files") or [])
+    )
 
     # 步驟 5：未帶 --parent 時提示 in_progress group
     if not args.parent:

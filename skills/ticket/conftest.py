@@ -27,6 +27,11 @@ from pathlib import Path
 import pytest
 
 import liveness_session_isolation as _liveness_iso
+import sys as _sys
+
+# 共用 helper 位於 .claude/lib（ticket skill 內的 liveness 為自有副本，lib 不在 sys.path）
+_sys.path.append(str(Path(__file__).resolve().parents[2] / "lib"))
+from process_state_restore import process_state_guard  # noqa: E402,F401  逐測試還原 cwd/environ
 
 # testpaths 覆蓋警告外掛：命令列路徑未涵蓋全部 testpaths 時於終端摘要警告
 from testpaths_coverage_warning import (  # noqa: F401

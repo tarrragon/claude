@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.0.2（2026-11-19）— `hooks/comment-qa-hook.py` 不再以 Write／Edit 回應中不存在的 `success` 欄位判定工具成敗，改以 PostToolUse 觸發即視為成功；原本判定恆為失敗而跳過檢查，修正後註解品質檢查恢復運作（仍為建議模式，不阻擋）。skill 指令內容不變。
+
 **Version**: 1.0.1
 **Last Updated**: 2026-11-14
 - 修正 linked worktree 下的讀寫位置：`comment-qa-hook.py` 的日誌與報告目錄改由框架

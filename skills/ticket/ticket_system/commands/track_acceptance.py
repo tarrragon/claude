@@ -612,8 +612,13 @@ def _replace_or_append_section_content(
     section_text: str,
     section_content: str,
     new_entry: str,
+    before_generated: bool = False,
 ) -> str:
     """Schema 章節含 placeholder 時替換，否則正常 append。
+
+    before_generated 為 True 時（Problem Analysis：CLI 只在此章節寫入派發日誌、
+    Commit 規範、查重紀錄），追加內容插在這些子節之前而非尾端；其餘章節維持附加在尾端，
+    人寫的同名標題不影響落點。
 
     Why: 4/9 W3 ANA saffron 都遇到 append-log 不替換 placeholder 導致
     body-schema-checker false positive 阻擋 complete，被迫用 --skip-body-check。
@@ -636,9 +641,15 @@ def _replace_or_append_section_content(
     from ticket_system.lib.ticket_validator import _is_placeholder
 
     if not _is_placeholder(section_content):
-        # 已有實質內容（例如 create 寫入的查重紀錄）：逐行剝掉舊形態的可見佔位符後 append，
+        # 已有實質內容（例如 create 寫入的查重紀錄）：逐行剝掉舊形態的可見佔位符後追加，
         # 否則「（選填：…）」會永遠留在章節開頭
-        return _strip_visible_placeholder_lines(section_text) + new_entry
+        stripped = _strip_visible_placeholder_lines(section_text)
+        if not before_generated:
+            return stripped + new_entry
+        # 插在 CLI 產生的子節之前，不落進派發日誌／Commit 規範／查重紀錄（見 insert_before_generated）
+        from ticket_system.lib.managed_subsections import insert_before_generated
+
+        return insert_before_generated(stripped, new_entry)
 
     # placeholder-only：保留 header + Schema HTML 註解，移除其他 placeholder 文字
     # section_text 結構：`## Header\n[content_with_placeholders]`
@@ -889,6 +900,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
                 section_text=section_text,
                 section_content=section_content,
                 new_entry=new_entry,
+                before_generated=section == "Problem Analysis",
             )
 
         # 更新 body

@@ -9,20 +9,17 @@ WRAP SKILL↔YAML 一致性檢查 Hook — wrap-skill-yaml-consistency-hook.py
 觸發時機：
   - PreToolUse(Edit/Write) on:
       .claude/skills/wrap-decision/SKILL.md（portability-allow: 本 skill 自我引用，consumer 共通安裝位置）
-      .claude/config/wrap-triggers.yaml（portability-allow: 此 skill 對消費端環境的硬性依賴——AC4 映射檔無法解析時 exit 2 阻擋、缺檔時警告，沿用時需提供對應設定檔）
+      .claude/config/wrap-triggers.yaml（portability-allow: 此 skill 對消費端環境的依賴，沿用時需提供對應設定檔）
 
-檢查項目（依 ANA Solution 規格）：
-  AC1 Signal orphan：每個 YAML signals[].id 在映射檔 signal_to_skill_triggers 有對應 SKILL 情境（警告）
-  AC2 Keyword orphan：每個 YAML keywords[] / failure_detection.keywords[] 在映射檔
-                       keyword_to_trigger_category 有 belongs_to 類別（警告）
+檢查項目：
   AC3 Version 非回退：YAML version 與 SKILL.md footer **Version**: 各自 >= git HEAD 對應值（警告）
-  AC4 映射檔：缺檔時警告放行；存在但無法解析時阻擋 exit 2
 
-警告 vs 阻擋策略：
+策略：
   - 警告：exit 0 + stderr（與 wrap-decision-tripwire-hook 的 advisory 模式一致）
-  - 阻擋：exit 2（僅限映射檔缺失或無法解析；其他檢查無前提）
+  - 檢查例外：stderr + logger.error 後放行 exit 0
+  - 不讀取映射檔（AC1/AC2/AC4 已移除）
 
-唯一觸發來源：.claude/config/wrap-triggers.yaml + 映射檔（portability-allow: 同上硬性依賴）
+唯一觸發來源：.claude/config/wrap-triggers.yaml（portability-allow: 同上依賴）
 觀測性：依 .claude/rules/core/observability-rules.md 規則 1-3（雙通道 stderr + logger）（portability-allow: 架構性橋接至框架 auto-load 規則）
 """
 
@@ -61,23 +58,9 @@ except ImportError:
 
 YAML_REL_PATH = ".claude/config/wrap-triggers.yaml"
 SKILL_REL_PATH = ".claude/skills/wrap-decision/SKILL.md"  # portability-allow: hook 綁專案根目錄，隨專案部署、不隨 skill 搬遷
-ALIGNMENT_REL_PATH = (
-    ".claude/skills/wrap-decision/references/project-integration/triggers-alignment.yaml"  # portability-allow: 同上
-)
 
 WATCHED_PATHS = (YAML_REL_PATH, SKILL_REL_PATH)
 STDERR_PREFIX = "[WRAP Consistency]"
-
-# 缺映射檔時內嵌的最小可用範例：
-# schema 只存在於映射檔自身的檔頭註解（即缺失的那個檔案內），故不可指向外部
-# 文件自救。範例保留兩個頂層必要欄位，佔位符供讀者依實際 signal/keyword 替換。
-_ALIGNMENT_MINIMAL_EXAMPLE = """\
-version: "1.0.0"
-signal_to_skill_triggers:
-  <yaml_signal_id>:
-    - "<skill_situation_label>"
-keyword_to_trigger_category:
-  "<yaml_keyword>": "<skill_description_trigger_category>\""""
 
 
 # ============================================================================
@@ -156,96 +139,6 @@ def _extract_skill_version(skill_text: str) -> Optional[str]:
 # 檢查邏輯
 # ============================================================================
 
-def load_alignment(project_root: Path, logger) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """載入映射檔。返回 (data, error_message)。error_message 非 None 時應阻擋。"""
-    path = project_root / ALIGNMENT_REL_PATH
-    if not path.exists():
-        msg = (
-            f"映射檔不存在：{ALIGNMENT_REL_PATH}\n"
-            "請在該路徑新建檔案，最小可用範例（複製後依實際 signal/keyword 調整佔位符）：\n"
-            f"{_ALIGNMENT_MINIMAL_EXAMPLE}"
-        )
-        logger.error(msg)
-        return None, msg
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        if not isinstance(data, dict):
-            msg = f"映射檔頂層非 mapping：{ALIGNMENT_REL_PATH}"
-            logger.error(msg)
-            return None, msg
-        return data, None
-    except yaml.YAMLError as e:
-        msg = f"映射檔 YAML 解析錯誤：{ALIGNMENT_REL_PATH}: {e}"
-        logger.error(msg)
-        return None, msg
-
-
-def load_yaml_config(project_root: Path, logger) -> Optional[Dict[str, Any]]:
-    """載入 wrap-triggers.yaml。失敗返回 None（記錄但不阻擋；可能是用戶正在編輯的暫態）。"""
-    path = project_root / YAML_REL_PATH
-    if not path.exists():
-        logger.info(f"YAML 不存在（可能是新建）：{YAML_REL_PATH}")
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except yaml.YAMLError as e:
-        logger.info(f"YAML parse 失敗（可能用戶正在編輯）：{e}")
-        return None
-
-
-def check_signal_orphan(
-    yaml_data: Dict[str, Any], alignment: Dict[str, Any], logger
-) -> List[str]:
-    """AC1：每個 YAML signal id 在映射檔有對應 SKILL 情境。返回警告列表。"""
-    warnings: List[str] = []
-    signals = yaml_data.get("signals", []) if yaml_data else []
-    mapping = alignment.get("signal_to_skill_triggers", {}) or {}
-    for sig in signals:
-        if not isinstance(sig, dict):
-            continue
-        sid = sig.get("id")
-        if not sid:
-            continue
-        situations = mapping.get(sid)
-        if not situations or not isinstance(situations, list) or len(situations) == 0:
-            warnings.append(
-                f"AC1 Signal orphan：YAML signal '{sid}' 在映射檔 signal_to_skill_triggers 無對應 SKILL 情境"
-            )
-    logger.info(f"AC1 signal_orphan check: {len(warnings)} warning(s)")
-    return warnings
-
-
-def check_keyword_orphan(
-    yaml_data: Dict[str, Any], alignment: Dict[str, Any], logger
-) -> List[str]:
-    """AC2：每個 YAML keyword 在映射檔有 belongs_to 類別。返回警告列表。"""
-    warnings: List[str] = []
-    signals = yaml_data.get("signals", []) if yaml_data else []
-    kw_map = alignment.get("keyword_to_trigger_category", {}) or {}
-    for sig in signals:
-        if not isinstance(sig, dict):
-            continue
-        sid = sig.get("id", "<unknown>")
-        # 直接 keywords[]
-        for kw in sig.get("keywords", []) or []:
-            if kw not in kw_map:
-                warnings.append(
-                    f"AC2 Keyword orphan：signal '{sid}' keyword '{kw}' 在映射檔 keyword_to_trigger_category 無 belongs_to 類別"
-                )
-        # failure_detection.keywords[]
-        fd = sig.get("failure_detection") or {}
-        if isinstance(fd, dict):
-            for kw in fd.get("keywords", []) or []:
-                if kw not in kw_map:
-                    warnings.append(
-                        f"AC2 Keyword orphan：signal '{sid}' failure_detection keyword '{kw}' 無 belongs_to 類別"
-                    )
-    logger.info(f"AC2 keyword_orphan check: {len(warnings)} warning(s)")
-    return warnings
-
-
 def check_version_no_regress(project_root: Path, logger) -> List[str]:
     """AC3：YAML version 與 SKILL footer Version 各自 >= git HEAD 值。返回警告列表。"""
     warnings: List[str] = []
@@ -316,42 +209,20 @@ def main() -> int:
 
     logger.info(f"watched file edit: {watched}")
 
-    # AC4 缺檔分支：映射檔不存在時降為警告並放行。
-    # 映射檔不隨框架發佈，缺檔即阻擋會讓 SKILL.md 與 wrap-triggers.yaml
-    # 無法以 Edit/Write 修改。缺檔時無從比對 AC1/AC2，只提醒建檔；
-    # 檔案存在但解析失敗仍走下方阻擋分支（判定失敗落在保守側）。
-    if not (project_root / ALIGNMENT_REL_PATH).exists():
-        _, missing_msg = load_alignment(project_root, logger)
-        notice = (
-            f"{STDERR_PREFIX} 映射檔缺失（警告，不阻擋）：AC1/AC2 一致性比對未執行。\n"
-            f"{missing_msg}"
-        )
-        sys.stderr.write(notice + "\n")
-        emit_model_reminder("PreToolUse", notice, input_data=input_data)
-        logger.warning("alignment file missing; AC4 downgraded to warning")
+    # 檢查例外時放行（advisory hook，不因自身故障阻擋編輯），stderr + logger 雙通道
+    try:
+        warnings: List[str] = check_version_no_regress(project_root, logger)
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"{STDERR_PREFIX} check_version_no_regress 例外（放行）：{e}\n")
+        logger.error(f"check_version_no_regress failed: {e}", exc_info=True)
         return 0
-
-    # AC4：映射檔存在但無法解析（阻擋級）
-    alignment, err = load_alignment(project_root, logger)
-    if alignment is None:
-        sys.stderr.write(f"{STDERR_PREFIX} 映射檔錯誤（阻擋）：{err}\n")
-        return 2
-
-    # 載入 YAML（無法解析時跳過後續檢查，但不阻擋）
-    yaml_data = load_yaml_config(project_root, logger)
-
-    warnings: List[str] = []
-    if yaml_data:
-        warnings.extend(check_signal_orphan(yaml_data, alignment, logger))
-        warnings.extend(check_keyword_orphan(yaml_data, alignment, logger))
-    warnings.extend(check_version_no_regress(project_root, logger))
 
     if warnings:
         sys.stderr.write(f"{STDERR_PREFIX} 偵測到 {len(warnings)} 項一致性警告：\n")
         for w in warnings:
             sys.stderr.write(f"  - {w}\n")
         sys.stderr.write(
-            f"{STDERR_PREFIX} 建議：修正 {ALIGNMENT_REL_PATH} 或當前編輯檔保持雙向同步。\n"
+            f"{STDERR_PREFIX} 建議：修正 version 使其不低於 git HEAD。\n"
         )
         for w in warnings:
             logger.info(f"warning: {w}")

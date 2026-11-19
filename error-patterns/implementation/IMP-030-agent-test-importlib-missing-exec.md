@@ -4,7 +4,6 @@ title: 代理人產出的測試程式碼使用 importlib 但遺漏 exec_module �
 category: implementation
 severity: medium
 created: 2026-03-11
-related_tickets:
 ---
 
 # IMP-030：代理人產出的測試程式碼使用 importlib 但遺漏 exec_module 呼叫

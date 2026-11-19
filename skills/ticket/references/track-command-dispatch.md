@@ -333,7 +333,7 @@ ticket track dispatch-check --release <agent_handle|agent_id>
 | 回合仍在進行（`turn_ended_at` 為空） | 保留——釋放會讓守衛立刻看不到執行中的代理人；卡住不結束的回合由 1 小時回合中 TTL 回收 | 1 |
 | 取不到目前 session_id、狀態檔讀取失敗或結構不符 | 不改動狀態檔，`[FAIL] ...`（stderr） | 2 |
 
-**代理人仍有背景工作時不要釋放**（已知缺口）：代理人因背景工作完成而恢復時不經 SendMessage，條目不會放回，恢復後的寫檔在守衛視野外——`bare-commit-guard` 與 `workspace-wipe-guard` 會把這段期間判為無並行。`[OK]` 訊息後固定附一行 `[WARN]` 提醒。涵蓋所有恢復路徑的放回點另行追蹤。
+**背景工作完成而恢復的代理人**：這條恢復路徑不經 SendMessage。條目改由 `released-dispatch-restore-hook` 放回：它排在 PreToolUse:Bash 分派群組第一位，在該代理人第一次呼叫 Bash 時，以 payload 的 agent_id（完全相等）比對釋放紀錄，早於 `bare-commit-guard` 與 `workspace-wipe-guard` 的判定。剩下的缺口：代理人在第一次呼叫 Bash 之前，只用 Edit／Write 寫檔的期間，不在派發清單上。`[OK]` 訊息後固定附一行 `[WARN]` 說明這段缺口。
 
 參數與 SendMessage 的 `to` 都接受 `name [ref]` 形式，比對前剝除 `[ref]` 後綴。session_id 依 `CLAUDE_CODE_SESSION_ID` 環境變數、其次 registry 內唯一的 FRESH session 解析。釋放結果寫 stderr，並寫入 `.claude/hook-logs/dispatch-check-prune/`。帶 `--release` 時不做活躍派發評估。
 

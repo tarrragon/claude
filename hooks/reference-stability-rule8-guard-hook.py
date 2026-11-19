@@ -107,6 +107,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -116,16 +117,14 @@ from typing import Dict, List, Optional, Set, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
-    from lib.hook_io import emit_hook_output
-    from lib.ticket_id_pattern import (
-        SEARCH_BOUNDED_RE as VERSIONED_TICKET_PATTERN,
-        BARE_BOTH_BOUNDED_RE as BARE_TICKET_PATTERN,
-    )
-except ImportError as e:
-    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    sys.exit(0)
+# import 期失敗不攔截：例外照常拋出，直譯器以 exit 1 結束（非 exit 2，仍放行），
+# runtime 記為 non-blocking error、relay 轉告模型（hook-system-operations〈輸出規範〉）
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from lib.hook_io import emit_hook_output
+from lib.ticket_id_pattern import (
+    SEARCH_BOUNDED_RE as VERSIONED_TICKET_PATTERN,
+    BARE_BOTH_BOUNDED_RE as BARE_TICKET_PATTERN,
+)
 
 
 EXIT_ALLOW = 0
@@ -191,6 +190,63 @@ def is_framework_mandated_project_path(token: str) -> bool:
     return (
         token in FRAMEWORK_MANDATED_PROJECT_FILES
         or token.startswith(FRAMEWORK_MANDATED_PROJECT_DIRS)
+    )
+
+
+# doc／doc-flow skill 以固定檔名管理的 consumer 文件（file_locator、batch_init、
+# test_map、validate 寫死的檔名）。與 FRAMEWORK_MANDATED 分開：未採用 doc 系統的
+# consumer 沒有這些檔，不符合「每個 consumer 保證存在」；但檔名由框架定義、各
+# consumer 相同，引用它描述的是框架 schema，不是某個專案的識別符，規則 8 防的
+# 跨專案死連結（指向只有單一專案才有的內容）不成立。只收精確檔名：docs/spec/、
+# docs/usecases/ 等目錄底下的檔是專案內容（如某份規格），仍屬專案路徑。
+FRAMEWORK_DEFINED_DOC_FILES = frozenset({
+    "docs/proposals-tracking.yaml",
+    "docs/traceability.yaml",
+    "docs/domain-map.md",
+    "docs/non-domain-paths.yaml",
+    "docs/app-use-cases.md",
+})
+
+# 框架目錄本身（本 hook 位於 <framework>/hooks/）。用於判定相對路徑 token 是否
+# 指向框架內既有檔（如 skill 內 lib/messages.py）——那是框架內部結構的相對寫法，
+# 不是 consumer 的 lib/。
+_FRAMEWORK_DIR = Path(__file__).resolve().parent.parent
+# 走訪框架目錄時略過的子目錄：執行期產物與巢狀 worktree 快照，不屬框架檔
+_FRAMEWORK_WALK_SKIP_DIRS = frozenset({
+    "worktrees", "hook-logs", "logs", ".venv", "__pycache__", "node_modules",
+})
+_framework_rel_paths: Optional[frozenset] = None
+
+
+def _framework_relative_paths() -> frozenset:
+    """框架目錄下所有檔案的相對路徑（posix），首次呼叫時走訪並快取。
+
+    只在出現路徑候選時才走訪，未命中的編輯不付此成本。走訪失敗回傳空集合
+    （此時不排除任何候選，誤差方向為多提示，不會漏報）。
+    """
+    global _framework_rel_paths
+    if _framework_rel_paths is not None:
+        return _framework_rel_paths
+    collected = set()
+    try:
+        for dirpath, dirnames, filenames in os.walk(_FRAMEWORK_DIR):
+            dirnames[:] = [d for d in dirnames if d not in _FRAMEWORK_WALK_SKIP_DIRS]
+            rel_dir = Path(dirpath).relative_to(_FRAMEWORK_DIR).as_posix()
+            for name in filenames:
+                collected.add(name if rel_dir == "." else f"{rel_dir}/{name}")
+    except OSError as exc:
+        # 走訪失敗不中斷守衛：回傳空集合，等同不排除（多提示而非漏報）
+        sys.stderr.write(f"[rule8 守衛] 走訪框架目錄失敗，路徑軌不排除框架內相對路徑：{exc}\n")
+        collected = set()
+    _framework_rel_paths = frozenset(collected)
+    return _framework_rel_paths
+
+
+def resolves_inside_framework(token: str) -> bool:
+    """路徑 token 是否為框架內既有檔的相對路徑（任一層目錄下有同一相對路徑）。"""
+    suffix = "/" + token
+    return any(
+        rel == token or rel.endswith(suffix) for rel in _framework_relative_paths()
     )
 
 # 路徑類命中的完整 token 樣式：從最外層邊界（行首 / 空白 / 反引號 / 引號 /
@@ -509,7 +565,9 @@ def find_project_path_hits_with_lines(text: str) -> List[Tuple[str, int]]:
                 continue
             if is_framework_mandated_project_path(token):
                 continue
-            if token.startswith(PROJECT_PATH_PREFIXES):
+            if token in FRAMEWORK_DEFINED_DOC_FILES:
+                continue
+            if token.startswith(PROJECT_PATH_PREFIXES) and not resolves_inside_framework(token):
                 hits.append((token, idx))
     return hits
 
@@ -813,16 +871,24 @@ def filter_marker_exempt(
 
 
 def build_path_warning_output(file_path: str, pre_text: str, post_text: str) -> Optional[str]:
-    """計算路徑類新增命中並組合 WARNING 訊息；無新增命中或全數豁免時回傳 None。
+    """計算路徑類新增命中並組合 WARNING 訊息；無新增命中或全數豁免時回傳 None。"""
+    return compute_path_warning(file_path, pre_text, post_text)[0]
+
+
+def compute_path_warning(
+    file_path: str, pre_text: str, post_text: str
+) -> Tuple[Optional[str], List[str]]:
+    """回傳（WARNING 訊息或 None, 未被 marker 豁免的新增路徑命中）。
 
     本函式輸出恆為 WARNING（不影響 main() 的阻擋判斷，exit code 全由
     ticket ID 命中軌決定）——即使 marker 格式錯誤，路徑類命中規模過大
     （見模組 docstring「專案檔案路徑偵測」段），此層級整體維持僅提示、
-    不阻擋，格式錯誤同樣併入提示訊息而非升級為阻擋。
+    不阻擋，格式錯誤同樣併入提示訊息而非升級為阻擋。命中清單供 main()
+    寫入日誌：路徑軌升級判準以新增命中的誤報比例計算，日誌須含命中值。
     """
     new_paths = diff_new_hits(pre_text, post_text, finder=find_project_path_hits)
     if not new_paths:
-        return None
+        return None, []
 
     blocked_paths, format_error_messages = filter_marker_exempt(
         file_path,
@@ -831,13 +897,13 @@ def build_path_warning_output(file_path: str, pre_text: str, post_text: str) -> 
         hits_with_lines_finder=find_project_path_hits_with_lines,
     )
     if not blocked_paths and not format_error_messages:
-        return None
+        return None, []
 
     messages = []
     if blocked_paths:
         messages.append(build_path_warning_message(file_path, blocked_paths))
     messages.extend(format_error_messages)
-    return "\n\n".join(messages)
+    return "\n\n".join(messages), list(blocked_paths)
 
 
 def main() -> int:
@@ -884,11 +950,12 @@ def main() -> int:
 
     pre_text, post_text = reconstruct_pre_post_text(tool_name, tool_input, file_path)
 
-    path_warning = build_path_warning_output(file_path, pre_text, post_text)
+    path_warning, path_hits = compute_path_warning(file_path, pre_text, post_text)
     if path_warning:
         sys.stderr.write(path_warning + "\n")
         logger.info(
-            f"專案路徑類新增命中（WARNING，不阻擋）：file={file_path} tool={tool_name}"
+            f"專案路徑類新增命中（WARNING，不阻擋）：file={file_path} tool={tool_name} "
+            f"hits={sorted(set(path_hits))}"
         )
 
     result = _ticket_id_track(file_path, tool_name, pre_text, post_text, logger)

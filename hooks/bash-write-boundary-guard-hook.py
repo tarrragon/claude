@@ -343,6 +343,20 @@ def _scope_evidence(texts: List[str]) -> List[str]:
     return out
 
 
+def _clue_texts(tokens: List[str], env: dict) -> List[str]:
+    """命令 token 作為路徑線索前的正規化：賦值 token（NAME=value）只取 value，
+    再以同命令字面賦值展開變數。未處理時 `W=/x/.claude` 會連同 `W=` 前綴被當成
+    相對路徑，解析到 checkout 內的 `W=` 目錄而判為範圍外放行。
+    展開組合超限時保留原文（不產生替身路徑，線索只用於找受限路徑）。"""
+    out: List[str] = []
+    for tok in tokens:
+        m = _ASSIGN.match(tok)
+        text = m.group(2) if m else tok
+        exps = _expand_all(text, env) if ("$" in text or text[:1] == "~") else [text]
+        out.extend(exps if exps is not None else [text])
+    return out
+
+
 _TEMP_HINTS = ("/tmp/", "/private/tmp/", "/var/folders/")
 
 
@@ -1009,8 +1023,11 @@ def _scan_statement_tokens(toks: List[str], out: List[str]) -> None:
             j += 1
 
 
-def _next_cd(cur_cd: Optional[str], toks: List[str]) -> Optional[str]:
-    """陳述以 cd 開頭時更新累積的 cd 位移；None 表示無法靜態判定。"""
+def _next_cd(cur_cd: Optional[str], toks: List[str], env: Optional[dict] = None) -> Optional[str]:
+    """陳述以 cd 開頭時更新累積的 cd 位移；None 表示無法靜態判定。
+
+    cd 目標含變數時，以同命令先前的字面賦值展開（與候選路徑同一套 _expand_all）；
+    只有展開結果唯一且不含殘留變數、命令替換、~ 時才採用，其餘維持無法判定。"""
     if not toks or _basename(toks[0]) not in ("cd", "pushd"):
         return cur_cd
     if "-" in toks[1:]:
@@ -1019,7 +1036,12 @@ def _next_cd(cur_cd: Optional[str], toks: List[str]) -> Optional[str]:
     if not args or cur_cd is None:
         return cur_cd
     target = args[0]
-    if target[:1] in ("~", "$") or "$" in target or "`" in target:
+    if "$" in target or target[:1] == "~":
+        expansions = _expand_all(target, env or {})
+        if expansions is None or len(expansions) != 1:
+            return None
+        target = expansions[0]
+    if target[:1] == "~" or "$" in target or "`" in target:
         return None
     return target if target.startswith("/") else posixpath.join(cur_cd, target)
 
@@ -1193,7 +1215,7 @@ def _collect_candidates(command: str, depth: int, dirs: Optional[List[Optional[s
                 cd_stack.append(cur_cd)
             elif cd_stack:
                 cur_cd = cd_stack.pop()
-        cur_cd = _next_cd(cur_cd, stmt.tokens)
+        cur_cd = _next_cd(cur_cd, stmt.tokens, env)
         opened, closed, body_toks = _compound_effect(stmt.tokens)
         compound_depth += opened
         certain = compound_depth == 0 and _assignment_is_certain(stmt, len(cd_stack))
@@ -1227,7 +1249,7 @@ def _collect_candidates(command: str, depth: int, dirs: Optional[List[Optional[s
                             candidates.extend(analysis[0])
                 else:
                     # 腳本讀不到：無從分析寫入呼叫，argv 中落在受限範圍的字面路徑納入候選
-                    candidates.extend(_scope_evidence(parts[1]))
+                    candidates.extend(_scope_evidence(_clue_texts(parts[1], env)))
             opaque_writes = 0
             strings: List[str] = []
             for argv in (argvs if argvs is not None else [None]):
@@ -1242,7 +1264,7 @@ def _collect_candidates(command: str, depth: int, dirs: Optional[List[Optional[s
                     strings.extend(found)
             if opaque_writes:
                 # 寫入呼叫的目標不明：以原始碼字串常數與整條命令的 token 找受限路徑線索
-                clues = strings + command_tokens
+                clues = strings + _clue_texts(command_tokens, env)
                 evidence = _scope_evidence(clues)
                 if evidence:
                     candidates.extend(dict.fromkeys(evidence))
@@ -1432,6 +1454,17 @@ def _checkout_root_or_none(cwd: str) -> Optional[str]:
     return root if os.path.exists(os.path.join(root, ".git")) else None
 
 
+def _unresolved_cd_restricted_literal(raw: str) -> Optional[str]:
+    """cd 位移無法判定時：相對候選字面以受限頂層開頭（扣除豁免）則回傳正規化路徑，否則 None。
+    絕對路徑、含變數或命令替換、以 .. 跳出者不判。"""
+    if not raw or raw[0] in "/~" or "$" in raw or "`" in raw:
+        return None
+    rel = posixpath.normpath(raw)
+    if rel.startswith(".."):
+        return None
+    return rel if _scope_hit(rel) else None
+
+
 def iter_checkout_write_targets(command: str, cwd: str, opaque: Optional[List[str]] = None):
     """逐候選寫入路徑產生 (raw, rel, why)。供本 hook 與 bash-edit-guard 共用。
 
@@ -1452,6 +1485,12 @@ def iter_checkout_write_targets(command: str, cwd: str, opaque: Optional[List[st
     for raw, cd in zip(candidates, dirs):
         abs_path = None if cd is None else _resolve_candidate(raw, cd, base, roots[0])
         if abs_path is None:
+            literal = _unresolved_cd_restricted_literal(raw) if cd is None else None
+            if literal is not None:
+                # cd 位移無法判定，但相對路徑字面已落在受限頂層：不論實際在哪個目錄，
+                # 都是寫進某個 checkout 的受限範圍，判命中（fail-closed 方向）
+                yield raw, literal, ""
+                continue
             yield raw, None, "unresolvable"
             continue
         rel = _relative_to_roots(abs_path, roots)

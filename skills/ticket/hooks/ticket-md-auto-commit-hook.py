@@ -85,10 +85,10 @@ sys.path.insert(0, str(_TICKET_SKILL_DIR))
 from lib import (
     setup_hook_logging,
     run_hook_safely,
-    get_uncommitted_files,
     FileStatus,
     ENV_SESSION_ID,
 )
+from lib.git_utils import GitStatusError, get_uncommitted_files_strict
 from lib.pm_registry import get_registry_paths, read_registry, DEGRADED_READ_KEY
 from ticket_system.lib import git_ops
 
@@ -215,7 +215,13 @@ def get_changed_ticket_md_files(logger) -> "list[str]":
     可觀測性：排除須留痕，不可靜默丟失）。
     """
     try:
-        file_statuses = get_uncommitted_files()
+        file_statuses = get_uncommitted_files_strict()
+    except GitStatusError as exc:
+        # 失敗與「無未提交票檔」不可同形：本輪不提交（既有失敗路徑），但須可見
+        message = f"git status 失敗，本輪不代捕 ticket md: {exc}"
+        logger.warning(message)
+        sys.stderr.write(f"[{HOOK_NAME}] {message}\n")
+        return []
     except subprocess.TimeoutExpired:
         logger.warning("git status 逾時")
         return []

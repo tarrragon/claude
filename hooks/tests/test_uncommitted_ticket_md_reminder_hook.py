@@ -115,7 +115,7 @@ def test_find_uncommitted_ticket_md_detects_modified():
         _FakeFileStatus(" M", "docs/work-logs/v1/v1.0/v1.0.0/tickets/1.0.0-W8-005.md"),
         _FakeFileStatus(" M", "src/popup/popup.js"),
     ]
-    with patch.object(hook, "get_uncommitted_files", return_value=files):
+    with patch.object(hook, "get_uncommitted_files_strict", return_value=files):
         result = hook.find_uncommitted_ticket_md()
     assert result == [
         "docs/work-logs/v1/v1.0/v1.0.0/tickets/1.0.0-W8-005.md"
@@ -126,7 +126,7 @@ TICKET = "docs/work-logs/v1/v1.0/v1.0.0/tickets/1.0.0-W8-005.md"
 
 
 def _find(status, command='git commit -m "x"', path=TICKET):
-    with patch.object(hook, "get_uncommitted_files", return_value=[_FakeFileStatus(status, path)]):
+    with patch.object(hook, "get_uncommitted_files_strict", return_value=[_FakeFileStatus(status, path)]):
         return hook.find_uncommitted_ticket_md(command)
 
 
@@ -168,7 +168,7 @@ def test_find_uncommitted_ticket_md_detects_untracked():
     files = [
         _FakeFileStatus("??", "docs/work-logs/v1/v1.0/v1.0.0/tickets/1.0.0-W8-099.md"),
     ]
-    with patch.object(hook, "get_uncommitted_files", return_value=files):
+    with patch.object(hook, "get_uncommitted_files_strict", return_value=files):
         result = hook.find_uncommitted_ticket_md()
     assert len(result) == 1
 
@@ -177,13 +177,13 @@ def test_find_uncommitted_ticket_md_empty_when_no_ticket():
     files = [
         _FakeFileStatus(" M", "src/popup/popup.js"),
     ]
-    with patch.object(hook, "get_uncommitted_files", return_value=files):
+    with patch.object(hook, "get_uncommitted_files_strict", return_value=files):
         result = hook.find_uncommitted_ticket_md()
     assert result == []
 
 
 def test_find_uncommitted_ticket_md_empty_when_clean():
-    with patch.object(hook, "get_uncommitted_files", return_value=[]):
+    with patch.object(hook, "get_uncommitted_files_strict", return_value=[]):
         result = hook.find_uncommitted_ticket_md()
     assert result == []
 
@@ -201,7 +201,7 @@ def _run_main_with(input_data, uncommitted):
 
     files = [_FakeFileStatus(s, p) for s, p in uncommitted]
     with patch.object(hook, "read_json_from_stdin", return_value=input_data), \
-         patch.object(hook, "get_uncommitted_files", return_value=files):
+         patch.object(hook, "get_uncommitted_files_strict", return_value=files):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             exit_code = hook.main()

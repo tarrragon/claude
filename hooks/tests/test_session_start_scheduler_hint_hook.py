@@ -355,6 +355,30 @@ def test_detect_active_version_no_todolist_returns_none(tmp_path):
     assert hook._detect_active_version(tmp_path, MagicMock()) is None
 
 
+# 現行 docs/todolist.yaml 的條目形狀：version 與 status 之間隔著 description、
+# codename 等欄位，status 值帶引號。舊正則要求兩者緊鄰且值不帶引號，永不命中。
+REAL_SHAPE_TODOLIST = (
+    "versions:\n"
+    "  - version: \"0.17.0\"\n"
+    "    description: \"上一版\"\n"
+    "    status: \"completed\"\n"
+    "  - version: \"0.18.0\"\n"
+    "    description: \"本版\"\n"
+    "    codename: \"x\"\n"
+    "    status: \"active\"\n"
+    "  - version: \"0.19.0\"\n"
+    "    status: \"planned\"\n"
+)
+
+
+def test_detect_active_version_real_todolist_shape(tmp_path):
+    hook = load_hook_module()
+    todolist = tmp_path / "docs" / "todolist.yaml"
+    todolist.parent.mkdir(parents=True)
+    todolist.write_text(REAL_SHAPE_TODOLIST, encoding="utf-8")
+    assert hook._detect_active_version(tmp_path, MagicMock()) == "0.18.0"
+
+
 # ---------------------------------------------------------------------------
 # 17. scan_spawned_pending：只納入 completed ANA，只回傳非 terminal spawned
 # ---------------------------------------------------------------------------

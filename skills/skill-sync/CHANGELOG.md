@@ -2,6 +2,24 @@
 
 新到舊。版號有三個住址，bump 時必須一起動：本檔最上方的 `**Version**:` 條目、`SKILL.md` frontmatter 的 `metadata.version`、`pyproject.toml` 的 `project.version`。三者相等由 `tests/test_cli.py::test_three_version_addresses_agree` 斷言，漏動任何一處測試即紅並印出三個值。（`uv.lock` 也帶版號，但由 uv 依 `pyproject.toml` 自動重算，不是人工住址。）版號規則見專案的 skill 同步規範。
 
+**Version**: 1.28.2 — SKILL.md〈Terminology〉補兩段：兩個 repo 都承載 skill，差別是粒度與更新頻率（framework canonical 是凍結在最後一次全樹推送的快照，發佈庫逐支更新），同步後版本未變時依序問兩題（是否在這條通道上、快照時點是否早於要的變更）；只在發佈庫的 skill 目錄屬預期形態，算殘留的只有兩種（canonical 曾有後刪除、兩邊同名 skill 內的多餘檔案）。行為不變
+
+**Version**: 1.28.1 — `_extract_version_string` 改為先取 frontmatter 版號，再退回正文的 `**Version**:` 行；退回時只認行首、只擷取 semver 本體。原本先搜全文，SKILL.md 正文引用 changelog 範例時會蓋過 frontmatter 版號，帶全形日期尾綴的條目也會整段併入版號。版號只供人類顯示，不進入同步判定，放行與阻擋不變
+
+**Version**: 1.28.0 — `pull <name>` 與 `push` 的 `[y/N]` 確認被取消時（回答非 y、EOF、Ctrl-C）改以結束碼 1 結束，`Aborted. No changes applied.` 改寫到 stderr；原本三者都以 0 返回，呼叫端無法從結束碼分辨套用與未套用。`echo n` 預覽因此以 1 結束，屬預覽的預期結果。兩處確認收斂為 `_confirm_or_abort`，結束碼常數 `ABORT_EXIT_CODE`。SKILL.md〈Non-interactive callers〉同步；新增 `tests/test_confirm_abort_exit.py`，既有五個以回答 n 取消的測試改斷言非零結束
+
+**Version**: 1.27.1 — 兩份 force-log（portability、divergence）在 linked worktree 內改寫到主倉庫的 `.claude/hook-logs/`：worktree 自己的 hook-logs 被 gitignore 忽略、隨 worktree 清理刪除，紀錄原本會一起遺失。主倉庫以 `git rev-parse --git-common-dir` 的父目錄判定（套件內自行解析，不 import `.claude/lib`）；查詢失敗時退回目前 checkout 並寫 stderr。`get_skills_dir` 與 `HOOK_LOGS_DIR` 覆寫不變，放行與阻擋行為不變。新增 `tests/test_hook_logs_shared_root.py`
+
+**Version**: 1.27.0 — `.skill-sync-override` 由「只改分類」改為實際保護本地：`pull <name>` 遇根層標記在 clone 前以結束碼 1 拒絕，單獨給 `--force` 仍拒絕；逃生閥為新旗標 `--discard-local`（仍進確認），`--discard-local --force` 略過確認；拒絕訊息含標記路徑與兩條可複製的逃生指令。`push <name>` 對帶標記的 skill 只寫 stderr 警告、不阻擋。常數註解、docstring、SKILL.md、執行期 `[OVERRIDE]` 輸出同步改寫為兩個後果。新增 `tests/test_override_pull_guard.py`
+
+**Version**: 1.26.0 — 新增加法式 `.skill-sync-ignore` 標記：放在 skill 子目錄內，該目錄整棵子樹不進 push、pull、內容雜湊、可攜性掃描與 prune，push 與 pull 兩個方向都由本地標記決定；只增加排除，名稱式排除與憑證判準不受影響，標記檔本身以名稱排除、不會推上遠端。skill 根層的標記不合法，`pull <name>` 與 `push <name>` 在 clone 前以結束碼 1 拒絕（整個 skill 不同步屬 `sync-skills.yaml` private 清單）。新增 `tests/test_ignore_marker.py`
+
+**Version**: 1.25.8 — SKILL.md〈Notes〉的排除說明改為引用 `EXCLUDE_DIRS` 與其兩個具名集合（`TOOL_ARTIFACT_DIRS`、`POLICY_EXCLUDE_DIRS`），不再逐一列出成員（原列表缺 `.ruff_cache`、`.mypy_cache`、`htmlcov`）；補一則說明 `project-integration` 是保留字，改名後目錄失去同步保護（push 送出、`pull --prune` 刪除），且上游以原名存在同一內容時會重複落地；行為不變
+
+**Version**: 1.25.7 — `update_sync_manifest` 遇到無法計算內容雜湊的 skill 時，以 stderr 逐筆列出 skill 名，不再靜默略過；寫入前比對條目數與掃描到的 SKILL.md 數，不等即告警並列出兩側數字。只告警不中止，結束碼不變
+
+**Version**: 1.25.6 — `EXCLUDE_DIRS` 拆為 `TOOL_ARTIFACT_DIRS`（工具產物）與 `POLICY_EXCLUDE_DIRS`（`project-integration`）兩個具名集合，判定取聯集；排除結果逐項不變，註解寫明與框架 `sync_exclude_manifest` 各類別的對應；行為不變
+
 **Version**: 1.25.5 — 移除框架檔內的專案層級票號（規則 8 存量清理），改為自足敘述或佔位符；行為不變
 
 **Version**: 1.25.4 — SKILL.md 的〈Installation〉改述 shim 化後的做法：`skill-sync` 是 SessionStart 安裝的 cwd-resolving shim，改原始碼即時生效，安裝指令改為 `python3 .claude/scripts/install-skill-clis.py`（原為 `uv tool install`）；行為不變

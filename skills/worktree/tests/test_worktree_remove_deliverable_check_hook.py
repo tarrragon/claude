@@ -165,6 +165,24 @@ class TestDirtyStatus:
             assert hook._dirty_status("/path/wt", logger) is None
 
 
+class TestGuardCStatusFailure:
+    """3.4.0-W1-329：判定為已 fail-closed，不需遷移，以測試固定此性質。"""
+
+    def test_status_failure_blocks(self, logger):
+        """觸發條件：_dirty_status 回 None（git status 失敗）→ 阻擋。"""
+        with patch.object(hook, "_dirty_status", return_value=None):
+            msg = hook._guard_c("/path/wt", "feat/x", logger)
+        assert msg is not None and "無法查詢 worktree 狀態" in msg
+
+    def test_clean_passes(self, logger):
+        with patch.object(hook, "_dirty_status", return_value=[]):
+            assert hook._guard_c("/path/wt", "feat/x", logger) is None
+
+    def test_does_not_use_shared_silent_api(self):
+        """不得經吞失敗的 get_uncommitted_files（失敗與乾淨同形）。"""
+        assert not hasattr(hook, "get_uncommitted_files")
+
+
 # ---------------------------------------------------------------------------
 # main 整合
 # ---------------------------------------------------------------------------

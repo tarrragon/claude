@@ -42,6 +42,8 @@ created: 2026-09-02
 
 ## 最小重現
 
+> 下列輸出為實測記錄，路徑保留量測時原值（量測環境：BAL 專案，使用者目錄已匿名為 `/Users/x`，2026-09-02）。
+
 ```bash
 # 同一相對路徑字串，因 cwd 不同而絕對化到不同位置
 python3 -c "
@@ -63,7 +65,7 @@ cat ~/.local/bin/skill-sync
 # exec uv run --quiet --directory "$skill_dir" skill-sync "$@"
 ```
 
-驗證環境：flutter_balance 專案，`skill-sync push broken-link-check --force` 實際執行兩次（違規數 48、42），皆未出現在 `<repo>/.claude/hook-logs/skill-sync-portability-force.jsonl`；全機搜尋找到兩筆紀錄完整落在 `<repo>/.claude/skills/skill-sync/.claude/hook-logs/skill-sync-portability-force.jsonl`，timestamp 與違規數逐筆吻合。blog 專案同結構的 stray 檔亦存在（兩筆歷史紀錄）。
+驗證環境：BAL 專案，`skill-sync push broken-link-check --force` 實際執行兩次（違規數 48、42），皆未出現在 `<repo>/.claude/hook-logs/skill-sync-portability-force.jsonl`；全機搜尋找到兩筆紀錄完整落在 `<repo>/.claude/skills/skill-sync/.claude/hook-logs/skill-sync-portability-force.jsonl`，timestamp 與違規數逐筆吻合。blog 專案同結構的 stray 檔亦存在（兩筆歷史紀錄）。
 
 ## 案例：portability gate 的 --force 留痕缺口（2026-09-02）
 
@@ -82,4 +84,4 @@ cat ~/.local/bin/skill-sync
 
 - `ARCH-APP-002`（`uv tool install` 全域 namespace 碰撞；`uv run --directory` shim 是其根治方案，本案是該方案的未預期副作用）
 - `.claude/rules/core/tool-output-trust-rules.md` 規則 3（關鍵事實用無法腦補的固定值交叉驗證）——本案的固定值是「全機搜尋同名檔 + 逐行內容比對」
-- flutter_balance / blog 專案 `.gitignore` 中 `**/hook-logs/` 與 `.claude/skills/*/.claude/hook-logs/` 規則（先前已發現此機制，但僅做 git 層緩解）
+- BAL / blog 專案 `.gitignore` 中 `**/hook-logs/` 與 `.claude/skills/*/.claude/hook-logs/` 規則（先前已發現此機制，但僅做 git 層緩解）

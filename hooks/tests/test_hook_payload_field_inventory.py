@@ -40,11 +40,6 @@ _WRONG = "讀錯欄位，功能失效"
 _FALLBACK = "主欄位正確，另以 or 後備讀取無依據欄位"
 _UNSOURCED = "欄位無官方文件或實機樣本依據"
 KNOWN_DEVIATIONS: dict[tuple[str, str], str] = {
-    (".claude/skills/dart-comment-traceability/hooks/comment-qa-hook.py", "tool_response.success"): f"{_WRONG}：3.4.0-W1-083",
-    (".claude/hooks/file-ownership-guard-hook.py", "tool_input.id"): f"{_WRONG}：3.4.0-W1-084",
-    (".claude/hooks/file-ownership-guard-hook.py", "tool_input.target_id"): f"{_WRONG}：3.4.0-W1-084",
-    (".claude/hooks/file-ownership-guard-hook.py", "tool_input.ticket_id"): f"{_WRONG}：3.4.0-W1-084",
-    (".claude/skills/ticket/hooks/stop-worklog-handoff-sync-check-hook.py", "top.session_start_timestamp"): f"{_WRONG}：3.4.0-W1-085",
     (".claude/hooks/5w1h-compliance-check-hook.py", "tool_input.content"): f"{_FALLBACK}：3.4.0-W1-086",
     (".claude/hooks/parallel-claim-audit-hook.py", "top.tool_result"): f"{_FALLBACK}：3.4.0-W1-086",
     (".claude/hooks/phase4-decision-enforcement-hook.py", "top.hookEventName"): f"{_FALLBACK}：3.4.0-W1-086",

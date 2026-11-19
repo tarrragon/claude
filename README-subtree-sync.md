@@ -9,7 +9,7 @@
 - **本地管理**: `.claude` 是實體目錄，納入主專案 Git 版本控制
 - **獨立 Repo**: https://github.com/tarrragon/claude.git
 - **同步方式**: 雙向同步（推送和拉取）
-- **同步範圍**: `.claude/` 目錄（FLUTTER.md 位於 `.claude/project-templates/` 中，隨 rsync 自動包含）
+- **同步範圍**: `.claude/` 目錄
 
 ## 設計原理
 
@@ -59,7 +59,7 @@ python3 ./.claude/scripts/sync-claude-pull.py
 
 ## 其他專案如何使用
 
-新專案的首次設置和定期更新配置，請參考 [README.md](./README.md) 的「其他專案如何使用」章節。
+新專案的首次設置請參考 [README.md](./README.md) 的〈安裝〉章節，定期更新配置請參考同檔的〈更新到新版本〉章節。
 
 ## 目錄結構
 
@@ -69,7 +69,6 @@ project/
 │   ├── hooks/               # Hook 腳本
 │   ├── agents/              # Agent 配置
 │   ├── methodologies/       # 方法論文件
-│   ├── project-templates/   # 專案模板（含 FLUTTER.md）
 │   ├── scripts/             # 同步腳本
 │   │   ├── sync-claude-push.py   # 推送腳本
 │   │   └── sync-claude-pull.py   # 拉取腳本
@@ -106,5 +105,6 @@ project/
 
 ---
 
-**Last Updated**: 2026-03-04
+**Last Updated**: 2026-11-19
+**Version**: 2.0.1 - 〈其他專案如何使用〉改指 README.md 現存的〈安裝〉與〈更新到新版本〉章節；移除已不存在的 `project-templates/`（概述的同步範圍與目錄結構樹）
 **Version**: 2.0.0 - 定位為同步機制技術文件，首次設置引導移至 README.md

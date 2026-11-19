@@ -5,6 +5,10 @@
       "budget": 380,
       "hooks": [
         {
+          "path": ".claude/hooks/released-dispatch-restore-hook.py",
+          "timeout": 10
+        },
+        {
           "path": ".claude/hooks/isolated-subagent-main-write-guard-hook.py"
         },
         {

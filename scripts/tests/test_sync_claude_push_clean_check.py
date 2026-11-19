@@ -112,6 +112,61 @@ def test_classify_orphan_true_when_local_history_has_deletion(tmp_path):
     assert classification == sync_mod._ORPHAN_TRUE
 
 
+def _commit_file(root: Path, rel: str, message: str) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("x\n", encoding="utf-8")
+    _run(["git", "add", "-A"], root)
+    _run(["git", "commit", "-q", "-m", message], root)
+
+
+def test_classify_orphan_readded_then_untracked_is_not_true_orphan(tmp_path):
+    """308.5 對照組：刪除後又加回的路徑，最近一次變動是新增，不算推送方刪過。
+    （之後移出 tracked 樹但未 commit 刪除，模擬 pull 結果未提交。）"""
+    _init_repo(tmp_path)
+    rel = ".claude/skills/example/restored.md"
+    _add_file_commit_then_delete(tmp_path, rel)
+    _commit_file(tmp_path, rel, "re-add")
+    _run(["git", "rm", "-q", "--cached", rel], tmp_path)
+    (tmp_path / rel).unlink()
+
+    classification = sync_mod.classify_orphan_candidate(
+        Path("skills/example/restored.md"), tmp_path / ".claude", tmp_path,
+    )
+
+    assert classification == sync_mod._ORPHAN_OTHER_CONTRIBUTION
+
+
+def test_classify_orphan_readded_then_deleted_again_is_true_orphan(tmp_path):
+    """308.5 正向對照：加回之後又刪除並 commit，最近一次變動是刪除，仍判 true_orphan。"""
+    _init_repo(tmp_path)
+    rel = ".claude/skills/example/restored.md"
+    _add_file_commit_then_delete(tmp_path, rel)
+    _add_file_commit_then_delete(tmp_path, rel)
+
+    classification = sync_mod.classify_orphan_candidate(
+        Path("skills/example/restored.md"), tmp_path / ".claude", tmp_path,
+    )
+
+    assert classification == sync_mod._ORPHAN_TRUE
+
+
+def test_classify_orphan_deletion_on_other_branch_only_is_not_true_orphan(tmp_path):
+    """308.5：刪除只發生在其他分支，HEAD 歷史從未擁有該路徑，不算推送方刪過
+    （舊的 --all 查詢會判 true_orphan）。"""
+    _init_repo(tmp_path)
+    _run(["git", "checkout", "-q", "-b", "stale"], tmp_path)
+    rel = ".claude/skills/example/other.md"
+    _add_file_commit_then_delete(tmp_path, rel)
+    _run(["git", "checkout", "-q", "-"], tmp_path)
+
+    classification = sync_mod.classify_orphan_candidate(
+        Path("skills/example/other.md"), tmp_path / ".claude", tmp_path,
+    )
+
+    assert classification == sync_mod._ORPHAN_OTHER_CONTRIBUTION
+
+
 def test_classify_orphan_other_contribution_when_never_owned(tmp_path):
     """acceptance 1：本專案 git 歷史從未擁有過的路徑（磁碟也無），分類為
     other_contribution，不列為孤兒。"""

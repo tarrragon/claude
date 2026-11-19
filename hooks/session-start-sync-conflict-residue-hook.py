@@ -31,23 +31,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/
 sys.path.insert(0, str(Path(__file__).parent.parent))  # .claude/       (lib.*)
-try:
-    from lib import (
-        emit_hook_output,
-        read_json_from_stdin,
-        run_hook_safely,
-        setup_hook_logging,
-    )
-    # .claude/ 掃描屬主 repo 全域狀態：用 CLAUDE_PROJECT_DIR 導向的 git_utils 版本
-    from lib.git_utils import get_project_root
-    from lib.sync_conflict_residue import (
-        SYNC_CONFLICTS_DIR,
-        detect_conflict_residue,
-        scan_conflict_marker_residue,
-    )
-except ImportError as e:
-    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    sys.exit(0)
+# import 期失敗不攔截：例外照常拋出，直譯器以 exit 1 結束（不阻擋），
+# runtime 記為 non-blocking error、relay 轉告模型（hook-system-operations〈輸出規範〉）
+from lib import (
+    emit_hook_output,
+    read_json_from_stdin,
+    run_hook_safely,
+    setup_hook_logging,
+)
+# .claude/ 掃描屬主 repo 全域狀態：用 CLAUDE_PROJECT_DIR 導向的 git_utils 版本
+from lib.git_utils import get_project_root
+from lib.sync_conflict_residue import (
+    SYNC_CONFLICTS_DIR,
+    detect_conflict_residue,
+    scan_conflict_marker_residue,
+)
 
 HOOK_NAME = "session-start-sync-conflict-residue"
 EXIT_SUCCESS = 0

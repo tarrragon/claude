@@ -221,6 +221,8 @@ def test_run_audit_base_sha_missing_downgrades_with_message(
     assert "base sha 缺失" in out
     assert "無法預測" in out
     assert "orphan.md" in out
+    assert "可忽略" not in out
+    assert "sync-preserve.yaml" in out
     # 缺失情境不可誤判為分組輸出
     assert "將被刪除" not in out
     assert "將保留" not in out
@@ -253,6 +255,8 @@ def test_run_audit_base_sha_unreachable_downgrades_with_message(
     assert "不可達" in out
     assert "無法預測" in out
     assert "orphan.md" in out
+    assert "可忽略" not in out
+    assert "sync-preserve.yaml" in out
     assert "將被刪除" not in out
     assert "將保留" not in out
 
@@ -288,6 +292,9 @@ def test_run_audit_monitor_canary_regression_3_deleted_10_kept(
 ):
     """monitor 實測案例：base 中曾有的 3 檔歸將被刪除，其餘 10 檔歸將保留。
 
+    3.4.0-W1-307.1 起其中 5 個 egg-info 檔由 manifest 排除，不再是孤兒候選，
+    將保留組剩 5 檔。
+
     base_sha 本身（e41fd8021b75）無法用 fixture 重現（git hash 由內容
     決定，無法偽造指定 sha），故以等價結構替代：3 檔存在於 base 且已被
     上游刪除，10 檔從未存在於 base——與 monitor 案例的分類結果同構。
@@ -307,6 +314,10 @@ def test_run_audit_monitor_canary_regression_3_deleted_10_kept(
         "skills/worktree/build/lib/scripts/mod2.py",
         "skills/worktree/build/lib/scripts/mod3.py",
         "skills/worktree/build/lib/scripts/mod4.py",
+    ]
+    # 原案例 13 個孤兒中的 5 個 egg-info 檔：3.4.0-W1-307.1 起 manifest 以路徑段
+    # 後綴排除 <套件>.egg-info/，它們不再是孤兒候選（工具產物不該被當孤兒）。
+    excluded_tool_artifacts = [
         "skills/worktree/worktree_skill.egg-info/PKG-INFO",
         "skills/worktree/worktree_skill.egg-info/SOURCES.txt",
         "skills/worktree/worktree_skill.egg-info/dependency_links.txt",
@@ -314,7 +325,7 @@ def test_run_audit_monitor_canary_regression_3_deleted_10_kept(
         "skills/worktree/worktree_skill.egg-info/entry_points.txt",
     ]
     assert len(will_be_deleted) == 3
-    assert len(will_be_kept) == 10
+    assert len(will_be_kept) == 5
 
     base_sha = _make_base_repo(
         upstream, {rel: "content" for rel in will_be_deleted}
@@ -325,7 +336,7 @@ def test_run_audit_monitor_canary_regression_3_deleted_10_kept(
     claude_dir.mkdir(parents=True)
     _write_tree(
         claude_dir,
-        {rel: "content" for rel in will_be_deleted + will_be_kept},
+        {rel: "content" for rel in will_be_deleted + will_be_kept + excluded_tool_artifacts},
     )
     (claude_dir / ".sync-state.json").write_text(
         json.dumps({"last_synced_base_sha": base_sha}), encoding="utf-8"
@@ -356,11 +367,12 @@ def test_run_audit_monitor_canary_regression_3_deleted_10_kept(
 
     assert delete_group == sorted(will_be_deleted)
     assert keep_group == sorted(will_be_kept)
+    assert not set(excluded_tool_artifacts) & set(orphans)
 
     pull.run_audit()
     out = capsys.readouterr().out
     assert "3 個將被刪除" in out
-    assert "10 個將保留" in out
+    assert "5 個將保留" in out
 
 
 # ============================================================================

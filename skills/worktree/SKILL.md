@@ -4,7 +4,7 @@ description: "Use this skill for managing git worktrees for Ticket-based develop
 argument-hint: "<subcommand> [args]"
 allowed-tools: Bash, Read, Write, Edit
 metadata:
-  version: 1.9.0
+  version: 1.10.0
 ---
 
 # Worktree Management SKILL
@@ -141,10 +141,13 @@ suites:
 
 skill 被 hooks 或 scripts 使用時加跑對應套件：改動涉及某 skill，且快照內 `.claude/hooks`、`.claude/scripts` 的 .py（1）行首 `from X`／`import X` 匯入該 skill 的頂層模組（skill 根與其 `scripts/` 下的 .py 模組名、帶 `__init__.py` 的套件名；`sys.path.insert` 之後的匯入同樣涵蓋），或（2）非測試檔含 `skills/<名稱>/` 路徑引用（讀 skill 檔案），就加跑 hooks／scripts 套件。未被使用的 skill 只跑自己的套件。通用模組名（如 `constants`）可能多報，只會多跑套件。
 
+skill 被其他 skill 匯入時加跑匯入者的套件：改動落在某 skill 的頂層目錄內（skill 根或其 `scripts/` 下的子目錄，如 `.claude/skills/ticket/ticket_system/`；依路徑判定，套件被刪除或改名時同樣涵蓋），且快照內其他帶 `tests/` 的 skill 有 .py 以行首（含縮排）`from X`／`import X` 匯入該目錄名，就加選該 skill 套件，並印一行 `[合併前測試] 跨 skill 匯入加選套件：skill:<名稱>（匯入 <套件名>）`；該套件沿用上次驗證結果而未實跑時，括號內加註「沿用」。只比對目錄、不比對單檔模組，各 skill 同名的 `constants.py`、`cli.py` 不會互相加選；代價是其他 skill 以 `sys.path.insert` 匯入的單檔模組（如 `from merge_gate import ...`）不在涵蓋內。改動不在子目錄內（如 skill 根的單檔、`SKILL.md`）時選擇結果不變。
+
 多個套件依 flutter、hooks、scripts、skill（名稱排序）的固定順序執行，任一紅燈即停。
 
 - 快照內缺 `.dart_tool/package_config.json` 時先 `flutter pub get`（使用 FVM 的快照為 `fvm flutter pub get`，判定同上）；失敗則明確指出缺哪個產物。宣告檔中的 `command`、`generate` 由專案寫定，閘門不補 fvm 前綴。
 - CAS 重試：驗證狀態以套件為單位記錄。依「該套件上次驗過的 commit 到新 commit」的差異，套用上表的套件選擇規則：差異不觸及該套件就沿用其驗證結果，觸及就只重跑該套件；沒有驗證紀錄的套件（例如匯入掃描使套件集合變大）加跑。`RETRY_REUSE_EXEMPT_GLOBS`（`docs/work-logs/**/tickets/*.md`、`docs/work-logs/**/v*-main.md`、`docs/work-logs/topic-assignments.txt`）內的檔案仍不計入差異，語意不變。沿用的套件輸出 `[合併前測試] 套件 <名稱>：沿用｜沿用 <commit 前 12 碼> 的驗證結果｜耗時 0.0s`，重跑者為原本的綠燈／紅燈結果行；重試超過 `GATE_MAX_RETRIES`（預設 3）中止，ref 不變、分支保留。
+- 紅燈保留 ref：套件紅燈（exit 非 124／125）時，閘門在主 repo 建 `refs/merge-gate-failures/<完整合併 commit sha>`，讓 `.claude/logs/merge-gate-failures/` 旁置檔對應的 commit 在 `git gc` 後仍可回放；失敗理由多印一行 `合併 commit 回放 ref：<ref 名>`。保留期 30 天（以 commit 的 committer date 判定），每次建立新 ref 時順手清理過期者，免手動；手動清理用 `git update-ref -d refs/merge-gate-failures/<sha>`。建立或清理失敗只寫 stderr 與 `worktree-merge.log`，不改變閘門結果。
 - 每個套件結束輸出一行結果（套件名、狀態、pytest `N passed` 或 flutter `All tests passed` 等摘要、耗時；紅燈、逾時、中斷也記錄），同時寫入 stdout 與 `.claude/logs/worktree-merge.log`。
 - 每次閘門開始與結束各記一行，預檢無衝突時中間多記一行 `[合併閘門] 預檢｜target <分支>｜分支 <來源分支>｜commit <base HEAD 前 12 碼>｜結果 無衝突`（有衝突則無此行，直接記結束行「預檢衝突」；前綴 `[合併閘門]`，與套件結果行 `[合併前測試]` 刻意不同，名額預估的中位數取樣只認後者）：`[合併閘門] 開始｜target <分支>｜分支 <來源分支>｜commit <base HEAD 前 12 碼>`、`[合併閘門] 結束｜target <分支>｜分支 <來源分支>｜commit <前 12 碼>｜結果 <寫入|拒絕|紅燈|逾時|中止|預檢衝突>`。結束行的 commit 在結果為「寫入」時是合併 commit，其餘仍是 base HEAD。「拒絕」涵蓋持有者超出自身預估過久而放棄等待，以及持有期間子程序的名額等待逾時（兩者同為結束碼 125，無法再分）；「逾時」為套件逾時；「預檢衝突」為進場排隊前以 `merge-tree` 試算當下 main 與分支即有文字衝突（不排隊、不占名額，結束碼 1；已合併、空合併、ref 解析失敗放行，由取得名額後的既有路徑判定）；「中止」為取得名額後的 CAS 衝突（含排隊期間 main 前進產生的新衝突）、重試上限、非預期例外或中斷。
 - 持有者超出自身預估過久（疑似卡住）而放棄等待是預期內結果：只輸出名額閘門的一行說明，不印 traceback，`merge` 以 125 結束，ref 不變；非預期例外仍保留 traceback。佇列總等待不設上限，不再因前方預估過長而提早拒絕；進場與等待提示寫出「順位 N（持有者之後第 N 位，順位不含持有者），前方 M 筆，前方第一筆：<命令或分支>」與預估等待，呼叫端自行決定是否中止。持有者換人是先到者取得名額後後方遞補，不是插隊。

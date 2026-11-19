@@ -49,6 +49,7 @@ from lib import (  # noqa: E402
     scan_ticket_files_by_version,
     parse_ticket_frontmatter,
     PM_ONLY_PREFIX,
+    get_current_version_from_todolist,
 )
 from lib.hook_base import get_shared_state_root  # noqa: E402
 from lib.checkout_identity import owning_checkout_root  # noqa: E402
@@ -65,12 +66,6 @@ STOP_FLAG_EXPIRY_SECONDS = 7200  # 2 小時（一個 session 的合理長度）
 # In-progress 偵測豁免
 # 任務進行中提醒 handoff 邏輯倒置：handoff 是 session 結束時的動作
 IN_PROGRESS_STATUSES = {"in_progress"}
-
-# todolist active version 偵測（與 session-start-scheduler-hint-hook 同步）
-_TODOLIST_ACTIVE_VERSION_RE = re.compile(
-    r"-\s*version:\s*[\"']?(\S+?)[\"']?\s*\n\s*status:\s*active",
-    re.MULTILINE,
-)
 
 # Pending dir 相對路徑（與 ticket_system.constants.HANDOFF_DIR 一致；硬編副本）
 HANDOFF_PENDING_RELPATH = ".claude/handoff/pending"
@@ -247,18 +242,12 @@ def _extract_ticket_ids(content: str, active_version: Optional[str] = None) -> l
 
 
 def _detect_active_version(project_root: Path) -> Optional[str]:
-    """偵測 todolist.yaml 中 status=active 的版本字串（不含 v 前綴）。"""
-    todolist = project_root / "docs" / "todolist.yaml"
-    if not todolist.exists():
-        return None
-    try:
-        content = todolist.read_text(encoding="utf-8")
-        m = _TODOLIST_ACTIVE_VERSION_RE.search(content)
-        if m:
-            return m.group(1).strip().lstrip("v")
-    except Exception:
-        return None
-    return None
+    """偵測 todolist.yaml 中 status=active 的版本字串（不含 v 前綴）。
+
+    委派 lib 的共用解析（逐項找 status，容許欄位間隔與帶引號的值）。
+    """
+    version = get_current_version_from_todolist(project_root)
+    return version.lstrip("v") if version else None
 
 
 def _find_worklog_path(project_root: Path, version: str) -> Path:
@@ -917,6 +906,43 @@ def detect_sync_drift(
     return _format_warning(missing, orphan)
 
 
+# transcript 開頭是 title、agent-name 等無時間戳的中繼紀錄，實際首筆帶
+# timestamp 的紀錄在前十行內；上限只為避免異常檔案逐行讀到底。
+TRANSCRIPT_START_SCAN_LINES = 200
+
+
+def _session_start_from_transcript(transcript_path, logger) -> float:
+    """以 transcript 首筆帶 timestamp 的紀錄作為 session 起點（epoch 秒）。
+
+    Stop payload 沒有 session 起點欄位；transcript_path 是官方共同欄位，
+    同一 session 經 compact 仍寫同一檔，/clear 則換新檔，起點語意與
+    「本 session」一致。取不到時回 0，下游判定照舊退回全文掃描（fail-open）。
+    """
+    if not transcript_path:
+        logger.info("payload 無 transcript_path，session 起點以 0 計")
+        return 0.0
+    try:
+        with open(transcript_path, encoding="utf-8") as f:
+            for _, line in zip(range(TRANSCRIPT_START_SCAN_LINES), f):
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                ts = record.get("timestamp") if isinstance(record, dict) else None
+                if not isinstance(ts, str):
+                    continue
+                try:
+                    return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    continue
+    except OSError as e:
+        logger.warning("讀取 transcript 失敗，session 起點以 0 計: %s", e)
+        return 0.0
+    logger.warning("transcript 前 %d 行無可解析的 timestamp，session 起點以 0 計",
+                   TRANSCRIPT_START_SCAN_LINES)
+    return 0.0
+
+
 def main():
     logger = setup_hook_logging("stop-worklog-handoff-sync-check")
     try:
@@ -935,7 +961,8 @@ def main():
             except (json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"解析 stdin 失敗，fallback: {e}")
 
-        session_start = float(event.get("session_start_timestamp", 0) or 0)
+        session_start = _session_start_from_transcript(event.get("transcript_path"), logger)
+        logger.info("session 起點: %s", session_start)
 
         session_root = get_project_root()
         project_root = get_shared_state_root(session_root)

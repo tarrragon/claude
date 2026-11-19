@@ -24,6 +24,13 @@
 | `__main__` CLI 工具 | 人工執行，錯誤應報告 | exit(1) 報告錯誤 | exit(0) — 語義錯誤 |
 | `run_hook_safely` 異常 | 核心安全包裝 | 記錄日誌，不繞過 CLI bug | exit(0) + stderr — 違反 IMP-048/049 |
 
+> **更正（2026-11）**：上表第 1 列與第 3 列依據的是 IMP-048／IMP-049 時期的判斷：當時把 exit 1 的「hook error」顯示當成 CLI bug。2026-11 runtime 實測推翻了這個判斷：exit 1 是 runtime 保存的 non-blocking error 紀錄，不阻擋操作，框架讀取端會把它轉告模型。現行做法以 `.claude/references/hook-system-operations.md`〈輸出規範（stderr 與 exit code）〉為準：
+>
+> - **第 1 列（Hook 執行路徑 ImportError）**：匯入目標隨框架同步（`.claude/lib/` 等），屬必要依賴，不攔截，讓例外照常拋出（直譯器以 exit 1 結束）。`exit(0)` 會讓 runtime 判為成功、不留紀錄，守衛失效時與「沒有違規」同形。只有第三方可選依賴且有可用降級時才可攔截，並須在註解寫明降級理由。
+> - **第 3 列（`run_hook_safely` 異常）**：記錄日誌並回傳 exit 1，是現行的正確做法；「不繞過 CLI bug」的理由已不成立，正確的理由是 exit 1 留下 runtime 紀錄、供讀取端轉告。
+>
+> 本模式的主張（同一 pattern 在不同執行路徑語義不同，修改前逐一分析）不受影響。原表保留，作為當時判斷的紀錄。
+
 ## 解決方案
 
 **修復前必做**：對每個修改位置逐一回答：

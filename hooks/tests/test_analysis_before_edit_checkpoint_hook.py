@@ -177,6 +177,23 @@ def test_dispatch_managed_subsections_do_not_count_as_filled(root, log):
     assert decision == "deny"
 
 
+def test_append_log_after_dispatch_counts_as_filled(root, log):
+    """deny 指引照做（append-log 補寫無標題內容）後放行；舊寫法（附加在尾端）仍 deny。
+
+    E1 對照：同一段補寫，插在 CLI 子節之前（append-log 現行寫法）與附加在尾端
+    （落進〈Commit 規範〉），檢查點判定不同。
+    """
+    from ticket_system.lib.managed_subsections import insert_before_generated
+
+    entry = "\n讀票確認：寫入點在 foo.py 的 bar()。"
+    write_ticket(root, pa=PA_DISPATCH_LOG_ONLY + entry)  # 舊寫法：落進 Commit 規範
+    map_agent(root)
+    assert hook.evaluate(payload(root, "src/foo.py"), root, log)[0] == "deny"
+
+    write_ticket(root, pa=insert_before_generated(PA_DISPATCH_LOG_ONLY, entry))
+    assert hook.evaluate(payload(root, "src/foo.py"), root, log) == (None, None)
+
+
 def test_human_analysis_alongside_dedup_allowed(root, log):
     """E1 對照：同一結構補上人寫分析後放行"""
     write_ticket(root, pa=PA_FILLED_WITH_DEDUP)

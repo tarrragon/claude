@@ -39,11 +39,31 @@ from ticket_system.lib.version import (
 
 
 class TestIsVersionScopeFrozen:
-    def test_todolist_missing_not_frozen(self, monkeypatch, tmp_path):
+    def test_todolist_missing_not_frozen(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(
             "ticket_system.lib.version.get_ticket_state_root", lambda: tmp_path
         )
         assert is_version_scope_frozen("0.1.0") is False
+        err = capsys.readouterr().err
+        assert "todolist.yaml 不存在" in err and "fail-open" in err
+        log = tmp_path / ".claude" / "hook-logs" / "version-scope-gate.log"
+        assert "todolist.yaml 不存在" in log.read_text(encoding="utf-8")
+
+    def test_todolist_parse_failure_stderr_and_log(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "todolist.yaml").write_text(
+            "versions: [unclosed", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.version.get_ticket_state_root", lambda: tmp_path
+        )
+        assert is_version_scope_frozen("0.1.0") is False
+        err = capsys.readouterr().err
+        assert "解析 todolist.yaml 失敗" in err and "fail-open" in err
+        log = tmp_path / ".claude" / "hook-logs" / "version-scope-gate.log"
+        assert "解析 todolist.yaml 失敗" in log.read_text(encoding="utf-8")
 
     def test_scope_field_absent_not_frozen(self, monkeypatch, tmp_path):
         _write_todolist(tmp_path, [{"version": "0.1.0", "status": "active"}])

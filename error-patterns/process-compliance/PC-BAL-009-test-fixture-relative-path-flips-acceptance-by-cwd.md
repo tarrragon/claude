@@ -85,4 +85,4 @@ PM 據此一度判定「agent 回報失實」並寫入 worklog；靠 pass+fail �
 - PC-165：測試綠燈不等於 runtime 正確（顏色穩定但無效；本模式為顏色不穩定）
 - PC-V1-010：subagent 在完成摘要混淆 total 與 passed（本模式的對帳手段依賴 total 被正確回報）
 - TEST-BAL-001：理想化 fixture 使 validator 假通過（同屬 fixture 與真實環境落差，該案為恆真、本案為隨環境翻轉）
-- 實證：flutter_balance 某次驗收（2026-07-26），fixture 已改為 cwd 無關
+- 實證：BAL 某次驗收（2026-07-26），fixture 已改為 cwd 無關

@@ -1,7 +1,7 @@
 """
 ticket track onboard 命令（multi-PM 協調層 Phase 2，issue tarrragon/claude#77）
 
-`/clear` = session 死亡 + 新生（新 session id，舊 registry entry 成孤兒）。
+`/clear` = session 死亡 + 新生（新 session id，舊 registry entry 標記 ended_reason=clear，分類 ended_by_clear，仍計入佔用；heartbeat 逾時且無存活派發後由下次 SessionStart 清理）。
 入場不是恢復記憶，是從世界平面重建三問：我是誰 / 同事是誰 / 我手上有
 什麼。session 啟動已印 30+ hook 輸出牆，入場資訊必須收斂為單一固定值表，
 不再疊加噪音（CLI-first、AI-last，AI 只讀結論不做判定）。

@@ -557,9 +557,48 @@ def get_target_root(
     return original_root
 
 
+class GitStatusError(RuntimeError):
+    """git status 執行失敗（與「無變更」區分）；訊息為 git 的錯誤輸出。"""
+
+
+GIT_STATUS_FAILURE_LOG_NAME = "git-status-failure"
+
+
+def _report_git_status_failure(cwd: Optional[str], error: str) -> None:
+    """舊 API 吞掉 git status 失敗時留痕：stderr + 日誌檔（規則 4）。"""
+    message = f"git status failed cwd={cwd or os.getcwd()} error={error}"
+    print(f"[Warning] {message}", file=sys.stderr)
+    try:
+        from lib.hook_logging import get_hook_log_dir
+        log_dir = get_hook_log_dir(GIT_STATUS_FAILURE_LOG_NAME)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{GIT_STATUS_FAILURE_LOG_NAME}-{datetime.now().strftime('%Y%m%d')}.log"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now(timezone.utc).isoformat()} {message}\n")
+    except Exception as e:
+        # 日誌失敗不得影響呼叫端（fail-open）；stderr 已留痕
+        print(f"[Warning] git status failure logging failed: {e}", file=sys.stderr)
+
+
+def get_uncommitted_files_strict(cwd: Optional[str] = None) -> list[FileStatus]:
+    """
+    取得未提交變更，git status 失敗時拋 GitStatusError（可區分失敗與無變更）
+
+    Returns:
+        list[FileStatus]: 成功時的變更列表；無變更為空列表
+
+    Raises:
+        GitStatusError: git status 執行失敗（非 git 目錄、逾時、git 不存在等）
+    """
+    return _parse_status_lines(_get_status_lines_strict(cwd))
+
+
 def get_uncommitted_files(cwd: Optional[str] = None) -> list[FileStatus]:
     """
     獲取未提交變更的結構化資訊（高階 API）
+
+    已棄用：git status 失敗時仍回空列表（僅補 stderr 與日誌），無法與
+    「無變更」區分；需區分者改用 get_uncommitted_files_strict()。
 
     內部呼叫 git status --porcelain，將結果解析為 FileStatus 物件列表。
     每個 FileStatus 物件包含狀態碼和檔案路徑的結構化資訊。Renamed/Copied
@@ -591,8 +630,11 @@ def get_uncommitted_files(cwd: Optional[str] = None) -> list[FileStatus]:
         untracked = sum(1 for f in files if f.is_untracked)
         print(f"Total changes: {total}, Untracked: {untracked}")
     """
-    status_lines = _get_uncommitted_status_lines(cwd=cwd)
+    return _parse_status_lines(_get_uncommitted_status_lines(cwd=cwd))
 
+
+def _parse_status_lines(status_lines: list[str]) -> list[FileStatus]:
+    """將 porcelain 狀態行解析為 FileStatus 列表。"""
     if not status_lines:
         return []
 
@@ -633,9 +675,20 @@ def _get_uncommitted_status_lines(cwd: Optional[str] = None) -> list[str]:
             print(f"  {line}")
     """
     # -z：路徑不加引號、不跳脫，以 NUL 分隔；Renamed/Copied 為 "XY new\0old\0"
+    try:
+        return _get_status_lines_strict(cwd)
+    except GitStatusError as e:
+        _report_git_status_failure(cwd, str(e))
+        return []
+
+
+def _get_status_lines_strict(cwd: Optional[str] = None) -> list[str]:
+    """執行 git status --porcelain -z 並解析；命令失敗拋 GitStatusError。"""
     success, output = run_git_command(["status", "--porcelain", "-z"], cwd=cwd)
 
-    if not success or not output:
+    if not success:
+        raise GitStatusError(output)
+    if not output:
         return []
 
     entries = output.split("\0")

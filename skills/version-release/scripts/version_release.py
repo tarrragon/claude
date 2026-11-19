@@ -1993,6 +1993,45 @@ def warn_if_frozen_without_blockers(version: str) -> None:
         print_warning(message)
 
 
+_SYNC_BASE_PATH = ".claude/sync-base.json"
+
+
+def describe_unpushed_claude_commits(project_root: Path) -> str:
+    """回傳一行說明：本地有多少 `.claude/` commit 尚未推送到 framework canonical。
+
+    只供發版前查看，不阻擋、不計入 preflight 的通過判定。錨點是 git 歷史中最後一次
+    寫入 `.claude/sync-base.json` 的 commit（push 或 pull 後都會 commit 這個檔）；
+    計數是錨點之後動到 `.claude/` 的非 merge commit，不含 sync-base.json 本身。
+    與框架 lib 的 unpushed_claude_commits 判準相同；本套件不 import 框架 lib，
+    故另存一份，判準變更時兩處一起改。
+    """
+
+    def _git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git", *args], cwd=project_root, capture_output=True, text=True
+        )
+
+    anchor = _git("log", "-1", "--format=%H", "--", _SYNC_BASE_PATH)
+    if anchor.returncode != 0:
+        return f"未推送的 .claude/ commit：無法計算（git log 失敗：{anchor.stderr.strip()}）"
+    anchor_sha = anchor.stdout.strip()
+    if not anchor_sha:
+        return f"未推送的 .claude/ commit：無法計算（git 歷史中沒有 {_SYNC_BASE_PATH}）"
+    counted = _git(
+        "rev-list", "--count", "--no-merges", f"{anchor_sha}..HEAD",
+        "--", ".claude/", f":(exclude){_SYNC_BASE_PATH}",
+    )
+    if counted.returncode != 0:
+        return f"未推送的 .claude/ commit：無法計算（git rev-list 失敗：{counted.stderr.strip()}）"
+    count = int(counted.stdout.strip() or 0)
+    if count == 0:
+        return f"未推送的 .claude/ commit：0 個（自上次同步 {anchor_sha[:9]} 之後）"
+    return (
+        f"未推送的 .claude/ commit：{count} 個（自上次同步 {anchor_sha[:9]} 之後），"
+        "consumer 尚未取得這些變更，直到下一次 sync-push"
+    )
+
+
 def check_version_frozen(version: str) -> Tuple[bool, List[str]]:
     """檢查目標版本是否已於 todolist.yaml 標記 scope: frozen。
 
@@ -2136,6 +2175,10 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
     else:
         for hit in ph_hits:
             print_warning(f"佔位實作: {hit}")
+
+    # 1.8 未推送的 .claude/ commit（資訊，不計入 all_ok）
+    print_info("[OK] 檢查未推送的 .claude/ commit...")
+    print_info(describe_unpushed_claude_commits(get_project_root()), 1)
 
     all_ok = wl_ok and td_status["passed"] and td_ok and pv_ok and vs_ok
     return all_ok, results

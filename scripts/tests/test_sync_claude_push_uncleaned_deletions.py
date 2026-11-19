@@ -5,9 +5,10 @@ clean_stale_files 不會執行，遠端（clone）殘留該檔成孤兒。detect
 偵測「遠端 clone 有、本地 tracked 樹（staging）無」的檔，供 main 結尾輸出 soft
 警告（R2：不阻擋、不改 --clean 預設）。
 
-判定須與 clean_stale_files 對齊：
+判定須與 clean_stale_files 一致（警告集合 == --clean 實際刪除集合）：
   - 遠端獨有檔（CHANGELOG/VERSION/README/LICENSE/.gitignore/.git）不算孤兒
-  - should_exclude 命中者（local-only / 憑證，可能屬他專案）不算孤兒
+  - 遠端已追蹤、推送方 tracked 樹無的 local-only 名稱算孤兒（--clean 會刪）
+  - 帶 base_sha 時，base 之後他方新增的檔不算孤兒
   - 遠端與本地都有的檔不算孤兒
 """
 from __future__ import annotations
@@ -87,17 +88,65 @@ def test_git_dir_files_not_reported(tmp_path: Path):
     assert sync_mod.detect_uncleaned_deletions(temp_dir, staging) == []
 
 
-# ---------- 對齊 clean_stale_files：should_exclude 命中者不算孤兒 ----------
+# ---------- 對齊 clean_stale_files：遠端已追蹤的 local-only 名稱會被 --clean 刪除 ----------
 
-def test_should_exclude_files_not_reported(tmp_path: Path):
+def test_remote_tracked_local_only_file_is_reported(tmp_path: Path):
+    """正向對照：local-only 名稱遠端有、推送方 tracked 樹無時，--clean 會刪，警告須列出。"""
     temp_dir, staging = _make_dirs(tmp_path)
-    # settings.local.json 為 local-only（should_exclude 命中），可能屬他專案，不算孤兒
     assert sync_mod.should_exclude(Path("settings.local.json")) is True
     _write(temp_dir, "settings.local.json", "{}\n")
     _write(temp_dir, "keep.md")
     _write(staging, "keep.md")
 
-    assert sync_mod.detect_uncleaned_deletions(temp_dir, staging) == []
+    assert sync_mod.detect_uncleaned_deletions(temp_dir, staging) == ["settings.local.json"]
+
+
+# ---------- 契約：警告集合 == --clean 實際刪除集合 ----------
+
+def _run_git(args: list[str], cwd: Path) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _files(root: Path) -> set[str]:
+    return {
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*")
+        if p.is_file() and ".git" not in p.relative_to(root).parts
+    }
+
+
+def test_warning_set_equals_clean_deletion_set(tmp_path: Path):
+    """同一份輸入下，警告列出的檔與 clean_stale_files 實際刪除的檔相同。
+
+    遠端含：本地已刪的檔（刪）、遠端已追蹤的 local-only 名稱（刪）、base 之後
+    他方新增的檔（保留）、雙方都有的檔（保留）、遠端獨有 metadata（保留）。
+    """
+    temp_dir, staging = _make_dirs(tmp_path)
+    _run_git(["init", "-q"], temp_dir)
+    _run_git(["config", "user.email", "t@example.com"], temp_dir)
+    _run_git(["config", "user.name", "t"], temp_dir)
+    _write(temp_dir, "keep.md")
+    _write(temp_dir, "hooks/obsolete.py")
+    _write(temp_dir, "settings.local.json", "{}\n")
+    _write(temp_dir, "CHANGELOG.md")
+    _run_git(["add", "-A"], temp_dir)
+    _run_git(["commit", "-q", "-m", "base"], temp_dir)
+    base_sha = _run_git(["rev-parse", "HEAD"], temp_dir)
+    _write(temp_dir, "rules/other-consumer.md")
+    _run_git(["add", "-A"], temp_dir)
+    _run_git(["commit", "-q", "-m", "other consumer"], temp_dir)
+    _write(staging, "keep.md")
+
+    warned = sync_mod.detect_uncleaned_deletions(temp_dir, staging, base_sha=base_sha)
+    before = _files(temp_dir)
+    sync_mod.clean_stale_files(temp_dir, staging, base_sha=base_sha)
+    deleted = sorted(before - _files(temp_dir))
+
+    assert warned == deleted == ["hooks/obsolete.py", "settings.local.json"]
 
 
 # ---------- 多孤兒：排序輸出 ----------

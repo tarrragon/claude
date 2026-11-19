@@ -42,7 +42,7 @@
 |------|------|
 | 生命週期 | 跨 session 保留，但專案獨立 |
 | 跨專案共用 | 不可，每個專案獨立管理 |
-| 範例 | `settings.local.json`、`sync-preserve.yaml`、`.sync-state.json` |
+| 範例 | `settings.local.json`、`.sync-state.json` |
 
 **辨識問題**：這個檔案的內容對不同專案是否有不同取值？若是，屬類型 B。
 
@@ -85,10 +85,12 @@
 
 | 集合 | 比對方式 | 成員 |
 |------|------|------|
-| `PER_PROJECT_PATTERNS` | 路徑任一段同名即排除 | `project-integration`、`.version-release.yaml`（各專案的發版設定） |
+| `PER_PROJECT_PATTERNS` | 路徑任一段同名即排除 | `project-integration`、`.version-release.yaml`（各專案的發版設定）、`sync-preserve.yaml`、`sync-skills.yaml`（consumer 的同步宣告） |
 | `PER_PROJECT_ROOT_DIRS` | 只在 `.claude/` 根層排除，`skills/*/plans/` 等巢狀同名目錄照常同步 | `plans`、`analyses`、`migration-backups`（專案的計畫、分析與 ticket 備份） |
 
 兩個集合都不在 `GITIGNORE_EXPECTED`，SessionStart 的 `.gitignore` 檢查不要求忽略它們。防止專案產物被推進框架 repo 靠的是同步排除（push 複製到遠端前以 `should_exclude` 過濾），與 `.gitignore` 無關；專案也可以自行選擇忽略它們。
+
+同步宣告檔是例外，不應忽略：`sync-preserve.yaml`、`sync-skills.yaml` 是人寫的設定，被忽略時只存在建立它的 checkout，新 clone 或 linked worktree 讀不到，pull 的 preserve 保護與 push 的 private 排除都會失效。兩者前版歸類型 B 並要求忽略；`.gitignore` 仍有這兩條時，SessionStart 檢查與 project-init onboard 會列為可移除（判定在 `RETIRED_GITIGNORE_NAMES`、`retired_gitignore_lines()`），移除後把宣告檔 git add。
 
 **skill 的每專案狀態放根層 `project-integration/<skill 名>/`，不放 skill 目錄內**：skill 目錄內的檔案隨 sync 擴散，狀態放那裡會讓各 consumer 共用同一份進度。放根層 `project-integration/` 時沿用既有的雙向排除，不需在 `sync_exclude_manifest.py` 新增名稱。對照：`cc-release-impact-review` 的 `state/last-reviewed.md` 刻意放在 skill 目錄內、隨 sync 共用，因為 Claude Code 版本評估的結論跨專案通用。
 
@@ -116,41 +118,41 @@ private:           # 任何 mode 下排除推送
 | `select` | 只拉 `include` 清單 | 只推 `include`（排除 private） |
 | `none` | 不拉任何 skill | 不推任何 skill |
 
-`sync-skills.yaml` 本身屬類型 B（LOCAL_ONLY_PATTERNS），不跨專案同步。
+`sync-skills.yaml` 本身屬類型 E（PER_PROJECT_PATTERNS）：進專案版控、不跨專案同步。
 
 **專案專用 skill 不推 canonical**：skill 內容寫死本專案的 App、路徑或流程時，維持 `mode: all`，
 把該 skill 目錄名列入 `private:`。push 端在複製與 `--clean` 兩條路徑都跳過它；pull 端在 `mode: all`
 下不受影響，canonical 沒有該 skill 時本地檔案也不會被動到。驗證方式：以 `copy_filtered_from_staging`
-對 `git archive HEAD .claude` 的暫存樹跑一次，確認輸出樹缺該 skill 目錄（`--dry-run` 只產生 commit
-message，不列檔案清單，不能用來驗證）。
+對 `git archive HEAD .claude` 的暫存樹跑一次，確認輸出樹缺該 skill 目錄（`--dry-run` 只列 `--clean`
+會刪除的遠端檔，不列複製到遠端的檔案清單，不能用來驗證）。
 
 **限制**：本檔 gitignored，只存在於執行 sync-push 的那份 checkout。新 clone、另一台機器、或在其他
 worktree 執行 sync-push 時沒有本檔，`private` 清單不生效，該 skill 會被推出且無警告。
 
 ---
 
-## sync-preserve.yaml — 比對維度為完整檔案路徑
+## sync-preserve.yaml — 檔案項精確比對、目錄項前綴比對
 
-`sync-preserve.yaml` 的 `preserve:` 清單只接受**相對於 `.claude/` 的完整檔案路徑**，逐項與待處理項目的
-`rel.as_posix()` 做精確字串比對（push 端 `copy_filtered_from_staging` / `clean_stale_files` /
-`detect_uncleaned_deletions`，pull 端對稱七處皆同）。過濾迴圈只迭代檔案，不迭代目錄。
+`sync-preserve.yaml` 的 `preserve:` 清單接受**相對於 `.claude/` 的檔案路徑或目錄路徑**。push、pull
+所有比對點共用 `.claude/lib/sync_exclude_manifest.py` 的 `is_preserved`：
+
+- 檔案項：與待處理檔案的相對路徑完全相同才命中。
+- 目錄項（含或不含結尾 `/`）：檔案位於該目錄之下即命中，比對以 `<項目>/` 為前綴，`skills/foo` 不會誤命中
+  `skills/foobar/`。
 
 ```yaml
 preserve:
-  - skills/my-private-skill/README.md      # 正確：完整檔案路徑
-  - skills/my-private-skill/scripts/run.py # 正確：目錄下逐檔列出
-  - skills/my-private-skill/               # 錯誤：目錄項不生效，過濾迴圈不比對目錄
+  - skills/my-private-skill/README.md      # 檔案項：只保護這個檔
+  - skills/my-private-skill/               # 目錄項：保護整個目錄
 ```
 
-**Why**：目錄項在比對階段永遠不等於任何檔案的完整相對路徑，該項靜默無效，且過濾迴圈本身即跳過目錄
-（`if not item.is_file(): continue`），無論項目寫法如何都不會命中。
+**Why**：pull 不覆寫、push 不推送的必須是同一組檔案。兩端共用同一判定，目錄項對兩端效果一致：pull 保留
+本地內容，push 不把它推上共享框架 repo。
 
-**Consequence**：使用者若誤以為目錄項可保護整個子目錄，實際整個目錄仍會被推上共享框架 repo（與
-v1.48.6 誤推事故同一失效方向）。push 端 `load_preserve_list` 讀入時會對「以斜線結尾」或「對應本地路徑
-實際為目錄」的項目輸出 stderr 警告，但撰寫 `sync-preserve.yaml` 時仍應直接列出目錄下的具體檔案，不依賴
-執行期警告事後修正。
+**Consequence**：3.4.0 以前兩端都以精確字串比對，目錄項靜默無效（tarrragon/claude#50）。舊版框架的
+consumer 若寫了目錄項，升級後該目錄才開始受保護，pull 不再以上游內容覆寫它。
 
-**Action**：需要保留整個目錄時，逐一列出該目錄下所有需保留的檔案路徑，不要只寫目錄名。
+**Action**：要保護整個目錄時寫目錄項；只想保護個別檔案時逐檔列出，避免目錄內日後新增的檔也被一併保留。
 
 ---
 

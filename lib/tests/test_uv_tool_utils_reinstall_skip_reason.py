@@ -79,6 +79,44 @@ def test_git_missing_skips_reinstall(tmp_path):
     assert "無法判定" in reason
 
 
+def test_command_does_not_require_path_format_option(tmp_path):
+    # --path-format=absolute 需 git 2.31；舊版會把它原樣印成第一行且 rc=0
+    fake = subprocess.CompletedProcess(args=[], returncode=0, stdout=".git\n.git\n", stderr="")
+    with patch.object(uv_tool_utils.subprocess, "run", return_value=fake) as run:
+        reinstall_skip_reason(tmp_path)
+    assert not any(a.startswith("--path-format") for a in run.call_args.args[0])
+
+
+def test_relative_output_resolves_against_project_root(tmp_path, monkeypatch):
+    # 不帶 --path-format 時 git 回相對於 -C 目錄的路徑（子目錄的 common dir 為 ../.git）
+    root = tmp_path / "repo"
+    sub = root / "sub"
+    sub.mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    fake = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=f"{root / '.git'}\n../.git\n", stderr=""
+    )
+    with patch.object(uv_tool_utils.subprocess, "run", return_value=fake):
+        assert reinstall_skip_reason(sub) is None
+
+
+def test_linked_worktree_reason_names_main_checkout_from_relative_output(tmp_path, monkeypatch):
+    main = tmp_path / "main"
+    linked = tmp_path / "linked"
+    linked.mkdir()
+    monkeypatch.chdir(tmp_path)
+    fake = subprocess.CompletedProcess(
+        args=[], returncode=0,
+        stdout=f"{main / '.git' / 'worktrees' / 'linked'}\n{main / '.git'}\n", stderr="",
+    )
+    with patch.object(uv_tool_utils.subprocess, "run", return_value=fake):
+        reason = reinstall_skip_reason(linked)
+    assert reason is not None
+    assert f"主 checkout 為 {main.resolve()}" in reason
+
+
 def test_incomplete_output_skips_reinstall(tmp_path):
     fake = subprocess.CompletedProcess(args=[], returncode=0, stdout="/x/.git\n", stderr="")
     with patch.object(uv_tool_utils.subprocess, "run", return_value=fake):

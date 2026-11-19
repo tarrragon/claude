@@ -300,9 +300,27 @@ def test_ticket_lock_covered_variants_not_reported(tmp_path):
         assert _lock_missing(hook, sub, line + "\n") == [], line
 
 
-def test_ticket_root_under_claude_not_reported(tmp_path):
+def test_ticket_root_under_claude_reported_when_uncovered(tmp_path):
+    """正向對照：票庫在 .claude/ 下、.gitignore 沒涵蓋 → 報缺。"""
     hook = load_hook_module()
-    assert _lock_missing(hook, tmp_path, "", root_dir=".claude/tickets") == []
+    assert _lock_missing(hook, tmp_path, "", root_dir=".claude/tix") == [
+        ".claude/tix/**/*.md.lock"
+    ]
+
+
+def test_ticket_root_under_claude_covered_by_claude_lock_glob(tmp_path):
+    """反向對照：有 .claude/**/*.lock → 不報。"""
+    hook = load_hook_module()
+    assert _lock_missing(hook, tmp_path, ".claude/**/*.lock\n", root_dir=".claude/tix") == []
+
+
+def test_no_gitignore_with_ticket_root_under_claude_lists_lock(tmp_path):
+    """沒有 .gitignore、票庫在 .claude/ 下 → 缺項含該 lock 項。"""
+    hook = load_hook_module()
+    with patch.object(hook, "resolve_ticket_root_dir", return_value=".claude/tix"):
+        missing, _tracked, exists = hook.run_checks(tmp_path, MagicMock())
+    assert not exists
+    assert ".claude/tix/**/*.md.lock" in missing
 
 
 def test_resolve_ticket_root_dir_failure_falls_back(tmp_path):
@@ -397,3 +415,45 @@ def test_pycache_nested_or_bare_entry_not_reported():
     log = logging.getLogger("t")
     for good in (".claude/**/__pycache__", "__pycache__/", "__pycache__"):
         assert ".claude/**/__pycache__" not in hook.check_missing_entries({good}, log)
+
+
+# ---------------------------------------------------------------------------
+# 3.4.0-W1-300.1：宣告檔改進版控，舊 gitignore 條目提示可移除
+# ---------------------------------------------------------------------------
+def _complete_content(hook) -> str:
+    return "\n".join(sorted(hook.REQUIRED_GITIGNORE_ENTRIES)) + "\ndocs/**/*.md.lock\n"
+
+
+def test_retired_entries_reported_as_removable(tmp_path):
+    """正向對照：完整 .gitignore 另含兩條舊規則 → 報出可移除，且不算缺漏。"""
+    hook = load_hook_module()
+    _make_gitignore(
+        tmp_path,
+        _complete_content(hook) + ".claude/**/sync-preserve.yaml\n.claude/**/sync-skills.yaml\n",
+    )
+    log = MagicMock()
+    with patch.object(hook.subprocess, "run", return_value=_mk_ls_files("")):
+        missing, tracked, exists = hook.run_checks(tmp_path, log)
+    retired = hook.check_retired_entries(tmp_path, log)
+    assert missing == [] and tracked == []
+    assert retired == [".claude/**/sync-preserve.yaml", ".claude/**/sync-skills.yaml"]
+
+    output = hook.build_hook_output(missing, tracked, exists, retired)
+    assert output.get("suppressOutput") is False
+    context = output["hookSpecificOutput"]["additionalContext"]
+    assert "`.claude/**/sync-preserve.yaml` 可移除" in context
+    assert "2 條舊規則可移除" in output["systemMessage"]
+
+
+def test_no_retired_entries_stays_silent(tmp_path):
+    """負向對照：完整 .gitignore 無舊規則 → 仍為 suppressOutput。"""
+    hook = load_hook_module()
+    _make_gitignore(tmp_path, _complete_content(hook))
+    retired = hook.check_retired_entries(tmp_path, MagicMock())
+    assert retired == []
+    assert hook.build_hook_output([], [], True, retired) == {"suppressOutput": True}
+
+
+def test_retired_check_without_gitignore_returns_empty(tmp_path):
+    hook = load_hook_module()
+    assert hook.check_retired_entries(tmp_path, MagicMock()) == []

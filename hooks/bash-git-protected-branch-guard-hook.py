@@ -709,6 +709,131 @@ def _check_invocation(command: str, inv: Dict[str, object], host_root: str, logg
     return _check_files_for_target(command, inv, target, logger)
 
 
+# ============================================================================
+# 主 checkout 改變 HEAD 的 checkout／switch
+# ============================================================================
+# 共用主工作樹由並行 session 與 hook 共用，HEAD 離開 main 會把它們一併帶到錯誤分支
+# （.claude/pm-rules/parallel-dispatch.md〈禁止在共用主工作樹切換或建立分支（強制）〉）。
+# 範圍：只判定本專案 repo 的主 checkout（git-dir 等於 common-dir，且 common-dir 與 host 相同）；
+# 其他 repo 與 linked worktree 不判定。目錄含變數等無法靜態判定時放行並記日誌。
+
+HEAD_CHANGE_SUBCOMMANDS = frozenset({"checkout", "switch"})
+# 主 checkout 可停留的分支：切回這些分支放行
+_MAIN_BRANCH_NAMES = frozenset({"main", "master"})
+# 建立分支的旗標（checkout -b/-B/--orphan、switch -c/-C/--create/--force-create/--orphan）
+_CREATE_BRANCH_FLAGS = frozenset({"-b", "-B", "-c", "-C", "--create", "--force-create", "--orphan"})
+# 會消耗下一個 token 作為值、且值不是目標 ref 的旗標
+_HEAD_VALUE_FLAGS = frozenset({"--conflict", "--pathspec-from-file"})
+
+
+def _is_commitish(target_dir: str, ref: str) -> bool:
+    """ref 可解析為 commit，或為某個 remote 上的同名分支（checkout 會 DWIM 建立追蹤分支）。"""
+    ok, _ = run_git_command(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=target_dir)
+    if ok:
+        return True
+    ok, out = run_git_command(["for-each-ref", "--count=1", f"refs/remotes/*/{ref}"], cwd=target_dir)
+    return ok and bool(out.strip())
+
+
+def _head_change_reason(subcmd: str, args: List[str], target_dir: str) -> Optional[str]:
+    """checkout／switch 是否改變 HEAD；會改變時回傳原因，否則 None。
+
+    放行：帶 `--`（還原檔案）、無目標、目標為 main／master、checkout 多個位置引數（<tree-ish> <paths>）、
+    checkout 的單一引數不是 ref（視為路徑，如 `git checkout .`）。
+    """
+    if "--" in args:
+        return None
+    positional: List[str] = []
+    skip_next = False
+    for tok in args:
+        if skip_next:
+            skip_next = False
+            continue
+        flag = tok.split("=", 1)[0]
+        if flag in _CREATE_BRANCH_FLAGS:
+            return f"建立分支（{flag}）"
+        if flag == "--detach" or (subcmd == "switch" and tok == "-d"):
+            return "detach HEAD"
+        if flag in _HEAD_VALUE_FLAGS and "=" not in tok:
+            skip_next = True
+            continue
+        if tok.startswith("-") and tok != "-":
+            continue
+        positional.append(tok)
+    if len(positional) != 1:
+        return None
+    ref = positional[0]
+    if ref == "-":
+        return "切回前一個分支（git checkout -）"
+    if ref in _MAIN_BRANCH_NAMES:
+        return None
+    if subcmd == "checkout" and not _is_commitish(target_dir, ref):
+        return None
+    return f"切換到 {ref}"
+
+
+def _git_dirs(directory: str) -> Optional[Tuple[str, str]]:
+    """(git-dir, common-dir) 的絕對真實路徑；不在 git repo 內時回傳 None。"""
+    ok, out = run_git_command(
+        ["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"], cwd=directory
+    )
+    lines = out.strip().splitlines() if ok else []
+    if len(lines) < 2:
+        return None
+    return os.path.realpath(lines[0]), os.path.realpath(lines[1])
+
+
+def _is_host_main_checkout(target_dir: str, host_root: str) -> bool:
+    """target_dir 位於本專案 repo 的主 checkout（非 linked worktree）。"""
+    target = _git_dirs(target_dir)
+    host = _git_dirs(host_root)
+    if target is None or host is None:
+        return False
+    git_dir, common_dir = target
+    return git_dir == common_dir and common_dir == host[1]
+
+
+def build_main_checkout_head_deny_message(statement: str, target_dir: str, reason: str) -> str:
+    return (
+        f"[主 checkout 分支保護] 共用主工作樹禁止改變 HEAD（{reason}）\n"
+        f"被攔截的命令: {statement}\n"
+        f"主 checkout: {target_dir}\n\n"
+        "主工作樹由並行 session 與 hook 共用，HEAD 離開 main 會把它們一併帶到錯誤分支。\n"
+        "改在 linked worktree 進行：\n"
+        "  git worktree add <路徑> -b <新分支>          # 建立新分支\n"
+        "  git worktree add <路徑> <既有分支>           # 切到既有分支\n"
+        "  git worktree add --detach <路徑> <commit>    # 檢視舊 commit\n"
+        "  或 /worktree create <ticket-id>\n"
+        "切回 main（git checkout main）與還原檔案（git checkout -- <path>）不受限制。\n"
+        "依據：.claude/pm-rules/parallel-dispatch.md〈禁止在共用主工作樹切換或建立分支（強制）〉"
+    )
+
+
+def _check_main_checkout_head_change(command: str, payload: Dict[str, object], logger) -> Optional[str]:
+    """命令中任一 checkout／switch 會改變本專案主 checkout 的 HEAD 時回傳 deny 訊息。"""
+    host_root = _resolve_host_root(payload)
+    cwd = payload.get("cwd")
+    base_dir = cwd if isinstance(cwd, str) and cwd else host_root
+    invocations = find_git_invocations(command, HEAD_CHANGE_SUBCOMMANDS, base_dir=base_dir)
+    if not invocations:
+        return None
+    for inv in invocations:
+        if inv.dir_unknown:
+            logger.info("checkout/switch 目錄無法靜態判定（含變數等），放行: %s", " ".join(inv.statement))
+            continue
+        target_dir = inv.effective_dir or base_dir
+        reason = _head_change_reason(inv.subcommand, inv.args, target_dir)
+        if reason is None:
+            continue
+        if not _is_host_main_checkout(target_dir, host_root):
+            logger.debug("checkout/switch 目標非本專案主 checkout，放行: %s", target_dir)
+            continue
+        statement = " ".join(inv.statement)
+        logger.info("主 checkout 改變 HEAD，阻擋: %s（%s，目錄 %s）", statement, reason, target_dir)
+        return build_main_checkout_head_deny_message(statement, target_dir, reason)
+    return None
+
+
 def main() -> int:
     logger = setup_hook_logging("bash-git-protected-branch-guard")
 
@@ -727,6 +852,15 @@ def main() -> int:
 
     if not contains_git_word(command):
         logger.debug("命令不含 git 字樣，短路允許")
+        return 0
+
+    head_deny = _check_main_checkout_head_change(command, input_data, logger)
+    if head_deny:
+        emit_hook_output(
+            "PreToolUse",
+            permission_decision="deny",
+            permission_decision_reason=head_deny,
+        )
         return 0
 
     invocations = _find_write_invocations(command)

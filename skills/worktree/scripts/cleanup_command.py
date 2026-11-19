@@ -19,6 +19,7 @@ try:
     from .constants import BRANCH_FORCE_DELETE_FLAG, CLEANUP_OUTPUT_WIDTH, DEFAULT_BASE_BRANCH
     from .messages import CleanupMessages
     from .merge_gate import emit_gate_line
+    from .merge_cas import resolve_main_checkout_root
     from .xcode_derived_data import remove_derived_data_for
     from .worktree_manager import (
         _check_working_tree_clean, _extract_ticket_id_from_worktree, _validate_and_find_worktree,
@@ -30,6 +31,7 @@ except ImportError:
     from constants import BRANCH_FORCE_DELETE_FLAG, CLEANUP_OUTPUT_WIDTH, DEFAULT_BASE_BRANCH
     from messages import CleanupMessages
     from merge_gate import emit_gate_line
+    from merge_cas import resolve_main_checkout_root
     from xcode_derived_data import remove_derived_data_for
     from worktree_manager import (
         _check_working_tree_clean, _extract_ticket_id_from_worktree, _validate_and_find_worktree,
@@ -273,7 +275,7 @@ def _timed_git_remove(worktree_path: str, extra_args: list[str]) -> tuple[bool, 
     result = "成功" if ok else "失敗"
     flags = "".join(f" {arg}" for arg in extra_args)
     emit_gate_line(
-        str(get_project_root()),
+        resolve_main_checkout_root(str(get_project_root())),  # 與 merge 端同一份 worktree-merge.log（MR）
         f"[清理移除]worktree remove{flags}｜target {worktree_path}"
         f"｜耗時 {elapsed:.1f}s｜上限 {WORKTREE_REMOVE_TIMEOUT_SECONDS}s｜結果 {result}",
     )

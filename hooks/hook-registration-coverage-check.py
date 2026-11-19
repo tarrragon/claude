@@ -48,7 +48,7 @@ sys.path.insert(0, str(_PROJECT_INIT_DIR))
 from lib import setup_hook_logging, run_hook_safely
 from lib.hook_command_resolver import resolve_hook_script_path
 from lib.hook_registry import merge_dispatch_registry
-from lib.project_hook_registry import manifest_commands
+from lib.project_hook_registry import manifest_commands, script_identity
 from project_init.lib.hook_checker import (
     extract_registered_hooks,
     extract_registered_skill_hooks,
@@ -488,6 +488,34 @@ def _format_permission_report(ok_count: int, missing_files: List[str]) -> List[s
     return lines
 
 
+MANIFEST_UNDETERMINED_NOTE = (
+    "專案 hook 清冊無法判定，清冊內 hook 可能被列為未註冊"
+)
+
+
+def manifest_registered_hooks(
+    project_root: Path,
+) -> Optional[Tuple[set, set]]:
+    """專案 hook 清冊註冊的 (主層 hook 檔名集合, skill hook 識別集合)。
+
+    識別格式對齊 extract_registered_hooks（`<file>.py`）與
+    extract_registered_skill_hooks（`<skill>/hooks/<file>.py`）。
+    清冊無法判定（manifest_commands 回傳 None）時回傳 None。
+    """
+    commands = manifest_commands(project_root)
+    if commands is None:
+        return None
+    main_hooks: set = set()
+    skill_hooks: set = set()
+    for command in commands:
+        identity = script_identity(command)
+        if identity.startswith("hooks/") and identity.endswith(".py"):
+            main_hooks.add(identity[len("hooks/"):])
+        elif identity.startswith("skills/") and identity.endswith(".py"):
+            skill_hooks.add(identity[len("skills/"):])
+    return main_hooks, skill_hooks
+
+
 def main():
     logger = setup_hook_logging("hook-registration-coverage-check")
     # Determine project root
@@ -541,9 +569,18 @@ def main():
     all_skill_hooks = scan_skill_hooks(skills_dir, exact_excludes, patterns)
     registered_skill_hooks = extract_registered_skill_hooks(settings)
 
+    # 併入專案 hook 清冊註冊（settings.local.json 由清冊產生，不在 settings.json）
+    manifest_sets = manifest_registered_hooks(project_root)
+    manifest_hooks: set = set()
+    manifest_skill_hooks: set = set()
+    if manifest_sets is not None:
+        manifest_hooks, manifest_skill_hooks = manifest_sets
+
     # Find unregistered hooks
-    unregistered = all_hooks - registered_hooks
-    unregistered_skill_hooks = all_skill_hooks - registered_skill_hooks
+    unregistered = all_hooks - registered_hooks - manifest_hooks
+    unregistered_skill_hooks = (
+        all_skill_hooks - registered_skill_hooks - manifest_skill_hooks
+    )
     count_excluded = sum(
         1 for f in hooks_dir.glob('*.py')
         if should_exclude_file(f.name, exact_excludes, patterns)
@@ -561,7 +598,18 @@ def main():
     log_output = f"已出現在 settings.json: {len(registered_hooks)} 個"
     print(log_output)
     logger.info(log_output)
-    log_output = f"未出現在 settings.json: {len(unregistered)} 個"
+    log_output = (
+        f"經專案 hook 清冊註冊: "
+        f"{len((all_hooks & manifest_hooks) - registered_hooks)} 個"
+        f"（Skill Hooks {len((all_skill_hooks & manifest_skill_hooks) - registered_skill_hooks)} 個）"
+    )
+    print(log_output)
+    logger.info(log_output)
+    if manifest_sets is None:
+        log_output = f"[WARNING] {MANIFEST_UNDETERMINED_NOTE}"
+        print(log_output)
+        logger.warning(log_output)
+    log_output = f"未出現在 settings.json 且不在清冊: {len(unregistered)} 個"
     print(log_output)
     logger.info(log_output)
     log_output = f"排除（見 hook-exclude-list.json，含經其他管道註冊者）: {count_excluded} 個"

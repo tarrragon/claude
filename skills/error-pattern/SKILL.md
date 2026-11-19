@@ -2,7 +2,7 @@
 name: error-pattern
 description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯誤經驗和防護措施 (query), (2) 記錄新發現的錯誤模式和教訓 (add), (3) Ticket 開始前查詢歷史問題避免再犯, (4) 系統化管理錯誤學習經驗。Use when: user mentions error pattern, 錯誤模式, 教訓, 經驗記錄, 學習經驗, 防護措施, 錯誤紀錄, or needs to avoid recurring issues."
 metadata:
-  version: 1.7.1
+  version: 1.7.2
 ---
 
 # error-pattern SKILL
@@ -55,6 +55,8 @@ metadata:
 - **新建立時**：撰寫「基本資訊」區塊的內文「風險等級」時，frontmatter `severity` 必須同時填入相同值，禁止 frontmatter 留預設 placeholder 或憑感覺快速填寫後不比對內文。
 - **事後修訂內文風險等級時**：必須同步更新 frontmatter `severity`，否則 `query` 排序/顯示會呈現與內文判斷不一致的等級（PC-BAL 類漂移）。
 - **禁止**片面只改 frontmatter `severity` 而不核對內文——frontmatter 是否正確以「是否忠實反映內文判斷」為準，不是獨立來源。
+
+**frontmatter 不放專案票號欄位**：error-pattern 的 frontmatter 禁止寫 `source_ticket`、`source_tickets`、`related_tickets` 等記錄專案票號的欄位。理由：error-pattern 屬框架資產，會隨同步擴散到所有 consumer 專案，專案票號在他處無法解析（規則 8，見 `.claude/references/reference-stability-rules.md`）；現行歸屬判定也不讀這些欄位。違反的後果是票號隨同步外洩並成為永久失效引用。需要表達「某票與某 pattern 有關」時，改在該票的 ticket md 內引用 PC ID（如 `PC-166`）或 pattern 檔名，由票單向指向 pattern。
 
 已完成一次全量覆核修正：381 檔中 15 檔（皆有值可比對者）分歧，14 檔判定內文較準確並已同步更新 frontmatter；1 檔（ARCH-001）判定 frontmatter 較準確而保留原值，內文對應修正已記錄為 spawn-request 待後續票處理。
 

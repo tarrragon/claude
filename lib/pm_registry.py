@@ -74,7 +74,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 try:
     from .git_utils import run_git_command
@@ -388,11 +388,34 @@ def _merge_entry(entry: Dict, name: str, project: str, now: str) -> None:
     entry["heartbeat_ts"] = now
     entry["name"] = name
     entry["project"] = project
+    entry.pop(ENDED_REASON_KEY, None)  # 同 session_id 重新啟用，清除結束標記
 
 
 # ============================================================================
 # 公開 API：session 生命週期
 # ============================================================================
+
+
+def _prune_ended_clear(
+    sessions: Dict, live_dispatch_session_ids: Optional[Set[str]], logger=None
+) -> None:
+    """移除已可確定無人再寫檔的 ended_by_clear entry。
+
+    條件（AND）：標記 ended_reason=clear、heartbeat 逾 STALE 門檻、且該
+    session 無存活派發記錄。live_dispatch_session_ids 為 None 表示呼叫端
+    無法取得派發記錄，保守不清理。
+    """
+    if live_dispatch_session_ids is None:
+        return
+    for sid in list(sessions):
+        entry = sessions[sid]
+        if entry.get(ENDED_REASON_KEY) != END_REASON_CLEAR:
+            continue
+        if sid in live_dispatch_session_ids or is_fresh(entry.get("heartbeat_ts")):
+            continue
+        del sessions[sid]
+        if logger:
+            logger.info("清理 ended_by_clear entry: session_id=%s", sid)
 
 
 def register_session(
@@ -403,6 +426,7 @@ def register_session(
     project: str,
     source: str = "",
     logger=None,
+    live_dispatch_session_ids: Optional[Set[str]] = None,
 ) -> None:
     """SessionStart 註冊：依 `source` 分流 merge 或 reset（契約 v2 D4 增補 1）。
 
@@ -424,6 +448,7 @@ def register_session(
         else:
             sessions[session_id] = _new_entry(name, project, now)
 
+        _prune_ended_clear(sessions, live_dispatch_session_ids, logger)
         write_registry(registry_file, data, logger=logger)
 
 
@@ -466,6 +491,35 @@ def update_heartbeat(
             return False
 
         _merge_entry(entry, name, project, now_dt.isoformat())
+        write_registry(registry_file, data, logger=logger)
+        return True
+
+
+ENDED_REASON_KEY = "ended_reason"
+END_REASON_CLEAR = "clear"
+
+
+def mark_session_ended(
+    registry_file: Path,
+    lock_file: Path,
+    session_id: str,
+    reason: str,
+    logger=None,
+) -> bool:
+    """SessionEnd reason=clear 時保留 entry 並標記結束原因。
+
+    /clear 後該 session 的背景 shell 與子代理仍會寫檔（實測：背景命令在
+    /clear 後 3 分鐘仍寫入），不能以「entry 消失」判為 orphan_confirmed。
+
+    Returns:
+        bool: entry 是否存在並被標記
+    """
+    with _registry_lock(lock_file):
+        data = read_registry(registry_file, logger=logger)
+        entry = data.setdefault("sessions", {}).get(session_id)
+        if entry is None:
+            return False
+        entry[ENDED_REASON_KEY] = reason
         write_registry(registry_file, data, logger=logger)
         return True
 
@@ -524,6 +578,8 @@ def classify_ownership(
     - "cross_session_alive"：他 session 所屬且該 session heartbeat 仍新鮮
     - "orphan_confirmed"：session_id 不在 pm-registry.json 的 sessions 中
       （已 SessionEnd graceful release），無 session 可回收
+    - "ended_by_clear"：entry 仍在 registry 且標記 ended_reason=clear
+      （/clear 結束，其背景工作與子代理仍可能寫檔），不得判為孤兒
     - "orphan_suspected"：session_id 存在於 registry 但 heartbeat 已逾
       STALE 門檻，可能異常終止未 graceful release
     - "unknown_owner"：entry 無 session_id（早期派發記錄缺此欄位），無法
@@ -544,6 +600,8 @@ def classify_ownership(
     session_entry = registry_sessions.get(entry_session_id)
     if session_entry is None:
         return "orphan_confirmed"
+    if session_entry.get(ENDED_REASON_KEY) == END_REASON_CLEAR:
+        return "ended_by_clear"
     if not is_fresh(session_entry.get("heartbeat_ts")):
         return "orphan_suspected"
     return "cross_session_alive"

@@ -9,17 +9,14 @@ PC-099 防護：acceptance-gate-hook 場景 #17 AUQ 原本僅比對 mtime > tick
 
 歸屬判定順序（短路求值）：
 
-1. PC 檔案含 YAML frontmatter `source_ticket` 欄位：
-   - 等於當前 ticket_id → 歸屬（保留）
-   - 為空 / null / 其他 ticket_id → 不歸屬（過濾）
+1. PC 檔案讀取失敗 → 保守歸屬（避免漏報）
 
-2. PC 檔案無 frontmatter（既有 legacy 格式）：
-   - 當前 ticket md 內容（where.files / acceptance / solution log）引用該 PC 的
-     檔名（basename）或 PC ID（如 `PC-099`）→ 歸屬
-   - 完全無引用 → 不歸屬（meta-ticket / 跨 session 保護）
+2. 當前 ticket md 內容（where.files / acceptance / solution log）引用該 PC 的
+   檔名（basename）或 PC ID（如 `PC-099`）→ 歸屬
+   完全無引用 → 不歸屬（meta-ticket / 跨 session 保護）
 
-此策略採混合方案：(b) source_ticket 前瞻 +
-(a) 時間窗 fallback（以 ticket md 引用為近似證據，避免依賴 git log）。
+不讀取 PC frontmatter 的任何欄位：error-pattern 會隨同步擴散到其他專案，
+歸屬證據只放在當前 ticket md（以 ticket md 引用為證據，避免依賴 git log）。
 """
 
 from __future__ import annotations
@@ -27,7 +24,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 # Pattern ID 正規表達式收斂為單一 SSOT。
 # PATTERN_ID_RE 涵蓋全 category（PC/IMP/ARCH/...）並支援 Model 1 來源前綴格式
@@ -40,52 +37,6 @@ if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
 from lib.pattern_id import PATTERN_ID_RE as _PATTERN_ID_RE  # noqa: E402
-
-# YAML frontmatter 開頭結尾標記
-_FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-
-# YAML frontmatter 開頭結尾標記
-_FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-
-
-def _parse_pc_frontmatter_source_ticket(
-    pc_content: str, logger=None
-) -> Tuple[bool, Optional[str]]:
-    """解析 PC 檔案的 YAML frontmatter `source_ticket` 欄位。
-
-    僅支援扁平 key: value 形式（PC frontmatter 慣例），不解析巢狀結構、
-    清單、anchors 等完整 YAML 特性。若日後 PC frontmatter 需要更複雜結構，
-    應改用 PyYAML 並更新此函式契約。
-
-    Returns:
-        (has_frontmatter, source_ticket_value)
-        - has_frontmatter: 檔案是否含 `---` YAML frontmatter 區塊
-        - source_ticket_value: frontmatter 內 `source_ticket` 的值；無此欄位或值為
-          空/null 時為 None
-    """
-    m = _FRONTMATTER_RE.match(pc_content)
-    if not m:
-        return False, None
-
-    block = m.group(1)
-    for line in block.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("source_ticket:"):
-            value = stripped.split(":", 1)[1].strip()
-            # 去除引號（支援 "..." 與 '...' 兩種引號變體）
-            if (value.startswith('"') and value.endswith('"')) or (
-                value.startswith("'") and value.endswith("'")
-            ):
-                value = value[1:-1]
-            # null / 空值視為 None
-            if not value or value.lower() in ("null", "~", "none"):
-                if logger:
-                    logger.debug("source_ticket 為空/null，回退至引用檢查")
-                return True, None
-            return True, value
-
-    return True, None
-
 
 def _extract_pc_id(pc_filename: str) -> Optional[str]:
     """從 PC 檔名提取 Pattern ID（如 PC-099-meta-....md → PC-099）。"""
@@ -134,7 +85,7 @@ def filter_error_patterns_by_ticket_scope(
     for rel_path in candidate_files:
         pc_path = project_dir / rel_path
         try:
-            pc_content = pc_path.read_text(encoding="utf-8")
+            pc_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
             if logger:
                 logger.warning(
@@ -143,31 +94,7 @@ def filter_error_patterns_by_ticket_scope(
             attributed.append(rel_path)
             continue
 
-        # 步驟 1：frontmatter source_ticket 優先
-        has_frontmatter, source_ticket = _parse_pc_frontmatter_source_ticket(
-            pc_content, logger
-        )
-
-        if has_frontmatter and source_ticket is not None:
-            if source_ticket == current_ticket_id:
-                if logger:
-                    logger.info(
-                        "PC %s frontmatter source_ticket=%s 匹配當前 ticket，歸屬",
-                        rel_path,
-                        source_ticket,
-                    )
-                attributed.append(rel_path)
-            else:
-                if logger:
-                    logger.info(
-                        "PC %s frontmatter source_ticket=%s 不匹配當前 ticket %s，過濾",
-                        rel_path,
-                        source_ticket,
-                        current_ticket_id,
-                    )
-            continue
-
-        # 步驟 2：無 frontmatter 或 source_ticket 為 null → 回退至 ticket 引用檢查
+        # 歸屬只看 ticket md 是否引用該 PC
         pc_id = _extract_pc_id(Path(rel_path).name)
         if _ticket_references_pc(ticket_content, rel_path, pc_id):
             if logger:

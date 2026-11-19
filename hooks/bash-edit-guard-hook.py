@@ -31,14 +31,15 @@ Bash Edit Guard Hook - PreToolUse Hook
   - 排除子 shell 形式：以括號深度追蹤，未閉合子 shell 內的所有 cd/pushd
     （不論 connector 為 (、&& 或 ;）皆不改變持久 cwd，一致排除
   - 排除 git -C / uv --directory（不含 cd 指令，天然不命中）
-  - 排除還原至專案根 cd /<repo-root>（污染後補救的合法用途）
+  - 排除還原至作用根 cd /<作用根>（污染後補救的合法用途；作用根為 payload.cwd
+    所屬 checkout 的根，在 linked worktree 內即該 worktree 的根）
 
 行為:
   - 模式 A: 依上述分級；ticket md 與裸 cd 同時命中時兩段 reason 併列。
   - 模式 B（裸 cd / pushd）: permission_decision=deny（IMP-008 三度復發後根治）。
     命中即在命令送出前擋下，cwd 不因該次命令改變；reason 附 git -C / 子 shell /
     uv --directory 替代指引。兩個已知放行面（皆非缺陷，但「永不改變 cwd」不成立）：
-    還原至專案根的 cd 屬刻意排除（見上）；偵測為正則掃描字面命令，
+    還原至作用根的 cd 屬刻意排除（見上）；偵測為正則掃描字面命令，
     `bash -c 'cd x'`、`eval`、變數展開、`builtin cd` 等非字面形式不在範圍。
     cd + edit 同時命中以 deny 為準。
     FP 抑制：heredoc body 與單/雙引號字串內的字面 cd 不算裸 cd，避免擋掉合法 script 撰寫。
@@ -200,7 +201,7 @@ def _detect_bash_edit_patterns(command: str, literal_ranges=None) -> bool:
 # connector 涵蓋：行首(^)、換行(\n)、&&、;、||、左括號(()
 # \bcd\b / \bpushd\b 後須接空白 + 引數，避免命中 cdrom / pushder 等字面
 # target 遇連接符（; & | 括號）即截斷：cd <root>;cmd 的 target 不含分號，
-# 專案根還原的比對才不會失敗
+# 作用根還原的比對才不會失敗
 _BARE_CD_PATTERN = re.compile(
     r'(^|\n|&&|;|\|\||\()\s*\b(cd|pushd)\s+([^\s;&|()]+)'
 )
@@ -375,16 +376,20 @@ def _find_bare_cd_target(
       子 shell 內（depth > 0）一律排除，不論該命中 connector 為 (、&& 或 ;。
       修復前 (cd a && cd b) 第二個 cd 因 connector 為 && 誤報，現一致排除。
     - git -C <path> / uv --directory <path>：不含 cd 指令，天然不命中
-    - 還原至專案根 cd /<repo-root>：污染後補救的合法用途（CLAUDE_PROJECT_DIR）
+    - 還原至作用根 cd /<作用根>：污染後補救的合法用途。作用根為 payload.cwd 所屬
+      checkout 的根（action_root）；在 linked worktree 內即該 worktree 的根，
+      此時 cd <主 checkout 根> 不算還原、照常命中。
 
     收窄修正:
     舊版排除所有絕對路徑 cd，導致 cd /<repo-root>/subdir（絕對子目錄）被靜默放行。
-    現收窄為「target 正規化後恰等於專案根」才排除，絕對子目錄恢復 warn。
-    CLAUDE_PROJECT_DIR 未設時保守不排除（warn 不 deny）。
+    現收窄為「target 正規化後恰等於作用根」才排除，絕對子目錄照常命中。
+    作用根與 CLAUDE_PROJECT_DIR 都取不到時保守不排除（任何 cd 都命中）。
+
+    命中後的處置在 main()：一律 deny（模式 B），本函式只回傳命中 target。
 
     False-positive 務實邊界（限制）:
-    PreToolUse 只見 raw command 字串，無完整 shell parse。
-    heredoc／quoted 字串內的字面 cd 可能誤判。warn 不 deny，誤判成本低。
+    PreToolUse 只見 raw command 字串，無完整 shell parse。heredoc 與引號內的
+    字面 cd 已由 literal_ranges 排除；其餘無法 parse 的寫法仍可能誤判而被 deny。
 
     Args:
         command: Bash 命令
@@ -394,7 +399,7 @@ def _find_bare_cd_target(
     Returns:
         str | None - 命中的 cd/pushd target；無命中回傳 None
     """
-    # 專案根（用於排除「污染後還原至專案根」的合法 cd）
+    # 還原比對用的根（用於排除「污染後還原至作用根」的合法 cd）
     # 優先採作用根（情境 C：env=MAIN、cwd=WT 時還原目標是 WT）；
     # 無作用根且 CLAUDE_PROJECT_DIR 未設時為 None，保守不排除任何絕對路徑
     project_root = action_root or os.environ.get('CLAUDE_PROJECT_DIR')
@@ -421,12 +426,12 @@ def _find_bare_cd_target(
         if _paren_depth(command, match.start(2), literal_ranges) > 0:
             continue
 
-        # 排除 2: 還原至專案根 cd /<repo-root> — 污染後補救的合法用途
-        # 收窄：僅 target 正規化後恰等於專案根才排除；絕對子目錄恢復 warn
+        # 排除 2: 還原至作用根 cd /<作用根> — 污染後補救的合法用途
+        # 收窄：僅 target 正規化後恰等於作用根才排除；絕對子目錄照常命中
         if project_root and target.rstrip('/') == project_root:
             continue
 
-        # 命中：裸 cd / pushd（行首或串接後，且非專案根還原、非子 shell）
+        # 命中：裸 cd / pushd（行首或串接後，且非作用根還原、非子 shell）
         return target
 
     # 排除 3 & 4: git -C / uv --directory 不含 cd 指令，天然不命中上方掃描

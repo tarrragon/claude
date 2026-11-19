@@ -70,6 +70,18 @@ def test_orphan_confirmed_does_not_block(monkeypatch):
     assert _run(monkeypatch, {"s-alive": _fresh()}, True, one) == 0
 
 
+def test_clear_ended_owner_still_blocks(monkeypatch):
+    # E2 正向對照：reason=clear 結束的條目經 classify_ownership 為 ended_by_clear，
+    # 不被排除、仍計入佔用 -> DENY；對照 test_orphan_confirmed_does_not_block
+    sessions = {
+        "s-a": {"heartbeat_ts": datetime.now(timezone.utc).isoformat(), "ended_reason": "clear"},
+        "s-alive": _fresh(),
+    }
+    stale_clear = {"s-a": {"heartbeat_ts": "2000-01-01T00:00:00+00:00", "ended_reason": "clear"}, "s-alive": _fresh()}
+    assert _run(monkeypatch, sessions, True, _two("s-a")) == 2
+    assert _run(monkeypatch, stale_clear, True, _two("s-a")) == 2
+
+
 def test_alive_owner_still_blocks(monkeypatch):
     sessions = {"s-a": _fresh(), "s-alive": _fresh()}
     assert _run(monkeypatch, sessions, True, _two("s-a")) == 2

@@ -1,4 +1,4 @@
-> **編號溯源（native intruder 讓位）**：本 pattern 為本專案原生（非框架 canonical）。先前不對稱 push 誤把它推上框架 PC-177 號，使上游 PC-177 同時承載框架 canonical（defensive-rule-mechanical-overapplication）與本 native intruder 兩 slug。本專案將本 pattern 讓位重編為 PC-184（全索引對照確認 184 為 next-free canonical）。上游殘留的 `PC-177-malformed-tool-call-rendered-as-text.md` 為應清除的孤兒（canonical 是 defensive，PC-177 不該由本 native 佔用）；上游 PC-177-defensive 由本地 PC-181（lineage 認領）保護，不受本讓位影響。
+> **編號溯源（native intruder 讓位）**：本 pattern 為本專案原生（非框架 canonical）。先前不對稱 push 誤把它推上框架 PC-177 號，使上游 PC-177 同時承載框架 canonical（defensive-rule-mechanical-overapplication）與本 native intruder 兩 slug。本專案將本 pattern 讓位重編為 PC-184（全索引對照確認 184 為 next-free canonical）。上游殘留的 `PC-177-malformed-tool-call-rendered-as-text.md` 為應清除的孤兒（canonical 是 defensive，PC-177 不該由本 native 佔用）。PC-177-defensive 與其 consumer 重編號副本 PC-181 後來都在 2026-06 未宣告的 sync-push `--clean` 中遺失，v3.4.0 依 #63 以前綴號 PC-LLM-009 復原；PC-177、PC-181 在 canonical 留空。
 
 # PC-184: malformed tool-call 被當文字渲染而未執行
 

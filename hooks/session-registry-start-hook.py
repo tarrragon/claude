@@ -98,6 +98,7 @@ _OWNERSHIP_LABELS = {
     "self": "本 session 自有",
     "cross_session_alive": "他 session 所屬（仍存活）",
     "orphan_confirmed": "確定孤兒（擁有者 session 已結束）",
+    "ended_by_clear": "擁有者以 /clear 結束（背景工作與子代理可能仍在寫檔）",
     "orphan_suspected": "疑似孤兒（擁有者 session heartbeat 逾時）",
     "unknown_owner": "歸屬不明（記錄缺 session_id）",
     "registry_unavailable": "無法判定（pm-registry.json 讀取失敗或損毀）",
@@ -120,6 +121,10 @@ _OWNERSHIP_ACTIONS = {
     "orphan_confirmed": (
         "目前無任何 session 可查得或執行回收，回報為框架限制；代理人本身"
         "是否仍在執行未知，本框架僅是無查證或回收路徑，非「已清除」"
+    ),
+    "ended_by_clear": (
+        "擁有者 session 以 /clear 結束，其子代理與背景命令可能仍在執行並寫檔，"
+        "不視為孤兒；以 ListAgents 與檔案活動確認後再決定是否回收"
     ),
     "orphan_suspected": (
         "擁有者 session 可能仍在但心跳已逾時，建議先確認該 session 是否"
@@ -216,6 +221,19 @@ def scan_idle_agents(
     )
 
 
+def _live_dispatch_session_ids(project_root: Path, logger) -> Optional[set]:
+    """存活派發記錄的 session_id 集合；讀取失敗回 None（呼叫端不清理）。"""
+    try:
+        return {
+            d.get("session_id")
+            for d in get_active_dispatches(project_root)
+            if isinstance(d, dict) and d.get("session_id")
+        }
+    except Exception as e:  # 讀取失敗 fail-safe：記日誌並放棄清理
+        logger.warning("讀取派發記錄失敗，略過 ended_by_clear 清理: %s", e)
+        return None
+
+
 def main() -> int:
     logger = setup_hook_logging(HOOK_NAME)
     input_data = read_json_from_stdin(logger)
@@ -257,6 +275,7 @@ def main() -> int:
             project=str(project_root),
             source=source,
             logger=logger,
+            live_dispatch_session_ids=_live_dispatch_session_ids(project_root, logger),
         )
         logger.info(
             "session 已註冊至 pm-registry: session_id=%s name=%s source=%s",

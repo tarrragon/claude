@@ -17,14 +17,29 @@
 | 不覆蓋 | 倉庫根目錄 `CLAUDE.md`（保留各專案特定配置） |
 | pull 指令 | `/sync-pull`（從中央 repo 拉取最新配置到本專案） |
 | push 指令 | `/sync-push`（只由框架主控方在發版時執行，推送 `.claude/` 並打 `v<版號>` tag；角色判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉） |
-| 狀態檔 | `.claude/.sync-state.json`（記錄上次 push hash、版本、time，與 `last_synced_base_sha`） |
-| preserve 清單 | `.claude/sync-preserve.yaml`（本地特化檔案，pull 時原地保留不被覆蓋或刪除） |
+| 狀態檔 | `.claude/sync-base.json`（進 git：`last_synced_base_sha` 與 `pinned_version`）；`.claude/.sync-state.json`（本機：上次 push hash、版本、time，與衝突輪的 pending base） |
+| preserve 清單 | `.claude/sync-preserve.yaml`（列入 sync-preserve 的本地特化，pull 時原地保留不被覆蓋或刪除；定義見〈本地特化的定義〉） |
 
 **Why（為何是雙向有狀態）**：中央 repo 是多專案共享的框架來源。主控方在本地演化框架後發版推送；consumer 端則可能保有本地特化（見 preserve 清單），同時中央 repo 持續有新版發佈。雙向同步必須以「上次同步點」（base SHA）為基準做三方合併，才能區分「本地新增」與「上游新增」。
 
 **Consequence（不理解的代價）**：把同步當成單向覆蓋會在兩個方向都出錯——pull 時用上游舊版蓋掉本地演化，push 時用本地版蓋掉上游其他專案的貢獻。
 
-**Action**：執行任何 pull/push 前，先確認 `.sync-state.json` 的 `last_synced_base_sha` 狀態（見 §3），再依 §2 判斷該 pull 還是 push。
+**Action**：執行任何 pull/push 前，先確認 `sync-base.json` 的 `last_synced_base_sha` 狀態（見 §3），再依 §2 判斷該 pull 還是 push。
+
+### 本地特化的定義
+
+本節是框架內「本地特化」一詞的權威定義，其他文件與腳本輸出引用本節，不另下定義。
+
+**本地特化**：本專案在 `.claude/` 內、相對上次同步基準點（base SHA）所做的變更，分兩種形態：
+
+| 形態 | 判定 | 例 |
+|------|------|-----|
+| 新增 | 檔案在本地存在，base 中不存在 | 專案自建的代理人、專案特有的 hook |
+| 修改 | 檔案在 base 中存在，本專案的 commit 改過它（單一檔的判定：本地內容與 base 版本不同） | 本專案對上游 hook 的調整 |
+
+**與 sync-preserve 的關係**：`sync-preserve.yaml` 是保護機制，不是定義。列進清單的部分稱「列入 sync-preserve 的本地特化」，pull 時原地保留；沒列進清單的本地特化，三方合併時仍會收到上游改動（雙方都改的部分以衝突呈現），全量 overlay 時會被覆蓋或轉存。
+
+**本定義只描述狀態，不決定是否合法**：consumer 不修改 `.claude/` 的通用內容（規範見 `.claude/README.md`）。修改通用內容即使符合「修改」形態，仍屬違反規範；pull 後由 `framework-update-adaptation` skill 的第 1 類「本地特化被覆寫」處理。
 
 ---
 
@@ -49,7 +64,7 @@
 
 ## 3. base SHA 與三方合併 vs full overlay
 
-`.sync-state.json` 的 `last_synced_base_sha` 是同步機制的關鍵狀態，決定 pull 走「安全的三方合併」還是「危險的 full overlay fallback」。
+`sync-base.json` 的 `last_synced_base_sha` 是同步機制的關鍵狀態，決定 pull 走「安全的三方合併」還是「危險的 full overlay fallback」。它進 git、跟著 commit 走，所以新 clone 與 linked worktree 也讀得到。`sync-base.json` 沒有這個欄位時，腳本回退讀舊位置 `.sync-state.json`，下一次成功的 pull 或 push 把它移進 `sync-base.json`。
 
 ### 3.1 兩條路徑的判定
 
@@ -72,7 +87,7 @@
 
 **Consequence**：誤以為「機制有三方合併就一定安全」，在 base SHA 缺失時執行 pull，三方合併形同未啟用，full overlay 的三類風險（§4）全數暴露。
 
-**Action**：pull 前先檢視 `.sync-state.json` 是否含 `last_synced_base_sha`。缺失時，預期本次走 full overlay，務必先完成 §4 的前置確認（git status 乾淨 + 覆蓋預覽）再執行。
+**Action**：pull 前先檢視 `sync-base.json`（或舊位置 `.sync-state.json`）是否含 `last_synced_base_sha`。缺失時，預期本次走 full overlay，務必先完成 §4 的前置確認（git status 乾淨 + 覆蓋預覽）再執行。
 
 ---
 
@@ -99,7 +114,7 @@
 ### 4.3 安全處理流程
 
 1. **pull 前**：確認 `git status` 工作區乾淨（本地未提交變更先 commit 或 stash），避免覆蓋遺失。
-2. **pull 前**：檢視 `.sync-state.json` 的 `last_synced_base_sha`；缺失即預期 full overlay，提高警覺。
+2. **pull 前**：檢視 `sync-base.json` 的 `last_synced_base_sha`；缺失即預期 full overlay，提高警覺。
 3. **執行時**：詳閱覆蓋預覽（will-overwrite / will-delete）與 AskUserQuestion 清單，逐項確認非預期覆蓋。
 4. **pull 後**：執行 `git diff` 比對本次同步引入的變更；特別檢查是否有孤兒複製（新舊位置同名檔案並存）與非預期刪除。
 5. **發現本地演化被覆蓋**：主控方以發版推送使本地成為新 base，而非反覆 pull；consumer 把被覆蓋的修改內容回報 framework issue，不推送。
@@ -114,13 +129,14 @@
 
 ## 5. sync-preserve.yaml 維護時機
 
-`.claude/sync-preserve.yaml` 的 `preserve` 清單列出「本地特化檔案」，pull 時原地保留不被覆蓋或刪除。
+`.claude/sync-preserve.yaml` 的 `preserve` 清單列出要在 pull 時原地保留、不被覆蓋或刪除的本地特化（定義見 §1〈本地特化的定義〉）。
 
 ### 5.1 何時登錄
 
 | 觸發時機 | 動作 |
 |---------|------|
-| 新增本專案特有防護（hook / error-pattern / 其 test） | 同步在 `preserve` 登錄該檔相對 `.claude/` 的路徑 |
+| 新增本專案特有防護（hook / 其 test） | 同步在 `preserve` 登錄該檔相對 `.claude/` 的路徑 |
+| 新增待收錄的 error-pattern | 登錄該檔；去處判定與等待收錄期間的處置見 §5.3 |
 | 新增本地特化的 runtime state 或 local-only 設定 | 登錄以免 full overlay 時被 stale 清理移除 |
 | 移除某項本地特化 | 同步從 `preserve` 移除該項，保持清單與現實一致 |
 
@@ -128,7 +144,7 @@
 
 | 類別 | 是否登錄 | 範例性質 |
 |------|---------|---------|
-| 本專案獨有、中央 repo 沒有的防護檔 | 登錄 | 專案特有 hook 及其 test、專案特有 error-pattern |
+| 本專案獨有、中央 repo 沒有的防護檔 | 登錄 | 專案特有 hook 及其 test、待收錄的 error-pattern（§5.3） |
 | 中央 repo 共有的框架檔 | 不登錄 | 共用 hook、共用規則（由同步機制正常管理） |
 | 本地 runtime state / local-only 設定 | 登錄 | 不應被上游覆蓋的本地狀態檔 |
 
@@ -137,6 +153,29 @@
 **Consequence**：本專案持續新增特有防護卻忘記登錄 preserve，在 full overlay 的 stale 清理時這些防護會被移至 `.sync-conflicts/` 甚至刪除（git 追蹤感知防護是安全網，但 preserve 原地保留才是正解）。
 
 **Action**：將「新增本專案特有防護時同步登錄 preserve」綁定為提交前檢查項。git 追蹤感知（§4.2）是兜底，不可取代主動登錄——依賴兜底會讓特化檔反覆進 `.sync-conflicts/` 需手動取回。
+
+### 5.3 consumer 的 error-pattern：去處與等待收錄期間
+
+框架不設 consumer 專屬的 error-pattern 區。consumer 寫下一則教訓時，先以捕獲時分流的判別問句決定去處（`.claude/pm-rules/pm-quality-baseline.md` 規則 7）：「另一個專案的 session 讀到這則 pattern，能用嗎」。
+
+| 判定 | 去處 |
+|------|------|
+| 不可攜：只對本專案成立 | 本專案 `docs/`，不放進 `.claude/` |
+| 可攜：替換專案名後仍成立 | 本地先以 `/error-pattern add` 建立，再開 framework issue 請主控方收錄進中央 repo |
+
+可攜的 pattern 從本地建立到中央 repo 收錄之前，涉及三樣東西。preserve 是整檔粒度，只能保護第一樣：
+
+| 對象 | 性質 | 等待收錄期間的處置 | 全量 overlay 吃掉後的恢復 |
+|------|------|-----------------|----------------------|
+| pattern 檔 | 一級資料 | 登錄 `preserve` | 不會被吃掉 |
+| `error-patterns/README.md` 索引列 | 衍生值，由檔案推導（`/error-pattern add` 會自動補寫） | 照常由工具寫入 | 執行 `uv run .claude/skills/error-pattern/lib/readme_index.py sync --write` 重建 |
+| `error-patterns/_project-registry.yaml` 本專案代號列 | 一級資料；配號工具以它辨識專案，未登錄即報錯 | 本地先寫入，同一列附在收錄請求中 | 依收錄請求中的原文重寫該列 |
+
+**Why**：索引列與代號列都在中央 repo 共有的檔案裡。preserve 整檔保留這兩個檔，會擋住上游對它們的全部更新，所以等待收錄期間只能接受「被吃掉後恢復」。
+
+**Consequence**：不知道恢復步驟時，全量 overlay 之後索引一致性檢查報缺索引，配號工具報專案未登錄，看起來像框架壞了。中央 repo 收錄前每次全量 overlay 都會再發生一次。
+
+**Action**：收錄請求附上 pattern 全文、索引列、代號列三樣原文，請主控方原樣收錄；字面相同時，下次 sync-pull 的三方合併會乾淨帶回。代號列只有一行，又是本專案所有後續配號的前提，請主控方優先收錄。收錄後從 `preserve` 移除該 pattern 檔（§5.1 第 3 列）。
 
 ---
 
@@ -192,7 +231,7 @@ Claude Code 於 session 啟動時載入 skill 註冊表並快取路徑與內容�
 
 - [ ] 方向判斷：本次改過 `.claude/` 嗎？改過預設 push，沒改且要更新才 pull（§2）
 - [ ] pull 前：`git status` 工作區乾淨，未提交變更已 commit / stash（§4.3）
-- [ ] pull 前：已檢視 `.sync-state.json` 的 `last_synced_base_sha`，缺失即預期 full overlay（§3.2）
+- [ ] pull 前：已檢視 `sync-base.json` 的 `last_synced_base_sha`，缺失即預期 full overlay（§3.2）
 - [ ] pull 執行時：已詳閱覆蓋預覽與 AskUserQuestion 確認清單（§4.2）
 - [ ] pull 後：已 `git diff` 比對，確認無孤兒複製與非預期刪除（§4.3）
 - [ ] 新增本專案特有防護時，已同步登錄 `sync-preserve.yaml`（§5）
@@ -212,7 +251,9 @@ Claude Code 於 session 啟動時載入 skill 註冊表並快取路徑與內容�
 
 ---
 
-**Last Updated**: 2026-11-09
+**Last Updated**: 2026-11-19
+**Version**: 1.4.0 — §5 新增 5.3〈consumer 的 error-pattern：去處與等待收錄期間〉：不設 consumer 專屬區，依捕獲時分流決定去處；可攜者經 framework issue 收錄，等待期間 pattern 檔登錄 preserve，索引列與代號列在全量 overlay 後的恢復步驟。§5.1、§5.2 的「專案特有 error-pattern」改為「待收錄的 error-pattern」。
+**Version**: 1.3.0 — §1 新增〈本地特化的定義〉，為框架內「本地特化」的權威定義：相對 base 的新增或修改兩種形態；sync-preserve 是保護機制，列入者稱「列入 sync-preserve 的本地特化」；定義只描述狀態，不使修改通用內容合法。§1 preserve 清單列與 §5 首句改為引用本定義。
 **Version**: 1.2.0 — push 改為只由主控方在發版時執行：§1 push 指令列與 Why、§2 使用時機表（consumer 本地有框架修改改為回報 issue）、§4.3 第 5 步、§6.2 canonical 中轉兩步同步改寫。角色判定路由 escalation-flow〈角色：主控方與 consumer〉。
 **Version**: 1.1.0 — 新增 §6 全域覆蓋層（`~/.claude/`）正規流程：禁止單一專案 rsync 至全域、canonical 中轉三步、消費者數判別提問、包含或分支的雙向 grep 判定、session 快取導致的生效時機落差；檢查清單補 2 項
 **Version**: 1.0.0 — 初版：pull/push 時機、base SHA 與三方合併、full overlay fallback 風險與處理、preserve 維護時機

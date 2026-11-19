@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.9.12（2026-11-19）— 測試輔助：`tests/conftest.py` 新增逐測試還原 cwd 與環境變數的 fixture（載入框架 lib 的 `process_state_restore`）。腳本與 skill 指令內容不變。
+
 **Version**: 1.9.11 — 維度 4 步驟 1 的「CLAUDE.md『教學模組對應表』」寫明是使用本 skill 的專案自己維護的章節、本 skill 不附這張表，沒有這個章節時照降級條款跳過
 
 **Version**: 1.9.10 — 本地變更（內部清理，判定結果、exit code、stdout 不變）：`scripts/check_domain_coverage.py` 刪除單文字版 `check_domain_coverage`（與多份 map 聯集版同語意的第二份實作，主流程只用後者，原呼叫端只剩測試）；單份 map 傳單元素清單給 `check_domain_coverage_union`，測試改驗證主流程實際走的路徑。每份 map 的歸屬解析由兩次（合併歸屬、未覆蓋 FR 落點提示）收斂為一次，「整份無歸屬而預設計給」的判定（含系統層例外）收斂為單一屬性，覆蓋判定與尾行說明共用。唯一可觀察差異：相容模式的 stderr 訊息改述其現行可達條件（取得 spec 識別時，於各 map 皆無 SPEC 歸屬且非系統層的 map 皆無 FR 編號時到達，含系統層不存在或無 FR 的情形），取不到 spec 識別的 WARNING 訊息不變；`extract_spec_id` 的 docstring 改述 None 的實際去向。tests 新增 3 案例、移除 1 案例（原單文字版的相容模式案例，改寫為預設計給與系統層相容兩案），本專案七份 SPEC 修改前後 exit code、stdout、stderr 逐字不變

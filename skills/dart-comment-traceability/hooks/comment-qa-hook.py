@@ -777,12 +777,10 @@ def main():
         # 3. 提取工具資訊
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input") or {}
-        tool_response = input_data.get("tool_response") or {}
 
-        # 4. 檢查工具是否成功執行
-        if not tool_response.get("success", False):
-            log_message(logger, f"工具 {tool_name} 執行失敗，跳過檢查")
-            return 0
+        # 4. 不讀 tool_response 判定成敗：PostToolUse 只在工具成功後觸發
+        #    （失敗走 PostToolUseFailure），且 Write／Edit 的回應沒有 success 欄位，
+        #    以該欄位判定會恆為失敗、檢查永不執行。
 
         # 5. 檢查檔案是否需要處理（包含語言檢測）
         file_path = tool_input.get("file_path", "")

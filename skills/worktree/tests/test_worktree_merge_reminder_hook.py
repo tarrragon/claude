@@ -56,7 +56,7 @@ class TestGetDirtyFiles:
         lib.git_utils.get_uncommitted_files，直接 mock 該函式回傳
         FileStatus 列表（不再 patch hook 自身的 subprocess）。"""
         monkeypatch.setattr(
-            hook, "get_uncommitted_files",
+            hook, "get_uncommitted_files_strict",
             lambda cwd: [
                 hook.FileStatus(status="??", file_path="tickets/0.0.0-W1-001.md"),
                 hook.FileStatus(status=" M", file_path="tickets/0.0.0-W1-002.md"),
@@ -70,12 +70,12 @@ class TestGetDirtyFiles:
         ]
 
     def test_empty_status_returns_empty_list(self, logger, monkeypatch):
-        monkeypatch.setattr(hook, "get_uncommitted_files", lambda cwd: [])
+        monkeypatch.setattr(hook, "get_uncommitted_files_strict", lambda cwd: [])
         assert hook.get_dirty_files("/path/to/wt", logger) == []
 
     def test_git_command_failure_returns_empty_list(self, logger, monkeypatch):
         """0.2.1-W3-286：共用層不區分 git 失敗與無變更，皆回傳空清單。"""
-        monkeypatch.setattr(hook, "get_uncommitted_files", lambda cwd: [])
+        monkeypatch.setattr(hook, "get_uncommitted_files_strict", lambda cwd: [])
         assert hook.get_dirty_files("/path/to/wt", logger) == []
 
 

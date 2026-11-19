@@ -80,18 +80,14 @@ from typing import Dict, List, Optional, Set
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from lib import (
-        setup_hook_logging, run_hook_safely, read_json_from_stdin,
-        get_code_root, emit_model_reminder,
-    )
-    from lib.hook_registry import registry_commands
-except ImportError as e:
-    # hook 自身失敗雙通道（quality-baseline 規則 4）：import 失敗時尚無
-    # logger 可用，僅能靠 stderr 讓用戶可見；fail-open（exit 0）避免因
-    # 本 hook 壞掉而連帶擋住 SessionStart / Edit / Write。
-    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    sys.exit(0)
+# import 期失敗不攔截：例外照常拋出，直譯器以 exit 1 結束（非 exit 2，不擋
+# SessionStart / Edit / Write），runtime 記為 non-blocking error、relay 轉告模型
+# （hook-system-operations〈輸出規範〉）
+from lib import (
+    setup_hook_logging, run_hook_safely, read_json_from_stdin,
+    get_code_root, emit_model_reminder,
+)
+from lib.hook_registry import registry_commands
 
 
 HOOK_NAME = "hook-dependency-isolation-check"

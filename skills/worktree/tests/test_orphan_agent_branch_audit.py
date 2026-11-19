@@ -635,7 +635,7 @@ class TestCollectModifiedTicketPathsFailurePaths:
         def fake_get_uncommitted_files(cwd=None):
             raise RuntimeError("git status 失敗")
 
-        monkeypatch.setattr(hook, "get_uncommitted_files", fake_get_uncommitted_files)
+        monkeypatch.setattr(hook, "get_uncommitted_files_strict", fake_get_uncommitted_files)
 
         result = hook.collect_modified_ticket_paths(tmp_path, logger)
         assert result is None
@@ -650,7 +650,7 @@ class TestCollectModifiedTicketPathsFailurePaths:
         def fake_get_uncommitted_files(cwd=None):
             return [FakeFileStatus("docs/work-logs/v1/tickets/0.1.0-W1-001.md", is_modified=True)]
 
-        monkeypatch.setattr(hook, "get_uncommitted_files", fake_get_uncommitted_files)
+        monkeypatch.setattr(hook, "get_uncommitted_files_strict", fake_get_uncommitted_files)
 
         result = hook.collect_modified_ticket_paths(tmp_path, logger)
         assert result == ["docs/work-logs/v1/tickets/0.1.0-W1-001.md"]

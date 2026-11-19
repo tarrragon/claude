@@ -2,7 +2,7 @@
 
 涵蓋：
   - 原始分類 frozenset 對外暴露且為 frozenset
-  - 組合集合 SYNC_EXCLUDE_ALL = LOCAL_ONLY | CREDENTIAL | PER_PROJECT
+  - 組合集合 SYNC_EXCLUDE_ALL = LOCAL_ONLY | CREDENTIAL | PER_PROJECT | TOOL_ARTIFACT
   - should_exclude 對相對路徑契約（assert not is_absolute）
   - should_exclude 對各分類維度（名稱 / 副檔名 / 前綴 / 目錄段）
   - 缺陷 N 回歸：push.compute_content_hash 與 status.compute_content_hash
@@ -48,13 +48,50 @@ def test_raw_classifications_are_frozensets():
 
 
 def test_sync_exclude_all_is_union():
-    # SYNC_EXCLUDE_ALL 為三維度聯集：local-only + 憑證 + per-project tracked layer
-    # （含 project-integration）
+    # SYNC_EXCLUDE_ALL 為四維度聯集：local-only + 憑證 + per-project tracked layer
+    # （含 project-integration）+ 工具產物
     assert manifest.SYNC_EXCLUDE_ALL == (
         manifest.LOCAL_ONLY_PATTERNS
         | manifest.CREDENTIAL_PATTERNS
         | manifest.PER_PROJECT_PATTERNS
+        | manifest.TOOL_ARTIFACT_PATTERNS
     )
+
+
+# 3.4.0-W1-307.1：與 skill-sync TOOL_ARTIFACT_DIRS 對齊的工具產物類別。
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "skills/x/.ruff_cache/0.14.0/cache.bin",
+        "skills/x/.mypy_cache/3.14/module.data.json",
+        "skills/x/htmlcov/index.html",
+        "skills/x/foo.egg-info/PKG-INFO",
+        "skills/x/Foo.EGG-INFO/PKG-INFO",
+    ],
+)
+def test_tool_artifacts_excluded(rel):
+    assert manifest.should_exclude(Path(rel)) is True
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        # build 刻意不排除：整個 .claude/ 作用域下的通用目錄名
+        "skills/x/build/a.py",
+        # 後綴比對只看路徑段結尾，名稱中段含 egg-info 不命中
+        "skills/x/egg-info-notes/a.md",
+        "skills/x/SKILL.md",
+    ],
+)
+def test_tool_artifact_rule_does_not_overreach(rel):
+    assert manifest.should_exclude(Path(rel)) is False
+
+
+def test_tool_artifacts_not_required_in_gitignore():
+    # 工具產物不進 .gitignore 必要清單，避免 consumer 的 SessionStart 檢查多出缺項
+    required = manifest.required_gitignore_entries()
+    for name in manifest.TOOL_ARTIFACT_PATTERNS:
+        assert not any(name in entry for entry in required), name
 
 
 def test_credential_dimensions_present():
@@ -187,3 +224,50 @@ def test_compute_content_hash_prunes_excluded_dirs_before_descending(tmp_path):
         "hook-logs 目錄被下探，剪枝未在遍歷前生效："
         f"{[p for p in walked_dirpaths if 'hook-logs' in Path(p).parts]}"
     )
+
+
+# =====================================================================
+# 3.4.0-W1-300.1：sync-preserve.yaml、sync-skills.yaml 改歸類型 E
+# =====================================================================
+
+DECLARATION_FILES = ("sync-preserve.yaml", "sync-skills.yaml")
+
+
+@pytest.mark.parametrize("name", DECLARATION_FILES)
+def test_declaration_files_are_per_project_not_local_only(name):
+    assert name in manifest.PER_PROJECT_PATTERNS
+    assert name not in manifest.LOCAL_ONLY_PATTERNS
+
+
+@pytest.mark.parametrize("name", DECLARATION_FILES)
+def test_declaration_files_still_excluded_from_sync(name):
+    """push 與 pull 都經 should_exclude 判定，歸類改變不影響排除。"""
+    assert manifest.should_exclude(Path(name))
+
+
+@pytest.mark.parametrize("name", DECLARATION_FILES)
+def test_declaration_files_not_required_in_gitignore(name):
+    joined = "\n".join(manifest.required_gitignore_entries())
+    assert name not in joined
+
+
+def test_retired_gitignore_lines_matches_all_spellings():
+    lines = [
+        "# 註解 sync-preserve.yaml",
+        ".claude/**/sync-preserve.yaml",
+        "/.claude/sync-skills.yaml",
+        "sync-skills.yaml",
+        "!.claude/sync-preserve.yaml",
+        ".claude/**/settings.local.json",
+        "",
+    ]
+    assert manifest.retired_gitignore_lines(lines) == [
+        ".claude/**/sync-preserve.yaml",
+        "/.claude/sync-skills.yaml",
+        "sync-skills.yaml",
+    ]
+
+
+def test_retired_gitignore_lines_empty_for_current_entries():
+    """負向對照：現行必要條目一條都不算可移除。"""
+    assert manifest.retired_gitignore_lines(manifest.required_gitignore_entries()) == []

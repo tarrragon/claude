@@ -4,7 +4,6 @@ title: 強制 logger 參數導致函式提取至共用模組後介面不一致
 category: implementation
 severity: medium
 created: 2026-03-09
-related_tickets:
 ---
 
 # IMP-029：強制 logger 參數導致函式提取至共用模組後介面不一致

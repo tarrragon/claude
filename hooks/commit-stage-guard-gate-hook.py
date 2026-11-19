@@ -77,7 +77,7 @@ rename 檔案（含純 rename 與 rename 併內容變更）不略過，改以 `g
 | 9 | proposal-evaluation-gate-hook.py                        | `_check_proposal_evaluation` | 完整重用（is_target_file + parse_frontmatter + check_prop_content + check_tracking_yaml；old_status 由 pre_text frontmatter 推導取代原 tool_input 依賴） |
 | 10| suggest-compact.py                                      | （無對應函式）                | 排除：純 session 步調建議（tool-call 計數），與檔案內容正確性無關，非 commit 補網範疇 |
 | 11| ticket-path-guard-hook.py（skills/ticket）              | `_check_ticket_path`         | 完整重用（is_forbidden_ticket_path） |
-| 12| wrap-skill-yaml-consistency-hook.py（skills/wrap-decision）| `_check_wrap_skill_yaml`  | 完整重用（`_is_watched` + `load_alignment` + `load_yaml_config` + `check_signal_orphan` + `check_keyword_orphan` + `check_version_no_regress`，皆讀磁碟現況，不依賴 tool_input） |
+| 12| wrap-skill-yaml-consistency-hook.py（skills/wrap-decision）| `_check_wrap_skill_yaml`  | 完整重用（`_is_watched` + `check_version_no_regress`，皆讀磁碟現況，不依賴 tool_input） |
 
 第 3、10 項無實際攔截邏輯可轉呼（原 hook 從不 deny／與內容無關），計入
 「12 支」是因來源分析票原始分組清單即含此二者；本票如實記錄其 no-op

@@ -1,6 +1,6 @@
 [project]
 name = "branch-worktree-guardian"
-version = "0.1.0"
+version = "1.0.3"
 description = "Create feature worktree utility"
 requires-python = ">=3.10"
 dependencies = []

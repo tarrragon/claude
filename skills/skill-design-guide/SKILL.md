@@ -2,7 +2,7 @@
 name: skill-design-guide
 description: "Anthropic skill spec plus this project's conventions: frontmatter, descriptions, loading budgets, and splitting an oversized skill. Use when creating a skill, editing SKILL.md, reviewing skill quality, or moving content into references/."
 metadata:
-  version: 1.24.0
+  version: 1.25.0
 ---
 
 # Skill Design Guide
@@ -130,7 +130,7 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 | 何時讀 | 檔案 | 涵蓋章節 |
 |--------|------|---------|
 | 寫或修 frontmatter：name、description、擴展欄位、觸發控制、命名 | `references/frontmatter-and-description.md` | 〈YAML Frontmatter〉〈Description 寫作（最重要的一節）〉〈命名規則〉〈觸發控制矩陣〉 |
-| 寫或修 SKILL.md 正文：骨架、內容品質、引用形式、什麼不該放 | `references/writing-the-body.md` | 〈嚴禁清單 — 什麼不該放進 Skill〉〈Body 寫作〉（含〈外部引用：指名身分，不用檔案路徑〉）〈Claude Code 特有功能〉〈一則完整走查：兩個判斷標準只有一個附了可執行動作〉 |
+| 寫或修 SKILL.md 正文：骨架、內容品質、引用形式、什麼不該放；進版號、並行修改同一 skill 時何時取號 | `references/writing-the-body.md` | 〈嚴禁清單 — 什麼不該放進 Skill〉〈Body 寫作〉（含〈外部引用：指名身分，不用檔案路徑〉）〈版號規則：合併時才取號〉〈Claude Code 特有功能〉〈一則完整走查：兩個判斷標準只有一個附了可執行動作〉 |
 | 從零建一個新 skill、判斷它屬哪一類型、決定內容該放 `scripts/`／`references/`／`assets/`、要廢止或遷移既有 skill、或引入他人的 skill | `references/creating-and-adopting-skills.md` | 〈檔案結構〉〈三類 bundled resource 的分工〉〈Skill 建立流程〉〈Skill 類型速查〉〈廢止與遷移〉〈安全考量〉 |
 | 既有 skill 超出第 2 層預算、要外移內容 | `references/splitting-an-existing-skill.md` | 〈為什麼需要專屬程序〉〈補範例後超標：觸發條件與處置順序〉〈外移什麼、留什麼〉〈拆分特有的必查項〉〈兩種驗證，方法不同〉〈拆分特有的高頻缺陷〉〈結構約定〉〈收尾〉〈一則最小走查〉〈走完之後〉〈相關〉 |
 | 決定工作流該給多少自由度或要不要設預設值、設計多步驟工作流、要進階範本、規劃測試方法、或 skill 行為不如預期 | `references/patterns-and-troubleshooting.md` | 〈Degrees of Freedom — 自由度匹配脆弱性〉〈Opinionated Defaults — 預設路徑引導正確做法〉〈Skill 設計模式〉（**控制流形狀**，要模板來這裡）〈選擇方法：Problem-first vs Tool-first〉〈測試方法〉〈迭代回饋指引〉〈常見問題排除〉 |

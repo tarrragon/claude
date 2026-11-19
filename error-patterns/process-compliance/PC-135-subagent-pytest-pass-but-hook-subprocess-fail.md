@@ -3,7 +3,7 @@
 **類別**: process-compliance
 **嚴重度**: High
 **首次發現**: 2026-05-10（SSOT delegate 變更 → 即時補丁 c87e0aee）
-**相關**: ARCH-020、PC-115、PC-110
+**相關**: ARCH-020、PC-115、PC-110、PC-136
 
 ---
 
@@ -77,18 +77,26 @@ caller 端 `try: from lib import X; except: def X(...): return False` 的設計�
 
 ### Hook 層（建議）
 
-為 silent fallback 加 stderr warning：
+**必要依賴不攔截 ImportError**：匯入目標隨框架同步（如 `handoff_utils`、`.claude/lib/`），缺失代表框架或 PEP 723 依賴宣告損壞，不寫 fallback、不攔截，讓例外照常拋出：
 
 ```python
-try:
-    from handoff_utils import is_handoff_stale
-except ImportError as e:
-    sys.stderr.write(f"[WARN] handoff_utils import 失敗 ({e})，使用 stub。請檢查 pep723 deps\n")
-    def is_handoff_stale(record, project_root=None):
-        return False, ""
+from handoff_utils import is_handoff_stale  # 必要依賴：失敗時 exit 1，由 runtime 記錄
 ```
 
-讓 silent fallback 變 noisy fallback，下次同樣症狀立刻可見。
+直譯器以 exit 1 結束，runtime 記為 non-blocking error（不阻擋操作），框架讀取端在下一個事件把 Traceback 末行（如 `ModuleNotFoundError: No module named 'yaml'`）轉告模型。本案的 yaml 缺失會在第一次觸發時被看見，而不是靠 stub 永遠回 `(False, "")`。規範見 `.claude/references/hook-system-operations.md`〈輸出規範（stderr 與 exit code）〉。
+
+**可選依賴才降級**：只有第三方套件缺失時仍有可用的降級行為，才攔截 ImportError，並在註解寫明降級理由與降級後少了什麼。
+
+> **更正（2026-11）**：本節原建議「ImportError 時寫 stderr warning 後改用 stub 繼續」。該做法的 hook 以 exit 0 結束，stderr 對模型不可見，runtime 也不留紀錄，所以「noisy fallback」實際上只有在有人去看 stderr 時才 noisy。2026-11 runtime 實測後，〈輸出規範〉改為 import 期失敗不吞成 exit 0，本節隨之改寫。原寫法如下，保留作為紀錄，不再建議：
+>
+> ```python
+> try:
+>     from handoff_utils import is_handoff_stale
+> except ImportError as e:
+>     sys.stderr.write(f"[WARN] handoff_utils import 失敗 ({e})，使用 stub。請檢查 pep723 deps\n")
+>     def is_handoff_stale(record, project_root=None):
+>         return False, ""
+> ```
 
 ### Lib 層（正本清源）
 
@@ -160,4 +168,5 @@ PC-135 觀測閾值「3+ 次同類補丁」已達標：
 
 ---
 
+**Last Updated**: 2026-11-18 | **Version**: 1.2.0 — 〈Hook 層（建議）〉改寫：必要依賴不攔截 ImportError（exit 1 由 runtime 記錄、讀取端轉告），只有可選依賴且有可用降級時才攔截；原 stub fallback 建議以更正註記保留（依 hook-system-operations〈輸出規範〉2026-11 改寫）
 **Last Updated**: 2026-05-14 | **Version**: 1.1.0 — 追加案例 #2（agent-dispatch-validation-hook 漏 sync）+ 強制檢查設計待 ticket | **Source**: SSOT delegate 補丁 c87e0aee + post-revert commit 1bc42b70

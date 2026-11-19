@@ -5,6 +5,8 @@
 """
 import logging
 import re
+import sys
+from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -600,6 +602,19 @@ def _suggest_next_major(
     return (suggested, "新功能歸大版本")
 
 
+def _report_scope_gate_fail_open(root, reason: str) -> None:
+    """凍結閘 fail-open 時寫 stderr 並追加日誌檔（日誌寫入失敗只回報 stderr）。"""
+    msg = f"[WARNING] is_version_scope_frozen: {reason}，凍結閘放行（fail-open）"
+    sys.stderr.write(msg + "\n")
+    try:
+        log_dir = root / ".claude" / "hook-logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with open(log_dir / "version-scope-gate.log", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat()} {msg}\n")
+    except OSError as e:
+        sys.stderr.write(f"[WARNING] is_version_scope_frozen: 日誌檔寫入失敗 ({e})\n")
+
+
 def is_version_scope_frozen(version: str) -> bool:
     """判斷指定版本在 todolist.yaml 是否標記 scope: frozen。
 
@@ -618,6 +633,7 @@ def is_version_scope_frozen(version: str) -> bool:
     todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
+        _report_scope_gate_fail_open(root, f"todolist.yaml 不存在 ({todolist_path})")
         return False
 
     try:
@@ -625,9 +641,8 @@ def is_version_scope_frozen(version: str) -> bool:
         with open(todolist_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except Exception as e:
-        logger.warning(
-            f"is_version_scope_frozen: 解析 todolist.yaml 失敗 "
-            f"({type(e).__name__}: {e})，視為未凍結"
+        _report_scope_gate_fail_open(
+            root, f"解析 todolist.yaml 失敗 ({type(e).__name__}: {e})"
         )
         return False
 

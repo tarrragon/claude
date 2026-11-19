@@ -95,13 +95,15 @@ def reinstall_skip_reason(
 
 
 def _probe_reinstall_root(project_root: Path) -> Optional[str]:
-    """執行 git 判定；回傳 None（主 checkout）或不重裝原因。"""
+    """執行 git 判定；回傳 None（主 checkout）或不重裝原因。
+
+    不使用 --path-format=absolute：該選項需 git 2.31，舊版不報錯，
+    而是把選項原樣印成第一行（rc=0），整組輸出錯位一行。改為接受
+    git 原生輸出，相對路徑以 -C 指定的 project_root 為基準 resolve。
+    """
     try:
         result = subprocess.run(
-            [
-                "git", "-C", str(project_root), "rev-parse",
-                "--path-format=absolute", "--git-dir", "--git-common-dir",
-            ],
+            ["git", "-C", str(project_root), "rev-parse", "--git-dir", "--git-common-dir"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -122,8 +124,9 @@ def _probe_reinstall_root(project_root: Path) -> Optional[str]:
     if len(lines) < 2:
         return f"無法判定 {project_root} 是否為主 checkout（git rev-parse 輸出不完整）"
 
-    git_dir = Path(lines[0]).resolve()
-    common_dir = Path(lines[1]).resolve()
+    # git 的相對輸出以 -C 目錄為基準；絕對路徑與 project_root 相接時不受影響
+    git_dir = (project_root / lines[0]).resolve()
+    common_dir = (project_root / lines[1]).resolve()
     if git_dir == common_dir:
         return None
     return (

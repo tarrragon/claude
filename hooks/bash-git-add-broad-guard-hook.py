@@ -121,7 +121,12 @@ from lib.git_command_parse import (
     find_git_invocations,
     is_literal_pathspec_token,
 )
-from lib.git_utils import run_git_command, get_uncommitted_files, FileStatus
+from lib.git_utils import (
+    run_git_command,
+    get_uncommitted_files_strict,
+    FileStatus,
+    GitStatusError,
+)
 
 
 # git add/stage 無法靜態列舉的 flag（目錄列舉語意，需實際檔案系統狀態）
@@ -214,6 +219,22 @@ def _build_unknown_dir_message(broad_command: str) -> str:
         "看不出 add 會作用在哪個 repo，也就無法確認該 repo 有沒有不該納入的變更。",
         "",
         "請改用展開後的字面絕對路徑重新執行，例如：git -C /abs/path add <檔案>",
+    ])
+
+
+def _build_status_failure_message(broad_command: str, reason: str) -> str:
+    """git status 失敗時的 deny 訊息：失敗原因 + 重試方式。"""
+    return "\n".join([
+        "[廣域 git add 被阻擋：git status 執行失敗]",
+        "",
+        f"被攔截的命令：{broad_command}",
+        f"失敗原因：{reason}",
+        "",
+        "hook 無法確認目前有沒有他方未提交的變更，廣域 add 可能把它們一併 stage，",
+        "故保守阻擋，不當作「無變更」放行。",
+        "",
+        "重試方式：先排除 git status 失敗的原因（路徑是否為 git repo、git 是否可用、",
+        "index 是否損壞），再重新執行同一命令；或改用精準 add（git add <檔案>）。",
     ])
 
 
@@ -334,7 +355,13 @@ def main() -> int:
         logger.debug("目標 repo 為 worktree 隔離環境，豁免放行")
         return 0
 
-    uncommitted = get_uncommitted_files(cwd=target_cwd)
+    try:
+        uncommitted = get_uncommitted_files_strict(cwd=target_cwd)
+    except GitStatusError as exc:
+        # fail-closed：無法確認有無他方未提交變更時，不能當作「無變更」放行
+        logger.warning("git status 失敗，廣域 git add 保守阻擋：%s（%s）", broad_command, exc)
+        print(_build_status_failure_message(broad_command, str(exc)), file=sys.stderr)
+        return 2
     if not uncommitted:
         logger.debug("廣域 add 但目前無未提交變更，無汙染風險，放行")
         return 0

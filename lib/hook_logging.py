@@ -67,6 +67,12 @@ CLEANUP_INTERVAL_SECONDS = 300
 # Liveness 索引子目錄：hook 已載入/未載入的正向訊號（見 mark_hook_entry）
 LIVENESS_SUBDIR = "_liveness"
 
+# 寫入帳本：未隔離的測試寫入共用根時，追加 test_run 與呼叫者（洩漏哨兵據此歸屬）。
+# 副檔名刻意非 .jsonl，避免被 session liveness 索引的 *.jsonl 彙整與清理誤納。
+WRITE_LEDGER_NAME = "_write-ledger.ndjson"
+ENV_TEST_RUN = "HOOK_LIVENESS_TEST_RUN"
+ENV_TEST_ISOLATION = "HOOK_TEST_ISOLATION"
+
 # CC runtime 曝露的 session id 環境變數，與 stdin session_id 一致
 # （見 hook-architect-technical-reference.md）。取用此 env var 可在 stdin
 # 讀取之前即取得 session_id，免除「先記進入、取得 session_id 後補綁」的
@@ -84,6 +90,25 @@ def _default_log_root() -> Path:
     HOOK_TEST_ISOLATION=1 時 get_shared_state_root 回該值，隔離語意不變。
     """
     return get_shared_state_root(get_project_root())
+
+
+def _record_write_ledger(root: Path, caller: str) -> None:
+    """測試執行中未隔離地寫入日誌根時，於帳本追加 test_run 與呼叫者。
+
+    只在寫入路徑呼叫（唯讀解析不記帳）。無 test_run 或已隔離（HOOK_TEST_ISOLATION=1，
+    根已導向 tmp）不記帳。失敗只寫 stderr，不影響 hook 主流程。
+    """
+    test_run = os.environ.get(ENV_TEST_RUN)
+    if not test_run or os.environ.get(ENV_TEST_ISOLATION) == "1":
+        return
+    try:
+        ledger_dir = Path(root) / ".claude" / "hook-logs" / LIVENESS_SUBDIR
+        ledger_dir.mkdir(parents=True, exist_ok=True)
+        entry = {"test_run": test_run, "caller": caller}
+        with open(ledger_dir / WRITE_LEDGER_NAME, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        sys.stderr.write("[hook-logging] 寫入帳本失敗（caller={}）: {}\n".format(caller, e))
 
 
 def _sanitize_hook_name(name: str) -> str:
@@ -316,6 +341,7 @@ def setup_hook_logging(
     sanitized_name = _sanitize_hook_name(hook_name)
     root_dir = project_root if project_root is not None else _default_log_root()
     log_base_dir = root_dir / ".claude" / "hook-logs" / sanitized_name
+    _record_write_ledger(root_dir, sanitized_name)
 
     # 建立日誌目錄
     try:
@@ -365,6 +391,7 @@ def save_check_log(
     try:
         project_dir = _default_log_root()
         log_dir = project_dir / ".claude" / "hook-logs" / hook_name
+        _record_write_ledger(project_dir, hook_name)
         log_dir.mkdir(parents=True, exist_ok=True)
 
         log_file = log_dir / f"checks-{datetime.now().strftime('%Y%m%d')}.log"

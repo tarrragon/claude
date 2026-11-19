@@ -31,6 +31,7 @@ Uncommitted Ticket MD Reminder Hook - PreToolUse Hook
   - 同一命令先精確 git add 的路徑視為會被提交
 """
 
+import logging
 import sys
 import re
 from pathlib import Path
@@ -46,7 +47,7 @@ try:
         read_json_from_stdin,
         emit_model_reminder,
     )
-    from lib.git_utils import get_uncommitted_files
+    from lib.git_utils import GitStatusError, get_uncommitted_files_strict
     from lib.git_command_parse import match_git_commit, find_git_invocations
 except ImportError as e:
     # ImportError 不應 exit(1) 阻斷流程；降級為 no-op（fail-open）
@@ -79,7 +80,10 @@ except ImportError as e:
     def emit_model_reminder(event, text, *, audience="all", input_data=None):
         return None
 
-    def get_uncommitted_files():
+    class GitStatusError(RuntimeError):
+        pass
+
+    def get_uncommitted_files_strict(cwd=None):
         return []
 
     def match_git_commit(command, exclude_amend=True, base_dir=None):
@@ -171,7 +175,19 @@ def find_uncommitted_ticket_md(command: str = "") -> list[str]:
     """
     form = _commit_form(command) if command else (False, [], False)
     result = []
-    for file_status in get_uncommitted_files():
+    try:
+        file_statuses = get_uncommitted_files_strict()
+    except GitStatusError as exc:
+        # 失敗與「無未提交檔案」不可同形：三通道留痕後跳過本項提醒，不阻擋 commit
+        message = f"git status 失敗，未提交 ticket md 檢查已跳過（cwd={Path.cwd()}）: {exc}"
+        logging.getLogger("uncommitted-ticket-md-reminder").warning(message)
+        sys.stderr.write(f"[uncommitted-ticket-md-reminder] {message}\n")
+        # 平常提醒走 additionalContext（受眾含模型），跳過訊息同管道
+        emit_model_reminder(
+            "PreToolUse", f"[uncommitted-ticket-md-reminder] {message}"
+        )
+        return []
+    for file_status in file_statuses:
         path = file_status.file_path
         # Renamed/Copied 格式 "old -> new" 取新名比對
         if " -> " in path:

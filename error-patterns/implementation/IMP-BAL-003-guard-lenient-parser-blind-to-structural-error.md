@@ -24,7 +24,7 @@ related_patterns: [IMP-APP-005, ARCH-020, IMP-006]
 - 稽核器的 warning 清單只涵蓋語意規則（欄位值是否合規），無「檔案是否可被解析」項。
 - 消費端錯誤訊息含「解析失敗，將改用 ... 方式」而 exit code 為 0。
 
-## 實證案例（flutter_balance 0.2.1-W3，2026-07-26）
+## 實證案例（BAL 0.2.1-W3，2026-07-26）
 
 `docs/todolist.yaml` 的 `0.2.1` 版本條目被誤置到檔尾 `references:` mapping 之後，
 而非 `versions:` list 內。同一 session 的兩份輸出：

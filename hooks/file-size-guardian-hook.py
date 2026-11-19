@@ -22,6 +22,7 @@ File Size Guardian Hook - 過大檔案掃描
 來源: PC-042（單檔掃描）；auto-load 預算量測
 """
 
+import hashlib
 import json
 import os
 import re
@@ -263,7 +264,13 @@ def measure_auto_load_budget(root: Path) -> tuple[int, list[tuple[str, int]]]:
 
 
 def _get_budget_state_path(root: Path) -> Path:
-    return get_hook_log_dir("file-size-guardian") / "auto-load-budget-state.json"
+    """上次量測的狀態檔：放在主 checkout 的 hook-logs，但依掃描根分檔。
+
+    worktree 啟動的 session 掃描的是該 worktree 的 auto-load 集合，若與主 checkout 共用一份，
+    差值會拿兩個不同集合相比。檔名以掃描根路徑的 sha256 前 16 碼區分（同 project_hook_registry）。
+    """
+    digest = hashlib.sha256(str(root.resolve()).encode("utf-8")).hexdigest()[:16]
+    return get_hook_log_dir("file-size-guardian") / f"auto-load-budget-state-{digest}.json"
 
 
 def load_previous_budget_total(state_path: Path) -> int | None:

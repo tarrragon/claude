@@ -23,7 +23,7 @@
 
 ## 案例
 
-flutter_balance 專案，用戶要求為尚未啟動的 v0.0.2 建立需求訪談 ticket。
+BAL 專案，用戶要求為尚未啟動的 v0.0.2 建立需求訪談 ticket。
 
 執行序列：
 
@@ -78,4 +78,4 @@ flutter_balance 專案，用戶要求為尚未啟動的 v0.0.2 建立需求訪�
 
 ---
 
-Last Updated: 2026-07-20 | Source: flutter_balance 越層建票與撤銷
+Last Updated: 2026-07-20 | Source: BAL 越層建票與撤銷

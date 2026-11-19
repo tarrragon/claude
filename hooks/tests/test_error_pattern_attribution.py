@@ -6,9 +6,9 @@ Error Pattern Attribution Filter 測試（PC-099 regression）
 false positive 場景，不再將「與當前 ticket 無關的 PC 新增」誤報為場景 #17 AUQ。
 
 測試矩陣：
-  (1) PC 含 frontmatter source_ticket 匹配當前 ticket → 保留
-  (2) PC 含 frontmatter source_ticket 指向其他 ticket → 過濾
-  (3) PC 含 frontmatter source_ticket 為 null → 回退至引用檢查
+  (1) frontmatter source_ticket 不被讀取：等於當前票但 ticket md 未引用 → 過濾
+  (2) frontmatter source_ticket 不被讀取：ticket md 引用 → 歸屬（不論欄位值）
+  (3) PC 含 frontmatter source_ticket 為 null → 只看引用檢查
   (4) PC 無 frontmatter 但 ticket md 引用 PC ID → 保留（legacy 格式相容）
   (5) PC 無 frontmatter 且 ticket md 未引用 → 過濾（PC-099 核心防護）
   (6) PC 無 frontmatter 但 ticket md 引用 basename → 保留
@@ -56,7 +56,8 @@ def _write_pc(project_dir: Path, rel_path: str, content: str) -> Path:
 # Frontmatter source_ticket 匹配
 # ----------------------------------------------------------------------------
 
-def test_frontmatter_source_ticket_matches_current(tmp_path, logger):
+def test_frontmatter_source_ticket_equal_but_unreferenced_is_filtered(tmp_path, logger):
+    """frontmatter source_ticket 不再被讀取：等於當前票但 ticket md 未引用 → 過濾。"""
     rel = ".claude/error-patterns/process-compliance/PC-100-a.md"
     _write_pc(
         tmp_path,
@@ -66,43 +67,35 @@ def test_frontmatter_source_ticket_matches_current(tmp_path, logger):
     result = filter_error_patterns_by_ticket_scope(
         [rel], CURRENT_TICKET, "ticket body", tmp_path, logger
     )
-    assert result == [rel]
+    assert result == []
 
 
-@pytest.mark.parametrize(
-    "quoted_value",
-    [
-        f'"{CURRENT_TICKET}"',
-        f"'{CURRENT_TICKET}'",
-    ],
-    ids=["double_quoted", "single_quoted"],
-)
-def test_frontmatter_source_ticket_with_quotes(tmp_path, logger, quoted_value):
-    """source_ticket 值含引號變體（"..." / '...'）應正確去引號並匹配。"""
-    rel = ".claude/error-patterns/process-compliance/PC-q-quoted.md"
+def test_frontmatter_source_ticket_equal_and_referenced_is_attributed(tmp_path, logger):
+    """正向對照：同一 PC，ticket md 引用 → 歸屬。"""
+    rel = ".claude/error-patterns/process-compliance/PC-100-a.md"
     _write_pc(
         tmp_path,
         rel,
-        f"---\nsource_ticket: {quoted_value}\n---\n\n# PC-q\n",
+        f"---\nsource_ticket: {CURRENT_TICKET}\n---\n\n# PC-100\n",
     )
     result = filter_error_patterns_by_ticket_scope(
-        [rel], CURRENT_TICKET, "ticket body", tmp_path, logger
+        [rel], CURRENT_TICKET, "see PC-100", tmp_path, logger
     )
     assert result == [rel]
 
 
-def test_frontmatter_source_ticket_points_to_other(tmp_path, logger):
+def test_frontmatter_source_ticket_other_but_referenced_is_attributed(tmp_path, logger):
+    """frontmatter 指向其他票不再過濾：ticket md 引用即歸屬。"""
     rel = ".claude/error-patterns/process-compliance/PC-101-b.md"
     _write_pc(
         tmp_path,
         rel,
         f"---\nsource_ticket: {OTHER_TICKET}\n---\n\n# PC-101\n",
     )
-    # ticket body 即使含 PC-101 也應以 frontmatter 為準
     result = filter_error_patterns_by_ticket_scope(
         [rel], CURRENT_TICKET, "see PC-101", tmp_path, logger
     )
-    assert result == []
+    assert result == [rel]
 
 
 def test_frontmatter_source_ticket_null_falls_back_to_reference(tmp_path, logger):
@@ -195,14 +188,14 @@ def test_mixed_candidates_only_attributed_kept(tmp_path, logger):
     rel_other = ".claude/error-patterns/process-compliance/PC-111-other.md"
     rel_legacy_unref = ".claude/error-patterns/process-compliance/PC-112-unref.md"
 
-    _write_pc(tmp_path, rel_own, f"---\nsource_ticket: {CURRENT_TICKET}\n---\n")
+    _write_pc(tmp_path, rel_own, "# PC-110 own\n")
     _write_pc(tmp_path, rel_other, f"---\nsource_ticket: {OTHER_TICKET}\n---\n")
     _write_pc(tmp_path, rel_legacy_unref, "# PC-112 legacy no reference\n")
 
     result = filter_error_patterns_by_ticket_scope(
         [rel_own, rel_other, rel_legacy_unref],
         CURRENT_TICKET,
-        "ticket body not mentioning any PC id",
+        "ticket body mentions PC-110 only",
         tmp_path,
         logger,
     )

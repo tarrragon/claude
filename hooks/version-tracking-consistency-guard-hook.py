@@ -32,8 +32,7 @@ quality-baseline 規則 4）：
 5. closed 票延後承諾稽核：closed_by 缺失、不在其 close_reason 允許的值域
    （lib/close_resolution.py），或
    close_reason_note 含延後語意（延後/移到/後續）卻無 ticket ID 引用
-   （全歷史稽核已知六張 0.3.0 歷史存量列豁免清單，技術債另有追蹤票承接，
-   避免重複噪音）
+   （專案設定檔列出的歷史存量票豁免，避免重複噪音）
 6. 提案層 stale：提案 target_version 在 todolist.yaml 已 completed，
    但提案 status 仍為 draft（評估結論：此為收版漏更新的漂移）
 7. 提案未註冊 todolist：提案 status 為 confirmed 且 target_version 非
@@ -91,19 +90,9 @@ COMPLETED_TICKET_STATUSES = {"completed", "closed"}
 # ticket_system，避免拉入 PyYAML 以外更大的 ticket_system 依賴鏈。
 DEFER_SEMANTIC_PATTERN = re.compile(r"延後|移到|後續")
 
-# 全歷史稽核已知六張 0.3.0 存量票：延後語意但無 follow-up
-# ticket ID 引用，技術債另有追蹤票承接（非本 hook 職責），故豁免以
-# 避免每 session 重複噪音。（下列 ID 為功能性比對資料，hook 以其判定豁免。）
-KNOWN_LEGACY_CLOSED_TICKET_IDS = frozenset(
-    {
-        "0.3.0-W1-004",
-        "0.3.0-W1-005",
-        "0.3.0-W1-006",
-        "0.3.0-W1-007",
-        "0.3.0-W2-008",
-        "0.3.0-W3-005",
-    }
-)
+# 漂移 5 的歷史存量豁免名單：由專案設定提供（每行一個 ticket ID，
+# 忽略 # 註解與空行）；檔案不存在時為空名單。
+LEGACY_CLOSED_TICKETS_CONFIG = Path(".claude") / "project-integration" / "version-tracking-legacy-closed-tickets.txt"
 
 # 漂移 6/7：提案層偵測用常數
 # 對應 docs/proposals-tracking.yaml 實際結構：`  - id: PROP-016`（YAML 清單項）。
@@ -410,16 +399,33 @@ def scan_closed_tickets(project_root: Path, logger) -> list[dict]:
     return closed
 
 
-def detect_closed_ticket_anomalies(closed_tickets: list[dict]) -> list[str]:
+def load_legacy_closed_ticket_ids(project_root: Path, logger) -> frozenset[str]:
+    """讀取專案設定的歷史存量豁免名單；缺檔靜默回空，讀取失敗回空並警告。"""
+    config_path = project_root / LEGACY_CLOSED_TICKETS_CONFIG
+    if not config_path.is_file():
+        return frozenset()
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        message = f"[version-tracking-consistency-guard] 讀取豁免名單失敗，視為空名單: {config_path}: {exc}"
+        sys.stderr.write(message + "\n")
+        logger.warning(message)
+        return frozenset()
+    lines = (line.strip() for line in text.splitlines())
+    return frozenset(line for line in lines if line and not line.startswith("#"))
+
+
+def detect_closed_ticket_anomalies(
+    closed_tickets: list[dict], exempt_ticket_ids: frozenset[str] = frozenset()
+) -> list[str]:
     """偵測漂移 5：closed 票 closed_by 缺失/不在 close_reason 值域，或 note 含延後語意無 ticket ID 引用。
 
-    已知六張 0.3.0 歷史存量（KNOWN_LEGACY_CLOSED_TICKET_IDS）列入豁免，
-    避免每 session 重複噪音。
+    exempt_ticket_ids（專案設定提供的歷史存量）列入豁免，避免每 session 重複噪音。
     """
     anomalies: list[str] = []
     for frontmatter in closed_tickets:
         ticket_id = frontmatter.get("id") or str(frontmatter.get("_path", ""))
-        if ticket_id in KNOWN_LEGACY_CLOSED_TICKET_IDS:
+        if ticket_id in exempt_ticket_ids:
             continue
 
         closed_by = str(frontmatter.get("closed_by") or "").strip()
@@ -653,7 +659,9 @@ def main() -> int:
         tag_drift_version = detect_tag_drift(versions, project_root, logger)
 
         closed_tickets = scan_closed_tickets(project_root, logger)
-        closed_ticket_anomalies = detect_closed_ticket_anomalies(closed_tickets)
+        closed_ticket_anomalies = detect_closed_ticket_anomalies(
+            closed_tickets, load_legacy_closed_ticket_ids(project_root, logger)
+        )
 
         proposals_path = project_root / "docs" / "proposals-tracking.yaml"
         proposals = parse_proposals(proposals_path, logger)

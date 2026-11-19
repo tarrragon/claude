@@ -47,26 +47,21 @@ from typing import Dict, Any, Optional, List, Set
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from lib.hook_base import get_shared_state_root
-    from lib import (
-        setup_hook_logging,
-        get_hook_log_dir,
-        parse_ticket_frontmatter,
-        read_json_from_stdin,
-        run_hook_safely,
-        get_project_root,
-        find_ticket_files,
-        validate_hook_input,
-        is_subagent_environment,
-    )
-except ImportError as e:
-    # 輸出合法 JSON 到 stdout（遵守 Hook 協定）
-    print(json.dumps({"result": "continue"}))
-    # 同時輸出錯誤到 stderr（雙通道要求）
-    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    # exit 0 避免 CLI 顯示 hook error
-    sys.exit(0)
+# import 期失敗不攔截：例外照常拋出，直譯器以 exit 1 結束（不阻擋），
+# runtime 記為 non-blocking error、relay 轉告模型（hook-system-operations〈輸出規範〉）。
+# lib 與 ticket_system 都隨框架同步，屬必要依賴。
+from lib.hook_base import get_shared_state_root
+from lib import (
+    setup_hook_logging,
+    get_hook_log_dir,
+    parse_ticket_frontmatter,
+    read_json_from_stdin,
+    run_hook_safely,
+    get_project_root,
+    find_ticket_files,
+    validate_hook_input,
+    is_subagent_environment,
+)
 
 # 讀寫意圖判定與 stale in_progress 判定改 import ticket_system 共用實作，
 # 取代原本就地複製的正則與判定函式（詳見下方「where.files 讀寫意圖判定」
@@ -74,17 +69,12 @@ except ImportError as e:
 _TICKET_SYSTEM_SKILL_DIR = Path(__file__).parent.parent / "skills" / "ticket"
 if str(_TICKET_SYSTEM_SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(_TICKET_SYSTEM_SKILL_DIR))
-try:
-    from ticket_system.lib.file_conflict import (
-        parse_file_intent,
-        _default_intent as _shared_default_intent,
-        write_files as _shared_write_files,
-    )
-    from ticket_system.lib.staleness import is_stale_in_progress
-except ImportError as e:
-    print(json.dumps({"result": "continue"}))
-    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    sys.exit(0)
+from ticket_system.lib.file_conflict import (
+    parse_file_intent,
+    _default_intent as _shared_default_intent,
+    write_files as _shared_write_files,
+)
+from ticket_system.lib.staleness import is_stale_in_progress
 
 # ============================================================================
 # 常數定義

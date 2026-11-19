@@ -127,6 +127,62 @@ def test_graceful_skip_when_script_missing(tmp_path):
 # 子進程無法執行（OSError / Timeout）→ graceful skip（回 0）
 # ============================================================================
 
+def _run_with_exc(tmp_path, monkeypatch, exc):
+    _make_test_script(tmp_path)
+
+    def _raise(*a, **k):
+        raise exc
+
+    monkeypatch.setattr(pull.subprocess, "run", _raise)
+    return pull.verify_hook_imports(tmp_path)
+
+
+def test_timeout_reports_unverified(tmp_path, monkeypatch, capsys):
+    """逾時：回 0，stderr 含「未驗證」，stdout 不含「全數通過」，摘要有一行。"""
+    rc = _run_with_exc(
+        tmp_path, monkeypatch, subprocess.TimeoutExpired(cmd="bash", timeout=1)
+    )
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "未驗證" in captured.err
+    assert "全數通過" not in captured.out
+    pull.report_unverified_summary()
+    assert "未驗證項目" in capsys.readouterr().err
+
+
+def test_oserror_reports_unverified(tmp_path, monkeypatch, capsys):
+    """OSError：同逾時，stderr 含「未驗證」與原因。"""
+    rc = _run_with_exc(tmp_path, monkeypatch, OSError("boom"))
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "未驗證" in captured.err and "boom" in captured.err
+    assert "全數通過" not in captured.out
+
+
+def test_summary_absent_when_all_pass(tmp_path, monkeypatch, capsys):
+    """正向對照：全數通過時不印未驗證摘要。"""
+    _make_test_script(tmp_path)
+    monkeypatch.setattr(
+        pull.subprocess, "run",
+        lambda *a, **k: _FakeCompleted(0, stdout="All hooks passed import check.\n"),
+    )
+    assert pull.verify_hook_imports(tmp_path) == 0
+    capsys.readouterr()
+    pull.report_unverified_summary()
+    assert capsys.readouterr().err == ""
+
+
+def test_incomplete_listed_in_summary(tmp_path, monkeypatch, capsys):
+    """INCOMPLETE 分支也列入末行摘要。"""
+    _make_test_script(tmp_path)
+    stdout = f"{pull.HOOK_IMPORT_INCOMPLETE_MARKER} 1 hook(s) undetermined\n"
+    monkeypatch.setattr(pull.subprocess, "run", lambda *a, **k: _FakeCompleted(0, stdout=stdout))
+    pull.verify_hook_imports(tmp_path)
+    capsys.readouterr()
+    pull.report_unverified_summary()
+    assert "未驗證項目" in capsys.readouterr().err
+
+
 def test_graceful_skip_on_subprocess_error(tmp_path, monkeypatch):
     """子進程 OSError / Timeout 時 graceful skip 回 0。"""
     _make_test_script(tmp_path)

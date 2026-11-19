@@ -171,6 +171,13 @@ def patch_paths_to_repo(git_repo: Path, monkeypatch):
     )
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(git_repo))
+    # 版本凍結閘讀專案根的 docs/todolist.yaml；缺檔會印 fail-open [WARNING]，
+    # 污染「stderr 不含 [WARNING]」類斷言。放一份可解析、未凍結的版本索引（不入 commit）
+    todolist = git_repo / "docs" / "todolist.yaml"
+    todolist.parent.mkdir(exist_ok=True)
+    todolist.write_text(
+        'versions:\n  - version: "0.0.0"\n    status: active\n', encoding="utf-8"
+    )
     reset_project_root_cache()
     reset_ticket_state_root_cache()
     yield git_repo

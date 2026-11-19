@@ -53,7 +53,12 @@ from lib import (
     run_hook_safely,
     resolve_session_id,
 )
-from lib.pm_registry import get_registry_paths, release_session
+from lib.pm_registry import (
+    END_REASON_CLEAR,
+    get_registry_paths,
+    mark_session_ended,
+    release_session,
+)
 
 HOOK_NAME = "session-registry-end-hook"
 EXIT_SUCCESS = 0
@@ -91,6 +96,19 @@ def main() -> int:
     registry_file, lock_file = registry_paths
 
     try:
+        if input_data.get("reason") == END_REASON_CLEAR:
+            marked = mark_session_ended(
+                registry_file=registry_file,
+                lock_file=lock_file,
+                session_id=session_id,
+                reason=END_REASON_CLEAR,
+                logger=logger,
+            )
+            logger.info(
+                "SessionEnd reason=clear，保留 entry 並標記: session_id=%s marked=%s",
+                session_id, marked,
+            )
+            return EXIT_SUCCESS
         released = release_session(
             registry_file=registry_file,
             lock_file=lock_file,

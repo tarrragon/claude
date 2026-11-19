@@ -271,6 +271,71 @@ class TestScope:
         _touch(Path(skel), ".claude/hooks/h.py", "import os\nfrom lib import z\n")
         assert mg.select_suites([".claude/skills/lone/mod.py"], skel) == ["skill:lone"]
 
+    def test_e1_package_change_adds_importing_skill(self, skel):
+        """E1 對照（3.4.0-W1-258）：同一改動，快照內有／無其他 skill 匯入該套件，選出的套件不同。"""
+        _touch(Path(skel), ".claude/skills/lone/lone_system/__init__.py")
+        _touch(Path(skel), ".claude/skills/lone/lone_system/core.py", "x = 1\n")
+        change = [".claude/skills/lone/lone_system/core.py"]
+        assert mg.select_suites(change, skel) == ["skill:lone"]
+        assert mg.cross_skill_importers(change, skel) == {}
+        _touch(Path(skel), ".claude/skills/withpy/tests/test_b.py",
+               "def test_x():\n    from lone_system.core import x\n")  # 縮排內匯入同樣涵蓋
+        assert mg.select_suites(change, skel) == ["skill:lone", "skill:withpy"]
+        assert mg.cross_skill_importers(change, skel) == {"skill:withpy": ["lone_system"]}
+
+    def test_package_under_scripts_counts(self, skel):
+        _touch(Path(skel), ".claude/skills/lone/scripts/lone_pkg/__init__.py")
+        _touch(Path(skel), ".claude/skills/nopy/tests/test_b.py", "import lone_pkg.sub\n")
+        change = [".claude/skills/lone/scripts/lone_pkg/sub.py"]
+        assert mg.select_suites(change, skel) == ["skill:lone", "skill:nopy"]
+
+    def test_change_outside_package_selects_as_before(self, skel):
+        """對照：被匯入套件存在，但改動不在套件內（skill 根的單檔），結果與修改前相同。"""
+        _touch(Path(skel), ".claude/skills/lone/lone_system/__init__.py")
+        _touch(Path(skel), ".claude/skills/withpy/tests/test_b.py", "from lone_system import y\n")
+        assert mg.select_suites([".claude/skills/lone/mod.py"], skel) == ["skill:lone"]
+
+    def test_single_file_module_name_not_matched_across_skills(self, skel):
+        """刻意行為：只比對套件；他 skill 匯入同名單檔模組（mod）不加選。"""
+        _touch(Path(skel), ".claude/skills/nopy/tests/test_b.py", "import mod\n")
+        assert mg.select_suites([".claude/skills/withpy/mod.py"], skel) == ["skill:withpy"]
+
+    def test_deleted_or_renamed_package_still_adds_importer(self, skel):
+        """E2：套件被刪除或改名後快照已無 __init__.py，匯入它的 skill 仍須加選（消費端會 ImportError）。"""
+        _touch(Path(skel), ".claude/skills/withpy/tests/test_b.py", "from lone_system import y\n")
+        assert "skill:withpy" in mg.select_suites([".claude/skills/lone/lone_system/__init__.py"], skel)
+        assert "skill:withpy" in mg.select_suites(
+            [".claude/skills/lone/lone_system/a.py", ".claude/skills/lone/lone_core/a.py"], skel)
+
+    def test_report_marks_reused_suite(self, capsys):
+        mg._report_cross_skill({"skill:a": ["p"], "skill:b": ["p"]}, ["skill:a"])
+        assert "skill:a（匯入 p）、skill:b（匯入 p，沿用）" in capsys.readouterr().out
+
+    def test_importer_without_pytest_tests_not_added(self, skel):
+        _touch(Path(skel), ".claude/skills/lone/lone_system/__init__.py")
+        _touch(Path(skel), ".claude/skills/tsonly/x.py", "from lone_system import y\n")
+        assert mg.select_suites([".claude/skills/lone/lone_system/a.py"], skel) == ["skill:lone"]
+
+    def test_similar_prefix_name_not_matched(self, skel):
+        _touch(Path(skel), ".claude/skills/lone/lone_system/__init__.py")
+        _touch(Path(skel), ".claude/skills/withpy/tests/test_b.py", "import lone_system_extra\n")
+        assert mg.select_suites([".claude/skills/lone/lone_system/a.py"], skel) == ["skill:lone"]
+
+    def test_gate_prints_cross_skill_reason(self, repo, capsys):
+        """E2：分支只改 foo 的套件；匯入者 bar 在 main 上，閘門仍須加跑 bar 並印理由。"""
+        commit_file(repo, ".claude/skills/foo/tests/test_a.py", "", "foo tests")
+        commit_file(repo, ".claude/skills/foo/foo_system/__init__.py", "", "foo pkg")
+        commit_file(repo, ".claude/skills/bar/tests/test_b.py", "from foo_system import x\n", "bar importer")
+        git(repo, "checkout", "-q", "feat")
+        git(repo, "merge", "-q", "main")
+        commit_file(repo, ".claude/skills/foo/foo_system/x.py", "x = 1\n", "foo change")
+        git(repo, "checkout", "-q", "main")
+        calls = []
+        out = wm.merge_branch_cas("feat", repo=str(repo), pre_merge_check=mg.MergeGate(str(repo), art(green_runner(calls))))
+        assert out.ok
+        assert "跨 skill 匯入加選套件：skill:bar（匯入 foo_system）" in capsys.readouterr().out
+        assert any("../skills/bar/tests" in " ".join(argv) for argv, _ in calls)
+
     def test_path_reference_counts_only_in_non_test_files(self, skel):
         _touch(Path(skel), ".claude/hooks/tests/test_h.py", "p = '.claude/skills/lone/x.json'\n")
         assert mg.select_suites([".claude/skills/lone/mod.py"], skel) == ["skill:lone"]

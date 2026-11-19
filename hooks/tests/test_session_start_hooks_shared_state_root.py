@@ -64,7 +64,8 @@ def scenario(request, tmp_path, monkeypatch):
     # 共用狀態：只存在 MAIN（未提交，不進 WT checkout）
     (main / "docs").mkdir(exist_ok=True)
     (main / "docs" / "todolist.yaml").write_text(
-        "versions:\n- version: 3.3.0\n  status: active\ntickets:\n- id: a\n  status: pending\n",
+        # versions 清單採 todolist 範本的縮排形式（lib 共用解析不支援零縮排清單，見 3.5.0 追蹤票）
+        "versions:\n  - version: 3.3.0\n    status: active\ntickets:\n- id: a\n  status: pending\n",
         encoding="utf-8",
     )
     (main / "docs" / "error-patterns").mkdir()

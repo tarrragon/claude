@@ -31,8 +31,14 @@ Action:
   - 摘要行：Traceback 的首行固定是 "Traceback (most recent call last):"，
     看不出原因，改取末行（例外類型與訊息）；其餘取首行。
   - 受眾：模型（additionalContext）。
-  - 失敗語意：fail-open。讀取端任何例外 exit 0，寫 stderr 與日誌檔；
-    觸發條件：transcript 讀不到、state 或紀錄目錄無法寫入、payload 解析失敗。
+  - 失敗語意：不阻擋任何操作。讀取端執行期例外由 run_hook_safely 寫日誌檔、
+    本 hook 寫 stderr 摘要，以 exit 1 結束：runtime 記為 non-blocking error，
+    下一次 relay 成功執行時轉告模型（以 uuid 去重，同一筆不重複；累積多筆
+    合併為一則，提醒次數不超過失敗次數）。若改回 exit 0，runtime 不留紀錄，
+    relay 自己的失敗沒有任何讀取端看得到。
+    觸發條件：state 或紀錄目錄無法寫入、payload 解析失敗等。transcript 不存在
+    不算失敗（無可讀內容），exit 0。
+    已知限制：relay 持續失敗（含 import 期）時無法轉告自己，需要另一個讀取端。
 
 環境變數（測試隔離）：
   HOOK_NONBLOCKING_RELAY_STATE_DIR、HOOK_NONBLOCKING_RELAY_RECORDS_DIR
@@ -279,7 +285,8 @@ def main() -> int:
         event = str(payload.get("hook_event_name") or "UserPromptSubmit")
         reminder = relay(payload)
     except Exception as exc:  # noqa: BLE001
-        # fail-open：先寫 stderr，再交給 run_hook_safely 寫完整 traceback 到日誌檔
+        # 先寫 stderr 摘要（runtime 寫進 transcript 供下次轉告），
+        # 再交給 run_hook_safely 寫完整 traceback 到日誌檔並回傳 exit 1
         _warn(f"讀取 transcript 失敗，略過本次轉告: {type(exc).__name__}: {exc}")
         raise
     if reminder:
@@ -287,11 +294,5 @@ def main() -> int:
     return 0
 
 
-def _main_fail_open() -> int:
-    """run_hook_safely 例外時回 1；本 hook 為提醒性質，一律以 0 結束。"""
-    run_hook_safely(main, HOOK_NAME)
-    return 0
-
-
 if __name__ == "__main__":
-    sys.exit(_main_fail_open())
+    sys.exit(run_hook_safely(main, HOOK_NAME))

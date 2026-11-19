@@ -256,7 +256,7 @@ ticket track restore <id> --reason <text> [--as <agent>]
 
 ### 補標記 — `add-exempt-marker`
 
-`append-log` 預設追加，`--replace` 可整段覆寫但會連同原文字一併取代（CLI 管理的 H3 子節「派發日誌」「Commit 規範」會保留並接在新內容之後；摘要列出將被取代的人寫 H3 標題，清單見 `track_dispatch.CLI_MANAGED_H3_HEADINGS`）（不可逆，執行前印摘要供核對），不適合只補一行 marker——該區段不在 `ticket-file-access-guard-hook` 白名單內故 Edit 工具被拒，兩者疊加使 `PC-093-exempt` 這類行級標記無法在不動原文的前提下事後補上。`add-exempt-marker` 補這條路，且**僅追加獨立標記行、不修改原文字**：
+`append-log` 預設追加（Problem Analysis 含 CLI 寫入的 H3 子節「派發日誌」「Commit 規範」「查重紀錄」時，插在第一個這類子節之前，補寫不會落進子節而被分析先行檢查點剝除），`--replace` 可整段覆寫但會連同原文字一併取代（CLI 管理的 H3 子節「派發日誌」「Commit 規範」會保留並接在新內容之後；摘要列出將被取代的人寫 H3 標題，清單見 `track_dispatch.CLI_MANAGED_H3_HEADINGS`）（不可逆，執行前印摘要供核對），不適合只補一行 marker——該區段不在 `ticket-file-access-guard-hook` 白名單內故 Edit 工具被拒，兩者疊加使 `PC-093-exempt` 這類行級標記無法在不動原文的前提下事後補上。`add-exempt-marker` 補這條路，且**僅追加獨立標記行、不修改原文字**：
 
 ```bash
 ticket track add-exempt-marker <id> --section "Solution" --match "命中行的文字子字串" \

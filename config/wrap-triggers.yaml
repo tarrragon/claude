@@ -1,7 +1,6 @@
 # .claude/config/wrap-triggers.yaml
 # WRAP 絆腳索 Hook 的觸發條件配置
 # 權威來源：本檔案（機器可讀）
-# 人類可讀對應（本專案詳細對應表）：.claude/skills/wrap-decision/references/project-integration/triggers-alignment.md
 # 通用原理（跨專案）：.claude/skills/wrap-decision/SKILL.md 的「觸發條件」章節與 description frontmatter
 # 同步檢查：doc-sync-check-hook 擴充或 consistency-check-hook（follow-up ticket）
 
@@ -11,8 +10,7 @@ source_of_truth_note: |
   本檔案為 wrap-decision-tripwire-hook.py 的唯一觸發條件來源。
   禁止在 Hook Python 程式碼中硬編碼 triggers / keywords / thresholds。
   若新增訊號，必須同步更新：
-    1. .claude/skills/wrap-decision/references/project-integration/triggers-alignment.md（本專案對應表）
-    2. .claude/skills/wrap-decision/SKILL.md description（若新增關鍵字）
+    1. .claude/skills/wrap-decision/SKILL.md description（若新增關鍵字）
   SKILL.md 本文（觸發條件章節）採抽象類別描述，不需同步具體關鍵字清單。
 
   category 欄位（v1.2.0 新增）：
@@ -78,7 +76,7 @@ signals:
       - "<cross-session-message"
       - "<teammate-message"
       - "[Subagent hand-back]"
-    # W10-058.1.1.2：context-aware filter（黑名單版）
+    # context-aware filter（黑名單版）
     # 觸發詞前後 window 字內含 words 任一者 → 視為技術語境陳述，suppress signal。
     # 用途：降低 hit 4 型誤報（技術陳述如「Stop 事件不可能每 turn fire」中「不可能」非 PM 限制性主張）。
     context_blacklist:
@@ -152,7 +150,7 @@ signals:
       參考：.claude/methodologies/three-phase-reflection-methodology.md
 
 # 提醒訊息通用前綴
-# C3-3/C3-4 (W10-056.3): 移除 include_signal_id / include_state_snapshot
+# 移除 include_signal_id / include_state_snapshot
 # DetectResult.signal_id 為 Python 內部使用（CE-4+R2 解 drift 風險），不需 YAML flag 控制。
 output:
   stderr_prefix: "[WRAP Tripwire]"

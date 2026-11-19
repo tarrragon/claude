@@ -1018,6 +1018,40 @@ class TestProjectPathWarningLayer:
         ctx = out["hookSpecificOutput"]["additionalContext"]
         assert "docs/spec/ui/SPEC-009.md" in ctx
 
+    def test_project_path_warning_log_line_records_hit_values(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """升級判準以誤報比例計算，日誌行須含命中值，不能只記檔名。"""
+        records: list[str] = []
+
+        class _Logger:
+            def info(self, msg, *a, **kw):
+                records.append(str(msg))
+
+            def debug(self, *a, **kw):
+                pass
+
+            warning = error = debug
+
+        monkeypatch.setattr(hook_mod, "setup_hook_logging", lambda *_a, **_kw: _Logger())
+        target = _claude_path(tmp_path, "methodologies", "log-methodology.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": "原始內容\n詳見 docs/spec/ui/SPEC-011.md 與 lib/foo.dart。",
+            },
+        }
+        assert _run_main(hook_mod, monkeypatch, payload) == 0
+        capsys.readouterr()
+
+        path_lines = [r for r in records if "專案路徑類新增命中" in r]
+        assert len(path_lines) == 1
+        assert "docs/spec/ui/SPEC-011.md" in path_lines[0]
+        assert "lib/foo.dart" in path_lines[0]
+
     @pytest.mark.parametrize(
         "mandated_path",
         ["docs/todolist.yaml", "docs/work-logs/v1/v1.0/v1.0.0/v1.0.0-main.md"],
@@ -1204,6 +1238,36 @@ class TestUnitFunctions:
             "實作見 .claude/skills/example/lib/foo.py。"
         )
         assert hits == []
+
+    def test_relative_path_resolving_inside_framework_not_flagged(self, hook_mod):
+        """框架內既有檔的相對寫法（.claude/lib/hook_io.py 寫成 lib/hook_io.py）不是專案路徑。
+
+        正向對照（E2）：框架內不存在的 lib/ 路徑仍命中。
+        """
+        assert (hook_mod._FRAMEWORK_DIR / "lib" / "hook_io.py").is_file()
+        hits = hook_mod.find_project_path_hits(
+            "模組見 lib/hook_io.py；consumer 的 lib/screens/home_page.dart 另計。"
+        )
+        assert hits == ["lib/screens/home_page.dart"]
+
+    def test_framework_defined_doc_files_not_flagged_but_spec_content_is(self, hook_mod):
+        """doc skill 固定檔名不算專案路徑；docs/spec/ 底下的個別規格仍算（E2）。"""
+        hits = hook_mod.find_project_path_hits(
+            "追溯表寫在 docs/traceability.yaml，用例清單在 docs/app-use-cases.md；"
+            "規格 docs/spec/billing/SPEC-012.md 屬專案內容。"
+        )
+        assert hits == ["docs/spec/billing/SPEC-012.md"]
+
+    def test_framework_walk_failure_keeps_candidates(self, hook_mod, monkeypatch):
+        """走訪失敗時不排除任何候選（誤差方向為多提示，不漏報）。"""
+        def _boom(*_a, **_kw):
+            raise OSError("walk failed")
+
+        monkeypatch.setattr(hook_mod, "_framework_rel_paths", None)
+        monkeypatch.setattr(hook_mod.os, "walk", _boom)
+        hits = hook_mod.find_project_path_hits("模組見 lib/hook_io.py。")
+        assert hits == ["lib/hook_io.py"]
+        monkeypatch.setattr(hook_mod, "_framework_rel_paths", None)
 
     def test_diff_new_hits_with_project_path_finder(self, hook_mod):
         pre = "既有引用 docs/spec/ui/SPEC-002.md"

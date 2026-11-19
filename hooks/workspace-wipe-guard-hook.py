@@ -184,7 +184,13 @@ from lib.git_command_parse import (
     find_git_invocations,
     parse_command_statements,
 )
-from lib.git_utils import FileStatus, get_action_root, get_project_root, get_uncommitted_files
+from lib.git_utils import (
+    FileStatus,
+    GitStatusError,
+    get_action_root,
+    get_project_root,
+    get_uncommitted_files_strict,
+)
 
 
 # 建立形式 git stash 的安全子命令（不清空工作區）
@@ -600,7 +606,9 @@ def _get_active_dispatch_count(
 
 
 def _has_main_repo_uncommitted_tracked_changes(
-    project_root: Path, logger: logging.Logger
+    project_root: Path,
+    logger: logging.Logger,
+    failure_sink: Optional[List[str]] = None,
 ) -> Optional[bool]:
     """檢查主 repo 是否有未提交的 tracked 檔案變更（不含未追蹤新檔案）。
 
@@ -613,12 +621,14 @@ def _has_main_repo_uncommitted_tracked_changes(
     讀檔失敗即靜默降級為不設防，與本守衛防止資料遺失的目的相悖。
     """
     try:
-        files = get_uncommitted_files(cwd=str(project_root))
-    except Exception:
+        files = get_uncommitted_files_strict(cwd=str(project_root))
+    except (GitStatusError, OSError) as exc:
         logger.warning(
             "讀取主 repo git status 失敗，無法判定是否有未提交變更，保守視為有變更",
             exc_info=True,
         )
+        if failure_sink is not None:
+            failure_sink.append(str(exc))
         return None
     return any(not f.is_untracked for f in files)
 
@@ -629,6 +639,7 @@ def _build_deny_message(
     dispatch_count: Optional[int],
     main_repo_dirty: Optional[bool],
     parse_cause: Optional[str] = None,
+    status_error: Optional[str] = None,
 ) -> str:
     """組出 DENY 訊息：操作名稱 + 觸發理由（可多條）+ 安全替代。
 
@@ -650,8 +661,10 @@ def _build_deny_message(
         )
     if main_repo_dirty is None:
         reasons.append(
-            "主 repo 有未提交變更：無法讀取主 repo 的 git status（讀取失敗），"
-            "保守視為有未提交變更"
+            "主 repo 有未提交變更：git status 執行失敗"
+            + (f"（原因：{status_error}）" if status_error else "")
+            + "，無法確認有無未提交變更，保守視為有未提交變更；"
+            "排除失敗原因（git 可用、路徑為 git repo、index 未損壞）後請重試"
         )
     elif main_repo_dirty:
         reasons.append(
@@ -740,7 +753,10 @@ def main() -> int:
         return 0
     logger.info("命令目標為主 repo、有綁定的 linked worktree 或無法解析，維持既有判定（操作=%s）", op_name)
     dispatch_count = _get_active_dispatch_count(project_root, logger)
-    main_repo_dirty = _has_main_repo_uncommitted_tracked_changes(action_root, logger)
+    status_failures: List[str] = []
+    main_repo_dirty = _has_main_repo_uncommitted_tracked_changes(
+        action_root, logger, status_failures
+    )
 
     is_parallel = dispatch_count is None or dispatch_count > 0
     is_main_repo_dirty = main_repo_dirty is None or main_repo_dirty
@@ -757,7 +773,12 @@ def main() -> int:
         )
         print(
             _build_deny_message(
-                op_name, safe_hint, dispatch_count, main_repo_dirty, parse_cause
+                op_name,
+                safe_hint,
+                dispatch_count,
+                main_repo_dirty,
+                parse_cause,
+                status_failures[0] if status_failures else None,
             ),
             file=sys.stderr,
         )
