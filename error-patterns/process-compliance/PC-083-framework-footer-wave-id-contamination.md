@@ -1,3 +1,9 @@
+---
+id: PC-083
+title: framework 檔案 footer/metadata 誤寫專案 Wave/Patch 識別符
+severity: low
+---
+
 # PC-083: framework 檔案 footer/metadata 誤寫專案 Wave/Patch 識別符
 
 ---

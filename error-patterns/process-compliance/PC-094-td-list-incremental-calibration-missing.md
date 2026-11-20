@@ -1,3 +1,9 @@
+---
+id: PC-094
+title: TD 清單即時校準缺失
+severity: medium
+---
+
 # PC-094: TD 清單即時校準缺失
 
 ## 基本資訊

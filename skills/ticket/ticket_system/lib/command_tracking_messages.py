@@ -37,6 +37,12 @@ class TrackQueryMessages:
     # execute_list 中截斷顯示時的標題格式（統計為全量，清單為截斷後）
     LIST_TITLE_TRUNCATED = "[List] {version} ({completed}/{total} 完成, 顯示前 {shown})"
 
+    # ids／yaml 格式截斷時寫 stderr 的提示（stdout 須維持機器可讀，提示不可混入）
+    LIST_TRUNCATED_STDERR_HINT = (
+        "[List] {version} 顯示 {shown}/{total} 筆（已截斷）；"
+        "調整顯示筆數用 --top N，列出全部用 --all"
+    )
+
     # execute_summary 中找不到 Tickets 的標題
     SUMMARY_NO_TICKETS_TITLE = "[Summary] {version} (0/0 完成)"
 

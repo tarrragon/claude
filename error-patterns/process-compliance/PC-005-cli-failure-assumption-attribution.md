@@ -1,3 +1,9 @@
+---
+id: PC-005
+title: CLI 失敗時基於假設歸因
+severity: medium
+---
+
 # PC-005: CLI 失敗時基於假設歸因
 
 ---

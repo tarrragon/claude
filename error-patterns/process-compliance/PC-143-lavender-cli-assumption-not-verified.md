@@ -1,3 +1,9 @@
+---
+id: PC-143
+title: Spec / ANA 規劃引用既有資源（CLI flag / Hook 名稱）未驗證存在性
+severity: medium
+---
+
 # PC-143: Spec / ANA 規劃引用既有資源（CLI flag / Hook 名稱）未驗證存在性
 
 > **Why**：spec 和 ANA 規劃中對既有資源（CLI flag、hook 名稱、模組路徑）的描述屬於「事實陳述」而非「設計選擇」。若未 grep / Read 驗證即寫入，實作者會以錯誤名稱開發，直到 Phase 3a 或 commit 才發現偏差，回頭修正成本隨階段推進而上升。

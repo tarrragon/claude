@@ -1,3 +1,9 @@
+---
+id: PC-149
+title: Ticket complete 後合併分支 worktree 無自動清理
+severity: medium
+---
+
 # PC-149: Ticket complete 後合併分支 worktree 無自動清理
 
 ## 基本資訊

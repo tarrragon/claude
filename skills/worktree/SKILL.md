@@ -105,6 +105,16 @@ cc runtime 派發 `isolation: "worktree"` 的 subagent 時自動建立隔離 wor
 
 `merge` 預設先取得 heavy 名額（改動不在全套件範圍內者不取），再於名額內執行 commit-tree、於合併 commit 的 detached worktree 快照內跑全套件、update-ref，update-ref 完成或中止後才釋放，檢查窗口不含排隊時間；快照內套件經 `run-with-timeout.py` 但以環境標記 `CLAUDE_SLOT_HELD_BY` 免重複取得名額；紅燈即不合併、列出失敗項、exit 1，快照無論成敗皆移除；移除用的 git 逾時或無法啟動時，寫 stderr 與 `worktree-merge.log`（`[合併閘門] WARNING：快照清理…`），閘門仍回報原本的結果，目錄最後仍在時另印「快照未移除：<路徑>」。實作在 `scripts/merge_gate.py`。
 
+**快照內跑的是受影響子集，全套件改在 main 上定期跑**（標題沿用「全套件」以保留既有引用錨點）：
+
+- **子集**：hooks、scripts、`skill:<名稱>` 三類 pytest 套件，只跑 `select_test_files` 選出的測試檔。選法是直接參照（匯入或字面提及改動檔，檔名不唯一時接受引號包住的父目錄名與檔名分別出現）加上沿匯入邊往上 2 層；遞移觸及的 conftest 不展開整個目錄。Flutter 與專案宣告套件照舊跑全套件。
+- **退回全套件**：選擇函式拋例外、依賴缺席、逾時（120 秒）、回傳 None、子集為 0 檔，該套件在定期全套件的暫停名單內（含暫停狀態讀不到），或定期全套件已停用，該套件改跑全套件。`worktree-merge.log` 每個套件記一行 `[合併前測試] 測試子集：套件 <名> 選中 N 檔` 或 `…退回全套件（<理由>）`。
+- **main 定期全套件**：從上次定期全套件完成時的 head 起算，累計 4 筆合併且 heavy 名額空閒時，在 main 上跑全套件；累計 8 筆時不論是否空閒都強制排入。以脫離 session 的子程序執行，合併不等它。狀態在 `.claude/logs/merge-gate-periodic.json`；標記為執行中但 pid 已死、超過 4 小時或標記無法解析時，判為殘留並重跑。手動執行：`python3 .claude/skills/worktree/scripts/merge_gate.py periodic-run|periodic-status --repo <主 checkout>`。
+- **紅燈處置**：在上次全綠以來的合併中二分定位，暫停受影響套件，寫 `worktree-merge.log` 與 stderr，通知所屬線與主控，不自動 revert。暫停期間，觸及暫停套件的合併一律實跑該套件全套件，綠燈才放行（修正或 revert 由此合入），之後重跑全套件綠燈即解除。
+- **停用開關**：`MERGE_GATE_PERIODIC=0` 停用定期全套件，只用於排除故障。停用期間合併閘門不跑子集，一律全套件，日誌理由寫「定期全套件停用」；補償控制不在時，閘門回到全套件，不留沒有全套件守著的區間。
+
+**Why**：全套件閘門的服務率（每小時約 4 筆）低於多線並行的到達率（每小時約 8 筆），佇列無法收斂；子集在關鍵路徑上只剩約一至三成秒數。子集會漏抓行程內狀態汙染與 main 既有失敗，所以必須由定期全套件兜底，延遲上限由 8 筆決定。**Action**：合併以子集綠燈為放行條件；main 被暫停的套件由所屬線修正或 revert，不以 `--skip-gate` 繞過。
+
 `worktree merge` 不可再以 `run-with-timeout.py` 包裝。外層計時器從啟動就開始計，會把閘門內的排隊時間算進逾時，排得久就會被外層中止；merge 內部套件的逾時從取得名額後才起算。pre-test-hook 會擋下這種包裝，並附上不包裝的寫法。需要長時間等待時，改用背景執行並把輸出寫檔。
 
 | 改動範圍（相對當下 main） | 跑的套件 |
@@ -141,7 +151,7 @@ suites:
 
 skill 被 hooks 或 scripts 使用時加跑對應套件：改動涉及某 skill，且快照內 `.claude/hooks`、`.claude/scripts` 的 .py（1）行首 `from X`／`import X` 匯入該 skill 的頂層模組（skill 根與其 `scripts/` 下的 .py 模組名、帶 `__init__.py` 的套件名；`sys.path.insert` 之後的匯入同樣涵蓋），或（2）非測試檔含 `skills/<名稱>/` 路徑引用（讀 skill 檔案），就加跑 hooks／scripts 套件。未被使用的 skill 只跑自己的套件。通用模組名（如 `constants`）可能多報，只會多跑套件。
 
-skill 被其他 skill 匯入時加跑匯入者的套件：改動落在某 skill 的頂層目錄內（skill 根或其 `scripts/` 下的子目錄，如 `.claude/skills/ticket/ticket_system/`；依路徑判定，套件被刪除或改名時同樣涵蓋），且快照內其他帶 `tests/` 的 skill 有 .py 以行首（含縮排）`from X`／`import X` 匯入該目錄名，就加選該 skill 套件，並印一行 `[合併前測試] 跨 skill 匯入加選套件：skill:<名稱>（匯入 <套件名>）`；該套件沿用上次驗證結果而未實跑時，括號內加註「沿用」。只比對目錄、不比對單檔模組，各 skill 同名的 `constants.py`、`cli.py` 不會互相加選；代價是其他 skill 以 `sys.path.insert` 匯入的單檔模組（如 `from merge_gate import ...`）不在涵蓋內。改動不在子目錄內（如 skill 根的單檔、`SKILL.md`）時選擇結果不變。
+skill 被其他 skill 匯入時加跑匯入者的套件：改動落在某 skill 的頂層目錄內（skill 根或其 `scripts/` 下的子目錄，如 `.claude/skills/ticket/ticket_system/`；依路徑判定，套件被刪除或改名時同樣涵蓋），且快照內其他帶 `tests/` 的 skill 有 .py 以行首（含縮排）`from X`／`import X` 匯入該目錄名，就加選該 skill 套件，並印一行 `[合併前測試] 跨 skill 匯入加選套件：skill:<名稱>（匯入 <套件名>）`；該套件沿用上次驗證結果而未實跑時，括號內加註「沿用」。單檔模組（skill 根或其 `scripts/` 下的 `.py`，如 `merge_gate.py`）只在模組名於快照各 skill 頂層唯一時比對，因此其他 skill 以 `sys.path.insert` 匯入的 `from merge_gate import ...` 會加選；各 skill 同名的 `constants.py`、`cli.py` 不會互相加選；已刪除的單檔照樣比對。改動不在頂層模組內（如 `SKILL.md`、`references/` 下的檔）時選擇結果不變。
 
 多個套件依 flutter、hooks、scripts、skill（名稱排序）的固定順序執行，任一紅燈即停。
 

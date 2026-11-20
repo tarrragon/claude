@@ -1,3 +1,9 @@
+---
+id: IMP-033
+title: 版本比對時 source 掃描範圍與 installed 不對齊
+severity: medium
+---
+
 # IMP-033: 版本比對時 source 掃描範圍與 installed 不對齊
 
 ## 基本資訊

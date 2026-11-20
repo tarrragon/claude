@@ -5,6 +5,11 @@ import argparse
 from doc_system.core.constants import REF_FIELDS
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
+from doc_system.core.provenance import (
+    NON_AUTHORITATIVE_NOTE,
+    is_proposal_id,
+    print_derived_documents,
+)
 
 
 def execute(args: argparse.Namespace) -> None:
@@ -34,7 +39,11 @@ def execute(args: argparse.Namespace) -> None:
     for field in REF_FIELDS:
         value = frontmatter.get(field)
         if value:
+            label = f"{field}{NON_AUTHORITATIVE_NOTE}" if field == "spec_refs" else field
             if isinstance(value, list):
-                print(f"{field}: {', '.join(str(v) for v in value)}")
+                print(f"{label}: {', '.join(str(v) for v in value)}")
             else:
-                print(f"{field}: {value}")
+                print(f"{label}: {value}")
+
+    if is_proposal_id(str(fm_id)):
+        print_derived_documents(locator, str(fm_id))

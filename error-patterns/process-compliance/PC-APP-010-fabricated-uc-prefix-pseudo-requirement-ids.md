@@ -5,6 +5,9 @@ severity: medium
 category: process-compliance
 created: "2026-07-14"
 related_patterns: [PC-APP-009]
+related:
+  - id: PC-APP-009
+    kind: citation
 ---
 
 # PC-APP-010: code agent 杜撰 UC- 前綴偽需求 ID

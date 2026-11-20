@@ -1,3 +1,9 @@
+---
+id: PC-V1-013
+title: acceptance 用 lenient build 路徑驗證，遮蔽 production-only gate 失敗
+severity: medium
+---
+
 # PC-V1-013: acceptance 用 lenient build 路徑驗證，遮蔽 production-only gate 失敗
 
 ## 基本資訊

@@ -1,5 +1,5 @@
 ---
-# 領域事件（Event）模板
+# 領域事件（Event）範本
 # 複製本檔案並重新命名為 EVT-{DOMAIN}-{NNN}-{簡短描述}.md
 # 存放於 docs/events/{domain}/
 

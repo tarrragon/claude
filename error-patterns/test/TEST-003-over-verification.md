@@ -1,3 +1,9 @@
+---
+id: TEST-003
+title: 過度驗證超出責任
+severity: medium
+---
+
 # TEST-003: 過度驗證超出責任
 
 ## 基本資訊

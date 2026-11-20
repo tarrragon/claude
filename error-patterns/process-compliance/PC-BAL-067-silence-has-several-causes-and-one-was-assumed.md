@@ -4,9 +4,12 @@ title: 沉默有多種成因而其中一種被預設，觀測與工具皆正確�
 category: process-compliance
 severity: medium
 related:
- - PC-BAL-064
- - PC-BAL-065
- - PC-BAL-066
+  - id: PC-BAL-064
+    kind: citation
+  - id: PC-BAL-065
+    kind: citation
+  - id: PC-BAL-066
+    kind: citation
 created: 2026-09-04
 ---
 

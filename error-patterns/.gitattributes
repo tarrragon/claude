@@ -1,0 +1,4 @@
+# README 索引的新列一律追加在分類表尾；並行分支各新增一則 pattern 時，
+# union 保留兩邊的追加列，不產生合併衝突。代價：兩邊改同一既有列時會靜默留下兩行，
+# 由 error-patterns-index-consistency-check-hook 的「README 列重複」檢查偵測。
+README.md merge=union

@@ -1,3 +1,9 @@
+---
+id: PC-002
+title: Ticket 設計建立新功能時未確認現有類似實作
+severity: medium
+---
+
 # PC-002: Ticket 設計建立新功能時未確認現有類似實作
 
 ---

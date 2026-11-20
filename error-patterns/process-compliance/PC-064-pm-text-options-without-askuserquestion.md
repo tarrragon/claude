@@ -1,3 +1,9 @@
+---
+id: PC-064
+title: PM 列純文字選項而未使用 AskUserQuestion
+severity: medium
+---
+
 # PC-064: PM 列純文字選項而未使用 AskUserQuestion
 
 ---

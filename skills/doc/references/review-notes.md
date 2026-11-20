@@ -6,10 +6,10 @@
 
 | # | 項目 | 修復 commit |
 |---|------|-----------|
-| 1 | references 模板路徑指向 docs/（已改為 Skill） | 66503a9 |
+| 1 | references 範本路徑指向 docs/（已改為 Skill） | 66503a9 |
 | 2 | PROP-004 缺反向引用 W2 Tickets | 66503a9 |
 | 3 | tracking.yaml 缺 PROP-004/005 entry | 66503a9 |
-| 4 | usecase 模板缺 platform/extension_status | 66503a9 |
+| 4 | usecase 範本缺 platform/extension_status | 66503a9 |
 | 5 | SKILL.md 未標記 CLI 未實作 | 66503a9 |
 | 6 | PROP-000 檔案名缺 PROP- 前綴 | e3a39db |
 | 7 | PROP-005 引用鏈斷裂 | e3a39db |

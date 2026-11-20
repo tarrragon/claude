@@ -148,6 +148,90 @@ class TestIsViolationToken:
         assert uc_registry.is_violation_token("UC-Pattern", {"UC-01": "x"}) is False
 
 
+class TestNoDigitTokenAllowed:
+    """無數字 token 放行：正規化後符合 ^UC-[A-Z]+$ 者不判違規；含數字者仍判違規。"""
+
+    @pytest.mark.parametrize("token", ["UC-A", "UC-X", "uc-a", "ＵＣ－Ａ", "UC-Login"])
+    def test_no_digit_token_not_violation(self, token):
+        assert uc_registry.is_violation_token(token, {"UC-01": "x"}) is False
+
+    @pytest.mark.parametrize("token", ["UC-09", "UC-1", "UC-01a", "UC-A1", "ＵＣ－０９", "UC-01.4.20"])
+    def test_digit_token_still_violation(self, token):
+        """正向對照：含數字的 token 仍判違規。"""
+        assert uc_registry.is_violation_token(token, {"UC-01": "x"}) is True
+
+    def test_filename_not_merged_into_token_current_behavior(self):
+        """UC-0x.MD：副檔名段（不分大小寫）不併入 token，擷取為 UC-0x，含數字故判違規（記錄現行行為）。"""
+        hits = uc_registry.find_uc_tokens_in_text("見 UC-0x.MD 說明")
+        assert [t for t, _ in hits] == ["UC-0x"]
+        assert uc_registry.is_violation_token("UC-0x", {"UC-01": "x"}) is True
+
+    def test_no_digit_filename_token_allowed(self):
+        hits = uc_registry.find_uc_tokens_in_text("見 UC-A.MD 說明")
+        assert [t for t, _ in hits] == ["UC-A"]
+        assert uc_registry.is_violation_token("UC-A", {"UC-01": "x"}) is False
+
+
+class TestInlineExemptMarker:
+    """行內標記 uc-verify-exempt: <理由>：只豁免標記所在行，理由必填。"""
+
+    def _violations(self, text):
+        hits = uc_registry.find_uc_tokens_in_text(text, skip_exempt_lines=True)
+        return [(t, n) for t, n in hits if uc_registry.is_violation_token(t, {"UC-01": "x"})]
+
+    def test_marker_absent_unchanged(self):
+        assert self._violations("// UC-99\n") == [("UC-99", 1)]
+
+    def test_marker_with_reason_exempts_line(self):
+        assert self._violations("// UC-99 uc-verify-exempt: 示例編號\n") == []
+
+    def test_marker_exempts_all_tokens_on_line(self):
+        assert self._violations("UC-98 UC-99 <!-- uc-verify-exempt: 示例 -->\n") == []
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "// UC-99 uc-verify-exempt:",
+            "// UC-99 uc-verify-exempt:    ",
+            "// UC-99 uc-verify-exempt:\t",
+            "<!-- UC-99 uc-verify-exempt: -->",
+            "/* UC-99 uc-verify-exempt:   */",
+        ],
+    )
+    def test_blank_reason_not_exempt(self, line):
+        assert self._violations(line + "\n") == [("UC-99", 1)]
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "| UC-99 | <!-- uc-verify-exempt: --> |",
+            "x UC-99 <!-- uc-verify-exempt: --> trailing",
+            "/* uc-verify-exempt: */ foo(UC-99)",
+        ],
+    )
+    def test_blank_reason_with_trailing_content_not_exempt(self, line):
+        assert self._violations(line + "\n") == [("UC-99", 1)]
+
+    def test_reason_before_closer_with_trailing_content_exempt(self):
+        assert self._violations("| UC-99 | <!-- uc-verify-exempt: 負向輸入 --> |\n") == []
+
+    def test_marker_on_other_line_not_exempt(self):
+        text = "// uc-verify-exempt: 說明\n// UC-99\n"
+        assert self._violations(text) == [("UC-99", 2)]
+
+    def test_marker_does_not_hide_digit_token_on_next_line(self):
+        text = "UC-98 uc-verify-exempt: 理由\nUC-99\nUC-97 uc-verify-exempt: 理由\n"
+        assert self._violations(text) == [("UC-99", 2)]
+
+    def test_marker_keyword_is_lowercase_only(self):
+        assert self._violations("UC-99 UC-VERIFY-EXEMPT: 理由\n") == [("UC-99", 1)]
+
+    def test_default_scan_ignores_marker(self):
+        """find_uc_tokens_in_text 預設行為不變（hook 沿用）。"""
+        hits = uc_registry.find_uc_tokens_in_text("UC-99 uc-verify-exempt: 理由\n")
+        assert ("UC-99", 1) in hits
+
+
 class TestSelfTest:
     def test_passes_when_any_valid_uc_present(self, tmp_path):
         headings = [(f"UC-{i:02d}", f"標題{i}") for i in range(1, 4)]
@@ -958,3 +1042,78 @@ class TestUcAllocationRoundTrip:
             with pytest.raises(SystemExit) as exc:
                 execute_filenames(argparse.Namespace())
         assert exc.value.code == 0, capsys.readouterr().out
+
+
+class TestIsExemptPathWorktreeMirror:
+    """136：.claude/worktrees/<name>/ 下的產品檔剝前綴後再判定。"""
+
+    def test_worktree_product_file_not_exempt(self, tmp_path):
+        assert uc_registry.is_exempt_path(
+            ".claude/worktrees/w1/lib/a.dart", str(tmp_path)
+        ) is False
+
+    def test_worktree_framework_asset_still_exempt(self, tmp_path):
+        assert uc_registry.is_exempt_path(
+            ".claude/worktrees/w1/.claude/hooks/x.py", str(tmp_path)
+        ) is True
+
+    def test_worktree_spec_still_exempt(self, tmp_path):
+        assert uc_registry.is_exempt_path(
+            ".claude/worktrees/w1/docs/spec/a.md", str(tmp_path)
+        ) is True
+
+    def test_plain_claude_path_still_exempt(self, tmp_path):
+        assert uc_registry.is_exempt_path(".claude/rules/x.md", str(tmp_path)) is True
+
+
+class TestIsExemptPathDualRoot:
+    """C2：豁免清單拆 doc root 與 code root。"""
+
+    def _roots(self, tmp_path):
+        ws = tmp_path / "ws"
+        repo = tmp_path / "repo"
+        ws.mkdir()
+        repo.mkdir()
+        return str(ws), str(repo)
+
+    def test_code_root_omitted_checks_both_lists(self, tmp_path):
+        ws, _ = self._roots(tmp_path)
+        assert uc_registry.is_exempt_path("test/fixtures/a.dart", ws) is True
+        assert uc_registry.is_exempt_path("docs/spec/a.md", ws) is True
+
+    def test_code_root_empty_same_as_omitted(self, tmp_path):
+        ws, _ = self._roots(tmp_path)
+        assert uc_registry.is_exempt_path("test/fixtures/a.dart", ws, "") is True
+        assert uc_registry.is_exempt_path("docs/spec/a.md", ws, "") is True
+
+    def test_code_root_equals_doc_root_checks_both_lists(self, tmp_path):
+        ws, _ = self._roots(tmp_path)
+        assert uc_registry.is_exempt_path("test/fixtures/a.dart", ws, ws) is True
+        assert uc_registry.is_exempt_path("docs/spec/a.md", ws, ws) is True
+
+    def test_external_doc_root_spec_and_claude_exempt(self, tmp_path):
+        ws, repo = self._roots(tmp_path)
+        for rel in ("docs/spec/a.md", "docs/work-logs/a.md", ".claude/x.md",
+                    uc_registry.USE_CASES_SPEC_RELATIVE_PATH):
+            assert uc_registry.is_exempt_path(f"{ws}/{rel}", ws, repo) is True
+
+    def test_external_doc_root_fixtures_not_exempt(self, tmp_path):
+        ws, repo = self._roots(tmp_path)
+        for rel in ("test/fixtures/a.dart", "tests/fixtures/a.dart"):
+            assert uc_registry.is_exempt_path(f"{ws}/{rel}", ws, repo) is False
+
+    def test_external_code_root_fixtures_exempt(self, tmp_path):
+        ws, repo = self._roots(tmp_path)
+        for rel in ("test/fixtures/a.dart", "tests/fixtures/a.dart"):
+            assert uc_registry.is_exempt_path(f"{repo}/{rel}", ws, repo) is True
+
+    def test_external_code_root_doc_prefixes_not_exempt(self, tmp_path):
+        ws, repo = self._roots(tmp_path)
+        for rel in ("docs/spec/a.md", "docs/work-logs/a.md", ".claude/x.md",
+                    uc_registry.USE_CASES_SPEC_RELATIVE_PATH):
+            assert uc_registry.is_exempt_path(f"{repo}/{rel}", ws, repo) is False
+
+    def test_legacy_alias_is_concatenation(self):
+        assert set(uc_registry.EXEMPT_PATH_PREFIXES) == set(
+            uc_registry.DOC_ROOT_EXEMPT_PREFIXES + uc_registry.CODE_ROOT_EXEMPT_PREFIXES
+        )

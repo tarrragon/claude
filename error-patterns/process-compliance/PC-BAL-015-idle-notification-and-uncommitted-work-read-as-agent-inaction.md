@@ -3,7 +3,11 @@ id: PC-BAL-015
 title: idle 通知加上尚未落地的寫入被當成代理人未執行，據以前台重做
 severity: 中
 category: process-compliance
-related: [PC-BAL-013, PC-062, PC-166]
+related:
+  - id: PC-BAL-013
+    kind: citation
+  - PC-062
+  - PC-166
 created: 2026-07-29
 ---
 

@@ -252,3 +252,165 @@ class TestGetProjectRoot:
         result = FileLocator.get_project_root()
 
         assert result == str(env_dir)
+
+
+# ---------------------------------------------------------------------------
+# resolve_code_root / 外接模式偵測（3.5.0-W1-151.1.8.1）
+# ---------------------------------------------------------------------------
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+
+from doc_system.core.file_locator import (  # noqa: E402
+    CodeRootError,
+    format_code_path,
+    is_external_mode,
+    resolve_code_root,
+)
+
+
+def _git(*args, cwd):
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        cwd=cwd, check=True, capture_output=True,
+    )
+
+
+def _init_repo(path):
+    path.mkdir(parents=True, exist_ok=True)
+    _git("init", "-q", cwd=path)
+    _git("commit", "-q", "--allow-empty", "-m", "init", cwd=path)
+    return path
+
+
+def _write_trace(root, body):
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "traceability.yaml").write_text(body, encoding="utf-8")
+
+
+class TestExternalModeDetection:
+    def test_env_unset_is_single_root(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        assert is_external_mode() is False
+
+    def test_env_dir_outside_any_repo_is_external(self, tmp_path, monkeypatch):
+        """正向對照：doc root 不在任何 git repo 內、cwd 在另一 repo，必為外接。"""
+        repo = _init_repo(tmp_path / "analyst")
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(ws))
+        monkeypatch.chdir(repo)
+        assert is_external_mode() is True
+
+    def test_env_dir_is_other_repo_is_external(self, tmp_path, monkeypatch):
+        """正向對照：doc root 為另一個 repo，git dir 不同，判為外接。"""
+        a = _init_repo(tmp_path / "a")
+        b = _init_repo(tmp_path / "b")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(b))
+        monkeypatch.chdir(a)
+        assert is_external_mode() is True
+
+    def test_same_repo_is_single(self, tmp_path, monkeypatch):
+        repo = _init_repo(tmp_path / "r")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+        monkeypatch.chdir(repo)
+        assert is_external_mode() is False
+
+    def test_worktree_not_misjudged_as_external(self, tmp_path, monkeypatch):
+        """CLAUDE_PROJECT_DIR 為主 checkout、cwd 在 worktree（反向亦然）不得誤判。"""
+        main = _init_repo(tmp_path / "main")
+        wt = tmp_path / "wt"
+        _git("worktree", "add", "-q", str(wt), "-b", "feat", cwd=main)
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(main))
+        monkeypatch.chdir(wt)
+        assert is_external_mode() is False
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(wt))
+        monkeypatch.chdir(main)
+        assert is_external_mode() is False
+
+    def test_cwd_not_in_repo_is_not_judged_external(self, tmp_path, monkeypatch):
+        """cwd 不在 git repo 時無從比對，保守判為單根（不憑空要求 code_root）。"""
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        cwd = tmp_path / "plain"
+        cwd.mkdir()
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(ws))
+        monkeypatch.chdir(cwd)
+        assert is_external_mode() is False
+
+
+class TestResolveCodeRoot:
+    def test_single_no_key_falls_back_to_doc_root(self, tmp_path):
+        _write_trace(tmp_path, "version: 1\n")
+        r = resolve_code_root(str(tmp_path), external=False)
+        assert r.path == str(tmp_path) and r.external is False
+
+    def test_single_no_traceability_file_falls_back(self, tmp_path):
+        assert resolve_code_root(str(tmp_path), external=False).path == str(tmp_path)
+
+    def test_null_value_treated_as_absent(self, tmp_path):
+        _write_trace(tmp_path, "code_root:\n")
+        assert resolve_code_root(str(tmp_path), external=False).path == str(tmp_path)
+
+    @pytest.mark.parametrize("value", ['""', '"   "', "123", "[a, b]"])
+    def test_invalid_format_errors(self, tmp_path, value):
+        _write_trace(tmp_path, f"code_root: {value}\n")
+        with pytest.raises(CodeRootError, match="code_root"):
+            resolve_code_root(str(tmp_path), external=False)
+
+    def test_nonexistent_path_errors(self, tmp_path):
+        _write_trace(tmp_path, "code_root: /no/such/dir/xyz\n")
+        with pytest.raises(CodeRootError, match="不存在"):
+            resolve_code_root(str(tmp_path), external=False)
+
+    def test_valid_absolute_path(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        ws = tmp_path / "ws"
+        _write_trace(ws, f"code_root: {repo}\n")
+        r = resolve_code_root(str(ws), external=True)
+        assert r.path == str(repo) and r.external is True
+
+    def test_relative_path_resolved_against_doc_root(self, tmp_path):
+        (tmp_path / "repo").mkdir()
+        _write_trace(tmp_path / "ws", "code_root: ../repo\n")
+        r = resolve_code_root(str(tmp_path / "ws"), external=True)
+        assert os.path.realpath(r.path) == os.path.realpath(tmp_path / "repo")
+
+    def test_external_without_code_root_errors_with_hint(self, tmp_path):
+        """正向對照：外接模式未設定必須失敗，訊息指出設定方式，不退回 doc root。"""
+        _write_trace(tmp_path, "version: 1\n")
+        with pytest.raises(CodeRootError) as exc:
+            resolve_code_root(str(tmp_path), external=True)
+        assert "docs/traceability.yaml" in str(exc.value)
+        assert "--code-root" in str(exc.value)
+
+    def test_override_beats_config(self, tmp_path):
+        a = tmp_path / "a"
+        b = tmp_path / "b"
+        a.mkdir()
+        b.mkdir()
+        _write_trace(tmp_path, f"code_root: {a}\n")
+        assert resolve_code_root(str(tmp_path), override=str(b), external=True).path == str(b)
+
+    def test_override_rescues_external_without_config(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        r = resolve_code_root(str(tmp_path), override=str(repo), external=True)
+        assert r.path == str(repo)
+
+    def test_override_nonexistent_errors(self, tmp_path):
+        with pytest.raises(CodeRootError, match="不存在"):
+            resolve_code_root(str(tmp_path), override=str(tmp_path / "nope"), external=False)
+
+    def test_override_blank_errors(self, tmp_path):
+        with pytest.raises(CodeRootError):
+            resolve_code_root(str(tmp_path), override="  ", external=False)
+
+
+class TestFormatCodePath:
+    def test_external_gets_repo_prefix(self):
+        assert format_code_path(os.path.join("lib", "a.dart"), True) == "repo:lib/a.dart"
+
+    def test_single_unchanged(self):
+        assert format_code_path("lib/a.dart", False) == "lib/a.dart"

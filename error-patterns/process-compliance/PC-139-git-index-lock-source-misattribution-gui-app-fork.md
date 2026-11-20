@@ -1,3 +1,9 @@
+---
+id: PC-139
+title: Git index.lock 衝突來源誤判（外部 GUI app fork 漏列）
+severity: low
+---
+
 # PC-139: Git index.lock 衝突來源誤判（外部 GUI app fork 漏列）
 
 ---

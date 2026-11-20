@@ -1,3 +1,9 @@
+---
+id: IMP-014
+title: Stop Hook reason 欄位被 Claude 解讀為命令
+severity: medium
+---
+
 # IMP-014: Stop Hook reason 欄位被 Claude 解讀為命令
 
 ## 分類

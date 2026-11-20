@@ -1,3 +1,9 @@
+---
+id: IMP-020
+title: PostToolUse Hook 共存時的觸發碰撞
+severity: medium
+---
+
 # IMP-020: PostToolUse Hook 共存時的觸發碰撞
 
 ---

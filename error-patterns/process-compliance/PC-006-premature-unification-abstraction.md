@@ -1,3 +1,9 @@
+---
+id: PC-006
+title: 過早統一抽象（DRY 誤用）
+severity: medium
+---
+
 # PC-006: 過早統一抽象（DRY 誤用）
 
 ## 基本資訊

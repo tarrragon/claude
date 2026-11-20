@@ -1,3 +1,9 @@
+---
+id: IMP-022
+title: 內聯 __import__ 重複實作共用邏輯
+severity: low
+---
+
 # IMP-022: 內聯 __import__ 重複實作共用邏輯
 
 ## 基本資訊

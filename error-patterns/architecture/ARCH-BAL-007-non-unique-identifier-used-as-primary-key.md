@@ -4,8 +4,10 @@ title: 非唯一識別符被當主鍵，集合去重靜默丟棄同鍵資料
 category: architecture
 severity: high
 related:
- - ARCH-BAL-002
- - ARCH-BAL-006
+  - id: ARCH-BAL-002
+    kind: citation
+  - id: ARCH-BAL-006
+    kind: citation
 created: 2026-07-28
 ---
 

@@ -1,5 +1,5 @@
 <!--
-Domain Map 模板 — 複製到對應 domain 目錄並重新命名。
+Domain Map 範本 — 複製到對應 domain 目錄並重新命名。
   多 domain 專案：docs/spec/{domain}/domain-map.md（與該 domain 的 spec 同層）
   單 domain 專案：docs/domain-map.md（根層退化形式）
 
@@ -16,10 +16,10 @@ Domain Map 模板 — 複製到對應 domain 目錄並重新命名。
 
 ---
 id: DOMAIN-MAP-{domain}
-domain: "{domain 名稱}"
+domain: "{domain 名稱}"          # 須等於 id 後綴（id 為 DOMAIN-MAP-foo 則 domain 為 foo），doc validate 檢查
 source_specs: []                 # §7 表列出的 spec 集合（每個 ### SPEC-NNN 子標題一份），如 [SPEC-001]
 related_usecases: []             # 相關 UC，如 [UC-01]
-depends_on_bundles: []           # 選填：本 bundle 依賴的其他 domain-map id，如 [DOMAIN-MAP-{domain}]；彙整見系統層模板
+depends_on_bundles: []           # 選填：本 bundle 依賴的其他 domain-map id，如 [DOMAIN-MAP-{domain}]；彙整見系統層範本
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 ---
@@ -132,7 +132,7 @@ aggregate A  aggregate B（by-id 參照，非直接依賴）
 
 <!-- 實作狀態欄填法：對 bundle 目標路徑跑 `ls lib/domains/{domain}/{bundle_dir}/` 或 grep 對應類別名，存在即「已實作」，不存在即「規劃中」。禁止憑印象填寫（PC-APP-012：曾把未接線的 PassthroughMerge 誤標已實作，導致下游產出不可執行 ticket）。 -->
 
-<!-- 資料契約文件引用連結欄填法：僅 data/infrastructure 列（承載持久化細節的 bundle）需填，連結到 doc skill data-contract-template 產出的文件（如 SPEC-010）。其餘列（domain 純函式 bundle）標「N/A」——資料層設計意圖屬 data 層 bundle 職責，不下沉 domain。判準與模板見 .claude/methodologies/data-layer-contract-methodology.md。 -->
+<!-- 資料契約文件引用連結欄填法：僅 data/infrastructure 列（承載持久化細節的 bundle）需填，連結到 doc skill data-contract-template 產出的文件（如 SPEC-010）。其餘列（domain 純函式 bundle）標「N/A」——資料層設計意圖屬 data 層 bundle 職責，不下沉 domain。判準與範本見 .claude/methodologies/data-layer-contract-methodology.md。 -->
 
 <!-- 實查約束（PC-BAL-007）：本欄陳述的持久化型態（實表/內嵌 VO/無持久化）必須以 schema 實查（讀 DDL、grep `CREATE TABLE`、ls migration 目錄）為準，禁止轉述既有 domain-map 描述或憑推論下斷言——並行文件票各自陳述同一事實時，未實查的一方曾寫入與實查結果相反的斷言（實證：某文件票誤述 loan domain 為「無獨立持久化」，同時段另一票實查確認 `book_loans` 為實表）。無法實查時，本欄標註「待 {來源票 ticket-id} 定案」，不得留空白斷言。 -->
 

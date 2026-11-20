@@ -1,3 +1,9 @@
+---
+id: PC-135
+title: 子代理人 pytest 環境驗證通過但實際 hook 子進程環境失準
+severity: high
+---
+
 # PC-135: 子代理人 pytest 環境驗證通過但實際 hook 子進程環境失準
 
 **類別**: process-compliance

@@ -1,3 +1,9 @@
+---
+id: IMP-028
+title: Hook Early-Return 路徑 API 簽名漂移
+severity: medium
+---
+
 # IMP-028: Hook Early-Return 路徑 API 簽名漂移
 
 ## 基本資訊

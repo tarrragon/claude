@@ -2,7 +2,7 @@
 name: error-pattern
 description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯誤經驗和防護措施 (query), (2) 記錄新發現的錯誤模式和教訓 (add), (3) Ticket 開始前查詢歷史問題避免再犯, (4) 系統化管理錯誤學習經驗。Use when: user mentions error pattern, 錯誤模式, 教訓, 經驗記錄, 學習經驗, 防護措施, 錯誤紀錄, or needs to avoid recurring issues."
 metadata:
-  version: 1.7.2
+  version: 1.10.0
 ---
 
 # error-pattern SKILL
@@ -27,7 +27,7 @@ metadata:
    - 未指定 `--category`：搜尋 `.claude/error-patterns/` 全部子目錄
    - 指定 `--category PC`：僅搜尋 `.claude/error-patterns/process-compliance/`
 3. 使用展開後的關鍵字匹配錯誤症狀、根因、解決方案
-4. **結果排序**：有 YAML frontmatter（`id:`/`title:`/`severity:`）的檔案優先顯示摘要；無 frontmatter 的檔案依標題行顯示
+4. **結果排序**：有 YAML frontmatter（`id:`/`title:`/`severity:`）的檔案優先顯示摘要；無 frontmatter 的檔案依標題行顯示。`severity` 為 `unassessed`（或內文「風險等級」為「未評估」）的檔案不參與等級排序，排在有等級的結果之後，顯示為 `[severity: 未評估]`，不當成 low
 5. 返回匹配的錯誤模式清單
 
 **輸出格式**：
@@ -58,6 +58,25 @@ metadata:
 
 **frontmatter 不放專案票號欄位**：error-pattern 的 frontmatter 禁止寫 `source_ticket`、`source_tickets`、`related_tickets` 等記錄專案票號的欄位。理由：error-pattern 屬框架資產，會隨同步擴散到所有 consumer 專案，專案票號在他處無法解析（規則 8，見 `.claude/references/reference-stability-rules.md`）；現行歸屬判定也不讀這些欄位。違反的後果是票號隨同步外洩並成為永久失效引用。需要表達「某票與某 pattern 有關」時，改在該票的 ticket md 內引用 PC ID（如 `PC-166`）或 pattern 檔名，由票單向指向 pattern。
 
+**frontmatter `related` 的 kind 標記**：`related` 同時用來記兩種關係，兩者對「對方要不要回指」的要求相反，所以每個條目用 `kind` 標明：
+
+```yaml
+related:
+  - id: PC-BAL-012
+    kind: sibling    # 同一問題的姊妹 pattern，必須雙向
+  - id: IMP-046
+    kind: citation   # 引用作為依據或背景，單向合法
+  - PC-166           # 舊格式（純 ID），視為 unknown
+```
+
+| kind | 判別準則 | index 一致性 hook 的判定 |
+|------|---------|------------------------|
+| `sibling` | 兩則描述同一問題的不同面向或變體，讀者讀其中一則時也該讀另一則 | 對方未回指即報單向 WARNING，不看建立日期 |
+| `citation` | 只是引用對方作為依據、背景或案例；對方不需要知道本則存在 | 單向合法，不報 |
+| `unknown` | 舊格式純 ID、沒寫 `kind`、或 `kind` 的值不在上兩者中 | 沿用舊規則：兩則 `created` 相差 7 天內才報單向 |
+
+判斷不了時問：「對方的讀者如果沒看到本則，會不會漏掉同一問題的另一半？」會就是 `sibling`，不會就是 `citation`。新增或修改 `related` 條目時一律寫 `kind`；舊條目不強制改寫，`unknown` 的行為與改版前相同。標成 `sibling` 時，同一次修改要在對方的 `related` 補上回指。
+
 已完成一次全量覆核修正：381 檔中 15 檔（皆有值可比對者）分歧，14 檔判定內文較準確並已同步更新 frontmatter；1 檔（ARCH-001）判定 frontmatter 較準確而保留原值，內文對應修正已記錄為 spawn-request 待後續票處理。
 
 **不變式的適用範圍：應然目標，非存量現況**（2026-08 全量掃描）：上述不變式定義「新建立與事後修訂時必須遵守」的目標狀態，不代表語料庫現況已達標。語料自前次覆核（381 檔）後持續成長，現全量掃描 420 檔，僅 63 檔（15.0%）兩側皆有值且一致；其餘 357 檔（85%）依三類分別處置：
@@ -84,13 +103,17 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
 
 **執行流程**：
 
-1. **選擇錯誤類別**（對應 `.claude/error-patterns/` 子目錄）
-   - architecture: 架構設計相關
-   - code-quality: 程式碼品質相關
-   - documentation: 文件相關
-   - implementation: 實作 bug 相關
-   - process-compliance: 流程合規相關
-   - test: 測試相關
+1. **選擇錯誤類別**（對應 `.claude/error-patterns/` 子目錄；步驟 7 配號傳的是前綴，不是目錄名）
+
+   | 目錄 | 前綴 | 用途 |
+   |------|------|------|
+   | architecture | `ARCH` | 架構設計相關 |
+   | code-quality | `CQ` | 程式碼品質相關 |
+   | documentation | `DOC` | 文件相關 |
+   | implementation | `IMP` | 實作 bug 相關 |
+   | process | `PROC` | 跨階段流程問題（非流程合規類） |
+   | process-compliance | `PC` | 流程合規相關 |
+   | test | `TEST` | 測試相關 |
 
 2. **輸入症狀描述**
    - 錯誤訊息特徵
@@ -114,22 +137,57 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
 7. **原子分配並保留來源前綴 ID**（跨專案共享框架必用，走原子版入口）
    - 呼叫 allocator 的 `allocate_and_reserve_pattern_id`：在鎖保護下把「決定編號」與
      「建立佔位檔」合併為單一原子操作。**取代**舊版 `allocate_pattern_id`（僅回傳
-     預覽字串、不建檔、不持鎖，並行呼叫下有 TOCTOU 撞號風險）：
-     ```python
-     import sys; sys.path.insert(0, ".claude/skills/error-pattern/lib")
+     預覽字串、不建檔、不持鎖，並行呼叫下有 TOCTOU 撞號風險）。在專案根目錄執行，
+     第一個引數填步驟 1 表格的**前綴**（如 `PC`），填目錄名（如 `process-compliance`）
+     會拋 `ValueError`；第二個引數填自己的代理人名稱：
+     ```bash
+     uv run --with pyyaml python -c '
+     import subprocess, sys
+     sys.path.insert(0, ".claude/skills/error-pattern/lib")
      from allocator import identify_project_code, allocate_and_reserve_pattern_id
-     proj = identify_project_code(
-         ".claude/error-patterns/_project-registry.yaml",
-         "<git toplevel>",  # git rev-parse --show-toplevel
-     )
-     stub_path = allocate_and_reserve_pattern_id(
-         "<CATEGORY>", ".claude", proj, reserved_by="<agent-name>"
-     )
-     pattern_id = stub_path.stem  # 佔位檔檔名（無 slug）即 pattern_id
+     from pathlib import Path
+     git = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True,
+                                     check=True).stdout.strip()
+     main_root = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+     proj = identify_project_code(".claude/error-patterns/_project-registry.yaml", str(main_root))
+     print(allocate_and_reserve_pattern_id(sys.argv[1], ".claude", proj, reserved_by=sys.argv[2],
+                                           tickets_root=main_root / "docs" / "work-logs"))
+     ' PC <agent-name>
      ```
+     `main_root` 是主 checkout 的根目錄：在主 checkout 執行時就是自己，在 worktree 執行時
+     指回主 checkout。專案代號與票檔掃描都以它為準，所以 worktree 的目錄名不必登錄，
+     其他線已登記在票上的編號也看得到（見下方〈多線並行〉）。
+     輸出即佔位檔路徑；檔名（無 slug）即 pattern_id。必須經 `uv run --with pyyaml`
+     執行：allocator 依賴 pyyaml，系統 python 通常沒有裝，會在 import 時失敗
+     （`ModuleNotFoundError: No module named 'yaml'`）。
    - **佔位檔語意**：函式回傳時，`stub_path` 指向的檔案已實際建立於磁碟（`status:
      reserved` frontmatter + 標題 `(reserved - 內容待補)`）——編號在配號當下即被
      佔用，非僅回傳字串。任何後續並行呼叫的掃描必然看到此佔位檔，不會配出相同編號。
+   - **佔位檔的 severity 兩面**：佔位檔已寫入 frontmatter `severity: unassessed` 與
+     內文「基本資訊」的 `- **風險等級**: 未評估`，兩面一致，`severity_audit` 判為
+     `unassessed`，不算單邊缺值。填入內容時兩面要一起改成實際等級；只改一面會被
+     判為 `both_differ`。「未評估」不是等級，README sync 照舊視為缺值並阻擋寫入。
+   - **多線並行（多個 session 各在自己的 worktree 工作）**：
+     - **寫入位置**：在自己的 worktree 執行上方命令，佔位檔、內容與步驟 8 的 README
+       sync 都留在 worktree，經 `worktree merge` 合入。不在主 checkout 建檔或提交：
+       主 checkout 的非票面提交會讓正在閘門驗證中的合併 CAS 失敗、套件全部重跑
+       （`multi-session-orchestration` 的 `references/shared-resources.md`〈4. 主 checkout 的本地 main〉）。
+     - **配號後立刻登記**：拿到編號後，下一個動作就是把 pattern ID 寫進自己的票
+       （`ticket track append-log <票號> --section "Solution" "配號 <ID>"`）。allocator 的鎖與
+       pattern 檔掃描只看自己的 checkout；其他 worktree 的佔位檔看不到，只能靠主 checkout
+       票檔裡的文字引用得知。票檔會自動提交到 main，屬閘門重試的豁免路徑，不會讓
+       他線的合併重跑套件。
+     - **票要等 pattern 合入後才 complete**：allocator 只把非終態票的引用算作預留
+       （終態為 completed／closed／abandoned／cancelled；沒有 status 的票保守計入）。
+       票先結束、pattern 檔還沒合入 main 的空窗內，這個編號會被別人再配一次。
+     - **預留號不可超前**：票面引用的號碼大於「目錄最大號 + 50」時，allocator 視為
+       異常大號，不計入並在 stderr 警告。登記的必須是 allocator 實際配給的號碼，
+       不要手寫預估號。
+     - **殘留風險**：兩條線在「配號」到「登記」之間同時配號，仍可能撞號。撞號會由
+       SessionStart 的 `error-patterns-index-consistency-check-hook.py`（同一 ID 對應多個檔案）報出；
+       看到時，後合入的一方改用新編號。
+     - **README 索引**：新列在 worktree 內 sync 即可。README 設有 `merge=union`，
+       兩線同期各新增列不會衝突（見 `.claude/error-patterns/README.md`〈新增錯誤模式流程〉）。
    - **接續動作**：拿到 `stub_path` 後，立即以 **Edit**（非 Write 新檔）把步驟
      2-6 蒐集的症狀/根因/解決方案/預防措施/關聯 Ticket 內容填入該檔案，取代佔位
      內容；填妥後可依慣例將檔名改為 `<CATEGORY>-<PROJ>-NNN-<slug>.md`（純索引可
@@ -147,10 +205,16 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
    - **順序要求（強制）：欄位補齊須早於 sync**。保守 upsert 只做「新增缺漏列」
      與「移除死連結列」，既有列逐字保留、不重新生成（見模組 docstring 保守
      upsert 核心約束）——一旦某檔案以佔位符（風險等級／來源版本缺漏）首次被
-     sync 寫入索引列，該列此後**無法由工具更正**，即使事後補齊檔案內文再重跑
-     sync 也不會覆寫既有列，且 sync 會回報「已與現況一致，無需更新」，看似
-     正常卻使佔位符永久卡住，只能人工改 README（與下方「禁止手動編輯」矛盾）。
-     故步驟 7 接續動作（Edit 填入實際內容）**必須先完成**，再執行本步驟。
+     sync 寫入索引列，預設的 sync 不會覆寫既有列，且會回報「已與現況一致，無需
+     更新」，看似正常卻讓佔位符留在索引裡。故步驟 7 接續動作（Edit 填入實際內容）
+     **必須先完成**，再執行本步驟。
+   - **既有列的刷新路徑**：佔位符已寫進索引時，補齊檔案內文後執行
+     `uv run .claude/skills/error-pattern/lib/readme_index.py sync --write --refresh`。
+     `--refresh` 只改兩類格，其餘逐字保留：
+     - 等於佔位符的格，以檔案內文的值補上（已有實值的格不動）
+     - 來源版本格正規化為 `v` 前綴（`0.2.1` → `v0.2.1`）
+     一個 ID 對應多個檔案、且該列沒有 slug 可區分時，不刷新該列。先 `--dry-run --refresh`
+     看 diff 再寫入。
    - 寫入新錯誤記錄檔案並確認「基本資訊」表已填妥後，執行 CLI 做保守 upsert
      （只新增本次新建 pattern 的索引列與清掉死連結列，既有列一律不動）：
      `uv run .claude/skills/error-pattern/lib/readme_index.py sync --write`

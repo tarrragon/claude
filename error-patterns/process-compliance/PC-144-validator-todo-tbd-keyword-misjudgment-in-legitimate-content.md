@@ -5,8 +5,9 @@ category: process-compliance
 severity: medium
 created: 2026-05-13
 related:
- - PC-113
- - PC-138
+  - PC-113
+  - id: PC-138
+    kind: sibling
 ---
 
 # PC-144: Validator `\bTODO\b` / `\bTBD\b` 將合法內容中的關鍵字誤判為 placeholder

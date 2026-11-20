@@ -1,3 +1,9 @@
+---
+id: PC-158
+title: mint-format-specialist 在視覺標記場景寫入 emoji（違反規則 3）
+severity: medium
+---
+
 # PC-158: mint-format-specialist 在視覺標記場景寫入 emoji（違反規則 3）
 
 > **錯誤類別**：流程合規（代理人對既有規則的內化失敗）

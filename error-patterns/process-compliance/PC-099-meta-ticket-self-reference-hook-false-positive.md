@@ -1,3 +1,9 @@
+---
+id: PC-099
+title: Meta-ticket 自我引用造成 Hook 誤報
+severity: medium
+---
+
 # PC-099: Meta-ticket 自我引用造成 Hook 誤報
 
 ## 基本資訊

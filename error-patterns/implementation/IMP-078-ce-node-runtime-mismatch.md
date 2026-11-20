@@ -6,8 +6,9 @@ severity: high
 status: active
 created: 2026-05-30
 related:
-- PC-165
-- ARCH-013
+  - id: PC-165
+    kind: citation
+  - ARCH-013
 ---
 
 # IMP-078: CE-Node 環境前提誤判 — Jest 測試綠燈但 CE Runtime 崩潰

@@ -74,6 +74,12 @@ _CATEGORY_DIRS = {
     "TEST": "test",
 }
 
+# 佔位檔 severity 兩面欄位的「未評估」值：佔位檔建立當下尚未判斷風險等級，
+# 兩面寫入同一個明確值，使 severity_audit 判為 unassessed 而非單邊缺值。
+# 刻意不放進 readme_index._SEVERITY_MAP：未評估不是等級，README sync 仍視為缺值並阻擋寫入。
+UNASSESSED_FRONTMATTER = "unassessed"
+UNASSESSED_BODY = "未評估"
+
 # ticket 目錄相對 claude_dir 上層的預設路徑段（見 _default_tickets_root）。
 _TICKETS_SUBPATH = ("docs", "work-logs")
 
@@ -120,31 +126,65 @@ def _default_tickets_root(claude_dir) -> Path:
     return Path(claude_dir).resolve().parent.joinpath(*_TICKETS_SUBPATH)
 
 
-def _max_num_in_ticket_references(tickets_root: Path, cat: str, project_code: str) -> int:
-    """掃 `tickets_root` 下所有 ticket md 檔的全文，取本專案精確前綴
+# 終態票的文字是歷史記錄（如驗收記錄的探針檔名），不是預留編號（#52）。
+_TERMINAL_TICKET_STATUSES = frozenset({"completed", "closed", "abandoned", "cancelled"})
+
+# 票面字面超過「目錄最大號 + K」視為異常大號。K=50：合法預留是已寫入票面、
+# 檔案尚未建的少數編號，超前目錄最大號通常個位數；探針字面（如 999）遠超此值。
+_RESERVATION_AHEAD_LIMIT = 50
+
+_STATUS_LINE_RE = re.compile(r"^status:\s*['\"]?([A-Za-z_]+)", re.MULTILINE)
+
+
+def _is_terminal_ticket(text: str) -> bool:
+    """讀 frontmatter 的 status；無 frontmatter 或無 status 視為非終態（保守計入）。"""
+    if not text.startswith("---"):
+        return False
+    end = text.find("\n---", 3)
+    if end == -1:
+        return False
+    match = _STATUS_LINE_RE.search(text[:end])
+    return bool(match) and match.group(1).lower() in _TERMINAL_TICKET_STATUSES
+
+
+def _max_num_in_ticket_references(
+    tickets_root: Path, cat: str, project_code: str, dir_max: int = 0
+) -> int:
+    """掃 `tickets_root` 下非終態 ticket md 的全文，取本專案精確前綴
     `<CAT>-<PROJ>-NNN` 文字引用的最大號；無則 0。
 
-    只比對精確前綴（`cat` + `-` + `project_code` + `-`），不比對 flat 格式或
-    其他專案前綴——避免把框架歷史文件中討論其他專案/其他 ticket 的 ID 字面
-    誤判為本專案的預留編號（見模組 docstring 誤判率查證）。
+    - 只比對精確前綴（`cat` + `-` + `project_code` + `-`），不比對 flat 格式或
+      其他專案前綴（見模組 docstring 誤判率查證）。
+    - 終態票不計：其字面是歷史記錄而非預留。
+    - 號碼大於 `dir_max + _RESERVATION_AHEAD_LIMIT` 視為異常大號，不計並寫
+      stderr 警告指出來源票（規則 4：忽略動作必須可見）。
 
-    `tickets_root` 不存在（如測試 `tmp_path` 無 `docs/` 目錄，或專案尚無
-    ticket 目錄）時回傳 0，不丟例外——此掃描屬盡力而為的輔助資訊，缺目錄
-    不應阻斷配號。
+    `tickets_root` 不存在時回傳 0，不丟例外——此掃描屬盡力而為的輔助資訊，
+    缺目錄不應阻斷配號。
     """
     if not tickets_root.is_dir():
         return 0
     ref_re = re.compile(
         rf"\b{re.escape(cat)}-{re.escape(project_code)}-(\d+)\b", re.IGNORECASE
     )
+    limit = dir_max + _RESERVATION_AHEAD_LIMIT
     max_num = 0
     for path in tickets_root.rglob("tickets/*.md"):
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
+        if _is_terminal_ticket(text):
+            continue
         for match in ref_re.finditer(text):
-            max_num = max(max_num, int(match.group(1)))
+            num = int(match.group(1))
+            if num > limit:
+                sys.stderr.write(
+                    f"[WARNING] allocator: 忽略異常大號 {cat}-{project_code}-{num}"
+                    f"（> 目錄最大號 {dir_max} + {_RESERVATION_AHEAD_LIMIT}），來源票：{path}\n"
+                )
+                continue
+            max_num = max(max_num, num)
     return max_num
 
 
@@ -185,7 +225,10 @@ def allocate_pattern_id(category_prefix, claude_dir, project_code, *, tickets_ro
 
     root = _resolve_tickets_root(claude_dir, tickets_root)
     if root is not None:
-        max_num = max(max_num, _max_num_in_ticket_references(root, cat, project_code.upper()))
+        max_num = max(
+            max_num,
+            _max_num_in_ticket_references(root, cat, project_code.upper(), max_num),
+        )
 
     return f"{prefix}{max_num + 1:03d}"
 
@@ -272,7 +315,8 @@ def allocate_and_reserve_pattern_id(
         max_num = _max_num_in_dir(cat_dir, prefix)
         if root is not None:
             max_num = max(
-                max_num, _max_num_in_ticket_references(root, cat, project_code.upper())
+                max_num,
+                _max_num_in_ticket_references(root, cat, project_code.upper(), max_num),
             )
         pattern_id = f"{prefix}{max_num + 1:03d}"
 
@@ -286,8 +330,11 @@ def allocate_and_reserve_pattern_id(
             "status: reserved\n"
             f"reserved_by: {reserved_by or 'unknown'}\n"
             f"reserved_at: {reserved_at}\n"
+            f"severity: {UNASSESSED_FRONTMATTER}\n"
             "---\n\n"
             f"# {pattern_id}: (reserved - 內容待補)\n\n"
+            "## 基本資訊\n\n"
+            f"- **風險等級**: {UNASSESSED_BODY}\n\n"
             "此檔案由 allocate_and_reserve_pattern_id 建立，用於原子化保留編號，"
             "尚未填入實際內容。請以 Edit（非 Write 新檔）填入正式內容，並視需要"
             f"改名為 `{pattern_id}-<slug>.md`。\n",

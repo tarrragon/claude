@@ -4,9 +4,10 @@ title: 待認領的衍生票被範圍較廣的票連帶完成，票本身零狀�
 category: process-compliance
 severity: 中
 related:
- - PC-162
- - PC-075
- - PC-BAL-018
+  - PC-162
+  - PC-075
+  - id: PC-BAL-018
+    kind: sibling
 created: 2026-08-03
 ---
 

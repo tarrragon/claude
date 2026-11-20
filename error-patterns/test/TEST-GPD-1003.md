@@ -3,7 +3,10 @@ id: TEST-GPD-1003
 title: "對照測試（拿掉修正後應轉紅）在同一個測試案例內放多條斷言，第一條失敗就中止，後面的斷言沒有執行，整體紅燈被誤讀成每一條斷言都有鑑別力"
 severity: medium
 category: test
-related: [TEST-GPD-1002, TEST-BAL-005]
+related:
+  - id: TEST-GPD-1002
+    kind: citation
+  - TEST-BAL-005
 created: 2026-10-30
 ---
 

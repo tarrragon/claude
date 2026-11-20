@@ -1,3 +1,9 @@
+---
+id: PC-MON-002
+title: 必填不等於有效 — CLI 必填欄位無值驗證，自由文字穿透防護
+severity: medium
+---
+
 # PC-MON-002: 必填不等於有效 — CLI 必填欄位無值驗證，自由文字穿透防護
 
 **類別**: process-compliance

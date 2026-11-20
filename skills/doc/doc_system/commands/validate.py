@@ -14,14 +14,20 @@ from doc_system.commands.create import DOC_TYPE_CONFIG, _get_templates_dir
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
 from doc_system.core.tracking_schema import (
+    DOC_STATUSES_BY_TYPE,
     EVT_CATEGORIES,
     EVT_REQUIRED_FIELDS,
     NON_DOMAIN_PATHS_FILE,
+    SYSTEM_LAYER_FILE,
+    LayerNamesFormatError,
     NonDomainPathsFormatError,
+    find_domain_id_suffix_problem,
+    read_layer_names,
     check_path_pattern_format,
     find_non_domain_path_problems,
     read_non_domain_paths,
     read_path_patterns,
+    COMPLETENESS_FIELDS,
     extract_bundle_dependencies,
     find_dangling_bundle_dependencies,
     find_missing_completeness_fields,
@@ -30,6 +36,8 @@ from doc_system.core.tracking_schema import (
     find_undeclared_domain_names,
     GRAPH_NODE_TYPES,
     id_pattern_body,
+    id_pattern_search,
+    ID_PATTERN_FLAGS,
 )
 from doc_system.core.uc_registry import _extract_structured_flow_steps
 
@@ -186,12 +194,82 @@ def _validate_event(frontmatter: dict) -> list[str]:
             f"category 值不合法: {category}（須為 {' 或 '.join(EVENT_VALID_CATEGORIES)}）"
         )
 
+    status_problem = _status_domain_problem("EVT", frontmatter)
+    if status_problem:
+        missing.append(status_problem)
+
     if not frontmatter.get("producers"):
         missing.append("缺少 producer：EVT 必須至少一個 producer")
     if category != EVENT_CATEGORY_WITHOUT_CONSUMER and not frontmatter.get("consumers"):
         missing.append("缺少 consumer：EVT 必須至少一個 consumer")
 
     return missing
+
+
+def _missing_field_messages(node_type: str, entry: dict) -> list[str]:
+    """依 COMPLETENESS_FIELDS[node_type] 回傳缺漏欄位訊息（鍵存在即算齊全，null／[] 合法）。"""
+    missing = find_missing_completeness_fields(COMPLETENESS_FIELDS[node_type], entry)
+    return [f"缺少必填欄位: {field}" for field in sorted(missing)]
+
+
+def _status_domain_problem(doc_type: str, frontmatter: dict) -> str | None:
+    """status 不在該型別值域時回傳訊息，否則 None。
+
+    缺鍵由完整性檢查負責（此處不報）；值為 null 視為欄位存在但未填，
+    與完整性語意一致，放行。空字串、大小寫不符等任何非 null 的越域值皆報錯。
+    """
+    value = frontmatter.get("status")
+    allowed = DOC_STATUSES_BY_TYPE[doc_type]
+    if value is None or value in allowed:
+        return None
+    return f"status 值不合法: {value!r}（{doc_type} 須為 {' / '.join(allowed)}）"
+
+
+_DOC_ID_PREFIX_NODE_TYPES = {"PROP-": "PROP", "SPEC-": "SPEC", "UC-": "UC"}
+
+
+def _fail_on_missing_completeness(doc_id: str, file_path: str, frontmatter: dict) -> None:
+    """PROP／SPEC／UC 缺完整性欄位時列出欄位並 exit 1。"""
+    prefix = next((p for p in _DOC_ID_PREFIX_NODE_TYPES if doc_id.upper().startswith(p)), None)
+    if prefix is None:
+        return
+    node_type = _DOC_ID_PREFIX_NODE_TYPES[prefix]
+    problems = _missing_field_messages(node_type, frontmatter)
+    if not problems:
+        domain_problem = _status_domain_problem(node_type, frontmatter)
+        if domain_problem is None:
+            return
+        print(f"驗證失敗: {doc_id} status 不在值域內")
+        print(f"  - {file_path}: {domain_problem}")
+        sys.exit(1)
+    print(f"驗證失敗: {doc_id} 缺少完整性欄位")
+    for item in problems:
+        print(f"  - {file_path}: {item}")
+    sys.exit(1)
+
+
+def _find_flowstep_missing_fields(steps: list) -> list[str]:
+    """FlowStep 缺 FLOWSTEP_REQUIRED_FIELDS 欄位的位置描述（空清單代表通過）。"""
+    problems: list[str] = []
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        label = f"flow[{step.get('id', f'#{index}')}]"
+        problems.extend(f"{label}: {msg}" for msg in _missing_field_messages("FlowStep", step))
+    return problems
+
+
+def _fail_on_flowstep_completeness(doc_id: str, file_path: str) -> None:
+    """UC 結構化 flow 區塊的步驟缺必填欄位時列出位置並 exit 1。"""
+    if not doc_id.upper().startswith("UC-"):
+        return
+    problems = _find_flowstep_missing_fields(_read_flow_steps(file_path))
+    if not problems:
+        return
+    print(f"驗證失敗: {doc_id} 的 flow 步驟缺少必填欄位")
+    for item in problems:
+        print(f"  - {file_path}: {item}")
+    sys.exit(1)
 
 
 def _execute_event_validation(project_root: str, doc_id: str) -> None:
@@ -218,18 +296,29 @@ def _execute_event_validation(project_root: str, doc_id: str) -> None:
     sys.exit(1)
 
 
-def _scan_domain_bundles(project_root: str) -> dict[str, tuple[Path, dict]]:
-    """掃描所有 domain-map 檔，回傳 bundle id → (實際載體路徑, frontmatter)。"""
+def _iter_bundle_carriers(project_root: str) -> list[tuple[Path, dict]]:
+    """所有帶 id 的 domain-map 載體，依序回傳 (路徑, frontmatter)；同 id 的多份不合併。"""
     root = Path(project_root)
     paths = [root / "docs" / "domain-map.md", *sorted(root.glob("docs/spec/*/domain-map.md"))]
-    bundles: dict[str, tuple[Path, dict]] = {}
+    carriers: list[tuple[Path, dict]] = []
     for path in paths:
         if not path.is_file():
             continue
         frontmatter = parse_frontmatter(str(path))
         if frontmatter and frontmatter.get("id"):
-            bundles[str(frontmatter["id"])] = (path, frontmatter)
-    return bundles
+            carriers.append((path, frontmatter))
+    return carriers
+
+
+def _scan_domain_bundles(project_root: str) -> dict[str, tuple[Path, dict]]:
+    """掃描所有 domain-map 檔，回傳 bundle id → (實際載體路徑, frontmatter)。"""
+    return {str(fm["id"]): (path, fm) for path, fm in _iter_bundle_carriers(project_root)}
+
+
+def _domain_suffix_problems(carriers: list[tuple[Path, dict]]) -> list[str]:
+    """domain 缺席、為空或不等於 id 後綴的載體，含檔案位置。"""
+    found = [(path, find_domain_id_suffix_problem(str(fm["id"]), fm.get("domain"))) for path, fm in carriers]
+    return [f"{path}: {msg}" for path, msg in found if msg]
 
 
 def _load_domain_bundles(project_root: str) -> dict[str, dict]:
@@ -240,7 +329,7 @@ def _load_domain_bundles(project_root: str) -> dict[str, dict]:
 def _find_duplicate_domains(project_root: str) -> dict[str, list[Path]]:
     """回傳 domain 值 → 宣告該值的 bundle 載體路徑（僅含出現兩次以上者）。"""
     by_domain: dict[str, list[Path]] = {}
-    for path, fm in _scan_domain_bundles(project_root).values():
+    for path, fm in _iter_bundle_carriers(project_root):
         if fm.get("domain"):
             by_domain.setdefault(str(fm["domain"]), []).append(path)
     return {d: paths for d, paths in by_domain.items() if len(paths) > 1}
@@ -279,26 +368,41 @@ def _find_bundle_dependency_cycles(bundles: dict[str, dict], doc_id: str) -> lis
 
 
 DOMAIN_MAP_SECTION7_PATTERN = r"^#{2}\s+7[.\s]"
-SPEC_SUBHEADING_PATTERN = re.compile(r"^###\s+(SPEC-\d+)")
+SPEC_SUBHEADING_PATTERN = re.compile(rf"^###\s+(?P<spec_id>{id_pattern_search('SPEC')})", ID_PATTERN_FLAGS)
+LEGACY_SECTION7_HINT = (
+    "提示: {doc_id} 的 §7 沒有任何 SPEC 子標題，視為舊結構（範本 2.4.0 以前），略過 source_specs 比對。"
+    "遷移：把 §7 單表拆成每個 spec 一組 '### SPEC-xxx' 子標題，FR 列依各 spec 原文歸屬（見 CHANGELOG 2.89.0）"
+)
 
 
 def _extract_section7_specs(text: str) -> set[str]:
     """取出 §7 下 '### SPEC-NNN' 子標題的 spec 集合；無 §7 回傳空集合。"""
     section = _extract_section(text, DOMAIN_MAP_SECTION7_PATTERN) or ""
     found = (SPEC_SUBHEADING_PATTERN.match(line) for line in section.splitlines())
-    return {m.group(1) for m in found if m}
+    return {m.group("spec_id") for m in found if m}
 
 
-def _find_source_specs_mismatch(path: Path, frontmatter: dict) -> list[str]:
-    """比對 §7 子標題 spec 集合與 frontmatter source_specs，回傳兩側差集描述。"""
-    declared = set(_as_name_list(frontmatter.get("source_specs")))
-    in_section7 = _extract_section7_specs(path.read_text(encoding="utf-8"))
+def _find_source_specs_mismatch(path: Path, frontmatter: dict) -> tuple[list[str], bool]:
+    """比對 §7 子標題 spec 集合與 source_specs，回傳（差集描述, 是否舊結構）。
+
+    §7 無任何 SPEC 子標題視為舊結構（不報錯）；判定本身失敗落在報錯側。
+    """
+    try:
+        declared = set(_as_name_list(frontmatter.get("source_specs")))
+        text = path.read_text(encoding="utf-8")
+        in_section7 = _extract_section7_specs(text)
+        has_section7 = _extract_section(text, DOMAIN_MAP_SECTION7_PATTERN) is not None
+    except Exception as exc:
+        sys.stderr.write(f"[validate] §7 判定失敗 {path}: {exc!r}\n")
+        return [f"無法判定 §7 結構: {exc!r}"], False
+    if not in_section7 and has_section7:
+        return [], True
     problems = []
     if declared - in_section7:
         problems.append(f"source_specs 有但 §7 無: {', '.join(sorted(declared - in_section7))}")
     if in_section7 - declared:
         problems.append(f"§7 有但 source_specs 無: {', '.join(sorted(in_section7 - declared))}")
-    return problems
+    return problems, False
 
 
 def _execute_domain_bundle_validation(project_root: str, doc_id: str) -> None:
@@ -317,10 +421,24 @@ def _execute_domain_bundle_validation(project_root: str, doc_id: str) -> None:
         for d, paths in _find_duplicate_domains(project_root).items()
         if own_path in paths
     ]
-    spec_problems = _find_source_specs_mismatch(own_path, bundles[doc_id])
-    if not targets and not cycles and not path_problems and not duplicates and not spec_problems:
-        print(f"通過: {doc_id} 的 depends_on_bundles 出邊、path_patterns、domain 唯一性與 source_specs 皆有效")
+    spec_problems, is_legacy = _find_source_specs_mismatch(own_path, bundles[doc_id])
+    if is_legacy:
+        print(LEGACY_SECTION7_HINT.format(doc_id=doc_id))
+    missing = _missing_field_messages("DomainBundle", bundles[doc_id])
+    suffix_problems = _domain_suffix_problems([(own_path, bundles[doc_id])])
+    if not (targets or cycles or path_problems or duplicates or spec_problems or missing or suffix_problems):
+        print(f"通過: {doc_id} 的 depends_on_bundles 出邊、path_patterns、domain 唯一性、domain 與 id 後綴與 source_specs 皆有效")
         sys.exit(0)
+
+    if suffix_problems:
+        print(f"驗證失敗: {doc_id} 的 domain 與 id 後綴不符")
+        for item in suffix_problems:
+            print(f"  - {item}")
+
+    if missing:
+        print(f"驗證失敗: {doc_id} 缺少完整性欄位")
+        for item in missing:
+            print(f"  - {item}")
 
     if spec_problems:
         print(f"驗證失敗: {doc_id} 的 source_specs 與 §7 子標題集合不一致")
@@ -391,17 +509,28 @@ def _collect_all_path_problems(project_root: str) -> list[str]:
     return problems + [f"{location}: {item}" for item in found]
 
 
+def _collect_layer_names_problems(project_root: str) -> list[str]:
+    """系統層檔 layer_names 存在但不是字串清單的問題（缺席為合法的未宣告，不報）。"""
+    try:
+        read_layer_names(project_root)
+    except LayerNamesFormatError as exc:
+        return [f"{Path(project_root) / SYSTEM_LAYER_FILE}: {exc}"]
+    return []
+
+
 def execute_paths(args: argparse.Namespace) -> None:
     """doc validate-paths：一次檢查全部 path_patterns 與非 domain 路徑清單檔（供 CI）。"""
     project_root = FileLocator.get_project_root()
     duplicates = [
         _format_duplicate_domain(d, paths) for d, paths in _find_duplicate_domains(project_root).items()
     ]
-    problems = duplicates + _collect_all_path_problems(project_root)
+    suffix_problems = _domain_suffix_problems(_iter_bundle_carriers(project_root))
+    problems = duplicates + suffix_problems + _collect_layer_names_problems(project_root)
+    problems += _collect_all_path_problems(project_root)
     if not problems:
-        print("通過: 全部 path_patterns、非 domain 路徑清單與 domain 唯一性皆有效")
+        print("通過: 全部 path_patterns、非 domain 路徑清單、domain 唯一性、domain 與 id 後綴與 layer_names 皆有效")
         sys.exit(0)
-    print("驗證失敗: path_patterns／非 domain 路徑清單／domain 唯一性無效")
+    print("驗證失敗: path_patterns／非 domain 路徑清單／domain 唯一性／domain 與 id 後綴／layer_names 無效")
     for item in problems:
         print(f"  - {item}")
     sys.exit(1)
@@ -607,6 +736,8 @@ def execute(args: argparse.Namespace) -> None:
         print(f"無法解析 frontmatter: {file_path}")
         sys.exit(2)
 
+    _fail_on_missing_completeness(doc_id, file_path, frontmatter)
+    _fail_on_flowstep_completeness(doc_id, file_path)
     _fail_on_undeclared_domains(project_root, doc_id, file_path, frontmatter)
     _fail_on_branch_from_structure(doc_id, file_path)
     _fail_on_flow_order(doc_id, file_path)
@@ -682,7 +813,42 @@ def _fixed_name_exemptions() -> set[str]:
 
 def _filename_id_regex(node_type: str) -> re.Pattern[str]:
     """檔名開頭的 ID 判定正則：ID 本體取自 GRAPH_NODE_TYPES 的 id_pattern，其後須接 `-` 或結尾。"""
-    return re.compile(rf"^(?P<doc_id>{id_pattern_body(node_type)})(?:-|$)")
+    return re.compile(rf"^(?P<doc_id>{id_pattern_body(node_type)})(?:-|$)", ID_PATTERN_FLAGS)
+
+
+_UNESCAPED_SLASH = re.compile(r"(?<!\^)/")
+
+
+def _carrier_dir_regexes(node_type: str) -> list[re.Pattern[str]] | None:
+    """各 carrier_path_patterns 的「目錄部分」正則（去掉最後一段檔名）。
+
+    carrier 的檔名段（含 README 排除、ID 前綴）正是本命令要檢查的對象，
+    只用目錄部分決定範圍，檔名壞的 carrier 內檔案才不會被範圍判定放過。
+    切點為最後一個不在字元類 `[^/]` 內的 `/`。
+
+    回傳 None 代表「取不到範圍資訊」，呼叫端須退回改動前的行為（全部檢查）：
+    型別沒有 carrier_path_patterns（缺鍵或空清單），或任一 pattern 沒有目錄
+    切點。理由：範圍限縮是收窄檢查，資訊不足時寧可多檢查，也不讓檔名檢查
+    靜默失效；視為根目錄範圍則會把 docs/ 下所有檔案跳過，同樣是靜默失效。
+    """
+    patterns = [e["pattern"] for e in GRAPH_NODE_TYPES[node_type].get("carrier_path_patterns", [])]
+    if not patterns:
+        return None
+    regexes = []
+    for pattern in patterns:
+        cuts = [m.start() for m in _UNESCAPED_SLASH.finditer(pattern)]
+        if not cuts:
+            return None
+        regexes.append(re.compile(pattern[: cuts[-1]] + "$", ID_PATTERN_FLAGS))
+    return regexes
+
+
+def _in_carrier_scope(project_root: Path, item: Path, regexes: list[re.Pattern[str]] | None) -> bool:
+    """檔案所在目錄是否落在該型別任一 carrier 路徑的目錄範圍內；regexes 為 None 時一律在範圍內。"""
+    if regexes is None:
+        return True
+    parent = item.relative_to(project_root).parent.as_posix()
+    return any(r.match(parent) for r in regexes)
 
 
 def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str]]:
@@ -708,8 +874,11 @@ def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str
             continue
 
         pattern = _filename_id_regex(prefix)
+        carrier_dirs = _carrier_dir_regexes(prefix)
         for item in sorted(target_dir.rglob("*.md")):
             if item.name.endswith("-template.md"):
+                continue
+            if not _in_carrier_scope(Path(project_root), item, carrier_dirs):
                 continue
 
             match = pattern.match(item.stem)

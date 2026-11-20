@@ -6,7 +6,8 @@ severity: high
 status: active
 created: 2026-04-20
 related:
-- IMP-067
+  - id: IMP-067
+    kind: citation
 ---
 
 # IMP-068: sync-push 版號 bump 缺 sanity check 導致異常跳躍靜默 push

@@ -1,5 +1,5 @@
 <!--
-系統層模板 — 複製為 docs/system-layer.md（整個專案一份）。
+系統層範本 — 複製為 docs/system-layer.md（整個專案一份）。
 
 用途：承接「跨 domain」的系統級決策。單一 domain 內的 bundle 邊界、分層與測試策略
 屬 `domain-map-template.md`（每個 domain 一份）；本文件只寫兩個以上 domain-map 之間
@@ -19,6 +19,10 @@
 ---
 title: "系統層 — {專案名稱}"
 bundles: []                      # 納入的 DomainBundle id，如 [DOMAIN-MAP-{domain}]
+# layer_names: [ui, infra]       # 選填但建議宣告：層級 SPEC 的 domain 欄保留名稱（字串清單）。
+#                                # 宣告後，SPEC 的 domain 欄不在已宣告 domain 也不在此清單者為錯誤；
+#                                # 寫 [] 表示無保留名稱（既有層級 SPEC 會轉紅）；整個鍵缺席則退回
+#                                # 「domain 不在已宣告集合即層級」並提示補宣告（遷移期）。
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 ---
@@ -64,9 +68,9 @@ updated: "YYYY-MM-DD"
 - 依賴只經由目標 bundle 的公開面，不得穿透到其內部。違反則目標 bundle 的內部重構會擴散到所有依賴者。
 - {其他跨 bundle 依賴底線 + 違反後果}
 
-## 3. 通道
+## 3. 通道與協調圖
 
-<!-- 跨 domain 共用的稀缺資源（連線池、單一事件迴圈、全域提示載體等）。單一 domain 專屬的通道回填到該 domain-map 的通道節，不在此重複。 -->
+<!-- 標題文字「通道與協調圖」供 spec 檢核以標題比對定位，勿改。跨 domain 共用的稀缺資源（連線池、單一事件迴圈、全域提示載體等）。單一 domain 專屬的通道回填到該 domain-map 的通道節，不在此重複。 -->
 
 | 通道 | 真持有者 | 持有層 | 請求它的 bundle | 仲裁方式 |
 |---|---|---|---|---|
@@ -99,7 +103,15 @@ updated: "YYYY-MM-DD"
 |---|---|---|
 | {待決事項} | {已決策／等待 ticket} | {結論；或 {ticket-id} 完成後執行什麼} |
 
+## 7. FR 覆蓋
+
+<!-- 跨 domain 的 FR 歸屬：每個 FR 對應到承接它的 domain-map（bundle）。單一 domain 內的 FR->bundle 對照寫在該 domain-map §7，不在此重複。 -->
+
+| FR | 承接的 domain-map | 備註 |
+|---|---|---|
+| {FR-NN} | {DOMAIN-MAP-X} | {跨 domain 時列出協作的其他 domain-map} |
+
 ---
 
 **Last Updated**: YYYY-MM-DD | **Source**: {規劃票 ticket-id}
-**Template Updated**: 2026-10-07 | **Version**: 1.0.0 — 新增系統層模板，承接跨 domain 的分層與依賴方向、通道、邊界決策、容錯策略、待決事項；與 `domain-map-template.md` 以 `depends_on_bundles` 出邊互連
+**Template Updated**: 2026-10-07 | **Version**: 1.0.0 — 新增系統層範本，承接跨 domain 的分層與依賴方向、通道、邊界決策、容錯策略、待決事項；與 `domain-map-template.md` 以 `depends_on_bundles` 出邊互連

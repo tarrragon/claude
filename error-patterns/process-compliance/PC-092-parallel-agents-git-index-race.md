@@ -6,8 +6,9 @@ severity: medium
 status: active
 created: 2026-04-18
 related:
-- PC-091
-- IMP-046
+  - id: PC-091
+    kind: citation
+  - IMP-046
 ---
 
 # PC-092: 並行代理人 git index 競爭導致 commit 邊界與訊息不對齊

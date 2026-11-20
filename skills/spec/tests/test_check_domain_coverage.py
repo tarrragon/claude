@@ -1,5 +1,6 @@
 """check_domain_coverage 測試：FR token 展開（逗號/範圍）+ 覆蓋差集判定。"""
 
+import re
 import sys
 
 import pytest
@@ -211,7 +212,8 @@ def test_main_with_event_flow_flag_reports_missing_labeling(tmp_path, monkeypatc
     spec = tmp_path / "SPEC-001.md"
     spec.write_text("### FR-01: 掃描完成通知\n發送通知。\n", encoding="utf-8")
     domain_map = tmp_path / "domain-map.md"
-    domain_map.write_text("| FR-01 | Ledger |\n", encoding="utf-8")
+    domain_map.write_text(
+        "| FR-01 | Ledger |\n## 2.5. 通道與協調圖\n### 2.5.3 到達類別與級別實例\n| x |\n", encoding="utf-8")
     rc = cdc.main([str(spec), "--check-event-flow-labeling"])
     assert rc == 1
     out = capsys.readouterr().out
@@ -333,7 +335,7 @@ def test_spec_id_not_read_from_body_after_frontmatter():
 
 def test_spec_id_outside_spec_nnn_form_falls_back_to_compat(capsys):
     """id 不是 SPEC-NNN 形式時 map 的歸屬鍵對不上，須走相容模式並警告，不得全數報未覆蓋。"""
-    spec = "---\nid: SPEC-UI-001\n---\n### FR-01: a\n"
+    spec = "---\nid: UI-001\n---\n### FR-01: a\n"
     assert _covered_by(spec, MAP_UNDER_B) == []
     assert "WARNING" in capsys.readouterr().err
 
@@ -432,14 +434,15 @@ def test_union_untitled_map_falls_back_to_its_source_specs(tmp_path, monkeypatch
     assert cdc.main([str(spec)]) == 0, capsys.readouterr().out
 
 
-def test_union_untitled_multi_source_specs_counts_to_inspected_spec(tmp_path, monkeypatch, capsys):
-    """整份無歸屬的 map 其 FR 計給受檢 SPEC，與 source_specs 值數無關。"""
+def test_union_untitled_multi_source_specs_fails(tmp_path, monkeypatch, capsys):
+    """整份無歸屬的 map 其 source_specs 多值：無從判定歸屬，失敗（丙；原行為為計給受檢 SPEC）。"""
     monkeypatch.chdir(tmp_path)
     spec = tmp_path / "docs/spec/ui/SPEC-101-x.md"
     _write(spec, SPEC_A)
     _write(tmp_path / "docs/spec/a/domain-map.md", _map("SPEC-101", "## SPEC-101\n| FR-01 | A |\n"))
     _write(tmp_path / "docs/spec/b/domain-map.md", _map("SPEC-101, SPEC-202", "| FR-02~03 | B |\n"))
-    assert cdc.main([str(spec)]) == 0, capsys.readouterr().out
+    assert cdc.main([str(spec)]) == 1
+    assert "source_specs 列入多個 SPEC" in capsys.readouterr().out
 
 
 # --- 審查的四種由綠轉紅輸入 + 一例反向假綠 ---
@@ -459,7 +462,8 @@ def _in_domain_dir(tmp_path, monkeypatch, map_text, system=None, extra_map=None)
 def test_green_to_red_1_multi_source_specs_with_other_spec_in_system(tmp_path, monkeypatch, capsys):
     spec = _in_domain_dir(tmp_path, monkeypatch, _map("SPEC-101, SPEC-202", "| FR-01~03 | A |\n"),
                           system="## SPEC-202\n| FR-09 | s |\n")
-    assert cdc.main([spec]) == 0, capsys.readouterr().out
+    assert cdc.main([spec]) == 1  # 丙：多值無明示歸屬，失敗（原為 0）
+    assert "source_specs 列入多個 SPEC" in capsys.readouterr().out
 
 
 def test_green_to_red_2_no_source_specs_system_mentions_other_spec(tmp_path, monkeypatch, capsys):
@@ -471,13 +475,15 @@ def test_green_to_red_2_no_source_specs_system_mentions_other_spec(tmp_path, mon
 def test_green_to_red_3_source_specs_lists_other_spec(tmp_path, monkeypatch, capsys):
     spec = _in_domain_dir(tmp_path, monkeypatch, _map("SPEC-202", "| FR-01~03 | A |\n"),
                           system="## SPEC-202\n| FR-09 | s |\n")
-    assert cdc.main([spec]) == 0, capsys.readouterr().out
+    assert cdc.main([spec]) == 1  # 丙：單值 SPEC-202，FR 計給 SPEC-202（原為 0）
+    capsys.readouterr()
 
 
 def test_green_to_red_4_multi_source_specs_and_other_map_titled(tmp_path, monkeypatch, capsys):
     spec = _in_domain_dir(tmp_path, monkeypatch, _map("SPEC-101, SPEC-202", "| FR-02~03 | A |\n"),
                           extra_map=_map("SPEC-101", "## SPEC-101\n| FR-01 | B |\n"))
-    assert cdc.main([spec]) == 0, capsys.readouterr().out
+    assert cdc.main([spec]) == 1  # 丙：多值無明示歸屬，失敗（原為 0）
+    assert "source_specs 列入多個 SPEC" in capsys.readouterr().out
 
 
 def test_reverse_false_green_verdict_independent_of_neighbours(tmp_path, monkeypatch, capsys):
@@ -912,7 +918,7 @@ def test_unparseable_source_specs_reports_format_problem(tmp_path, monkeypatch, 
 
 def test_unrecognized_spec_id_reports_id_problem(tmp_path, monkeypatch, capsys):
     spec = _spec_and_map(tmp_path, monkeypatch, "source_specs: [SPEC-101]",
-                         spec_text="---\nid: SPEC-UI-001\n---\n### FR-01: a\n", spec_name="ui-spec.md")
+                         spec_text="---\nid: UI-001\n---\n### FR-01: a\n", spec_name="ui-spec.md")
     assert cdc.main([str(spec)]) == 1
     out = capsys.readouterr().out
     assert "spec id 無法辨識" in out
@@ -948,7 +954,8 @@ EVENT_TAIL = "請於「通道與協調圖」節之「到達類別與級別實例
 
 def test_layer_mode_event_flow_tail_says_system_layer(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    spec = _layer_fixture(tmp_path, system="## SPEC-101\n| FR-01~02 | sys |\n")
+    spec = _layer_fixture(tmp_path, system="## SPEC-101\n| FR-01~02 | sys |\n"
+                          "## 2.5. 通道與協調圖\n### 2.5.3 到達類別與級別實例\n| x |\n")
     spec.write_text(LAYER_SPEC.replace("### FR-01: A", "### FR-01: 掃描完成通知\n發送通知。"),
                     encoding="utf-8")
     cdc.main([str(spec), "--check-event-flow-labeling"])
@@ -960,7 +967,8 @@ def test_non_layer_event_flow_tail_unchanged(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     spec = tmp_path / "SPEC-001.md"
     spec.write_text("### FR-01: 掃描完成通知\n發送通知。\n", encoding="utf-8")
-    (tmp_path / "domain-map.md").write_text("| FR-01 | Ledger |\n", encoding="utf-8")
+    (tmp_path / "domain-map.md").write_text(
+        "| FR-01 | Ledger |\n## 2.5. 通道與協調圖\n### 2.5.3 到達類別與級別實例\n| x |\n", encoding="utf-8")
     cdc.main([str(spec), "--check-event-flow-labeling"])
     lines = capsys.readouterr().out.splitlines()
     map_path = (tmp_path / "domain-map.md").resolve()
@@ -1052,7 +1060,7 @@ def test_map_without_frontmatter_keeps_not_listed_message(tmp_path, monkeypatch,
 
 def test_id_problem_reported_before_unparseable_map(tmp_path, monkeypatch, capsys):
     rc, lines = _run_ss(tmp_path, monkeypatch, capsys, "source_specs: SPEC-101",
-                        spec_text="---\nid: SPEC-UI-001\n---\n### FR-01: a\n", spec_name="ui-spec.md")
+                        spec_text="---\nid: UI-001\n---\n### FR-01: a\n", spec_name="ui-spec.md")
     assert rc == 1 and MSG_ID_UNRECOGNIZED in lines and MSG_UNPARSEABLE not in lines
 
 
@@ -1420,21 +1428,112 @@ def _map_domain_fixture(tmp_path, map_domain, spec_domain):
     return spec
 
 
-def test_map_domain_left_quote_only_reads_as_bare_name(tmp_path, monkeypatch, capsys):
-    """map 的 domain 欄只有左引號：維持舊讀法（去掉引號），SPEC 的同名 domain 是已宣告而非層級，請補 source_specs。"""
+def test_map_domain_left_quote_only_is_format_error(tmp_path, monkeypatch, capsys):
+    """map 的 domain 欄只有左引號：格式不符，不再讀成裸名稱。"""
     monkeypatch.chdir(tmp_path)
     spec = _map_domain_fixture(tmp_path, '"a', "a")
     assert cdc.main([str(spec)]) == 1
     out = capsys.readouterr().out
-    assert "source_specs" in out and "層級 SPEC" not in out
+    assert "格式不符" in out and "docs/spec/a/domain-map.md" in out and "通過" not in out
 
 
-def test_map_domain_tilde_keeps_declared_set_nonempty(tmp_path, monkeypatch, capsys):
-    """唯一的 map 的 domain 欄為波浪號：舊讀法視為名稱 ~，已宣告集合非空，SPEC 仍走層級判定。"""
+def test_map_domain_tilde_is_empty_error_not_layer(tmp_path, monkeypatch, capsys):
+    """map 的 domain 欄為波浪號：設為空，報錯，不再被讀成名稱 ~ 而走層級判定。"""
     monkeypatch.chdir(tmp_path)
     spec = _map_domain_fixture(tmp_path, "~", "ui")
+    assert cdc.main([str(spec)]) == 1
+    out = capsys.readouterr().out
+    assert "為空" in out and "層級 SPEC" not in out
+
+
+def test_map_domain_valid_control_still_layer(tmp_path, monkeypatch, capsys):
+    """正向對照：map 的 domain 欄合法，層級判定照舊。"""
+    monkeypatch.chdir(tmp_path)
+    spec = _map_domain_fixture(tmp_path, "a", "ui")
     assert cdc.main([str(spec)]) == 0
     assert "層級 SPEC" in capsys.readouterr().out
+
+
+def test_map_domain_absent_in_mixed_project_is_error(tmp_path, monkeypatch, capsys):
+    """整段缺席：另一份 map 已宣告 domain、本份缺 domain 鍵，未入已宣告集合會使層級判定翻轉，報錯。"""
+    monkeypatch.chdir(tmp_path)
+    spec = _map_domain_fixture(tmp_path, "a", "ui")
+    _write(tmp_path / "docs/spec/b/domain-map.md", "---\nsource_specs: [SPEC-998]\n---\n")
+    assert cdc.main([str(spec)]) == 1
+    out = capsys.readouterr().out
+    assert "缺席" in out and "docs/spec/b/domain-map.md" in out
+
+
+def test_map_domain_absent_in_single_domain_project_unchanged(tmp_path, monkeypatch, capsys):
+    """對照：專案內沒有任何 map 宣告 domain（單 domain 專案），缺席不報錯。"""
+    monkeypatch.chdir(tmp_path)
+    spec = tmp_path / "docs/spec/ui/SPEC-101-x.md"
+    _write(spec, LAYER_SPEC)
+    _write(tmp_path / "docs/spec/a/domain-map.md", "---\nsource_specs: [SPEC-999]\n---\n")
+    assert cdc.main([str(spec)]) == 1
+    out = capsys.readouterr().out
+    assert "缺席" not in out and "為空" not in out and "格式不符" not in out
+
+
+def test_map_domain_not_checked_when_spec_has_no_domain(tmp_path, monkeypatch, capsys):
+    """對照：SPEC 無 domain 欄時 map 端欄位不被消費，不檢查。"""
+    monkeypatch.chdir(tmp_path)
+    spec = tmp_path / "SPEC-101-x.md"
+    _write(spec, "---\nid: SPEC-101\n---\n### FR-01: A\n")
+    _write(tmp_path / "docs/spec/a/domain-map.md", "---\ndomain: ~\nsource_specs: [SPEC-999]\n---\n")
+    cdc.main([str(spec)])
+    assert "為空" not in capsys.readouterr().out
+
+
+# --- NFR 不計入 FR（FR_TOKEN_RE 左邊界）---
+
+def test_extract_fr_ids_ignores_nfr_token():
+    assert cdc.extract_fr_ids("NFR-01") == set()
+    assert cdc.extract_fr_ids("FR-01, NFR-02") == {1}
+
+
+def test_nfr_row_does_not_label_fr_in_event_flow():
+    spec = "### FR-01: 掃描完成通知\n發送通知。\n"
+    domain_map = (
+        "## 2.5. 通道與協調圖\n### 2.5.3 到達類別與級別實例\n"
+        "| 通道 | 事件 | 到達類別 | 級別 | 引用 |\n|---|---|---|---|---|\n"
+        "| x | y | 推送型 | 不可棄 | NFR-01 |\n")
+    assert cdc.check_event_flow_labeling(spec, domain_map) == [1]
+
+
+# --- 事件流：找不到通道節與節內缺標定分開輸出 ---
+
+def _flow_fixture(tmp_path, monkeypatch, map_text):
+    monkeypatch.chdir(tmp_path)
+    spec = tmp_path / "SPEC-001.md"
+    spec.write_text("### FR-01: 掃描完成通知\n發送通知。\n", encoding="utf-8")
+    (tmp_path / "domain-map.md").write_text(map_text, encoding="utf-8")
+    return spec
+
+
+def test_event_flow_no_channel_section_says_not_found(tmp_path, monkeypatch, capsys):
+    spec = _flow_fixture(tmp_path, monkeypatch, "| FR-01 | Ledger |\n")
+    assert cdc.main([str(spec), "--check-event-flow-labeling"]) == 1
+    out = capsys.readouterr().out
+    assert "找不到「通道與協調圖」節" in out and "未見通道標定" not in out
+
+
+def test_event_flow_section_present_but_unlabeled_keeps_unlabeled_message(tmp_path, monkeypatch, capsys):
+    """對照：有通道節但無標定 -> 沿用缺標定訊息，不說找不到。"""
+    spec = _flow_fixture(tmp_path, monkeypatch,
+                         "| FR-01 | Ledger |\n## 2.5. 通道與協調圖\n### 2.5.3 到達類別與級別實例\n| x |\n")
+    assert cdc.main([str(spec), "--check-event-flow-labeling"]) == 1
+    out = capsys.readouterr().out
+    assert "未見通道標定" in out and "找不到" not in out
+
+
+# --- 層級模式覆蓋缺口（parsed_maps 不依賴非層級分支）---
+
+def test_layer_mode_uncovered_reports_gap_without_error(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_fixture(tmp_path, system="## SPEC-101\n| FR-01 | sys |\n")
+    assert cdc.main([str(spec)]) == 1
+    assert "FR-02" in capsys.readouterr().out
 
 
 # --- source_specs 格式無法解析的 map：有其他路徑接手時也列出檔名（stderr 提醒，不改 exit code） ---
@@ -1514,7 +1613,7 @@ def _layer_id_fixture(tmp_path, monkeypatch, spec_id):
 
 
 def test_layer_spec_unrecognized_id_reports_id_cause(tmp_path, monkeypatch, capsys):
-    spec = _layer_id_fixture(tmp_path, monkeypatch, "SPEC-UI-101")
+    spec = _layer_id_fixture(tmp_path, monkeypatch, "UI-101")
     rc = cdc.main([str(spec)])
     out = capsys.readouterr().out
     assert rc == 1
@@ -1540,7 +1639,7 @@ def test_unrecognized_id_no_map_lists_unparseable_map(tmp_path, monkeypatch, cap
     """範圍外缺口：id 無法辨識且找不到 map 時，source_specs 無法解析的 map 也要列名。"""
     monkeypatch.chdir(tmp_path)
     spec = tmp_path / "docs/spec/ui/x.md"
-    _write(spec, "---\nid: SPEC-UI-101\n---\n### FR-01: A\n")
+    _write(spec, "---\nid: UI-101\n---\n### FR-01: A\n")
     _write(tmp_path / "docs/spec/b/domain-map.md", "---\ndomain: \"b\"\nsource_specs: SPEC-101\n---\n")
     rc = cdc.main([str(spec)])
     cap = capsys.readouterr()
@@ -1660,7 +1759,7 @@ def test_hint_e1_fully_attributed_prints_nothing(tmp_path, monkeypatch, capsys):
 
 def test_hint_e1_no_attribution_file_uses_default_message_not_partial_hint(tmp_path, monkeypatch, capsys):
     """E1 對照三：整份無歸屬的檔 FR 計給受檢 SPEC（既有訊息），不印部分歸屬提示。"""
-    spec = _partial_fixture(tmp_path, monkeypatch, "| FR-01,02 | A |\n")
+    spec = _partial_fixture(tmp_path, monkeypatch, "| FR-01,02 | A |\n", source_specs="[SPEC-101]")
     assert cdc.main([str(spec)]) == 1
     err = capsys.readouterr().err
     assert "依預設計給受檢 SPEC" in err and PARTIAL_MARK not in err
@@ -1824,3 +1923,372 @@ def test_layer_mode_prints_no_partial_hint(tmp_path, monkeypatch, capsys):
     assert cdc.main([str(spec)]) == 1
     cap = capsys.readouterr()
     assert LAYER_TAIL in cap.out and PARTIAL_MARK not in cap.err
+
+
+# --- 3.5.0-W1-151.1.7.2：具名 SPEC id、與 doc id_pattern 同值、舊結構訊息 ---
+
+DOC_SYSTEM = SCRIPTS_DIR.parent.parent / "doc" / "doc_system"
+SPEC_ID_PATTERN_RE = re.compile(r'"SPEC":\s*\{.*?"id_pattern":\s*r"([^"]+)"', re.DOTALL)
+SPEC_NAMED = "---\nid: SPEC-AUTH\n---\n### FR-01: a\n### FR-02: b\n### FR-03: c\n"
+MAP_NAMED = "## 7. 覆蓋\n### SPEC-AUTH 小節\n| FR-01 | X |\n### SPEC-UI-001\n| FR-02~03 | Y |\n"
+
+
+def _doc_spec_id_pattern():
+    """讀 doc tracking_schema 原文的 SPEC id_pattern（不 import，spec skill 須可單獨安裝）。"""
+    text = (DOC_SYSTEM / "core" / "tracking_schema.py").read_text(encoding="utf-8")
+    return SPEC_ID_PATTERN_RE.search(text).group(1)
+
+
+def test_named_spec_id_attribution_recognized():
+    """具名 SPEC-AUTH 的歸屬被辨識；SPEC-UI-001 的 FR 不計給 SPEC-AUTH。"""
+    assert _covered_by(SPEC_NAMED, MAP_NAMED) == [2, 3]
+    attributed, _ = cdc.extract_fr_attribution(MAP_NAMED)
+    assert attributed == {"SPEC-AUTH": {1}, "SPEC-UI-001": {2, 3}}
+
+
+def test_named_spec_id_not_silently_compat(capsys):
+    _covered_by(SPEC_NAMED, MAP_NAMED)
+    assert "相容模式" not in capsys.readouterr().err
+
+
+def test_spec_id_body_equals_doc_id_pattern():
+    """常數與 doc id_pattern 同值（去首尾錨點）。"""
+    assert fr_extract.SPEC_ID_BODY == _doc_spec_id_pattern().removeprefix("^").removesuffix("$")
+
+
+def test_spec_id_comparison_turns_red_when_constant_differs(monkeypatch):
+    """正向對照：常數故意不一致時，比對確實翻紅。"""
+    monkeypatch.setattr(fr_extract, "SPEC_ID_BODY", r"SPEC-\d+")
+    with pytest.raises(AssertionError):
+        test_spec_id_body_equals_doc_id_pattern()
+
+
+DOC_BOUNDARY_RE = re.compile(r'^ID_SEARCH_BOUNDARY\s*=\s*r"([^"]+)"', re.MULTILINE)
+
+
+def _doc_search_pattern():
+    """doc id_pattern_search 的產出：id_pattern 本體 + ID_SEARCH_BOUNDARY（讀原文，不 import）。"""
+    text = (DOC_SYSTEM / "core" / "tracking_schema.py").read_text(encoding="utf-8")
+    body = _doc_spec_id_pattern().removeprefix("^").removesuffix("$")
+    return body + DOC_BOUNDARY_RE.search(text).group(1)
+
+
+def test_spec_search_pattern_equals_doc_helper():
+    """spec 端「本體加邊界」與 doc helper 產出同值。"""
+    assert fr_extract.SPEC_ID_BODY + fr_extract.SPEC_ID_BOUNDARY == _doc_search_pattern()
+
+
+def test_spec_search_pattern_comparison_turns_red_when_boundary_differs(monkeypatch):
+    """正向對照：邊界常數故意不一致時，比對確實翻紅。"""
+    monkeypatch.setattr(fr_extract, "SPEC_ID_BOUNDARY", r"(?![A-Z])")
+    with pytest.raises(AssertionError):
+        test_spec_search_pattern_equals_doc_helper()
+
+
+def _doc_hint_text():
+    src = (DOC_SYSTEM / "commands" / "validate.py").read_text(encoding="utf-8")
+    block = re.search(r"LEGACY_SECTION7_HINT = \((.*?)\n\)", src, re.DOTALL).group(1)
+    return "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', block))
+
+
+def test_legacy_hint_wording_matches_doc_side(capsys):
+    """§7 存在但無 SPEC 子標題：措辭與 doc 端 LEGACY_SECTION7_HINT 同（{doc_id} 佔位以外）。"""
+    _covered_by(SPEC_A, "## 7. 覆蓋\n| FR-01~03 | X |\n", "docs/spec/a/domain-map.md")
+    err = capsys.readouterr().err
+    doc_tail = _doc_hint_text().split("{doc_id} ", 1)[1]
+    assert doc_tail in err
+
+
+def test_long_numeric_spec_id_not_truncated():
+    """SPEC-1234 完整取出（左支 3 位數不得截斷）；SPEC-0012-x 取 SPEC-0012。"""
+    assert fr_extract.SPEC_ID_RE.findall("see SPEC-1234 here") == ["SPEC-1234"]
+    assert fr_extract.extract_spec_id("---\nid: SPEC-1234\n---\n") == "SPEC-1234"
+    assert fr_extract.SPEC_ID_RE.search("SPEC-0012-x").group(0).rstrip("-") == "SPEC-0012"
+    attributed, _ = cdc.extract_fr_attribution("## SPEC-1234\n| FR-01 | a |\n")
+    assert attributed == {"SPEC-1234": {1}}
+
+
+@pytest.mark.parametrize("name, expected", [
+    ("SPEC-001-login.md", "SPEC-001"),
+    ("SPEC-AUTH-login.md", "SPEC-AUTH"),
+    ("SPEC-1234-x.md", "SPEC-1234"),
+])
+def test_spec_id_from_filename_forms(name, expected):
+    assert fr_extract.extract_spec_id("### FR-01: a\n", Path(name)) == expected
+
+
+def test_section7_heading_boundary_for_long_id():
+    """§7 子標題判定同邊界：僅含 SPEC-1234 的標題仍屬 has_spec_heading，且整段 id 被比對。"""
+    from domain_coverage import attribution
+    assert attribution.section7_state("## 7. x\n### SPEC-1234\n| FR-01 | a |\n") == "has_spec_heading"
+
+
+def test_section7_three_states_distinct(capsys):
+    """三態分開：無 §7／§7 無 SPEC 子標題／有子標題；無 §7 不套用舊結構訊息。"""
+    from domain_coverage import attribution
+    assert attribution.section7_state("## 8. x\n| FR-01 | a |\n") == "absent"
+    assert attribution.section7_state("## 7. x\n| FR-01 | a |\n") == "no_spec_heading"
+    assert attribution.section7_state("## 7. x\n### SPEC-AUTH\n| FR-01 | a |\n") == "has_spec_heading"
+    _covered_by(SPEC_A, "## 8. 覆蓋\n無\n")
+    assert "視為舊結構" not in capsys.readouterr().err
+
+
+# --- system-layer-template：通道節標題與 FR 覆蓋節 ---
+SYSTEM_LAYER_TEMPLATE = (
+    Path(__file__).resolve().parents[2] / "doc" / "templates" / "system-layer-template.md"
+)
+
+
+def test_system_layer_template_channel_section_locatable():
+    text = SYSTEM_LAYER_TEMPLATE.read_text(encoding="utf-8")
+    assert cdc.extract_channel_section(text) is not None
+
+
+def test_system_layer_template_has_fr_coverage_section():
+    text = SYSTEM_LAYER_TEMPLATE.read_text(encoding="utf-8")
+    assert re.search(r"^## .*FR 覆蓋", text, re.MULTILINE)
+
+
+# --- 層級保留名稱：docs/system-layer.md frontmatter 的 layer_names 正向宣告 ---
+
+def _layer_names_fixture(tmp_path, fm_line, spec_domain="ui"):
+    """fm_line 為 system-layer frontmatter 的內容行（None 表示整個檔無 frontmatter）。"""
+    body = "## SPEC-101\n| FR-01~02 | sys |\n"
+    system = body if fm_line is None else f"---\n{fm_line}---\n{body}"
+    return _layer_fixture(tmp_path, spec_domain=spec_domain, system=system)
+
+
+def test_layer_names_declared_name_is_layer_without_hint(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_names_fixture(tmp_path, "layer_names: [ui, infra]\n")
+    assert cdc.main([str(spec)]) == 0
+    out = capsys.readouterr().out
+    assert "docs/system-layer.md" in out and "layer_names" not in out
+
+
+def test_layer_names_block_list_form(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_names_fixture(tmp_path, "layer_names:\n  - infra\n  - ui\n")
+    assert cdc.main([str(spec)]) == 0
+
+
+def test_layer_names_declared_but_name_missing_is_red(tmp_path, monkeypatch, capsys):
+    """正向對照：清單存在而 domain 不在其中（拼錯的 corpuss）-> 紅，不再靜默視為層級。"""
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_names_fixture(tmp_path, "layer_names: [infra]\n", spec_domain="corpuss")
+    assert cdc.main([str(spec)]) == 1
+    out = capsys.readouterr().out
+    assert "'corpuss'" in out and "layer_names" in out and "視為層級 SPEC" not in out
+
+
+def test_layer_names_empty_list_is_declared_no_reserved_names(tmp_path, monkeypatch, capsys):
+    """layer_names: [] 視為已宣告、無保留名稱：既有層級 SPEC 轉紅（不退回現行判法）。"""
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_names_fixture(tmp_path, "layer_names: []\n")
+    assert cdc.main([str(spec)]) == 1
+    out = capsys.readouterr().out
+    assert "'ui'" in out and "layer_names" in out
+
+
+@pytest.mark.parametrize("fm_line", [None, "title: x\n"])
+def test_layer_names_absent_falls_back_with_hint(tmp_path, monkeypatch, capsys, fm_line):
+    """清單缺席（無 frontmatter、或 frontmatter 無此鍵）：退回現行判法，放行並提示補宣告。"""
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_names_fixture(tmp_path, fm_line)
+    assert cdc.main([str(spec)]) == 0
+    assert "layer_names" in capsys.readouterr().out
+
+
+def test_layer_names_system_layer_file_absent_keeps_missing_file_message(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_fixture(tmp_path, system=None)
+    assert cdc.main([str(spec)]) == 1
+    assert "不存在" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "fm_line", ["layer_names: ui\n", "layer_names: ~\n", "layer_names:\n", "layer_names: [ui, [x]]\n"])
+def test_layer_names_not_string_list_is_format_error(tmp_path, monkeypatch, capsys, fm_line):
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_names_fixture(tmp_path, fm_line)
+    assert cdc.main([str(spec)]) == 1
+    out = capsys.readouterr().out
+    assert "layer_names" in out and "字串清單" in out
+
+
+def test_layer_names_declared_domain_unaffected(tmp_path, monkeypatch, capsys):
+    """對照：domain 欄為已宣告 domain 時，layer_names 不介入（維持請補 source_specs）。"""
+    monkeypatch.chdir(tmp_path)
+    spec = _layer_names_fixture(tmp_path, "layer_names: []\n", spec_domain="a")
+    assert cdc.main([str(spec)]) == 1
+    assert "source_specs" in capsys.readouterr().out
+
+
+def test_system_layer_template_layer_names_only_in_comment():
+    text = SYSTEM_LAYER_TEMPLATE.read_text(encoding="utf-8")
+    assert "layer_names" in text
+    assert not re.search(r"^layer_names:", text, re.MULTILINE)
+
+
+# --- 丙：整份無歸屬的 map 依 source_specs 單值歸屬；丁：取不到 spec 識別且帶 --domain-map 失敗 ---
+
+BODY_ALL = "| FR-01~03 | A |\n"
+
+
+def test_c_single_source_specs_counts_to_that_spec(tmp_path, monkeypatch, capsys):
+    """紅輸入：source_specs 單值為他 SPEC，整份無歸屬的 map 其 FR 計給該 SPEC，受檢 SPEC-101 全未覆蓋。"""
+    spec = _in_domain_dir(tmp_path, monkeypatch, _map("SPEC-202", BODY_ALL))
+    assert cdc.main([spec]) == 1
+    assert [ln.strip() for ln in capsys.readouterr().out.splitlines() if ln.startswith("  FR-")] == ["FR-01", "FR-02", "FR-03"]
+
+
+def test_c_single_source_specs_matching_inspected_spec_passes(tmp_path, monkeypatch, capsys):
+    """正向對照：單值即受檢 SPEC 時通過；與上一例僅 source_specs 值不同，結果相反。"""
+    spec = _in_domain_dir(tmp_path, monkeypatch, _map("SPEC-101", BODY_ALL))
+    assert cdc.main([spec]) == 0, capsys.readouterr().out
+
+
+def test_c_multi_source_specs_without_explicit_attribution_fails(tmp_path, monkeypatch, capsys):
+    """紅輸入：多值且 map 無任何 SPEC 歸屬，無從判定歸屬，失敗並指名檔案與 source_specs。"""
+    spec = _in_domain_dir(tmp_path, monkeypatch, _map("SPEC-101, SPEC-202", BODY_ALL))
+    assert cdc.main([spec]) == 1
+    out = capsys.readouterr().out
+    assert "source_specs" in out and "SPEC-101" in out and "SPEC-202" in out and "domain-map.md" in out
+
+
+def test_c_multi_source_specs_with_explicit_attribution_passes(tmp_path, monkeypatch, capsys):
+    """正向對照：同為多值，map 內有明示歸屬則不失敗。"""
+    spec = _in_domain_dir(tmp_path, monkeypatch, _map("SPEC-101, SPEC-202", "## SPEC-101\n" + BODY_ALL))
+    assert cdc.main([spec]) == 0, capsys.readouterr().out
+
+
+def test_c_source_specs_key_absent_keeps_default_to_inspected_spec(tmp_path, monkeypatch, capsys):
+    """整段缺席：行為不變，FR 計給受檢 SPEC。"""
+    spec = _in_domain_dir(tmp_path, monkeypatch, "---\ntitle: x\n---\n" + BODY_ALL)
+    assert cdc.main([spec]) == 0, capsys.readouterr().out
+
+
+def test_c_source_specs_empty_list_keeps_default_to_inspected_spec(tmp_path, monkeypatch, capsys):
+    """設定為 []：行為不變，FR 計給受檢 SPEC。"""
+    spec = _in_domain_dir(tmp_path, monkeypatch, _map("", BODY_ALL))
+    assert cdc.main([spec]) == 0, capsys.readouterr().out
+
+
+def test_c_source_specs_unparseable_keeps_default_to_inspected_spec(tmp_path, monkeypatch, capsys):
+    """格式不符（無法解析）：行為不變，FR 計給受檢 SPEC。"""
+    spec = _in_domain_dir(tmp_path, monkeypatch, "---\nsource_specs: SPEC-202\n---\n" + BODY_ALL)
+    assert cdc.main([spec]) == 0, capsys.readouterr().out
+
+
+def _no_id_spec(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    spec = tmp_path / "docs/spec/a/notes.md"
+    _write(spec, "### FR-01: a\n")
+    _write(tmp_path / "docs/spec/a/domain-map.md", "## SPEC-202\n| FR-01 | A |\n")
+    return spec
+
+
+def test_d_unknown_spec_id_with_domain_map_flag_fails(tmp_path, monkeypatch, capsys):
+    """紅輸入：取不到 spec 識別且帶 --domain-map，不走相容比對，失敗。"""
+    spec = _no_id_spec(tmp_path, monkeypatch)
+    assert cdc.main([str(spec), "--domain-map", str(tmp_path / "docs/spec/a/domain-map.md")]) == 1
+    out = capsys.readouterr().out
+    assert "--domain-map" in out and "spec 識別" in out
+
+
+def test_d_unknown_spec_id_without_flag_keeps_compat(tmp_path, monkeypatch, capsys):
+    """正向對照：同輸入未帶旗標，走相容模式通過（落點不變）。"""
+    spec = _no_id_spec(tmp_path, monkeypatch)
+    assert cdc.main([str(spec)]) == 0, capsys.readouterr().out
+
+
+# --- CLAUDE_PROJECT_DIR：docs/ 解析根（外接資料夾） ---
+
+def _ext_root_with_map(tmp_path):
+    ext = tmp_path / "ext"
+    (ext / "docs" / "spec" / "d1").mkdir(parents=True)
+    (ext / "docs" / "spec" / "d1" / "domain-map.md").write_text(
+        "---\nsource_specs: [SPEC-001]\n---\n| FR-01 | Ledger |\n", encoding="utf-8")
+    return ext
+
+
+def _spec_elsewhere(tmp_path):
+    cwd = tmp_path / "elsewhere"
+    cwd.mkdir()
+    spec = cwd / "SPEC-001.md"
+    spec.write_text("---\nid: SPEC-001\n---\n### FR-01: A\n", encoding="utf-8")
+    return cwd, spec
+
+
+def test_project_dir_env_finds_map_outside_cwd(tmp_path, monkeypatch):
+    ext = _ext_root_with_map(tmp_path)
+    cwd, spec = _spec_elsewhere(tmp_path)
+    monkeypatch.chdir(cwd)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(ext))
+    assert cdc.locate_domain_maps(spec, None) == [ext / "docs" / "spec" / "d1" / "domain-map.md"]
+
+
+def test_project_dir_env_unset_uses_cwd(tmp_path, monkeypatch):
+    """對照：未設變數時仍相對 cwd，外接資料夾找不到。"""
+    _ext_root_with_map(tmp_path)
+    cwd, spec = _spec_elsewhere(tmp_path)
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    assert cdc.locate_domain_maps(spec, None) == []
+
+
+def test_project_dir_env_without_docs_is_not_found(tmp_path, monkeypatch):
+    """變數指向無 docs/ 的目錄：不退回 cwd，視為找不到。"""
+    cwd, spec = _spec_elsewhere(tmp_path)
+    (cwd / "docs").mkdir()
+    (cwd / "docs" / "domain-map.md").write_text("| FR-01 | Ledger |\n", encoding="utf-8")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.chdir(cwd)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(empty))
+    assert cdc.locate_domain_maps(spec, None) == []
+
+
+@pytest.mark.parametrize("value", ["", "MISSING"])
+def test_project_dir_env_empty_or_missing_dir_falls_back_to_cwd(tmp_path, monkeypatch, value):
+    cwd, spec = _spec_elsewhere(tmp_path)
+    (cwd / "docs").mkdir()
+    legacy = cwd / "docs" / "domain-map.md"
+    legacy.write_text("| FR-01 | Ledger |\n", encoding="utf-8")
+    monkeypatch.chdir(cwd)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", "" if value == "" else str(tmp_path / "nope"))
+    assert [p.resolve() for p in cdc.locate_domain_maps(spec, None)] == [legacy.resolve()]
+
+
+def test_project_dir_env_equal_cwd_same_as_unset(tmp_path, monkeypatch):
+    cwd, spec = _spec_elsewhere(tmp_path)
+    (cwd / "docs").mkdir()
+    (cwd / "docs" / "domain-map.md").write_text("| FR-01 | Ledger |\n", encoding="utf-8")
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    unset = [p.resolve() for p in cdc.locate_domain_maps(spec, None)]
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(cwd))
+    assert [p.resolve() for p in cdc.locate_domain_maps(spec, None)] == unset != []
+
+
+def test_layer_mode_reads_system_layer_under_project_dir(tmp_path, monkeypatch, capsys):
+    ext = tmp_path / "ext"
+    ext.mkdir()
+    spec = _layer_fixture(ext)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(ext))
+    assert cdc.main([str(spec)]) == 0, capsys.readouterr().out
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR")
+    assert cdc.main([str(spec)]) == 1  # 對照：未設時相對 cwd，找不到系統層
+
+
+def test_explicit_domain_map_ignores_project_dir(tmp_path, monkeypatch):
+    ext = _ext_root_with_map(tmp_path)
+    cwd, spec = _spec_elsewhere(tmp_path)
+    mine = cwd / "mine.md"
+    mine.write_text("| FR-01 | Ledger |\n", encoding="utf-8")
+    monkeypatch.chdir(cwd)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(ext))
+    assert cdc.locate_domain_maps(spec, str(mine)) == [mine]

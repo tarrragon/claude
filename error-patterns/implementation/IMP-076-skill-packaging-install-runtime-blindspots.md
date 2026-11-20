@@ -1,3 +1,9 @@
+---
+id: IMP-076
+title: Skill packaging install/runtime 二態盲點（auto-discover 配置缺失 + __file__ 上溯失效）
+severity: medium
+---
+
 # IMP-076: Skill packaging install/runtime 二態盲點（auto-discover 配置缺失 + __file__ 上溯失效）
 
 ## 基本資訊

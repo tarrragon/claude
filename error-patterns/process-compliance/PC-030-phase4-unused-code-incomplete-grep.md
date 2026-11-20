@@ -1,3 +1,9 @@
+---
+id: PC-030
+title: Phase 4 未使用程式碼判斷未全專案 grep 驗證
+severity: medium
+---
+
 # PC-030: Phase 4 未使用程式碼判斷未全專案 grep 驗證
 
 ## 錯誤分類

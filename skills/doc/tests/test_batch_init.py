@@ -164,3 +164,37 @@ class TestBatchInitSharesAllocator:
         spec_names = sorted(p.name for p in (tmp_path / "docs" / "spec").iterdir())
         assert [n for n in uc_names if not n.startswith("UC-005")][0].startswith("UC-006-")
         assert [n for n in spec_names if not n.startswith("SPEC-012")][0].startswith("SPEC-013-")
+
+
+class TestDomainMapPath:
+    """per-domain domain-map 形態：指定 --domain 切到 docs/spec/{domain}/，否則維持根層。"""
+
+    def test_domain_map_path_per_domain(self):
+        from doc_system.commands.batch_init import _domain_map_path
+
+        assert _domain_map_path("billing") == "docs/spec/billing/domain-map.md"
+
+    def test_domain_map_path_root_when_no_domain(self):
+        from doc_system.commands.batch_init import _domain_map_path
+
+        assert _domain_map_path(None) == "docs/domain-map.md"
+
+    def test_execute_report_names_per_domain_map(self, tmp_path, capsys):
+        project_root, templates_dir = _setup_project(tmp_path)
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(argparse.Namespace(proposals="PROP-001", domain="billing"))
+        output = capsys.readouterr().out
+        assert "docs/spec/billing/domain-map.md" in output
+        assert "docs/domain-map.md" not in output
+
+    def test_execute_report_names_root_map_without_domain(self, tmp_path, capsys):
+        project_root, templates_dir = _setup_project(tmp_path)
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(argparse.Namespace(proposals="PROP-001", domain=None))
+        assert "docs/domain-map.md" in capsys.readouterr().out

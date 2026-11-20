@@ -1,3 +1,9 @@
+---
+id: PC-012
+title: Complete 流程死鎖（#17 事前處理陷阱）
+severity: medium
+---
+
 # PC-012: Complete 流程死鎖（#17 事前處理陷阱）
 
 ## 基本資訊

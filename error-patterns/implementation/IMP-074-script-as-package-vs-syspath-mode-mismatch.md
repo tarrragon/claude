@@ -1,3 +1,9 @@
+---
+id: IMP-074
+title: Skill 同時用 scripts.* package 入口 + sys.path-mode 測試導致 import 雙模式衝突
+severity: medium
+---
+
 # IMP-074: Skill 同時用 scripts.* package 入口 + sys.path-mode 測試導致 import 雙模式衝突
 
 ## 基本資訊

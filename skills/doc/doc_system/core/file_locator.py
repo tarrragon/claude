@@ -2,7 +2,142 @@
 
 import os
 import subprocess
+import sys
 from pathlib import Path
+from typing import NamedTuple
+
+import yaml
+
+from doc_system.core.constants import CODE_ROOT_CONFIG_KEY
+
+PROJECT_DIR_ENV = "CLAUDE_PROJECT_DIR"
+REPO_PATH_PREFIX = "repo:"
+CODE_ROOT_EXIT_CODE = 2
+_TRACEABILITY_REL_PATH = os.path.join("docs", "traceability.yaml")
+
+
+class CodeRootError(Exception):
+    """code root 無法解析（外接模式未設定、設定格式不符或路徑不存在）。"""
+
+
+class CodeRoot(NamedTuple):
+    """程式碼端根目錄與其模式；external 為 True 時輸出路徑須帶 repo: 前綴。"""
+
+    path: str
+    external: bool
+
+
+def _git_common_dir(directory: str) -> str | None:
+    """回傳 directory 所屬 repo 的共用 git 目錄（realpath）；不在 repo 內回傳 None。
+
+    worktree 與主 checkout 共用同一個 common dir，是辨識「同一個 repo」的依據。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", directory, "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        # 不在 repo 內或無 git：以 None 表示「無 repo 身份」，由呼叫端判讀，非錯誤
+        return None
+    out = result.stdout.strip()
+    if not out:
+        return None
+    return os.path.realpath(os.path.join(directory, out))
+
+
+def is_external_mode() -> bool:
+    """判定是否為外接模式（doc root 為分析者端外接資料夾，程式碼在另一個 repo）。
+
+    偵測依據：CLAUDE_PROJECT_DIR（外接模式的唯一入口，規格 C2）所指目錄，
+    與 cwd 所屬 repo 是否為同一個 repo（比對 git common dir）。
+    - 環境變數未設定，或目錄不存在：單根。
+    - cwd 不在 git repo 內：無從比對，保守判單根。
+    - 該目錄不在任何 repo 內，或屬於不同 repo：外接。
+    - 同一 repo（含 linked worktree 與主 checkout 互為 doc root 與 cwd）：單根；
+      worktree 的 toplevel 與主 checkout 不同，故不比對 toplevel，改比對 common dir。
+    """
+    env_root = os.environ.get(PROJECT_DIR_ENV)
+    if not env_root or not Path(env_root).is_dir():
+        return False
+    cwd_common = _git_common_dir(os.getcwd())
+    if cwd_common is None:
+        return False
+    return _git_common_dir(env_root) != cwd_common
+
+
+def _read_configured_code_root(doc_root: str) -> object | None:
+    """讀 traceability.yaml 的 code_root 原值；檔案缺席、不可解析、鍵缺席或 null 皆回 None。"""
+    path = os.path.join(doc_root, _TRACEABILITY_REL_PATH)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError) as e:
+        sys.stderr.write(f"[doc] WARNING：無法讀取 {_TRACEABILITY_REL_PATH}，code_root 視為未設定：{e}\n")
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data.get(CODE_ROOT_CONFIG_KEY)
+
+
+def _validate_code_root_path(raw: object, base_dir: str, source: str) -> str:
+    """驗證 code root 值為非空字串且指向存在的目錄，回傳絕對路徑；相對路徑以 base_dir 解析。"""
+    if not isinstance(raw, str) or not raw.strip():
+        raise CodeRootError(f"{source} 須為非空的目錄字串，實際為 {raw!r}")
+    candidate = Path(raw.strip()).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path(base_dir) / candidate
+    if not candidate.is_dir():
+        raise CodeRootError(f"{source} 指向的目錄不存在：{candidate}")
+    return str(candidate)
+
+
+def resolve_code_root(
+    doc_root: str, override: str | None = None, external: bool | None = None
+) -> CodeRoot:
+    """程式碼端根目錄的單一入口（test-map、uc trace、uc verify 共用）。
+
+    來源優先序：--code-root 覆寫 > docs/traceability.yaml 的 code_root 鍵（唯一權威）。
+    都沒有時：單根回傳 doc_root；外接模式拋 CodeRootError，不退回 doc root
+    （退回會掃到外接資料夾而得到成功語氣的空結果）。
+    設定存在但格式不符或路徑不存在一律拋 CodeRootError，單根亦然。
+    """
+    if external is None:
+        external = is_external_mode()
+    if override is not None:
+        path = _validate_code_root_path(override, os.getcwd(), "--code-root")
+        return CodeRoot(path, external)
+    configured = _read_configured_code_root(doc_root)
+    if configured is not None:
+        path = _validate_code_root_path(
+            configured, doc_root, f"{_TRACEABILITY_REL_PATH} 的 {CODE_ROOT_CONFIG_KEY}"
+        )
+        return CodeRoot(path, external)
+    if external:
+        raise CodeRootError(
+            "外接模式（CLAUDE_PROJECT_DIR 指向 cwd 所屬 repo 之外的資料夾）下找不到程式碼根目錄。"
+            f"請在 docs/traceability.yaml 設定頂層鍵 {CODE_ROOT_CONFIG_KEY}"
+            "（被操作 repo 的路徑），或以 --code-root <路徑> 指定。"
+        )
+    return CodeRoot(doc_root, external)
+
+
+def resolve_code_root_or_exit(doc_root: str, override: str | None = None) -> CodeRoot:
+    """resolve_code_root 的命令列包裝：失敗時寫 stderr 並以 CODE_ROOT_EXIT_CODE 結束。"""
+    try:
+        return resolve_code_root(doc_root, override)
+    except CodeRootError as e:
+        sys.stderr.write(f"錯誤：{e}\n")
+        sys.exit(CODE_ROOT_EXIT_CODE)
+
+
+def format_code_path(rel_path: str, external: bool) -> str:
+    """外接模式下為相對 code root 的路徑加 repo: 前綴（規格 2.4），單根原樣回傳。"""
+    if not external:
+        return rel_path
+    return REPO_PATH_PREFIX + rel_path.replace(os.sep, "/")
 
 
 # ID 前綴到 FileLocator 查詢方法的對應

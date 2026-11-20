@@ -1,3 +1,9 @@
+---
+id: PC-073
+title: ANA 衍生 IMP Ticket 誤用 --parent 導致 children 關係，complete 時被 acceptance-gate 擋下
+severity: low
+---
+
 # PC-073: ANA 衍生 IMP Ticket 誤用 --parent 導致 children 關係，complete 時被 acceptance-gate 擋下
 
 > **[DEPRECATED 部分內容]** 本檔對「ANA 衍生 IMP 應用 spawned 而非 children」的指引已於 2026-05-03 多視角審查共識中被 PC-091 取代。ANA 結論的執行延伸（IMP/DOC 落地）依落地票所屬版本選關係：**本版範圍用 children（`--parent <ANA-ID>`）**；**依〈兩期〉排入後續版本者在目標版本以 `--source-ticket <ANA-ID>` 建根票**（2026-11-11 加版本維度，用戶裁定 2026-11-09）。路線與 complete 時點以 `.claude/pm-rules/ticket-lifecycle.md`〈ANA Ticket 落地下游血緣選擇〉為準。

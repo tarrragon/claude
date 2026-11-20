@@ -13,7 +13,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 |------|---------|------|
 | 一：禁裸 cd | git 操作用 `git -C path <cmd>`（首選不觸發 chpwd）；非 git 用子 shell `(cd path && cmd)`；uv 依用途分：skill CLI 與路徑引數相對呼叫者的命令用 `uv run --project path ...`（不改子行程 cwd），跑該目錄自己的測試套件用 `uv --directory path run pytest ...`（pytest 從 cwd 收集，`--project` 會收集到 0 個）；污染後以 `cd <作用根> &&` 還原（作用根＝目前所在 checkout 的根；在 worktree 內是該 worktree 的根，`cd <主 checkout 根>` 會被擋）。裸 cd 觸發 chpwd ls 淹沒，是 confabulation 觸發鏈第 1 環 | IMP-008 / IMP-056 / PC-046 / PC-166 |
 | 二：輸出機制辨識 | `run_in_background:true` → `TaskOutput(taskId)`；輸出含「Full output saved to」→ `Read(file_path)`；其餘直讀對話。預防大輸出：測試 `2>&1 \| tail -20`、一般 `\| head -100`、Grep `head_limit`、Read `offset`+`limit`。**輸出過濾方向**：`tail` 截斷、grep 白名單、`grep -v` 皆屬選擇性過濾，都更容易濾掉警告行——警告通常比正常輸出短且措辭不同，與輸出長度無關（實測：3 行輸出中 `tail -2`／`-3` 等常用值正好切掉第 1 行 `[Error]`；CLI 參數驗證錯誤如 argparse 的 error 前綴在頭、回吐內容在尾同屬此類）；不確定輸出結構時改用 `head` 或 `head`+`tail` 兩段皆取，grep 白名單須含 `WARNING\|Error\|Traceback` | IMP-009 |
-| 三：禁串接 git 寫入 | `git add && git commit` 允許（實務簡化，非「唯讀命令併發安全」保證）；commit/merge/rebase/push 之間禁串接。每個寫入操作獨立一個 Bash 呼叫。index.lock 競爭不限寫入串接——唯讀命令（status/diff-tree/log）refresh index stat cache 時也會短暫觸發，遇到預設短暫重試，非逕判串接違規 | IMP-046 / issue-34（30 次併發 add 命中 1 次） |
+| 三：禁串接 git 寫入 | `git add && git commit` 允許（實務簡化，非「唯讀命令併發安全」保證）；commit/merge/rebase/push 之間禁串接。每個寫入操作獨立一個 Bash 呼叫，且同一 worktree 的 git 寫入依序發出，不在同一回應並行（並行的獨立呼叫同時執行，仍競爭同一 index）。index.lock 競爭不限寫入串接——唯讀命令（status/diff-tree/log）refresh index stat cache 時也會短暫觸發，遇到預設短暫重試，非逕判串接違規 | IMP-046 / issue-34（30 次併發 add 命中 1 次） |
 | 四：CLI backtick 不用雙引號 | 雙引號內 backtick 被當 command substitution。改用 heredoc `cmd "$(cat <<'EOF'...EOF)"`、單引號包整參數、或 Edit 直改 ticket md。看到來源不明 `command not found` / `ModuleNotFoundError` 優先查 backtick | PC-079 |
 | 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 |
 | 六：長背景任務即時可觀察 | 需即時觀察用 `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`（告知 `tail -f`）；只需最終結果保留規則二 `\| tail`。雙層緩衝（fully-buffered + `\| tail` 等 EOF）使輸出檔全程 0 行 | 背景任務緩衝 spike 實驗 |
@@ -41,6 +41,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] 呼叫**寫入類 CLI**（ticket／doc 等）？→ 判成敗讀 exit code，不讀輸出外觀：`out=$(...); rc=$?`，`rc` 非 0 一律當失敗。輸出可被截斷／過濾／原樣回吐，`rc` 不可（規則二 Action 第 0 項）
 - [ ] `run_in_background:true`？→ `TaskOutput(taskId)`；含「Full output saved to」？→ `Read(file_path)`
 - [ ] 串接多個 git 寫入（commit/merge/rebase/push）？→ 拆成獨立呼叫（規則三）
+- [ ] 準備在同一回應並行發出多個 git 寫入？→ 同一 worktree 的 git 寫入依序發出，不在同一回應並行；已撞上 `Unable to write index` 先查 MERGE_HEAD、index.lock、status，全乾淨才單獨重跑（規則三、IMP-046）
 - [ ] 看到 `index.lock` 錯誤？→ 短暫重試為預設（並行環境屬預期現象，唯讀命令亦會觸發）；反覆失敗才排查串接或殘留鎖檔（規則三）
 - [ ] CLI 參數含 backtick？→ 改用 heredoc / 單引號 / Edit 工具（規則四）
 - [ ] 看到 `command not found` / `ModuleNotFoundError` 來源不明？→ 檢查 backtick command substitution（PC-079）
@@ -70,6 +71,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
+**Last Updated**: 2026-11-20 | **Version**: 3.16.0 — 規則三速查列補「同一 worktree 的 git 寫入依序發出，不在同一回應並行」：獨立 Bash 呼叫在同一回應並行發出時同時執行，仍競爭同一 index（批次合併實測 4 個並行 merge 中 1 個 `Unable to write index`）。統一檢查清單新增一列，含撞上後的三項檢查。變體與處置見 IMP-046〈變體：同一回應並行發出多個 git 寫入〉。
 **Last Updated**: 2026-11-19 | **Version**: 3.15.1 — 規則一速查與統一檢查清單的 cd 還原目標由「專案根」改為「作用根」（目前所在 checkout 的根；在 worktree 內是該 worktree 的根，`cd <主 checkout 根>` 會被 bash-edit-guard 擋下），對齊守衛自 2026-11 起以作用根判定還原的行為。對照表見 details.md 規則一〈方法 3〉。
 **Last Updated**: 2026-11-10 | **Version**: 3.15.0 — 規則一的 uv 寫法依用途分兩條：skill CLI 與路徑引數相對呼叫者的命令用 `uv run --project`（不改子行程 cwd；`--directory` 會讓相對路徑與專案根目錄以 path 解析，外觀同測試紅燈，tarrragon/claude#24）；跑該目錄自己的測試套件用 `uv --directory`（pytest 從 cwd 收集，`--project` 收集到 0 個）。統一檢查清單同步。實測見 details.md 規則一〈方法 2〉。
 **Last Updated**: 2026-10-14 | **Version**: 3.14.0 — 規則七把「進行中操作的裸 commit」擴及 cherry-pick、revert、rebase：存在 CHERRY_PICK_HEAD、REVERT_HEAD 或 rebase 衝突停下時守衛拒絕裸 commit，收尾改用對應的 `--continue`；`rebase -i` 的 edit 停下只提醒。統一檢查清單新增一列，相關文件的守衛描述同步。機制與實測見 details.md「進行中操作的裸 commit 收尾」。

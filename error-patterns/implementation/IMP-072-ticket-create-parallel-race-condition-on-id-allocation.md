@@ -1,3 +1,9 @@
+---
+id: IMP-072
+title: ticket create 並行執行時 ID 分配 race condition
+severity: medium
+---
+
 # IMP-072: ticket create 並行執行時 ID 分配 race condition
 
 ## 基本資訊

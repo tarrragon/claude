@@ -197,6 +197,41 @@ def test_missing_tickets_dir_graceful(tmp_path):
     assert allocate_pattern_id("IMP", claude_dir, "V1") == "IMP-V1-001"
 
 
+def test_completed_ticket_probe_literal_does_not_jump(tmp_path):
+    """正向對照（#52）：完成票的 999 字面修改前跳到 1000，修改後不計。"""
+    claude_dir = tmp_path / ".claude"
+    _write_registry(claude_dir)
+    _touch_pc(claude_dir, "implementation", "IMP-V1-003-x.md")
+    _write_ticket(
+        tmp_path, "0.1-W1-200.md", "---\nstatus: completed\n---\n\n探針 IMP-V1-999.md\n"
+    )
+    assert allocate_pattern_id("IMP", claude_dir, "V1") == "IMP-V1-004"
+
+
+def test_pending_ticket_legit_reservation_still_counted(tmp_path):
+    """對照：未完成票的合法預留（005）修改前後都被計入。"""
+    claude_dir = tmp_path / ".claude"
+    _write_registry(claude_dir)
+    _touch_pc(claude_dir, "implementation", "IMP-V1-003-x.md")
+    _write_ticket(
+        tmp_path, "0.1-W1-201.md", "---\nstatus: in_progress\n---\n\n記錄 IMP-V1-005\n"
+    )
+    assert allocate_pattern_id("IMP", claude_dir, "V1") == "IMP-V1-006"
+
+
+def test_outlier_in_active_ticket_ignored_with_stderr_warning(tmp_path, capsys):
+    """進行中票的異常大號不計，stderr 警告含來源票名。"""
+    claude_dir = tmp_path / ".claude"
+    _write_registry(claude_dir)
+    _touch_pc(claude_dir, "implementation", "IMP-V1-003-x.md")
+    _write_ticket(
+        tmp_path, "0.1-W1-202.md", "---\nstatus: pending\n---\n\n探針 IMP-V1-999\n"
+    )
+    assert allocate_pattern_id("IMP", claude_dir, "V1") == "IMP-V1-004"
+    err = capsys.readouterr().err
+    assert "0.1-W1-202.md" in err and "999" in err
+
+
 # --- allocate_and_reserve_pattern_id：原子建立佔位檔 + 鎖（issue 28 併入範圍） ---
 
 

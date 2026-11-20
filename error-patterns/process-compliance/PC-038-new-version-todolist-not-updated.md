@@ -1,3 +1,9 @@
+---
+id: PC-038
+title: 新版本開始時未同步更新 todolist.yaml
+severity: high
+---
+
 <!-- 注意：本文件禁止使用 emoji（交接文件規範） -->
 
 # PC-038: 新版本開始時未同步更新 todolist.yaml

@@ -6,7 +6,8 @@ severity: medium
 status: active
 created: 2026-11-05
 related:
-- PC-GPD-082
+  - id: PC-GPD-082
+    kind: sibling
 ---
 
 # PC-GPD-085：功能隨 sync 擴散，啟用開關沒有跟著擴散

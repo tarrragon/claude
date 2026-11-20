@@ -1,3 +1,9 @@
+---
+id: PC-076
+title: Session 間未 commit 變更在後續 session 執行中意外浮現
+severity: medium
+---
+
 # PC-076: Session 間未 commit 變更在後續 session 執行中意外浮現
 
 ---

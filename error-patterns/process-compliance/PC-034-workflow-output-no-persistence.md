@@ -1,3 +1,9 @@
+---
+id: PC-034
+title: 流程產出物無持久化導致跨 session 進度遺失
+severity: high
+---
+
 # PC-034: 流程產出物無持久化導致跨 session 進度遺失
 
 ## 錯誤資訊

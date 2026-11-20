@@ -3,7 +3,10 @@ id: PC-LLM-003
 title: "推薦寫法只以引發修正的那類用途驗證就全面替換，依賴舊語意的另一類用途隨之失效"
 severity: medium
 category: process-compliance
-related: [IMP-MON-003, IMP-LLM-001]
+related:
+  - IMP-MON-003
+  - id: IMP-LLM-001
+    kind: citation
 created: 2026-11-10
 ---
 

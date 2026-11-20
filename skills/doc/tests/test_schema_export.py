@@ -389,3 +389,9 @@ class TestCompatVersionDecoupledFromFrameworkVersion:
             _load_schema_json_from_disk()[self.KEY]
             == tracking_schema.TYPE_TABLE_COMPAT_VERSION
         )
+
+
+def test_exports_id_pattern_flags_ascii():
+    """ID 正則以 re.ASCII 強制，匯出 JSON 與磁碟檔都須寫明旗標。"""
+    assert build_schema_dict()["id_pattern_flags"] == "ASCII"
+    assert _load_schema_json_from_disk()["id_pattern_flags"] == "ASCII"

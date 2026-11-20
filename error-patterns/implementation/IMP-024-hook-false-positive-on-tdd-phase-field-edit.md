@@ -1,3 +1,9 @@
+---
+id: IMP-024
+title: phase-completion-gate-hook 在編輯 tdd_phase 欄位時誤觸 Phase 3b 完成警告
+severity: low
+---
+
 # IMP-024: phase-completion-gate-hook 在編輯 tdd_phase 欄位時誤觸 Phase 3b 完成警告
 
 ## 分類

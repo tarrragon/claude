@@ -4,12 +4,15 @@ title: 驗證管道對待驗現象不敏感——檢查條件恆真或恆偽，�
 severity: high
 category: process-compliance
 related:
- - TEST-BAL-001
- - PC-MON-002
- - PC-BAL-005
- - PC-BAL-009
- - PC-165
- - ARCH-016
+  - TEST-BAL-001
+  - PC-MON-002
+  - PC-BAL-005
+  - id: PC-BAL-009
+    kind: citation
+  - PC-165
+  - ARCH-016
+  - id: PC-BAL-012
+    kind: sibling
 created: 2026-07-27
 ---
 

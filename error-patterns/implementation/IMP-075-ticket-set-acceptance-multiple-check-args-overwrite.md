@@ -1,3 +1,9 @@
+---
+id: IMP-075
+title: ticket set-acceptance --check 多個 index 參數可能只勾選最後一個
+severity: low
+---
+
 # IMP-075: ticket set-acceptance --check 多個 index 參數可能只勾選最後一個
 
 ## 基本資訊

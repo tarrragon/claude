@@ -6,10 +6,13 @@ severity: high
 status: active
 created: 2026-08-27
 related:
-- PC-GPD-002
-- PC-BAL-056
-- IMP-BAL-017
-- PC-BAL-010
+  - id: PC-GPD-002
+    kind: sibling
+  - id: PC-BAL-056
+    kind: citation
+  - id: IMP-BAL-017
+    kind: citation
+  - PC-BAL-010
 ---
 
 # PC-BAL-057：安全網與它保護的判斷共享輸入，於是跟著錯而非攔住

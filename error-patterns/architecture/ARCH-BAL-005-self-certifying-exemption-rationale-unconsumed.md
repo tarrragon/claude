@@ -4,9 +4,12 @@ title: 自證式豁免——豁免決定與豁免理由在資料結構上分離�
 category: architecture
 severity: high
 related:
- - ARCH-BAL-003
- - PC-BAL-010
- - IMP-BAL-003
+  - id: ARCH-BAL-003
+    kind: citation
+  - id: PC-BAL-010
+    kind: citation
+  - id: IMP-BAL-003
+    kind: citation
 created: 2026-07-27
 ---
 

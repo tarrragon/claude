@@ -1,74 +1,40 @@
-# Error Pattern 編號區段治理 Policy（D2）
+# Error Pattern 編號區段 Policy（已退場）
 
-本文件定義 error-pattern（`PC` / `IMP` / `ARCH` / `TEST` / `DOC` / `CQ`）流水號的**編號區段約定**：framework 共享 error-pattern 使用 1–499，專案專屬 error-pattern 使用 500+。
+本文件原本定義 error-pattern 流水號的編號區段：1–499 給框架共享 pattern，500+ 給專案專屬 pattern。**500+ 區段已退場，本 policy 不再定義任何編號區段。** 決定一則 pattern 該不該進框架知識庫、用什麼編號，改由下表兩份權威文件規定。
 
-> **定位（必讀）**：本約定為**文件層約定（documentation convention）**，**非強制機制（no enforcement mechanism）**。目前沒有 hook / CLI / validator 在建立 error-pattern 時檢查或阻擋編號落在錯誤區段。約定的價值在於人類維護者建立新 pattern 時依此自律分流，避免 framework sync 將專案專屬 pattern 污染到其他專案。
-> **來源**：多視角審查 L3（無強制機制）。
-
----
-
-## 為什麼需要編號區段約定
-
-`.claude/error-patterns/` 隨 `.claude/` 同步機制（見 `.claude/scripts/README-subtree-sync.md`）跨專案推送 / 拉取。同步預設將整個 `.claude/error-patterns/` 視為 framework 共享資產一併傳播。
-
-**Why**：若專案專屬的 error-pattern（例如僅在 Readmoo Chrome Extension 情境成立的流程瑕疵）與 framework 通用 error-pattern 混用同一段流水號，sync 後其他專案會拉到對自身無意義甚至誤導的 pattern，且編號連續性使後人無法一眼辨識某 pattern 是否該跨專案套用。
-
-**Consequence**：缺乏區段約定會讓 framework error-pattern 知識庫被專案專屬內容稀釋；跨專案 sync 後，無關 pattern 佔用 `/error-pattern query` 結果，降低知識庫信任度，且難以在不破壞編號連續性的前提下事後分離。
-
-**Action**：建立新 error-pattern 前，先依下方「編號區段表」判定其適用範圍（framework 通用 vs 專案專屬），再從對應區段取下一個可用流水號。
+| 要決定的事 | 權威文件 |
+|-----------|---------|
+| 這則教訓要不要進 `.claude/error-patterns/`（框架相關或專案相關） | `.claude/pm-rules/pm-quality-baseline.md`〈規則 7：知識捕獲時分流〉內的「捕獲時分流判準」 |
+| 進了知識庫之後編什麼號 | `.claude/methodologies/error-pattern-numbering-methodology.md`〈核心原則：凍結 flat base，新編號用來源前綴〉 |
 
 ---
 
-## 編號區段表
+## 退場理由
 
-| 區段 | 適用範圍 | 範例 | 同步行為（現況） |
-|------|---------|------|----------------|
-| **1–499** | Framework 通用：跨專案皆成立的流程瑕疵 / 架構陷阱 / 實作模式 | `PC-001` ~ `PC-499`、`IMP-001` ~ `IMP-499` 等 | 隨 `.claude/` sync 跨專案傳播 |
-| **500+** | 專案專屬：僅在本專案技術棧 / 業務情境成立 | `PC-500`、`IMP-500` 等（本專案目前尚無） | 預期不跨專案傳播（**目前 sync 無此過濾，靠人工或 manifest 約定**） |
+**Why**：500+ 區段要解決的問題是專案專屬 pattern 隨 sync 污染其他專案。這個問題已經在更早的環節處理掉，區段約定變成重複且無人使用的第二套規則。
 
-**現況補述**：截至本文件建立時，本專案所有 error-pattern 編號皆落在 1–499（framework 區段），尚無 500+ 專案專屬 pattern。500+ 區段為**預留**，待首次出現「明確只適用本專案、不應跨專案傳播」的 pattern 時啟用。
+- **分流在捕獲時完成**：捕獲時分流判準要求專案相關內容寫進 `docs/` 或 `CLAUDE.md`，不寫進 `.claude/error-patterns/`。依這個判準，專案專屬 pattern 根本不會出現在知識庫，也就不需要專屬編號區段。
+- **來源已由前綴標示**：新編號採 `<CAT>-<PROJ>-NNN` 來源前綴，看編號就知道是哪個專案發現的。區段只能分出「框架或專案」兩類，前綴能分出具體專案，資訊比區段完整。
+- **區段沒有現存使用**：2026-11-20 實測（量測環境：框架上游 repo），知識庫中流水號 500 以上的檔案為 0。
+- **sync 不依區段過濾**：同步腳本依 `.claude/lib/sync_exclude_manifest.py` 的路徑分類決定傳不傳，不讀編號區段。所以區段約定即使被遵守，也不會改變 sync 的行為。
 
----
+**Consequence**：若保留區段約定，建立 pattern 的人要同時套用兩套互相重疊的判準（區段三問、捕獲時分流），而且區段三問會把專案專屬內容導向知識庫的 500+，與捕獲時分流的「導向 `docs/`」方向相反。
 
-## 區段判定準則
-
-建立 error-pattern 時，先回答以下三問判定區段歸屬：
-
-| 問題 | 判定 |
-|------|------|
-| 此 pattern 的根因是否與本專案特定技術棧 / 業務邏輯綁定？ | 是 → 傾向 500+；否 → 1–499 |
-| 移植到另一個無關專案後，此 pattern 是否仍有警示價值？ | 有 → 1–499；無 → 500+ |
-| 此 pattern 描述的防護措施是否可在 framework 層（rules / methodologies / hooks）落地？ | 可 → 1–499；僅能在專案層落地 → 500+ |
-
-**判定原則**：三問偏向 framework（1–499）即放 1–499；明確偏向專案專屬（無跨專案價值）才放 500+。**有疑慮時預設 1–499**——framework 區段的誤分流成本（其他專案多一個可忽略的 pattern）低於專案區段的誤分流成本（framework 知識庫遺漏應共享的 pattern）。
-
----
-
-## 非強制性說明（L3）
-
-**本約定不被任何自動化機制強制**。具體而言：
-
-| 機制 | 是否檢查編號區段 |
-|------|----------------|
-| `/error-pattern` skill | 否 |
-| `.claude/` sync push / pull 腳本 | 否（按 `sync_exclude_manifest.py` 路徑分類過濾，非按編號區段） |
-| acceptance-gate / 任何 PreToolUse hook | 否 |
-
-**Consequence**：因無強制層，編號落在錯誤區段不會被阻擋，唯一防線是維護者建立 pattern 時主動套用本約定。若未來發現此約定被頻繁違反（例如多個 framework pattern 誤入 500+，或專案 pattern 污染 sync），應建 ANA 評估是否升級為強制機制（hook 檢查編號 vs sync manifest 按區段過濾）。
-
-**Action（升級 trigger）**：本約定升級為強制機制的 trigger 為「累積 ≥ 3 個編號區段誤分流案例」，屆時建 ANA ticket 評估強制方案。在此之前維持文件約定。
+**Action**：建立 error-pattern 前，先依捕獲時分流判準確認內容屬於框架相關，再依來源前綴方法論配號（實際配號用 `/error-pattern add`，由 allocator 產生）。不要使用 500 以上的流水號表示專案專屬。
 
 ---
 
 ## 與既有規範的邊界
 
-| 文件 | 聚焦 | 與本 policy 差異 |
-|------|------|----------------|
-| `.claude/error-patterns/README.md` | error-pattern 檔案格式、分類前綴（PC/IMP/ARCH/TEST/DOC/CQ）、必填章節 | 本 policy 補充「同一前綴內的流水號區段約定」，README 不涉及區段 |
-| `.claude/references/reference-stability-rules.md` 規則 8 | 框架禁引用專案層級識別符（ticket ID 等） | 本 policy 處理「編號區段分流」，stability-rules 處理「引用穩定性」，互補 |
-| `.claude/scripts/README-subtree-sync.md` | `.claude/` 同步機制（push/pull/排除） | 本 policy 解釋區段約定存在的動機（sync 跨專案傳播），sync README 描述同步行為 |
+| 文件 | 聚焦 |
+|------|------|
+| `.claude/pm-rules/pm-quality-baseline.md` 規則 7 | 內容進不進框架知識庫 |
+| `.claude/methodologies/error-pattern-numbering-methodology.md` | 進了知識庫之後的編號形式、凍結 flat base、legacy 重號 |
+| `.claude/error-patterns/README.md` | 檔案格式、分類前綴、索引 |
+| `.claude/scripts/README-subtree-sync.md` | `.claude/` 同步機制與排除分類 |
 
 ---
 
-**Last Updated**: 2026-06-03
+**Last Updated**: 2026-11-20
+**Version**: 2.0.0 — 退場 500+ 專案專屬區段：本 policy 不再定義編號區段，改指向捕獲時分流判準與來源前綴方法論。理由：專案專屬內容在捕獲時就導向 `docs/`、來源由前綴標示、500+ 區段現存 0 檔、sync 不依區段過濾。原 1–499／500+ 區段表、區段判定三問、升級 trigger 一併移除。
 **Version**: 1.0.0 — 初版：定義 PC/IMP/ARCH 等 error-pattern 編號區段約定（framework 1–499 / project 500+），明示為文件約定非強制機制（多視角 L3）

@@ -1,3 +1,9 @@
+---
+id: PC-V1-006
+title: 規則變更未盤點既有規則矛盾即上線
+severity: medium
+---
+
 # PC-V1-006: 規則變更未盤點既有規則矛盾即上線
 
 **類別**: process-compliance

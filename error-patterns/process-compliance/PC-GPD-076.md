@@ -6,8 +6,9 @@ severity: medium
 status: active
 created: 2026-11-03
 related:
-- PC-BAL-036
-- PC-GPD-075
+  - PC-BAL-036
+  - id: PC-GPD-075
+    kind: citation
 ---
 
 # PC-GPD-076：分類判準要先用已知正例試跑，再交給代理人全量套用

@@ -23,17 +23,17 @@ doc domain <name>   # 帶 domain 名稱：列出該 domain 下的 spec 清單與
 
 domain 之間的核心責任與依賴關係屬專案知識，記錄於該專案的 `docs/domain-map.md`（單 domain）或 `docs/spec/{domain}/domain-map.md`（多 domain），非本 Skill 範疇。
 
-## 模板
+## 範本
 
-### 功能規格模板（預設）
+### 功能規格範本（預設）
 
-模板位置：`.claude/skills/doc/templates/spec-template.md`
+範本位置：`.claude/skills/doc/templates/spec-template.md`
 
 適用於功能需求、API 規格、資料模型等一般性規格文件。
 
-### Design System 規格模板
+### Design System 規格範本
 
-模板位置：`.claude/skills/doc/templates/design-system-spec-template.md`
+範本位置：`.claude/skills/doc/templates/design-system-spec-template.md`
 
 適用於定義專案統一視覺規格（配色、間距、圓角、陰影、字體、元件尺寸）。包含：
 - Token 表格格式：`| Token | 值 | Dart/JS 對應 | 用途 |`
@@ -44,7 +44,7 @@ domain 之間的核心責任與依賴關係屬專案知識，記錄於該專案�
 
 使用時機：新專案建立 UI design system 規格，或既有專案統一視覺 token 管理。
 
-### 功能規格模板必填 frontmatter
+### 功能規格範本必填 frontmatter
 
 | 欄位 | 說明 |
 |------|------|

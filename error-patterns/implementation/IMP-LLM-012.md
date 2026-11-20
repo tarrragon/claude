@@ -3,7 +3,9 @@ id: IMP-LLM-012
 title: "拿 git 狀態當「兩個檔案仍一致」的證據：已提交不代表衍生檔同步，git status 不列出被忽略的檔"
 severity: medium
 category: implementation
-related: [IMP-LLM-011]
+related:
+  - id: IMP-LLM-011
+    kind: citation
 created: 2026-11-13
 ---
 

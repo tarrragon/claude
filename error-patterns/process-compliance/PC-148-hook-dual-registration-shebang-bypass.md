@@ -19,6 +19,24 @@ created: 2026-05-16
 
 **Why**：訊號矛盾本身就是一條 PC 模式——它會誤導除錯方向。**Consequence**：後人接手時可能誤判 hook 邏輯有 bug 而改 hook 程式碼或 lib，忽略真因在「設定檔層級的重複註冊」，產生無效或破壞性修復。**Action**：看到雙重訊號優先比對 `settings.json` vs `settings.local.json` 對同事件同 matcher 的註冊重複狀況，再決定是否動 hook 程式碼。
 
+## 適用範圍註記（2026-11-20 重驗）
+
+本節只更新適用範圍與現況結論；以下觸發條件、根因、案例保留事發當時（2026-05-16）的敘述，不改寫。
+
+**註冊形式現況**（依 `.claude/settings.json` 與 `.claude/hooks/hook-dispatch-registry.json` 實測）：
+
+| 註冊位置 | 現行形式 | 與本 PC 描述的差異 |
+|---------|---------|------------------|
+| `settings.json` 的 hook 註冊 | 帶 PEP 723 區塊的 hook 一律為 `uv run --quiet $CLAUDE_PROJECT_DIR/<path>`；檔頭無 PEP 723 區塊、shebang 為 `python3` 的少數 hook 為 `python3 $CLAUDE_PROJECT_DIR/<path>`；裸路徑形式（`$CLAUDE_PROJECT_DIR/.claude/hooks/foo-hook.py`，依 shebang 執行）已無任何一筆 | 觸發條件 2 所列「`settings.json` 用裸路徑、依 shebang 執行」的形式已不存在 |
+| `settings.local.json` | 本 repo 無此檔 | 雙重註冊的前提（觸發條件 1）在本 repo 不成立 |
+| Bash 事件的 PreToolUse／PostToolUse／PostToolUseFailure hook | 不直接寫在 `settings.json`，改列於 `hook-dispatch-registry.json`，由 `hook-dispatcher.py` 單一程序分派執行 | 本 PC 撰寫時無此層 |
+
+**由根因推導的現況結論**：
+
+- 根因的核心原則（runtime 對同事件同 matcher 的多處註冊逐一執行、不去重）未變，仍成立。consumer 若在 `settings.local.json` 另行註冊同一 hook，本 PC 的症狀仍會出現；防護措施表的規則層（hook 一律只寫入 `settings.json`）仍適用。
+- 「執行路徑繞過 PEP 723 依賴宣告」這個機制，在現行架構有一個同型的位置：`hook-dispatcher.py` 以自己的直譯器環境執行 registry 內的 hook（in-process 用 `runpy`，退回路徑用 `sys.executable` 子程序），不讀各 hook 自己的 PEP 723 區塊。重驗時 registry 內各 hook 宣告的依賴只有 `pyyaml`，與分派器自身宣告相同，故目前不觸發；日後若有 hook 宣告分派器未宣告的依賴並列入 registry，會以本 PC 的形態（hook 單獨執行正常、經分派器執行時 `ModuleNotFoundError`）重現。
+- 修正動作第 4 步的「顯式解譯器前綴」判準仍有效；其中的 hook 支數為撰寫當時的計數。
+
 ## 觸發條件
 
 以下三條件同時成立：

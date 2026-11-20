@@ -1,3 +1,9 @@
+---
+id: PC-014
+title: AskUserQuestion 合理化跳過
+severity: medium
+---
+
 # PC-014: AskUserQuestion 合理化跳過
 
 ---

@@ -69,7 +69,7 @@
 - `.claude/rules/core/agent-definition-standard.md` — 代理人三區塊結構標準
 - `.claude/rules/README.md` — 自動載入預算原則（每回合必要性自問）
 - `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — 知識捕獲時分流判準（框架相關／專案相關／兩者皆非）+ 升級目的地預算閘門
-- `.claude/README.md`「同步機制」章 — 寫作類 skill（compositional-writing / multi-round-review）內容 SSOT 在 blog repo，框架端為回流副本；依地圖判定「寫作方法 → skills/」後，內容修改應到上游 repo 執行
+- `.claude/README.md`「同步機制」章 — 寫作類 skill（compositional-writing / multi-round-review）主要在 blog repo 維護，llm-dev 也可能調整；兩邊經發佈庫交換內容，框架端的改動推送後通知 blog repo 收入。依地圖判定「寫作方法 → skills/」後，內容修改以 blog repo 為主要位置
 - `.claude/skills/skill-design-guide/SKILL.md` — skills 載體的細部規範（官方規格、frontmatter、漸進揭露結構）
 
 ---

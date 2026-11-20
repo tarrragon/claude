@@ -5,7 +5,9 @@ category: process-compliance
 severity: medium
 created: 2026-05-11
 related:
- - PC-113
+  - PC-113
+  - id: PC-144
+    kind: sibling
 ---
 
 # PC-138: Validator 將 trade-off 表格的 N/A cell 誤判為 placeholder

@@ -1,3 +1,9 @@
+---
+id: PC-106
+title: 規則失效跳過讀 code 直接判定規則設計錯誤
+severity: medium
+---
+
 # PC-106：規則失效跳過讀 code 直接判定規則設計錯誤
 
 **類別**：process-compliance

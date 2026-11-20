@@ -266,6 +266,24 @@ $ <上述命令> 2>&1 | tail -2
 
 **適用邊界**：本節與上一節「截斷方向」共用同一機制（依內容特徵選擇性移除），上一節聚焦 `tail` 單一過濾手段，本節泛化至任何過濾手段；兩節合併適用範圍見主文 `bash-tool-usage-rules.md` 規則二「輸出過濾方向」條款。
 
+### 顯示與轉送擷取的輸出：用 `printf '%s'`，不用 `echo`
+
+**原則**：在 zsh 下顯示擷取的字串（`out=$(cmd)` 之後），或把字串轉送給另一個程式（手動餵 hook payload），一律寫成 `printf '%s\n' "$out"` 或 `printf '%s' "$P" | <cmd>`，不寫 `echo`。
+
+**Why**：zsh 內建 `echo` 預設解析 `\t`、`\n` 等跳脫序列，即使參數在雙引號內；bash 的 `echo` 預設不解析。顯示時，Windows 路徑 `D:\side\termchat` 會被印成 `D:\side<tab>ermchat`。轉送時，JSON 字串值的 `\n` 會變成真換行，payload 成為無效 JSON，hook 走空輸入的預設放行，輸出與真實放行相同。
+
+**Consequence**：前者讓人誤判 CLI 寫壞了內容；後者讓人誤判守衛修正沒有生效，或把未驗證的守衛當成已驗證放行。兩者 rc 都是 0，看不出失敗。
+
+**Action**：
+
+| 用途 | 寫法 |
+|------|------|
+| 顯示擷取的輸出 | `printf '%s\n' "$out"` |
+| 檢查原始位元組 | `printf '%s' "$out" \| od -c` |
+| 手動餵 hook payload | `printf '%s' "$P" \| <hook>`；先以 `printf '%s' "$P" \| python3 -m json.tool >/dev/null` 確認 payload 合法 |
+
+最小重現與 hook 層對照見 `IMP-LLM-019`。
+
 ---
 
 ## 規則三詳細：禁止串接多個 git 寫入操作
@@ -922,6 +940,8 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 
 ---
 
+**Last Updated**: 2026-11-20
+**Version**: 1.23.0 — 規則二新增小節〈顯示與轉送擷取的輸出：用 `printf '%s'`，不用 `echo`〉：zsh 內建 `echo` 預設展開反斜線跳脫，顯示時反斜線路徑失真，轉送 JSON payload 時成為無效 JSON 而使 hook 輸出與放行同形；附三種用途的替代寫法，最小重現路由 `IMP-LLM-019`。
 **Last Updated**: 2026-10-30
 **Version**: 1.22.0 — 要件 B 新增〈第四平面：提交前快照〉：說明 `ticket track commit` 以提交前快照辨認己方中途暫存（含 `git mv` 後改檔），列出三條件與成立理由，並列出仍判為他人在途的情形；配方步驟 10 加註，指出手動配方未做快照、else 分支須自行確認。手動配方的命令與三平面判準不變。來源 tarrragon/claude#55。
 **Last Updated**: 2026-10-15

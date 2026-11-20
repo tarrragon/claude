@@ -368,7 +368,7 @@ PM 填寫 Phase 2 Context Bundle 時，必須將 domain map 的「Bundle 不變�
 
 | 條件 | PM 動作 |
 |------|--------|
-| `docs/domain-map.md` 存在且含不變式清單 | Context Bundle 加入不變式清單路徑引用，sage 逐條轉 domain unit test |
+| domain map（單 domain 專案為 `docs/domain-map.md`，多 domain 專案為各 domain 的 `docs/spec/{domain}/domain-map.md`）存在且含不變式清單 | Context Bundle 加入不變式清單路徑引用，sage 逐條轉 domain unit test |
 | domain map 不存在 | 先建 domain map（`/doc` domain-map 模板），或在 Context Bundle 標註「無 domain map：測試設計僅依 spec FR」 |
 
 **Why**：domain map 不變式是 domain 層測試的權威輸入軸（與 spec FR 正交）。version-bootstrap 已消費此軸（Step 5），但 per-feature TDD 路徑若不內化此輸入，sage 只依 spec FR 設計測試，domain 層的行為不變式（如 carry-forward、DAG 依賴方向）會遺漏。
@@ -483,7 +483,8 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 
 ---
 
-**Last Updated**: 2026-10-15
+**Last Updated**: 2026-11-20
+**Version**: 2.20.1 — Phase 2 domain map 輸入表的存在條件補多 domain 形態 `docs/spec/{domain}/domain-map.md`，與 doc skill 支援的兩種 domain-map 位置一致（原只寫根層一種）
 **Version**: 2.20.0 — Phase 3b 轉換條件改為本票相關測試檔全綠，全套件由合併閘門在合併 main 前執行
 **Version**: 2.19.0 — 相關文件補一行路由指向 `worktree-operations.md`「多階段串接派發」節（跨 agent phase 接力的 feat 分支累積器機制，屬 git 分支操作非 TDD phase 語意，不搬機制內容）
 **Version**: 2.18.0 — 新增「ANA 全量 grep/regex 範圍驗證完整性規範」獨立章節：三層強制要求（驗證方法涵蓋完整性聲明、覆蓋完整性聲明格式、AC 設計連動），觸發案例為某 ANA AC-4 二度誤判

@@ -8,11 +8,17 @@ import yaml
 
 from doc_system.core.constants import (
     TEST_FILE_EXTENSIONS,
+    TEST_FILE_EXTENSIONS_CONFIG_KEY,
     TEST_SCAN_DIRS,
     TEST_SCAN_DIRS_CONFIG_KEY,
     TITLE_MAX_DISPLAY_LEN,
 )
-from doc_system.core.file_locator import FileLocator
+from doc_system.core.file_locator import (
+    REPO_PATH_PREFIX,
+    FileLocator,
+    format_code_path,
+    resolve_code_root_or_exit,
+)
 from doc_system.core.frontmatter_parser import parse_frontmatter
 
 TRACEABILITY_REL_PATH = os.path.join("docs", "traceability.yaml")
@@ -50,6 +56,24 @@ def _resolve_scan_dirs(traceability_data: dict) -> list[str]:
         )
         return list(TEST_SCAN_DIRS)
     return [d.strip() for d in configured]
+
+
+def _resolve_test_extensions(traceability_data: dict) -> tuple[str, ...]:
+    """取得測試檔副檔名：traceability.yaml 有設定則整份取代預設，否則用 TEST_FILE_EXTENSIONS。"""
+    configured = traceability_data.get(TEST_FILE_EXTENSIONS_CONFIG_KEY)
+    if configured is None:
+        return TEST_FILE_EXTENSIONS
+
+    valid = isinstance(configured, list) and configured and all(
+        isinstance(e, str) and e.strip().startswith(".") and len(e.strip()) > 1 for e in configured
+    )
+    if not valid:
+        sys.stderr.write(
+            f"[test-map] WARNING：{TRACEABILITY_REL_PATH} 的 {TEST_FILE_EXTENSIONS_CONFIG_KEY} "
+            f"須為非空、以點開頭的副檔名字串清單，實際為 {configured!r}；改用預設 {TEST_FILE_EXTENSIONS}\n"
+        )
+        return TEST_FILE_EXTENSIONS
+    return tuple(e.strip() for e in configured)
 
 
 def _load_traceability_tests(project_root: str) -> dict[str, list[str]]:
@@ -102,7 +126,9 @@ def _scan_test_files(tests_dir: str, uc_id: str) -> list[str]:
 
 
 def _build_test_content_index(
-    project_root: str, scan_dirs: list[str] | None = None
+    project_root: str,
+    scan_dirs: list[str] | None = None,
+    extensions: tuple[str, ...] = TEST_FILE_EXTENSIONS,
 ) -> dict[str, str]:
     """建立 {file_path: content_lower} 索引；scan_dirs 省略時掃描 TEST_SCAN_DIRS。"""
     index: dict[str, str] = {}
@@ -113,7 +139,7 @@ def _build_test_content_index(
             continue
         for root, _dirs, files in os.walk(tests_dir):
             for filename in sorted(files):
-                if not filename.endswith(TEST_FILE_EXTENSIONS):
+                if not filename.endswith(extensions):
                     continue
                 file_path = os.path.join(root, filename)
                 try:
@@ -186,19 +212,23 @@ def execute(args: argparse.Namespace) -> None:
     全數零命中時寫 stderr 警示並列出掃過的目錄。
     """
     locator = FileLocator(FileLocator.get_project_root())
-    project_root = locator.project_root
+    doc_root = locator.project_root
     uc_id = getattr(args, "uc_id", None)
+    # 文件（UC、traceability.yaml）在 doc root；測試檔掃描在 code root，兩者外接模式下不同
+    code = resolve_code_root_or_exit(doc_root, getattr(args, "code_root", None))
+    project_root = code.path
 
     uc_files = locator.list_usecases()
     if not uc_files:
         print("沒有找到任何 UC 文件。")
         return
 
-    traceability_data = _load_traceability_data(project_root)
+    traceability_data = _load_traceability_data(doc_root)
     traceability_tests = _extract_mapping_tests(traceability_data)
     scan_dirs = _resolve_scan_dirs(traceability_data)
+    extensions = _resolve_test_extensions(traceability_data)
     # 單次掃描建立索引，避免每個 UC 重複讀取測試檔案
-    content_index = _build_test_content_index(project_root, scan_dirs)
+    content_index = _build_test_content_index(project_root, scan_dirs, extensions)
     scanned_uc_count = 0
     scan_hit_count = 0
 
@@ -230,6 +260,8 @@ def execute(args: argparse.Namespace) -> None:
         if test_files:
             for tf in test_files:
                 rel_path = os.path.relpath(tf, project_root) if os.path.isabs(tf) else tf
+                if not rel_path.startswith(REPO_PATH_PREFIX):
+                    rel_path = format_code_path(rel_path, code.external)
                 print(f"{'':>12}   {rel_path}")
 
     if scanned_uc_count and not scan_hit_count:

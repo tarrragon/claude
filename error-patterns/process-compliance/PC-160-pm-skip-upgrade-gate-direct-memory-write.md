@@ -1,3 +1,9 @@
+---
+id: PC-160
+title: PM 跳過升級評估閘門直接寫 memory 處理 session 浮現洞察
+severity: medium
+---
+
 # PC-160: PM 跳過升級評估閘門直接寫 memory 處理 session 浮現洞察
 
 > **錯誤類別**：流程合規（quality-baseline 規則 5「所有發現必須追蹤」解讀偏差）

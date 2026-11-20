@@ -44,7 +44,7 @@ spec 與 use case 收進自己的版控。本規格定義此情境下的替代�
 
 ```
 <外接資料夾>/                     # 分析者端持有，不進被操作 repo
-  README.md                       # 對照表：被操作 repo 的絕對路徑與 commit、盤點日期、
+  README.md                       # 對照表：被操作 repo 的 commit（路徑值見 code_root）、盤點日期、
                                   # 對帳責任人與對帳觸發條件
   <工作項表>.md                    # 盤點工作項表，唯一任務主檔
   docs/                           # 此中間層必須存在，見 2.2
@@ -63,7 +63,7 @@ spec 與 use case 收進自己的版控。本規格定義此情境下的替代�
 
 | 欄位 | 內容 |
 |------|------|
-| 被操作 repo 路徑 | 絕對路徑 |
+| 被操作 repo 路徑 | 不在此記錄；路徑值見 `docs/traceability.yaml` 的 `code_root`（C3） |
 | 被操作 repo commit | 盤點當下的 commit |
 | 盤點日期 | |
 | 對帳責任人 | 執行對帳的人或角色 |
@@ -78,7 +78,7 @@ spec 與 use case 收進自己的版控。本規格定義此情境下的替代�
 |------|------|-------------|
 | C1 `docs/` 中間層不可省 | 外接資料夾整體作為 doc CLI 的 doc root，`docs/` 之下的相對結構與一般專案完全相同 | doc CLI 以 `<root>/docs/...` 推導全部文件路徑。省掉這一層，原本零改動即可運作的讀寫點全數失效，且失效形態是找不到檔案而非報錯設定有誤 |
 | C2 CLI 一律從分析者端啟動 | 在具備本框架 `.claude/` 的 repo 內執行 doc CLI，並以 `CLAUDE_PROJECT_DIR` 指向 `<外接資料夾>` | doc 的啟動 shim 以 cwd 的 git root 是否含該 skill 判斷可否執行。從被操作 repo 啟動會直接被拒，使用者的第一個動作就失敗 |
-| C3 `README.md` 必須記錄被操作 repo 的絕對路徑與 commit | 連同盤點日期、對帳責任人與對帳觸發條件一併記錄。`README.md` 是這些事實的權威，工作項表的〈摘要〉段只是就近複本 | 同時觸及文件與程式碼的命令沒有第二個根可用（見 2.5）；且「這份盤點掃的是哪一版程式碼」事後無從還原，對帳時無法判斷差異來自修復還是來自程式碼已經前進 |
+| C3 被操作 repo 的路徑值只記在 `docs/traceability.yaml` 的 `code_root` | `README.md` 仍記被操作 repo 的 commit、盤點日期、對帳責任人與對帳觸發條件，並指向 `code_root`，不再記路徑值。這些事實的權威在 `README.md`（路徑值的權威在設定鍵），工作項表的〈摘要〉段只是就近複本 | 路徑值有兩處可寫時會各自漂移，且 doc CLI 只讀設定鍵：`README.md` 的路徑值改了而設定鍵沒改，命令掃的仍是舊位置（見 2.5）；「這份盤點掃的是哪一版程式碼」事後無從還原，對帳時無法判斷差異來自修復還是來自程式碼已經前進 |
 
 ### 2.3 工作項表放在根層，不放進 `docs/`
 
@@ -105,21 +105,37 @@ GitHub Issue、依順序層分段貼進 Slack（見第 5 節）——貼出去�
 
 ### 2.5 目前的工具限制
 
-外接模式下，doc CLI 的命令分三類。第三類的失敗形態是**成功語氣的空結果**，必須在使用前
-知道：
+doc CLI 同時觸及文件與程式碼的命令（`test-map`、`uc trace`、`uc verify`）把根分成兩個：
+文件端是 doc root（`CLAUDE_PROJECT_DIR` 指向的外接資料夾），程式碼端是 code root（被操作
+repo）。code root 的權威是 `docs/traceability.yaml` 的頂層鍵 `code_root`（相對路徑以 doc
+root 解析），命令列的 `--code-root <路徑>` 可覆寫；兩者都沒有時，外接模式不退回 doc root，
+而是 exit 2 並指出設定方式。`test_file_extensions` 為選填頂層鍵，有設定時整份取代預設的
+測試檔副檔名清單。
+
+**外接模式的判定**：`CLAUDE_PROJECT_DIR` 的 git common dir 與 cwd 的不同即為外接模式。
+worktree 內執行以 git common dir 比對，不誤判。外接資料夾若放在同一個 repo 的子目錄內，
+會被判成單根，此時 code root 回退 doc root，需要分開掃描時改用 `--code-root`。
+
+外接模式下，doc CLI 的命令分四類：
 
 | 類別 | 命令 | 行為 | 依據 |
 |------|------|------|------|
-| 已實測可用 | `domain`／`uc list`／`uc verify`（帶路徑）／`create usecase` | 以 `CLAUDE_PROJECT_DIR` 指向外接資料夾即正常運作，寫入落點正確 | 上游盤點的實測記錄 |
+| 已實測可用 | `domain`／`uc list`／`create usecase` | 以 `CLAUDE_PROJECT_DIR` 指向外接資料夾即正常運作，寫入落點正確 | 上游盤點的實測記錄 |
 | 判定可用，未逐一實測 | `query`／`list`／`nav`／`status`／`validate`／其餘 `create` 型別／fingerprint sidecar 寫入 | 與已實測者共用同一套路徑推導，判定為同樣可用 | 讀程式碼路徑解析推導，非實測 |
-| 須明確指定被操作 repo 路徑 | `uc verify <被操作 repo 路徑>` | 不帶路徑時只掃外接資料夾，回報「驗證通過」；帶路徑才掃得到被操作 repo。輸出的檔案定位是相對外接資料夾的跨界相對路徑，交付前須依 2.4 改寫並加前綴 | 已實測 |
-| 外接模式下不可用 | `test-map` | 掃描目標落在外接資料夾，回報「沒有找到任何 UC 文件」。這是假陰性，不是「確實沒有」 | 已實測 |
-| 外接模式下不可用 | `uc trace` | 無指定掃描根的參數，掃不到被操作 repo。輸出形態未實測 | 讀程式碼推導 |
+| 須設定 code root | `test-map`／`uc trace`／`uc verify`（含帶路徑） | 掃 code root；未設定 `code_root` 且無 `--code-root` 時 exit 2 並指出設定方式，不再回報空結果。輸出路徑帶來源前綴：code root 內為 `repo:`、doc root 內為 `ws:`，與 2.4 一致，不再出現 `../repo/` 跨界相對路徑。`uc verify` 不帶路徑時掃 code root 與 doc root，兩邊都沒有可掃的檔案時 exit 2，不印通過 | 3.5.0 已處理（`tarrragon/claude#109`；行為見 `.claude/CHANGELOG.md` 遷移步驟 11） |
+| 外接模式下仍掃 doc root | `uc context`／`uc summary` | 掃描範圍仍是 doc root，掃不到被操作 repo，輸出不可作為程式碼端覆蓋或引用的證據 | 不在 3.5.0（`tarrragon/claude#109`） |
 
-**Action**：後兩類命令的輸出在外接模式下不得作為覆蓋率或引用狀況的證據；需要該結論時
-改以手動 grep 被操作 repo，並在工作項表的來源欄註明取得方式。第二類命令首次使用時，
-先以一筆資料確認寫入落點確實在外接資料夾內再繼續——這類命令的失敗形態與第四、五類同型
-（寫到非預期位置而不報錯），實測範圍尚未涵蓋它們。
+spec 的 `check_domain_coverage.py` 另有一條：docs/ 以 `CLAUDE_PROJECT_DIR` 解析，未設或指向
+不存在的目錄時用 cwd（遷移步驟 12）。`--domain-map` 明示時不受影響。
+
+**Action**：
+
+- 第三類命令在外接模式下先確認 `code_root` 已設定；設定錯誤（空字串、指向不存在的目錄）
+  同樣 exit 2，不會靜默掃錯位置。
+- 第四類命令的輸出不得作為覆蓋率或引用狀況的證據；需要該結論時改以手動 grep 被操作
+  repo，並在工作項表的來源欄註明取得方式。
+- 第二類命令首次使用時，先以一筆資料確認寫入落點確實在外接資料夾內再繼續——這類命令的
+  失敗形態是寫到非預期位置而不報錯，實測範圍尚未涵蓋它們。
 
 ---
 
@@ -131,7 +147,7 @@ GitHub Issue、依順序層分段貼進 Slack（見第 5 節）——貼出去�
 
 | 段 | 內容 |
 |----|------|
-| 摘要 | 盤點範圍、盤點日期、項目總數、各順序層的件數；另複寫 `README.md` 的被操作 repo、對帳責任人與對帳觸發條件，供填表者就近查閱。這些欄位的權威在 `README.md`（C3），兩處不一致時以 `README.md` 為準 |
+| 摘要 | 盤點範圍、盤點日期、項目總數、各順序層的件數；另複寫 `README.md` 的被操作 repo commit、對帳責任人與對帳觸發條件，供填表者就近查閱；被操作 repo 的路徑值不複寫，見 `docs/traceability.yaml` 的 `code_root`（C3）。這些欄位的權威在 `README.md`（路徑值為設定鍵），兩處不一致時以權威處為準 |
 | 工作項表 | 一行一項，每格單行，可直接轉 CSV |
 | 項目詳情 | 每項一小節，放驗收條件全文、證據、影響檔案清單 |
 | 對帳紀錄 | 一次對帳一列 |
@@ -358,8 +374,9 @@ G1 至 G4 機械可查（查事實、查欄位、數份數、查票）；**G5 �
 | skill / 檔案 | 引用的節 |
 |-------------|---------|
 | `project-analysis` | 入口的模式宣告與外接資料夾建立、盤點步驟的產物落點、彙整與交付 → 〈適用範圍〉〈外接資料夾結構〉〈盤點工作項表規格〉〈讀法映射〉〈匯入方式對照〉（**已接線**） |
-| `doc`（`SKILL.md`） | 模板表與參考資料表的索引列 → 全篇（**已接線**） |
+| `doc`（`SKILL.md`） | 範本表與參考資料表的索引列 → 全篇（**已接線**） |
 | `doc`（`templates/inventory-worksheet-template.md`） | 範本表頭指回欄位規格 → 〈盤點工作項表規格〉（**已接線**） |
+| `spec`（`SKILL.md`） | 定位與分工段末的引用句 → 〈讀法映射〉（**已接線**） |
 | `foundation-design` | 移植前置條件、降級段、工作流建票步驟 → 第 1 節、第 4 節 |
 | `component-contract-design` | 前置條件、step-5 執行者表 → 第 1 節、第 4 節 |
 | `doc`（`references/legacy-code-workflow.md`） | 開頭的模式分流與相關文件表 → 〈適用範圍〉（**已接線**；其〈前置步驟〉〈追蹤整合〉的二擇一改寫尚未完成） |
@@ -370,6 +387,28 @@ G1 至 G4 機械可查（查事實、查欄位、數份數、查票）；**G5 �
 | `.claude/references/multi-system-tracking-sync.md` | 禁止行為的例外 → 第 1 節 |
 
 各 skill 的接線進度追蹤於 framework issue `claude#109` 的待辦區段。
+
+---
+
+## 8. 上游盤點需改寫 12 點
+
+來自上游 consumer 對外接模式的盤點。「承接」欄只寫版本層級：已處理的標「3.5.0 已處理」，
+未處理的標「不在 3.5.0」並附理由；兩者皆對應 `tarrragon/claude#109`。
+
+| 編號 | 位置 | 問題摘要 | 承接 |
+|------|------|---------|------|
+| A2 | doc `core/file_locator.py` `get_project_root()` | 只回傳一個根，外接需要 doc root 與 code root | 3.5.0 已處理（新增 code root 單一解析入口；`tarrragon/claude#109`） |
+| B5 | doc `commands/test_map.py` | 追溯矩陣在 doc root、掃描目錄在 code root，共用一根而掃空 | 3.5.0 已處理（`tarrragon/claude#109`） |
+| B6 | doc `commands/uc.py` `uc verify`／`uc trace` | 白名單在 doc root、掃描對象在 code root；跨界相對路徑；trace 無參數 | 3.5.0 已處理；`uc context`／`uc summary` 不在 3.5.0，仍掃 doc root（`tarrragon/claude#109`） |
+| C2 | doc `core/uc_registry.py` `EXEMPT_PATH_PREFIXES` | 豁免清單的成員分屬兩個根 | 3.5.0 已處理（拆為 doc root 與 code root 兩份清單，外接模式依檔案所在根只比對所屬清單；`tarrragon/claude#109`） |
+| C4 | doc `core/tracking_schema.py` `GRAPH_NODE_TYPES` 的 carrier 字面 | schema 對外宣告的載體位置寫死 docs/ | 不在 3.5.0：schema 字面改寫，排入後續維護版本（`tarrragon/claude#109`） |
+| D1 | `.claude/hooks/uc-reference-validation-hook.py` | 白名單在 doc root，hook 取不到位置參數 | 不在 3.5.0：hook 取位置的方式，排入後續維護版本（`tarrragon/claude#109`） |
+| E2 | ticket skill `lib/command_lifecycle_messages.py` SPEC 登錄簿缺席指引 | 指引把外接使用者導向錯誤位置 | 不在 3.5.0：訊息文字修正，排入後續維護版本（`tarrragon/claude#109`） |
+| E3 | spec `check_domain_coverage.py` `locate_domain_map()` | docs/ 相對 cwd 解析 | 3.5.0 已處理（改以 `CLAUDE_PROJECT_DIR` 解析；`tarrragon/claude#109`） |
+| F4 | doc `templates/legacy-assessment-report-template.md` 產出物索引表 | 欄位語意要改成外接資料夾內的相對位置 | 不在 3.5.0：範本改寫，排入後續維護版本（`tarrragon/claude#109`） |
+| F5 | doc `references/legacy-code-workflow.md` 評估報告與 spec 落點 | 報告寫進被操作 repo 的 docs/ | 不在 3.5.0：流程文件改寫，排入後續維護版本（`tarrragon/claude#109`） |
+| F8 | `.claude/references/language-constraints-exemption-rules.md` emoji 豁免 | 豁免以 docs/spec 路徑界定，外接後誤報 | 不在 3.5.0：射程改寫，排入後續維護版本（`tarrragon/claude#109`） |
+| F9 | `.claude/references/reference-stability-rules.md` 規則 7 規格清單 | 射程以路徑列舉界定 | 不在 3.5.0：射程改寫，排入後續維護版本（`tarrragon/claude#109`） |
 
 ---
 
@@ -387,6 +426,9 @@ G1 至 G4 機械可查（查事實、查欄位、數份數、查票）；**G5 �
 
 ---
 
+**Last Updated**: 2026-11-20 | **Version**: 1.2.0 — C3 改為路徑值只記在 `docs/traceability.yaml`
+的 `code_root`（2.1、2.2、3.1 三處同步）；2.5 依 doc CLI 雙根解析後的行為改寫；新增第 8 節收入
+上游盤點需改寫 12 點與承接。**Source**: `tarrragon/claude#109`。
 **Last Updated**: 2026-09-16 | **Version**: 1.1.0 — 第 7 節新增 `project-analysis` 列並標記
 已接線（該 skill 為分析模式的工序入口，依本規格宣告模式與決定產物落點），表前敘述同步加
 「標記已接線者除外」；相關文件表增列該 skill、接手流程列補「吸收模式」。同次依本節 Action

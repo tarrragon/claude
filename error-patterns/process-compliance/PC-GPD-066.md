@@ -6,9 +6,10 @@ severity: medium
 status: active
 created: 2026-11-01
 related:
-- PC-BAL-022
-- PC-GPD-043
-- PC-166
+  - PC-BAL-022
+  - id: PC-GPD-043
+    kind: citation
+  - PC-166
 ---
 
 # PC-GPD-066：以版控內容相同沿用另一工作樹的測試結果

@@ -1,8 +1,8 @@
 ---
 name: doc
-description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、建立、導航和管理。Use for: (1) 查詢提案、規格、用例文件, (2) 建立新提案/規格/用例（從模板）, (3) 跨文件導航（從 UC 找 spec/ticket）, (4) Domain 地圖查詢, (5) 追蹤索引管理, (6) UC 測試對應驗證, (7) 提案評估與審查, (8) 測試追溯矩陣查詢（UC↔測試覆蓋狀態）, (9) UC 編號治理（uc list 列合法 UC / uc verify 白名單驗證可掛 CI / uc trace 引用追溯 / uc context 派發 UC 定位）。Use when: user mentions PROP-, UC-, SPEC-, 功能, 需求, feature, issue, 提案, 用例, 規格, 需求文件, 需求追蹤, 測試覆蓋, 追溯, traceability, test-map, UC 編號, 編號驗證, uc verify, 偽 UC, 合法 UC 清單"
+description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、建立、導航和管理。Use for: (1) 查詢提案、規格、用例文件, (2) 建立新提案/規格/用例（從範本）, (3) 跨文件導航（從 UC 找 spec/ticket）, (4) Domain 地圖查詢, (5) 追蹤索引管理, (6) UC 測試對應驗證, (7) 提案評估與審查, (8) 測試追溯矩陣查詢（UC↔測試覆蓋狀態）, (9) UC 編號治理（uc list 列合法 UC / uc verify 白名單驗證可掛 CI / uc trace 引用追溯 / uc context 派發 UC 定位）。Use when: user mentions PROP-, UC-, SPEC-, 模板, 功能, 需求, issue, 提案, 用例, 規格, 需求文件, 需求追蹤, 測試覆蓋, 追溯, traceability, test-map, UC 編號, 編號驗證, uc verify, 偽 UC, 合法 UC 清單"
 metadata:
-  version: 1.26.3
+  version: 1.27.1
 ---
 
 # Doc SKILL
@@ -22,7 +22,7 @@ metadata:
 | DomainMap | `docs/spec/{domain}/domain-map.md`（單 domain 退化 `docs/domain-map.md`） | domain bundle 邊界、依賴方向、層測試策略？（DDD 水平視角，正交 UC）| `templates/domain-map-template.md` |
 | DataContract | `docs/spec/{domain}/`（沿用 SPEC-NNN 編號體系，`subdomain: data-contract`） | 資料層邏輯契約（DB-agnostic）與實作綁定（DB-specific）是什麼？（schema 語意、不變式、保證層歸屬） | `templates/data-contract-template.md` |
 | UseCase | `docs/usecases/` | 使用場景和驗收標準？ | Read `references/usecases.md` |
-| Event | `docs/events/{domain}/`（ID 為 `EVT-{DOMAIN}-{NNN}`，domain-scoped 配號） | 領域事件是什麼？誰發送（producer）、誰接收（consumer）？B 層 proposed 型別，`producers`/`consumers` 建立時選填，`doc validate` 對已存在文件強制檢查 `producers` 非空；`consumers` 依 category 分流（`domain_event` 必須非空，`process_event` 允許為空） | `templates/event-template.md` |
+| Event | `docs/events/{domain}/`（ID 為 `EVT-{DOMAIN}-{NNN}`，domain-scoped 配號） | 領域事件是什麼？誰發送（producer）、誰接收（consumer）？A 層 established 型別，`producers`/`consumers` 建立時選填，`doc validate` 對已存在文件強制檢查 `producers` 非空；`consumers` 依 category 分流（`domain_event` 必須非空，`process_event` 允許為空） | `templates/event-template.md` |
 | Tracking | `docs/proposals-tracking.yaml` | 提案進度如何？ | Read `references/tracking.md` |
 
 ---
@@ -44,18 +44,29 @@ metadata:
 | `nav` | 跨文件導航 | `/doc nav UC-01` → 相關 spec/proposal/ticket |
 | `domain` | Domain 地圖 | `/doc domain {domain}`（省略 `{domain}` 動態列出當前專案所有 domain） |
 | `status` | 追蹤狀態 | `/doc status` |
-| `test-map` | UC 測試對應：先取 `docs/traceability.yaml` 的 `mappings[].tests`，未回填的 UC 改掃測試目錄比對 UC ID。掃描目錄預設 `test/`、`integration_test/`、`tests/`，可在 `docs/traceability.yaml` 以頂層鍵 `test_scan_dirs`（目錄字串清單）整份取代；改走掃描的 UC 全數零命中時 stderr 警示並列出各目錄實況 | `/doc test-map UC-01` |
+| `test-map` | UC 測試對應：先取 `docs/traceability.yaml` 的 `mappings[].tests`，未回填的 UC 改掃測試目錄比對 UC ID。掃描目錄預設 `test/`、`integration_test/`、`tests/`，可在 `docs/traceability.yaml` 以頂層鍵 `test_scan_dirs`（目錄字串清單）整份取代；測試檔副檔名可用頂層鍵 `test_file_extensions`（以點開頭的清單）整份取代預設；測試目錄在 code root 下（見下方〈code root 與外接模式〉）；改走掃描的 UC 全數零命中時 stderr 警示並列出各目錄實況 | `/doc test-map UC-01 [--code-root <路徑>]` |
 | `batch-init` | 批量建置骨架 | `/doc batch-init --proposals PROP-007,PROP-008 --domain {domain}` |
 | `uc list` | 列出合法 UC 編號+標題（SSOT 動態解析） | `/doc uc list` |
-| `uc verify [path]` | 驗證路徑內 UC token 白名單合規（可掛 CI） | `/doc uc verify lib`（exit 0=pass / 1=violation；相對路徑以呼叫者 cwd 解析，不存在回 exit 2） |
-| `uc trace <UC-XX>` | 列出指定 UC 的 code 引用位置 | `/doc uc trace UC-01` |
+| `uc verify [path] [--code-root <路徑>]` | 驗證路徑內 UC token 白名單合規（可掛 CI）；省略 path 掃 code root（外接模式另含 doc root），掃描目標內無可掃檔案回 exit 2 | `/doc uc verify lib`（exit 0=pass / 1=violation；相對路徑以呼叫者 cwd 解析，不存在回 exit 2） |
+| `uc trace <UC-XX> [--code-root <路徑>]` | 列出指定 UC 在 code root 的引用位置 | `/doc uc trace UC-01` |
 | `uc context <UC-XX\|ticket-id>` | 輸出 UC 標題+spec 位置+code 引用 top-N，供派發 Context Bundle 引用 | `/doc uc context UC-01` 或 `/doc uc context <ticket-id>` |
 | `validate <UC-ID\|SPEC-ID\|EVT-ID\|DOMAIN-MAP-ID>` | 依 ID 前綴分派驗證：`UC-*`／`SPEC-*` 先檢查 domain 引用（UC flow 區塊的 `traverses`、SPEC frontmatter 的 `depends_on_domains` 每個值須為某份 DomainBundle 宣告的 domain，未宣告則 exit 1 並列出檔案與欄位；語料無任何 DomainBundle 時不檢查），`SPEC-*` 再依 subdomain 分派章節 schema（目前僅 data-contract）；非 data-contract 文件通過時只列實際檢查過的項目為「通過」（前提不成立者如語料無 DomainBundle、UC 無 flow 區塊列「略過」），再說明不適用項（UC 不出現 /spec 路由，非 data-contract SPEC 保留 `/spec validate` 提示，PROP 等其他型別兩者皆無，exit 0）/ `EVT-*`（必填欄位 + producer/consumer 交叉驗證）/ `DOMAIN-MAP-*`（`depends_on_bundles` 出邊目標須為已存在的 domain-map id，不存在則 exit 1 並列出懸空目標；該 bundle 的 `domain` 與其他 bundle 重複時 exit 1 並列出 domain 值與每份 bundle 路徑；§7 下 `### SPEC-NNN` 子標題的 spec 集合須與 frontmatter `source_specs` 相等，不等則 exit 1 並列出兩側差集） | `/doc validate SPEC-002`、`/doc validate EVT-LIBRARY-001` 或 `/doc validate DOMAIN-MAP-{domain}`（exit 0=通過 / 1=章節缺失或欄位缺失 / 2=文件不存在或 frontmatter 不可解析） |
-| `validate-paths` | 一次檢查全部 DomainBundle 的 `path_patterns` 與非 domain 路徑清單檔 `docs/non-domain-paths.yaml`（路徑由 `tracking_schema.py` 的 `NON_DOMAIN_PATHS_FILE` 宣告，`doc schema export` 匯出；模板 `templates/non-domain-paths-template.yaml`）。檔案缺席合法（未宣告），`non_domain_path_patterns: []` 為宣告無非 domain 路徑，檔案存在但缺鍵或值非清單則 exit 1。檢查格式、同檔重複、與任一 `path_patterns` 同字串、路徑存在，並檢查不同 DomainBundle 宣告相同 `domain`（列出每個重複群組的 domain 值與各 bundle 路徑，exit 1） | `/doc validate-paths`（exit 0=通過 / 1=列出檔案、值與原因；供 CI） |
+| `validate-paths` | 一次檢查全部 DomainBundle 的 `path_patterns` 與非 domain 路徑清單檔 `docs/non-domain-paths.yaml`（路徑由 `tracking_schema.py` 的 `NON_DOMAIN_PATHS_FILE` 宣告，`doc schema export` 匯出；範本 `templates/non-domain-paths-template.yaml`）。檔案缺席合法（未宣告），`non_domain_path_patterns: []` 為宣告無非 domain 路徑，檔案存在但缺鍵或值非清單則 exit 1。檢查格式、同檔重複、與任一 `path_patterns` 同字串、路徑存在，並檢查不同 DomainBundle 宣告相同 `domain`（列出每個重複群組的 domain 值與各 bundle 路徑，exit 1） | `/doc validate-paths`（exit 0=通過 / 1=列出檔案、值與原因；供 CI） |
 
 ---
 
-> **uc 子命令群組**：UC 編號治理（格式規範、SSOT 解析、豁免範圍）定義於 `docs/spec/uc-numbering-convention.md`，四個 uc 子命令是該規範的唯一 CLI 實作；`uc-reference-validation-hook.py`（PreToolUse WARNING 層）已複用 `doc_system/core/uc_registry.py`——修改解析/豁免邏輯只改 uc_registry 單點，禁止在 hook 或其他消費端複製規則（防漂移）。
+> **uc 子命令群組**：UC 編號治理由 `doc_system/core/uc_registry.py` 實作，四個 uc 子命令共用它；`uc-reference-validation-hook.py`（PreToolUse WARNING 層）亦複用同一模組。本節說明三件事，細節以該模組為準：
+>
+> - **格式**：合法 UC 編號格式取自 `tracking_schema` 中 UC 節點的 `id_pattern`（`uc_registry` 不寫死位數）；不符格式的 token（單位數、偽子樹、字母偽子段）一律判違規。
+> - **SSOT**：合法 UC 集合讀自專案的 UC 主檔（路徑常數 `USE_CASES_SPEC_RELATIVE_PATH`，`get_ssot_path` 回傳），只解析 `## {UC ID}: 標題` 形式的標題行，`get_valid_uc_map` 回傳 `{UC 編號: 標題}`；主檔缺失時集合為空。
+> - **豁免範圍**：依類別分三種，具體內容以 `uc_registry.py` 為權威，本檔不逐條列出。
+>   - **路徑類**：框架資產目錄與已知非引用語境的檔案不視為 UC 引用，見 `is_exempt_path`。
+>   - **token 形態類**：UC-Pattern 設計模式標註（`UC_PATTERN_EXEMPT_RE`），以及正規化後完全不含數字的 token（如 `UC-A`、`UC-X`，`UC_NO_DIGIT_TOKEN_RE`）不判違規；含數字者（`UC-09`、`UC-1`、`UC-01a`、`UC-A1`）不在此類。判定入口 `is_violation_token`。
+>   - **行內標記**：該行寫 `uc-verify-exempt: <理由>`（HTML 註解或程式碼註解皆可，關鍵字小寫）。只豁免標記所在的那一行，該行所有 UC token 都豁免；理由必填，理由取標記到第一個收尾符號（`-->`、`*/`）之間的文字，空白就不豁免；標記在別行不影響本行。解析見 `has_inline_exempt_marker`，由 `uc verify` 的掃描套用；PreToolUse 寫入驗證 hook 暫不讀此標記。
+>
+> 修改解析／豁免邏輯只改 `uc_registry` 單點，禁止在 hook 或其他消費端複製規則（防漂移）。
+
+> **code root 與外接模式**：`test-map`、`uc trace`、`uc verify` 的程式碼端根目錄由 `resolve_code_root()`（`doc_system/core/file_locator.py`）單點決定：`--code-root` 旗標 > `docs/traceability.yaml` 的頂層鍵 `code_root`（相對路徑以 doc root 解析）；都沒有時單根專案用 doc root，外接模式 exit 2 並指出設定方式。外接模式＝`CLAUDE_PROJECT_DIR` 所指目錄不屬於 cwd 所在 repo（比對 git common dir，同 repo 的 worktree 與主 checkout 視為同一個，不誤判）；cwd 不在 git repo 內時無從比對，視為單根。外接模式的輸出路徑為 `repo:<路徑>`（code root 內）與 `ws:<路徑>`（doc root 內，僅 `uc verify`），規格見 `references/external-workspace-spec.md` 2.4。
 
 ## 無子命令時的預設行為
 
@@ -69,7 +80,7 @@ metadata:
 ### 文件關係圖
 
 ```
-Proposal ──spec_refs──→ Spec
+Proposal ←─source_proposal─── Spec（nav／query 由此反查；spec_refs 非權威）
     │                      │
     │                 related_usecases
     │                      │
@@ -101,21 +112,21 @@ doc domain <name>   # 帶 domain 名稱：列出該 domain 下的 spec 清單與
 
 ---
 
-## 模板
+## 範本
 
-模板是框架資產，放在 Skill 內。`docs/` 只放產物，不放模板。
+範本是框架資產，放在 Skill 內。`docs/` 只放產物，不放範本。
 
-| 模板 | 位置 | 用途 |
+| 範本 | 位置 | 用途 |
 |------|------|------|
-| 提案模板 | `templates/proposal-template.md` | 建立新提案 |
-| 規格模板 | `templates/spec-template.md` | 建立新功能規格 |
-| Domain Map 模板 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角）。§3 每個 bundle 必須 `ls`/`grep` 驗證目標路徑存在後才標「已實作」，不存在標「規劃中」（PC-APP-012 防護） |
-| 系統層模板 | `templates/system-layer-template.md` | 建立 `docs/system-layer.md`（整個專案一份）：承接跨 domain 的分層與依賴方向、通道、邊界決策、容錯策略、待決事項；與 domain-map 以 frontmatter `depends_on_bundles` 互連，用 `cp` 建立（同 domain map） |
-| 資料契約模板 | `templates/data-contract-template.md` | 建立資料層邏輯契約與實作綁定文件（DB-agnostic / DB-specific 兩區） |
-| Design System 規格模板 | `templates/design-system-spec-template.md` | 建立 UI 設計系統規格（token 層） |
-| 元件庫規格模板 | `templates/component-library-spec-template.md` | 建立 L3 元件庫章節：逐元件依元件契約欄位表填寫（含回饋契約）、容器元件排列不變式、禁用對照、豁免清單（依元件庫雙向約束方法論）；缺範例位置的三段鏈式範例集見 `examples/component-library-chained-examples.md` |
-| 用例模板 | `templates/usecase-template.md` | 建立新用例 |
-| 事件模板 | `templates/event-template.md` | 建立新領域事件（producers/consumers 建立時選填） |
+| 提案範本 | `templates/proposal-template.md` | 建立新提案 |
+| 規格範本 | `templates/spec-template.md` | 建立新功能規格 |
+| Domain Map 範本 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角）。§3 每個 bundle 必須 `ls`/`grep` 驗證目標路徑存在後才標「已實作」，不存在標「規劃中」（PC-APP-012 防護） |
+| 系統層範本 | `templates/system-layer-template.md` | 建立 `docs/system-layer.md`（整個專案一份）：承接跨 domain 的分層與依賴方向、通道、邊界決策、容錯策略、待決事項；與 domain-map 以 frontmatter `depends_on_bundles` 互連，用 `cp` 建立（同 domain map） |
+| 資料契約範本 | `templates/data-contract-template.md` | 建立資料層邏輯契約與實作綁定文件（DB-agnostic / DB-specific 兩區） |
+| Design System 規格範本 | `templates/design-system-spec-template.md` | 建立 UI 設計系統規格（token 層） |
+| 元件庫規格範本 | `templates/component-library-spec-template.md` | 建立 L3 元件庫章節：逐元件依元件契約欄位表填寫（含回饋契約）、容器元件排列不變式、禁用對照、豁免清單（依元件庫雙向約束方法論）；缺範例位置的三段鏈式範例集見 `examples/component-library-chained-examples.md` |
+| 用例範本 | `templates/usecase-template.md` | 建立新用例 |
+| 事件範本 | `templates/event-template.md` | 建立新領域事件（producers/consumers 建立時選填） |
 | 盤點工作項表範本 | `templates/inventory-worksheet-template.md` | 協作或接手專案且對方無本框架 ticket 系統時，替代 ticket 的任務追蹤產物（摘要／工作項表／項目詳情／對帳紀錄四段）。欄位與讀法映射見 `references/external-workspace-spec.md` |
 
 ### 使用方式
@@ -180,7 +191,7 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 
 **前置檢查**：1 操作風險表、2 Domain Map 任一為空 = saas 訪談沒走完 Stage 1 / 2，doc 無源可長 usecase / spec — 回頭請 saas 補完盤點，不可硬生半成品。
 
-接手順序：proposal（綁範圍） -> spec（依 domain map） -> usecase（依操作表） -> 補雙向交叉引用 -> **CLAUDE.md 瘦身**。saas 側的移交規格見 saas skill 的 `references/decision-record-template.md`「銜接 doc 系統」節。doc 單獨使用（無 saas）時此 saas 接手表不觸發、照常從模板建立。
+接手順序：proposal（綁範圍） -> spec（依 domain map） -> usecase（依操作表） -> 補雙向交叉引用 -> **CLAUDE.md 瘦身**。saas 側的移交規格見 saas skill 的 `references/decision-record-template.md`「銜接 doc 系統」節。doc 單獨使用（無 saas）時此 saas 接手表不觸發、照常從範本建立。
 
 > **domain map 不因無 saas 而略過**（saas / standalone 調和）：saas 起手時 domain map 由 saas Stage 1/2 的 DDD 切分餵入產出端；非 saas 起手（提案 / handoff 起手）時，domain map 改由 version-bootstrap Step 2.5 從 `templates/domain-map-template.md` 新建。domain 規劃是所有規劃波的通用步驟，非 saas 專屬——上方「2 Domain Map -> spec」的 saas 接手不觸發，不等於 domain map 步驟被跳過。
 

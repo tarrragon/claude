@@ -4,11 +4,12 @@ title: 複合條件搜尋的加總計數遮蔽單一詞項的零命中——一�
 severity: high
 category: process-compliance
 related:
- - PC-BAL-010
- - PC-161
- - PC-030
- - PC-165
- - PC-BAL-039
+  - id: PC-BAL-010
+    kind: sibling
+  - PC-161
+  - PC-030
+  - PC-165
+  - PC-BAL-039
 created: 2026-07-27
 ---
 

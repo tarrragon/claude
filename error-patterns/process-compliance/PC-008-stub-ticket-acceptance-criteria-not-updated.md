@@ -1,3 +1,9 @@
+---
+id: PC-008
+title: Stub Ticket 認領後未更新驗收條件，導致 complete 失敗
+severity: medium
+---
+
 # PC-008: Stub Ticket 認領後未更新驗收條件，導致 complete 失敗
 
 ## 基本資訊

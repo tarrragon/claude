@@ -4,11 +4,12 @@ title: 追加型載體凍結未量測的宣稱——讀者取得的是「現況�
 severity: high
 category: process-compliance
 related:
- - PC-SCLK-004
- - PC-166
- - PC-BAL-010
- - IMP-BAL-017
- - PC-BAL-056
+  - PC-SCLK-004
+  - PC-166
+  - PC-BAL-010
+  - IMP-BAL-017
+  - id: PC-BAL-056
+    kind: citation
 created: 2026-08-27
 ---
 

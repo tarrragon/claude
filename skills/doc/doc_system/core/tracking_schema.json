@@ -79,7 +79,7 @@
       "direction": "directed",
       "forward_cardinality": "one",
       "forward_field": "branch_from",
-      "layer": "proposed",
+      "layer": "established",
       "maintainer": "手動",
       "reverse_field": null
     },
@@ -106,7 +106,7 @@
       "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "consumes",
-      "layer": "proposed",
+      "layer": "established",
       "maintainer": "手動",
       "reverse_field": null
     },
@@ -142,7 +142,7 @@
       "direction": "directed",
       "forward_cardinality": "many",
       "forward_field": "emits",
-      "layer": "proposed",
+      "layer": "established",
       "maintainer": "手動",
       "reverse_field": null
     },
@@ -178,7 +178,7 @@
       "direction": "directed",
       "forward_cardinality": "one",
       "forward_field": "return_to",
-      "layer": "proposed",
+      "layer": "established",
       "maintainer": "手動",
       "reverse_field": null
     },
@@ -220,6 +220,7 @@
     }
   },
   "id_pattern_dialect": "python-re",
+  "id_pattern_flags": "ASCII",
   "node_types": {
     "DomainBundle": {
       "carrier": "docs/spec/{domain}/domain-map.md 或 docs/domain-map.md frontmatter",
@@ -254,12 +255,12 @@
         }
       ],
       "id_pattern": "^EVT-[A-Z0-9]+-\\d{3}$",
-      "layer": "proposed"
+      "layer": "established"
     },
     "FlowStep": {
       "carrier": "UC 文件內結構化 flow 區塊（YAML list）",
       "id_pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
-      "layer": "proposed"
+      "layer": "established"
     },
     "PROP": {
       "carrier": "docs/proposals/PROP-NNN-{slug}.md frontmatter",
@@ -321,5 +322,5 @@
   "non_domain_paths_file": "docs/non-domain-paths.yaml",
   "non_domain_paths_key": "non_domain_path_patterns",
   "notice": "本檔為 tracking_schema.py 的衍生產物，唯一 SSOT 為該 .py 檔。禁止直接編輯本 JSON，修改型別表請改 tracking_schema.py 後重新執行`doc schema export` 產生。",
-  "schema_generated_at_framework_version": "2.84.0"
+  "schema_generated_at_framework_version": "3.5.0"
 }

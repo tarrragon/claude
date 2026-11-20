@@ -4,8 +4,9 @@ title: 規則只寫 Action 未寫 Consequence，讀者讀成偏好而非約束
 category: documentation
 severity: 高
 related:
- - PC-066
- - ARCH-BAL-005
+  - PC-066
+  - id: ARCH-BAL-005
+    kind: citation
 created: 2026-07-31
 ---
 

@@ -28,7 +28,7 @@
 
 ### 規則 1：測試通過率 100%
 
-**測試通過率必須維持 100%**：本機提交前該票相關測試檔全綠；合併 main 前全套件全綠，由 worktree 合併流程在閘門內執行並讀結束碼，紅燈不合併，代理人不自行跑全套件（執行點與套件選擇見 `.claude/skills/worktree/SKILL.md`〈合併前全套件〉）；CI 落地後，PR 合併須 CI 全綠（見 `.claude/pm-rules/verification-framework.md`〈與 CI 的分工〉）；版本發布完整套件通過。違規處理：測試失敗禁止直接修復，必須派發 incident-responder 分析，遵循 Skip-gate 防護機制。
+**測試通過率必須維持 100%**：本機提交前該票相關測試檔全綠；合併 main 前受影響的測試子集全綠，由 worktree 合併流程在閘門內選出、執行並讀結束碼，紅燈不合併，選擇失敗、套件暫停中或定期全套件停用時改跑全套件；全套件改在 main 上定期執行，紅燈時二分定位並暫停受影響套件的合併，直到修正或 revert 後重跑全綠；代理人不自行跑全套件（子集判準、定期觸發與暫停見 `.claude/skills/worktree/SKILL.md`〈合併前全套件〉）；CI 落地後，PR 合併須 CI 全綠（見 `.claude/pm-rules/verification-framework.md`〈與 CI 的分工〉）；版本發布完整套件通過。違規處理：測試失敗禁止直接修復，必須派發 incident-responder 分析，遵循 Skip-gate 防護機制。
 
 - **邊界：測試綠燈不等於 Runtime 正確**：100% 通過是必要非充分條件。修復「訊息系統 / 日誌系統 / 跨模組整合」類 bug 時 unit test 綠燈可能遮蔽 runtime 失效（mock 替代真實依賴 + 斷言不檢查訊息文字 + 動態語言靜默忽略多餘參數三層共振）；此類修復 acceptance 必含 runtime 層級驗證。詳見 `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md`。
 - **邊界：少量綠燈不等於 always 綠燈**：race / 異步 / 環境敏感類問題 baseline 取樣 N < 5 時連續 GREEN 可能是 flaky 環境的幸運連勝，基於假 baseline 的決策鏈會連鎖崩塌；此類任務派發前 prompt 必須強制 N >= 5 取樣 + 紀錄 GREEN/RED 分佈。詳見 `.claude/error-patterns/process-compliance/PC-168-flaky-baseline-lucky-streak.md`。
@@ -113,6 +113,7 @@
 - `.claude/skills/framework-issue/SKILL.md` - 規則 5 框架問題升級流程（介入判斷、兩條路徑、issue 關閉協議、回報前查重 SOP）
 
 ---
+**Last Updated**: 2026-11-20 | **Version**: 4.3.0 — 規則 1 合併時點由「合併 main 前全套件全綠」改為「受影響的測試子集全綠，選擇失敗、套件暫停中或定期全套件停用時改跑全套件」，全套件移到 main 上定期執行（紅燈二分定位並暫停受影響套件的合併，直到修正或 revert 後重跑全綠）。理由：全套件閘門服務率低於多線到達率，佇列無法收斂；子集的漏抓由定期全套件兜底。來源：用戶裁定（2026-11-18 方案 3；2026-11-20 觸發條件、紅燈處置、計數基準）。
 **Last Updated**: 2026-11-13 | **Version**: 4.2.0 — 規則 4 補「進程級失敗不吞成 exit 0」一段：import 期、直譯器啟動的失敗由 runtime 記錄、框架讀取端轉告模型，hook 不得攔截成 exit 0；各層負責者路由 hook-system-operations〈輸出規範〉（該節同版改寫，兩處對 hook 異常輸出管道的要求改為一致）。依據：2026-11 runtime 實測。
 **Last Updated**: 2026-11-12 | **Version**: 4.1.1 — 規則 5 強制層註記對齊 checker 現行判定：適用 ANA 與 DOC；規劃數不計落地確認區段；落地數另計回指本票的票；部分落地亦阻擋 complete。
 **Last Updated**: 2026-11-11 | **Version**: 4.1.0 — 規則 5 ANA spawn 情境表第一列加版本維度：本版範圍的落地用 `--parent`，依〈兩期〉排入後續版本的落地在目標版本以 `--source-ticket` 建根票；complete 時點、先登記與放棄回寫路由 ticket-lifecycle〈ANA Ticket 落地下游血緣選擇〉。來源：用戶裁定（2026-11-09）。

@@ -6,9 +6,10 @@ severity: medium
 status: active
 created: 2026-05-03
 related:
-- PC-093
-- PC-119
-- decision-trigger-binding
+  - PC-093
+  - id: PC-119
+    kind: citation
+  - decision-trigger-binding
 ---
 
 # PC-120: 多視角審查結論未轉換為合法決策狀態 — 「P3 / 不建立 ticket」灰區

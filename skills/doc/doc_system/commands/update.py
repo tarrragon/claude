@@ -10,9 +10,7 @@ import yaml
 
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
-
-
-VALID_STATUSES = ("draft", "discussing", "confirmed", "implemented", "withdrawn")
+from doc_system.core.tracking_schema import statuses_for_doc_id
 
 
 def _update_frontmatter_status(file_path: str, new_status: str) -> str:
@@ -172,9 +170,10 @@ def execute(args: argparse.Namespace) -> None:
     doc_id = args.id
     new_status = args.status
 
-    if new_status not in VALID_STATUSES:
+    valid_statuses = statuses_for_doc_id(doc_id)
+    if new_status not in valid_statuses:
         print(f"無效狀態: {new_status}")
-        print(f"有效值: {', '.join(VALID_STATUSES)}")
+        print(f"有效值: {', '.join(valid_statuses)}")
         sys.exit(1)
 
     project_root = FileLocator.get_project_root()

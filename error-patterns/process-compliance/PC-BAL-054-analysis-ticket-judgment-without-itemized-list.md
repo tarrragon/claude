@@ -3,7 +3,11 @@ id: PC-BAL-054
 title: 分析票只落地判定不落地逐筆清單，下游票依賴不存在的資料
 severity: high
 category: process-compliance
-related: [PC-034, PC-BAL-053, IMP-BAL-012]
+related:
+  - PC-034
+  - id: PC-BAL-053
+    kind: citation
+  - IMP-BAL-012
 created: 2026-08-23
 ---
 

@@ -4,7 +4,8 @@ title: 修法本身是它所要修的缺陷的另一個實例
 category: process-compliance
 severity: medium
 related:
- - PC-BAL-064
+  - id: PC-BAL-064
+    kind: citation
 created: 2026-09-03
 ---
 

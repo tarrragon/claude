@@ -173,3 +173,102 @@ class TestMergeCommitNotApplied:
         sf = StagedFile(EVT_PATH, "", EVT_NO_CONSUMER, "")
         assert _check_doc_validate([sf], root, _Logger(), is_merge_commit=False)  # 正向對照
         assert _check_doc_validate([sf], root, _Logger(), is_merge_commit=True) == []
+
+
+# ---- 3.5.0-W1-167：未觸及但工作區有未提交修改的 docs 檔，取提交內容（HEAD）參與判定 ----
+
+# 跨檔檢查：觸及的 SPEC 以 depends_on_domains 引用 domain，須被某 DomainBundle 宣告
+# （語料完全沒有 DomainBundle 時 doc validate 不檢查）
+SPEC_PATH = "docs/spec/ui/SPEC-001-sample.md"
+SPEC_REF = (
+    "---\nid: SPEC-001\ntitle: sample\nstatus: draft\ndomain: ui\nsubdomain: null\n"
+    "depends_on_domains: [alpha]\n---\n# spec\n"
+)
+MAP_ALPHA_PATH = "docs/spec/alpha/domain-map.md"
+MAP_BETA_PATH = "docs/spec/beta/domain-map.md"
+MAP_ALPHA = "---\nid: DOMAIN-MAP-alpha\ndomain: alpha\n---\n# map\n"
+MAP_BETA = "---\nid: DOMAIN-MAP-beta\ndomain: beta\n---\n# map\n"
+
+
+def _git(root, *args):
+    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                   check=True, capture_output=True)
+
+
+def _repo(tmp_path, head_files, workspace_files):
+    """建 git repo：head_files 提交進 HEAD，workspace_files 再覆寫工作區。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init", "-q")
+    for rel, text in head_files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text, encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "--allow-empty", "-m", "base")
+    for rel, text in workspace_files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text, encoding="utf-8")
+    return root
+
+
+def _touched_check(root):
+    sf = StagedFile(SPEC_PATH, "", SPEC_REF, "")
+    return [f.severity for f in dv.check_doc_validate([sf], root, _Logger(), Finding)]
+
+
+class TestUntouchedDirtyFilesUseHead:
+    def test_baseline_declared_in_head_passes(self, tmp_path):
+        root = _repo(tmp_path, {MAP_ALPHA_PATH: MAP_ALPHA}, {SPEC_PATH: SPEC_REF})
+        assert _touched_check(root) == []
+
+    def test_other_uncommitted_removes_declaration_not_blocking(self, tmp_path):
+        """他檔未提交修改把宣告改成 beta：修改前誤擋，修改後以 HEAD 放行。"""
+        root = _repo(tmp_path, {MAP_ALPHA_PATH: MAP_ALPHA}, {SPEC_PATH: SPEC_REF})
+        (root / MAP_ALPHA_PATH).write_text(MAP_BETA, encoding="utf-8")
+        assert _touched_check(root) == []
+
+    def test_other_uncommitted_blank_not_blocking(self, tmp_path):
+        """設定為空：HEAD 有宣告、工作區清成空檔，以 HEAD 判定放行。"""
+        root = _repo(tmp_path, {MAP_ALPHA_PATH: MAP_ALPHA}, {SPEC_PATH: SPEC_REF})
+        (root / MAP_ALPHA_PATH).write_text("", encoding="utf-8")
+        assert _touched_check(root) == []
+
+    def test_other_uncommitted_adds_declaration_denied(self, tmp_path):
+        """HEAD 只宣告 beta，他檔未提交修改改成宣告 alpha：修改前誤放，修改後 deny。"""
+        root = _repo(tmp_path, {MAP_ALPHA_PATH: MAP_BETA}, {SPEC_PATH: SPEC_REF})
+        (root / MAP_ALPHA_PATH).write_text(MAP_ALPHA, encoding="utf-8")
+        assert _touched_check(root) == ["deny"]
+
+    def test_other_untracked_only_in_workspace_denied(self, tmp_path):
+        """整段缺席：宣告 alpha 的檔 HEAD 不存在、只在工作區 untracked，改判 deny。"""
+        root = _repo(tmp_path, {MAP_BETA_PATH: MAP_BETA}, {SPEC_PATH: SPEC_REF, MAP_ALPHA_PATH: MAP_ALPHA})
+        assert _touched_check(root) == ["deny"]
+
+    def test_untracked_declaration_with_empty_head_corpus_passes(self, tmp_path):
+        """HEAD 無任何 DomainBundle：doc validate 不檢查，untracked 宣告不影響（不變）。"""
+        root = _repo(tmp_path, {}, {SPEC_PATH: SPEC_REF, MAP_ALPHA_PATH: MAP_ALPHA})
+        assert _touched_check(root) == []
+
+    def test_touched_file_mismatch_still_warn(self, tmp_path):
+        root = _repo(tmp_path, {}, {EVT_PATH: EVT_NO_CONSUMER + "工作區另有修改\n"})
+        sf = StagedFile(EVT_PATH, "", EVT_NO_CONSUMER, "")
+        findings = dv.check_doc_validate([sf], root, _Logger(), Finding)
+        assert [f.severity for f in findings] == ["warn"]
+
+    def test_git_failure_falls_back_to_workspace_judgement_with_stderr(self, tmp_path, monkeypatch, capsys):
+        root = _repo(tmp_path, {}, {EVT_PATH: EVT_NO_CONSUMER})
+        real_run = subprocess.run
+
+        def _fail_git(cmd, *a, **k):
+            if cmd and cmd[0] == "git":
+                raise OSError("injected")
+            return real_run(cmd, *a, **k)
+
+        monkeypatch.setattr(dv.subprocess, "run", _fail_git)
+        logger = _Logger()
+        sf = StagedFile(EVT_PATH, "", EVT_NO_CONSUMER, "")
+        findings = dv.check_doc_validate([sf], root, logger, Finding)
+        # E1 對照：改動前同輸入為 deny，git 失敗時退回原判定，仍 deny
+        assert [f.severity for f in findings] == ["deny"]
+        assert "injected" in capsys.readouterr().err
+        assert any("injected" in w for w in logger.warnings)

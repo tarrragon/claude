@@ -4,8 +4,10 @@ title: 同一產出中查證與猜測並列，查證的部分使猜測的部分�
 category: process-compliance
 severity: medium
 related:
- - PC-BAL-064
- - ARCH-BAL-022
+  - id: PC-BAL-064
+    kind: citation
+  - id: ARCH-BAL-022
+    kind: citation
 created: 2026-09-04
 ---
 

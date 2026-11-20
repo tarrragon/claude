@@ -29,6 +29,22 @@ PM 派發實作代理人（thyme / parsley / fennel）執行純 `.claude/` 修�
 | 派發代理人類型為「實作代理人」 | hook 1 將 thyme / parsley / fennel / cinnamon 等列為實作代理人 |
 | 任務需執行 git commit | hook 1 認定實作代理人會 commit 必須隔離 |
 
+## 適用範圍註記（2026-11-20 重驗）
+
+本節只更新適用範圍與現況結論；以下症狀、根因、案例保留事發當時（2026-04-30）的敘述，不改寫。
+
+| 根因 | 現況 | 依據 |
+|------|------|------|
+| 根因一（hook 1 以代理人 type 單維度強制 worktree） | **已解除** | `agent-dispatch-validation-hook.py`（現位於 `.claude/skills/ticket/hooks/`，事發時位於 `.claude/hooks/`）已改為依 prompt 路徑分類：prompt 只涉及豁免路徑（`.claude/`、`docs/`、頂層文件，以 branch-verify 豁免清單為準）時不要求 worktree，放行主 repo 派發。即選項 A 已落地 |
+| 根因二（ARCH-015：runtime 對 worktree 內 `.claude/` 路徑擋 subagent 寫入） | **仍成立，不因根因一解除而解除** | 此限制屬 runtime 層，hook 與設定層無法覆蓋，框架也無法保證它不再出現。ARCH-015 記錄 CC 2.1.161 起實測解鎖（本次重驗時，worktree 隔離的 subagent 以 Edit 寫入 worktree 內 `.claude/` 也成功），但該行為依賴平台修復、無穩定性保證，可能隨 runtime 版本回退。因此框架仍以「受限」為前提：同一 hook 的 docstring 與判定程式仍以「worktree 即使同 repo，runtime 仍拒絕其 `.claude/` 寫入」為前提，維持阻擋含外部 `.claude/` 的派發 |
+| 根因三（兩規則疊加使 `.claude/` 任務無路徑可派發） | **已解除** | 疊加的一方（根因一）已改為路徑感知：純 `.claude/` 任務可不帶 isolation 在主 repo 派發，不再落入 worktree，故不再同時觸發根因二 |
+
+**由根因推導的現況結論**：
+
+- 純 `.claude/` 修改任務：主 repo 不帶 isolation 派發即可，不再需要下方「PM 當下 fallback」。
+- 同時改 `.claude/` 與非豁免路徑（如 `src/`、`tests/` 等產品碼）的混合任務：hook 仍要求 worktree，而 worktree 內的 `.claude/` 寫入是否被擋取決於 runtime 版本（根因二）。框架不依賴解鎖行為，此情形仍需拆分（`.claude/` 部分在主 repo 派發或由 PM 前台執行，其餘派 worktree），下方「PM 派發前自檢」的拆分判準對此情形仍適用。
+- 「中長期修復方向」表與「既有追蹤」表反映事發當時的評估狀態；選項 A 已落地，其餘選項只剩混合任務的情形需要評估。
+
 ## 根因
 
 ### 根因一：hook 1 以「代理人 type」單維度判斷強制 worktree

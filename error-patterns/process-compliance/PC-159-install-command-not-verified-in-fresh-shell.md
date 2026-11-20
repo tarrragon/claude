@@ -1,3 +1,9 @@
+---
+id: PC-159
+title: development-setup IMP 文件安裝指令未在 fresh shell 實機驗證
+severity: high
+---
+
 # PC-159: development-setup IMP 文件安裝指令未在 fresh shell 實機驗證
 
 > **錯誤類別**：流程合規（IMP 完成標準不含 fresh shell 驗證）

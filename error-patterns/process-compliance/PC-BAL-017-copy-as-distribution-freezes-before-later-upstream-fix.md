@@ -3,7 +3,13 @@ id: PC-BAL-017
 title: 以複製作為分發手段時副本凍結於複製時點，之後的上游修復不傳播且驗證易假設已含
 severity: 中
 category: process-compliance
-related: [ARCH-BAL-009, PC-BAL-015, IMP-BAL-002]
+related:
+  - id: ARCH-BAL-009
+    kind: citation
+  - id: PC-BAL-015
+    kind: citation
+  - id: IMP-BAL-002
+    kind: citation
 created: 2026-07-30
 ---
 

@@ -1,3 +1,9 @@
+---
+id: PC-150
+title: Subagent 形似字 normalize 誤替換
+severity: medium
+---
+
 # PC-150: Subagent 形似字 normalize 誤替換
 
 ---

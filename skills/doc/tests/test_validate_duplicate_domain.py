@@ -2,6 +2,7 @@
 
 E2：兩份 bundle 宣告相同 domain，DOMAIN-MAP 驗證與 validate-paths 皆為紅，訊息含 domain 值與兩份路徑。
 E1：把其中一份改成不同 domain 後，兩個入口皆為綠。
+fixture 的 domain 等於 id 後綴，故同 domain 只在 id 也重複時出現（兩份放在不同資料夾）。
 """
 
 import argparse
@@ -18,7 +19,7 @@ def _bundle(root: Path, folder: str, domain: str) -> Path:
     path = root / f"docs/spec/{folder}/domain-map.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"---\nid: DOMAIN-MAP-{folder}\ndomain: {domain}\n---\n# map\n", encoding="utf-8"
+        f"---\nid: DOMAIN-MAP-{domain}\ndomain: {domain}\n---\n# map\n", encoding="utf-8"
     )
     return path
 
@@ -30,8 +31,8 @@ def _run(root: Path, fn, args, capsys) -> tuple[int, str]:
     return exc.value.code, capsys.readouterr().out
 
 
-def _validate_map(root: Path, folder: str, capsys) -> tuple[int, str]:
-    return _run(root, execute, argparse.Namespace(doc_id=f"DOMAIN-MAP-{folder}"), capsys)
+def _validate_map(root: Path, domain: str, capsys) -> tuple[int, str]:
+    return _run(root, execute, argparse.Namespace(doc_id=f"DOMAIN-MAP-{domain}"), capsys)
 
 
 def _validate_paths(root: Path, capsys) -> tuple[int, str]:
@@ -42,7 +43,7 @@ class TestDuplicateDomainRejected:
     def test_domain_map_validation_red_and_lists_both_paths(self, tmp_path, capsys):
         a = _bundle(tmp_path, "alpha", "shared")
         b = _bundle(tmp_path, "beta", "shared")
-        code, out = _validate_map(tmp_path, "alpha", capsys)
+        code, out = _validate_map(tmp_path, "shared", capsys)
         assert code == 1
         assert "shared" in out and str(a) in out and str(b) in out
 
@@ -67,11 +68,11 @@ class TestDistinctDomainAccepted:
     def test_changed_domain_makes_both_entry_points_green(self, tmp_path, capsys):
         _bundle(tmp_path, "alpha", "shared")
         _bundle(tmp_path, "beta", "other")
-        assert _validate_map(tmp_path, "alpha", capsys)[0] == 0
+        assert _validate_map(tmp_path, "shared", capsys)[0] == 0
         assert _validate_paths(tmp_path, capsys)[0] == 0
 
     def test_duplicate_elsewhere_does_not_fail_unrelated_bundle(self, tmp_path, capsys):
         _bundle(tmp_path, "alpha", "shared")
         _bundle(tmp_path, "beta", "shared")
         _bundle(tmp_path, "gamma", "solo")
-        assert _validate_map(tmp_path, "gamma", capsys)[0] == 0
+        assert _validate_map(tmp_path, "solo", capsys)[0] == 0

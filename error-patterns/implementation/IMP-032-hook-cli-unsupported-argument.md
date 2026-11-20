@@ -1,3 +1,9 @@
+---
+id: IMP-032
+title: Hook 傳遞 CLI 不支援的參數
+severity: medium
+---
+
 # IMP-032: Hook 傳遞 CLI 不支援的參數
 
 ## 基本資訊

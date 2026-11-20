@@ -6,9 +6,12 @@ severity: high
 status: active
 created: 2026-08-26
 related:
-- IMP-BAL-005
-- PC-005
-- ARCH-BAL-019
+  - IMP-BAL-005
+  - PC-005
+  - id: ARCH-BAL-019
+    kind: citation
+  - id: IMP-BAL-017
+    kind: sibling
 ---
 
 # IMP-BAL-016：兩種成因壓成同一回傳值，錯誤訊息指名其中一種

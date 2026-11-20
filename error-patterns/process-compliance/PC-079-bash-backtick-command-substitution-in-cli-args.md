@@ -1,3 +1,9 @@
+---
+id: PC-079
+title: Bash CLI 參數含 backtick 被解析為 command substitution
+severity: medium
+---
+
 # PC-079: Bash CLI 參數含 backtick 被解析為 command substitution
 
 ---

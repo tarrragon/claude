@@ -186,6 +186,8 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 
 反向案斷言的是「不應出現的東西沒出現」，關掉正向功能時它不會轉紅；這不代表它沒有鑑別力。要另做一個突變去拿掉它守護的條件。
 
+**對照環境要求**：以舊版程式碼做正向對照（E2，或上表的突變確認）時，被測程式碼與測試檔必須同屬一棵目錄樹，並以被測模組的 `__file__` 確認實際 import 的是舊版。在舊版目錄下以絕對路徑跑另一棵樹的測試檔不算對照：pytest 依測試檔位置決定 rootdir 與 `pythonpath`，import 的仍是新版，對照會誤報全綠。正確做法是複製套件後只換回被測檔，或把測試檔放進舊版的 worktree 內執行。症狀、根因與 `__file__` 驗證步驟見 `.claude/error-patterns/test/TEST-LLM-004.md`。
+
 ---
 
 ## 與 quality-baseline 的交叉引用
@@ -204,6 +206,7 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 - `.claude/skills/test-assertion-design/SKILL.md` — 跨專案通用概念框架（9 類型斷言問題、斷言品質三問）
 - `.claude/rules/core/quality-baseline.md` — 規則 1（測試通過率 100%）、規則 3（設計問題立即修正）
 - `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md` — 測試綠燈不等於 runtime 正確（修復鏈 acceptance 含 runtime 驗證）
+- `.claude/error-patterns/test/TEST-LLM-004.md` — 在舊版目錄跑另一棵樹的測試檔做正向對照，rootdir 取自測試檔位置，對照誤報全綠
 - `.claude/pm-rules/ticket-body-schema.md` — IMP 「src 字串輸出變更額外 acceptance」章節（src 字面修改必含 npm test）
 - 計時斷言修復案例（event-system + UC07，見來源專案 v0.19.0 工作日誌）
 - 全專案計時斷言盤點分析（7 檔 21 個斷言的分類判斷，見來源專案 v0.19.0 工作日誌）
@@ -211,6 +214,7 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 
 ---
 
-**Last Updated**: 2026-10-31
+**Last Updated**: 2026-11-20
+**Version**: 1.2.0 — 〈延伸路由：測試晚於實作時，以突變確認補鑑別力的證據〉補「對照環境要求」一段：正向對照須讓被測程式碼與測試檔同屬一棵目錄樹，並以 `__file__` 確認 import 來源；路由至 TEST-LLM-004。相關文件同步增列。
 **Version**: 1.1.0 — 新增〈延伸路由：測試晚於實作時，以突變確認補鑑別力的證據〉：晚寫的測試沒有 RED 觀察，鑑別力以「一個突變打一個行為、確認只有目標案轉紅、還原驗證乾淨、寫進票面」四步取得；反向案需另做突變。
 **Version**: 1.0.0 — 從 `.claude/rules/core/test-assertion-design-rules.md` v1.3.0 主文外移（auto-load token 收斂試水溫首檔），substance 零刪失。歷史版本演進見原 stub 檔 footer 與 git log。

@@ -3,7 +3,12 @@ id: TEST-BAL-004
 title: 測試以寫入 production 共享狀態達成前置條件，遭外部行程競態使前置失效
 severity: high
 category: test
-related: [PC-168, PC-BAL-001, TEST-BAL-002, TEST-BAL-003]
+related:
+  - PC-168
+  - PC-BAL-001
+  - TEST-BAL-002
+  - id: TEST-BAL-003
+    kind: citation
 created: 2026-08-18
 ---
 

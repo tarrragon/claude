@@ -1,3 +1,9 @@
+---
+id: PC-074
+title: 字元集守衛 Hook 實作時的繁簡共用字 false positive
+severity: low
+---
+
 # PC-074: 字元集守衛 Hook 實作時的繁簡共用字 false positive
 
 ---

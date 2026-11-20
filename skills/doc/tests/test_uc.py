@@ -355,6 +355,34 @@ class TestExecuteUnknownSubcommand:
         assert "list" in err
 
 
+class TestUcVerifyInlineExemptAndNoDigit:
+    """uc verify 端到端：行內標記與無數字 token 放行。"""
+
+    def test_marker_line_exempt_exit_0(self, tmp_path):
+        root = _setup_project(tmp_path, {"lib/a.dart": "// UC-99 uc-verify-exempt: 示例\n"})
+        assert _run_verify(root, str(tmp_path / "lib")) == 0
+
+    def test_marker_absent_exit_1(self, tmp_path):
+        root = _setup_project(tmp_path, {"lib/a.dart": "// UC-99\n"})
+        assert _run_verify(root, str(tmp_path / "lib")) == 1
+
+    def test_blank_reason_exit_1(self, tmp_path):
+        root = _setup_project(tmp_path, {"lib/a.dart": "// UC-99 uc-verify-exempt:   \n"})
+        assert _run_verify(root, str(tmp_path / "lib")) == 1
+
+    def test_marker_on_other_line_exit_1(self, tmp_path):
+        root = _setup_project(tmp_path, {"lib/a.dart": "// uc-verify-exempt: 說明\n// UC-99\n"})
+        assert _run_verify(root, str(tmp_path / "lib")) == 1
+
+    def test_no_digit_token_exit_0(self, tmp_path):
+        root = _setup_project(tmp_path, {"lib/a.dart": "// UC-A 與 UC-X 為占位\n"})
+        assert _run_verify(root, str(tmp_path / "lib")) == 0
+
+    def test_digit_token_still_exit_1(self, tmp_path):
+        root = _setup_project(tmp_path, {"lib/a.dart": "// UC-A1\n"})
+        assert _run_verify(root, str(tmp_path / "lib")) == 1
+
+
 class TestUcVerifyTokenVariants:
     def test_lowercase_and_fullwidth_variants_detected_as_violation(self, tmp_path, capsys):
         project_root = _setup_project(
@@ -383,3 +411,188 @@ class TestUcVerifyTokenVariants:
                 uc.execute(args)
 
         assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# code root 分離（3.5.0-W1-151.1.8.1）
+# ---------------------------------------------------------------------------
+def _external_project(tmp_path, cfg=True):
+    ws = tmp_path / "ws"
+    repo = tmp_path / "repo"
+    _setup_project(ws)
+    (repo / "lib").mkdir(parents=True)
+    (repo / "lib" / "bad.dart").write_text("// UC-99 違規\n// UC-01 ok\n", encoding="utf-8")
+    if cfg:
+        (ws / "docs" / "traceability.yaml").write_text(f"code_root: {repo}\n")
+    return ws, repo
+
+
+def _patch_external(monkeypatch):
+    monkeypatch.setattr("doc_system.core.file_locator.is_external_mode", lambda *a, **k: True)
+
+
+class TestUcExternalCodeRoot:
+    def test_verify_no_path_scans_code_root(self, tmp_path, capsys, monkeypatch):
+        """不帶路徑時掃到 code root 的違規（原本假陰性只印通過）。"""
+        ws, _ = _external_project(tmp_path)
+        _patch_external(monkeypatch)
+        args = argparse.Namespace(uc_command="verify", path=None, code_root=None)
+        with patch.object(FileLocator, "get_project_root", return_value=str(ws)):
+            with pytest.raises(SystemExit) as exc:
+                uc.execute(args)
+        out = capsys.readouterr().out
+        assert exc.value.code == 1
+        assert "repo:lib/bad.dart:1:UC-99" in out
+        assert "../" not in out
+
+    def test_verify_external_without_code_root_exits_nonzero(self, tmp_path, capsys, monkeypatch):
+        ws, _ = _external_project(tmp_path, cfg=False)
+        _patch_external(monkeypatch)
+        args = argparse.Namespace(uc_command="verify", path=None, code_root=None)
+        with patch.object(FileLocator, "get_project_root", return_value=str(ws)):
+            with pytest.raises(SystemExit) as exc:
+                uc.execute(args)
+        assert exc.value.code not in (0, 1)
+        assert "code_root" in capsys.readouterr().err
+
+    def test_verify_explicit_path_external_without_code_root_exits_nonzero(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        """正向對照：外接、帶明示 path、無 code_root 無旗標，仍 exit 2；帶旗標則放行。"""
+        ws, repo = _external_project(tmp_path, cfg=False)
+        _patch_external(monkeypatch)
+        target = str(repo / "lib")
+        args = argparse.Namespace(uc_command="verify", path=target, code_root=None)
+        with patch.object(FileLocator, "get_project_root", return_value=str(ws)):
+            with pytest.raises(SystemExit) as exc:
+                uc.execute(args)
+        assert exc.value.code == 2
+        assert "code_root" in capsys.readouterr().err
+
+        args = argparse.Namespace(uc_command="verify", path=target, code_root=str(repo))
+        with patch.object(FileLocator, "get_project_root", return_value=str(ws)):
+            with pytest.raises(SystemExit) as exc:
+                uc.execute(args)
+        assert exc.value.code == 1
+
+    def test_verify_zero_files_scanned_not_a_pass(self, tmp_path, capsys):
+        """無可掃檔案時不得印通過。"""
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "app-use-cases.md").write_text("## UC-01: a\n")
+        empty = tmp_path / "code"
+        empty.mkdir()
+        (tmp_path / "docs" / "traceability.yaml").write_text(f"code_root: {empty}\n")
+        args = argparse.Namespace(uc_command="verify", path=None, code_root=None)
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                uc.execute(args)
+        assert exc.value.code == 2
+        assert "通過" not in capsys.readouterr().out
+
+    def test_verify_pass_message_reports_scan_count(self, tmp_path, capsys):
+        project_root = _setup_project(tmp_path, {"lib/a.dart": "// UC-01\n"})
+        args = argparse.Namespace(uc_command="verify", path=None, code_root=None)
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            with pytest.raises(SystemExit) as exc:
+                uc.execute(args)
+        assert exc.value.code == 0
+        assert "個檔案" in capsys.readouterr().out
+
+    def test_trace_scans_code_root_with_prefix(self, tmp_path, capsys, monkeypatch):
+        ws, _ = _external_project(tmp_path)
+        _patch_external(monkeypatch)
+        args = argparse.Namespace(uc_command="trace", uc_id="UC-01", code_root=None, all=False, limit=None)
+        with patch.object(FileLocator, "get_project_root", return_value=str(ws)):
+            uc.execute(args)
+        assert "repo:lib/bad.dart:2" in capsys.readouterr().out
+
+    def test_trace_external_without_code_root_exits_nonzero(self, tmp_path, capsys, monkeypatch):
+        ws, _ = _external_project(tmp_path, cfg=False)
+        _patch_external(monkeypatch)
+        args = argparse.Namespace(uc_command="trace", uc_id="UC-01", code_root=None, all=False, limit=None)
+        with patch.object(FileLocator, "get_project_root", return_value=str(ws)):
+            with pytest.raises(SystemExit) as exc:
+                uc.execute(args)
+        assert exc.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# 豁免判定修正（136 worktree 鏡射、137 相對路徑基準、C2 雙根清單）
+# ---------------------------------------------------------------------------
+def _run_verify(project_root, path):
+    args = argparse.Namespace(uc_command="verify", path=path, code_root=None)
+    with patch.object(FileLocator, "get_project_root", return_value=project_root):
+        with pytest.raises(SystemExit) as exc:
+            uc.execute(args)
+    return exc.value.code
+
+
+class TestUcVerifyRelativePathBase:
+    """137：相對路徑以 cwd 為基準，判定與實際讀取的檔案一致。"""
+
+    def test_cwd_app_fixtures_not_exempt(self, tmp_path, monkeypatch):
+        root = _setup_project(tmp_path, {"app/test/fixtures/x.dart": "// UC-99\n"})
+        monkeypatch.chdir(tmp_path / "app")
+        assert _run_verify(root, "test/fixtures") == 1
+
+    def test_cwd_docs_spec_exempt(self, tmp_path, monkeypatch):
+        root = _setup_project(tmp_path, {"docs/spec/a.md": "UC-99\n"})
+        monkeypatch.chdir(tmp_path / "docs")
+        assert _run_verify(root, "spec") == 0
+
+    def test_cwd_docs_sibling_non_exempt_dir_exit_1(self, tmp_path, monkeypatch):
+        """正向對照：cwd=docs，同層非豁免目錄含 UC-99 仍 exit 1。"""
+        root = _setup_project(tmp_path, {"docs/other/a.md": "UC-99\n"})
+        monkeypatch.chdir(tmp_path / "docs")
+        assert _run_verify(root, "other") == 1
+
+    def test_cwd_root_fixtures_exempt(self, tmp_path, monkeypatch):
+        root = _setup_project(tmp_path, {"test/fixtures/x.dart": "// UC-99\n"})
+        monkeypatch.chdir(tmp_path)
+        assert _run_verify(root, "test/fixtures") == 0
+
+
+class TestUcVerifyWorktreeMirror:
+    """136：worktree 下產品檔受檢，框架資產仍豁免。"""
+
+    def test_worktree_product_file_with_undefined_uc_exit_1(self, tmp_path, monkeypatch):
+        root = _setup_project(tmp_path, {".claude/worktrees/w1/lib/a.dart": "// UC-99\n"})
+        monkeypatch.chdir(tmp_path)
+        assert _run_verify(root, ".claude/worktrees/w1/lib") == 1
+
+    def test_worktree_framework_asset_exempt(self, tmp_path, monkeypatch):
+        root = _setup_project(tmp_path, {".claude/worktrees/w1/.claude/hooks/x.py": "# UC-99\n"})
+        monkeypatch.chdir(tmp_path)
+        assert _run_verify(root, ".claude/worktrees/w1/.claude/hooks") == 0
+
+
+class TestUcVerifyExternalDualRoot:
+    """C2：外接模式交叉案例不豁免，各自根內的豁免保留。"""
+
+    def _run(self, tmp_path, monkeypatch, ws_files, repo_files, explicit=None):
+        ws, repo = _external_project(tmp_path)
+        (repo / "lib" / "bad.dart").write_text("// UC-01\n", encoding="utf-8")
+        for base, files in ((ws, ws_files), (repo, repo_files)):
+            for rel, content in files.items():
+                f = base / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(content, encoding="utf-8")
+        _patch_external(monkeypatch)
+        return _run_verify(str(ws), str(tmp_path / explicit) if explicit else None)
+
+    def test_doc_root_fixtures_violation_exit_1(self, tmp_path, monkeypatch):
+        assert self._run(tmp_path, monkeypatch, {"test/fixtures/x.dart": "// UC-99\n"}, {}) == 1
+
+    def test_code_root_claude_dir_explicit_path_violation_exit_1(self, tmp_path, monkeypatch):
+        """隱藏目錄不在遞迴掃描內，以明示檔案路徑驗證 code root 底下 .claude/ 不豁免。"""
+        assert self._run(tmp_path, monkeypatch, {}, {".claude/a.md": "UC-99\n"}, explicit="repo/.claude/a.md") == 1
+
+    @pytest.mark.parametrize("rel", ["docs/spec/a.md", "docs/work-logs/a.md"])
+    def test_code_root_doc_prefix_violation_exit_1(self, tmp_path, monkeypatch, rel):
+        assert self._run(tmp_path, monkeypatch, {}, {rel: "UC-99\n"}) == 1
+
+    def test_code_root_fixtures_exempt(self, tmp_path, monkeypatch):
+        assert self._run(tmp_path, monkeypatch, {}, {"test/fixtures/x.dart": "// UC-99\n"}) == 0
+
+    def test_doc_root_spec_exempt(self, tmp_path, monkeypatch):
+        assert self._run(tmp_path, monkeypatch, {"docs/spec/a.md": "UC-99\n"}, {}) == 0

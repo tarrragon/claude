@@ -4,9 +4,12 @@ title: 宣告層枚舉窄於執行層判準，讀者據宣告自我豁免
 category: architecture
 severity: medium
 related:
- - ARCH-BAL-002
- - ARCH-BAL-003
- - ARCH-BAL-005
+  - id: ARCH-BAL-002
+    kind: citation
+  - id: ARCH-BAL-003
+    kind: sibling
+  - id: ARCH-BAL-005
+    kind: citation
 created: 2026-07-27
 ---
 

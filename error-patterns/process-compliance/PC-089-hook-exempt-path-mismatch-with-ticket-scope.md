@@ -6,7 +6,8 @@ severity: medium
 created: 2026-04-18
 related:
   - PC-019  # worktree 派發前 commit
-  - ARCH-015  # worktree vs .claude/ 路徑限制
+  - id: ARCH-015  # worktree vs .claude/ 路徑限制
+    kind: citation
 ---
 
 # PC-089: Hook 豁免路徑與 Ticket 寫入範圍不一致

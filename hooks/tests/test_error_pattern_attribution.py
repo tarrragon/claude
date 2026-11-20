@@ -200,3 +200,48 @@ def test_mixed_candidates_only_attributed_kept(tmp_path, logger):
         logger,
     )
     assert result == [rel_own]
+
+
+# ----------------------------------------------------------------------------
+# 3.5.0-W1-054：非執行者文字不構成歸屬（每項附正向對照）
+# ----------------------------------------------------------------------------
+
+PC_REL = ".claude/error-patterns/process-compliance/PC-099-x.md"
+
+
+def _attributed(tmp_path, logger, content):
+    _write_pc(tmp_path, PC_REL, "# PC-099\n")
+    return filter_error_patterns_by_ticket_scope(
+        [PC_REL], CURRENT_TICKET, content, tmp_path, logger
+    ) == [PC_REL]
+
+
+@pytest.mark.parametrize(
+    "excluded, executor",
+    [
+        ("<!-- PC-099 防護措施 -->\n", "PC-099 防護措施\n"),
+        ("```\nacceptance-gate PC-099 保護\n```\n", "acceptance-gate PC-099 保護\n"),
+        (
+            "### 查重紀錄\n\n- `PC-099`\n\n### 下一節\nz\n",
+            "### 下一節\n\n- `PC-099`\n",
+        ),
+        (
+            "### Context Bundle\n\nPC-099 內容\n\n## Solution\nz\n",
+            "## Solution\n\nPC-099 內容\n",
+        ),
+    ],
+)
+def test_non_executor_text_not_attributed_but_prose_is(
+    tmp_path, logger, excluded, executor
+):
+    assert _attributed(tmp_path, logger, excluded) is False
+    assert _attributed(tmp_path, logger, executor) is True
+
+
+def test_comment_and_prose_mixed_still_attributed(tmp_path, logger):
+    content = "<!-- PC-099 -->\n## Solution\n\n修正 PC-099\n"
+    assert _attributed(tmp_path, logger, content) is True
+
+
+def test_multiline_comment_stripped(tmp_path, logger):
+    assert _attributed(tmp_path, logger, "<!--\n選填 PC-099\n-->\n") is False

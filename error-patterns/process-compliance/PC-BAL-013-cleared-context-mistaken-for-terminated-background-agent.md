@@ -3,7 +3,10 @@ id: PC-BAL-013
 title: 主線程 context 中斷被當成背景代理人已終止，據以重派造成雙寫入者
 severity: 高
 category: process-compliance
-related: [PC-166, PC-BAL-008]
+related:
+  - PC-166
+  - id: PC-BAL-008
+    kind: citation
 created: 2026-07-27
 ---
 

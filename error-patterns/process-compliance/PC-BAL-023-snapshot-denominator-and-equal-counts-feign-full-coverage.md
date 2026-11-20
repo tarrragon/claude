@@ -4,10 +4,11 @@ title: 自我擴張集合的覆蓋率以起始快照為分母——計數相等�
 severity: high
 category: process-compliance
 related:
- - PC-BAL-012
- - PC-BAL-010
- - PC-BAL-020
- - PC-161
+  - PC-BAL-012
+  - PC-BAL-010
+  - id: PC-BAL-020
+    kind: citation
+  - PC-161
 created: 2026-08-05
 ---
 

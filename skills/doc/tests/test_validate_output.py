@@ -33,7 +33,7 @@ def _step(step_id: str, next_ids: list[str]) -> str:
 def _uc(root: Path, steps: list[str]) -> None:
     _write(
         root, "docs/usecases/UC-01-sample.md",
-        "---\nid: UC-01\ntitle: sample\n---\n# UC\n\n```yaml\nflow:\n" + "".join(steps) + "```\n",
+        "---\nid: UC-01\ntitle: sample\nstatus: draft\n---\n# UC\n\n```yaml\nflow:\n" + "".join(steps) + "```\n",
     )
 
 
@@ -68,7 +68,7 @@ class TestUcPassOutput:
 
 class TestSpecNonDataContractOutput:
     def _spec(self, root: Path) -> None:
-        _write(root, "docs/spec/ui/SPEC-001-x.md", "---\nid: SPEC-001\ntitle: x\n---\n# S\n")
+        _write(root, "docs/spec/ui/SPEC-001-x.md", "---\nid: SPEC-001\ntitle: x\nstatus: draft\n---\n# S\n")
 
     def test_lists_passed_checks_then_keeps_route_hint(self, tmp_path, capsys):
         self._spec(tmp_path)
@@ -110,13 +110,13 @@ class TestOutputMatchesWhatRan:
         assert "domain 引用" in _passed_section(out)
 
     def test_e2_spec_no_bundle_domain_check_skipped(self, tmp_path, capsys):
-        _write(tmp_path, "docs/spec/ui/SPEC-001-x.md", "---\nid: SPEC-001\ntitle: x\n---\n# S\n")
+        _write(tmp_path, "docs/spec/ui/SPEC-001-x.md", "---\nid: SPEC-001\ntitle: x\nstatus: draft\n---\n# S\n")
         _, out = _run(tmp_path, "SPEC-001", capsys)
         assert "domain 引用" not in _passed_section(out)
         assert "/spec validate" in out
 
     def test_e2_uc_without_flow_block_flow_checks_not_listed_as_passed(self, tmp_path, capsys):
-        _write(tmp_path, "docs/usecases/UC-01-sample.md", "---\nid: UC-01\ntitle: s\n---\n# UC\n")
+        _write(tmp_path, "docs/usecases/UC-01-sample.md", "---\nid: UC-01\ntitle: s\nstatus: draft\n---\n# UC\n")
         code, out = _run(tmp_path, "UC-01", capsys)
         assert code == 0
         passed = _passed_section(out)
@@ -124,7 +124,7 @@ class TestOutputMatchesWhatRan:
         assert "略過" in out and "flow" in out
 
     def test_e2_prop_shows_no_spec_hint_and_no_uc_flow_text(self, tmp_path, capsys):
-        _write(tmp_path, "docs/proposals/PROP-001-x.md", "---\nid: PROP-001\ntitle: x\n---\n# P\n")
+        _write(tmp_path, "docs/proposals/PROP-001-x.md", "---\nid: PROP-001\ntitle: x\nstatus: draft\n---\n# P\n")
         code, out = _run(tmp_path, "PROP-001", capsys)
         assert code == 0
         assert "/spec" not in out

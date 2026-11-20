@@ -1,3 +1,9 @@
+---
+id: IMP-027
+title: 跨境界 Library-Hook 邏輯重複
+severity: low
+---
+
 # IMP-027: 跨境界 Library-Hook 邏輯重複
 
 ## 基本資訊

@@ -32,7 +32,7 @@ def _domain_map(root: Path, domain: str) -> None:
 def _uc(root: Path, traverses: str) -> None:
     _write(
         root, "docs/usecases/UC-01-sample.md",
-        "---\nid: UC-01\ntitle: sample\n---\n# UC\n\n```yaml\nflow:\n"
+        "---\nid: UC-01\ntitle: sample\nstatus: draft\n---\n# UC\n\n```yaml\nflow:\n"
         '  - id: "s1"\n    name: "step"\n    next: []\n    branch_from: null\n'
         f"    return_to: null\n    emits: []\n    consumes: []\n    traverses: {traverses}\n```\n",
     )
@@ -41,7 +41,7 @@ def _uc(root: Path, traverses: str) -> None:
 def _spec(root: Path, depends: str) -> None:
     _write(
         root, "docs/spec/ui/SPEC-001-sample.md",
-        f"---\nid: SPEC-001\ndomain: ui\nsubdomain: null\ndepends_on_domains: {depends}\n---\n# spec\n",
+        f"---\nid: SPEC-001\ntitle: sample\nstatus: draft\ndomain: ui\nsubdomain: null\ndepends_on_domains: {depends}\n---\n# spec\n",
     )
 
 

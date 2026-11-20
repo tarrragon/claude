@@ -3,7 +3,11 @@ id: PC-BAL-016
 title: 以既有缺陷為範本的同類掃描繼承種子缺陷的軸，零缺陷結論被下游當成全檔無缺陷
 severity: 高
 category: process-compliance
-related: [PC-BAL-011, PC-APP-003, PC-162]
+related:
+  - id: PC-BAL-011
+    kind: citation
+  - PC-APP-003
+  - PC-162
 created: 2026-07-30
 ---
 

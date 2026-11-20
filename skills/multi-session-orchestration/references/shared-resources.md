@@ -60,6 +60,7 @@ PM 一律逐票各自 `worktree merge`，不再開整合 worktree、不手動列
 - 各線共用同一個本地 main，任何一線 `git push` 都會帶出所有本地 commit。
 - 後果：在主 checkout 提交的非票面變更，會被他線的推送一併帶上 main，等於略過閘門，而提交者自己並沒有推送。
 - 因此非票面修改一律在 worktree 做、經閘門合併；暫停推送期間尤其不在主 checkout 提交 `.claude/` 變更。
+- 新增 error-pattern 也照此辦理：在自己的 worktree 配號、填內容、sync 索引，經閘門合併。在主 checkout 提交 pattern 檔，會讓正在驗證的合併在寫入時 CAS 失敗，hooks 套件整套重跑。配號後立刻把 ID 寫進自己的票：票檔是閘門重試的豁免路徑，其他線配號時靠它看見這個編號。流程見 `error-pattern` skill〈add〉步驟 7〈多線並行〉。
 - 推送前以 `git diff --name-only origin/main main | grep -v '^docs/work-logs/'` 確認範圍。
 
 ---

@@ -1,3 +1,9 @@
+---
+id: PC-009
+title: PM 在 completed ticket 誤用 --context-refresh 旗標
+severity: medium
+---
+
 # PC-009: PM 在 completed ticket 誤用 --context-refresh 旗標
 
 ## 基本資訊

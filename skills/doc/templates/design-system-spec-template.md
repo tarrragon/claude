@@ -1,5 +1,5 @@
 ---
-# Design System 規格模板
+# Design System 規格範本
 # 複製本檔案到 docs/spec/ 並重新命名為 design-system-spec.md
 # 用途：定義專案的統一視覺規格（配色、間距、圓角、陰影、字體、元件尺寸）
 

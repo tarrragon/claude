@@ -34,7 +34,7 @@ def _step(step_id: str, next_ids: list[str], branch_from: str | None = None) -> 
 def _uc(root: Path, steps: list[str]) -> None:
     _write(
         root, "docs/usecases/UC-01-sample.md",
-        "---\nid: UC-01\ntitle: sample\n---\n# UC\n\n```yaml\nflow:\n" + "".join(steps) + "```\n",
+        "---\nid: UC-01\ntitle: sample\nstatus: draft\n---\n# UC\n\n```yaml\nflow:\n" + "".join(steps) + "```\n",
     )
 
 

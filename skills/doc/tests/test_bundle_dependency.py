@@ -29,6 +29,7 @@ ESTABLISHED_EDGE_NAMES = frozenset(
         "requirement_impl", "domain_dependency", "domain_coverage", "blood",
         "spawn", "blocking", "association", "discovery",
         "uc_ticket_refs",
+        "emission", "consumption", "branching", "returning",
     }
 )
 

@@ -1,3 +1,9 @@
+---
+id: PC-095
+title: WRAP W 階段選項池不完備（Claude 預設「新增工具」結構性偏見）
+severity: medium
+---
+
 # PC-095: WRAP W 階段選項池不完備（Claude 預設「新增工具」結構性偏見）
 
 ---

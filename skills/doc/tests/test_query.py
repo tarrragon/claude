@@ -68,3 +68,22 @@ class TestQueryExecute:
         result = locator.resolve_file("UNKNOWN-001")
 
         assert result is None
+
+    def test_query_prop_reverse_lookup(self, tmp_path, capsys):
+        """PROP 的 spec_refs 與反查不一致時，兩者都可見，反查來自 source_proposal。"""
+        for d in ("proposals", "spec", "usecases"):
+            (tmp_path / "docs" / d).mkdir(parents=True)
+        (tmp_path / "docs" / "proposals" / "PROP-010-x.md").write_text(
+            "---\nid: PROP-010\ntitle: \"P\"\nstatus: draft\nspec_refs: [SPEC-999]\n---\n"
+        )
+        (tmp_path / "docs" / "spec" / "SPEC-010-x.md").write_text(
+            "---\nid: SPEC-010\ntitle: \"S\"\nstatus: draft\nsource_proposal: PROP-010\n---\n"
+        )
+        (tmp_path / "docs" / "usecases" / "UC-10-x.md").write_text(
+            "---\nid: UC-10\ntitle: \"U\"\nstatus: draft\nsource_proposal: [PROP-010]\n---\n"
+        )
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            execute(argparse.Namespace(doc_id="PROP-010"))
+        out = capsys.readouterr().out
+        assert "SPEC-010" in out and "UC-10" in out
+        assert "SPEC-999" in out and "非權威" in out

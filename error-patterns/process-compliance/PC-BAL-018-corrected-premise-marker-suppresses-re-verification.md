@@ -4,9 +4,15 @@ title: 「前提已更正」標記使後手停止驗證，錯誤更正因此獲�
 category: process-compliance
 severity: 高
 related:
- - PC-162
- - PC-BAL-016
- - ARCH-BAL-005
+  - PC-162
+  - id: PC-BAL-016
+    kind: citation
+  - id: ARCH-BAL-005
+    kind: citation
+  - id: PC-BAL-021
+    kind: sibling
+  - id: PC-BAL-020
+    kind: sibling
 created: 2026-07-31
 ---
 

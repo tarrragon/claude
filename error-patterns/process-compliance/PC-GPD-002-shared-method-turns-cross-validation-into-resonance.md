@@ -4,9 +4,12 @@ title: 兩個來源共享同一個抽取方法時，一致性不是證據——�
 severity: high
 category: process-compliance
 related:
- - PC-BAL-010
- - PC-GPD-001
- - PC-166
+  - PC-BAL-010
+  - id: PC-GPD-001
+    kind: citation
+  - PC-166
+  - id: PC-BAL-057
+    kind: sibling
 created: 2026-08-27
 ---
 

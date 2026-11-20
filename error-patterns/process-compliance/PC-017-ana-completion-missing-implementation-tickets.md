@@ -1,3 +1,9 @@
+---
+id: PC-017
+title: ANA Ticket 完成後未自動建立修復+防護 Ticket
+severity: medium
+---
+
 # PC-017: ANA Ticket 完成後未自動建立修復+防護 Ticket
 
 ---

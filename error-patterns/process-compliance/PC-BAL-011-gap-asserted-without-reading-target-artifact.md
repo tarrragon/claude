@@ -3,7 +3,10 @@ id: PC-BAL-011
 title: 未讀目標載體即斷言缺口存在，據以建票或決策
 severity: 中
 category: process-compliance
-related: [PC-068, PC-BAL-008]
+related:
+  - PC-068
+  - id: PC-BAL-008
+    kind: citation
 created: 2026-07-27
 ---
 

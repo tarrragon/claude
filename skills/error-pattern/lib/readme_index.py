@@ -164,7 +164,21 @@ def _extract_version(body):
     raw = raw.strip()
     if not raw or raw == "{發現時的版本}":
         return None
-    return raw
+    return normalize_version(raw)
+
+
+_BARE_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+")
+
+
+def normalize_version(raw):
+    """來源版本統一為 `v` 前綴寫法：以 `N.N.N` 開頭者補 `v`，其餘原樣回傳。
+
+    只補前綴、不改內容，因此可安全套用到索引既有列（不會改變該格承載的資訊）。
+    """
+    if raw is None:
+        return None
+    text = str(raw)
+    return f"v{text}" if _BARE_VERSION_RE.match(text) else text
 
 
 def _extract_title(frontmatter, body, pattern_id):
@@ -443,7 +457,45 @@ def _is_separator_row(line):
     return bool(inner) and all(ch in "-:| \t" for ch in inner)
 
 
-def merge_category_table(existing_row_lines, new_rows):
+_CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
+_REFRESH_FIELDS = ((2, "title"), (3, "severity"), (4, "source_version"))
+
+
+def refresh_row_line(line, row):
+    """刷新單一既有列：只覆寫內容為佔位符的格，來源版本格另做前綴正規化。
+
+    有實值的格一律不以檔案內容覆寫——索引可能是該資料唯一的載體（見模組
+    docstring），刷新只補洞、不重算。欄數不符預期（4 欄資料）時原樣回傳。
+    """
+    cells = _CELL_SPLIT_RE.split(line)
+    if len(cells) != 6:
+        return line
+    changed = False
+    for index, key in _REFRESH_FIELDS:
+        current = cells[index].strip()
+        if current == PLACEHOLDER:
+            value = row.get(key, PLACEHOLDER)
+            if value and value != PLACEHOLDER:
+                cells[index] = f" {_escape_cell(value)} "
+                changed = True
+        elif key == "source_version":
+            normalized = normalize_version(current)
+            if normalized != current:
+                cells[index] = f" {normalized} "
+                changed = True
+    return "|".join(cells) if changed else line
+
+
+def _refresh_target(row_id, slug, rows_by_key, id_counts):
+    """找出既有列對應的唯一掃描結果；無法唯一判定（一 ID 多檔的無 slug 列）回 None。"""
+    if slug is not None:
+        return rows_by_key.get((row_id, slug))
+    if id_counts.get(row_id) == 1:
+        return next(row for key, row in rows_by_key.items() if key[0] == row_id)
+    return None
+
+
+def merge_category_table(existing_row_lines, new_rows, refresh=False):
     """保守 upsert：既有列逐字原樣保留（不重新生成內容），只新增「檔案有但
     索引無」的列、移除「索引有但檔案已不存在」的死連結列。
 
@@ -458,6 +510,14 @@ def merge_category_table(existing_row_lines, new_rows):
     """
     id_counts = Counter(row["id"] for row in new_rows)
     new_composite_keys = {(row["id"], row.get("slug", "")) for row in new_rows}
+    rows_by_key = {(row["id"], row.get("slug", "")): row for row in new_rows}
+
+    def _keep(line, row_id, slug):
+        if refresh:
+            target = _refresh_target(row_id, slug, rows_by_key, id_counts)
+            if target is not None:
+                return refresh_row_line(line, target)
+        return line
 
     merged = []
     existing_plain_ids = set()
@@ -469,12 +529,12 @@ def merge_category_table(existing_row_lines, new_rows):
         if slug is None:
             existing_plain_ids.add(row_id)
             if row_id in id_counts:
-                merged.append(line)  # 模糊識別：ID 仍有檔案存在，保守保留
+                merged.append(_keep(line, row_id, None))  # 模糊識別：ID 仍有檔案存在，保守保留
             # 否則：ID 已無任何對應檔案（死連結），捨棄該列
         else:
             existing_composite_keys.add((row_id, slug))
             if (row_id, slug) in new_composite_keys:
-                merged.append(line)  # 精確識別：對應檔案仍存在，原樣保留
+                merged.append(_keep(line, row_id, slug))  # 精確識別：對應檔案仍存在，原樣保留
             # 否則：對應檔案已不存在（死連結），捨棄該列
 
     for row in new_rows:
@@ -491,8 +551,11 @@ def merge_category_table(existing_row_lines, new_rows):
     return merged
 
 
-def sync_readme_text(readme_text, category_rows):
-    """對 README 全文做「現有模式」章節資料列的保守 upsert，其餘內容原樣保留。"""
+def sync_readme_text(readme_text, category_rows, refresh=False):
+    """對 README 全文做「現有模式」章節資料列的保守 upsert，其餘內容原樣保留。
+
+    `refresh=True` 時另對既有列做佔位符補值與來源版本正規化（見 `refresh_row_line`）。
+    """
     lines = readme_text.splitlines()
     out = []
     i = 0
@@ -523,7 +586,9 @@ def sync_readme_text(readme_text, category_rows):
             while i < n and lines[i].strip().startswith("|"):
                 existing_rows.append(lines[i])
                 i += 1
-            out.extend(merge_category_table(existing_rows, category_rows[current_category]))
+            out.extend(
+                merge_category_table(existing_rows, category_rows[current_category], refresh)
+            )
             current_category = None  # 表格已處理，避免同分類重複觸發
             continue
 
@@ -536,7 +601,7 @@ def sync_readme_text(readme_text, category_rows):
     return result
 
 
-def sync(claude_dir):
+def sync(claude_dir, refresh=False):
     """計算保守 upsert 結果；純函式不寫檔，回傳 (現況, 生成後內容, unified diff 字串)。
 
     非原子操作：讀與算之間、算與後續寫檔之間皆無鎖保護。並行呼叫本函式後
@@ -549,7 +614,7 @@ def sync(claude_dir):
     original = readme_path.read_text(encoding="utf-8")
 
     category_rows = scan_category_rows(error_patterns_dir)
-    updated = sync_readme_text(original, category_rows)
+    updated = sync_readme_text(original, category_rows, refresh)
 
     diff = "".join(
         difflib.unified_diff(
@@ -604,7 +669,7 @@ def _readme_lock(claude_dir):
         lock_file.close()
 
 
-def sync_and_write(claude_dir, *, _pre_write_delay=None):
+def sync_and_write(claude_dir, *, refresh=False, _pre_write_delay=None):
     """在鎖保護下讀 → 算 → 寫，同一臨界區內完成。
 
     與 `sync()` 的差異：後者是純函式，讀與寫分離、無鎖保護，並行呼叫後各自
@@ -625,7 +690,7 @@ def sync_and_write(claude_dir, *, _pre_write_delay=None):
     """
     claude_dir = Path(claude_dir)
     with _readme_lock(claude_dir):
-        original, updated, diff = sync(claude_dir)
+        original, updated, diff = sync(claude_dir, refresh)
         if _pre_write_delay:
             time.sleep(_pre_write_delay)
         if diff:
@@ -659,6 +724,14 @@ def main(argv=None):
             "建立索引列（逃生閥，見 find_incomplete_new_rows）"
         ),
     )
+    sync_cmd.add_argument(
+        "--refresh",
+        action="store_true",
+        help=(
+            "另刷新既有列：佔位符格以檔案內文補值（有實值的格不動），"
+            "來源版本補 v 前綴；一 ID 多檔的無 slug 列不刷新"
+        ),
+    )
 
     args = parser.parse_args(argv)
     if args.command != "sync":
@@ -672,7 +745,7 @@ def main(argv=None):
                 print("已阻擋寫入：補齊上述欄位後重跑，或加 --allow-placeholder 略過。")
                 return 1
         # 讀-算-寫收進同一臨界區，避免併發 --write 遺失索引列。
-        _original, updated, diff = sync_and_write(args.claude_dir)
+        _original, updated, diff = sync_and_write(args.claude_dir, refresh=args.refresh)
         if not diff:
             print("README.md 已與現況一致，無需更新。")
             return 0
@@ -685,7 +758,7 @@ def main(argv=None):
     incomplete = find_incomplete_new_rows(args.claude_dir)
     if incomplete:
         sys.stderr.write(format_incomplete_warning(incomplete) + "\n")
-    _original, _updated, diff = sync(args.claude_dir)
+    _original, _updated, diff = sync(args.claude_dir, args.refresh)
     if not diff:
         print("README.md 已與現況一致，無需更新。")
         return 0

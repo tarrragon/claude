@@ -4,9 +4,10 @@ title: 同源自審宣稱等價於多視角審查，審查缺口被自我頒發�
 category: process-compliance
 severity: 高
 related:
- - PC-BAL-022
- - PC-055
- - PC-093
+  - id: PC-BAL-022
+    kind: citation
+  - PC-055
+  - PC-093
 created: 2026-08-10
 ---
 

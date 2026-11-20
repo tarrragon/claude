@@ -3,7 +3,11 @@ id: IMP-BAL-006
 title: 同一排除集合在同一同步方向的兩條消費路徑處置相反——套用與否由呼叫端各自決定而非集合定義強制
 severity: high
 category: implementation
-related: [ARCH-BAL-017, ARCH-BAL-009, IMP-BAL-002]
+related:
+  - id: ARCH-BAL-017
+    kind: sibling
+  - ARCH-BAL-009
+  - IMP-BAL-002
 canonical_issue: tarrragon/claude#50
 created: 2026-08-12
 ---

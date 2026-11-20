@@ -1,5 +1,5 @@
 ---
-# 用例（Use Case）模板
+# 用例（Use Case）範本
 # 複製本檔案並重新命名為 UC-{XX}-{簡短描述}.md
 
 id: UC-XX
@@ -77,7 +77,7 @@ ticket_refs: []                  # 實作此用例的 ticket
 
 ## 流程拓撲（結構化 Flow 區塊，選填）
 
-> FlowStep 型別現階段屬**提案中（proposed）**，尚未升級為正式契約，本區塊選填。
+> FlowStep 型別屬**正式（established）**契約，本區塊選填。
 > `uc_registry.py` 未偵測到本區塊時，自動 fallback 至既有散文解析（見
 > `.claude/skills/doc/references/usecases.md`「流程拓撲（結構化 Flow 區塊）」章節）。
 > 本區塊是上方「主要成功場景」「替代場景」的機器可讀對應，不取代散文描述。
@@ -88,7 +88,7 @@ ticket_refs: []                  # 實作此用例的 ticket
   中，替代場景群以流水號命名（如 1a-1d），其中一項的實際分岔點與流水號暗示
   的主流程步驟不一致——位置編碼在既有語料上已產生誤讀，本規則即為防此重演。
 - 具體 ID 格式（命名慣例、唯一性規則）留待首個 UC 完成結構化回填、取得真實
-  結構樣本後再定案，本模板僅提供概念範例，不構成規範。
+  結構樣本後再定案，本範本僅提供概念範例，不構成規範。
 - `branch_from` 的值依實際分岔的場景步驟決定，不依替代場景散文標題的編號位置
   （如「XXa」）判讀：ID 本身不編碼位置，此為其直接推論。
 
@@ -104,14 +104,15 @@ flow:
     return_to: null               # 僅替代場景步驟填寫：回歸到哪個步驟 id。
                                   # back-edge，繪圖/佈局工具須排除於 DAG 佈局。
     implements: []                 # 對應 FR 編號，如 ["FR-01"]，選填
-    emits: []                      # 對應 EVT 編號，提案中型別，選填
-    consumes: []                   # 對應 EVT 編號，提案中型別，選填
+    emits: []                      # 必填，欄位必存在：對應 EVT 編號；無則填 []
+    consumes: []                   # 必填，欄位必存在：對應 EVT 編號；無則填 []
     traverses: ["{DomainName}"]    # 必填，欄位必存在：本步驟直接觸及的 domain 名清單（0..n）。
                                   # 純畫面步驟填 []；經依賴邊間接到達的 domain 不列。
 ```
 
-**emits / consumes 說明**：EVT 型別現階段屬提案中，尚未進 validator 必填
-契約。兩欄位選填，待首個真實 EVT 實例出現後再視需要升級為建議填寫。
+**emits / consumes 說明**：兩欄位屬 FlowStep 完整性必填集合（欄位必須存在，
+缺欄位時 `doc validate` exit 1）。無事件的步驟填空清單 `[]`，不得省略。EVT 型別
+本身屬正式契約，值只放對應的 EVT 編號。
 
 **traverses 說明**：列出本步驟**直接觸及**的 domain 公開面，對應 domain map
 的「貫穿」。一步可觸及多個 domain，故為清單；不觸及任何 domain 的純畫面步驟

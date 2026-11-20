@@ -191,6 +191,52 @@ def parse_related_field(frontmatter_text: str) -> set:
     return ids
 
 
+RELATED_KINDS = ("sibling", "citation", "unknown")
+_ENTRY_ID_LINE = re.compile(rf"^\s*-\s*id:\s*['\"]?({RELATED_ID_PATTERN.pattern})")
+_ENTRY_KIND_LINE = re.compile(r"^\s+kind:\s*['\"]?([A-Za-z_]+)")
+
+
+def _related_field_bodies(frontmatter_text: str) -> list:
+    """回傳 related / related_patterns 欄位值的原始文字（各欄位一段）。"""
+    bodies = []
+    for field_name in RELATED_FIELD_NAMES:
+        match = re.search(
+            rf"^{field_name}:(.*?)(?={_NEXT_TOP_LEVEL_KEY}|\Z)",
+            frontmatter_text,
+            re.MULTILINE | re.DOTALL,
+        )
+        if match:
+            bodies.append(match.group(1))
+    return bodies
+
+
+def parse_related_entries(frontmatter_text: str) -> dict:
+    """解析 related 條目為 {id: kind}。
+
+    結構化條目（block list 的 `- id: X` 下一行接縮排的 `kind: <值>`）取其 kind；
+    舊格式（純 ID，inline flow 或 block list）與不合法的 kind 值一律為 `unknown`
+    ——unknown 沿用 created 7 天窗口的近似判定，行為與引入 kind 前相同。
+    """
+    entries: dict = {}
+    for body in _related_field_bodies(frontmatter_text):
+        current = None
+        for line in body.splitlines():
+            id_match = _ENTRY_ID_LINE.match(line)
+            if id_match:
+                current = id_match.group(1)
+                entries[current] = "unknown"
+                continue
+            kind_match = _ENTRY_KIND_LINE.match(line)
+            if kind_match and current is not None:
+                kind = kind_match.group(1).lower()
+                entries[current] = kind if kind in RELATED_KINDS else "unknown"
+                continue
+            current = None
+            for legacy_id in RELATED_ID_PATTERN.findall(line):
+                entries.setdefault(legacy_id, "unknown")
+    return entries
+
+
 def extract_created_date(frontmatter_text: str):
     """從 frontmatter 文字解析 created 欄位日期，回傳 date 物件；缺失或格式
     不符時回傳 None（呼叫端須將 None 視為「無法判定批次」，不得臆測日期）。
@@ -204,12 +250,16 @@ def extract_created_date(frontmatter_text: str):
         return None
 
 
-def collect_related_map(error_patterns_root: Path) -> dict:
+def collect_related_map(error_patterns_root: Path, kinds_out: dict = None) -> dict:
     """掃描各分類目錄，回傳 {id: (related_ids_set, created_date_or_None, rel_path)}。
 
     與 collect_dir_id_map 共用同一目錄遍歷範圍，額外讀取檔案內容解析
     frontmatter 的 related 與 created 欄位。無法辨識 ID 或讀檔失敗的檔案略過
     （fail-open，不影響其餘檔案的檢查）。
+
+    `kinds_out` 有給時，同一次掃描另填入 {id: {related_id: kind}}（見
+    parse_related_entries），供 check_related_bidirectional 依 kind 判定；
+    回傳值的形狀不變，舊呼叫端不受影響。
     """
     related_map: dict = {}
     for category in CATEGORY_DIRS:
@@ -231,10 +281,12 @@ def collect_related_map(error_patterns_root: Path) -> dict:
             created = extract_created_date(frontmatter_text)
             rel = f"{category}/{file_path.name}"
             related_map[file_id] = (related_ids, created, rel)
+            if kinds_out is not None:
+                kinds_out[file_id] = parse_related_entries(frontmatter_text)
     return related_map
 
 
-def check_related_bidirectional(related_map: dict) -> list:
+def check_related_bidirectional(related_map: dict, kinds: dict = None) -> list:
     """檢查同批次 related 雙向性，回傳單向引用清單 [(from_id, to_id, from_rel), ...]。
 
     related 欄位承載兩種無法區分的語意——引註（單向合法）與姊妹關係（同批次
@@ -246,7 +298,12 @@ def check_related_bidirectional(related_map: dict) -> list:
     僅檢查 to_id 本身存在於 related_map（即確實是本索引涵蓋的 error-pattern，
     而非其他引用形態）；自我引用不計。回傳結果依 (from_id, to_id) 排序，
     供輸出穩定。
+
+    `kinds`（{id: {related_id: kind}}）有給時依條目 kind 判定：sibling 不看日期，
+    對方未回指即列入；citation 單向合法，不列入；unknown 與未給 kinds 時沿用
+    上述 7 天窗口近似。
     """
+    kinds = kinds or {}
     one_way = []
     for from_id, (related_ids, from_created, from_rel) in related_map.items():
         for to_id in related_ids:
@@ -256,6 +313,12 @@ def check_related_bidirectional(related_map: dict) -> list:
                 continue
             back_related, to_created, _ = related_map[to_id]
             if from_id in back_related:
+                continue
+            kind = kinds.get(from_id, {}).get(to_id, "unknown")
+            if kind == "citation":
+                continue
+            if kind == "sibling":
+                one_way.append((from_id, to_id, from_rel))
                 continue
             if from_created is None or to_created is None:
                 continue
@@ -517,8 +580,17 @@ def main() -> int:
             logger.warning("凍結登記表解析失敗，fail-open 為全部碰撞列 WARNING：%s", frozen_error)
         result = compare(dir_id_map, readme_ids, frozen_registry, readme_id_counts)
 
-        related_map = collect_related_map(error_patterns_root)
-        result["one_way_related"] = check_related_bidirectional(related_map)
+        related_kinds: dict = {}
+        related_map = collect_related_map(error_patterns_root, kinds_out=related_kinds)
+        result["one_way_related"] = check_related_bidirectional(related_map, related_kinds)
+        sibling_count = sum(
+            1 for entries in related_kinds.values() for kind in entries.values() if kind == "sibling"
+        )
+        logger.info(
+            "related kind 判定：sibling 條目 %d 筆，單向引用 %d 組",
+            sibling_count,
+            len(result["one_way_related"]),
+        )
 
         report = format_report(result, frozen_error)
 

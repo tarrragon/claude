@@ -32,7 +32,7 @@ def _setup_spec(tmp_path, spec_id, subdomain, body):
     spec_dir = tmp_path / "docs" / "spec" / "demo"
     spec_dir.mkdir(parents=True)
     md = spec_dir / f"{spec_id}-x.md"
-    frontmatter = f"---\nid: {spec_id}\ntitle: \"Test\"\nsubdomain: {subdomain}\n---\n"
+    frontmatter = f"---\nid: {spec_id}\ntitle: \"Test\"\nstatus: draft\nsubdomain: {subdomain}\n---\n"
     md.write_text(frontmatter + body, encoding="utf-8")
     return str(tmp_path)
 
@@ -269,7 +269,8 @@ class TestValidateFilenames:
 
     def test_fixed_name_file_exempted_and_reported_as_info(self, tmp_path, capsys):
         """框架約定固定命名文件（有對應 template）不報違規，且以 INFO 顯性列出。"""
-        spec_dir = tmp_path / "docs" / "spec"
+        # 置於 carrier 目錄內（docs/spec/{domain}/）；docs/spec/ 根層屬 carrier 外，不再掃描
+        spec_dir = tmp_path / "docs" / "spec" / "platform"
         spec_dir.mkdir(parents=True)
         (spec_dir / "design-system-spec.md").write_text(
             "---\nid: N/A\ntitle: \"Design System\"\n---\n內容\n", encoding="utf-8"
@@ -307,7 +308,8 @@ class TestValidateFilenames:
 
     def test_uc_numbering_convention_exempted_without_template(self, tmp_path, capsys):
         """uc-numbering-convention.md 無對應模板，須靠顯式清單豁免（1.4.0-W1-013）。"""
-        spec_dir = tmp_path / "docs" / "spec"
+        # 置於 carrier 目錄內（docs/spec/{domain}/）；docs/spec/ 根層屬 carrier 外，不再掃描
+        spec_dir = tmp_path / "docs" / "spec" / "platform"
         spec_dir.mkdir(parents=True)
         (spec_dir / "uc-numbering-convention.md").write_text(
             "---\nid: N/A\ntitle: \"UC 編號慣例\"\n---\n內容\n", encoding="utf-8"
@@ -384,3 +386,115 @@ class TestDomainMapSourceSpecsMatchSection7:
         code, out = _validate_alpha(tmp_path, capsys)
         assert code == 1
         assert "source_specs 有但 §7 無: SPEC-003" in out
+
+
+class TestDomainMapSection7LegacyAndNamedIds:
+    """151.1.7.1：舊單表降為提示；新結構漏列仍報錯；SPEC 子標題取自 id_pattern；判定失敗落報錯側。"""
+
+    def test_new_structure_missing_spec_still_fails(self, tmp_path, capsys):
+        # 正向對照（放行安全條件）：新結構已有子標題但漏列 source_specs 中的 spec
+        _write_domain_map(tmp_path, "[SPEC-001, SPEC-002]", ["SPEC-001"])
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "source_specs 有但 §7 無: SPEC-002" in out
+
+    def test_legacy_single_table_only_hints(self, tmp_path, capsys):
+        _write_domain_map(tmp_path, "[SPEC-001, SPEC-002]", [])
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 0
+        assert "舊結構" in out and "遷移" in out
+
+    def test_named_spec_id_subheading_recognized(self, tmp_path, capsys):
+        _write_domain_map(tmp_path, "[SPEC-AUTH]", ["SPEC-AUTH"])
+        code, _ = _validate_alpha(tmp_path, capsys)
+        assert code == 0
+
+    def test_named_spec_id_missing_fails(self, tmp_path, capsys):
+        _write_domain_map(tmp_path, "[SPEC-AUTH, SPEC-001]", ["SPEC-001"])
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "SPEC-AUTH" in out
+
+    @pytest.mark.parametrize("spec_id", ["SPEC-001", "SPEC-1234", "SPEC-AUTH", "SPEC-UI-001"])
+    def test_subheading_id_not_truncated(self, tmp_path, capsys, spec_id):
+        # 3 位數、4 位數、具名、帶後綴標題（_write_domain_map 內為「### <id>（x）」）皆完整取值
+        _write_domain_map(tmp_path, f"[{spec_id}]", [spec_id])
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 0, out
+
+    def test_long_numeric_subheading_vs_other_id_still_fails(self, tmp_path, capsys):
+        # 正向對照：SPEC-1234 子標題不得被截成 SPEC-123 而湊巧對上 source_specs
+        _write_domain_map(tmp_path, "[SPEC-123]", ["SPEC-1234"])
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "SPEC-123" in out
+
+    @staticmethod
+    def _write_without_section7(root: Path, source_specs: str) -> None:
+        path = root / "docs" / "spec" / "alpha" / "domain-map.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"---\nid: DOMAIN-MAP-alpha\ndomain: alpha\nsource_specs: {source_specs}\n---\n"
+            "# map\n\n## 6. 其他\n\n## 8. 後記\n",
+            encoding="utf-8",
+        )
+
+    def test_missing_section7_with_source_specs_fails(self, tmp_path, capsys):
+        # 正向對照：§7 整段缺席不是舊結構，維持報錯
+        self._write_without_section7(tmp_path, "[SPEC-001]")
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "source_specs 有但 §7 無: SPEC-001" in out
+
+    def test_missing_section7_with_empty_source_specs_passes_without_hint(self, tmp_path, capsys):
+        self._write_without_section7(tmp_path, "[]")
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 0
+        assert "舊結構" not in out
+
+    def test_read_failure_falls_on_error_side(self, tmp_path, capsys):
+        # 失敗側：讀檔例外不得被當成舊結構放行
+        _write_domain_map(tmp_path, "[SPEC-001]", ["SPEC-001"])
+        with patch("doc_system.commands.validate._extract_section7_specs", side_effect=OSError("boom")):
+            code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "無法判定" in out
+
+
+class TestDomainEqualsIdSuffix:
+    """DomainBundle 的 domain 須等於 id 後綴（DOMAIN-MAP-<後綴>）。"""
+
+    @staticmethod
+    def _bundle(root: Path, domain_line: str) -> None:
+        path = root / "docs" / "spec" / "alpha" / "domain-map.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"---\nid: DOMAIN-MAP-alpha\n{domain_line}source_specs: []\n---\n# map\n", encoding="utf-8")
+
+    def test_equal_passes(self, tmp_path, capsys):
+        self._bundle(tmp_path, "domain: alpha\n")
+        assert _validate_alpha(tmp_path, capsys)[0] == 0
+
+    def test_mismatch_fails_and_names_both_values(self, tmp_path, capsys):
+        self._bundle(tmp_path, "domain: beta\n")
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1
+        assert "'beta'" in out and "'alpha'" in out
+
+    def test_empty_domain_fails(self, tmp_path, capsys):
+        self._bundle(tmp_path, "domain: \n")
+        code, out = _validate_alpha(tmp_path, capsys)
+        assert code == 1 and "id 後綴" in out
+
+    def test_absent_domain_fails(self, tmp_path, capsys):
+        self._bundle(tmp_path, "")
+        assert _validate_alpha(tmp_path, capsys)[0] == 1
+
+    def test_validate_paths_reports_mismatch(self, tmp_path, capsys):
+        from doc_system.commands.validate import execute_paths
+
+        self._bundle(tmp_path, "domain: beta\n")
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_paths(argparse.Namespace())
+        assert exc.value.code == 1
+        assert "'beta'" in capsys.readouterr().out

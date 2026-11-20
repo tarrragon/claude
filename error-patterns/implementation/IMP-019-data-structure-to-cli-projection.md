@@ -1,3 +1,9 @@
+---
+id: IMP-019
+title: 資料結構投射到 CLI 介面假設錯誤
+severity: low
+---
+
 # IMP-019：資料結構投射到 CLI 介面假設錯誤
 
 **錯誤碼**: IMP-019

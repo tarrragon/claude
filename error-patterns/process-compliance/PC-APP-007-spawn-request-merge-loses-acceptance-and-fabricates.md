@@ -1,3 +1,9 @@
+---
+id: PC-APP-007
+title: 多個 Spawn Request 合併為單票時驗收項遺失與憑空補入
+severity: high
+---
+
 # PC-APP-007: 多個 Spawn Request 合併為單票時驗收項遺失與憑空補入
 
 ## 基本資訊

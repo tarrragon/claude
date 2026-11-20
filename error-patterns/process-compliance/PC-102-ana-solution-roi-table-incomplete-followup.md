@@ -1,3 +1,9 @@
+---
+id: PC-102
+title: ANA Solution 修復方向表未逐項轉 spawned ticket
+severity: high
+---
+
 # PC-102: ANA Solution 修復方向表未逐項轉 spawned ticket
 
 ## 基本資訊

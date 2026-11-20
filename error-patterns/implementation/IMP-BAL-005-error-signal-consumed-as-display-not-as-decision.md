@@ -4,9 +4,11 @@ title: 錯誤訊號被消費為顯示而非判定——印了紅字，流程照�
 category: implementation
 severity: high
 related:
- - ARCH-BAL-005
- - IMP-BAL-002
- - IMP-043
+  - id: ARCH-BAL-005
+    kind: citation
+  - id: IMP-BAL-002
+    kind: sibling
+  - IMP-043
 created: 2026-07-30
 ---
 

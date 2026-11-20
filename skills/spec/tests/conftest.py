@@ -1,4 +1,4 @@
-"""pytest conftest: 逐測試還原 cwd 與 os.environ（3.4.0-W1-288）。"""
+"""pytest conftest: 逐測試還原 cwd 與 os.environ。"""
 
 import sys
 from pathlib import Path

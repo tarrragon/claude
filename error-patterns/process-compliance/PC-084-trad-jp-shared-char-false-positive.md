@@ -1,3 +1,9 @@
+---
+id: PC-084
+title: 日文漢字清單誤列繁日共用字 false positive
+severity: low
+---
+
 # PC-084: 日文漢字清單誤列繁日共用字 false positive
 
 ---

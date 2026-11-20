@@ -32,6 +32,8 @@ assert _TOP_LEVEL_KEYS == {
     "runtime_tests",
     "last_updated",
     "test_scan_dirs",
+    "test_file_extensions",
+    "code_root",
 }
 _VERSION_KEY = "version"
 _MAPPINGS_KEY = "mappings"
@@ -46,6 +48,13 @@ _LAST_UPDATED_KEY = "last_updated"
 # proposals-tracking.yaml 的 proposals 為 list-based（PROPOSALS_TRACKING_SCHEMA SSOT），
 # 非 dict-keyed-by-id；_get_proposal_info 依此格式線性查找（IMP-APP-002 同族欄位假設修復）。
 assert PROPOSALS_TRACKING_SCHEMA["proposals_format"] == "list"
+
+
+def _domain_map_path(domain: str | None) -> str:
+    """domain-map 的相對路徑：指定 domain 為 per-domain 形態，否則為根層形態。"""
+    if domain:
+        return f"docs/spec/{domain}/domain-map.md"
+    return "docs/domain-map.md"
 
 
 def _load_tracking(tracking_file: str) -> dict:
@@ -192,3 +201,4 @@ def execute(args: argparse.Namespace) -> None:
     print("  - 每份 Spec 的 FR 列表和介面定義")
     print("  - 每份 UC 的 GWT 場景")
     print("  - Traceability 中的 scenario 映射（目前為 TODO 佔位）")
+    print(f"  - domain-map（{_domain_map_path(domain)}）的 bundle 清單與 FR 覆蓋")

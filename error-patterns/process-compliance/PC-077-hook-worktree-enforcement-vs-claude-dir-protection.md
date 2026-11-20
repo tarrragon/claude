@@ -1,3 +1,9 @@
+---
+id: PC-077
+title: Hook 強制 worktree vs ARCH-015 `.claude/` 保護的派發死結
+severity: medium
+---
+
 # PC-077: Hook 強制 worktree vs ARCH-015 `.claude/` 保護的派發死結
 
 ---

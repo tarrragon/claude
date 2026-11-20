@@ -1,3 +1,9 @@
+---
+id: PC-141
+title: 監測類 ANA acceptance 未預先區分設計性偏差 vs 失效性訊號
+severity: medium
+---
+
 # PC-141: 監測類 ANA acceptance 未預先區分設計性偏差 vs 失效性訊號
 
 ## 基本資訊

@@ -1,3 +1,9 @@
+---
+id: PC-136
+title: 結構性修復未掃 lib callers 反模式
+severity: high
+---
+
 # PC-136: 結構性修復未掃 lib callers 反模式
 
 **類別**: process-compliance

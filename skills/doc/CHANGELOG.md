@@ -1,6 +1,10 @@
 # doc 版本紀錄
 
-新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
+新到舊。版號權威為 `SKILL.md` frontmatter 的 `metadata.version`；衍生住址為本檔首條、`pyproject.toml` 的 `version`、`doc_system/__init__.py` 的 `__version__`，四處須相等。規則見 `.claude/skills/skill-design-guide/references/writing-the-body.md`〈版號規則：合併時才取號〉。
+
+**Version**: 1.27.1（2026-11-20）— 文件：同一資產的稱呼統一為「範本」（SKILL.md、templates、references 與 `create` 的 help 字串；檔名 `*-template.md` 不變）；〈uc 子命令群組〉改為自足說明格式、SSOT 與豁免判定原則，不再引用 consumer 專案的規範檔；本檔開頭的版號住址敘述改為實際四處。CLI 結束碼與報錯集合不變。
+
+**Version**: 1.27.0（2026-11-20）— `nav`、`query` 以 PROP 為起點時，由 SPEC／UC 的 `source_proposal`（純量視為單項清單）反查並列出 SPEC 與 UC（新增 `doc_system/core/provenance.py`）；`spec_refs` 照舊顯示但標示「非權威」。`references/tracking.md` 寫明權威欄位。結束碼與報錯集合不變，只增加輸出列。
 
 **Version**: 1.26.3（2026-11-19）— 對齊版號住址：`pyproject.toml` 的 `version` 與 `doc_system/__init__.py` 的 `__version__` 由 1.0.0 改為與 `metadata.version` 相同。CLI 行為不變。
 

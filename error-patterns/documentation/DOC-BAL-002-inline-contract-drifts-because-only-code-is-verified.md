@@ -4,10 +4,12 @@ title: 同檔案內的行為契約隨程式碼變更漂移，因為只有程式�
 category: documentation
 severity: 高
 related:
- - DOC-005
- - DOC-BAL-001
- - ARCH-BAL-012
- - PC-165
+  - DOC-005
+  - id: DOC-BAL-001
+    kind: citation
+  - id: ARCH-BAL-012
+    kind: citation
+  - PC-165
 created: 2026-08-01
 ---
 

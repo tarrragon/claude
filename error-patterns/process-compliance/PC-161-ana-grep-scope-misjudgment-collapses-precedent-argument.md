@@ -1,3 +1,9 @@
+---
+id: PC-161
+title: ANA grep 範圍誤判導致「前車之鑑」強論證崩塌
+severity: high
+---
+
 # PC-161: ANA grep 範圍誤判導致「前車之鑑」強論證崩塌
 
 > **錯誤類別**：流程合規（ANA 用 grep 結果支撐強論證但 grep 範圍 / 方法有誤）

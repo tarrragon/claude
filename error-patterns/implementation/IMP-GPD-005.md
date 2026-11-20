@@ -3,6 +3,9 @@ id: IMP-GPD-005
 title: fail-open 守衛新增阻擋種類時漏補對應資源，例外被外層吞成放行
 severity: 高
 status: active
+related:
+  - id: IMP-LLM-018
+    kind: sibling
 ---
 
 # IMP-GPD-005: fail-open 守衛新增阻擋種類時漏補對應資源，例外被外層吞成放行
@@ -13,7 +16,7 @@ status: active
 - **分類**: 實作（implementation）
 - **風險等級**: 高（新增的阻擋從未生效，hook 以非阻擋碼結束，只驗「有沒有擋」以外的測試全綠）
 - **來源版本**: 0.5.0
-- **相關 Pattern**: PC-GPD-033（放寬守衛只驗誤擋消失；本模式是收緊守衛時新路徑未接通）、IMP-003（Hook 失敗必須對用戶可見）
+- **相關 Pattern**: PC-GPD-033（放寬守衛只驗誤擋消失；本模式是收緊守衛時新路徑未接通）、IMP-003（Hook 失敗必須對用戶可見）、IMP-LLM-018（姊妹：失敗沒有例外，被沿用的掃描函式以正常回傳的降級結果通道交出，閘門不讀而放行）
 
 ---
 

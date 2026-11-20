@@ -6,7 +6,8 @@ severity: medium
 status: active
 created: 2026-11-02
 related:
-- PC-GPD-070
+  - id: PC-GPD-070
+    kind: sibling
 ---
 
 # PC-GPD-071：了結寫成敘事，沒寫配對行

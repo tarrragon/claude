@@ -175,7 +175,7 @@ Windows 執行 sync-push 時 git 對新增檔案的 mode 處理與 macOS/Linux �
 
 - 獨立 Repo: https://github.com/tarrragon/claude.git
 - 排除分類 SSOT: `.claude/lib/sync_exclude_manifest.py`
-- Error-pattern 編號區段約定（影響 `error-patterns/` 跨專案傳播）: `.claude/references/error-pattern-numbering-policy.md`
+- Error-pattern 編號區段約定（已退場，改由捕獲時分流與來源前綴處理跨專案傳播）: `.claude/references/error-pattern-numbering-policy.md`
 
 ## 最佳實踐
 

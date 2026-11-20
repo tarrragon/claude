@@ -1,3 +1,9 @@
+---
+id: PC-132
+title: Hook self-check 警示是被忽視的反推資料源
+severity: medium
+---
+
 # PC-132: Hook self-check 警示是被忽視的反推資料源
 
 ---

@@ -11,7 +11,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from doc_system.core.file_locator import FileLocator
+from doc_system.core.file_locator import (
+    CODE_ROOT_EXIT_CODE,
+    FileLocator,
+    format_code_path,
+    resolve_code_root_or_exit,
+)
 from doc_system.core.frontmatter_parser import parse_frontmatter_text
 from doc_system.core.uc_registry import (
     CLI_SCANNABLE_EXTENSIONS,
@@ -203,17 +208,47 @@ def _cmd_list(args: argparse.Namespace) -> None:
         print(f"{uc_id:<10} {valid[uc_id]}")
 
 
-def _cmd_verify(args: argparse.Namespace) -> None:
-    """驗證指定路徑（或整個專案）內 UC token 是否符合白名單，違規則 exit 1。
+WORKSPACE_PATH_PREFIX = "ws:"
 
-    環境/參數錯誤（路徑不存在、白名單解析為空）視為 fail-fast，exit 2，
-    與 violation（exit 1）區分，避免假綠燈或誤導性全違規清單。
+
+def _label_path(file_path: str, doc_root: str, code_root: str, external: bool) -> str:
+    """輸出用的檔案定位：外接模式依檔案所在根加 repo:／ws: 前綴，不產生 ../ 跨界相對路徑。"""
+    file_abs = os.path.realpath(file_path)
+    code_abs = os.path.realpath(code_root)
+    if file_abs == code_abs or file_abs.startswith(code_abs + os.sep):
+        return format_code_path(os.path.relpath(file_abs, code_abs), external)
+    doc_abs = os.path.realpath(doc_root)
+    if external and (file_abs == doc_abs or file_abs.startswith(doc_abs + os.sep)):
+        return WORKSPACE_PATH_PREFIX + os.path.relpath(file_abs, doc_abs).replace(os.sep, "/")
+    return os.path.relpath(file_path, code_root)
+
+
+def _verify_scan_targets(path: str | None, doc_root: str, code_root: str, external: bool) -> list[str]:
+    """決定 verify 掃描目標：明示路徑優先；省略時掃 code root，外接模式另含 doc root。"""
+    if path:
+        return [path]
+    return [code_root, doc_root] if external else [code_root]
+
+
+def _is_under(file_path: str, root: str) -> bool:
+    """file_path 是否位於 root 之下（realpath 比對）。"""
+    file_abs = os.path.realpath(file_path)
+    root_abs = os.path.realpath(root)
+    return file_abs == root_abs or file_abs.startswith(root_abs + os.sep)
+
+
+def _cmd_verify(args: argparse.Namespace) -> None:
+    """驗證指定路徑（省略則掃 code root；外接模式另含 doc root）內 UC token 是否符合白名單，違規則 exit 1。
+
+    環境/參數錯誤（路徑不存在、白名單解析為空、code root 無法解析、零檔案可掃）
+    視為 fail-fast，exit 2，與 violation（exit 1）區分，避免假綠燈或誤導性全違規清單。
     """
     project_root = FileLocator.get_project_root()
-    target = args.path or project_root
+    code = resolve_code_root_or_exit(project_root, getattr(args, "code_root", None))
+    targets = _verify_scan_targets(args.path, project_root, code.path, code.external)
 
-    if args.path and not Path(target).exists():
-        print(f"錯誤：指定路徑不存在: {target}", file=sys.stderr)
+    if args.path and not Path(args.path).exists():
+        print(f"錯誤：指定路徑不存在: {args.path}", file=sys.stderr)
         sys.exit(2)
 
     valid = get_valid_uc_map(project_root)
@@ -226,22 +261,40 @@ def _cmd_verify(args: argparse.Namespace) -> None:
         sys.exit(2)
 
     violations: list[tuple[str, int, str]] = []
-    for file_path in _iter_scannable_files(target):
-        if is_exempt_path(file_path, project_root):
-            continue
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                text = f.read()
-        except (OSError, UnicodeDecodeError) as e:
-            print(f"[uc] 略過無法讀取的檔案 {file_path}: {e}", file=sys.stderr)
-            continue
-        for token, lineno in find_uc_tokens_in_text(text):
-            if is_violation_token(token, valid):
-                rel = os.path.relpath(file_path, project_root)
-                violations.append((rel, lineno, normalize_token(token)))
+    scanned_count = 0
+    for target in targets:
+        for file_path in _iter_scannable_files(target):
+            scanned_count += 1  # 含豁免路徑：零計數代表目標內根本沒有檔案，而非全數豁免
+            # 以 cwd 為基準轉絕對路徑，與下方 open() 的解析基準一致（137）
+            abs_path = os.path.abspath(file_path)
+            if code.external:
+                exempt = is_exempt_path(abs_path, project_root, code.path)
+            else:
+                exempt_root = code.path if _is_under(abs_path, code.path) else project_root
+                exempt = is_exempt_path(abs_path, exempt_root)
+            if exempt:
+                continue
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    text = f.read()
+            except (OSError, UnicodeDecodeError) as e:
+                print(f"[uc] 略過無法讀取的檔案 {file_path}: {e}", file=sys.stderr)
+                continue
+            for token, lineno in find_uc_tokens_in_text(text, skip_exempt_lines=True):
+                if is_violation_token(token, valid):
+                    rel = _label_path(file_path, project_root, code.path, code.external)
+                    violations.append((rel, lineno, normalize_token(token)))
+
+    if scanned_count == 0:
+        print(
+            f"錯誤：掃描目標 {targets} 內沒有可掃描的檔案，無法驗證（不視為通過）。"
+            "code root 設定錯誤時會出現此情形。",
+            file=sys.stderr,
+        )
+        sys.exit(CODE_ROOT_EXIT_CODE)
 
     if not violations:
-        print("UC 編號驗證通過，無違規 token。")
+        print(f"UC 編號驗證通過，無違規 token（掃描 {scanned_count} 個檔案）。")
         sys.exit(0)
 
     print(f"發現 {len(violations)} 處違規 UC 編號:")
@@ -253,6 +306,7 @@ def _cmd_verify(args: argparse.Namespace) -> None:
 def _cmd_trace(args: argparse.Namespace) -> None:
     """列出指定 UC 編號的所有 code 引用位置，預設截斷 + 依 lib/test/docs 分組（lib 優先）。"""
     project_root = FileLocator.get_project_root()
+    code = resolve_code_root_or_exit(project_root, getattr(args, "code_root", None))
     valid = get_valid_uc_map(project_root)
     uc_id = normalize_token(args.uc_id)
 
@@ -260,7 +314,7 @@ def _cmd_trace(args: argparse.Namespace) -> None:
         print(f"找不到合法 UC 編號: {args.uc_id}（執行 `doc uc list` 查看合法清單）")
         sys.exit(1)
 
-    hits = _scan_project_for_uc(uc_id, project_root)
+    hits = _scan_project_for_uc(uc_id, code.path)
     if not hits:
         print(f"{uc_id} 目前無任何 code 引用。")
         return
@@ -274,7 +328,7 @@ def _cmd_trace(args: argparse.Namespace) -> None:
     for group_name, group_hits in _group_trace_hits(display_hits):
         print(f"-- {group_name} --")
         for rel, lineno, context in group_hits:
-            print(f"  {rel}:{lineno}: {context}")
+            print(f"  {format_code_path(rel, code.external)}:{lineno}: {context}")
 
     if not show_all and total > len(display_hits):
         print(

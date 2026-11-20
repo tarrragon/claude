@@ -1,3 +1,9 @@
+---
+id: PC-068
+title: Phase 3a 規劃新建既有 utility 而未先掃描重用
+severity: high
+---
+
 # PC-068: Phase 3a 規劃新建既有 utility 而未先掃描重用
 
 **觸發日期**: 2026-04-15

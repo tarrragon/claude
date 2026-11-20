@@ -1,3 +1,9 @@
+---
+id: PC-090
+title: 推延性 close 反模式
+severity: medium
+---
+
 # PC-090: 推延性 close 反模式
 
 ## 基本資訊

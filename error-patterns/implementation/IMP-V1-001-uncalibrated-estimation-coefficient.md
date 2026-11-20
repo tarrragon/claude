@@ -1,3 +1,9 @@
+---
+id: IMP-V1-001
+title: 估算係數未經實測校準即上線
+severity: medium
+---
+
 # IMP-V1-001: 估算係數未經實測校準即上線
 
 **類別**: implementation

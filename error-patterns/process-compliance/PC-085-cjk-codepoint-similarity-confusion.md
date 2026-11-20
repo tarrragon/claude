@@ -1,3 +1,9 @@
+---
+id: PC-085
+title: CJK 漢字相鄰 codepoint 在 `\uXXXX` escape 中的肉眼混淆
+severity: low
+---
+
 # PC-085: CJK 漢字相鄰 codepoint 在 `\uXXXX` escape 中的肉眼混淆
 
 ---

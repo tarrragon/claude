@@ -3,7 +3,10 @@ id: IMP-LLM-002
 title: "finally 區塊內的清理動作拋出例外，取代主流程的結果（綠燈、紅燈或原例外）"
 severity: high
 category: implementation
-related: [IMP-LLM-001, IMP-BAL-010]
+related:
+  - id: IMP-LLM-001
+    kind: citation
+  - IMP-BAL-010
 created: 2026-11-10
 ---
 

@@ -58,3 +58,10 @@ class TestParseFrontmatter:
         result = parse_frontmatter(str(tmp_path / "nonexistent.md"))
 
         assert result is None
+
+    def test_non_utf8_file_returns_none(self, tmp_path):
+        """非 UTF-8 檔案依 docstring 契約回傳 None，不拋 UnicodeDecodeError。"""
+        md = tmp_path / "big5.md"
+        md.write_bytes("---\ntitle: 中文\n---\n".encode("big5"))
+
+        assert parse_frontmatter(str(md)) is None

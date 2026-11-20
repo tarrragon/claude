@@ -61,9 +61,9 @@
 | partial | 部分實作或概念相通但細節不同 |
 | not-applicable | 不適用於 Chrome Extension |
 
-## 模板
+## 範本
 
-模板位置：`.claude/skills/doc/templates/usecase-template.md`
+範本位置：`.claude/skills/doc/templates/usecase-template.md`
 
 ### 必填 frontmatter
 
@@ -90,7 +90,7 @@
 
 UC 文件本文可選擇性附加一個結構化 `flow` YAML 區塊，把「主要成功場景」與
 「替代場景」的步驟拓撲（分岔點、回歸點）升格為可解析節點，供 `doc uc` CLI
-與外部視覺化工具讀取，不需再靠散文 heuristic 推斷。欄位骨架與填寫範例見模板
+與外部視覺化工具讀取，不需再靠散文 heuristic 推斷。欄位骨架與填寫範例見範本
 `.claude/skills/doc/templates/usecase-template.md`「流程拓撲（結構化 Flow
 區塊，選填）」章節。
 
@@ -125,7 +125,7 @@ UC 文件本文可選擇性附加一個結構化 `flow` YAML 區塊，把「主�
 
 | UC 狀態 | 是否需填寫 |
 |---------|-----------|
-| 新建 UC | 建議填寫（模板已內建骨架） |
+| 新建 UC | 建議填寫（範本已內建骨架） |
 | 既有 UC（尚未回填） | 選填；`uc_registry.py` 未偵測到本區塊時 fallback 既有散文解析，不影響既有功能 |
 | FlowStep 升級為正式契約後 | 待首個 UC 完成結構化回填驗證後另行裁定是否轉為必填 |
 

@@ -19,6 +19,22 @@ related:
 - 新建的 Hook 在 settings.json 已註冊，但不觸發
 - 或顯示 `PostToolUse:Bash hook error` / `PreToolUse:Read hook error`（每次觸發對應事件皆報錯）
 
+## 適用範圍註記（2026-11-20 重驗）
+
+本節只更新適用範圍與現況結論；以下症狀、根因、案例保留事發當時（2026-03 至 2026-04）的敘述，不改寫。
+
+**註冊路徑現況**：`.claude/settings.json` 的 hook 註冊已全數改為顯式解譯器形式（`uv run --quiet $CLAUDE_PROJECT_DIR/<path>` 或 `python3 $CLAUDE_PROJECT_DIR/<path>`），重驗時沒有任何一筆是下方根因所述的「直接路徑」形式；Bash 事件的 hook 經 `hook-dispatcher.py` 分派，分派器以 `runpy` 或 `sys.executable` 子程序執行，同樣不讀檔案的可執行位。`hook-registration-coverage-check.py` 的可執行位掃描因此已於 2026-08-22 降級為純偵測（不再自動 chmod、不再自動 commit）。
+
+**影響重估**：
+
+| 路徑 | 是否依賴可執行位 | 缺可執行位的後果 |
+|------|----------------|----------------|
+| `settings.json` 註冊的 hook 由 runtime 觸發 | 否 | 無。本文件「hook 全期零效力、每次事件皆報錯」的 severity 前提對此路徑不成立 |
+| 手動驗證時以路徑直接執行（如 `./.claude/hooks/xxx-hook.py`，依 shebang） | 是 | `Permission denied`，驗證者可能誤判 hook 本身有錯；殘留影響非零 |
+| consumer 端仍有直接路徑形式的註冊（自行改寫的 `settings.json`，或 `settings.local.json` 內的註冊） | 是 | 下方原症狀照樣重現 |
+
+**由根因推導的現況結論**：根因（Write 建檔預設 644、git 或跨平台流程遺失 mode）未變，仍成立；變的是可執行位不再是 runtime 觸發的必要條件。下方「解決方案」的 chmod 步驟對手動直接執行與上表第三列的 consumer 仍有效。「快速診斷指令」以命令第一個字為檔案路徑，對現行 `uv run`／`python3` 形式的註冊不會列出任何結果，只適用於直接路徑形式的註冊。
+
 ## 根因
 
 `.claude/hooks/` 下的 `.py` 檔案缺少執行權限（`chmod +x`）。Write 工具建立的檔案預設權限為 `644`（`-rw-r--r--`），不含執行位元。

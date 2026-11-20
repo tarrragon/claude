@@ -78,3 +78,15 @@ def test_entry_propagates_nonzero_exit(form, project):
     result = _run(form, ["no-such-command"], project)
     assert result.returncode == 2
     assert "usage: doc" in result.stderr
+
+
+def test_code_root_flag_parsed_for_test_map_and_uc():
+    """--code-root 旗標掛在 test-map、uc verify、uc trace。"""
+    sys.path.insert(0, str(SKILL_DIR))
+    from doc_system.cli import build_parser
+
+    p = build_parser()
+    assert p.parse_args(["test-map", "--code-root", "/x"]).code_root == "/x"
+    assert p.parse_args(["uc", "verify", "--code-root", "/x"]).code_root == "/x"
+    assert p.parse_args(["uc", "trace", "UC-01", "--code-root", "/x"]).code_root == "/x"
+    assert p.parse_args(["test-map"]).code_root is None

@@ -1830,7 +1830,7 @@ def _rel_under_claude(repo_rel_path: str) -> str | None:
 import re as _re  # noqa: E402
 
 # 刻意只認 flat 凍結核心格式（PC-NNN），不拓寬至前綴格式（決策）。
-# 本子系統是 flat 整數撞號解析（int(group(1)) + numbers: dict[int,str] +
+# 本子系統是 flat 整數撞號解析（int(group(1)) + numbers: dict[int,set[str]] +
 # _next_available_pc_number 整數遞增）。Model 1 前綴格式（PC-V1-001）天生不參與
 # flat 撞號——各專案在自己前綴空間累加，零協調防碰撞。現值 regex 對前綴檔匹配失敗
 # 回 None（'V' 非 \d），正是正確排除行為；拓寬反而會把前綴檔誤拉進整數撞號路徑
@@ -1839,6 +1839,34 @@ import re as _re  # noqa: E402
 _PC_FILENAME_RE = _re.compile(r"^PC-(\d+)-(.+)\.md$")
 # 溯源註記內辨識上游號（與重編號寫入的註記字面對稱）
 _PROVENANCE_UPSTREAM_RE = _re.compile(r"編號溯源.*?編號為\s*PC-(\d+)", _re.DOTALL)
+
+# 凍結重號登記（PC 列）：同一 flat 號對應兩個教訓、跨專案一致的 legacy 碰撞，
+# 一律不重編。正本為 methodologies/error-pattern-numbering-methodology.md
+# 〈已知 legacy intra-dir 重號（凍結保留，不重編）〉表格；IMP 等其他前綴列不在
+# 本子系統範圍。以常數表達而非執行期解析 markdown，一致性由
+# tests/test_sync_claude_pull_pc_collision.py 的常數比對測試把關。
+FROZEN_PC_DUPLICATES: dict[int, frozenset[str]] = {
+    10: frozenset({
+        "pm-skipped-checkpoint-after-ticket-complete",
+        "task-tracking-in-memory",
+    }),
+    19: frozenset({
+        "design-decision-memory-only",
+        "worktree-merge-state-loss",
+    }),
+    20: frozenset({
+        "fix-at-consumer-instead-of-producer",
+        "plan-execution-dispatch-mismatch",
+    }),
+    30: frozenset({
+        "agent-slash-command-unreachable",
+        "phase4-unused-code-incomplete-grep",
+    }),
+    105: frozenset({
+        "feature-implemented-without-doc-integration",
+        "pm-cli-syntax-autopilot",
+    }),
+}
 
 
 def parse_pc_filename(repo_rel: str) -> tuple[int, str] | None:
@@ -1861,15 +1889,18 @@ def build_local_pc_index(claude_dir: Path) -> dict:
 
     回傳:
         {
-          "numbers": {編號: slug, ...},           # 本地已佔用的 PC 號 → slug
+          "numbers": {編號: {slug, ...}, ...},    # 本地已佔用的 PC 號 → slug 集合
           "provenance": {(上游號, slug): 本地號},  # 已重編過的溯源映射（去重用）
         }
+
+    numbers 一號收多個 slug：凍結重號組（FROZEN_PC_DUPLICATES）同號兩檔並存，
+    只記一個 slug 會把另一檔誤判為撞號。
 
     provenance 由本地檔內的「編號溯源」註記解析：若某本地 PC 檔記載「上游編號為
     PC-X」，即建立 (X, 該檔 slug) → 該檔本地號 的映射，供 dedup 辨識上游帶回的
     同一 pattern。
     """
-    numbers: dict[int, str] = {}
+    numbers: dict[int, set[str]] = {}
     provenance: dict[tuple[int, str], int] = {}
     ep_root = claude_dir / "error-patterns"
     if not ep_root.is_dir():
@@ -1881,10 +1912,14 @@ def build_local_pc_index(claude_dir: Path) -> dict:
             continue
         local_num = int(m.group(1))
         slug = m.group(2)
-        numbers[local_num] = slug
+        numbers.setdefault(local_num, set()).add(slug)
         try:
             text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError) as exc:
+            # 號與 slug 已入索引；只是無法解析溯源註記，dedup 可能失效，須可見
+            sys.stderr.write(
+                f"[WARNING] PC 索引讀取 {path} 失敗，略過溯源註記解析：{exc}\n"
+            )
             continue
         prov = _PROVENANCE_UPSTREAM_RE.search(text)
         if prov:
@@ -1893,7 +1928,7 @@ def build_local_pc_index(claude_dir: Path) -> dict:
     return {"numbers": numbers, "provenance": provenance}
 
 
-def _next_available_pc_number(numbers: dict[int, str], start: int) -> int:
+def _next_available_pc_number(numbers: dict[int, set[str]], start: int) -> int:
     """從 start 起找第一個未被本地佔用的 PC 號。"""
     candidate = max(numbers, default=start - 1) + 1
     candidate = max(candidate, start + 1)
@@ -1920,9 +1955,11 @@ def resolve_pc_collision(
     """偵測上游 PC 檔是否與本地撞號並決定處置。
 
     回傳 (new_repo_rel, new_content, action)，action 枚舉：
-      - "none"        無衝突（或同號同 slug 屬同一檔），原樣交三方合併
+      - "none"        無衝突（號未佔用、該號 slug 集合已含此 slug、或屬凍結重號組），
+                      原樣交三方合併
       - "dedup_skip"  上游帶回的是先前已重編過的同一 pattern，跳過不匯入
-      - "renumber"    撞號（同號不同 slug），重編為本地可用號 + 注入溯源註記
+      - "renumber"    撞號（同號且 slug 不在本地集合、亦非凍結組成員），重編為本地
+                      可用號 + 注入溯源註記
 
     僅處理 error-patterns 下 PC 檔；其餘一律回 "none"。
     """
@@ -1931,22 +1968,26 @@ def resolve_pc_collision(
         return repo_rel, upstream_content, "none"
 
     upstream_num, slug = parsed
-    numbers: dict[int, str] = local_index.get("numbers", {})
+    numbers: dict[int, set[str]] = local_index.get("numbers", {})
     provenance: dict[tuple[int, str], int] = local_index.get("provenance", {})
 
     # dedup：上游號 + slug 已在本地以重編號收錄 → 同一 pattern，跳過
     if (upstream_num, slug) in provenance:
         return repo_rel, upstream_content, "dedup_skip"
 
-    existing_slug = numbers.get(upstream_num)
-    # 無人佔用該號 → 無衝突
-    if existing_slug is None:
-        return repo_rel, upstream_content, "none"
-    # 同號同 slug → 本就是同一檔，正常三方合併
-    if existing_slug == slug:
+    # 凍結重號組成員：即使本地缺其中一檔也不重編（登記表豁免）
+    if slug in FROZEN_PC_DUPLICATES.get(upstream_num, frozenset()):
         return repo_rel, upstream_content, "none"
 
-    # 撞號（同號不同 slug）：重編號
+    existing_slugs = numbers.get(upstream_num)
+    # 無人佔用該號 → 無衝突
+    if not existing_slugs:
+        return repo_rel, upstream_content, "none"
+    # 該號的 slug 集合已含此 slug → 本就是同一檔，正常三方合併
+    if slug in existing_slugs:
+        return repo_rel, upstream_content, "none"
+
+    # 撞號（同號且 slug 不在集合內）：重編號
     new_num = _next_available_pc_number(numbers, upstream_num)
     prefix = repo_rel.rsplit("/", 1)[0]
     new_repo_rel = f"{prefix}/PC-{new_num}-{slug}.md"
@@ -2014,7 +2055,7 @@ def _apply_renumbered_pc(
     _atomic_write(local_file, new_content, rollback_log)
     if parsed is not None:
         new_num, slug = parsed
-        local_pc_index.setdefault("numbers", {})[new_num] = slug
+        local_pc_index.setdefault("numbers", {}).setdefault(new_num, set()).add(slug)
         prov = _PROVENANCE_UPSTREAM_RE.search(new_content.decode("utf-8"))
         if prov:
             upstream_num = int(prov.group(1))

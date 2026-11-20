@@ -6,7 +6,9 @@ severity: medium
 status: active
 created: 2026-11-01
 related:
-- PC-166
+  - PC-166
+  - id: PC-GPD-071
+    kind: sibling
 ---
 
 # PC-GPD-070：先寫「已完成」再看動作結果

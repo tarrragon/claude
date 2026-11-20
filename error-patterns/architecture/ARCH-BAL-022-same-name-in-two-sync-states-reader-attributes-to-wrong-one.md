@@ -4,8 +4,9 @@ title: 同一名稱同時存在於兩個同步狀態，讀者把分歧歸因至�
 severity: medium
 category: architecture
 related:
- - ARCH-BAL-002
- - PC-BAL-064
+  - ARCH-BAL-002
+  - id: PC-BAL-064
+    kind: citation
 created: 2026-09-04
 ---
 

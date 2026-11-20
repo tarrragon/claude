@@ -1,3 +1,9 @@
+---
+id: PC-MON-001
+title: 工具防護落地於可繞過的執行點導致復發
+severity: medium
+---
+
 # PC-MON-001: 工具防護落地於可繞過的執行點導致復發
 
 **類別**: process-compliance

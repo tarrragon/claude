@@ -24,11 +24,17 @@ proposals:
         verified_by: "ticket-id 或 null"
 ```
 
+### `specs:` 段的寫入職責
+
+`doc create spec`（含 data-contract，同屬 SPEC 編號體系）建立檔案後，由建立端在 `docs/proposals-tracking.yaml` 的 `specs:` 段追加 `{id, title, status: draft}`，已存在同 id 則略過。`proposals:` 段由 `doc create proposal` 同樣寫入。手動建檔、不經 `doc create` 的 spec 須自行登錄，否則 `spec_reference_checker`（ticket skill）會以未登錄誤報引用。
+
 > **設計備註**：tracking.yaml 的 checklist 與 ticket 系統的職責不同。tracking 追蹤的是**需求確認進度**（提案層級），ticket 追蹤的是**任務執行進度**（實作層級）。提案可能在 ticket 完成後仍因需求變更而重新評估。
 
 ## 跨文件導航
 
 基於 YAML frontmatter 的引用欄位：
+
+**權威欄位**：PROP→SPEC／UC 的權威是 SPEC／UC frontmatter 的 `source_proposal`；`nav`、`query` 以 PROP 為起點時，由該欄位反查並列出 SPEC 與 UC。PROP 的 `spec_refs` 非權威，保留相容、不刪既有值，輸出時標示「非權威」，與反查不一致時以反查為準。
 
 | 起點 | 可導航到 | 透過欄位 |
 |------|---------|---------|
@@ -73,6 +79,17 @@ proposals:
 - 升版時機：只在型別表內容變更時（節點型別、邊型、欄位值域等）手動把常數升為變更當下的框架版本；`.claude/VERSION` 變動、sync-push 後重產皆不改此值。
 - 不改鍵名的理由：改名會影響所有舊 consumer；舊 consumer 照舊寫入的框架版本與新常數落在同一條遞增序列，App 閘門不需修改即可比較。
 - 守衛：staleness 守衛不再排除此鍵，鍵值被手改或未隨型別表變更升版，會與重產結果不一致而被攔下。
+
+### 型別層級（layer）與升級判準
+
+`GRAPH_NODE_TYPES`、`GRAPH_EDGE_TYPES` 每個型別以 `layer` 宣告對消費端的穩定性承諾：`established` 表示已被獨立語料交叉驗證、消費端可依賴；`proposed` 表示形狀仍可能變動。`doc validate` 與 `doc create` 不依 layer 分流，layer 只出現在 `doc schema export` 匯出的 JSON。
+
+升級為 `established` 需兩條件同時成立：
+
+1. 該型別在兩個以上互相獨立的 consumer 專案語料中有實例。「互相獨立」指兩個專案的語料由不同的人、在不同的領域假設下各自產出，任一方的文件不是另一方的複製、改寫或同一流程的重跑；同一組人或同一套領域假設產出的多個專案仍算同一來源。
+2. doc CLI 對該型別有建立與驗證支援（範本產出 + validator 檢查）。
+
+目前 `bundle_dependency`、`closed_by` 兩個邊型維持 `proposed`，其餘型別皆為 `established`。
 
 ## 查詢方式
 

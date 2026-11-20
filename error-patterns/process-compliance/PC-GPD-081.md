@@ -6,7 +6,8 @@ severity: medium
 status: active
 created: 2026-11-04
 related:
-- PC-GPD-075
+  - id: PC-GPD-075
+    kind: sibling
 ---
 
 # PC-GPD-081：裁定落到規格，沒有落到實作

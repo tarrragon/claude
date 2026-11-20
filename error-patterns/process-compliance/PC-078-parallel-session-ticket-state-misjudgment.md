@@ -1,3 +1,9 @@
+---
+id: PC-078
+title: 並行 terminal/session 的 Ticket 狀態異動被誤判為前 session 遺留
+severity: high
+---
+
 # PC-078: 並行 terminal/session 的 Ticket 狀態異動被誤判為前 session 遺留
 
 ---

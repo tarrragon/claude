@@ -12,14 +12,14 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from doc_system.core.tracking_schema import GRAPH_NODE_TYPES, id_pattern_body
+from doc_system.core.tracking_schema import GRAPH_NODE_TYPES, ID_PATTERN_FLAGS, id_pattern_body
 
 # SSOT 檔案相對路徑（本專案適配，見 uc-numbering-convention.md 第 6 節跨專案表）
 USE_CASES_SPEC_RELATIVE_PATH = "docs/app-use-cases.md"
 
 # 合法 UC 標題行格式：## {UC ID}: 標題。UC ID 格式取自 tracking_schema 的 id_pattern。
 # 一律以具名群組取值：id 本體若含捕獲群組，位置編號會錯位。
-UC_HEADING_RE = re.compile(rf"^## (?P<uc_id>{id_pattern_body('UC')}): (?P<title>.+)$")
+UC_HEADING_RE = re.compile(rf"^## (?P<uc_id>{id_pattern_body('UC')}): (?P<title>.+)$", ID_PATTERN_FLAGS)
 
 # 主要成功場景區塊標題與步驟行格式（供 get_uc_summary 解析主流程摘要）
 MAIN_FLOW_HEADING = "### 主要成功場景"
@@ -38,7 +38,7 @@ SUB_SCENARIO_H4_RE = re.compile(r"^####\s+(\d+[A-Za-z]+)\.")
 MAX_MAIN_FLOW_STEPS = 10
 
 # 合法 UC 編號格式：取自 tracking_schema 的 id_pattern，本模組不寫死位數。
-VALID_UC_FORMAT_RE = re.compile(GRAPH_NODE_TYPES["UC"]["id_pattern"])
+VALID_UC_FORMAT_RE = re.compile(GRAPH_NODE_TYPES["UC"]["id_pattern"], ID_PATTERN_FLAGS)
 
 # 掃描文字時抓取所有 UC- 開頭 token（含合法、格式違規與偽子樹）。
 # 大小寫不敏感（IGNORECASE）以涵蓋小寫 uc-01 等變體；並額外納入
@@ -73,6 +73,18 @@ UC_TOKEN_RE = re.compile(
 # 對應規範第 5 節「UC-Pattern 設計模式標註」豁免類別
 UC_PATTERN_EXEMPT_RE = re.compile(r"^UC-[A-Z][a-zA-Z]")
 
+# 無數字 token 放行：正規化後完全不含數字（UC-A、UC-X）者不是編號引用，不判違規。
+# 含數字者（UC-09、UC-1、UC-01a、UC-A1）不符此式，仍走白名單與格式判定。
+# 說明見 doc SKILL.md〈uc 子命令群組〉豁免範圍。
+UC_NO_DIGIT_TOKEN_RE = re.compile(r"^UC-[A-Z]+$")
+
+# 行內豁免標記：同一行含 `uc-verify-exempt: <理由>` 時，該行所有 UC token 不判違規。
+# 註解形式不限（HTML／程式碼註解皆可），只認標記字面；關鍵字限小寫。
+# 理由必填：理由取標記到第一個收尾符號（-->、*/）之間的文字，去除空白後為空，視為無標記。
+# 說明見 doc SKILL.md〈uc 子命令群組〉豁免範圍。
+UC_INLINE_EXEMPT_RE = re.compile(r"uc-verify-exempt:(?P<reason>.*)")
+_COMMENT_CLOSER_SPLIT_RE = re.compile(r"-->|\*/")
+
 # 全形轉半形字元對照（連字號與數字/字母），供 normalize_token 使用
 _FULLWIDTH_HYPHENS = "－﹣―"
 _FULLWIDTH_OFFSET = 0xFF00 - 0x20  # 全形字元碼點與對應半形字元的固定偏移量
@@ -96,15 +108,22 @@ def normalize_token(token: str) -> str:
 
 
 # 豁免路徑：以此開頭的相對路徑不受「必須存在於 SSOT」約束（規範第 5 節）
-EXEMPT_PATH_PREFIXES = (
+DOC_ROOT_EXEMPT_PREFIXES = (
     "docs/work-logs/",
-    "test/fixtures/",
-    "tests/fixtures/",
     "docs/spec/",
     # 框架資產（hooks、skills、規則）提及 UC- 屬示例或工具自身說明，
     # 不是專案程式碼對用例的引用，比對專案 SSOT 只會產生誤報
     ".claude/",
 )
+CODE_ROOT_EXEMPT_PREFIXES = (
+    "test/fixtures/",
+    "tests/fixtures/",
+)
+# 兩份清單串接的相容別名（單根與 hook 過渡用）
+EXEMPT_PATH_PREFIXES = DOC_ROOT_EXEMPT_PREFIXES + CODE_ROOT_EXEMPT_PREFIXES
+
+# worktree 是專案的同構副本，其下路徑剝除此前綴後再套豁免清單
+CLAUDE_WORKTREES_DIR = ".claude/worktrees/"
 
 # 豁免路徑：精確相符（SSOT 自身）
 EXEMPT_PATH_EXACT = (USE_CASES_SPEC_RELATIVE_PATH,)
@@ -362,7 +381,19 @@ def get_uc_summary(uc_id: str, project_root: str) -> dict | None:
     }
 
 
-def is_exempt_path(file_path: str, project_root: str) -> bool:
+def _strip_worktree_prefix(rel: str) -> str:
+    """rel 以 `.claude/worktrees/<name>/` 開頭時剝除該段，否則原樣回傳。"""
+    if not rel.startswith(CLAUDE_WORKTREES_DIR):
+        return rel
+    _, sep, tail = rel[len(CLAUDE_WORKTREES_DIR):].partition("/")
+    return tail if sep and tail else rel
+
+
+def _is_within(abs_path: str, root: str) -> bool:
+    return abs_path == root or abs_path.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def is_exempt_path(file_path: str, project_root: str, code_root: str | None = None) -> bool:
     """判定路徑是否屬規範第 5 節五類豁免中的「路徑類」豁免（不含 UC-Pattern token 類）。
 
     雙錨點比對：優先用相對 project_root 的路徑前綴（一般情況，錨點 1）；
@@ -374,12 +405,27 @@ def is_exempt_path(file_path: str, project_root: str) -> bool:
     相對路徑以 project_root 解析，不以行程 cwd 解析：行程 cwd 位於
     `.claude/` 之下時（如在 `.claude/hooks` 執行），專案程式碼的相對路徑會被
     解析到 `.claude/hooks/` 之下，落入錨點 2 的 `.claude/` 片段而誤判豁免。
+
+    雙根清單：外接模式（code_root 非空且與 project_root 不同）下，檔案在 code root
+    之下只比 CODE_ROOT_EXEMPT_PREFIXES，其餘只比 DOC_ROOT_EXEMPT_PREFIXES 與
+    EXEMPT_PATH_EXACT；code_root 未傳、為空或與 project_root 相同時兩份清單皆比。
+
+    worktree 鏡射：rel 以 `.claude/worktrees/<name>/` 開頭時，剝除該段後再判定。
     """
     candidate = Path(file_path)
     if not candidate.is_absolute():
         candidate = Path(project_root) / candidate
     abs_path = candidate.resolve()
     abs_str = str(abs_path).replace(os.sep, "/")
+
+    doc_prefixes = DOC_ROOT_EXEMPT_PREFIXES + CODE_ROOT_EXEMPT_PREFIXES
+    if code_root:
+        code_abs = os.path.realpath(code_root)
+        if code_abs != os.path.realpath(project_root):
+            doc_prefixes = DOC_ROOT_EXEMPT_PREFIXES
+            if _is_within(str(abs_path), code_abs):
+                code_rel = os.path.relpath(str(abs_path), code_abs).replace(os.sep, "/")
+                return _strip_worktree_prefix(code_rel).startswith(CODE_ROOT_EXEMPT_PREFIXES)
 
     try:
         rel = os.path.relpath(str(abs_path), project_root)
@@ -388,17 +434,14 @@ def is_exempt_path(file_path: str, project_root: str) -> bool:
     rel = rel.replace(os.sep, "/")
 
     if not rel.startswith(".."):
-        if rel in EXEMPT_PATH_EXACT:
-            return True
-        if any(rel.startswith(prefix) for prefix in EXEMPT_PATH_PREFIXES):
-            return True
-        return False
+        rel = _strip_worktree_prefix(rel)
+        return rel in EXEMPT_PATH_EXACT or rel.startswith(doc_prefixes)
 
     # 錨點 2（僅當檔案不在 project_root 之下時啟用）：以路徑片段比對，
     # 避免巧合子字串誤判（要求前後皆為路徑邊界）。
     if any(abs_str.endswith("/" + exact) for exact in EXEMPT_PATH_EXACT):
         return True
-    return any((f"/{prefix}") in abs_str for prefix in EXEMPT_PATH_PREFIXES)
+    return any((f"/{prefix}") in abs_str for prefix in doc_prefixes)
 
 
 def is_pattern_exempt_token(token: str) -> bool:
@@ -406,14 +449,32 @@ def is_pattern_exempt_token(token: str) -> bool:
     return bool(UC_PATTERN_EXEMPT_RE.match(token))
 
 
-def find_uc_tokens_in_text(text: str) -> list[tuple[str, int]]:
+def has_inline_exempt_marker(line: str) -> bool:
+    """該行是否含有效的行內豁免標記（`uc-verify-exempt: <理由>`，理由非空白）。
+
+    標記解析只做字串比對與切除，無例外路徑；任何無法確認理由非空的輸入
+    （無標記、理由空白、只剩註解收尾符號）一律回傳 False，即不豁免。
+    """
+    match = UC_INLINE_EXEMPT_RE.search(line)
+    if not match:
+        return False
+    reason = _COMMENT_CLOSER_SPLIT_RE.split(match.group("reason"), maxsplit=1)[0]
+    return bool(reason.strip())
+
+
+def find_uc_tokens_in_text(text: str, skip_exempt_lines: bool = False) -> list[tuple[str, int]]:
     """回傳文字中所有 UC- 開頭 token（原始大小寫/全形形態）及其所在行號（1-based）。
 
     回傳原始擷取形態（供訊息顯示定位），違規判定與白名單比對一律經
     normalize_token() 轉換為正規形式後再進行，見 is_violation_token。
+
+    skip_exempt_lines 為 True 時，含有效行內豁免標記的行不回傳任何 token
+    （預設 False，行為與加入標記前相同）。
     """
     hits: list[tuple[str, int]] = []
     for lineno, line in enumerate(text.splitlines(), start=1):
+        if skip_exempt_lines and has_inline_exempt_marker(line):
+            continue
         for match in UC_TOKEN_RE.finditer(line):
             hits.append((match.group(0), lineno))
     return hits
@@ -429,6 +490,8 @@ def is_violation_token(token: str, valid: dict[str, str]) -> bool:
     # （uc-unset）不符豁免樣式，正規化後卻成為格式違規的 UC-UNSET
     normalized = normalize_token(token)
     if is_pattern_exempt_token(normalized):
+        return False
+    if UC_NO_DIGIT_TOKEN_RE.match(normalized):
         return False
     if VALID_UC_FORMAT_RE.match(normalized):
         return normalized not in valid

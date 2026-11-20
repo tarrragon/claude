@@ -1,3 +1,9 @@
+---
+id: PC-010
+title: PM 在 ticket complete 後跳過 Checkpoint 流程
+severity: medium
+---
+
 # PC-010: PM 在 ticket complete 後跳過 Checkpoint 流程
 
 ## 基本資訊

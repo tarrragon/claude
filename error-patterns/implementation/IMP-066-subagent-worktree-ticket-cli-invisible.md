@@ -6,8 +6,9 @@ severity: medium
 status: active
 created: 2026-04-18
 related:
-- ARCH-015
-- PC-019
+  - id: ARCH-015
+    kind: citation
+  - PC-019
 ---
 
 # IMP-066: subagent 在 isolation:worktree 下透過 ticket CLI 看不到主 repo 新建 ticket

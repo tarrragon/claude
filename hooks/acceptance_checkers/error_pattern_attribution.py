@@ -44,10 +44,28 @@ def _extract_pc_id(pc_filename: str) -> Optional[str]:
     return m.group(0).upper() if m else None
 
 
+# 非執行者文字：範本註解、hook 證據引文（程式碼區塊）、CLI 產生段落。
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_CODE_FENCE_RE = re.compile(r"^```.*?^```[^\n]*$", re.DOTALL | re.MULTILINE)
+# CLI 產生段落：自標題起算，到下一個任一級標題前
+_CLI_SECTION_RE = re.compile(
+    r"^#{2,4} (?:查重紀錄|Context Bundle)[^\n]*\n.*?(?=^#{1,4} |\Z)",
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def _strip_non_executor_text(ticket_content: str) -> str:
+    """剝除 HTML 註解、程式碼區塊、CLI 產生段落，只留執行者寫入的內容。"""
+    text = _HTML_COMMENT_RE.sub("", ticket_content)
+    text = _CODE_FENCE_RE.sub("", text)
+    return _CLI_SECTION_RE.sub("", text)
+
+
 def _ticket_references_pc(
     ticket_content: str, pc_file_path: str, pc_id: Optional[str]
 ) -> bool:
-    """檢查 ticket md 內容是否引用指定 PC（以 basename 或 PC ID）。"""
+    """檢查 ticket md 執行者內容是否引用指定 PC（以 basename 或 PC ID）。"""
+    ticket_content = _strip_non_executor_text(ticket_content)
     basename = Path(pc_file_path).name
     # basename 直接出現
     if basename and basename in ticket_content:
@@ -85,6 +103,7 @@ def filter_error_patterns_by_ticket_scope(
     for rel_path in candidate_files:
         pc_path = project_dir / rel_path
         try:
+            # 結果丟棄：只為偵測讀檔失敗（失敗則保守歸屬）
             pc_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
             if logger:
@@ -108,7 +127,7 @@ def filter_error_patterns_by_ticket_scope(
         else:
             if logger:
                 logger.info(
-                    "PC %s (id=%s) 無 frontmatter 歸屬且 ticket %s md 未引用，過濾（PC-099 保護）",
+                    "PC %s (id=%s) ticket %s md 執行者內容未引用，過濾（PC-099 保護）",
                     rel_path,
                     pc_id,
                     current_ticket_id,

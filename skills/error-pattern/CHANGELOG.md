@@ -2,6 +2,25 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.10.0 — 新增〈frontmatter `related` 的 kind 標記〉：條目可寫成 `- id: <ID>` 加 `kind: sibling|citation`，舊格式純 ID 視為 `unknown`。附判別準則表與一個判斷問題：對方的讀者沒看到本則時，會不會漏掉同一問題的另一半。index 一致性 hook 依 kind 判定雙向性：`sibling` 未回指即報、不看日期；`citation` 不報；`unknown` 沿用 7 天窗口。新增或修改條目時一律寫 `kind`，舊條目不強制改寫。
+
+**Version**: 1.9.1 — `add` 步驟 8 新增〈既有列的刷新路徑〉：佔位符已寫進索引時，補齊內文後以 `readme_index.py sync --write --refresh` 補值，並把來源版本正規化為 `v` 前綴。原本說「該列無法由工具更正」，已改寫。〈多線並行〉補兩點 allocator 現行判定：終態集合為 completed／closed／abandoned／cancelled，沒有 status 的票保守計入；票面引用號碼大於「目錄最大號 + 50」時不計入，並在 stderr 警告。
+
+**Version**: 1.9.0 — `add` 步驟 7 的配號命令改由 git common dir 取得主 checkout 根目錄，專案代號與 `tickets_root` 都以它為準，所以在 worktree 內執行時，目錄名不必登錄，也看得到其他線登記在票上的編號。新增〈多線並行〉一節，說明四件事：
+- 寫入位置與提交都在 worktree，經 `worktree merge` 合入
+- 配號後立刻把 ID 寫進自己的票
+- 票等 pattern 合入後才 complete
+- 配號到登記之間仍有撞號殘留風險，以及如何偵測與處置
+
+流程變更：多線並行時新增「配號後登記」一步
+**Last Updated**: 2026-11-20
+
+**Version**: 1.8.1 — `add` 步驟 1 改為目錄／前綴／用途對照表（補上 process／`PROC`）。步驟 7 的配號範例改為可照抄的 `uv run --with pyyaml python -c` 命令，前綴當引數，並寫明兩件事：傳目錄名會拋 `ValueError`；系統 python 缺 pyyaml 會在 import 時失敗。無流程或命令變更
+**Last Updated**: 2026-11-20
+
+**Version**: 1.8.0 — 原子配號佔位檔改為寫入 severity 兩面：frontmatter `severity: unassessed`，以及內文「基本資訊」的 `- **風險等級**: 未評估`。`severity_audit` 新增 `unassessed` 分類與 `is_unassessed()`；一面未評估、另一面有等級時判為 `both_differ`。`query` 的排序規則補上一條：未評估不參與等級排序，排在有等級的結果之後。「未評估」不放進 `_SEVERITY_MAP`，README sync 照舊視為缺值並阻擋寫入
+**Last Updated**: 2026-11-20
+
 **Version**: 1.7.2 — `SKILL.md` 明寫 error-pattern frontmatter 不放 `source_ticket`／`source_tickets`／`related_tickets` 等專案票號欄位（規則 8；歸屬改由 ticket md 引用 PC ID 表達）；刪除 IMP-029、IMP-030、PC-APP-006 三檔空的 `related_tickets` 欄位。無流程或命令變更
 **Last Updated**: 2026-11-19
 

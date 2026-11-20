@@ -1,5 +1,5 @@
 ---
-# 提案（Proposal）模板
+# 提案（Proposal）範本
 # 複製本檔案並重新命名為 PROP-{NNN}-{簡短描述}.md
 
 id: PROP-NNN

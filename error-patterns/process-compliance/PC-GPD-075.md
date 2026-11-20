@@ -6,8 +6,10 @@ severity: medium
 status: active
 created: 2026-11-03
 related:
-- PC-BAL-036
-- TEST-GPD-002
+  - PC-BAL-036
+  - TEST-GPD-002
+  - id: PC-GPD-081
+    kind: sibling
 ---
 
 # PC-GPD-075：被契約測試綁住的規格與實作要同批進 main

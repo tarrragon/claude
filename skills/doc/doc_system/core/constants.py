@@ -35,4 +35,13 @@ TEST_SCAN_DIRS = ["test", "integration_test", "tests"]
 TEST_SCAN_DIRS_CONFIG_KEY = "test_scan_dirs"
 
 # test-map 檔案掃描辨識的測試檔副檔名（含 dart，涵蓋 Flutter 專案）。
+# 專案可在 docs/traceability.yaml 以頂層鍵 TEST_FILE_EXTENSIONS_CONFIG_KEY 覆寫，
+# 設定值整份取代本清單（不疊加）。
 TEST_FILE_EXTENSIONS = (".dart", ".js", ".ts", ".py", ".test.js", ".spec.js")
+
+# docs/traceability.yaml 內覆寫測試副檔名的頂層鍵（值為以點開頭的副檔名字串清單）。
+TEST_FILE_EXTENSIONS_CONFIG_KEY = "test_file_extensions"
+
+# docs/traceability.yaml 內指定程式碼根目錄的頂層鍵（值為目錄字串；相對路徑以 doc root 解析）。
+# 外接模式下為必填；是 code root 的唯一權威來源，--code-root 旗標可覆寫。
+CODE_ROOT_CONFIG_KEY = "code_root"

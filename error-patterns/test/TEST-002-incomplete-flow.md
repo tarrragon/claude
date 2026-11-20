@@ -1,3 +1,9 @@
+---
+id: TEST-002
+title: 測試流程不完整
+severity: high
+---
+
 # TEST-002: 測試流程不完整
 
 ## 基本資訊

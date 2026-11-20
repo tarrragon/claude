@@ -1,3 +1,9 @@
+---
+id: TEST-004
+title: 重構引入 Wrapper 函式後 Mock Patch 路徑失效
+severity: high
+---
+
 # TEST-004: 重構引入 Wrapper 函式後 Mock Patch 路徑失效
 
 ## 基本資訊

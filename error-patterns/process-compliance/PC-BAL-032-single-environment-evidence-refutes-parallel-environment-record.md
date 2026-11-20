@@ -1,3 +1,9 @@
+---
+id: PC-BAL-032
+title: 以單一環境的證據推翻另一環境的記錄
+severity: high
+---
+
 # PC-BAL-032：以單一環境的證據推翻另一環境的記錄
 
 **分類**: process-compliance

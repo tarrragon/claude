@@ -253,3 +253,86 @@ class TestScanDirs:
 
         assert "test_scan_dirs 須為非空的目錄字串清單" in result.err
         assert _uc_count(result.out, "UC-01") == 1
+
+
+# ---------------------------------------------------------------------------
+# code root 分離 / repo: 前綴 / 副檔名設定鍵（3.5.0-W1-151.1.8.1）
+# ---------------------------------------------------------------------------
+import pytest  # noqa: E402
+
+from doc_system.commands.test_map import _resolve_test_extensions  # noqa: E402
+from doc_system.core.constants import TEST_FILE_EXTENSIONS  # noqa: E402
+
+
+def _external_layout(tmp_path, code_root_cfg=True):
+    ws = tmp_path / "ws"
+    repo = tmp_path / "repo"
+    (ws / "docs" / "usecases").mkdir(parents=True)
+    (ws / "docs" / "usecases" / "UC-01-import.md").write_text(
+        '---\nid: UC-01\ntitle: "Import"\nstatus: approved\n---\n'
+    )
+    (repo / "test").mkdir(parents=True)
+    (repo / "test" / "b_test.py").write_text("# UC-01 py test")
+    cfg = f"code_root: {repo}\n" if code_root_cfg else "version: 1\n"
+    (ws / "docs" / "traceability.yaml").write_text(cfg)
+    return ws, repo
+
+
+def _run_external(ws, args, monkeypatch):
+    monkeypatch.setattr("doc_system.core.file_locator.is_external_mode", lambda *a, **k: True)
+    with patch.object(FileLocator, "get_project_root", return_value=str(ws)):
+        execute(args)
+
+
+class TestExternalCodeRoot:
+    def test_scans_code_root_with_repo_prefix(self, tmp_path, capsys, monkeypatch):
+        ws, _repo = _external_layout(tmp_path)
+        _run_external(ws, argparse.Namespace(uc_id=None, code_root=None), monkeypatch)
+        out = capsys.readouterr().out
+        assert "repo:test/b_test.py" in out
+        assert "../" not in out
+
+    def test_external_without_code_root_exits_nonzero(self, tmp_path, capsys, monkeypatch):
+        """正向對照：外接模式未設 code_root，非 0 結束並指出設定方式。"""
+        ws, _repo = _external_layout(tmp_path, code_root_cfg=False)
+        with pytest.raises(SystemExit) as exc:
+            _run_external(ws, argparse.Namespace(uc_id=None, code_root=None), monkeypatch)
+        assert exc.value.code != 0
+        assert "code_root" in capsys.readouterr().err
+
+    def test_code_root_flag_overrides(self, tmp_path, capsys, monkeypatch):
+        ws, repo = _external_layout(tmp_path, code_root_cfg=False)
+        _run_external(ws, argparse.Namespace(uc_id=None, code_root=str(repo)), monkeypatch)
+        assert "repo:test/b_test.py" in capsys.readouterr().out
+
+    def test_single_root_output_has_no_prefix(self, tmp_path, capsys):
+        project_root = _setup_project(tmp_path, {"test_import.dart": "// UC-01"})
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            execute(argparse.Namespace(uc_id=None))
+        out = capsys.readouterr().out
+        assert "repo:" not in out and "test_import.dart" in out
+
+
+class TestTestExtensionsConfig:
+    def test_absent_uses_default(self):
+        assert _resolve_test_extensions({}) == TEST_FILE_EXTENSIONS
+
+    def test_value_replaces_default(self):
+        assert _resolve_test_extensions({"test_file_extensions": [".kt"]}) == (".kt",)
+
+    @pytest.mark.parametrize("bad", [[], "kt", [1], [""]])
+    def test_invalid_falls_back_with_warning(self, bad, capsys):
+        assert _resolve_test_extensions({"test_file_extensions": bad}) == TEST_FILE_EXTENSIONS
+        assert "test_file_extensions" in capsys.readouterr().err
+
+    def test_kt_counted_via_config_and_not_without(self, tmp_path, capsys):
+        """正向對照：設定鍵有無，.kt 計入與否產物不同。"""
+        project_root = _setup_project(tmp_path, {"a_test.kt": "// UC-01"})
+        args = argparse.Namespace(uc_id="UC-01")
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            execute(args)
+        assert "a_test.kt" not in capsys.readouterr().out
+        (tmp_path / "docs" / "traceability.yaml").write_text("test_file_extensions: ['.kt']\n")
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            execute(args)
+        assert "a_test.kt" in capsys.readouterr().out

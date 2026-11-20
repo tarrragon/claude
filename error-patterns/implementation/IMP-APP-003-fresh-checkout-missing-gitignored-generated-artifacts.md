@@ -1,3 +1,9 @@
+---
+id: IMP-APP-003
+title: fresh checkout 缺 gitignored 生成產物導致連鎖編譯失敗（並被誤歸因為資源耗盡）
+severity: high
+---
+
 # IMP-APP-003: fresh checkout 缺 gitignored 生成產物導致連鎖編譯失敗（並被誤歸因為資源耗盡）
 
 ## 基本資訊

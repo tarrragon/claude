@@ -41,7 +41,8 @@ def parse_frontmatter(file_path: str) -> dict | None:
 
     try:
         text = path.read_text(encoding="utf-8-sig")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
+        # 讀不到或非 UTF-8：依契約回傳 None，由呼叫端視為無 frontmatter
         return None
 
     return parse_frontmatter_text(text)

@@ -1,8 +1,9 @@
 """domain map 定位：source_specs 解析、定位鏈、層級 SPEC 判定與各類診斷訊息。
 
-路徑常數皆為相對於 cwd 的相對路徑（測試以 chdir 隔離）。
+路徑常數為相對 docs 解析根的相對路徑；定位鏈以 _docs_root() 解析（CLAUDE_PROJECT_DIR，未設或無效時 cwd）。
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -12,6 +13,17 @@ from .fr_extract import FRONTMATTER_BLOCK_RE, SPEC_ID_RE, extract_spec_id
 DOMAIN_MAP_GLOB_DIR = Path("docs/spec")
 SYSTEM_LAYER_PATH = Path("docs/system-layer.md")
 LEGACY_DOMAIN_MAP_PATH = Path("docs/domain-map.md")
+
+
+def _docs_root():
+    """docs/ 的解析根：CLAUDE_PROJECT_DIR 指向存在的目錄時用它，否則 cwd（Path(".")，保持相對路徑）。"""
+    value = os.environ.get("CLAUDE_PROJECT_DIR", "")
+    return Path(value) if value and Path(value).is_dir() else Path(".")
+
+
+def system_layer_file():
+    """系統層檔案的實際路徑（docs 解析根下）；訊息顯示仍用 SYSTEM_LAYER_PATH。"""
+    return _docs_root() / SYSTEM_LAYER_PATH
 SOURCE_SPECS_KEY_RE = re.compile(r"^source_specs:[ \t]*(.*?)[ \t]*$")
 BLOCK_ITEM_RE = re.compile(r"^[ \t]*-[ \t]*(.*?)[ \t]*$")
 TRAILING_COMMENT_RE = re.compile(r"(?:^|[ \t]+)#.*$")
@@ -60,7 +72,7 @@ def _parse_source_specs(map_text):
 
 def _list_domain_maps():
     """列舉 docs/spec/*/domain-map.md（依路徑排序，結果穩定）。"""
-    return sorted(DOMAIN_MAP_GLOB_DIR.glob("*/domain-map.md"))
+    return sorted((_docs_root() / DOMAIN_MAP_GLOB_DIR).glob("*/domain-map.md"))
 
 
 def _scan_listing_maps(spec_id):
@@ -108,9 +120,11 @@ def locate_domain_maps_with_reason(spec_path, explicit, spec_id=None):
             found.append(m)
             seen.add(m.resolve())
     if found:
-        return found + ([SYSTEM_LAYER_PATH] if SYSTEM_LAYER_PATH.exists() else []), None, unparseable
-    if LEGACY_DOMAIN_MAP_PATH.exists():
-        return [LEGACY_DOMAIN_MAP_PATH], None, unparseable
+        layer = system_layer_file()
+        return found + ([layer] if layer.exists() else []), None, unparseable
+    legacy = _docs_root() / LEGACY_DOMAIN_MAP_PATH
+    if legacy.exists():
+        return [legacy], None, unparseable
     return [], _diagnose_missing(spec_id, unparseable), unparseable
 
 
@@ -215,27 +229,106 @@ def _declared_domains():
     return {d for d in found if d}
 
 
-def is_layer_spec(spec_text):
-    """SPEC 的 domain 欄非任何已宣告 DomainBundle 的 domain，即為層級 SPEC（以系統層判定）。
+LAYER_NAMES_KEY = "layer_names"  # 權威在 doc 的 tracking_schema.LAYER_NAMES_KEY，字面須同步（本腳本不 import doc）
+LAYER_NAMES_FORMAT_MESSAGE = (
+    f"domain 覆蓋檢核失敗：{SYSTEM_LAYER_PATH} frontmatter 的 {LAYER_NAMES_KEY} 須為字串清單"
+    "（如 [ui, infra]，或寫 [] 宣告無保留名稱）。"
+)
 
-    domain 欄未填、或專案無任何已宣告 domain（單 domain 專案）時不適用。
+
+def _split_flow_items(value):
+    """行內清單 `[a, b]` 拆成項目；含巢狀方括號回 None。"""
+    inner = value[1:-1]
+    if "[" in inner or "]" in inner:
+        return None
+    return [_unquote_domain(p.strip()) for p in inner.split(",") if p.strip()]
+
+
+def read_layer_names():
+    """讀系統層 frontmatter 的 layer_names，回傳 (狀態, 名稱清單)。
+
+    狀態：absent（檔案非一般檔、無 frontmatter 或無此鍵，遷移期）、declared（含 `[]`）、format（非字串清單）。
+    """
+    layer_file = system_layer_file()
+    if not layer_file.is_file():
+        return "absent", []
+    block = FRONTMATTER_BLOCK_RE.match(layer_file.read_text(encoding="utf-8"))
+    lines = block.group(1).splitlines() if block else []
+    for i, line in enumerate(lines):
+        key = re.match(rf"^{LAYER_NAMES_KEY}:[ \t]*(.*?)[ \t]*$", line)
+        if not key:
+            continue
+        value = TRAILING_COMMENT_RE.sub("", key.group(1)).strip()
+        if value.startswith("[") and value.endswith("]"):
+            items = _split_flow_items(value)
+            return ("declared", items) if items is not None else ("format", [])
+        if value:
+            return "format", []
+        items = []
+        for following in lines[i + 1:]:
+            if not TRAILING_COMMENT_RE.sub("", following).strip():
+                continue
+            item = BLOCK_ITEM_RE.match(following)
+            if not item:
+                break
+            items.append(_unquote_domain(TRAILING_COMMENT_RE.sub("", item.group(1)).strip()))
+        return ("declared", items) if items else ("format", [])
+    return "absent", []
+
+
+def is_layer_spec(spec_text):
+    """SPEC 的 domain 欄是層級名稱，即為層級 SPEC（以系統層判定）。
+
+    domain 欄未填、或專案無任何已宣告 domain（單 domain 專案）、或 domain 是已宣告 domain 時不適用。
+    層級名稱的判準：系統層宣告了 layer_names 時，domain 在清單內；清單缺席（遷移期）時，沿用
+    「domain 不在已宣告集合」。清單存在而 domain 不在其中者不是層級，由 undeclared_layer_name_error 轉紅。
     """
     domain = _frontmatter_domain(spec_text)
     declared = _declared_domains()
-    return bool(domain and declared and domain not in declared)
+    if not (domain and declared and domain not in declared):
+        return False
+    state, names = read_layer_names()
+    return domain in names if state == "declared" else state == "absent"
+
+
+def layer_names_error(spec_text):
+    """layer_names 存在但非字串清單時回傳錯誤訊息，否則 None。僅在 SPEC 有 domain 欄時消費。"""
+    if _frontmatter_domain(spec_text) and read_layer_names()[0] == "format":
+        return LAYER_NAMES_FORMAT_MESSAGE
+    return None
+
+
+def undeclared_layer_name_error(spec_text):
+    """layer_names 已宣告、SPEC 的 domain 欄既非已宣告 domain 也不在清單內時回傳錯誤訊息，否則 None。"""
+    domain = _frontmatter_domain(spec_text)
+    declared = _declared_domains()
+    state, names = read_layer_names()
+    if not (domain and declared and domain not in declared and state == "declared" and domain not in names):
+        return None
+    shown = ", ".join(names) if names else "（無保留名稱）"
+    return (
+        f"domain 覆蓋檢核失敗：SPEC 的 domain 欄 {domain!r} 不在已宣告 domain 集合 "
+        f"[{', '.join(sorted(declared))}]，也不在 {SYSTEM_LAYER_PATH} 宣告的 {LAYER_NAMES_KEY} [{shown}]。"
+        f"請修正 domain 欄，或把層級名稱加入 {LAYER_NAMES_KEY}。"
+    )
 
 
 def layer_banner(spec_text, unparseable=()):
     """走系統層時印出判定依據：SPEC 的 domain 欄值與已宣告 domain 集合（供人眼比對錯字）。
 
     unparseable 非空時，有 map 以無法解析的寫法可能列了本 SPEC，橫幅不宣稱「無任何 map 列入」。
+    layer_names 缺席時附遷移提示（退回以 domain 不在已宣告集合判定）。
     """
     declared = ", ".join(sorted(_declared_domains()))
     claim = "無可解析的 map 列入本 SPEC（另有 map 的 source_specs 格式無法解析，見 stderr）" if unparseable else "無任何 map 列入本 SPEC"
-    return (
+    banner = (
         f"domain 覆蓋檢核：{claim}，其 domain 欄 {_frontmatter_domain(spec_text)!r} "
         f"不在已宣告 domain 集合 [{declared}]，視為層級 SPEC，以系統層判定"
     )
+    if read_layer_names()[0] == "absent":
+        banner += (f"\n提示：{SYSTEM_LAYER_PATH} frontmatter 未宣告 {LAYER_NAMES_KEY}，目前退回以"
+                   f"「domain 不在已宣告集合」判定層級；請補宣告 {LAYER_NAMES_KEY}: [層級名稱]（遷移期寬限）。")
+    return banner
 
 
 def warn_unparseable_maps(unparseable):

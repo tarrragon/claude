@@ -1,3 +1,9 @@
+---
+id: PC-082
+title: 修復 regression 時選還原舊值而非移除（忽略全域規則適用範圍）
+severity: medium
+---
+
 # PC-082: 修復 regression 時選還原舊值而非移除（忽略全域規則適用範圍）
 
 ---

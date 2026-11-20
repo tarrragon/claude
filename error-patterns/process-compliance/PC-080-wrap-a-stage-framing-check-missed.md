@@ -1,3 +1,9 @@
+---
+id: PC-080
+title: WRAP A 階段未檢查問題框架（選項全在同一框架內，違反 Consider the Opposite）
+severity: medium
+---
+
 # PC-080: WRAP A 階段未檢查問題框架（選項全在同一框架內，違反 Consider the Opposite）
 
 ---

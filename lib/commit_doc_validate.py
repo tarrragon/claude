@@ -13,9 +13,13 @@ PreToolUse（commit-stage-guard-gate，讀 index）與 reference-transaction
 - 只擋新增：同一 doc_id 在「本次提交前」的 docs 樹再驗一次，扣除已存在的錯誤項目，
   剩餘非空才算新增。提交前的樹以工作區複製，並把本次變更的每個 docs 檔還原為
   pre_text（新檔則移除），等同提交前的 docs 狀態。
-- 比對基準：doc validate 讀工作區。工作區內容與 StagedFile.post_text（PreToolUse 為
+- 比對基準：本批觸及檔讀工作區；工作區內容與 StagedFile.post_text（PreToolUse 為
   index、reference-transaction 為 commit tree）不一致時，驗證結果不代表提交內容，
-  新增錯誤降為 warn。
+  新增錯誤降為 warn。未觸及、但工作區與 HEAD 不同的 docs 檔（含 untracked）改取
+  HEAD 內容（HEAD 無此檔則視為不存在）：未觸及檔的提交內容即父 commit 版本，PreToolUse
+  與 reference-transaction 兩路徑皆同。無此類髒檔時不建暫存樹。git 列髒檔或取 HEAD
+  內容失敗：退回以工作區內容判定（與改動前相同，放寬類改動失敗時落在保守側），
+  stderr 與日誌寫明原因。
 - doc CLI 失敗、逾時或輸出無法辨識：fail-open，寫 stderr 與日誌。
 """
 
@@ -126,8 +130,76 @@ def run_doc_validate(doc_id: str, root: Path) -> ValidateResult:
     return result
 
 
-def _build_pre_commit_tree(project_root: Path, staged_files, dest: Path) -> None:
-    """複製 doc validate 會讀的路徑，再把本次變更的 docs 檔還原為提交前內容。"""
+def _git_out(project_root: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(project_root), *args],
+        capture_output=True, timeout=DOC_VALIDATE_TIMEOUT_SECONDS,
+    )
+
+
+def _untouched_dirty_paths(project_root: Path, staged_files) -> Tuple[Optional[List[str]], str]:
+    """工作區與 HEAD 不同、且不在本批觸及清單的 validate 輸入路徑（含 untracked）。
+
+    回傳 (路徑清單, 失敗原因)；git 失敗時清單為 None。非 git 工作樹視為無髒檔。
+    """
+    try:
+        inside = _git_out(project_root, "rev-parse", "--is-inside-work-tree")
+        if inside.returncode != 0:
+            return [], ""
+        status = _git_out(
+            project_root, "status", "--porcelain", "-z", "--untracked-files=all",
+            "--", *_VALIDATE_INPUT_PATHS,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git 無法執行：{exc}"
+    if status.returncode != 0:
+        return None, f"git status rc={status.returncode}"
+    touched = {sf.rel_path for sf in staged_files}
+    paths: List[str] = []
+    tokens = status.stdout.decode("utf-8", "replace").split("\0")
+    i = 0
+    while i < len(tokens):
+        entry = tokens[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        if entry[0] in "RC":  # 改名／複製：下一個 token 是原路徑
+            if i < len(tokens):
+                paths.append(tokens[i])
+            i += 1
+        paths.append(entry[3:])
+    return [p for p in dict.fromkeys(paths) if p not in touched], ""
+
+
+def _apply_head_versions(project_root: Path, dest: Path, paths: List[str]) -> Optional[str]:
+    """把樹內的未觸及髒檔改寫為 HEAD 內容（HEAD 無此檔則移除）；失敗回傳原因。"""
+    for rel in paths:
+        try:
+            listed = _git_out(project_root, "ls-tree", "HEAD", "--", rel)
+            if listed.returncode != 0:
+                return f"git ls-tree {rel} rc={listed.returncode}"
+            target = dest / rel
+            if not listed.stdout.strip():
+                if target.exists():
+                    target.unlink()
+                continue
+            shown = _git_out(project_root, "show", f"HEAD:{rel}")
+        except (OSError, subprocess.SubprocessError) as exc:
+            return f"git 無法執行：{exc}"
+        if shown.returncode != 0:
+            return f"git show HEAD:{rel} rc={shown.returncode}"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(shown.stdout)
+    return None
+
+
+def _build_pre_commit_tree(
+    project_root: Path, staged_files, dest: Path, head_paths: Optional[List[str]] = None,
+) -> Optional[str]:
+    """複製 doc validate 會讀的路徑；未觸及髒檔改取 HEAD 內容，再把本次變更的 docs 檔還原為提交前內容。
+
+    回傳取 HEAD 內容失敗的原因（None 代表成功）。
+    """
     for rel in _VALIDATE_INPUT_PATHS:
         src = project_root / rel
         if src.is_dir():
@@ -135,6 +207,17 @@ def _build_pre_commit_tree(project_root: Path, staged_files, dest: Path) -> None
         elif src.is_file():
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest / rel)
+    failure = _apply_head_versions(project_root, dest, head_paths) if head_paths else None
+    _revert_touched_docs(staged_files, dest)
+    return failure
+
+
+def _build_post_commit_tree(project_root: Path, dest: Path, head_paths: List[str]) -> Optional[str]:
+    """提交後樹：工作區複製，未觸及髒檔改取 HEAD 內容（觸及檔保持工作區版本）。"""
+    return _build_pre_commit_tree(project_root, [], dest, head_paths)
+
+
+def _revert_touched_docs(staged_files, dest: Path) -> None:
     for sf in staged_files:
         if not sf.rel_path.startswith("docs/"):
             continue
@@ -186,9 +269,22 @@ def check_doc_validate(staged_files, project_root: Path, logger, finding_cls) ->
     findings = []
     pre_results: Dict[str, ValidateResult] = {}
     tmp_dir: Optional[str] = None
+    post_tmp_dir: Optional[str] = None
+    head_paths, git_failure = _untouched_dirty_paths(project_root, staged_files)
+    post_root = project_root
     try:
+        if head_paths:
+            post_tmp_dir = tempfile.mkdtemp(prefix="commit-doc-validate-post-")
+            git_failure = _build_post_commit_tree(project_root, Path(post_tmp_dir), head_paths) or ""
+            if not git_failure:
+                post_root = Path(post_tmp_dir)
+        if head_paths is None or git_failure:
+            head_paths = []
+            msg = f"[doc-validate] 無法取得未觸及 docs 檔的提交內容，退回以工作區內容判定（同改動前）：{git_failure}"
+            sys.stderr.write(msg + "\n")
+            logger.warning(msg)
         for sf, doc_id in nodes:
-            post = run_doc_validate(doc_id, project_root)
+            post = run_doc_validate(doc_id, post_root)
             if not post.ok:
                 _report_cli_failure(doc_id, sf.rel_path, post.detail, logger)
                 continue
@@ -197,7 +293,7 @@ def check_doc_validate(staged_files, project_root: Path, logger, finding_cls) ->
                 continue
             if tmp_dir is None:
                 tmp_dir = tempfile.mkdtemp(prefix="commit-doc-validate-")
-                _build_pre_commit_tree(project_root, staged_files, Path(tmp_dir))
+                _build_pre_commit_tree(project_root, staged_files, Path(tmp_dir), head_paths)
             pre = run_doc_validate(doc_id, Path(tmp_dir)) if sf.pre_text else ValidateResult(True, frozenset())
             if not pre.ok:
                 _report_cli_failure(doc_id, sf.rel_path, "提交前基準：" + pre.detail, logger)
@@ -223,6 +319,7 @@ def check_doc_validate(staged_files, project_root: Path, logger, finding_cls) ->
                 sf.rel_path,
             ))
     finally:
-        if tmp_dir is not None:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        for leftover in (tmp_dir, post_tmp_dir):
+            if leftover is not None:
+                shutil.rmtree(leftover, ignore_errors=True)
     return findings

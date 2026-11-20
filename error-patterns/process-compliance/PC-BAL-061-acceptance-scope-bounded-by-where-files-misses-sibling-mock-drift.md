@@ -52,6 +52,8 @@ severity: high
 
 **做法**：以被測 hook 的檔名在所有套件的測試目錄取集合，例如 `grep -rl <hook 檔名> .claude/hooks/tests .claude/skills/*/tests`，全數執行，並把命中檔數寫進驗收記錄。hook 檔名含連字號，測試只能以路徑載入，所以檔名必定出現在測試檔內，這個 grep 可以取到全集。已知盲區是經 dispatcher 或 registry 間接執行的整合測試，這類測試不會寫出檔名，仍由合併閘門的全套件兜底。被測對象是一般 Python 模組、且模組名是常見字（如 `lease` 會命中 `please`）時，裸名 grep 會混入大量無關檔，改以 import 語句形式取集合，例如 `grep -rlE "lib\.lease|import lease|from \.?lease"`。
 
+**實例（2026-11）**：修改 `version-release-guard-hook.py` 後，代理人只跑 `.claude/skills/version-release/tests/` 下的測試，結果全綠。這支 hook 也由 PreToolUse 分派器執行，`.claude/hooks/tests/` 下的分派器合併測試斷言 stderr 為空，修改後 hook 多了 stderr 輸出，要到合併閘門才判紅。分派器測試以清單列出被分派的 hook 檔名，因此本例用上方的 hook 檔名 grep 就能取到該檔，不屬於上述盲區；漏檢的原因是沒有執行 grep，只跑了 hook 所在 skill 的測試目錄。
+
 ## 變體：改動 import，全域的架構守衛測試不在相關測試內
 
 **症狀**：代理人新增或改動 import 後，只跑被改畫面的測試，結果全綠。專案另有一支全域的架構守衛測試，掃描整個原始碼目錄，檢查分層的 import 方向（例如畫面之間不得互相 import、應用層不得 import 畫面層）。這支測試要到合併閘門跑全套件時才轉紅。
@@ -67,6 +69,31 @@ severity: high
 **根因**：被替換的是函式，受影響的是「patch 或依賴這個函式名的測試」。這個集合由函式名決定，不由 hook 名決定。用 hook 名 grep 取到的集合是一個子集。
 
 **做法**：替換或移除函式時，除了用 hook 檔名取集合，還要用舊函式名取集合，例如 `grep -rn 'setattr(.*"<舊函式名>"' .claude/hooks/tests .claude/skills/*/tests`，再逐筆對照被測 hook 是否已改用新函式。hook 仍 import 舊名、但部分呼叫點已改用新函式時，測試要兩個名稱都 patch。
+
+**實例（2026-11，日誌路徑遷移波）**：同一批遷移中有兩次合併閘門紅燈屬於上述「patch 打不到新呼叫點」的情形。第一次是 post-test hook 的日誌目錄改由 `get_hook_log_dir` 解析，第二次是 ticket lifecycle 的日誌根改由 `_hook_logs_root` 解析。兩者的既有測試都只替身舊的路徑綁定，hook 因此把日誌寫到真實位置，測試卻在 fixture 目錄讀取，斷言讀到空內容。兩次的代理人都只跑了自己改過的檔案所對應的測試，沒有用舊綁定名或新函式名 grep 測試目錄。
+
+## 變體：路徑來源改由新函式解析，測試的隔離手段對新來源不起作用
+
+**症狀**：hook 把掃描根或寫入根改由新函式解析，新函式以 `__file__` 推出位置，不讀 cwd 也不讀環境變數。既有測試沒有 patch 任何函式，而是以 `monkeypatch.chdir` 或 `monkeypatch.setenv` 把 hook 導向 fixture。改動後 hook 實際掃的是真實 worktree，找不到 fixture 裡的觸發條件，就不產生預期的報告，斷言失敗。過程不會拋錯，所以看起來像 hook 邏輯有問題。
+
+**根因**：測試的隔離是「替身某個輸入來源」。路徑來源換成另一個函式之後，舊的隔離手段（cwd、env）仍然生效，但已不在新函式的輸入裡。這和「patch 舊函式名」屬於同一類 seam 錯位：測試接在舊的 seam，程式已改走新的 seam。差別在於本變體沒有舊函式名可以 grep，上一個變體的做法取不到這些測試。
+
+**做法**：把路徑來源改由新函式解析時，先確認新函式讀哪些輸入（`__file__`、cwd、env、參數），再以被改 hook 的檔名取得測試集合，逐檔檢查隔離手段是否落在新函式的輸入內；不在的，改為 patch 新函式本身。修正時要配正向對照：在 fixture 放一個已知該觸發的輸入，斷言 hook 確實對它產出結果，避免「hook 掃了別的目錄、剛好沒結果」與「hook 正確判定無結果」在斷言端同形。
+
+**實例（2026-11）**：file-size-guardian 的掃描根改為 `get_code_root`。既有測試只切換 cwd、設定 env，hook 掃了真實 worktree，找不到超標檔，就沒有寫報告。修法是在測試中 patch `get_code_root`。
+
+## 變體：替身簽名漂移被 observability except 吞掉，斷言端只看到空結果
+
+**症狀**：被呼叫端的簽名改了（參數減少或改名），另一個測試檔裡的 lambda 或 fake 替身仍是舊簽名。呼叫替身時拋出 `TypeError`，但 hook 依可觀測性規則把這段呼叫包在 `except` 裡，記成 INFO 日誌後繼續執行（例如「記錄失敗（不影響 claim）: ...<lambda>() missing 1 required positional argument」）。斷言端看到的是「實得 []」這類空結果，而不是 `TypeError`。根因只出現在閘門的完整輸出裡，看斷言訊息會以為是被測邏輯沒有產出。
+
+**根因**：主體描述的簽名漂移，通常在執行時以 `TypeError` 整檔紅燈，訊息直接指向替身。hook 為了「記錄失敗不影響主流程」而吞掉例外時，這個訊號被降級成一行日誌，失敗的表現從「呼叫錯誤」變成「沒有結果」，誤導判讀方向。
+
+**做法**：
+- 判讀閘門紅燈時，斷言為空結果的，先在完整輸出搜尋 `missing .* required positional argument`、`unexpected keyword argument`、`記錄失敗`，排除替身簽名不符，再懷疑被測邏輯。
+- 測試層有兩個候選修法：測試中讓這類 except 遇到 `TypeError` 時重拋；或在測試中斷言日誌沒有「記錄失敗」。兩者都讓簽名漂移重新以失敗呈現。
+- 結構層沿用主體的預防措施：替身以 `create_autospec` 綁定真實簽名，漂移在建立替身時就拋錯，不會進入被吞掉的 except。
+
+**實例（2026-11）**：`write_audit_entry` 的簽名從 `(entry, project_root, logger)` 改為 `(entry, logger)`。不在該票 where.files 內的一個共用狀態根測試仍以三參數 lambda 當替身，hook 的 except 把 `TypeError` 記成 INFO，斷言端顯示實得空清單，合併閘門才判紅，根因要讀完整輸出才看得到。
 
 ## 判別與邊界
 

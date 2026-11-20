@@ -1,4 +1,4 @@
-<!-- Legacy Code 評估報告模板 -->
+<!-- Legacy Code 評估報告範本 -->
 <!-- 每次執行 Legacy Code 接手流程時建立一份，放在 docs/ 根目錄 -->
 <!-- 檔名：legacy-assessment-{date}.md -->
 

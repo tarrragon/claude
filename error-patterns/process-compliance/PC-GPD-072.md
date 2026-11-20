@@ -6,7 +6,10 @@ severity: medium
 status: active
 created: 2026-11-02
 related:
-- PC-GPD-070
+  - id: PC-GPD-070
+    kind: citation
+  - id: PC-GPD-078
+    kind: sibling
 ---
 
 # PC-GPD-072：送出成功不等於對方收到

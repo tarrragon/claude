@@ -5,6 +5,11 @@ import argparse
 from doc_system.core.constants import REF_FIELDS
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
+from doc_system.core.provenance import (
+    NON_AUTHORITATIVE_NOTE,
+    is_proposal_id,
+    print_derived_documents,
+)
 
 
 def _extract_refs(frontmatter: dict) -> dict[str, list[str]]:
@@ -55,11 +60,16 @@ def execute(args: argparse.Namespace) -> None:
     print()
 
     refs = _extract_refs(frontmatter)
-    if not refs:
+    is_prop = is_proposal_id(str(fm_id))
+    if not refs and not is_prop:
         print("(無引用關聯)")
         return
 
     for field_name, ref_list in refs.items():
-        print(f"  {field_name}:")
+        label = f"{field_name}{NON_AUTHORITATIVE_NOTE}" if field_name == "spec_refs" else field_name
+        print(f"  {label}:")
         for ref in ref_list:
             print(f"    - {ref}")
+
+    if is_prop:
+        print_derived_documents(locator, str(fm_id))

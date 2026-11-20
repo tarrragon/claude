@@ -43,6 +43,10 @@ COMPLETENESS_SEMANTICS = (
 # 陷阱三）。carrier_path_patterns 內每個 pattern 沿用同一方言，不另設欄位。
 ID_PATTERN_DIALECT = "python-re"
 
+# 搭配方言的比對旗標：`\d`、`\w` 只比對 ASCII（對應 tracking_schema.ID_PATTERN_FLAGS
+# = re.ASCII）。非 Python 引擎的消費端須以等價方式限制為 ASCII。
+ID_PATTERN_FLAGS_EXPORT = "ASCII"
+
 # carrier_path_patterns 的比對演算法說明，隨 JSON 一併匯出（呼應
 # COMPLETENESS_SEMANTICS 的匯出理由：避免消費端只看到數字組、猜測比對規
 # 則）。完整定義與計算依據見 tracking_schema.py GRAPH_NODE_TYPES 前的
@@ -78,6 +82,7 @@ def build_schema_dict(project_root: Path | None = None) -> dict:
     return {
         "schema_generated_at_framework_version": tracking_schema.TYPE_TABLE_COMPAT_VERSION,
         "id_pattern_dialect": ID_PATTERN_DIALECT,
+        "id_pattern_flags": ID_PATTERN_FLAGS_EXPORT,
         "notice": SCHEMA_EDIT_NOTICE,
         "node_types": {
             name: dict(fields) for name, fields in GRAPH_NODE_TYPES.items()

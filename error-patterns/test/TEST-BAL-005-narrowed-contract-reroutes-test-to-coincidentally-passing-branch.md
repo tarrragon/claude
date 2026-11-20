@@ -3,7 +3,12 @@ id: TEST-BAL-005
 title: 合法值收窄使舊測試改走另一分支，斷言因輸出清單重疊而巧合成立
 severity: high
 category: test
-related: [TEST-BAL-002, TEST-BAL-003, PC-165, DOC-007]
+related:
+  - TEST-BAL-002
+  - id: TEST-BAL-003
+    kind: citation
+  - PC-165
+  - DOC-007
 created: 2026-08-19
 ---
 

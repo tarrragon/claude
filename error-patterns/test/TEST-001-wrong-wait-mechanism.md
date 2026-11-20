@@ -1,3 +1,9 @@
+---
+id: TEST-001
+title: 錯誤的等待機制
+severity: high
+---
+
 # TEST-001: 錯誤的等待機制
 
 ## 基本資訊

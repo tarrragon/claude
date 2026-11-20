@@ -1,3 +1,9 @@
+---
+id: PC-100
+title: ANA 衍生 IMP/ADJ 時 PCB 欄位未繼承 source ticket
+severity: high
+---
+
 # PC-100: ANA 衍生 IMP/ADJ 時 PCB 欄位未繼承 source ticket
 
 ## 基本資訊

@@ -1,3 +1,9 @@
+---
+id: IMP-013
+title: 重構設計意圖盲視
+severity: medium
+---
+
 # IMP-013: 重構設計意圖盲視
 
 ## 基本資訊

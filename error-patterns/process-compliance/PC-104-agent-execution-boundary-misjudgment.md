@@ -1,3 +1,9 @@
+---
+id: PC-104
+title: Agent 執行邊界誤判導致結果未落地
+severity: medium
+---
+
 # PC-104: Agent 執行邊界誤判導致結果未落地
 
 ## 基本資訊

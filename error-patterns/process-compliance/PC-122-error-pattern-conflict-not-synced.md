@@ -1,3 +1,9 @@
+---
+id: PC-122
+title: 新建 error-pattern 推翻既有 PC 但未同步舊 PC，留下並存衝突源
+severity: medium
+---
+
 # PC-122: 新建 error-pattern 推翻既有 PC 但未同步舊 PC，留下並存衝突源
 
 ---

@@ -1,3 +1,9 @@
+---
+id: PC-137
+title: 並行派發 subagent 對 `.claude/` Edit 觸發 runtime deny
+severity: medium
+---
+
 # PC-137: 並行派發 subagent 對 `.claude/` Edit 觸發 runtime deny
 
 **類別**: process-compliance

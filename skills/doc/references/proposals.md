@@ -34,9 +34,9 @@ draft → discussing → confirmed → implemented
 2. ticket 完成 → 更新 proposals-tracking.yaml checklist
 3. 所有 checklist 完成 → 提案 status 改為 implemented
 
-## 模板
+## 範本
 
-模板位置：`.claude/skills/doc/templates/proposal-template.md`
+範本位置：`.claude/skills/doc/templates/proposal-template.md`
 
 ### 欄位說明
 

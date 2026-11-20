@@ -2,7 +2,7 @@
 name: system-misjudgment
 description: "以系統為索引的 AI 誤判檢查庫：記錄除錯、實機驗證時對系統行為的常見錯誤判讀、實際機制與可執行檢查方法。Use when: 除錯、實機驗證、觀測不到事件或 log、懷疑系統行為、否定結果（零事件、沒有 log、分支還在）要當證據前、誤判後要記錄。"
 metadata:
-  version: 1.3.0
+  version: 1.8.0
 ---
 
 # system-misjudgment：依「正在面對的系統」查已知誤判與檢查方法
@@ -23,11 +23,15 @@ error-patterns 依類別分目錄，查不到同一系統上的陷阱。本 skil
 | macOS FSEvents／fseventsd／檔案監看 | `references/macos-fsevents.md` | 監看零事件、刪監看根目錄、/private 路徑、驗證 PASS 但可能被他人寫入污染 |
 | Dart VM service Logging／flutter run | `references/dart-vm-service-log.md` | 沒有 log、log 漏行、訊息被截斷、時間戳矛盾 |
 | git index／worktree／工作區 | `references/git-index-worktree.md` | index.lock、`git status` 的「改動」、index 吸入他人變更、worktree 路徑、worktree 鎖的 pid |
-| 合併閘門與背景程序 | `references/merge-gate-background-process.md` | 分支還在、閘門像失敗、程序已結束的宣告、測試數下降、測試綠但行為未變 |
+| 合併閘門與背景程序 | `references/merge-gate-background-process.md` | 分支還在、閘門像失敗、程序已結束的宣告、測試數下降、測試綠但行為未變、改預設值後命令行為未變、斷言實得空結果 |
 | 工具輸出與 AI 自身記錄 | `references/tool-output-and-records.md` | 輸出夾旁白、記憶中的 commit、工作區觀測當持久結論 |
 | Riverpod provider 接線 | `references/riverpod-provider-wiring.md` | 測試綠但啟動報 provider 錯誤 |
 | Flutter 測試 binding（幀與時鐘） | `references/flutter-test-binding.md` | integration_test finder 找不到元件、時紅時綠、畫面停在 loading、疑似元件改名 |
 | Python os.path 平台實作（posixpath／ntpath） | `references/python-os-path-platform.md` | 在 macOS／Linux 模擬 Windows 路徑、反斜線、磁碟機代號、Windows 上守衛放行 |
+| pytest rootdir 與 import 來源 | `references/pytest-rootdir-import.md` | 正向對照全綠、跨目錄樹跑測試檔、cwd 與 import 來源不一致 |
+| 子行程執行脈絡（cwd／環境變數）與 runtime 探針 | `references/subprocess-cwd-env-probe.md` | 探針判定符合但落點不同、hook 寫入位置與報告不符、探針產物被偵測器命中 |
+| zsh shell（macOS 預設 shell） | `references/zsh-shell.md` | 驗證命令無錯誤但判斷不成立、`$var:` 值被截斷、`echo` 顯示的反斜線變 tab、手動餵 hook 沒有輸出 |
+| 共用 bin 目錄的 CLI 入口（uv tool／pipx／brew） | `references/shared-bin-symlink-entry.md` | 已安裝卻執行失敗、重裝無效、`uv tool list` 正常、入口 symlink 被寫穿 |
 
 ## 通則
 

@@ -3,7 +3,9 @@ id: TEST-GPD-1005
 title: "以 async 函式 override Riverpod 的 FutureProvider 來模擬「已載入」，首幀仍是 loading，畫面先走未載入分支"
 severity: low
 category: test
-related: [TEST-GPD-1003]
+related:
+  - id: TEST-GPD-1003
+    kind: citation
 created: 2026-10-30
 ---
 

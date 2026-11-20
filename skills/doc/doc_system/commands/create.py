@@ -1,6 +1,7 @@
 """create 子命令 — 從模板建立新文件（proposal/spec/usecase）。"""
 
 import argparse
+import json
 import re
 import sys
 from datetime import date
@@ -10,7 +11,12 @@ import yaml
 
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
-from doc_system.core.tracking_schema import GRAPH_NODE_TYPES, PROPOSALS_TRACKING_SCHEMA
+from doc_system.core.tracking_schema import (
+    DOC_INITIAL_STATUS,
+    DOC_STATUSES_BY_TYPE,
+    GRAPH_NODE_TYPES,
+    PROPOSALS_TRACKING_SCHEMA,
+)
 
 
 # type 到模板檔名和目標子目錄的對應
@@ -50,7 +56,7 @@ DOC_TYPE_CONFIG = {
     },
 }
 
-VALID_PROPOSAL_STATUSES = ("draft", "discussing", "confirmed", "implemented", "withdrawn")
+assert all(DOC_INITIAL_STATUS in statuses for statuses in DOC_STATUSES_BY_TYPE.values())
 
 
 # id_pattern 中序號段的位數量詞，如 `\d{3}`、`\d{2,}`、`[0-9]{3}`。
@@ -156,6 +162,15 @@ def _slugify(title: str) -> str:
     return slug.strip("-")
 
 
+def _ascii_slug(title: str) -> str:
+    """`doc create` 的檔名 slug：只留 ASCII，中文等非 ASCII 字元丟棄。
+
+    全為非 ASCII 時回傳空字串，由呼叫端退回只用 ID 命名。`_slugify` 保留
+    給 batch-init（沿用既有中文 slug 行為，不在本票範圍）。
+    """
+    return _slugify(re.sub(r"[^\x00-\x7f]", "", title))
+
+
 def _get_templates_dir() -> Path:
     """取得 templates/ 目錄路徑（不依賴原始碼樹與安裝目錄的相對位置）。
 
@@ -217,6 +232,64 @@ def _replace_frontmatter_date(content: str) -> str:
     return content
 
 
+_INLINE_COMMENT_RE = re.compile(r'^(\s*[\w-]+:\s*(?:"[^"]*"|[^"#\s][^#]*?|))\s+#.*$')
+_H1_WITH_ID_RE = re.compile(r"^# \S+: \{[^}]*\}\s*$", re.MULTILINE)
+_H1_TITLE_FIRST_RE = re.compile(r"^# \{[^}]*\}(.*)$", re.MULTILINE)
+
+
+def _split_frontmatter(content: str) -> tuple[str, str]:
+    """把內容切成 (frontmatter 含兩條 `---`, 其餘本文)；無 frontmatter 時前者為空。"""
+    match = re.match(r"\A---\n.*?\n---\n", content, flags=re.DOTALL)
+    if not match:
+        return "", content
+    return content[: match.end()], content[match.end():]
+
+
+def _strip_frontmatter_comments(content: str) -> str:
+    """移除 frontmatter 內的範本說明註解（整行註解與值後的行尾註解）；本文不動。"""
+    frontmatter, body = _split_frontmatter(content)
+    if not frontmatter:
+        return content
+    kept = []
+    for line in frontmatter.split("\n"):
+        if line.lstrip().startswith("#"):
+            continue
+        kept.append(_INLINE_COMMENT_RE.sub(r"\1", line))
+    cleaned = "\n".join(kept)
+    # 說明註解區與欄位間的空行一併收掉，避免 `---` 後留下空白行
+    cleaned = re.sub(r"\A---\n\n+", "---\n", cleaned)
+    return cleaned + body
+
+
+def _apply_title(content: str, doc_id: str, title: str) -> str:
+    """把 --title 寫入 frontmatter 的 title（event 為 name）與本文 H1。"""
+    if not title:
+        return content
+    quoted = json.dumps(title, ensure_ascii=False)
+    frontmatter, body = _split_frontmatter(content)
+    frontmatter = re.sub(
+        r"^((?:title|name):\s*).*$", lambda m: f"{m.group(1)}{quoted}",
+        frontmatter, count=1, flags=re.MULTILINE,
+    )
+    body = _H1_WITH_ID_RE.sub(lambda _m: f"# {doc_id}: {title}", body, count=1)
+    body = _H1_TITLE_FIRST_RE.sub(lambda m: f"# {title}{m.group(1)}", body, count=1)
+    return frontmatter + body
+
+
+def _add_spec_tracking_entry(tracking_file: str, spec_id: str, title: str) -> None:
+    """在 proposals-tracking.yaml 的 specs: 段登錄 spec（建立端負責寫入，已存在則略過）。"""
+    path = Path(tracking_file)
+    data = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.is_file() else {}
+    specs = data.setdefault("specs", [])
+    if any(entry.get("id") == spec_id for entry in specs if isinstance(entry, dict)):
+        return
+    specs.append({"id": spec_id, "title": title, "status": DOC_INITIAL_STATUS})
+    path.write_text(
+        yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
 def _add_tracking_entry(tracking_file: str, prop_id: str, title: str) -> None:
     """在 proposals-tracking.yaml 新增 proposal entry。"""
     path = Path(tracking_file)
@@ -241,7 +314,7 @@ def _add_tracking_entry(tracking_file: str, prop_id: str, title: str) -> None:
         {
             "id": prop_id,
             "title": title,
-            "status": "draft",
+            "status": DOC_INITIAL_STATUS,
             "proposed": date.today().isoformat(),
             confirm_field: None,
             "target_version": None,
@@ -310,9 +383,11 @@ def execute(args: argparse.Namespace) -> None:
     # 替換 frontmatter 中的 id 和日期
     content = _replace_frontmatter_id(template_content, doc_id)
     content = _replace_frontmatter_date(content)
+    content = _strip_frontmatter_comments(content)
+    content = _apply_title(content, doc_id, title)
 
     # 決定目標路徑
-    slug = _slugify(title) if title else ""
+    slug = _ascii_slug(title) if title else ""
     filename = f"{doc_id}-{slug}.md" if slug else f"{doc_id}.md"
 
     target_dir = Path(project_root) / config["target_dir"]
@@ -327,5 +402,7 @@ def execute(args: argparse.Namespace) -> None:
     # proposal 自動新增 tracking entry
     if doc_type == "proposal":
         _add_tracking_entry(locator.tracking_file, doc_id, title or doc_id)
+    elif doc_type in ("spec", "data-contract"):
+        _add_spec_tracking_entry(locator.tracking_file, doc_id, title or doc_id)
 
     print(f"已建立: {target_file}")

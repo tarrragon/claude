@@ -4,10 +4,12 @@ title: 已查證與未查證的陳述共用同一確定語氣，讀者無從分�
 category: process-compliance
 severity: 高
 related:
- - PC-166
- - PC-BAL-018
- - PC-BAL-015
- - PC-BAL-004
+  - PC-166
+  - id: PC-BAL-018
+    kind: sibling
+  - id: PC-BAL-015
+    kind: citation
+  - PC-BAL-004
 created: 2026-07-31
 ---
 

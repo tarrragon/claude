@@ -13,7 +13,8 @@ from pathlib import Path
 FR_HEADER_RE = re.compile(r"^#{3,}\s+(FR-\d+)[:：]", re.MULTILINE)
 
 # 展開 FR token：FR-NN、逗號續列 FR-01,02,03、範圍 FR-13~17 / FR-13-17
-FR_TOKEN_RE = re.compile(r"FR-(\d+)((?:\s*[~\-,]\s*\d+)*)")
+# 左邊界：前一字元不得是英數字或底線，使 NFR-01 不被計成 FR-01。
+FR_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_])FR-(\d+)((?:\s*[~\-,]\s*\d+)*)")
 
 
 def _expand_fr_token(head_num, tail):
@@ -127,6 +128,34 @@ def extract_spec_frs(spec_text):
     return {int(m.group(1).split("-")[1]) for m in FR_HEADER_RE.finditer(masked)}
 
 
+ATX_HEADING_RE = re.compile(r"^(#{1,6})[ \t]+")
+
+
+def split_fr_sections(spec_text):
+    """依 FR 標題（FR_HEADER_RE，與抽取同一份規則）切段，回傳 (fr_id 如 "FR-01", 段落內容) 清單。
+
+    段落止於下一個 FR 標題，或下一個階層不低於該 FR 標題的 ATX 標題（較深子標題留在段內），
+    因此最後一個 FR 不吃入其後的非 FR 章節。標題判定略過圍欄與註解；段落內容取原文。
+    """
+    originals = spec_text.splitlines()
+    masked = _scan_text(spec_text).splitlines()
+    masked += [""] * (len(originals) - len(masked))
+    sections, current = [], None  # current = (fr_id, level, start)
+
+    def close(end):
+        if current:
+            sections.append((current[0], "\n".join(originals[current[2]:end]) + "\n"))
+
+    for i, line in enumerate(masked):
+        heading = ATX_HEADING_RE.match(line)
+        fr = FR_HEADER_RE.match(line)
+        if fr or (heading and current and len(heading.group(1)) <= current[1]):
+            close(i)
+            current = (fr.group(1), len(heading.group(1)), i) if fr else None
+    close(len(originals))
+    return sections
+
+
 # 形似 FR 定義的行（抽取端漏抓提醒與宣告矛盾比對共用單一判定，規則只在此處改）。
 # 行文字先做 NFKC 正規化（全形字母、數字、連字號、方括號併入半形）。
 _FR_LEAD = r"[*_\[【「`]*"  # 粗體、強調、方括號、反引號包裹
@@ -137,7 +166,13 @@ FR_LIKE_STRONG_RE = re.compile(r"^ {0,3}(?:\*\*|__)" + _FR_CORE, re.IGNORECASE)
 FR_LIKE_SETEXT_TEXT_RE = re.compile(r"^ {0,3}" + _FR_CORE, re.IGNORECASE)
 SETEXT_UNDERLINE_RE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
 
-SPEC_ID_RE = re.compile(r"SPEC-\d+")
+# 與 doc skill tracking_schema 的 SPEC id_pattern 去首尾錨點後同值（雙形態：SPEC-NNN 與 SPEC-{SLUG}）。
+# 不跨 skill import（spec skill 須可單獨安裝），由比對測試讀 doc 原文確保一致。
+SPEC_ID_BODY = r"SPEC-([0-9]{3}|[A-Z0-9-]+)"
+# 編譯版把捕獲群組改為非捕獲，使 findall 回傳整段 id（map_locate 以 findall 取 id 集合）；匹配語意不變。
+# 尾端邊界 (?![A-Z0-9])：左支 [0-9]{3} 命中後若仍接英數，回溯改走右支，避免截斷 SPEC-1234 為 SPEC-123。
+SPEC_ID_BOUNDARY = r"(?![A-Z0-9])"
+SPEC_ID_RE = re.compile(SPEC_ID_BODY.replace("(", "(?:") + SPEC_ID_BOUNDARY)
 FRONTMATTER_BLOCK_RE = re.compile(r"\A---\s*\n(.*?)^---\s*$", re.MULTILINE | re.DOTALL)
 FRONTMATTER_ID_LINE_RE = re.compile(r"^id:\s*[\"']?([^\s\"']+)", re.MULTILINE)
 
@@ -203,8 +238,8 @@ def find_skipped_fr_lines(spec_text):
 def extract_spec_id(spec_text, spec_path=None):
     """spec 識別：先取 frontmatter id，缺時取檔名的 SPEC-NNN 前綴，都沒有回 None。
 
-    只接受 SPEC-NNN 形式：domain map 的歸屬鍵由 SPEC_ID_RE 抽出，其他形式的 id
-    （如 SPEC-UI-001）在 map 端永遠對不上，回 None。覆蓋比對遇 None 走相容模式並警告
+    接受 SPEC_ID_RE 的雙形態（SPEC-NNN 與具名 SPEC-AUTH 等）：domain map 的歸屬鍵由同一常數抽出。
+    不符形式回 None。覆蓋比對遇 None 走相容模式並警告
     （不把該 spec 的全部 FR 報成未覆蓋）；定位 domain map 與層級模式遇 None 則報 id 無法辨識。
     frontmatter 只看收尾 --- 之前的區塊。
     """
@@ -216,7 +251,7 @@ def extract_spec_id(spec_text, spec_path=None):
     if spec_path is not None:
         name = SPEC_ID_RE.match(Path(spec_path).name)
         if name:
-            return name.group(0).upper()
+            return name.group(0).upper().rstrip("-")
     return None
 
 

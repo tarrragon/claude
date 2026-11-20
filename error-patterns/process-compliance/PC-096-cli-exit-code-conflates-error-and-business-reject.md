@@ -1,3 +1,9 @@
+---
+id: PC-096
+title: CLI exit code 混淆「程式錯誤」與「業務拒絕」
+severity: medium
+---
+
 # PC-096: CLI exit code 混淆「程式錯誤」與「業務拒絕」
 
 ---

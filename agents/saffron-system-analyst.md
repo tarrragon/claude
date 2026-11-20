@@ -70,7 +70,7 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 | 檢查項 | 判定 |
 |--------|------|
-| `docs/domain-map.md` 存在？ | 不存在 → 報告建議建立（`/doc` domain-map 模板） |
+| domain map 存在？（單 domain 專案為 `docs/domain-map.md`，多 domain 專案為新功能所屬 domain 的 `docs/spec/{domain}/domain-map.md`） | 不存在 → 報告建議建立（`/doc` domain-map 模板） |
 | 新功能涉及的 domain 概念是否已列入 Bundle 界定表？ | 未列入 → 報告建議新增 bundle 或歸入既有 bundle |
 | 依賴方向是否違反 domain map §2 DAG？ | 違反 → 標記為高嚴重度 |
 | 新增 domain 概念是否有對應不變式？ | 無不變式 → 建議補充 |
@@ -332,6 +332,9 @@ SA 前置審查在以下情況下**應該被觸發**：
 - 升級機制正確使用
 
 ---
+
+**Last Updated**: 2026-11-20
+**Version**: 1.5.1 — Domain Map 存在性檢查補多 domain 形態 `docs/spec/{domain}/domain-map.md`，與 doc skill 支援的兩種 domain-map 位置一致（原只寫根層一種）
 
 **Last Updated**: 2026-11-10
 **Version**: 1.5.0 — tools 補 Edit、Write（用戶授權，2026-11-10）：原本只有唯讀工具，派到需要寫審查報告或分析文件的票，走到寫檔那一步才失敗。允許產出新增「分析文件寫入」一列與路徑範圍：限 `docs/` 下的審查報告、分析與需求文件，票面經 ticket CLI 寫入；禁止行為第 1 項（不寫程式碼）不變，另明寫不寫 `.claude/` 框架檔。

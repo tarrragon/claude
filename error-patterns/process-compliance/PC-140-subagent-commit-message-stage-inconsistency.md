@@ -1,3 +1,9 @@
+---
+id: PC-140
+title: Subagent commit message 與 stage 內容不一致
+severity: medium
+---
+
 # PC-140: Subagent commit message 與 stage 內容不一致
 
 ## 基本資訊

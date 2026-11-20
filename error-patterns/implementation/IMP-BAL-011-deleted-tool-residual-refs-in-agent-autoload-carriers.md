@@ -3,7 +3,11 @@ id: IMP-BAL-011
 title: 刪除工具後的殘留引用在代理人自動載入載體上是行為缺陷，且被刪工具承擔的職責未隨引用一併交接
 severity: high
 category: implementation
-related: [IMP-042, IMP-009]
+related:
+  - IMP-042
+  - IMP-009
+  - id: PC-BAL-053
+    kind: sibling
 created: 2026-08-22
 ---
 

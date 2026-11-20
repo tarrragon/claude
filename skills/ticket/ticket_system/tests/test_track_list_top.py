@@ -464,3 +464,74 @@ class TestGroupG:
     def test_G3_help_mentions_priority_sort(self):
         text = self._list_help_text()
         assert "priority" in text.lower()
+
+
+# ===========================================================================
+# Group H: ids／yaml 截斷時 stderr 提示（3.5.0-W1-148）
+# ===========================================================================
+
+
+def _hint_lines(err: str) -> List[str]:
+    """取出 stderr 中的截斷提示行（含 --top 與 --all 調整方式）。"""
+    return [line for line in err.splitlines() if "--top" in line and "--all" in line]
+
+
+class TestGroupH:
+    def test_H1_ids_truncated_hint_on_stderr(self, monkeypatch, capsys, F5):
+        """ids 被預設 --top 截斷：stderr 一行含顯示筆數與總數，stdout 仍為純票號。"""
+        _patch_loader(monkeypatch, F5)
+        rc, out, err = _run_list_single(_ns(status=["pending"], fmt="ids"), capsys)
+        assert rc == 0
+        lines = [l for l in out.splitlines() if l.strip()]
+        assert len(lines) == 10
+        assert all(l.startswith("T-5") and " " not in l for l in lines)
+        hints = _hint_lines(err)
+        assert len(hints) == 1
+        assert "10" in hints[0] and "67" in hints[0]
+
+    def test_H2_ids_all_no_hint_contrast(self, monkeypatch, capsys, F5):
+        """E1 對照：同批 fixture 傳 --all 時 stderr 無提示，與不傳的產物不同。"""
+        _patch_loader(monkeypatch, F5)
+        _, _, err_t = _run_list_single(_ns(status=["pending"], fmt="ids"), capsys)
+        _, out_a, err_a = _run_list_single(
+            _ns(status=["pending"], fmt="ids", list_all=True), capsys
+        )
+        assert _hint_lines(err_t) != _hint_lines(err_a)
+        assert _hint_lines(err_a) == []
+        assert len([l for l in out_a.splitlines() if l.strip()]) == 67
+
+    def test_H3_ids_not_truncated_no_hint(self, monkeypatch, capsys, F4b):
+        """結果筆數不超過 --top：stderr 無提示。"""
+        _patch_loader(monkeypatch, F4b)
+        rc, out, err = _run_list_single(_ns(fmt="ids"), capsys)
+        assert rc == 0
+        assert _hint_lines(err) == []
+
+    def test_H4_yaml_truncated_hint_on_stderr(self, monkeypatch, capsys, F5):
+        """yaml 被截斷：stderr 有提示，stdout 仍可解析為 10 筆的 YAML 列表。"""
+        import yaml as _yaml
+
+        _patch_loader(monkeypatch, F5)
+        rc, out, err = _run_list_single(_ns(status=["pending"], fmt="yaml"), capsys)
+        assert rc == 0
+        data = _yaml.safe_load(out)
+        assert isinstance(data, list) and len(data) == 10
+        hints = _hint_lines(err)
+        assert len(hints) == 1
+        assert "10" in hints[0] and "67" in hints[0]
+
+    def test_H5_yaml_all_no_hint(self, monkeypatch, capsys, F5):
+        _patch_loader(monkeypatch, F5)
+        rc, out, err = _run_list_single(
+            _ns(status=["pending"], fmt="yaml", list_all=True), capsys
+        )
+        assert rc == 0
+        assert _hint_lines(err) == []
+
+    def test_H6_table_truncated_no_stderr_hint(self, monkeypatch, capsys, F5):
+        """table 已在 stdout 標題標示截斷，不重複寫 stderr。"""
+        _patch_loader(monkeypatch, F5)
+        rc, out, err = _run_list_single(_ns(status=["pending"], fmt="table"), capsys)
+        assert rc == 0
+        assert "顯示前 10" in out
+        assert _hint_lines(err) == []

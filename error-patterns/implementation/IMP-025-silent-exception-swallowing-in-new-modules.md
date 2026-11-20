@@ -1,3 +1,9 @@
+---
+id: IMP-025
+title: '新模組引入 `except Exception: pass` 靜默吞掉異常'
+severity: medium
+---
+
 # IMP-025: 新模組引入 `except Exception: pass` 靜默吞掉異常
 
 ## 分類

@@ -3,7 +3,11 @@ id: PC-BAL-053
 title: 依檔名查證失效引用，對「功能被合併進不同名檔案」為盲，產出功能缺口假結論
 severity: high
 category: process-compliance
-related: [IMP-BAL-011, ARCH-TUNL-001, PC-MON-001]
+related:
+  - id: IMP-BAL-011
+    kind: sibling
+  - ARCH-TUNL-001
+  - PC-MON-001
 created: 2026-08-22
 ---
 

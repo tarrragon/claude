@@ -1,3 +1,9 @@
+---
+id: PC-016
+title: Hook 阻止後使用 Bash 工具繞過保護機制
+severity: high
+---
+
 # PC-016: Hook 阻止後使用 Bash 工具繞過保護機制
 
 ---

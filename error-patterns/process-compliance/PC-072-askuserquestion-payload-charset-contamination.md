@@ -1,3 +1,9 @@
+---
+id: PC-072
+title: AskUserQuestion payload 生成時混入簡體字與 emoji
+severity: medium
+---
+
 # PC-072: AskUserQuestion payload 生成時混入簡體字與 emoji
 
 ---

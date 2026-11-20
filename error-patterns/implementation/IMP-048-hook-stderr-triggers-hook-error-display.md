@@ -1,3 +1,9 @@
+---
+id: IMP-048
+title: Hook stderr 輸出觸發 Claude Code "hook error" 顯示
+severity: low
+---
+
 # IMP-048: Hook stderr 輸出觸發 Claude Code "hook error" 顯示
 
 ## 錯誤症狀

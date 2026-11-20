@@ -1,3 +1,9 @@
+---
+id: IMP-073
+title: Logger 方法解構導致 this 遺失 + Promise hang
+severity: medium
+---
+
 # IMP-073: Logger 方法解構導致 this 遺失 + Promise hang
 
 ## 基本資訊

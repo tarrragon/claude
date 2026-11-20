@@ -1,3 +1,9 @@
+---
+id: IMP-077
+title: 測試 helper 設計反模式（local fork 變死碼 + 同名異介面命名衝突）
+severity: low
+---
+
 # IMP-077: 測試 helper 設計反模式（local fork 變死碼 + 同名異介面命名衝突）
 
 ## 基本資訊

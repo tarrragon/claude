@@ -60,6 +60,15 @@ def _isolate_git_cwd(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_periodic_suite(monkeypatch):
+    """合併閘門預設啟用 main 定期全套件：離開名額區段時可能以子程序啟動真實全套件。
+
+    測試一律停用預設；需要時以 MergeGate(periodic=...) 注入。
+    """
+    monkeypatch.setenv("MERGE_GATE_PERIODIC", "0")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_derived_data(tmp_path, monkeypatch):
     """cleanup 的 DerivedData 清理指向 tmp 下不存在的目錄，避免測試掃描或刪除真實的 ~/Library。
 

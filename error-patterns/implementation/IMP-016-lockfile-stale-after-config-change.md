@@ -1,3 +1,9 @@
+---
+id: IMP-016
+title: Lock 檔案未隨配置檔同步更新
+severity: medium
+---
+
 # IMP-016: Lock 檔案未隨配置檔同步更新
 
 ## 分類

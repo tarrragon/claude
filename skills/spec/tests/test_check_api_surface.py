@@ -172,6 +172,68 @@ def test_main_exit_code_zero_when_clean(tmp_path, capsys):
     assert "通過" in capsys.readouterr().out
 
 
+# --- 切段終點：最後一個 FR 段落不吃入其後的非 FR 章節 ---
+
+def test_last_fr_section_stops_at_following_non_fr_heading():
+    text = "### FR-01: A\nbody a\n### 設計約束\nPOST API 回 501\n"
+    sections = dict(check_api_surface.split_fr_sections(text))
+    assert "body a" in sections["FR-01"]
+    assert "設計約束" not in sections["FR-01"] and "POST API" not in sections["FR-01"]
+
+
+def test_fr_section_keeps_deeper_subheadings_and_stops_at_higher_heading():
+    """對照：較深子標題留在段內；較高階（H2）標題結束段落。"""
+    text = "### FR-01: A\n#### 細節\nbody\n## 下一章\nafter\n"
+    section = dict(check_api_surface.split_fr_sections(text))["FR-01"]
+    assert "#### 細節" in section and "body" in section
+    assert "下一章" not in section
+
+
+def test_signal_line_under_deeper_subheading_inside_fr_still_reported():
+    """正向對照：較深子標題留在 FR 段內，其下無路徑的 API 訊號行仍列為缺口（防新規則把子標題也切掉）。"""
+    text = "### FR-01: A\n#### 細節\nanalytics API 回傳 501\n### 設計約束\n一般敘述\n"
+    findings = check_api_surface.check_api_surface(text)
+    assert [f["fr_id"] for f in findings] == ["FR-01"]
+
+
+def test_following_non_fr_chapter_not_reported_as_fr_gap():
+    text = "### FR-01: A\n一般敘述\n### 設計約束\nanalytics API 回傳 501\n"
+    assert check_api_surface.check_api_surface(text) == []
+
+
+# --- 0 段不印通過 ---
+
+def test_main_zero_fr_sections_fails_not_pass(tmp_path, capsys):
+    spec_file = tmp_path / "spec.md"
+    spec_file.write_text("# 無 FR 的文件\nanalytics API 回傳 501\n", encoding="utf-8")
+    rc = check_api_surface.main([str(spec_file)])
+    out = capsys.readouterr().out
+    assert rc != 0
+    assert "通過" not in out and "未抽到任何 FR" in out
+
+
+def test_main_format_mismatch_headers_also_fail(tmp_path, capsys):
+    """設定格式不符（H2、無冒號）：與整段缺席同為 0 段分支，並列出形似行。"""
+    spec_file = tmp_path / "spec.md"
+    spec_file.write_text("## FR-01 名稱\n內容\n", encoding="utf-8")
+    rc = check_api_surface.main([str(spec_file)])
+    out = capsys.readouterr().out
+    assert rc != 0 and "通過" not in out and "FR-01 名稱" in out
+
+
+# --- 抽取規則只剩一份 ---
+
+def test_split_fr_sections_is_the_single_extraction_rule():
+    from domain_coverage import fr_extract
+    assert check_api_surface.split_fr_sections is fr_extract.split_fr_sections
+    assert not hasattr(check_api_surface, "FR_HEADER_RE")
+
+
+def test_split_accepts_h4_fullwidth_colon_and_skips_fenced_header():
+    text = "#### FR-01：A\nbody\n```\n### FR-09: fake\n```\n"
+    assert [i for i, _ in check_api_surface.split_fr_sections(text)] == ["FR-01"]
+
+
 if __name__ == "__main__":
     import pytest
 

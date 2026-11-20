@@ -1,3 +1,9 @@
+---
+id: PC-TUNL-001
+title: monorepo 子端可編譯產物未納入 CI 守門（本機綠燈遮蔽 reproducibility）
+severity: medium
+---
+
 # PC-TUNL-001: monorepo 子端可編譯產物未納入 CI 守門（本機綠燈遮蔽 reproducibility）
 
 ---

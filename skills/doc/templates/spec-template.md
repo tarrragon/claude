@@ -1,5 +1,5 @@
 ---
-# 功能規格（Spec）模板
+# 功能規格（Spec）範本
 # 複製本檔案到對應的 domain 子目錄並重新命名
 # 例如：docs/spec/extraction/extraction-pipeline.md
 

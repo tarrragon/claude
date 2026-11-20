@@ -1,3 +1,9 @@
+---
+id: PC-093
+title: YAGNI 累積反模式：推測性抽象的延後決策
+severity: medium
+---
+
 # PC-093: YAGNI 累積反模式：推測性抽象的延後決策
 
 ## 基本資訊

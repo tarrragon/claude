@@ -3,7 +3,10 @@ id: PC-BAL-008
 title: 同 repo 並行 agent 共用 git index，commit 掃入他人已 staged 檔案
 severity: medium
 category: process-compliance
-related: [PC-BAL-007, PC-SCLK-005]
+related:
+  - id: PC-BAL-007
+    kind: citation
+  - PC-SCLK-005
 created: 2026-07-26
 ---
 

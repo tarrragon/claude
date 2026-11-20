@@ -6,8 +6,9 @@ severity: medium
 status: active
 created: 2026-11-05
 related:
-- PC-GPD-078
-- PC-BAL-015
+  - id: PC-GPD-078
+    kind: sibling
+  - PC-BAL-015
 ---
 
 # PC-GPD-086：回報裡的「接下來」不等於已派發

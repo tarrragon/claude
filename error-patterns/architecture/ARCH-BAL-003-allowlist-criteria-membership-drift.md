@@ -4,6 +4,9 @@ title: 白名單自訂納入判準但成員未同步，判準與名單脫節
 category: architecture
 severity: medium
 created: 2026-07-26
+related:
+  - id: ARCH-BAL-006
+    kind: sibling
 ---
 
 # ARCH-BAL-003: 白名單自訂納入判準但成員未同步，判準與名單脫節

@@ -6,9 +6,10 @@ severity: medium
 status: active
 created: 2026-05-03
 related:
-- PC-040
-- PC-066
-- PC-118
+  - PC-040
+  - PC-066
+  - id: PC-118
+    kind: citation
 ---
 
 # PC-119: parallel-evaluation 用法誤解 — PM 單派 linux 視角而非並行三人組

@@ -11,7 +11,10 @@ import re
 import sys
 from pathlib import Path
 
-FR_HEADER_RE = re.compile(r"^### (FR-\d+):.*$", re.MULTILINE)
+from domain_coverage.fr_extract import (  # noqa: E402  FR 切段規則的唯一一份，本檔不另持
+    EXPECTED_HEADING_HINT, fr_like_lines, split_fr_sections,
+)
+
 PATH_RE = re.compile(r"/v1/[A-Za-z0-9_/{}=&,:.\-]*")
 SUBJECT_BEFORE_RE = re.compile(r"([A-Za-z][\w-]*)\s+(?:API|api|endpoint)")
 CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
@@ -26,17 +29,6 @@ API_CONTEXT_RE = re.compile(r"API|端點", re.IGNORECASE)
 # 表格欄位標題「Endpoint」或「endpoint 路徑」小節標籤本身是路徑定義的引導語，非缺口
 TABLE_HEADER_ENDPOINT_RE = re.compile(r"\|\s*endpoint\s*\|", re.IGNORECASE)
 ENDPOINT_INTRO_RE = re.compile(r"endpoint\s*路徑", re.IGNORECASE)
-
-
-def split_fr_sections(spec_text):
-    """依 `### FR-XX:` 標題切出各功能需求段落，回傳 (fr_id, 段落內容) 清單。"""
-    headers = list(FR_HEADER_RE.finditer(spec_text))
-    sections = []
-    for idx, header in enumerate(headers):
-        start = header.start()
-        end = headers[idx + 1].start() if idx + 1 < len(headers) else len(spec_text)
-        sections.append((header.group(1), spec_text[start:end]))
-    return sections
 
 
 def extract_subject(line):
@@ -93,6 +85,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     spec_text = Path(args.spec_path).read_text(encoding="utf-8")
+    if not split_fr_sections(spec_text):
+        print("API surface 檢核失敗：未抽到任何 FR 段落（未執行檢核）。")
+        print(EXPECTED_HEADING_HINT)
+        for no, line, _ in fr_like_lines(spec_text):
+            print(f"  形似 FR 標題但未被抽出，第 {no} 行：{line}")
+        return 1
     findings = check_api_surface(spec_text)
 
     if not findings:

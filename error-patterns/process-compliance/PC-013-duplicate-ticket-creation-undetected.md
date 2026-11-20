@@ -1,3 +1,9 @@
+---
+id: PC-013
+title: 重複 Ticket 建立未被偵測
+severity: low
+---
+
 # PC-013: 重複 Ticket 建立未被偵測
 
 ---

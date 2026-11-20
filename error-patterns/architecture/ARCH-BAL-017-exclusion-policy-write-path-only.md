@@ -4,6 +4,9 @@ title: 排除政策只在寫入路徑生效，報告路徑對其零知識
 category: architecture
 severity: medium
 created: 2026-08-12
+related:
+  - id: IMP-BAL-006
+    kind: sibling
 ---
 
 # ARCH-BAL-017: 排除政策只在寫入路徑生效，報告路徑對其零知識

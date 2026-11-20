@@ -52,6 +52,24 @@ rm -f .git/index.lock && git add <files> && git commit -m "..."
 
 **Why**：sequencer 在 commit 失敗前已把該 pick 寫入「已完成」清單，staged 內容與原 commit 等價，但 git 無法分辨這是「pick 未提交」還是「使用者額外 stage 的改動」，所以 `--continue` 拒絕；守衛同樣無法分辨，所以擋下 commit。**Consequence**：在這個狀態下嘗試各種收尾指令，容易把 staged 內容併進錯的 commit，或改寫歷史。**Action**：rebase 是自己發起的，就 `git rebase --abort` 回到 rebase 前的分支狀態（工作樹乾淨、無 `rebase-merge` 目錄）後重做；重做前可用 `git diff --cached | git patch-id --stable` 與原 commit 的 patch-id 比對，確認沒有遺失或混入改動。rebase 不是自己發起的，停手回報，不代為 abort。
 
+## 變體：同一回應並行發出多個 git 寫入
+
+**規則三要求每個 git 寫入獨立一個 Bash 呼叫，但獨立呼叫若在同一回應中並行發出，它們會同時執行，仍然爭奪同一個 index。** 「拆成獨立呼叫」只解決命令串接，不解決同時執行。
+
+觀測（批次合併）：同一回應並行發出 4 個 `git -C <wt> merge`，各自是獨立的 Bash 呼叫，字面上符合規則三。其中 1 個報 `fatal: Unable to write index`。事後查無 `MERGE_HEAD`，也沒有殘留的 `index.lock`；單獨重跑那一個，成功。
+
+**Why**：同一回應裡的多個工具呼叫會並行執行，平台不保證先後順序。對同一個 worktree 的 git 寫入，各自都要取得該 worktree 的 index 鎖，並行就會競爭。**Consequence**：失敗的那個合併可能停在不一致的狀態。若沒查清楚就直接重跑，或直接 commit，可能在半完成的合併上繼續疊加變更（見 `PC-169`）。**Action**：對同一 worktree（或同一個共用 checkout）的 git 寫入，在不同回應中依序發出，前一個的結果回來後再發下一個。已經撞上時，依序檢查以下三項，全部乾淨才單獨重跑：
+
+| 檢查 | 命令 | 乾淨的判準 |
+|------|------|-----------|
+| 有沒有未收尾的合併 | `test -f "$(git -C <wt> rev-parse --path-format=absolute --git-path MERGE_HEAD)" && echo MERGE_HEAD` | 沒有輸出 |
+| 有沒有殘留的鎖檔 | `test -f "$(git -C <wt> rev-parse --path-format=absolute --git-path index.lock)" && echo LOCK` | 沒有輸出 |
+| 工作區狀態 | `git -C <wt> status --porcelain` | 沒有輸出，或只有預期中的變更 |
+
+任一項不乾淨，依 `PC-169` 與規則七〈兩段式合併禁令〉處置，不直接重跑。
+
+`--path-format=absolute` 不可省略：在主 checkout 上，`--git-path` 預設回傳相對路徑（`.git/MERGE_HEAD`），`test -f` 會以目前所在目錄解析，從其他目錄執行時查錯位置，得到假的「乾淨」。
+
 ## 發生次數
 
 多次（用戶回報至少 2-3 次）

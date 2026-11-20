@@ -1,3 +1,9 @@
+---
+id: PC-075
+title: spawned 與 children 狀態檢查語義不對稱
+severity: high
+---
+
 # PC-075: spawned 與 children 狀態檢查語義不對稱
 
 ---

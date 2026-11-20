@@ -6,7 +6,8 @@ severity: medium
 status: active
 created: 2026-11-04
 related:
-- PC-GPD-081
+  - id: PC-GPD-081
+    kind: citation
 ---
 
 # PC-GPD-083：方案比較要先查每個方案依賴的承載處是否存在

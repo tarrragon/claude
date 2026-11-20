@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 from doc_system.commands.update import execute
@@ -226,7 +227,7 @@ class TestUpdateStatus:
             '---\nid: UC-01\ntitle: "Test UC"\nstatus: draft\n---\n# UC-01\n'
         )
 
-        args = argparse.Namespace(id="UC-01", status="confirmed")
+        args = argparse.Namespace(id="UC-01", status="approved")
 
         with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
             execute(args)
@@ -235,6 +236,28 @@ class TestUpdateStatus:
         assert "已更新" in output
         # UC 不會有 tracking 同步訊息
         assert "已同步 tracking.yaml" not in output
+
+    def test_update_usecase_rejects_proposal_status(self, tmp_path, capsys):
+        """UC 的值域不含 PROP 的 confirmed：exit 1 且檔案不變（正向對照）。"""
+        usecases_dir = tmp_path / "docs" / "usecases"
+        usecases_dir.mkdir(parents=True)
+        md = usecases_dir / "UC-01-test.md"
+        md.write_text('---\nid: UC-01\ntitle: "T"\nstatus: draft\n---\n# UC-01\n')
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute(argparse.Namespace(id="UC-01", status="confirmed"))
+
+        assert exc.value.code == 1
+        assert "無效狀態" in capsys.readouterr().out
+        assert "status: draft" in md.read_text()
+
+    def test_update_proposal_rejects_spec_status(self, tmp_path):
+        _setup_proposal(tmp_path, "PROP-050", "draft")
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute(argparse.Namespace(id="PROP-050", status="approved"))
+        assert exc.value.code == 1
 
 
 class TestTargetVersionRegistrationGuidance:

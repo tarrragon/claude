@@ -3,7 +3,10 @@ id: IMP-BAL-002
 title: sync-claude-pull.py 未知參數不報錯，推進 base SHA 卻不套 delta，破壞三方合併基準
 severity: high
 category: implementation
-related: [PC-V1-001]
+related:
+  - PC-V1-001
+  - id: IMP-BAL-005
+    kind: sibling
 created: 2026-07-25
 ---
 

@@ -4,9 +4,11 @@ title: 交接內容的完整度被誤讀為交接已建立，指標從未寫入�
 category: process-compliance
 severity: 高
 related:
- - PC-009
- - ARCH-BAL-005
- - IMP-BAL-005
+  - PC-009
+  - id: ARCH-BAL-005
+    kind: citation
+  - id: IMP-BAL-005
+    kind: citation
 created: 2026-07-31
 ---
 

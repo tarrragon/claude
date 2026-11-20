@@ -6,8 +6,9 @@ severity: medium
 status: active
 created: 2026-06-04
 related:
-- PC-158
-- PC-165
+  - PC-158
+  - id: PC-165
+    kind: citation
 ---
 
 # IMP-079: 批次替換工具誤傷偵測目標字面 — regex/meta-test 內嵌待測字元被盲目轉換後語意塌縮

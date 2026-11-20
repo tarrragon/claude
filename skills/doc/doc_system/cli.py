@@ -12,6 +12,11 @@ if not __package__:
 
 from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init, uc, validate, schema
 
+CODE_ROOT_HELP = (
+    "程式碼根目錄（覆寫 docs/traceability.yaml 的 code_root；"
+    "外接模式下兩者至少須有一個）"
+)
+
 
 def build_parser() -> argparse.ArgumentParser:
     """建立主 parser 和所有 subparser。"""
@@ -59,9 +64,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="UC ID（省略則顯示全部）",
     )
+    test_map_parser.add_argument("--code-root", default=None, help=CODE_ROOT_HELP)
 
     # create
-    create_parser = subparsers.add_parser("create", help="從模板建立新文件")
+    create_parser = subparsers.add_parser("create", help="從範本建立新文件")
     create_parser.add_argument(
         "type",
         choices=["proposal", "spec", "usecase", "data-contract", "event"],
@@ -99,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument(
         "--status",
         required=True,
-        help="新狀態（draft/discussing/confirmed/implemented/withdrawn）",
+        help="新狀態（PROP: draft/discussing/confirmed/implemented/withdrawn；SPEC/UC/EVT: draft/review/approved/deprecated）",
     )
 
     # validate
@@ -127,10 +133,12 @@ def build_parser() -> argparse.ArgumentParser:
     uc_subparsers.add_parser("list", help="列出合法 UC 編號+標題")
 
     uc_verify_parser = uc_subparsers.add_parser("verify", help="驗證路徑內 UC token 是否符合白名單")
-    uc_verify_parser.add_argument("path", nargs="?", default=None, help="掃描路徑（省略則掃描整個專案）")
+    uc_verify_parser.add_argument("path", nargs="?", default=None, help="掃描路徑（省略則掃描 code root，外接模式另含 doc root）")
+    uc_verify_parser.add_argument("--code-root", default=None, help=CODE_ROOT_HELP)
 
     uc_trace_parser = uc_subparsers.add_parser("trace", help="列出指定 UC 的 code 引用位置")
     uc_trace_parser.add_argument("uc_id", help="UC 編號，如 UC-01（例：doc uc trace UC-05）")
+    uc_trace_parser.add_argument("--code-root", default=None, help=CODE_ROOT_HELP)
     uc_trace_parser.add_argument(
         "--limit", type=int, default=None, help="輸出筆數上限（預設 20）"
     )

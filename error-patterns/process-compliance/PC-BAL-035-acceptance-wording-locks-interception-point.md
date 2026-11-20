@@ -64,6 +64,8 @@ severity: 高
 
 三項措施皆已落地為自律層。措施 2 另於可機械判定子集（type=IMP 且 `where.files` 觸及 hooks 目錄或 skill 私有 hooks 目錄）加設硬擋，**檢查對象為產生路徑盤點表的正本**（撰寫者寫在實作策略欄位，機器解析並輸出計數），不檢查 acceptance 中的數字宣告——對副本設閘門而正本不設，與本模式根因同構。形態選擇的判準見本節末「硬擋形態的判準」。
 
+> **適用範圍註記（2026-11-20 重驗）**：下表措施 2 強制層欄寫的「該行為的實作進行中，現行版本檢查的仍是 acceptance 中的數字宣告」為 v1.5.0 撰寫當時的狀態，現已不成立。`.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py` 現行實作解析 `how.strategy`（缺則 `Solution`）中含「產生路徑」表頭的盤點表正本，行為三分已落地：表格缺席（含表頭下一行非分隔列）阻擋 complete；解析成功不阻擋，並以 `logger.info` 輸出盤點、覆蓋、未覆蓋三個數字；表格存在但解析失敗則 fail-open，只記 warning。acceptance 不再要求第四項的數字宣告。前三項（失敗語意等）仍是對 acceptance 的語意關鍵詞比對，本節「反例」段對該比對機制的批評仍適用。下表原文保留不改。
+
 | 機制 | 內容 | 落地位置 |
 |------|------|---------|
 | 建票時（步驟 1） | 防護類 ticket 的 AC 描述威脅事件或最終狀態；攔截點決策移至 `how.strategy` 或 Solution（兩者分屬不同欄位，非二選一） | `.claude/pm-rules/ticket-body-schema.md`「防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy」節；`.claude/methodologies/acceptance-criteria-methodology.md` 禁用規則表「禁止以攔截點替代威脅事件（防護類）」列 +「防護類驗收條件：威脅事件測試」節 |

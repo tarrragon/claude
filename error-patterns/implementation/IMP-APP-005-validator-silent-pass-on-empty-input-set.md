@@ -5,6 +5,11 @@ severity: high
 category: implementation
 created: "2026-07-14"
 related_patterns: [PC-APP-011, IMP-APP-004]
+related:
+  - id: IMP-APP-004
+    kind: citation
+  - id: PC-APP-011
+    kind: citation
 ---
 
 # IMP-APP-005: 驗證工具對空輸入集假綠燈

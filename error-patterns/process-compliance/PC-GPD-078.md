@@ -6,7 +6,10 @@ severity: medium
 status: active
 created: 2026-11-03
 related:
-- PC-GPD-072
+  - id: PC-GPD-072
+    kind: sibling
+  - id: PC-GPD-086
+    kind: sibling
 ---
 
 # PC-GPD-078：「沒有指示就照做」不會自己開始

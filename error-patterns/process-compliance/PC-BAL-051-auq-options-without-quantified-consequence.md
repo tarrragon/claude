@@ -5,7 +5,10 @@ severity: 高
 category: process-compliance
 status: active
 source: hook-logs 一次性清除授權（PM session 第一次 AUQ 被同儕 session 量測攔下後重做）
-related: [PC-BAL-050, PC-BAL-022]
+related:
+  - id: PC-BAL-050
+    kind: citation
+  - PC-BAL-022
 created: 2026-08-21
 ---
 

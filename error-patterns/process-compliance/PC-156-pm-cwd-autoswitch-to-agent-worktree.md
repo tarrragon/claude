@@ -1,3 +1,9 @@
+---
+id: PC-156
+title: PM cwd auto-switch 到 agent worktree
+severity: medium
+---
+
 # PC-156: PM cwd auto-switch 到 agent worktree
 
 > **錯誤類別**：流程合規（cc runtime 行為認知缺口）

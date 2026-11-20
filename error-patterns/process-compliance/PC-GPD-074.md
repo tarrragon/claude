@@ -6,7 +6,8 @@ severity: low
 status: active
 created: 2026-11-02
 related:
-- PC-GPD-072
+  - id: PC-GPD-072
+    kind: citation
 ---
 
 # PC-GPD-074：授權要在執行動作的 session 取得

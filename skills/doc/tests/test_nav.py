@@ -85,3 +85,48 @@ class TestNavExecute:
 
         output = capsys.readouterr().out
         assert "無引用關聯" in output
+
+
+def _make_reverse_ref_project(tmp_path, prop_spec_refs=""):
+    """PROP 未必填 spec_refs；SPEC 以純量、UC 以清單 source_proposal 指向它。"""
+    (tmp_path / "docs" / "proposals").mkdir(parents=True)
+    (tmp_path / "docs" / "spec").mkdir(parents=True)
+    (tmp_path / "docs" / "usecases").mkdir(parents=True)
+    (tmp_path / "docs" / "proposals" / "PROP-010-x.md").write_text(
+        f"---\nid: PROP-010\ntitle: \"P\"\nstatus: draft\n{prop_spec_refs}---\n"
+    )
+    (tmp_path / "docs" / "spec" / "SPEC-010-x.md").write_text(
+        "---\nid: SPEC-010\ntitle: \"S\"\nstatus: draft\nsource_proposal: PROP-010\n---\n"
+    )
+    (tmp_path / "docs" / "usecases" / "UC-10-x.md").write_text(
+        "---\nid: UC-10\ntitle: \"U\"\nstatus: draft\nsource_proposal: [PROP-010, PROP-011]\n---\n"
+    )
+    return str(tmp_path)
+
+
+class TestNavReverseLookup:
+    """PROP 起點由 source_proposal 反查 SPEC／UC。"""
+
+    def test_prop_without_spec_refs_finds_spec_and_uc(self, tmp_path, capsys):
+        root = _make_reverse_ref_project(tmp_path)
+        with patch.object(FileLocator, "get_project_root", return_value=root):
+            execute(argparse.Namespace(doc_id="PROP-010"))
+        out = capsys.readouterr().out
+        assert "SPEC-010" in out
+        assert "UC-10" in out
+        assert "source_proposal" in out
+
+    def test_spec_refs_mismatch_shows_both(self, tmp_path, capsys):
+        root = _make_reverse_ref_project(tmp_path, "spec_refs: [SPEC-999]\n")
+        with patch.object(FileLocator, "get_project_root", return_value=root):
+            execute(argparse.Namespace(doc_id="PROP-010"))
+        out = capsys.readouterr().out
+        assert "SPEC-999" in out
+        assert "非權威" in out
+        assert "SPEC-010" in out
+
+    def test_non_prop_start_has_no_reverse_section(self, tmp_path, capsys):
+        root = _make_reverse_ref_project(tmp_path)
+        with patch.object(FileLocator, "get_project_root", return_value=root):
+            execute(argparse.Namespace(doc_id="UC-10"))
+        assert "反查" not in capsys.readouterr().out

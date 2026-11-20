@@ -1,3 +1,212 @@
+## [3.5.0] - 2026-11-21
+
+### 對 consumer 的影響
+
+2.89.0 起，`doc validate DOMAIN-MAP-*` 會比對 domain-map §7 的子標題與 `source_specs`。當時的 CHANGELOG 沒有列出 consumer 影響與遷移方式，現已補在下方 [2.89.0] 條目的〈對 consumer 的影響（事後補記）〉（tarrragon/claude#130）。本版調整 §7 判定的部分見本條〈遷移步驟〉。
+
+#### 輸出新增
+- **`doc nav`／`doc query` 以 PROP 為起點時新增反查列**：由 SPEC／UC frontmatter 的 `source_proposal` 反查導出的文件並列出；PROP 的 `spec_refs` 標示「非權威」，保留相容、不刪值。結束碼與報錯集合不變。
+
+#### 預設改變
+- **commit 守衛的 `doc validate` 對未觸及的 docs 檔改取提交內容（HEAD 版本）**：同批未觸及、但工作區另有未提交修改（含 untracked）的 docs 檔，跨檔檢查不再讀工作區。遷移：原本靠工作區未提交的被引用檔（例如尚未提交的 DomainBundle 宣告）讓提交通過者，現改 deny，須先提交被引用檔；原本被他線未提交修改誤擋者不再擋。git 列髒檔或取 HEAD 內容失敗時，退回以工作區內容判定（與改動前相同），並寫 stderr 與日誌。
+- **`doc validate` 開始檢查 frontmatter 完整性欄位**：欄位必須存在，值為 `null` 或 `[]` 仍算存在。缺欄位的文件由 exit 0 變成 exit 1：
+  - PROP、SPEC、UC：缺 `id`、`title`、`status` 任一項。
+  - DomainBundle（`doc validate DOMAIN-MAP-*`）：缺 `id`、`domain` 任一項。
+- **UC 的結構化 flow 區塊開始檢查 FlowStep 必填欄位**：每個步驟須有 `id`、`name`、`next`、`branch_from`、`return_to`、`emits`、`consumes`、`traverses`，缺一項即 exit 1，訊息指出 `flow[<步驟 id>]` 與欄位名。不觸及 domain 的步驟 `traverses` 填 `[]`，不可省略。
+- **`doc validate-filenames` 只掃 carrier 目錄內的檔案**：範圍取自各型別 `carrier_path_patterns` 的目錄部分（例如 SPEC 為 `docs/spec/{domain}/`）。carrier 目錄外的 md（如 `docs/spec/` 根層、domain 目錄下更深的子目錄）不再被判違規，也不再列為「已豁免」。型別沒有 carrier 路徑樣板時退回全部檢查。
+- **文件 status 值域依型別拆分**（`tracking_schema.DOC_STATUSES_BY_TYPE`，`doc create`、`doc update`、`doc validate` 都引用它）：
+  - PROP：`draft`／`discussing`／`confirmed`／`implemented`／`withdrawn`（不變）。
+  - SPEC、UC、EVT：`draft`／`review`／`approved`／`deprecated`。
+  - `doc update <SPEC|UC|EVT-ID> --status` 只接受該型別值域（原本一律用 PROP 五值）；無法由 ID 前綴判定型別時沿用 PROP 值域。
+  - `doc validate` 開始檢查 status 是否在該型別值域內，越域時 exit 1。
+
+  | 輸入類別 | 改動前 | 改動後 |
+  |---|---|---|
+  | 各型別用自己值域內的值（PROP `confirmed`、SPEC／UC／EVT `approved`） | validate 通過；update 對 SPEC／UC／EVT 的 `approved` 拒絕 | validate 通過；update 通過 |
+  | 跨型別的值（SPEC／UC／EVT 用 `discussing`、`confirmed`；PROP 用 `approved`） | validate 通過；update 對 SPEC／UC／EVT 的 `confirmed` 放行 | validate exit 1；update 拒絕（exit 1，檔案不變） |
+  | 拼錯或大小寫不符（`aproved`、`Approved`） | validate 通過 | validate exit 1 |
+  | status 整段缺席 | PROP／SPEC／UC：exit 1（完整性檢查，「缺少必填欄位: status」）；EVT：通過 | 不變（落在既有完整性檢查，不另報值域錯誤；EVT 仍通過） |
+  | status 設為 `null` 或留空（`status:`） | 通過（鍵存在，完整性語意） | 通過（值域檢查略過 null，維持完整性語意） |
+  | status 設為空字串（`status: ""`）或其他非 null 的格式不符值（空白、數字） | 通過 | validate exit 1（不在值域內） |
+- **ID 正則的 `\d`、`\w`、`\s` 只比對 ASCII**（`re.ASCII`；`\s` 只比對 ASCII 空白）：`tracking_schema.ID_PATTERN_FLAGS`；匯出 JSON 新增 `id_pattern_flags: "ASCII"`，`id_pattern_dialect` 仍為 `"python-re"`。doc skill 內自行編譯 ID 正則的位置（UC 標題行與 UC 編號格式、SPEC 子標題、`validate-filenames` 的檔名 ID 與 carrier 目錄）一律帶此旗標。收緊結果：
+
+  | 輸入類別 | 改動前 | 改動後 |
+  |---|---|---|
+  | ASCII 合法 ID（`UC-01`、`PROP-001`、ASCII 的 Ticket ID） | 命中 | 命中 |
+  | 全形數字（`UC-０１`、`PROP-００１`、Ticket ID 的波次段用全形數字） | 命中 | 不命中 |
+  | 阿拉伯－印度數字（`UC-٠١`、`PROP-٠٠١`） | 命中 | 不命中 |
+  | 非 ASCII 字母（Ticket ID 的版本前綴含中文字） | 命中 | 不命中 |
+  | `###` 後接全形空白或 NBSP（SPEC 子標題） | 命中 | 不命中 |
+  | 整段缺席（標題行無 ID、檔名無 ID 前綴、欄位不存在） | 不命中 | 不命中 |
+  | 設定為空或格式不符（`UC-`、`UC-1`、空字串、Ticket ID 缺序號段） | 不命中 | 不命中 |
+
+  影響：domain-map 的 §7 若全部用「`###` 後接全形空白或 NBSP」寫 SPEC 子標題，會被視為舊結構，略過 source_specs 比對。這種行在 CommonMark 本來就不算標題。
+
+- **`parse_frontmatter` 遇非 UTF-8 檔回傳 `None`**（原拋 `UnicodeDecodeError`）；呼叫端把該檔視為無 frontmatter。
+- **模板標註對齊 schema**：`usecase-template.md` 的 `emits`、`consumes` 改標必填（欄位必存在，無則 `[]`）；`system-layer-template.md` 第 3 節標題改為「通道與協調圖」並新增「FR 覆蓋」節。
+- **`doc batch-init` 完成報告的 domain-map 路徑依 `--domain` 切換**：指定時為 `docs/spec/{domain}/domain-map.md`，不指定維持 `docs/domain-map.md`。不新增建檔行為。
+
+- **六個圖譜型別升為正式（established）**：`doc schema export` 匯出 JSON 中，節點型別 `FlowStep`、`EVT` 與邊型 `emission`、`consumption`、`branching`、`returning` 的 `layer` 值由 `proposed` 改為 `established`；`bundle_dependency`、`closed_by` 維持 `proposed`。`doc validate`、`doc create` 結果不變，只影響讀取 `layer` 的 consumer；匯出 JSON 的 `schema_generated_at_framework_version`（型別表相容版本）隨之升為 `3.5.0`。升級判準補上「互相獨立」的定義（兩個專案的語料由不同的人、在不同的領域假設下各自產出；同一組人或同一套領域假設產出的多個專案算同一來源）。`usecase-template.md` 的 FlowStep 狀態標示同步改為正式，「本區塊選填」不變。
+- **spec 檢核腳本（`check_api_surface.py`、`check_domain_coverage.py`）輸出改為如實，三處收緊**：
+
+  | 項 | 輸入類別 | 改動前 | 改動後 |
+  |---|---|---|---|
+  | `check_api_surface` 抽到 0 段 | 整段缺席（spec 沒有任何 FR 標題） | exit 0，印「檢核通過」 | exit 1，印「未抽到任何 FR 段落」與預期標題樣式 |
+  | `check_api_surface` 抽到 0 段 | 設定為空或格式不符（`## FR-01 名稱`、無冒號等不被抽出的標題） | exit 0，印「檢核通過」 | exit 1，同上，另列形似 FR 標題的行 |
+  | NFR 不計入 FR（`FR_TOKEN_RE` 左邊界） | 整段缺席（map 通道表內沒有任何 FR 引用） | 不涵蓋 | 不涵蓋 |
+  | NFR 不計入 FR | 設定為空或格式不符（map 以 `NFR-01` 引用，spec 有 `FR-01`） | `NFR-01` 被計成 `FR-01`，FR-01 被判已覆蓋或已標定 | `NFR-01` 不計，FR-01 判為未覆蓋或未標定 |
+  | map 端 `domain` 欄檢查 | 整段缺席（無 frontmatter 或無 `domain` 鍵），且專案內另有 map 已宣告 domain | 該 map 不入已宣告集合，SPEC 可能被誤判為層級 SPEC 而走系統層 | exit 1，列出該 map 路徑與「缺席」 |
+  | map 端 `domain` 欄檢查 | 設定為空（`~`、`null`、空字串）或格式不符（單邊引號、含空白、清單、井號） | 空值被讀成名稱 `~` 或去引號的字串，納入已宣告集合 | exit 1，列出該 map 路徑與「為空」或「格式不符」 |
+
+  FR 切段規則改為與 FR 抽取同一份（止於下一個 FR 或同階以上的標題；標題接受 H3 以上與全形冒號；圍欄與 HTML 註解內的標題不切段）。`check_api_surface` 與事件流標定共用這份規則，下列變化兩者都受影響，其中 a、b、c 可能使 exit code 改變：
+
+  | 項 | 輸入 | 改動前 | 改動後 |
+  |---|---|---|---|
+  | a（放寬） | FR 之後的非 FR 章節（如 `### 設計約束`）內的 API 訊號行 | 算進最後一個 FR 段，列為缺口，exit 1 | 不算進 FR 段，不列，可能 exit 0；事件流訊號詞同理不再歸給該 FR |
+  | b（收緊） | 同一個非 FR 章節內的 `/v1/...` 路徑 | 計入前一個 FR 的已定義路徑 | 不計入，該 FR 可能由通過轉為缺口 |
+  | c（收緊） | H4 以上或全形冒號的 FR 標題（`#### FR-01：…`） | 切出 0 段，印「檢核通過」 | 切段並檢查，可能列缺口 exit 1 |
+  | d | 圍欄或 HTML 註解內的 FR 標題 | 切成一段 | 不切段 |
+
+  不改 exit code 的只有一項：事件流標定在 map 找不到「通道與協調圖」節時，改印「無法判定：找不到節」，與節內缺標定的訊息分開（exit 1 不變）。
+  map 端 `domain` 欄檢查只在被消費處進行：SPEC 有 `domain` 欄、定位鏈找不到任何 map、未帶 `--domain-map`。缺席只在另有 map 已宣告 domain 時算錯；專案內所有 map 都不寫 `domain`（單 domain 專案）維持原行為。
+
+#### 遷移步驟
+1. 對既有文件補齊缺漏欄位：直接在 frontmatter 加上欄位（沒有值時寫 `null` 或 `[]`），不需改正文。
+2. flow 區塊的每個步驟補齊上列八個欄位。
+3. commit 時的 doc 驗證守衛（commit-stage-guard-gate）只擋「新增的錯誤」，不因文件既有的錯誤阻擋 commit。
+4. 原本放在 carrier 目錄外、靠 validate-filenames 提示的檔案，不再有提示；需要檢查就移入 carrier 目錄。
+5. 文件或檔名若用了全形／阿拉伯－印度數字或非 ASCII 字母組成 ID（例如 `UC-０１-x.md`、`## UC-٠١: 標題`），改為 ASCII；這類 ID 原本被接受，現在被視為格式不符。自行消費匯出 JSON 的 consumer，讀 `id_pattern_flags` 並在自己的正則引擎以等價方式限制為 ASCII。
+6. 現有 `usecase` 範本衍生的 UC 若 flow 步驟缺 `emits`／`consumes`，照第 2 步補 `[]`（範本標註改變不影響既有檔案的驗證結果）。
+7. 既有 SPEC、UC、EVT 若 frontmatter 的 status 是 PROP 值域的值（`discussing`、`confirmed`、`implemented`、`withdrawn`），改為 `draft`／`review`／`approved`／`deprecated` 之一（常見對應：`confirmed` → `approved`、`withdrawn` → `deprecated`）；空字串的 status 改填值域內的值或 `null`。更新程序若寫死 `doc update <SPEC|UC-ID> confirmed`，改用 `approved`。
+8. spec 檢核腳本：`check_api_surface.py` 對沒有 FR 標題的 spec 改為 exit 1，標題改成 `### FR-NN: 標題` 形式，或不對該 spec 跑此檢核；各 `docs/spec/*/domain-map.md` 的 frontmatter `domain` 補成單一名稱（不寫 `~`、`null`、空字串，不含引號殘留、空白或清單）；map 內以 `NFR-NN` 做的 FR 引用不再計入，需要標定或歸屬的 FR 改寫成 `FR-NN`。
+9. 層級 SPEC 改由專案正向宣告，且 DomainBundle 的 `domain` 須等於 id 後綴：
+   - 在 `docs/system-layer.md` frontmatter 加 `layer_names: [層級名稱, ...]`（系統層範本有註解示範），列出層級 SPEC 的 `domain` 欄值。宣告後，`check_domain_coverage.py` 對「`domain` 既不在已宣告 domain、也不在 `layer_names`」的 SPEC 改為 exit 1（原本放行為層級）；`layer_names: []` 視為已宣告、無保留名稱，既有層級 SPEC 會因此轉紅；值不是字串清單報格式錯誤 exit 1。
+   - 尚未宣告的專案（系統層檔不存在、無 frontmatter 或無 `layer_names` 鍵）遷移期行為不變，橫幅多一行提示補宣告。
+   - 各 `docs/spec/*/domain-map.md`（及 `docs/domain-map.md`）的 `domain` 須等於 `id` 去掉 `DOMAIN-MAP-` 的後綴；`doc validate DOMAIN-MAP-<後綴>` 與 `doc validate-paths` 對缺席、為空、不相等皆報錯（exit 1）。不相等時改 `domain` 或 `id` 之一使其一致。同 domain 的兩份 bundle 仍須放在不同資料夾，重複偵測改為逐檔掃描（同 id 的兩份不再被合併成一份）。
+   - `doc validate-paths` 另檢查 `layer_names` 的格式。
+10. `check_domain_coverage.py` 的 FR 歸屬放行改為依 `source_specs`，並收緊「取不到 spec 識別」的相容比對：
+    - 整份無任何 SPEC 歸屬（非系統層）的 domain map，其 FR 原一律計給受檢 SPEC；現依該 map 的 `source_specs`：單值計給該值，多值又無明示歸屬時 exit 1（訊息指名檔案與各 SPEC id）。
+    - 取不到 spec 識別（frontmatter id 與檔名皆無 SPEC-NNN）且帶 `--domain-map` 時 exit 1，不再走相容比對；未帶旗標的相容比對不變。
+    - 遷移：多值 `source_specs` 的 map，在 FR 所在章節標題含 `SPEC-NNN`，或同一行、該 FR 之前寫出 `SPEC-NNN`；單值 `source_specs` 的 map 若其值不是你期待的歸屬對象，改 `source_specs`；帶 `--domain-map` 檢核的 spec，修正 id 為 `SPEC-NNN` 形式或省略旗標。
+
+    | 輸入類別 | 改動前 | 改動後 |
+    |---|---|---|
+    | 無歸屬 map，`source_specs` 單值且等於受檢 SPEC | 通過（計給受檢 SPEC） | 不變 |
+    | 無歸屬 map，`source_specs` 單值為他 SPEC | 通過（計給受檢 SPEC） | FR 計給該他 SPEC，受檢 SPEC 的 FR 報未覆蓋（exit 1） |
+    | 無歸屬 map，`source_specs` 多值，檔內無明示歸屬 | 通過（計給受檢 SPEC） | exit 1（無從判定歸屬） |
+    | 無歸屬 map，`source_specs` 多值，檔內有明示歸屬 | 依明示歸屬 | 不變 |
+    | `source_specs` 整段缺席 | 通過（計給受檢 SPEC） | 不變 |
+    | `source_specs: []` | 通過（計給受檢 SPEC） | 不變 |
+    | `source_specs` 格式無法解析 | 通過（計給受檢 SPEC），另有格式提示 | 不變 |
+    | 取不到 spec 識別，帶 `--domain-map` | 相容比對，通過或列未覆蓋 | exit 1，訊息指出取不到 spec 識別 |
+    | 取不到 spec 識別，未帶旗標 | 相容比對 | 不變 |
+    | 合併後無任何歸屬（有 spec 識別） | 相容比對 | 不變 |
+11. doc CLI 的 `test-map`、`uc trace`、`uc verify` 改由 `resolve_code_root()` 決定程式碼端根目錄（文件端仍是 doc root），外接模式有三項行為改變：
+    - 外接模式（`CLAUDE_PROJECT_DIR` 指向的目錄不屬於 cwd 所在 repo，也不是同一 repo 的 worktree）下，三個命令須能解析出 code root，否則 exit 2 並指出設定方式。在 `docs/traceability.yaml` 加頂層鍵 `code_root: <被操作 repo 路徑>`（相對路徑以 doc root 解析），或每次帶 `--code-root <路徑>`。原本在外接模式下靜默掃 doc root 的 `uc verify`（不帶路徑）、`test-map`、`uc trace`，現在會失敗而不是回報空結果。
+    - 外接模式的輸出路徑改為 `repo:<相對 code root 的路徑>`（doc root 內的檔案為 `ws:`），不再輸出 `../repo/...`。解析 `uc verify` 輸出的腳本改認前綴。單根專案輸出不變。
+    - `uc verify` 不帶路徑時，外接模式掃 code root 與 doc root；通過訊息改為「UC 編號驗證通過，無違規 token（掃描 N 個檔案）。」（比對訊息全文的腳本改比對前綴「UC 編號驗證通過」）；掃描目標內沒有任何可掃檔案時 exit 2，不再印通過。
+    - 新增頂層鍵 `test_file_extensions`（以點開頭的副檔名清單，整份取代預設 `.dart/.js/.ts/.py/.test.js/.spec.js`）；`code_root`、`test_file_extensions` 皆為選填，不影響既有 traceability.yaml 的 conformance。`code_root` 設了但不是非空字串或指向不存在的目錄時，三個命令 exit 2（單根亦然）；`test_file_extensions` 格式不符時比照 `test_scan_dirs`，stderr 警告並改用預設。
+
+    | 輸入類別 | 改動前 | 改動後 |
+    |---|---|---|
+    | 單根，traceability.yaml 無 `code_root`（或值為 null） | code root = doc root | 不變（分支：回退 doc root） |
+    | 單根，`code_root: ""` 或純空白、非字串 | 鍵被忽略 | exit 2，訊息指出格式（分支：格式驗證） |
+    | 單根，`code_root` 指向不存在的路徑 | 鍵被忽略 | exit 2（分支：路徑存在性） |
+    | 外接，無 `code_root`、無旗標 | 掃 doc root，回報空結果或「通過」 | exit 2，訊息指出 traceability.yaml 與 `--code-root`（分支：外接未設定） |
+    | 外接，`code_root` 有效 | 不使用，掃 doc root | 掃 code root，輸出 `repo:` 前綴 |
+    | 帶 `--code-root`，有設定 | 無此旗標（argparse 拒絕） | 旗標優先於設定 |
+    | 帶 `--code-root`，無設定 | 無此旗標 | 外接下使用旗標值；單根下改掃旗標目錄 |
+    | `uc verify` 不帶路徑，單根 | 掃 doc root，通過只印固定句 | 掃 code root；通過句含檔案數；零檔案 exit 2 |
+    | `uc verify <path>` 帶明示路徑，外接，無 `code_root` 無旗標 | 只掃指定路徑，不需 code root，輸出為相對 doc root 的跨界路徑 | exit 2，訊息指出 traceability.yaml 與 `--code-root`（分支：外接未設定，於掃描前解析 code root）；帶 `--code-root` 則照常掃描 |
+    | `uc verify` 不帶路徑，外接 | 只掃 doc root，印通過（假陰性） | 掃 code root 與 doc root，違規為 `repo:`／`ws:` 前綴 |
+    | `test_file_extensions` 缺席 | 預設副檔名 | 不變 |
+    | `test_file_extensions: []` 或非清單 | 鍵被忽略 | stderr 警告，用預設 |
+    | `test_file_extensions: [.kt]` | 鍵被忽略（.kt 不計） | 整份取代，只計 `.kt` |
+    | worktree 內執行（`CLAUDE_PROJECT_DIR` 為主 checkout 或 worktree 自身） | 單根 | 不變，判單根（以 git common dir 比對，不比對 toplevel） |
+12. spec 腳本（`check_domain_coverage.py`）的 docs/ 解析根改為 `CLAUDE_PROJECT_DIR`（未設、空字串或指向不存在的目錄時為 cwd），涵蓋 domain-map 定位鏈、系統層（`docs/system-layer.md`）與 legacy `docs/domain-map.md`；明示 `--domain-map` 不受影響。consumer 若在 cwd 不等於 `CLAUDE_PROJECT_DIR` 的環境跑 spec 檢核（外接資料夾、hook 環境），會改讀 `CLAUDE_PROJECT_DIR` 下的 docs/：
+    - 原本靠 cwd 恰好有 docs/ 而通過的呼叫，在 `CLAUDE_PROJECT_DIR` 指向無 docs/ 的目錄時改為找不到而失敗（exit 0 -> 1，收緊）；`CLAUDE_PROJECT_DIR` 指向外接資料夾且該處有 docs/ 時，原本找不到而失敗的呼叫改為通過（exit 1 -> 0，放寬）。修法：確認 `CLAUDE_PROJECT_DIR` 指向放 docs/ 的資料夾，或改帶 `--domain-map`。
+    - spec `SKILL.md` 加入 external-workspace-spec 引用句，規格第 7 節引用表同步。
+
+    | 輸入類別 | 改動前 | 改動後 |
+    |---|---|---|
+    | `CLAUDE_PROJECT_DIR` 未設 | cwd 的 docs/ | 不變 |
+    | `CLAUDE_PROJECT_DIR` 等於 cwd | cwd 的 docs/ | 不變（同一目錄） |
+    | 不等於 cwd，該處有 docs/spec | 讀 cwd 的 docs/，找不到，exit 1 | 讀該處的 docs/，找得到，exit 0（放寬） |
+    | 不等於 cwd，該處沒有 docs/ | 讀 cwd 的 docs/，可能命中，exit 0 | 讀該處，找不到，不退回 cwd，exit 1（收緊） |
+    | 空字串或指向不存在的目錄 | cwd 的 docs/ | 不變，退回 cwd |
+    | 明示 `--domain-map` | 用明示路徑 | 不變，不讀 `CLAUDE_PROJECT_DIR` |
+    | hook 環境（`CLAUDE_PROJECT_DIR` 為主 checkout），在 worktree 內執行 | 讀 worktree 的 docs/ | 讀主 checkout 的 docs/（worktree 內未合併的 domain-map 讀不到）；只記錄，不改行為，doc 端 `get_project_root` 同優先順序。Bash 工具環境不設此變數，依 cwd 解析，同第 1 列 |
+
+13. `doc uc verify` 的路徑豁免判定修正三處（`is_exempt_path` 新增選填參數 `code_root`；`EXEMPT_PATH_PREFIXES` 保留為相容別名，內容由 `DOC_ROOT_EXEMPT_PREFIXES` 與 `CODE_ROOT_EXEMPT_PREFIXES` 串接）：
+    - 136：`.claude/worktrees/<name>/` 下的檔案剝除該前綴後再判定。worktree 內的產品檔改為受檢（收緊：exit 0 -> 1），其下的 `.claude/`、`docs/spec/` 等仍豁免。
+    - 137：`uc verify` 對相對路徑引數以 cwd 為基準轉絕對路徑後判定，與實際讀取的檔案一致。cwd 不是專案根時，原本多報或少報的檔案改為正確判定（兩方向皆可能改變 exit code）。
+    - C2（外接模式）：`test/fixtures/`、`tests/fixtures/` 只對 code root 內的檔案豁免；`docs/spec/`、`docs/work-logs/`、`.claude/`、SSOT 只對 doc root 內的檔案豁免。交叉位置（doc root 的 fixtures、code root 的 docs/spec 等）原本豁免，現在受檢（收緊：exit 0 -> 1）。修法：在該位置的未定義編號改為合法編號，或移到所屬根的豁免位置。非外接模式不變。
+
+    | 輸入類別 | 改動前 | 改動後 |
+    |---|---|---|
+    | `code_root` 未傳（整段缺席，hook 呼叫） | 兩類前綴皆比 | 不變（分支：`code_root` 為 falsy，兩份清單皆比） |
+    | `code_root` 為空字串 | 兩類前綴皆比 | 不變（分支：`code_root` 為 falsy，兩份清單皆比；落點同上，分列） |
+    | 外接，code root 下 `.claude/` 內的檔案，不帶路徑掃描時 | 不受檢（隱藏目錄被排除，掃不到） | 不變，仍掃不到；只有明示檔案路徑時才受檢（分支：`_iter_scannable_files` 排除隱藏目錄） |
+    | 非外接，doc 端前綴（`docs/spec/` 等）與 code 端前綴（`test/fixtures/`） | 豁免 | 不變 |
+    | 外接，doc root 的 `test/fixtures/`、`tests/fixtures/` | 豁免 | 受檢（分支：doc 清單不含 fixtures） |
+    | 外接，code root 的 `test/fixtures/`、`tests/fixtures/` | 豁免 | 豁免 |
+    | 外接，code root 的 `docs/spec/`、`docs/work-logs/`、`.claude/`、SSOT 路徑 | 豁免 | 受檢（分支：code 清單不含 doc 前綴） |
+    | 外接，doc root 的 `docs/spec/`、`.claude/`、SSOT | 豁免 | 豁免 |
+    | `.claude/worktrees/<name>/lib/a.dart` | 豁免 | 受檢（分支：剝前綴後不在清單） |
+    | `.claude/worktrees/<name>/.claude/x`、`.../docs/spec/x` | 豁免 | 豁免（分支：剝前綴後在清單） |
+    | cwd=專案根，相對路徑引數 | 正確 | 不變 |
+    | cwd=`app/`，引數 `test/fixtures` | 誤判豁免（以專案根解析） | 受檢（分支：abspath） |
+    | cwd=`docs/`，引數 `spec` | 誤判受檢 | 豁免 |
+    | cwd 在主 checkout，目標是 `.claude/worktrees/<name>/` 下的產品檔 | 豁免 | 受檢；合法集合取自主 checkout 的 SSOT，worktree 分支新增、尚未進 main 的 UC 會判違規（hook 的 payload.cwd 落在 worktree 時以 worktree 為作用根，常見路徑不受影響；程式不改，3.6.0 另行處理） |
+    | 外接，doc root 位在 code root 之內，檔案在 doc root | 依 doc 清單豁免 | 只比對 code 清單，`docs/spec/`、`.claude/`、SSOT 等改為受檢（只列出，不改程式） |
+
+14. `doc uc verify` 新增行內豁免標記並放行無數字 token（tarrragon/claude#98；放寬，exit 1 -> 0）：
+    - 標記：同一行寫 `uc-verify-exempt: <理由>`（HTML 註解、`//`、`/* */` 皆可，關鍵字小寫），該行所有 UC token 不判違規。理由必填，理由取標記到第一個收尾符號（`-->`、`*/`）之間的文字，空白就不豁免。只作用於標記所在行。
+    - 無數字 token：正規化後符合 `^UC-[A-Z]+$`（`UC-A`、`UC-X`、`uc-a`、全形 `ＵＣ－Ａ`）不判違規。
+    - 判定函式 `is_violation_token` 簽章不變，無數字放行同時適用於 PreToolUse 寫入驗證 hook；行內標記只由 `uc verify` 套用（`find_uc_tokens_in_text` 新增選填參數 `skip_exempt_lines`，預設不變），hook 暫不讀標記，後續版本處理。
+    - 遷移：因 `UC-A`、`UC-X` 一類占位字樣被擋者，不需改檔；其餘示例編號可在該行加標記取代搬檔或改字。
+
+    | 輸入類別 | 改動前 | 改動後 |
+    |---|---|---|
+    | 標記整段缺席，行內有 `UC-99` | 違規 | 不變（分支：`has_inline_exempt_marker` 為 False） |
+    | `UC-99 uc-verify-exempt: 示例` | 違規 | 放行（分支：標記理由非空） |
+    | 理由空白（`uc-verify-exempt:`、後接空格或 tab） | 違規 | 不變，仍違規（分支：理由去空白後為空） |
+    | 理由只剩註解收尾（`<!-- UC-99 uc-verify-exempt: -->`、`/* ... uc-verify-exempt: */`），含收尾符號後仍有內容者（`\| UC-99 \| <!-- uc-verify-exempt: --> \|`、`x <!-- uc-verify-exempt: --> trailing`、`/* uc-verify-exempt: */ foo(UC-99)`） | 違規 | 不變，仍違規（分支：理由取到第一個收尾符號前，為空） |
+| 理由在收尾符號前、其後仍有內容（`\| UC-99 \| <!-- uc-verify-exempt: 負向輸入 --> \|`） | 違規 | 放行（分支：收尾符號前理由非空） |
+    | 標記在別行，`UC-99` 在另一行 | 違規 | 不變，仍違規（分支：逐行判定） |
+    | 同一行有多個 token（`UC-98 UC-99` 加有效標記） | 皆違規 | 皆放行（分支：整行略過） |
+    | 關鍵字大寫（`UC-VERIFY-EXEMPT: 理由`） | 違規 | 不變，仍違規（分支：正則只認小寫） |
+    | `UC-A`、`UC-X`、`uc-a`、全形 `ＵＣ－Ａ` | 違規 | 放行（分支：`UC_NO_DIGIT_TOKEN_RE`） |
+    | `UC-09`（不在合法集）、`UC-1`、`UC-01a`、`UC-A1`、全形 `ＵＣ－０９`、`UC-01.4.20` | 違規 | 不變，仍違規（分支：含數字不符放行式） |
+    | `UC-0x.MD`（副檔名段） | 擷取為 `UC-0x`，違規 | 不變（副檔名段不併入 token，`UC-0x` 含數字仍違規） |
+    | 標記解析失敗 | 無失敗路徑 | 無失敗路徑：只做字串比對，無法確認理由非空者一律回 False（不豁免） |
+
+### Added
+- **合併閘門新增 main 定期全套件**（worktree skill，`scripts/merge_gate.py`）：自上次定期全套件起 main 累計 4 筆合併且全機名額空閒時，在 main head 的快照跑全部套件；累計 8 筆時不論空閒強制排入名額佇列。觸發在合併離開閘門時評估，以脫離 session 的子程序執行，合併本身不等它；手動執行用 `python3 .claude/skills/worktree/scripts/merge_gate.py periodic-run --repo <主 checkout>`，查狀態用 `periodic-status`。
+  - 紅燈：對每個紅燈套件，在它上次綠燈之後的 main 合併中前綴對半定位到一筆合併，暫停該套件的新合併，並在 `.claude/logs/worktree-merge.log` 與 stderr 寫一行 `[定期全套件] 紅燈｜套件 <名>｜定位 <commit>｜分支 <名>｜票 <號>`。不自動 revert。
+  - 暫停期間：觸及暫停中套件的合併一律實跑該套件（不沿用重試結果），紅燈即拒絕並說明暫停原因；綠燈表示這筆是修正或 revert，放行。無關套件的合併不受影響。
+  - 解除：修正或 revert 合入後，定期全套件會強制重跑，該套件綠燈才解除，日誌寫 `[定期全套件] 解除｜套件 <名>`。
+  - 狀態在 `.claude/logs/merge-gate-periodic.json`。狀態檔讀不到時一律多跑、多擋：強制觸發，閘門對選中套件全部實跑。環境變數 `MERGE_GATE_PERIODIC=0` 停用。
+  - 執行中的子程序若中途消失，下一次評估會強制重跑，判定依據為 pid 已死或執行超過 4 小時，執行中標記讀不懂時也一樣。
+- **合併閘門改跑受影響的測試子集**（worktree skill，`scripts/merge_gate.py`）：hooks、scripts、skill:<名稱> 三類 pytest 套件，改為只跑 `select_test_files` 選出的測試檔（S2b 加兩層匯入遞移）；選中的檔依各套件的收集範圍分配（命令列測試路徑，或 pyproject 的 testpaths）。flutter 與專案宣告套件不變。
+  - 下列情況該套件退回全套件：選擇函式拋例外、依賴缺席、逾時（120 秒）、回傳 None、子集為 0 檔，以及該套件因 main 定期全套件暫停中或暫停狀態讀不到。
+  - 定期全套件停用（`MERGE_GATE_PERIODIC=0`）時閘門完全不跑子集，所有套件一律全套件，日誌理由為「定期全套件停用」：子集的漏抓靠定期全套件補上，停用後沒有任何地方會跑全套件。
+  - `.claude/logs/worktree-merge.log` 每個套件多一行 `[合併前測試] 測試子集：套件 <名> 選中 N 檔`，或 `…退回全套件（<理由>）`。進度訊息「快照內跑全套件」改為「快照內跑套件」。
+- **`error-pattern` 的 README 索引可以刷新既有列**：`readme_index.py sync --write --refresh` 以檔案內文補上索引中的佔位符格，並把來源版本正規化為 `v` 前綴；已有實值的格不動。預設的 `sync` 行為不變，仍只新增缺漏列、移除死連結列。本框架的 README 存量已用它校正。
+- **`error-pattern add` 新增〈多線並行〉說明**：配號命令改由 git common dir 取得主 checkout 根目錄，在 worktree 內執行也看得到其他線登記在票上的編號；配號後要立刻把 ID 寫進票，票等 pattern 合入後才 complete。
+- **error-pattern `related` 條目可標 `kind`**：寫成 `- id: <ID>` 加 `kind: sibling` 或 `kind: citation`。`error-patterns-index-consistency-check-hook` 依 kind 判定雙向性：`sibling` 對方未回指即報單向 WARNING，不看建立日期；`citation` 單向合法，不報；舊格式純 ID 與不合法的 kind 值視為 `unknown`，沿用「建立日期相差 7 天內才報」的舊規則，所以既有語料的報告結果不變。判別準則見 `error-pattern` SKILL。
+- **zsh 的誤判收錄**：新增 error-pattern `IMP-LLM-019`（zsh 內建 `echo` 預設展開反斜線：擷取的輸出顯示失真，手動餵給 hook 的 JSON payload 損壞，輸出與放行同形）；`IMP-GPD-025` 補第二個實例（`$var:` 修飾詞截斷環境變數值，全程無錯誤）與預防措施；`system-misjudgment` 新增 zsh 系統檔 `references/zsh-shell.md`（ZSH-1、ZSH-2）；`bash-tool-usage-details` 規則二新增〈顯示與轉送擷取的輸出：用 `printf '%s'`，不用 `echo`〉。
+- **error-pattern 知識庫補收錄（E1）**：新增 error-pattern `PC-LLM-052`、`PC-LLM-053`、`PC-LLM-054`、`PC-LLM-055`（交給用戶執行的長單行指令被終端機折行：單行不超過終端機寬度，不知道寬度時以 80 字元為上限，交付後以固定值確認結果）、`TEST-LLM-004`、`TEST-LLM-005`、`IMP-LLM-014`、`IMP-LLM-016`、`IMP-LLM-017`、`IMP-LLM-018`、`PROC-LLM-001`；`PC-BAL-061` 補兩個變體（路徑來源遷移、替身簽名被 `except` 吞掉）；`IMP-GPD-005` 補 sibling 回指；`test-assertion-design-details` 補正向對照的對照環境要求；`system-misjudgment` 新增 PYT-1、SUB-1（1.4.0）、SBIN-1（1.6.0）、MG-5（1.7.0）、MG-6（1.8.0）。
+
+### Fixed
+- **sync-pull 不再把凍結重號組的 error-pattern 重編成本地號**：本地 PC 索引原本一個號只記一個 slug，canonical 的兩個 PC-105 其中一檔會被判為撞號、重編成 consumer 本地號，原檔之後也收不到上游更新。現在一個號可記多個 slug，且凍結重號組（PC-010、019、020、030、105）一律不重編，即使本地只有其中一檔。讀 error-pattern 檔失敗時改寫 stderr `[WARNING]`。先前已被重編出的副本（如某 consumer 的 PC-186）需自行刪除。
+- **`ticket track list` 以 ids、yaml 格式輸出且被 `--top` 截斷時，stderr 印出顯示筆數與總數**：`[List] <版本> 顯示 <顯示筆數>/<總數> 筆（已截斷）…`；stdout 不變。原本 ids 截斷時 stdout、stderr 都沒有提示，盤點會把顯示筆數誤讀為總數（tarrragon/claude#93）。未截斷或傳 `--all` 時不印。
+
+### Changed
+- **合併閘門的跨 skill 加選涵蓋單檔模組**（worktree skill）：其他 skill 以 `sys.path.insert` 匯入的單檔模組（skill 根或 `scripts/` 下的 `.py`，如 `merge_gate.py`）被改動時，匯入者的套件也會加選；模組名在快照各 skill 頂層重名時不加選。三處匯入掃描收斂成同一個函式，單次閘門內每個 skill 的 `.py` 只讀一次。
+- **ticket 的 `where.layer` 寫明為不可信的自由文字選填欄位**（ticket skill，`references/field-semantics.md`〈where.layer 的可信度〉）：CLI 不驗證值域，填入值與 `where.files` 不保證一致，hook、checker 與 PM 不得依其值判定；架構層資訊改由 `where.files` 的路徑判讀。CLI 行為不變。
+- **doc skill 同一資產的稱呼統一為「範本」**（doc 1.27.1）：SKILL.md、templates、references 與 `create` 的 help 字串原有「模板」「規格模板」「範本」並用，統一為「範本」（檔名 `*-template.md` 不變，description 觸發詞保留「模板」）。SKILL〈uc 子命令群組〉改為自足說明格式、SSOT 與豁免判定原則，不再引用 consumer 專案的規範檔；doc CHANGELOG 開頭的版號住址敘述改為實際四處。CLI 行為不變。
+
 ## [3.4.0] - 2026-11-19
 
 ### Summary
@@ -96,6 +305,16 @@
   - `sync-mechanism-guide.md` 新增 §5.3，說明 consumer error-pattern 的去處（不可攜進 `docs/`、可攜經 framework issue 收錄）與等待收錄期間索引列、代號列在全量 overlay 後的恢復步驟；`_project-registry.yaml` 新專案規則 3 改為經 issue 登錄。
 - **合併閘門**：worktree 1.10.0 起，改動落在某 skill 的頂層套件時，加選匯入該套件的其他 skill 的測試套件（原本只掃 hooks 與 scripts）；閘門輸出新增一行 `[合併前測試] 跨 skill 匯入加選套件：…`。
 - **skill 版號**：本版另有 broken-link-check 2.5.2、dart-comment-traceability 1.0.2、framework-issue 2.12.2、multi-session-orchestration 1.27.1、spec 1.9.12、strategic-compact 1.1.2、version-bootstrap 1.7.9。
+
+### 發版後補列（2026-11-20）
+以下變更已在 tag v3.4.0 內，發版時漏列，依發版第 6 步的 issue 留言補上。
+
+- **Added：SessionStart 新增 `sync-exclusion-channel-parity-check-hook.py`**：逐類比對框架同步與 skill-sync 兩個通道的工具產物排除。有差異時以 additionalContext 列出差異項，一致時不輸出；runtime state 類（`dispatch-active.json`、根層的 logs、state、worktrees）屬於預期的分歧，不告警（tarrragon/claude#50）。
+- **Fixed：`sync-preserve.yaml` 的目錄項改為生效**：目錄項（含或不含結尾 `/`）以前綴比對，pull 不覆寫、不刪除其下的檔案，push 不推送其下的檔案，也不再印目錄項警告。原本目錄項靜默無效。結束碼與參數不變（tarrragon/claude#50）。
+- **Fixed：工具產物排除類別在兩個通道對齊**：框架同步的排除補上 `.ruff_cache`、`.mypy_cache`、`htmlcov` 與 `*.egg-info`（後綴比對），pull 不再把本機的這些快取當成孤兒清理；`build` 不補，因為它是通用目錄名，會誤排除 skill 內的正常目錄。skill-sync 的 `EXCLUDE_DIRS` 拆成工具產物與政策（`project-integration`）兩個具名集合，排除結果不變。pull 備份的 `BACKUP_IGNORE_PATTERNS` 改由工具產物集合推導，備份與同步排除同一組產物（tarrragon/claude#50）。
+- **Fixed：`update_sync_manifest` 不再靜默跳過無法雜湊的 skill**：跳過時在 stderr 列出 skill 名與原因；寫入後條目數與掃描到的 SKILL.md 數不符時告警並列出兩側數字（tarrragon/claude#50）。
+- **Changed：skill-sync SKILL.md 的排除說明與通道說明**：排除說明改為引用權威集合，並寫明 `project-integration` 是保留字與改名的兩個後果（該目錄脫離同步；下次 pull 時上游的同名目錄回來，與改名後的目錄並存）（tarrragon/claude#50）。另寫明兩個 repo 都承載 skill，差別在粒度與更新頻率；只存在於發佈庫的 skill 目錄屬於預期形態，不是殘留（tarrragon/claude#85）。
+- **Changed：線 session 合併後收尾的申報身份**（multi-session-orchestration 1.27.1）：協調表新增一列，線 session 在主 checkout 收尾時先 `ticket track set-who <id> --current rosemary-project-manager`，再 `ticket track complete <id> --as rosemary-project-manager`，不以本線標籤申報；完整條文在 `.claude/pm-rules/parallel-dispatch.md`〈PM 側 worktree 合入與驗收三軸（強制）〉（tarrragon/claude#92）。
 
 ### Known issues
 - git 2.31 以下，workspace-wipe-guard 會把 linked worktree 或其他 repo 當成主 repo 判定，可能擋下原本應放行的清除（應擋的不會漏放）。
@@ -584,6 +803,17 @@ Changes: 1 feat, 2 docs, 1 chore
 feat: doc validate 比對 domain-map §7 子標題集合與 source_specs; docs: domain-map 範本 §7 註解依三種列型分流並補範例; docs: 新增 IMP-GPD-026 寫入端正規化補償讀取端缺陷 (+2 more)
 
 Changes: 1 feat, 3 docs, 1 chore
+
+### 對 consumer 的影響（事後補記，tarrragon/claude#130）
+
+#### 預設改變
+- `doc validate DOMAIN-MAP-*` 新增 §7 子標題集合與 frontmatter `source_specs` 的比對；範本 2.4.0 以前的舊單表結構（§7 沒有任何 `### SPEC-xxx` 子標題）原本會因此報錯，後續版本改為只印提示、exit 0。
+- 新結構（§7 至少有一個 SPEC 子標題）漏列 spec、或多列 spec，仍報錯；判定本身失敗（讀檔、解析例外）也報錯。
+
+#### 遷移步驟
+1. 把 §7 單表拆成每個 spec 一組 `### SPEC-xxx（標題）` 子標題加表格。
+2. FR 列依各 spec 原文歸屬到對應子標題，不憑編號猜測。
+3. `source_specs` 與子標題的 spec 集合必須相等，之後 `doc validate` 才不再印舊結構提示。
 
 - feat: doc validate 比對 domain-map §7 子標題集合與 source_specs
 - docs: domain-map 範本 §7 註解依三種列型分流並補範例

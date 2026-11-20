@@ -16,11 +16,19 @@ CAS 重試：每次重試依新 HEAD 產生不同的合併 commit。上次驗過
 merge_branch_cas 產生合併 commit 之前取得、update-ref 完成或中止後釋放；窗口因此只剩實際測試時間，
 不含排隊。持有期間以環境標記（slot_gate.export_hold）讓快照內經 run-with-timeout 的套件免重複取得。
 
+測試子集：內建 pytest 套件（hooks／scripts／skill:<名稱>）只跑 select_test_files 選出的測試檔；
+選擇失敗（例外、依賴缺席、逾時、回傳 None）、子集 0 檔、或該套件因 main 定期全套件暫停中（含暫停狀態讀不到）
+時該套件退回全套件，見 plan_test_subsets。定期全套件停用（MERGE_GATE_PERIODIC=0 或 periodic=None）時
+完全不跑子集：子集是以定期全套件為補償控制才成立的放寬，補償不在就沒有放寬。
+
 套件執行器可注入（SuiteRunner），單元測試不真的跑 hooks 或 flutter 全套件。
 """
 
+import fcntl
 import hashlib
+import json
 import os
+import posixpath
 import re
 import shutil
 import statistics
@@ -29,6 +37,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Optional
@@ -302,19 +311,49 @@ def _skill_has_tests(root: str, name: str) -> bool:
 _LIB_IMPORT = re.compile(r"^\s*(?:from|import)\s+lib(?:\.|\s|$)", re.MULTILINE)
 
 
+_scan_cache = threading.local()
+
+
+@contextmanager
+def source_scan_cache() -> Iterator[None]:
+    """單次閘門的掃描快取範圍：範圍內同一快照路徑只呼叫一次 scan_sources。
+
+    範圍外不快取——呼叫端（含測試）可能在兩次選擇之間改動目錄內容。巢狀進入沿用外層快取。
+    """
+    outer = getattr(_scan_cache, "store", None)
+    _scan_cache.store = {} if outer is None else outer
+    try:
+        yield
+    finally:
+        _scan_cache.store = outer
+
+
+def _sources(root: str) -> tuple:
+    """匯入掃描共用的資料來源：scan_sources 的結果，在 source_scan_cache 範圍內以快照路徑為鍵快取。"""
+    store = getattr(_scan_cache, "store", None)
+    if store is None:
+        return scan_sources(root)
+    key = os.path.realpath(root)
+    if key not in store:
+        store[key] = scan_sources(root)
+    return store[key]
+
+
+def _py_texts_under(texts: dict, prefix: str) -> dict:
+    """texts（scan_sources 的 .py 文字）中 prefix（repo 相對、以 / 結尾）之下者：{相對路徑: 文字}。"""
+    return {p: t for p, t in texts.items() if p.startswith(prefix)}
+
+
+def _skill_names(root: str) -> list:
+    base = Path(root) / ".claude" / "skills"
+    return sorted(p.name for p in base.iterdir() if p.is_dir()) if base.is_dir() else []
+
+
 def _skills_importing_lib(root: str) -> list:
     """掃描快照：帶 tests 目錄且有 .py 匯入 lib 的 skill 名稱（不寫死清單，新增 skill 不會漏）。"""
-    base = Path(root) / ".claude" / "skills"
-    found = []
-    for skill in sorted(p for p in base.iterdir() if p.is_dir()) if base.is_dir() else []:
-        if not _skill_has_tests(root, skill.name):
-            continue
-        for dirpath, dirnames, filenames in os.walk(skill):
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-            if any(_LIB_IMPORT.search(_read_text(Path(dirpath) / n)) for n in filenames if n.endswith(".py")):
-                found.append(skill.name)
-                break
-    return found
+    texts = _sources(root)[1]
+    return [n for n in _skill_names(root) if _skill_has_tests(root, n)
+            and any(_LIB_IMPORT.search(t) for t in _py_texts_under(texts, f".claude/skills/{n}/").values())]
 
 
 def _read_text(path: Path) -> str:
@@ -348,63 +387,93 @@ def _consumer_suites(root: str, skills: set) -> set:
     匯入以行首 `from X`／`import X` 辨識，故 sys.path.insert 之後的匯入同樣涵蓋；路徑引用
     只計非測試檔（測試檔提到路徑多為斷言字串）。通用模組名（如 constants）可能多報，只會多跑套件。
     """
+    mods = {s: _skill_top_modules(root, s) for s in skills}
+    texts = _sources(root)[1]
     suites = set()
     for suite, sub in ((SUITE_HOOKS, "hooks"), (SUITE_SCRIPTS, "scripts")):
-        mods = {s: _skill_top_modules(root, s) for s in skills}
-        for dirpath, dirnames, filenames in os.walk(Path(root) / ".claude" / sub):
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-            is_test = "tests" in Path(dirpath).parts
-            for n in (n for n in filenames if n.endswith(".py")):
-                text = _read_text(Path(dirpath) / n)
-                if any(_imports_any(text, m) or (not is_test and f"skills/{s}/" in text)
-                       for s, m in mods.items()):
-                    suites.add(suite)
+        for path, text in _py_texts_under(texts, f".claude/{sub}/").items():
+            is_test = "tests" in path.split("/")[:-1]
+            if any(_imports_any(text, m) or (not is_test and f"skills/{s}/" in text) for s, m in mods.items()):
+                suites.add(suite)
+                break
     return suites
 
 
-def _touched_packages(paths: list) -> dict:
-    """改動落在的 skill 頂層目錄（skill 根或 scripts/ 下）：{skill 名稱: {目錄名}}。
+def _skill_top_parts(path: str) -> Optional[tuple]:
+    """skill 內路徑去掉 `.claude/skills/<名稱>/` 與一層 `scripts/` 後的（skill 名稱, 剩餘片段）。"""
+    skill = _skill_name(path)
+    if not skill:
+        return None
+    rel = path.split("/")[3:]
+    return skill, rel[1:] if rel and rel[0] == "scripts" else rel
 
-    依路徑形狀判定，不看快照是否仍有 __init__.py：套件被刪除或改名時快照裡已沒有它，
+
+def _single_module_stem(name: str) -> Optional[str]:
+    """skill 頂層的單檔模組名；測試檔、__init__ 與非識別字檔名不算。"""
+    stem = name[:-3] if name.endswith(".py") else ""
+    if not stem.isidentifier() or stem == "__init__" or stem.startswith("test_") or stem.endswith("_test"):
+        return None
+    return stem
+
+
+def _top_module_counts(paths: list) -> Counter:
+    """快照內各 skill 頂層（skill 根與 scripts/）模組名的出現次數：單檔模組與帶 __init__.py 的套件都計。"""
+    counts = Counter()
+    for p in paths:
+        parts = _skill_top_parts(p)
+        if parts is None:
+            continue
+        rel = parts[1]
+        if len(rel) == 1 and _single_module_stem(rel[0]):
+            counts[_single_module_stem(rel[0])] += 1
+        elif len(rel) == 2 and rel[1] == "__init__.py" and rel[0] != "tests":
+            counts[rel[0]] += 1
+    return counts
+
+
+def _touched_packages(paths: list, counts: Optional[Counter] = None) -> dict:
+    """改動落在的 skill 頂層模組（skill 根或 scripts/ 下）：{skill 名稱: {模組名}}。
+
+    目錄依路徑形狀判定，不看快照是否仍有 __init__.py：套件被刪除或改名時快照裡已沒有它，
     而匯入它的 skill 正是最需要跑的。非套件目錄（references 等）只會比對不到匯入，不會誤選。
-    只取目錄不取單檔模組：各 skill 常有同名單檔（constants、cli），以模組名比對會讓
-    無關 skill 互相加選；套件名（如 ticket_system）在 repo 內唯一。
+    單檔模組（他 skill 以 sys.path.insert 匯入者，如 merge_gate）只取名稱在快照各 skill 頂層
+    唯一者（counts 為 _top_module_counts 的結果；未給時不取單檔）：各 skill 常有同名單檔
+    （constants、cli），以重名模組名比對會讓無關 skill 互相加選。已刪除的單檔計數為 0，照樣取。
     """
     touched = {}
     for p in paths:
-        skill = _skill_name(p)
-        if not skill:
+        parts = _skill_top_parts(p)
+        if parts is None:
             continue
-        rel = p.split("/")[3:]
-        if rel and rel[0] == "scripts":
-            rel = rel[1:]
+        skill, rel = parts
         if len(rel) > 1 and rel[0].isidentifier() and rel[0] != "tests":
             touched.setdefault(skill, set()).add(rel[0])
+        elif len(rel) == 1 and counts is not None:
+            stem = _single_module_stem(rel[0])
+            if stem and counts[stem] <= 1:
+                touched.setdefault(skill, set()).add(stem)
     return touched
 
 
 def cross_skill_importers(changed_paths: list, root: str) -> dict:
-    """改動落在某 skill 頂層套件時，快照內其他帶 tests 的 skill 若有 .py 匯入該套件，回傳 {套件識別: [套件名]}。
+    """改動落在某 skill 頂層模組時，快照內其他帶 tests 的 skill 若有 .py 匯入該模組，回傳 {套件識別: [模組名]}。
 
     匯入以行首（含縮排）`from X`／`import X` 辨識，與 hooks／scripts 的掃描同一判準。
     """
-    touched = _touched_packages([p for p in changed_paths if not is_reuse_exempt(p)])
-    base = Path(root) / ".claude" / "skills"
-    if not touched or not base.is_dir():
+    paths = [p for p in changed_paths if not is_reuse_exempt(p)]
+    if not any(_skill_name(p) for p in paths):
         return {}
+    all_paths, all_texts = _sources(root)
+    touched = _touched_packages(paths, _top_module_counts(all_paths))
     found = {}
-    for skill in sorted(p for p in base.iterdir() if p.is_dir()):
-        pkgs = set().union(*(m for s, m in touched.items() if s != skill.name))
-        if not pkgs or not _skill_has_tests(root, skill.name):
+    for skill in _skill_names(root) if touched else []:
+        mods = set().union(*(m for s, m in touched.items() if s != skill))
+        if not mods or not _skill_has_tests(root, skill):
             continue
-        hits = set()
-        for dirpath, dirnames, filenames in os.walk(skill):
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-            for n in (n for n in filenames if n.endswith(".py")):
-                text = _read_text(Path(dirpath) / n)
-                hits.update(m for m in pkgs if _imports_any(text, {m}))
+        texts = _py_texts_under(all_texts, f".claude/skills/{skill}/").values()
+        hits = {m for m in mods if any(_imports_any(t, {m}) for t in texts)}
         if hits:
-            found[f"{SUITE_SKILL_PREFIX}{skill.name}"] = sorted(hits)
+            found[f"{SUITE_SKILL_PREFIX}{skill}"] = sorted(hits)
     return found
 
 
@@ -501,13 +570,15 @@ def select_suites(changed_paths: list, root: str, base_decl=BASE_UNKNOWN) -> lis
         elif p.startswith(".claude/scripts/"):
             want.add(SUITE_SCRIPTS)
         elif p.startswith(".claude/lib/"):
-            want.update({SUITE_HOOKS, SUITE_SCRIPTS})
-            want.update(f"{SUITE_SKILL_PREFIX}{s}" for s in _skills_importing_lib(root))
+            want.update({SUITE_HOOKS, SUITE_SCRIPTS})  # 匯入 lib 的 skill 於下方共用掃描內加選
         else:  # hooks、rules、settings、無 tests 的 skill 等：hook 測試會讀這些檔
             want.add(SUITE_HOOKS)
-    if touched_skills:
-        want |= _consumer_suites(root, touched_skills)  # hooks／scripts 匯入該 skill 時加跑
-        want.update(cross_skill_importers(paths, root))  # 其他 skill 匯入改動的頂層套件時加跑
+    with source_scan_cache():  # lib 匯入者與下列兩處共用同一次掃描
+        if any(p.startswith(".claude/lib/") for p in paths):
+            want.update(f"{SUITE_SKILL_PREFIX}{s}" for s in _skills_importing_lib(root))
+        if touched_skills:
+            want |= _consumer_suites(root, touched_skills)  # hooks／scripts 匯入該 skill 時加跑
+            want.update(cross_skill_importers(paths, root))  # 其他 skill 匯入改動的頂層模組時加跑
     declared = [n for n in (decl or {}) if n in want]  # 宣告順序在前，與內建 flutter 居首一致
     head = declared + [s for s in (SUITE_FLUTTER, SUITE_HOOKS, SUITE_SCRIPTS) if s in want and s not in declared]
     return head + sorted(s for s in want if s.startswith(SUITE_SKILL_PREFIX))
@@ -528,12 +599,57 @@ def suite_command(suite: str, root: str, files: Optional[list] = None) -> list:
     decl = load_declaration(root)
     if decl is not None and suite in decl:
         return decl[suite]["command"] + (files or [])
-    if not suite.startswith(SUITE_SKILL_PREFIX):
+    parts = _python_suite_parts(suite, root)
+    if parts is None:
         return launch_argv(SUITE_COMMANDS[suite], root)
+    argv, _directory, test_paths = parts
+    return argv + test_paths
+
+
+def _python_suite_parts(suite: str, root: str) -> Optional[tuple]:
+    """內建 pytest 套件拆成（不含測試路徑的 argv, uv --directory 目錄, 命令列測試路徑）；其他套件回 None。"""
+    if suite in (SUITE_HOOKS, SUITE_SCRIPTS):
+        return launch_argv(SUITE_COMMANDS[suite], root), SUITE_COMMANDS[suite][2], []
+    if not suite.startswith(SUITE_SKILL_PREFIX):
+        return None
     name = suite[len(SUITE_SKILL_PREFIX):]
-    if os.path.isfile(os.path.join(root, ".claude", "skills", name, "pyproject.toml")):
-        return ["uv", "--directory", f".claude/skills/{name}", "run", "pytest"]
-    return ["uv", "--directory", ".claude/hooks", "run", "pytest", "-p", "no:cacheprovider", f"../skills/{name}/tests"]
+    directory = f".claude/skills/{name}"
+    if os.path.isfile(os.path.join(root, directory, "pyproject.toml")):
+        return ["uv", "--directory", directory, "run", "pytest"], directory, []
+    hooks = ".claude/hooks"
+    return ["uv", "--directory", hooks, "run", "pytest", "-p", "no:cacheprovider"], hooks, [f"../skills/{name}/tests"]
+
+
+def _pytest_testpaths(directory: str) -> list:
+    """directory 下 pyproject.toml 的 pytest testpaths；未宣告（含無 pyproject）時 pytest 從該目錄收集，回 ["."]。"""
+    path = os.path.join(directory, "pyproject.toml")
+    if not os.path.isfile(path):
+        return ["."]
+    import tomllib  # 只在子集分配時需要；缺席時由 plan_test_subsets 轉為該套件退回全套件
+
+    with open(path, "rb") as fh:
+        paths = tomllib.load(fh).get("tool", {}).get("pytest", {}).get("ini_options", {}).get("testpaths")
+    if not paths:
+        return ["."]
+    return [paths] if isinstance(paths, str) else list(paths)
+
+
+def suite_test_subset(suite: str, root: str, selected: list) -> list:
+    """selected（repo 相對路徑）中落在該套件收集範圍內的測試檔。
+
+    收集範圍：命令列測試路徑，未給時取 pyproject testpaths。範圍外的 test_*.py（如 skill 內的產品模組
+    test_map.py、其他套件的測試）不分配給此套件，避免 argv 收集到全套件本來不跑的檔。
+    """
+    _argv, directory, test_paths = _python_suite_parts(suite, root)
+    rel = test_paths or _pytest_testpaths(os.path.join(root, directory))
+    roots = tuple(posixpath.normpath(posixpath.join(directory, t)) + "/" for t in rel)
+    return sorted(p for p in selected if p.startswith(roots))
+
+
+def subset_command(suite: str, root: str, tests: list) -> list:
+    """內建 pytest 套件只跑 tests（repo 相對路徑）的命令；路徑改寫為相對 uv --directory 目錄。"""
+    argv, directory, _test_paths = _python_suite_parts(suite, root)
+    return argv + [posixpath.relpath(t, directory) for t in tests]
 
 
 def _git(args: list, repo: str):
@@ -908,10 +1024,11 @@ def emit_gate_line(log_root: str, line: str) -> None:
 
 def _run_suites(suites: list, snapshot: str, project_root: str, runner: SuiteRunner,
                 log_root: Optional[str] = None, on_green: Optional[Callable[[str], None]] = None,
-                tag: str = "nocommit", paths: Optional[list] = None) -> str:
+                tag: str = "nocommit", paths: Optional[list] = None, subsets: Optional[dict] = None) -> str:
     """依序跑各套件；任一紅燈即停。每個套件結束輸出一行結果（含紅燈、逾時、中斷）。回傳空字串表示全綠。
 
     on_green：套件綠燈時立即回呼，後面套件紅燈時前面已綠者仍可記錄供重試沿用。
+    subsets：plan_test_subsets 的結果 {套件: 測試檔}；列在其中的套件只跑這些檔，其餘跑全套件。
     """
     log_root = log_root or project_root
     for suite in suites:
@@ -929,7 +1046,11 @@ def _run_suites(suites: list, snapshot: str, project_root: str, runner: SuiteRun
         summary_pat, failure_pat = declared_patterns(suite, decl)
         start = time.monotonic()
         try:
-            command = suite_command(suite, snapshot) if files is None else suite_command(suite, snapshot, files)
+            subset = (subsets or {}).get(suite)
+            if subset:
+                command = subset_command(suite, snapshot, subset)
+            else:
+                command = suite_command(suite, snapshot) if files is None else suite_command(suite, snapshot, files)
             rc, out = runner(wrapped_argv(command), snapshot)
         except BaseException:  # 中斷也留一行紀錄後原樣再拋，讓上層清快照
             _emit_result(log_root, _suite_result_line(suite, "中斷", "無摘要", time.monotonic() - start))
@@ -946,12 +1067,24 @@ def _run_suites(suites: list, snapshot: str, project_root: str, runner: SuiteRun
     return ""
 
 
+_PERIODIC_DEFAULT = object()  # MergeGate 未指定 periodic 時：依 PERIODIC_ENV 決定是否啟用預設的定期全套件
+
+
 class MergeGate:
-    """可掛到 merge_branch_cas(pre_merge_check=...) 的檢查物件；持有跨重試的驗證狀態。"""
+    """可掛到 merge_branch_cas(pre_merge_check=...) 的檢查物件；持有跨重試的驗證狀態。
+
+    periodic：main 定期全套件（PeriodicSuite）。離開名額區段時評估觸發，檢查時對暫停中的套件
+    強制實跑；None 停用。未指定時預設啟用，環境變數 PERIODIC_ENV=0 停用。
+    """
 
     def __init__(self, repo: str, runner: Optional[SuiteRunner] = None, project_root: Optional[str] = None,
-                 on_event: Optional[Callable[[str], None]] = None):
+                 on_event: Optional[Callable[[str], None]] = None, periodic=_PERIODIC_DEFAULT,
+                 test_selector: Optional[Callable[[list, str], Optional[list]]] = None):
         self.repo = repo
+        if periodic is _PERIODIC_DEFAULT:
+            periodic = PeriodicSuite(repo) if os.environ.get(PERIODIC_ENV, "1") != "0" else None
+        self.periodic = periodic
+        self.test_selector = test_selector  # None 用 select_test_files；測試注入失敗情境驗證退回全套件
         self.on_event = on_event or (lambda _name: None)  # slot_acquired／slot_released，測試斷言順序用
         self.runner = runner or default_runner
         self.project_root = project_root or repo
@@ -1181,7 +1314,43 @@ class MergeGate:
 
         改動不在任何全套件範圍內者不取得，免得文件合併排在他方全套件之後。
         本票合併訊息取自 batch_hooks 登記的 message，隨排隊檔公開供領導者組批時逐票使用。
+        離開後（名額已釋放）評估 main 定期全套件是否觸發；不取得名額的合併同樣評估。
         """
+        try:
+            with self._hold_slot(branch, base):
+                yield
+        finally:
+            self._evaluate_periodic()
+
+    def _evaluate_periodic(self) -> None:
+        """評估定期全套件觸發；任何失敗寫 stderr 與日誌，不改變合併結果（下一次合併會再評估）。"""
+        if self.periodic is None:
+            return
+        try:
+            self.periodic.maybe_trigger()
+        except Exception as exc:  # 觸發評估不得改變已完成的合併結果；失敗須可見
+            _snapshot_warning(self.repo, f"定期全套件觸發評估失敗（{exc}）；下一次合併離開閘門時再評估")
+
+    def _blocked_hits(self, suites: list) -> tuple:
+        """選中套件中暫停中者：回 (須強制實跑的套件集合, {套件: 暫停資訊})。
+
+        讀不到暫停狀態時保守處理：選中的套件全部實跑（不沿用重試結果），並印 WARNING。
+        """
+        if self.periodic is None:
+            return set(), {}
+        try:
+            blocked = self.periodic.blocked_suites()
+        except PeriodicStateError as exc:
+            print(f"[合併前測試] WARNING：讀不到定期全套件的暫停狀態（{exc}），選中套件全部實跑")
+            return set(suites), {}
+        hits = {s: blocked[s] for s in suites if s in blocked}
+        for suite, info in sorted(hits.items()):
+            print(f"[合併前測試] 套件 {suite} 因 main 定期全套件紅燈暫停中（定位 "
+                  f"{_short(info.get('culprit'))}），本次一律實跑；綠燈才放行")
+        return set(hits), hits
+
+    @contextmanager
+    def _hold_slot(self, branch: str, base: str) -> Iterator[None]:
         if not self._needs_slot(branch, base):
             yield
             return
@@ -1235,10 +1404,14 @@ class MergeGate:
             return CheckResult(True)
         base_decl = load_base_declaration(self.repo, expected_old)
         _report_declaration_change(paths, decl, base_decl)
-        with _sigterm_as_interrupt(), merge_snapshot(self.repo, commit) as snap:
+        with _sigterm_as_interrupt(), merge_snapshot(self.repo, commit) as snap, source_scan_cache():
             suites = select_suites(paths, snap, base_decl)
+            forced, hits = self._blocked_hits(suites)
             todo = []
             for suite in suites:
+                if suite in forced:  # 暫停中或暫停狀態不明：不沿用重試結果
+                    todo.append(suite)
+                    continue
                 last = self._reusable(suite, commit, snap)
                 if last is None:
                     todo.append(suite)
@@ -1246,13 +1419,385 @@ class MergeGate:
                 _emit_result(self.repo, _suite_result_line(suite, "沿用", f"沿用 {last[:12]} 的驗證結果", 0.0))
                 self.verified_suites[suite] = commit  # 差異不觸及此套件，驗證結果視同延伸到新 commit
             _report_cross_skill(cross_skill_importers(paths, snap), todo)
+            subsets = {}
             if todo:
-                print(f"[合併前測試] 快照內跑全套件：{', '.join(todo)}（合併 commit {commit[:12]}，嘗試 {attempt}）")
+                print(f"[合併前測試] 快照內跑套件：{', '.join(todo)}（合併 commit {commit[:12]}，嘗試 {attempt}）")
                 self.suite_runs += 1
+                if self.periodic is None:  # 補償控制缺席：子集漏抓沒有任何全套件會補上，一律跑全套件
+                    full_only = {s: "定期全套件停用" for s in todo}
+                else:
+                    full_only = {s: "套件暫停中" if s in hits else "暫停狀態不明" for s in forced}
+                subsets = plan_test_subsets(paths, snap, todo, self.repo, self.test_selector, full_only)
             reason = _run_suites(todo, snap, self.project_root, self.runner, self.repo,
                                  on_green=lambda s: self.verified_suites.__setitem__(s, commit), tag=commit,
-                                 paths=paths)
-        return CheckResult(False, reason) if reason else CheckResult(True)
+                                 paths=paths, subsets=subsets)
+        if not reason:
+            return CheckResult(True)
+        return CheckResult(False, _paused_prefix(reason, hits) + reason)
+
+
+def _short(commit) -> str:
+    return commit[:12] if isinstance(commit, str) and commit else "未定位"
+
+
+def _paused_prefix(reason: str, hits: dict) -> str:
+    """紅燈的套件正在暫停中時，理由前加暫停說明（定位、分支、解除條件）。"""
+    lines = [f"[暫停] 套件 {s} 因 main 定期全套件紅燈暫停合併（定位 {_short(i.get('culprit'))}，"
+             f"分支 {i.get('branch') or '不明'}）；修正或 revert 合入且定期全套件重跑綠燈後解除\n"
+             for s, i in sorted(hits.items()) if f"[{s}]" in reason]
+    return "".join(lines)
+
+
+# ---------- main 定期全套件：觸發、二分定位、暫停受影響套件（2026-11-20） ----------
+#
+# 計數不存檔：自上次定期全套件完成的 head 起，main 的 first-parent commit 數（世界平面推得，
+# 批次多筆與 --skip-gate 合併都計入）。狀態檔只存基準、各套件最近綠燈 head、暫停中套件與執行中標記。
+# 讀不到狀態或基準時一律落在多跑、多擋的一側。觸發條件與紅燈處置為用戶裁定（2026-11-20）。
+
+PERIODIC_STATE_FILE = ".claude/logs/merge-gate-periodic.json"
+PERIODIC_OUT_FILE = ".claude/logs/merge-gate-periodic.out"  # 脫離 session 的 periodic-run 輸出
+PERIODIC_ENV = "MERGE_GATE_PERIODIC"  # 設 0 停用 MergeGate 預設的定期全套件
+PERIODIC_IDLE_COUNT = 4  # 累計到此數且名額空閒時執行
+PERIODIC_FORCE_COUNT = 8  # 累計到此數不論空閒強制排入
+PERIODIC_LINE_PREFIX = "[定期全套件]"
+TRIGGER_IDLE, TRIGGER_FORCED = "空閒", "強制"
+TRIGGER_UNKNOWN = "狀態不明"  # 狀態檔或基準讀不到：保守觸發
+TRIGGER_BLOCKED = "暫停重跑"  # 暫停中套件在紅燈 head 之後有改動（修正或 revert）：重跑以判定解除
+TRIGGER_STALE = "執行中殘留"  # 執行中標記的程序已消失、逾時或標記讀不懂：強制重跑
+# 執行中標記的逾時：全套件一輪約 13 分，加上多個紅燈套件各自二分（每點一個套件）仍遠低於此值；
+# 超過即視為程序已卡住、休眠喚醒後失去意義或 pid 被重用，不再等它
+PERIODIC_RUNNING_TIMEOUT_SECONDS = 4 * 3600
+RUNNING_NONE, RUNNING_LIVE, RUNNING_STALE = "none", "live", "stale"
+
+
+def running_status(running, now: Optional[float] = None) -> str:
+    """執行中標記的判定：無標記、執行中、殘留。pid 與開始時間任一讀不懂皆判殘留（保守：重跑）。"""
+    if running is None:
+        return RUNNING_NONE
+    if not isinstance(running, dict):
+        return RUNNING_STALE
+    pid, started = running.get("pid"), running.get("started_epoch")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return RUNNING_STALE
+    if not isinstance(started, (int, float)) or isinstance(started, bool):
+        return RUNNING_STALE
+    if not _pid_alive(pid):
+        return RUNNING_STALE
+    if (time.time() if now is None else now) - started > PERIODIC_RUNNING_TIMEOUT_SECONDS:
+        return RUNNING_STALE
+    return RUNNING_LIVE
+_MERGE_SUBJECT = re.compile(r"Merge branch '([^']+)'(?:\s*\(([^)]+)\))?")
+
+
+class PeriodicStateError(ValueError):
+    """定期全套件狀態檔存在但無法解析；呼叫端須落在保守一側。"""
+
+
+def all_suites(root: str) -> list:
+    """快照內的全部套件：宣告套件或內建 flutter、hooks／scripts（目錄存在者）、帶 pytest 測試的 skill。"""
+    decl = load_declaration(root)
+    if decl is not None:
+        suites = list(decl)
+    else:
+        suites = [SUITE_FLUTTER] if os.path.isfile(os.path.join(root, FLUTTER_MARKER_FILE)) else []
+    suites += [s for s, sub in ((SUITE_HOOKS, "hooks"), (SUITE_SCRIPTS, "scripts"))
+               if os.path.isdir(os.path.join(root, ".claude", sub))]
+    return suites + [f"{SUITE_SKILL_PREFIX}{n}" for n in _skill_names(root) if _skill_has_tests(root, n)]
+
+
+def slot_idle() -> bool:
+    """全機名額無持有者且佇列無人；查不到（目錄不可用）時視為空閒（保守：多跑）。"""
+    try:
+        directory = slot_gate.slot_dir()
+        return not slot_gate._all_slots_busy(directory) and not slot_gate.list_waiting(directory)
+    except OSError as exc:
+        sys.stderr.write(f"merge-gate: 名額空閒判定失敗，視為空閒：{exc}\n")
+        return True
+
+
+def launch_detached(repo: str) -> None:
+    """以脫離 session 的子程序執行 periodic-run，合併不等全套件；輸出附加到 PERIODIC_OUT_FILE。"""
+    out = Path(repo) / PERIODIC_OUT_FILE
+    out.parent.mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if k != slot_gate.HELD_ENV}
+    with open(out, "a", encoding="utf-8") as fh:
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "periodic-run", "--repo", repo],
+                         cwd=repo, stdin=subprocess.DEVNULL, stdout=fh, stderr=fh, env=env,
+                         start_new_session=True)
+
+
+def _pid_alive(pid) -> bool:
+    return isinstance(pid, int) and pid > 0 and not slot_gate._pid_gone(pid)
+
+
+class PeriodicSuite:
+    """main 定期全套件：評估觸發、在 main head 快照跑全部套件、紅燈二分定位並維護暫停中套件。"""
+
+    def __init__(self, repo: str, runner: Optional[SuiteRunner] = None,
+                 slot_idle: Optional[Callable[[], bool]] = None,
+                 launcher: Optional[Callable[[str], None]] = None, base: str = "main"):
+        self.repo = repo
+        self.runner = runner or default_runner
+        self.slot_idle = slot_idle or globals()["slot_idle"]
+        self.launcher = launcher or launch_detached
+        self.ref = f"refs/heads/{base}"
+        self.state_path = Path(repo) / PERIODIC_STATE_FILE
+
+    # ----- 狀態檔 -----
+
+    @contextmanager
+    def _locked(self) -> Iterator[None]:
+        lock = self.state_path.with_name(self.state_path.name + ".lock")
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)  # 關閉即釋放 flock
+
+    def _read(self) -> dict:
+        if not self.state_path.exists():
+            return {}
+        try:
+            state = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise PeriodicStateError(f"{PERIODIC_STATE_FILE} 無法讀取：{exc}") from exc
+        if not isinstance(state, dict) or not isinstance(state.get("blocked", {}), dict):
+            raise PeriodicStateError(f"{PERIODIC_STATE_FILE} 格式不符")
+        return state
+
+    def _write(self, state: dict) -> None:
+        tmp = self.state_path.with_name(f".{self.state_path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, self.state_path)
+
+    def read_state(self) -> dict:
+        with self._locked():
+            return self._read()
+
+    def blocked_suites(self) -> dict:
+        """暫停中的套件 -> 暫停資訊；狀態檔不存在回空 dict，無法解析拋 PeriodicStateError。"""
+        return dict(self.read_state().get("blocked") or {})
+
+    # ----- 觸發 -----
+
+    def _head(self) -> Optional[str]:
+        proc = _git(["rev-parse", "--verify", "--quiet", self.ref], self.repo)
+        return proc.stdout.decode().strip() if proc.returncode == 0 else None
+
+    def _first_parent(self, old: str, new: str) -> Optional[list]:
+        """old（不含）到 new 的 first-parent commit，時間序；old 不是 new 的祖先或 git 失敗回 None。"""
+        if _git(["merge-base", "--is-ancestor", old, new], self.repo).returncode != 0:
+            return None
+        proc = _git(["rev-list", "--first-parent", "--reverse", f"{old}..{new}"], self.repo)
+        return proc.stdout.decode().split() if proc.returncode == 0 else None
+
+    def pending_count(self, state: Optional[dict] = None) -> Optional[int]:
+        """上次定期全套件之後 main 的 first-parent commit 數；無基準或基準不在 main 上回 None。"""
+        state = self.read_state() if state is None else state
+        base = (state.get("last_run") or {}).get("head")
+        head = self._head()
+        if not isinstance(base, str) or not base or head is None:
+            return None
+        commits = self._first_parent(base, head)
+        return None if commits is None else len(commits)
+
+    def _touches_blocked(self, blocked: dict) -> bool:
+        """暫停中套件在各自紅燈 head 之後是否有改動；算不出來時視為有（保守：重跑）。"""
+        head = self._head()
+        for suite, info in blocked.items():
+            red_head = info.get("red_head") if isinstance(info, dict) else None
+            if not red_head or head is None:
+                return True
+            if red_head == head:
+                continue
+            diff = changed_paths_between(self.repo, red_head, head)
+            if diff is None or suite in select_suites(diff, self.repo, load_base_declaration(self.repo, red_head)):
+                return True
+        return False
+
+    def decide(self) -> Optional[str]:
+        """觸發類別或 None（不跑）。不啟動任何程序。"""
+        try:
+            state = self.read_state()
+        except PeriodicStateError:
+            return TRIGGER_UNKNOWN
+        running = running_status(state.get("running"))
+        if running == RUNNING_LIVE:
+            return None  # 已有一輪在跑：它結束時會更新基準
+        if running == RUNNING_STALE:  # 子程序中途消失或卡住：標記不會自己清掉，不重跑就永不再觸發
+            _snapshot_warning(self.repo, f"定期全套件執行中標記已殘留（{state.get('running')!r}），重新觸發")
+            return TRIGGER_STALE
+        count = self.pending_count(state)
+        if count is None:
+            return TRIGGER_UNKNOWN
+        blocked = state.get("blocked") or {}
+        if blocked and self._touches_blocked(blocked):
+            return TRIGGER_BLOCKED
+        if count >= PERIODIC_FORCE_COUNT:
+            return TRIGGER_FORCED
+        if count >= PERIODIC_IDLE_COUNT and self.slot_idle():
+            return TRIGGER_IDLE
+        return None
+
+    def maybe_trigger(self) -> Optional[str]:
+        """成立時記一行並啟動 periodic-run；回傳觸發類別或 None。"""
+        decision = self.decide()
+        if decision is None:
+            return None
+        _emit_result(self.repo, f"{PERIODIC_LINE_PREFIX} 觸發｜{decision}｜main {_short(self._head())}")
+        self.launcher(self.repo)
+        return decision
+
+    # ----- 執行 -----
+
+    def _claim(self) -> Optional[tuple]:
+        """取得執行權：回 (head, 執行前狀態)；他方執行中回 None。狀態檔壞掉時以空狀態重建。"""
+        with self._locked():
+            try:
+                state = self._read()
+            except PeriodicStateError as exc:
+                _snapshot_warning(self.repo, f"{exc}；定期全套件以空狀態重建（暫停紀錄遺失，本輪結果為準）")
+                state = {}
+            running = state.get("running")
+            mine = isinstance(running, dict) and running.get("pid") == os.getpid()
+            if not mine and running_status(running) == RUNNING_LIVE:
+                return None
+            if running is not None and not mine:
+                _snapshot_warning(self.repo, f"接手殘留的定期全套件執行中標記（{running!r}）")
+            head = self._head()
+            if head is None:
+                raise RuntimeError(f"無法解析 {self.ref}")
+            state["running"] = {"pid": os.getpid(), "head": head, "started_epoch": time.time(),
+                                "started": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            self._write(state)
+            return head, state
+
+    def run(self) -> dict:
+        """在 main head 快照跑全部套件；紅燈套件二分定位並暫停，綠燈套件解除暫停。"""
+        claimed = self._claim()
+        if claimed is None:
+            return {"result": "skipped", "reason": "已有一輪定期全套件在執行"}
+        head, state = claimed
+        try:
+            result = self._run_at(head, state)
+        finally:
+            with self._locked():
+                state.pop("running", None)
+                self._write(state)
+        return result
+
+    def _run_at(self, head: str, state: dict) -> dict:
+        base = (state.get("last_run") or {}).get("head")
+        paths = (changed_paths_between(self.repo, base, head) if base else None) or []
+        _emit_result(self.repo, f"{PERIODIC_LINE_PREFIX} 開始｜main {_short(head)}")
+        with _sigterm_as_interrupt(), merge_snapshot(self.repo, head) as snap, source_scan_cache():
+            suites = all_suites(snap)
+            red = [s for s in suites
+                   if _run_suites([s], snap, self.repo, self.runner, self.repo, tag=head, paths=paths)]
+            self._update(state, head, suites, red, snap)
+        outcome = "red" if red else "green"
+        _emit_result(self.repo, f"{PERIODIC_LINE_PREFIX} 結束｜main {_short(head)}｜結果 "
+                                f"{'紅燈 ' + ', '.join(red) if red else '綠燈'}")
+        return {"result": outcome, "head": head, "suites": suites, "red": red}
+
+    def _update(self, state: dict, head: str, suites: list, red: list, snap: str) -> None:
+        suite_green = dict(state.get("suite_green") or {})
+        blocked = dict(state.get("blocked") or {})
+        for suite in (s for s in suites if s not in red):
+            suite_green[suite] = head
+            if blocked.pop(suite, None) is not None:
+                _emit_result(self.repo, f"{PERIODIC_LINE_PREFIX} 解除｜套件 {suite}｜main {_short(head)} 重跑綠燈")
+        for suite in red:
+            if suite in blocked:  # 已暫停且仍紅：沿用原定位，不重複二分
+                blocked[suite] = {**blocked[suite], "red_head": head}
+                self._notify(suite, blocked[suite], "維持暫停")
+                continue
+            blocked[suite] = self._locate(suite, suite_green.get(suite), head, snap)
+            self._notify(suite, blocked[suite], "紅燈")
+        state.update(suite_green=suite_green, blocked=blocked,
+                     last_run={"head": head, "result": "red" if red else "green",
+                               "at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+        if not red:
+            state["last_green"] = head
+
+    def _notify(self, suite: str, info: dict, label: str) -> None:
+        """通知必寫 worktree-merge.log（同行 stdout），並寫 stderr。"""
+        line = (f"{PERIODIC_LINE_PREFIX} {label}｜套件 {suite}｜定位 {_short(info.get('culprit'))}｜"
+                f"分支 {info.get('branch') or '不明'}｜票 {info.get('ticket') or '不明'}｜"
+                f"暫停受影響套件的合併，修正或 revert 合入後重跑全綠才解除")
+        if info.get("reason"):
+            line += f"｜{info['reason']}"
+        _emit_result(self.repo, line)
+        sys.stderr.write(line + "\n")
+
+    def _locate(self, suite: str, green: Optional[str], head: str, snap: str) -> dict:
+        info = {"culprit": None, "branch": "", "ticket": "", "red_head": head,
+                "since": time.strftime("%Y-%m-%dT%H:%M:%S"), "reason": ""}
+        if not green:
+            info["reason"] = "無該套件的綠燈基準，未二分"
+            return info
+        try:
+            culprit = self._bisect(suite, green, head, snap)
+        except Exception as exc:  # 二分失敗仍須暫停（保守一側），原因寫進暫停資訊與日誌
+            info["reason"] = f"二分失敗：{exc}"
+            return info
+        if culprit is None:
+            info["reason"] = "綠燈基準不在 main 歷史上或其後無 commit，未二分"
+            return info
+        subject = _git(["log", "-1", "--format=%s", culprit], self.repo).stdout.decode().strip()
+        m = _MERGE_SUBJECT.search(subject)
+        info.update(culprit=culprit, branch=m.group(1) if m else "", ticket=(m.group(2) or "") if m else "")
+        return info
+
+    def _bisect(self, suite: str, green: str, head: str, snap: str) -> Optional[str]:
+        """沿用 _BatchRun 的前綴對半：points[lo] 綠、points[hi] 紅，測 mid 收斂到 hi=lo+1，回 points[hi]。"""
+        commits = self._first_parent(green, head)
+        if not commits:
+            return None
+        points = [green] + commits
+        lo, hi = 0, len(points) - 1
+        while hi > lo + 1:
+            mid = (lo + hi) // 2
+            if self._red_at(suite, points[lo], points[mid], points[hi], snap):
+                hi = mid
+            else:
+                lo = mid
+        return points[hi]
+
+    def _red_at(self, suite: str, green: str, cand: str, red: str, snap: str) -> bool:
+        """沿用 MergeGate 的規則：與綠端差異不觸及該套件即綠、與紅端差異不觸及即紅，否則在 cand 快照實跑。"""
+        for old, new, verdict in ((green, cand, False), (cand, red, True)):
+            diff = changed_paths_between(self.repo, old, new)
+            if diff is not None and suite not in select_suites(diff, snap, load_base_declaration(self.repo, old)):
+                return verdict
+        with merge_snapshot(self.repo, cand) as cand_snap:
+            return bool(_run_suites([suite], cand_snap, self.repo, self.runner, self.repo, tag=cand))
+
+
+def main(argv: Optional[list] = None) -> int:
+    """CLI：periodic-run（執行一輪定期全套件）、periodic-status（印狀態、計數與觸發判定，不執行）。"""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="merge_gate.py")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("periodic-run", "periodic-status"):
+        sub.add_parser(name).add_argument("--repo", required=True, help="主 checkout 根目錄")
+    args = parser.parse_args(argv)
+    suite = PeriodicSuite(args.repo)
+    if args.command == "periodic-run":
+        result = suite.run()
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result["result"] in ("green", "skipped") else 1
+    try:
+        state = suite.read_state()
+    except PeriodicStateError as exc:
+        print(f"{PERIODIC_LINE_PREFIX} {exc}")
+        return 1
+    print(json.dumps({"state": state, "pending": suite.pending_count(state), "decision": suite.decide()},
+                     ensure_ascii=False, indent=2))
+    return 0
 
 
 _PATH_TOKEN = re.compile(r"docs/work-logs/[^\s'\"`)\]}>,]+\.(?:md|txt)")
@@ -1294,3 +1839,266 @@ def find_exempt_file_reads(root: Path) -> list:
                 if is_reuse_exempt(token) and (root / token).is_file():
                     hits.append((str(f.relative_to(root)), token))
     return sorted(set(hits))
+
+
+# ---------- 測試檔子集選擇：S2b + 有界匯入遞移（經 plan_test_subsets 接進閘門關鍵路徑） ----------
+#
+# S2b：改動的測試檔、直接匯入或以檔名提及改動檔的測試檔、檔名對應（test_<stem>*.py）
+# 的測試檔；受影響的 conftest 展開其目錄。S2b 只看直接參照，漏抓「測試 → 中介模組 →
+# 改動模組」的遞移呼叫（已發生實例：改 ticket_system/lib/version.py，紅燈出在只匯入
+# commands/create.py 的測試）。本段在 S2b 之上沿匯入邊往上走 depth 層：只沿匯入邊、
+# 不沿檔名提及，第 2 層以後觸及的 conftest 不展開目錄——兩者都會讓高扇入模組的改動
+# 退化成近全套件。depth 預設 2：補上鏈長 2 的盲區所需的最小值；歷史十個合併的量測中
+# 選中檔總數 k=2 比 k=1 多約 9%，k=3 多約 18%，無界多約 32%。
+
+TEST_SUBSET_IMPORT_DEPTH = 2
+_SOURCE_SCAN_ROOT = ".claude"
+_PY_IMPORT = re.compile(r"^\s*(?:from\s+([.\w]+)\s+import\s+([^\n#]+)|import\s+([^\n#]+))", re.MULTILINE)
+
+
+def scan_sources(root: str) -> tuple:
+    """掃描快照 .claude/ 下的檔案，回傳（全部檔案相對路徑, {.py 相對路徑: 文字}）。
+
+    匯入圖與檔名提及共用的單一掃描入口；略過 _SKIP_DIRS（含 worktrees、.venv）。
+    """
+    base = Path(root)
+    paths, texts = [], {}
+    for dirpath, dirnames, filenames in os.walk(base / _SOURCE_SCAN_ROOT):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+        for name in filenames:
+            full = Path(dirpath) / name
+            rel = full.relative_to(base).as_posix()
+            paths.append(rel)
+            if name.endswith(".py"):
+                texts[rel] = _read_text(full)
+    return sorted(paths), texts
+
+
+def _is_test_file(path: str) -> bool:
+    name = posixpath.basename(path)
+    return path.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py"))
+
+
+def _module_names(path: str) -> set:
+    """路徑的所有 dotted 後綴（去 .py；__init__ 以套件名表示），對應 sys.path 指向任一層的匯入寫法。"""
+    parts = [p for p in path[:-3].split("/") if p]
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return {".".join(parts[i:]) for i in range(len(parts))}
+
+
+def _parse_imports(text: str, path: str) -> set:
+    """檔內匯入的 dotted 名稱（含 `from X import Y` 的 X.Y，以涵蓋匯入子模組的寫法）。"""
+    mods = set()
+    pkg = posixpath.dirname(path).split("/")
+    for m in _PY_IMPORT.finditer(text):
+        if m.group(3):
+            mods.update(n for n in (i.strip().split(" as ")[0].strip() for i in m.group(3).split(",")) if n)
+            continue
+        src = m.group(1)
+        names = [n.strip().split(" as ")[0].strip(" ()") for n in m.group(2).replace("(", "").split(",")]
+        if src.startswith("."):
+            dots = len(src) - len(src.lstrip("."))
+            rest = src.lstrip(".")
+            base = pkg[: len(pkg) - (dots - 1)] if dots > 1 else pkg
+            src = ".".join([*base, rest] if rest else base)
+        mods.add(src)
+        mods.update(f"{src}.{n}" for n in names if n and n != "*")
+    return mods
+
+
+def build_reverse_imports(texts: dict) -> dict:
+    """{被匯入檔: {匯入它的檔}}；名稱以 dotted 後綴比對，同名多檔時全部計入（只會多選）。"""
+    index = {}
+    for p in texts:
+        for name in _module_names(p):
+            index.setdefault(name, set()).add(p)
+    rev = {}
+    for p, text in texts.items():
+        for mod in _parse_imports(text, p):
+            for dep in index.get(mod, ()):
+                if dep != p:
+                    rev.setdefault(dep, set()).add(p)
+    return rev
+
+
+def _mention_tokens(path: str, basename_counts: Counter) -> set:
+    """檔名提及判準（S2b）：basename 唯一者用 basename；非唯一者要求父目錄名與 basename 同檔出現。
+
+    非唯一時另含 (父目錄名候選, basename 候選) 二元組，兩組各須命中一個。
+    """
+    base = posixpath.basename(path)
+    if basename_counts[base] == 1:
+        stem = base.rsplit(".", 1)[0]
+        return {base, stem} if "-" in stem and len(stem) > 8 else {base}  # hook 以連字號檔名經路徑載入
+    parent = posixpath.basename(posixpath.dirname(path))
+    return {
+        f"{parent}/{base}", f'"{parent}" / "{base}"', f"'{parent}' / '{base}'",
+        (frozenset({f'"{parent}"', f"'{parent}'"}), frozenset({f'"{base}"', f"'{base}'"})),
+    }
+
+
+def _mentions(text: str, tokens: set) -> bool:
+    for t in tokens:
+        hit = all(any(alt in text for alt in group) for group in t) if isinstance(t, tuple) else t in text
+        if hit:
+            return True
+    return False
+
+
+def _name_convention_tests(changed: list, paths: list) -> set:
+    """S1：檔名對應（test_<stem>*.py 或 <stem>*_test.py）的測試檔。"""
+    stems = {posixpath.basename(c)[:-3].replace("-", "_") for c in changed
+             if c.endswith(".py") and not _is_test_file(c)} - {"__init__"}
+    found = set()
+    for p in filter(_is_test_file, paths):
+        name = posixpath.basename(p)
+        core = name[5:-3] if name.startswith("test_") else name[:-8]
+        if any(core == s or core.startswith(s + "_") for s in stems):
+            found.add(p)
+    return found
+
+
+def _direct_hits(seeds: set, deleted: list, paths: list, texts: dict, rev: dict) -> tuple:
+    """S2b 第 1 層：回傳（直接匯入改動檔的檔, 以檔名提及改動檔的測試檔）。"""
+    counts = Counter(posixpath.basename(p) for p in paths)
+    tokens = {posixpath.basename(d) for d in deleted}
+    for s in seeds:
+        tokens |= _mention_tokens(s, counts)
+    importers = set().union(*(rev.get(s, set()) for s in seeds)) - seeds
+    mentioned = {p for p, text in texts.items()
+                 if _is_test_file(p) and p not in seeds and _mentions(text, tokens)}
+    return importers, mentioned
+
+
+def _import_closure(frontier: set, reached: set, rev: dict, depth: Optional[int]) -> set:
+    """自第 1 層的非測試匯入者往上沿匯入邊再走 depth-1 層（None 為無界），回傳新觸及的檔。"""
+    found, level = set(), 1
+    while frontier and (depth is None or level < depth):
+        level += 1
+        nxt = set().union(*(rev.get(f, set()) for f in frontier)) - reached - found
+        found |= nxt
+        frontier = {p for p in nxt if not _is_test_file(p)}
+    return found
+
+
+def select_test_files(changed_paths: list, root: str, depth: Optional[int] = TEST_SUBSET_IMPORT_DEPTH,
+                      sources: Optional[tuple] = None) -> list:
+    """依改動檔選出受影響的測試檔（repo 相對路徑，排序）：S2b 加上 depth 層匯入遞移。
+
+    depth=1 等同 S2b；None 為無界。sources 可傳入 scan_sources 的結果以共用一次掃描。
+    """
+    if depth is not None and depth < 1:
+        raise ValueError(f"depth 須 >= 1 或 None：{depth}")
+    paths, texts = sources if sources is not None else scan_sources(root)
+    present = set(paths)
+    changed = [c for c in changed_paths if c.startswith(_SOURCE_SCAN_ROOT + "/")]
+    seeds = {c for c in changed if c in present}
+    deleted = [c for c in changed if c not in present]
+    rev = build_reverse_imports(texts)
+    importers, mentioned = _direct_hits(seeds, deleted, paths, texts, rev)
+    level1 = seeds | importers | mentioned
+    selected = {p for p in level1 if _is_test_file(p)} | _name_convention_tests(changed, paths)
+    frontier = {p for p in importers if not _is_test_file(p)}
+    selected |= {p for p in _import_closure(frontier, level1, rev, depth) if _is_test_file(p)}
+    for d in {posixpath.dirname(p) for p in level1 if posixpath.basename(p) == "conftest.py"}:
+        selected |= {p for p in paths if _is_test_file(p) and p.startswith(d + "/")}
+    return sorted(selected)
+
+
+# ---------- 閘門接線：子集計畫與保守落點 ----------
+#
+# 只有內建 pytest 套件（hooks／scripts／skill:<名稱>）改跑子集；flutter 與專案宣告套件照舊。
+# 保守落點：選擇函式拋例外（含依賴缺席的 ImportError）、逾時、回傳 None，或該套件子集為 0 檔時，
+# 該套件跑全套件。0 檔退回而非免跑：套件已因路徑規則選中（例如 rules、settings 改動選 hooks——
+# hook 測試以 glob 或常數間接讀這些檔），選擇函式卻找不到參照，兩者不一致時以較寬者為準。
+
+SUBSET_SELECT_TIMEOUT_SECONDS = 120.0
+SUBSET_LINE_PREFIX = "[合併前測試] 測試子集："
+SUBSET_FALLBACK = "退回全套件"
+
+
+def _select_with_cache(changed: list, root: str) -> list:
+    """預設選擇函式：沿用 source_scan_cache 內的掃描結果，不重掃快照。"""
+    return select_test_files(changed, root, sources=_sources(root))
+
+
+def _call_with_timeout(fn: Callable, args: tuple, timeout: float):
+    """在 daemon 執行緒內呼叫 fn；逾時拋 TimeoutError（執行緒無法中止，留在背景直到自行結束）。
+
+    執行緒沿用呼叫端的 source_scan_cache 範圍：快取以 threading.local 保存，須明確交給執行緒。
+    """
+    store, box = getattr(_scan_cache, "store", None), {}
+
+    def work():
+        _scan_cache.store = store
+        try:
+            box["value"] = fn(*args)
+        except BaseException as exc:  # 交回呼叫端執行緒重拋，由 plan_test_subsets 記錄並退回全套件
+            box["error"] = exc if isinstance(exc, Exception) else RuntimeError(f"選擇函式中止：{exc!r}")
+
+    worker = threading.Thread(target=work, name="merge-gate-test-subset", daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        raise TimeoutError(f"選擇函式逾時 {timeout:g}s")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
+def _run_selector(selector: Callable, paths: list, snap: str) -> tuple:
+    """執行選擇函式，回傳（選中檔清單, 失敗理由）；失敗理由非空時清單為 None。"""
+    timeout = SUBSET_SELECT_TIMEOUT_SECONDS
+    try:
+        selected = _call_with_timeout(selector, (paths, snap), timeout)
+    except TimeoutError:
+        return None, f"選擇函式逾時 {timeout:g}s"
+    except Exception as exc:  # 例外與依賴缺席（ImportError）一律退回全套件；理由寫進閘門日誌
+        return None, f"選擇函式失敗：{type(exc).__name__}: {exc}"
+    if selected is None:
+        return None, "選擇函式回傳 None"
+    return list(selected), ""
+
+
+def plan_test_subsets(paths: list, snap: str, suites: list, log_root: str,
+                      selector: Optional[Callable[[list, str], Optional[list]]] = None,
+                      full_only: Optional[dict] = None) -> dict:
+    """為可跑子集的套件決定測試檔；回傳 {套件: 測試檔（repo 相對）}，不在其中的套件跑全套件。
+
+    full_only：{套件: 理由}，一律跑全套件者（main 定期全套件暫停中、或暫停狀態讀不到）；
+    暫停的放行條件是全套件綠燈，子集綠燈不足以證明暫停原因已排除。
+    每個可跑子集的套件在 stdout 與 worktree-merge.log 寫一行：選中檔數，或退回全套件與理由。
+    """
+    decl = load_declaration(snap)
+    full_only = full_only or {}
+    eligible = []
+    for s in suites:
+        if (decl is not None and s in decl) or _python_suite_parts(s, snap) is None:
+            continue
+        if s in full_only:
+            _emit_result(log_root, f"{SUBSET_LINE_PREFIX}套件 {s} {SUBSET_FALLBACK}（{full_only[s]}）")
+            continue
+        eligible.append(s)
+    if not eligible:
+        return {}
+    selected, failure = _run_selector(selector or _select_with_cache, paths, snap)
+    plan = {}
+    for suite in eligible:
+        files, note = [], failure
+        if not failure:
+            try:
+                files = suite_test_subset(suite, snap, selected)
+                note = "" if files else "子集 0 檔"
+            except Exception as exc:  # pyproject 讀取失敗等：只影響此套件，退回全套件並記錄
+                note = f"套件收集範圍解析失敗：{type(exc).__name__}: {exc}"
+        if note:
+            _emit_result(log_root, f"{SUBSET_LINE_PREFIX}套件 {suite} {SUBSET_FALLBACK}（{note}）")
+            continue
+        plan[suite] = files
+        _emit_result(log_root, f"{SUBSET_LINE_PREFIX}套件 {suite} 選中 {len(files)} 檔")
+    return plan
+
+
+if __name__ == "__main__":
+    sys.exit(main())

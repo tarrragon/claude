@@ -72,8 +72,8 @@ def test_build_local_pc_index_maps_number_to_slug(tmp_path):
     _write(ep / "PC-165-false-positive-fix-chain.md", "# PC-165\n")
     _write(ep / "PC-171-auq-dispatch.md", "# PC-171\n")
     index = pull.build_local_pc_index(claude)
-    assert index["numbers"][165] == "false-positive-fix-chain"
-    assert index["numbers"][171] == "auq-dispatch"
+    assert index["numbers"][165] == {"false-positive-fix-chain"}
+    assert index["numbers"][171] == {"auq-dispatch"}
 
 
 def test_build_local_pc_index_records_provenance(tmp_path):
@@ -252,3 +252,153 @@ def test_apply_delta_no_pc_collision_unchanged(tmp_path):
     text = applied_file.read_text(encoding="utf-8")
     assert "編號溯源" not in text
     assert "id: PC-300" in text
+
+
+# ============================================================================
+# 3.5.0-W1-144.1：一號多 slug 與凍結重號組
+#
+# 根因：build_local_pc_index 以 dict[int, str] 記本地號，同號兩檔只留一個
+# slug；resolve_pc_collision 據此把凍結重號組的另一檔誤判為撞號並重編。
+# ============================================================================
+
+_METHODOLOGY = (
+    Path(__file__).resolve().parent.parent.parent
+    / "methodologies" / "error-pattern-numbering-methodology.md"
+)
+_PC105_A = "feature-implemented-without-doc-integration"
+_PC105_B = "pm-cli-syntax-autopilot"
+
+
+def test_build_local_pc_index_same_number_keeps_all_slugs(tmp_path):
+    """同號兩檔都在本地時，索引須同時記住兩個 slug。"""
+    claude = tmp_path / ".claude"
+    ep = claude / "error-patterns" / "process-compliance"
+    _write(ep / f"PC-105-{_PC105_A}.md", "# A\n")
+    _write(ep / f"PC-105-{_PC105_B}.md", "# B\n")
+    index = pull.build_local_pc_index(claude)
+    assert index["numbers"][105] == {_PC105_A, _PC105_B}
+
+
+def test_frozen_pair_both_local_upstream_returns_either_is_none(tmp_path):
+    """對照：凍結組兩檔都在本地，上游帶回任一檔 → none（不重編）。"""
+    claude = tmp_path / ".claude"
+    ep = claude / "error-patterns" / "process-compliance"
+    _write(ep / f"PC-105-{_PC105_A}.md", "# A\n")
+    _write(ep / f"PC-105-{_PC105_B}.md", "# B\n")
+    index = pull.build_local_pc_index(claude)
+
+    for slug in (_PC105_A, _PC105_B):
+        repo_rel = f"error-patterns/process-compliance/PC-105-{slug}.md"
+        content = b"---\nid: PC-105\n---\n\nbody\n"
+        new_rel, new_content, action = pull.resolve_pc_collision(
+            repo_rel, content, index
+        )
+        assert action == "none", slug
+        assert new_rel == repo_rel
+        assert new_content == content
+
+
+def test_frozen_pair_only_one_local_upstream_brings_other_is_none(tmp_path):
+    """凍結組本地只有一檔，上游帶回另一檔 → 仍不重編（登記表豁免）。"""
+    claude = tmp_path / ".claude"
+    ep = claude / "error-patterns" / "process-compliance"
+    _write(ep / f"PC-105-{_PC105_A}.md", "# A\n")
+    index = pull.build_local_pc_index(claude)
+
+    repo_rel = f"error-patterns/process-compliance/PC-105-{_PC105_B}.md"
+    _, _, action = pull.resolve_pc_collision(repo_rel, b"# B\n", index)
+    assert action == "none"
+
+
+def test_frozen_number_with_unregistered_slug_still_renumbers(tmp_path):
+    """正向對照：凍結號但 slug 不在登記表 → 屬真撞號，仍重編。"""
+    claude = tmp_path / ".claude"
+    ep = claude / "error-patterns" / "process-compliance"
+    _write(ep / f"PC-105-{_PC105_A}.md", "# A\n")
+    _write(ep / f"PC-105-{_PC105_B}.md", "# B\n")
+    index = pull.build_local_pc_index(claude)
+
+    repo_rel = "error-patterns/process-compliance/PC-105-brand-new-lesson.md"
+    new_rel, _, action = pull.resolve_pc_collision(
+        repo_rel, b"---\nid: PC-105\n---\n\nbody\n", index
+    )
+    assert action == "renumber"
+    assert new_rel == "error-patterns/process-compliance/PC-106-brand-new-lesson.md"
+
+
+def test_non_frozen_same_number_slug_membership(tmp_path):
+    """非凍結號的同號多檔：slug 在集合內 → none；不在集合內 → renumber。"""
+    claude = tmp_path / ".claude"
+    ep = claude / "error-patterns" / "process-compliance"
+    _write(ep / "PC-300-alpha.md", "# a\n")
+    _write(ep / "PC-300-beta.md", "# b\n")
+    index = pull.build_local_pc_index(claude)
+
+    for slug in ("alpha", "beta"):
+        _, _, action = pull.resolve_pc_collision(
+            f"error-patterns/process-compliance/PC-300-{slug}.md", b"x\n", index
+        )
+        assert action == "none", slug
+
+    new_rel, _, action = pull.resolve_pc_collision(
+        "error-patterns/process-compliance/PC-300-gamma.md", b"x\n", index
+    )
+    assert action == "renumber"
+    assert new_rel == "error-patterns/process-compliance/PC-301-gamma.md"
+
+
+def test_frozen_constant_matches_methodology_pc_rows():
+    """凍結登記常數須與 methodology〈已知 legacy intra-dir 重號〉表格一致。
+
+    只比對 PC 列：本常數服務 PC 撞號對帳，IMP 等其他前綴列不在範圍。
+    """
+    text = _METHODOLOGY.read_text(encoding="utf-8")
+    section = text.split("### 已知 legacy intra-dir 重號", 1)[1].split("\n#", 1)[0]
+    row_re = pull._re.compile(
+        r"^\|\s*PC-(\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$"
+    )
+    expected: dict[int, frozenset[str]] = {}
+    for line in section.splitlines():
+        m = row_re.match(line)
+        if m:
+            expected[int(m.group(1))] = frozenset({m.group(2), m.group(3)})
+    assert expected, "methodology 表格未解析出任何 PC 列"
+    assert dict(pull.FROZEN_PC_DUPLICATES) == expected
+
+
+def test_build_local_pc_index_unreadable_file_reports_stderr(tmp_path, capsys):
+    """讀檔失敗不可靜默：stderr 須指出檔案，且號與 slug 仍入索引。"""
+    claude = tmp_path / ".claude"
+    ep = claude / "error-patterns" / "process-compliance"
+    ep.mkdir(parents=True)
+    (ep / "PC-400-bad-encoding.md").write_bytes(b"\xff\xfe\xfa invalid utf-8")
+    index = pull.build_local_pc_index(claude)
+    err = capsys.readouterr().err
+    assert "PC-400-bad-encoding.md" in err
+    assert index["numbers"][400] == {"bad-encoding"}
+
+
+def test_apply_delta_frozen_pair_not_renumbered(tmp_path):
+    """端到端：本地含 PC-105 兩檔，上游修改其一 → 原檔更新，不產生重編副本。"""
+    upstream = tmp_path / "upstream"
+    _init_repo(upstream)
+    ep = upstream / "error-patterns" / "process-compliance"
+    ep.mkdir(parents=True)
+    (ep / f"PC-105-{_PC105_A}.md").write_text("# A v1\n", encoding="utf-8")
+    (ep / f"PC-105-{_PC105_B}.md").write_text("# B v1\n", encoding="utf-8")
+    base = _commit_all(upstream, "base")
+    (ep / f"PC-105-{_PC105_B}.md").write_text("# B v2\n", encoding="utf-8")
+    _commit_all(upstream, "head")
+
+    project_root = tmp_path / "proj"
+    lep = project_root / ".claude" / "error-patterns" / "process-compliance"
+    lep.mkdir(parents=True)
+    (lep / f"PC-105-{_PC105_A}.md").write_text("# A v1\n", encoding="utf-8")
+    (lep / f"PC-105-{_PC105_B}.md").write_text("# B v1\n", encoding="utf-8")
+
+    pull.apply_upstream_delta(project_root, upstream, base)
+
+    assert (lep / f"PC-105-{_PC105_B}.md").read_text(encoding="utf-8") == "# B v2\n"
+    assert sorted(p.name for p in lep.glob(f"PC-*-{_PC105_B}.md")) == [
+        f"PC-105-{_PC105_B}.md"
+    ]

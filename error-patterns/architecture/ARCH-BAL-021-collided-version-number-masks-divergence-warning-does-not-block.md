@@ -4,9 +4,10 @@ title: 撞號的版本號使分叉看似已同步，偵測到分叉的警告不�
 category: architecture
 severity: high
 related:
- - ARCH-BAL-007
- - ARCH-BAL-008
- - PC-GPD-002
+  - ARCH-BAL-007
+  - ARCH-BAL-008
+  - id: PC-GPD-002
+    kind: citation
 created: 2026-09-03
 ---
 

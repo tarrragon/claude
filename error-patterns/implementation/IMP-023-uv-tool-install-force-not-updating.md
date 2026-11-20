@@ -1,3 +1,9 @@
+---
+id: IMP-023
+title: 'IMP-015: uv tool install --force 不更新已安裝套件程式碼'
+severity: medium
+---
+
 # IMP-015: uv tool install --force 不更新已安裝套件程式碼
 
 **分類**: implementation

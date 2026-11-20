@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.54.3（2026-11-20）— 文件：`references/field-semantics.md` 新增〈where.layer 的可信度〉一節，〈適用範圍〉的不涵蓋表補一列。`where.layer` 是自由文字選填欄位：CLI 不驗證值域，填入值與 `where.files` 不保證一致，`parallel-suggestion-hook` 的讀取分支讀的是不存在的扁平鍵而不會執行；hook、checker 與 PM 不得依其值判定，架構層資訊改由 `where.files` 判讀。CLI 行為不變。
+
 **Version**: 2.54.2（2026-11-18）— append-log 補寫不再落進 CLI 寫入的子節：
 - `append-log`（非 `--replace`）在章節已有實質內容時，原本把新內容附加在章節尾端。章節尾端是 dispatch 寫入的〈派發日誌〉〈Commit 規範〉或 create 寫入的〈查重紀錄〉時，沒有自己標題的補寫落進該子節：分析先行檢查點判定前剝除整個子節，補寫不被計入，照 deny 訊息的指引補寫後仍持續被擋；dispatch 冪等覆寫〈Commit 規範〉時，落在其中的補寫也會被刪除。改為插在第一個這類子節之前，與 `--replace` 的排列一致；章節沒有這類子節時仍附加在尾端。只對 Problem Analysis 生效（CLI 只在此章節寫入這三個子節），其他章節即使有人寫的同名標題也照舊附加在尾端。既有票中已落進子節的補寫不會遷移，仍會被檢查點剝除；要救回須以 `append-log --replace` 重寫該章節。
 - 插入邏輯放在 `ticket_system/lib/managed_subsections.py` 的 `insert_before_generated`，與子節清單同處，hook 環境可匯入。`references/track-command-update.md` 的 append-log 說明同步。

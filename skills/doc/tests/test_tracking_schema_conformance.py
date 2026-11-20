@@ -211,8 +211,10 @@ class TestGraphTypeTablesWellFormed:
     def test_node_types_cover_a_and_b_layer(self):
         a_layer = {n for n, v in GRAPH_NODE_TYPES.items() if v["layer"] == GRAPH_LAYER_ESTABLISHED}
         b_layer = {n for n, v in GRAPH_NODE_TYPES.items() if v["layer"] == GRAPH_LAYER_PROPOSED}
-        assert a_layer == {"PROP", "SPEC", "UC", "Ticket", "DomainBundle"}
-        assert b_layer == {"FlowStep", "EVT"}
+        assert a_layer == {
+            "PROP", "SPEC", "UC", "Ticket", "DomainBundle", "FlowStep", "EVT",
+        }
+        assert b_layer == set()
 
     def test_every_node_type_has_id_pattern_and_carrier(self):
         for name, entry in GRAPH_NODE_TYPES.items():
@@ -222,12 +224,10 @@ class TestGraphTypeTablesWellFormed:
     def test_edge_types_cover_a_and_b_layer(self):
         a_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["layer"] == GRAPH_LAYER_ESTABLISHED}
         b_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["layer"] == GRAPH_LAYER_PROPOSED}
-        assert len(a_layer) == 13, f"A 層邊應為 13 條，實得 {len(a_layer)}：{sorted(a_layer)}"
-        assert len(b_layer) == 6, f"B 層邊應為 6 條，實得 {len(b_layer)}：{sorted(b_layer)}"
-        assert b_layer == {
-            "emission", "consumption", "branching", "returning", "bundle_dependency",
-            "closed_by",
-        }
+        assert len(a_layer) == 17, f"A 層邊應為 17 條，實得 {len(a_layer)}：{sorted(a_layer)}"
+        assert len(b_layer) == 2, f"B 層邊應為 2 條，實得 {len(b_layer)}：{sorted(b_layer)}"
+        assert {"emission", "consumption", "branching", "returning"} <= a_layer
+        assert b_layer == {"bundle_dependency", "closed_by"}
 
     def test_every_edge_type_has_five_required_fields(self):
         """每條邊的 class / 正向欄位 / 反向欄位 / 維護方 / layer 皆可程式取用。"""
@@ -703,3 +703,54 @@ class TestGraphTypeTablesRealFlowStepConformance:
                     assert step["return_to"] in all_ids, (
                         f"{uc_name}: FlowStep {step['id']}.return_to 引用不存在的 {step['return_to']}"
                     )
+
+
+class TestIdPatternAsciiFlag:
+    """ID 正則方言：python-re + re.ASCII（A1 項 4）。"""
+
+    def test_flags_constant_is_ascii(self):
+        from doc_system.core.tracking_schema import ID_PATTERN_FLAGS
+
+        assert ID_PATTERN_FLAGS == re.ASCII
+
+    def test_uc_registry_rejects_fullwidth_and_arabic_indic_digits(self):
+        from doc_system.core.uc_registry import UC_HEADING_RE, VALID_UC_FORMAT_RE
+
+        for bad in ("UC-０１", "UC-٠١"):
+            assert not VALID_UC_FORMAT_RE.match(bad)
+            assert not UC_HEADING_RE.match(f"## {bad}: 標題")
+        assert VALID_UC_FORMAT_RE.match("UC-01")
+        assert UC_HEADING_RE.match("## UC-01: 標題")
+
+    def test_validate_regexes_reject_non_ascii_ids(self):
+        from doc_system.commands.validate import _filename_id_regex
+
+        assert _filename_id_regex("UC").match("UC-01-x.md")
+        assert not _filename_id_regex("UC").match("UC-０１-x.md")
+        assert not _filename_id_regex("PROP").match("PROP-００１-x.md")
+
+    def test_spec_subheading_rejects_non_ascii_whitespace(self):
+        """`\\s` 受 re.ASCII 限制：### 後接全形空白或 NBSP 不算 SPEC 子標題（旗標拿掉即翻紅）。"""
+        from doc_system.commands.validate import SPEC_SUBHEADING_PATTERN
+
+        assert SPEC_SUBHEADING_PATTERN.match("### SPEC-001")
+        assert not SPEC_SUBHEADING_PATTERN.match("###　SPEC-001")
+        assert not SPEC_SUBHEADING_PATTERN.match("### SPEC-001")
+
+    def test_ticket_pattern_flagged_rejects_non_ascii_word_chars(self):
+        from doc_system.core.tracking_schema import ID_PATTERN_FLAGS
+
+        pattern = GRAPH_NODE_TYPES["Ticket"]["id_pattern"]
+        assert re.match(pattern, "3.5.0-W1-001", ID_PATTERN_FLAGS)
+        assert not re.match(pattern, "版本-W1-001", ID_PATTERN_FLAGS)
+        assert not re.match(pattern, "3.5.0-W１-001", ID_PATTERN_FLAGS)
+
+
+class TestCodeRootKeysInTraceabilitySchema:
+    """code_root 與 test_file_extensions 為合法選填頂層鍵（3.5.0-W1-151.1.8.1）。"""
+
+    def test_keys_allowed(self):
+        assert {"code_root", "test_file_extensions"} <= TRACEABILITY_SCHEMA["top_level_keys"]
+
+    def test_not_required(self):
+        assert not {"code_root", "test_file_extensions"} & TRACEABILITY_SCHEMA["top_level_required_keys"]

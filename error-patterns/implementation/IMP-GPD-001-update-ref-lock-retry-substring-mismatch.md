@@ -2,6 +2,7 @@
 id: IMP-GPD-001
 title: 隔離索引 CAS 的鎖重試字串比對不涵蓋 update-ref 的 ref lock 錯誤
 status: active
+severity: high
 ---
 
 # IMP-GPD-001: 隔離索引 CAS 的鎖重試字串比對不涵蓋 update-ref 的 ref lock 錯誤

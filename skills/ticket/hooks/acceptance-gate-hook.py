@@ -836,7 +836,7 @@ def check_acceptance_status(
                         f"mtime 比對發現 {len(new_error_pattern_files)} 個候選 error-pattern，"
                         "進入 PC-099 歸屬過濾"
                     )
-                    # PC-099 防護：以 frontmatter source_ticket + ticket md 引用雙重過濾
+                    # PC-099 防護：僅保留 ticket md 執行者內容引用的 PC（讀檔失敗保守歸屬）
                     new_error_pattern_files = filter_error_patterns_by_ticket_scope(
                         new_error_pattern_files,
                         ticket_id,

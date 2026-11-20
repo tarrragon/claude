@@ -3,7 +3,15 @@ id: ARCH-BAL-009
 title: 預覽路徑各自實作執行路徑的判定邏輯，兩者必然漂移使預覽閘門失效
 severity: 高
 category: architecture
-related: [ARCH-BAL-003, IMP-BAL-004, PC-BAL-016]
+related:
+  - id: ARCH-BAL-003
+    kind: citation
+  - id: IMP-BAL-004
+    kind: citation
+  - id: PC-BAL-016
+    kind: citation
+  - id: ARCH-BAL-012
+    kind: sibling
 created: 2026-07-30
 ---
 

@@ -1,3 +1,9 @@
+---
+id: PC-105
+title: PM 對 SKILL CLI 語法的 autopilot 假設
+severity: medium
+---
+
 # PC-105: PM 對 SKILL CLI 語法的 autopilot 假設
 
 ---

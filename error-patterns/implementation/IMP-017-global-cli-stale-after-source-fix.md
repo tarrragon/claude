@@ -1,3 +1,9 @@
+---
+id: IMP-017
+title: 全局安裝 CLI 工具未隨原始碼修復同步
+severity: medium
+---
+
 # IMP-017: 全局安裝 CLI 工具未隨原始碼修復同步
 
 ## 分類

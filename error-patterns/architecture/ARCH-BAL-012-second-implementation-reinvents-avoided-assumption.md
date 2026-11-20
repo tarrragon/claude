@@ -4,9 +4,11 @@ title: 同一概念的第二份實作重新推導第一份刻意迴避的假設�
 category: architecture
 severity: 高
 related:
- - ARCH-BAL-009
- - TEST-BAL-002
- - PC-165
+  - id: ARCH-BAL-009
+    kind: sibling
+  - id: TEST-BAL-002
+    kind: citation
+  - PC-165
 created: 2026-07-31
 ---
 

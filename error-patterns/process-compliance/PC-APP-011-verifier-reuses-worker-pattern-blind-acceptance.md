@@ -5,6 +5,9 @@ severity: high
 category: process-compliance
 created: "2026-07-14"
 related_patterns: [PC-APP-010]
+related:
+  - id: PC-APP-010
+    kind: citation
 ---
 
 # PC-APP-011: 驗收者沿用執行者的偵測 pattern——假陰性驗收

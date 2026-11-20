@@ -993,15 +993,23 @@ def _output_tickets(
         tickets: 篩選後的 Ticket 列表（可能已被 --top 截斷）
         version: 版本號
         output_format: 輸出格式（table/ids/yaml）
-        total_stats: 截斷前的全量統計（僅 table 格式使用；None 時 fallback 為
-            從 tickets 自行計算，向後相容）
+        total_stats: 截斷前的全量統計（table 用於標題；ids／yaml 用於判定截斷並
+            於 stderr 提示；None 時視為未截斷，向後相容）
 
     Returns:
         int: 退出碼
     """
-    if output_format == "ids":
-        return _output_ids(tickets)
-    elif output_format == "yaml":
+    if output_format in ("ids", "yaml"):
+        # 截斷提示走 stderr：stdout 由下游管線讀取，須維持純票號／合法 YAML
+        if total_stats is not None and len(tickets) < total_stats["total"]:
+            sys.stderr.write(format_msg(
+                TrackQueryMessages.LIST_TRUNCATED_STDERR_HINT,
+                version=version,
+                shown=len(tickets),
+                total=total_stats["total"],
+            ) + "\n")
+        if output_format == "ids":
+            return _output_ids(tickets)
         return _output_yaml(tickets)
     else:
         # table 格式（預設）

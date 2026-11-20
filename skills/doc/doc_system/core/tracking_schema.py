@@ -10,6 +10,8 @@ schema 互不相同，各自獨立定義，消費端一律引用本模組常數�
 
 from __future__ import annotations
 
+import re
+
 # docs/proposals-tracking.yaml 的權威 schema。
 # 頂層結構：{proposals: [...], usecases: [...], specs: [...]}
 # proposals 為 list-based（非 dict-keyed-by-id）。
@@ -71,6 +73,8 @@ TRACEABILITY_SCHEMA = {
         "runtime_tests",
         "last_updated",
         "test_scan_dirs",
+        "test_file_extensions",
+        "code_root",
     },
     "top_level_required_keys": {"version", "last_updated"},
     "mappings_format": "list",
@@ -114,7 +118,10 @@ TRACEABILITY_SCHEMA = {
 # 該型別已被獨立語料交叉驗證、消費端可依賴；proposed 表示形狀仍可能變動。
 #
 # 升級判準（兩條件同時成立才升級，缺一維持 proposed）：
-#   1. 該型別在兩個以上互相獨立的 consumer 專案語料中有實例。單一專案的實例
+#   1. 該型別在兩個以上互相獨立的 consumer 專案語料中有實例。「互相獨立」指
+#      兩個專案的語料由不同的人、在不同的領域假設下各自產出，任一方的文件
+#      不是另一方的複製、改寫或同一流程的重跑；同一組人或同一套領域假設
+#      產出的多個專案仍算同一來源。單一專案的實例
 #      只證明「寫得出符合此型別的文件」，不證明型別捕捉到跨專案共通的結構——
 #      同一批人在同一套領域假設下產出的語料無法互為對照。
 #   2. doc CLI 對該型別有建立與驗證支援（模板產出 + validator 檢查）。缺此支援
@@ -172,9 +179,9 @@ GRAPH_EDGE_MAINTAINERS = frozenset({"手動", "CLI 自動", "手動/CLI"})
 # GRAPH_EDGE_TYPES 等型別表內容變更時手動升版，升為變更當下的框架版本。
 # 鍵名不改的理由：改名會影響所有舊 consumer；舊 consumer 照舊寫入的框架
 # 版本與本常數落在同一條遞增序列，消費端閘門無需修改即可比較。
-TYPE_TABLE_COMPAT_VERSION = "2.84.0"
+TYPE_TABLE_COMPAT_VERSION = "3.5.0"
 
-# 節點型別表：A 層 5 節點 + B 層 2 節點。FR 與 Test 不列為獨立節點型別
+# 節點型別表：A 層 7 節點（含 FlowStep、EVT）。FR 與 Test 不列為獨立節點型別
 # （無獨立檔案/ID 空間，語意由 SPEC / traceability 節點欄位承載）。
 GRAPH_NODE_TYPES = {
     "PROP": {
@@ -249,7 +256,7 @@ GRAPH_NODE_TYPES = {
         ],
     },
     "FlowStep": {
-        "layer": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
         # 不透明穩定識別符：位置與父步驟不編進 ID，拓撲全交 branch_from /
         # return_to 表達。kebab-case，與首批真實資料一致。
         "id_pattern": r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
@@ -257,7 +264,7 @@ GRAPH_NODE_TYPES = {
         # 無 carrier_path_patterns：carrier 非獨立檔案路徑，見本節前言。
     },
     "EVT": {
-        "layer": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
         "id_pattern": r"^EVT-[A-Z0-9]+-\d{3}$",
         "carrier": (
             "docs/events/{domain}/EVT-{DOMAIN}-NNN-{slug}.md frontmatter"
@@ -283,6 +290,13 @@ CARRIER_PATH_TYPES = frozenset(
 )
 
 
+# id_pattern 與 carrier pattern 的比對旗標：`\d`、`\w` 只比對 ASCII
+# （方言見匯出端 ID_PATTERN_DIALECT = "python-re"，旗標匯出為
+# `id_pattern_flags: "ASCII"`）。全形數字、阿拉伯－印度數字、非 ASCII 字母
+# 不是合法 ID 成分。所有自行 re.compile 這些 pattern 的地方都須帶此旗標。
+ID_PATTERN_FLAGS = re.ASCII
+
+
 def id_pattern_body(node_type: str) -> str:
     """回傳該型別 id_pattern 去掉首尾錨點的本體，供驗證端嵌入檔名、標題行等較大的正則。
 
@@ -291,6 +305,18 @@ def id_pattern_body(node_type: str) -> str:
     """
     pattern = GRAPH_NODE_TYPES[node_type]["id_pattern"]
     return pattern.removeprefix("^").removesuffix("$")
+
+
+ID_SEARCH_BOUNDARY = r"(?![A-Z0-9])"
+
+
+def id_pattern_search(node_type: str) -> str:
+    """回傳加右邊界的不錨定搜尋式：id_pattern 本體後接 `(?![A-Z0-9])`。
+
+    本體的交替式（如 SPEC 的 `[0-9]{3}|[A-Z0-9-]+`）左支先命中即停，不加邊界會把
+    `SPEC-1234` 截成 `SPEC-123`；邊界迫使其回溯到能吃完整個 ID 的分支。
+    """
+    return id_pattern_body(node_type) + ID_SEARCH_BOUNDARY
 
 # 完整性集合的共通語意（#99 第三項裁決，2026-09-24）：欄位必須存在；值
 # 可為 None（單值）或空清單 []（多值），代表「明確沒有」。此語意對應
@@ -312,6 +338,28 @@ def find_missing_completeness_fields(fields: frozenset[str], entry: dict) -> set
     return {field for field in fields if field not in entry}
 
 
+# 文件 status 值域的唯一定義，依型別拆分（create、update、validate 皆引用）。
+# PROP 走提案狀態流；SPEC／UC／EVT 走審閱狀態流。新建文件的初始 status 為
+# DOC_INITIAL_STATUS，必須落在每個型別的值域內。
+DOC_STATUSES_BY_TYPE = {
+    "PROP": ("draft", "discussing", "confirmed", "implemented", "withdrawn"),
+    "SPEC": ("draft", "review", "approved", "deprecated"),
+    "UC": ("draft", "review", "approved", "deprecated"),
+    "EVT": ("draft", "review", "approved", "deprecated"),
+}
+DOC_INITIAL_STATUS = "draft"
+
+
+def doc_type_of_id(doc_id: str) -> str | None:
+    """由文件 ID 前綴判定型別（PROP／SPEC／UC／EVT），無法判定回傳 None。"""
+    upper = doc_id.upper()
+    return next((t for t in DOC_STATUSES_BY_TYPE if upper.startswith(f"{t}-")), None)
+
+
+def statuses_for_doc_id(doc_id: str) -> tuple[str, ...]:
+    """文件 ID 對應型別的 status 值域；型別無法判定時沿用 PROP 值域（改動前的唯一值域）。"""
+    return DOC_STATUSES_BY_TYPE[doc_type_of_id(doc_id) or "PROP"]
+
 # EVT 節點必填欄位（完整性集合，語意見上方共通說明）。
 EVT_REQUIRED_FIELDS = frozenset({"id", "name", "canonical_name", "category"})
 
@@ -323,6 +371,52 @@ UC_REQUIRED_FIELDS = frozenset({"id", "title", "status"})
 # DomainBundle 識別最小集。個別 domain 的 carrier 是整份 domain-map.md，
 # 本集合僅描述單一 bundle 的識別欄位，不含 domain-map 全域結構。
 DOMAINBUNDLE_REQUIRED_FIELDS = frozenset({"id", "domain"})
+
+# DomainBundle 的 domain 值須等於 id 去掉此前綴後的後綴（id 是唯一識別，domain 是其名稱面）。
+DOMAINBUNDLE_ID_PREFIX = "DOMAIN-MAP-"
+
+
+def find_domain_id_suffix_problem(bundle_id: str, domain: object) -> str | None:
+    """domain 缺席、為空或不等於 id 後綴時回傳訊息，否則 None。id 不帶前綴者不在本檢查範圍。"""
+    if not bundle_id.startswith(DOMAINBUNDLE_ID_PREFIX):
+        return None
+    suffix = bundle_id[len(DOMAINBUNDLE_ID_PREFIX):]
+    if domain is None or domain == "":
+        return f"domain 缺席或為空，須等於 id 後綴 {suffix!r}"
+    if str(domain) != suffix:
+        return f"domain {str(domain)!r} 不等於 id 後綴 {suffix!r}"
+    return None
+
+
+# 層級保留名稱：專案在系統層檔（SYSTEM_LAYER_FILE）的 frontmatter 以 `layer_names`（字串清單）
+# 正向宣告哪些 SPEC domain 欄值屬層級（跨 domain 的系統層 SPEC）。三態：檔案或鍵缺席＝
+# 未宣告（遷移期，spec 腳本退回「domain 不在已宣告集合即層級」並提示）；`[]` ＝已宣告、
+# 無保留名稱（不退回）；值非字串清單＝格式錯誤。spec 腳本不 import doc，其
+# map_locate.LAYER_NAMES_KEY 字面須與此常數同步，權威在此。
+SYSTEM_LAYER_FILE = "docs/system-layer.md"
+LAYER_NAMES_KEY = "layer_names"
+
+
+class LayerNamesFormatError(ValueError):
+    """layer_names 存在但值不是字串清單。"""
+
+
+def read_layer_names(project_root) -> list[str] | None:
+    """讀取層級保留名稱：檔案或鍵缺席回 None，`[]` 回 `[]`，非字串清單拋格式錯誤。"""
+    from pathlib import Path
+
+    from doc_system.core.frontmatter_parser import parse_frontmatter
+
+    path = Path(project_root) / SYSTEM_LAYER_FILE
+    if not path.is_file():
+        return None
+    frontmatter = parse_frontmatter(str(path)) or {}
+    if LAYER_NAMES_KEY not in frontmatter:
+        return None
+    value = frontmatter[LAYER_NAMES_KEY]
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise LayerNamesFormatError(f"`{LAYER_NAMES_KEY}` 必須是字串清單")
+    return value
 
 # Ticket 型別不在此設完整性集合：欄位權威在 ticket skill
 # （field-semantics.md），本模組僅收錄圖譜消費所需的 id_pattern/carrier
@@ -535,7 +629,8 @@ GRAPH_EDGE_TYPES = {
         "maintainer": "手動",
         "layer": GRAPH_LAYER_ESTABLISHED,
     },
-    # --- B 層（4 條，proposed）---
+    # --- emission / consumption / branching / returning（established）---
+    # bundle_dependency、closed_by 維持 proposed。
     "emission": {
         "class": "dataflow",
         "forward_field": "emits",  # FlowStep.emits → EVT
@@ -543,7 +638,7 @@ GRAPH_EDGE_TYPES = {
         "direction": "directed",
         "reverse_field": None,
         "maintainer": "手動",
-        "layer": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "consumption": {
         "class": "dataflow",
@@ -552,7 +647,7 @@ GRAPH_EDGE_TYPES = {
         "direction": "directed",
         "reverse_field": None,
         "maintainer": "手動",
-        "layer": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "branching": {
         "class": "ordering",
@@ -561,7 +656,7 @@ GRAPH_EDGE_TYPES = {
         "direction": "directed",
         "reverse_field": None,
         "maintainer": "手動",
-        "layer": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "returning": {
         "class": "ordering",
@@ -571,7 +666,7 @@ GRAPH_EDGE_TYPES = {
         "direction": "directed",
         "reverse_field": None,
         "maintainer": "手動",
-        "layer": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "bundle_dependency": {
         # DomainBundle → DomainBundle：bundle 層級（跨 domain-map 檔）的

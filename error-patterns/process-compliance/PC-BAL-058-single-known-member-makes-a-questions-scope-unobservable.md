@@ -6,10 +6,13 @@ severity: high
 status: active
 created: 2026-08-27
 related:
-- PC-GPD-002
-- PC-BAL-057
-- PC-BAL-056
-- ARCH-BAL-011
+  - id: PC-GPD-002
+    kind: citation
+  - id: PC-BAL-057
+    kind: citation
+  - id: PC-BAL-056
+    kind: citation
+  - ARCH-BAL-011
 ---
 
 # PC-BAL-058：唯一已知成員使問題範圍不可觀察

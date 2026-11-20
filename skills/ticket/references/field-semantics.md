@@ -31,6 +31,7 @@
 | `decision_tree_path` | 決策樹路徑記錄（決策溯源） | 本檔不討論；參考 `pm-rules/decision-tree.md` |
 | `chain` | 任務鏈聚合視圖（衍生欄位） | 本檔不討論；參考 `atomic-ticket-methodology.md`「子任務建立指引」 |
 | `where.files` | 派發/提交/衝突判定用的檔案宣告（非血緣/依賴/關聯） | 本檔另闢〈where.files 宣告語意〉小節收斂七處分散對照（見下） |
+| `where.layer` | 架構層級的自由文字選填欄位（非血緣/依賴/關聯） | 不可信，不得作為判斷依據；見下〈where.layer 的可信度〉 |
 
 > **判別準則**：本檔聚焦「ticket 之間的關係欄位」（影響阻擋/排程/驗收 hook 行為）；決策溯源欄位（記錄為何建立此 ticket）不在本檔範圍。`where.files` 亦非關係欄位，因七處消費端各執一角而無完整住址，例外收斂於本節（非六欄位定義的一部分，故獨立為本節子標題，不計入下方六欄位）。
 
@@ -70,6 +71,23 @@
 | `create-command.md`〈多值參數格式〉`--where` | `--where` CLI 參數僅支援逗號分隔多值語法；後綴標記語法不在 CLI 建立階段輸入範圍內，須於建票後以 `set-where` 附加（直接 Edit frontmatter 會被 ticket-file-access-guard 擋下） |
 
 原始碼權威：`ticket_system/lib/file_conflict.py`（`parse_file_intent` / `_default_intent` / `is_directory_declaration`）、`ticket_system/commands/track_dispatch.py`（`_directory_declaration_block_message`）。
+
+### where.layer 的可信度
+
+**`where.layer` 是自由文字選填欄位，值不可信，不得作為任何判斷的依據。**
+
+| 項目 | 現況 |
+|------|------|
+| 值域 | 無。CLI 不驗證，任何字串都能寫入（`create --where-layer`、`set-where --layer`） |
+| 填寫來源 | 人工或代理人手填；plan-to-ticket 規範寫「由檔案路徑推斷」，但沒有程式執行推斷，填入值與 `where.files` 不保證一致 |
+| 實際內容 | 票庫盤點時多數為「待定義」佔位值，另有誤填為逗號分隔檔案清單的樣本 |
+| 消費端 | 無實際生效的讀取點：`parallel-suggestion-hook` 有讀取分支，但讀的是 frontmatter 不存在的扁平鍵 `where_layer`，分支不會執行；可影響派發、衝突、驗收判定的範圍資訊只有 `where.files` |
+
+**Why**：沒有值域與驗證的欄位，讀到的值可能是佔位值、誤填或與檔案範圍矛盾的描述，依它分支等於依雜訊分支。
+
+**Consequence**：hook、checker 或 PM 依 `where.layer` 判定架構層、派發對象或並行安全時，判定結果與票的實際範圍無關，錯誤在輸出上與正確判定同形。
+
+**Action**：需要架構層資訊時，從 `where.files` 的路徑判讀；新增 hook 或 checker 時不讀 `where.layer`。`where.layer` 只作為給人看的備註。此欄位改由推導或廢除屬後續版本的設計決定，在那之前本節的限制有效。
 
 ---
 

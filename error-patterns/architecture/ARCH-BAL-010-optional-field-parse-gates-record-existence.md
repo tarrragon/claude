@@ -4,9 +4,11 @@ title: 可選欄位的解析成敗決定記錄是否存在，解析失敗即整�
 category: architecture
 severity: 高
 related:
- - ARCH-BAL-003
- - PC-003
- - IMP-BAL-005
+  - id: ARCH-BAL-003
+    kind: citation
+  - PC-003
+  - id: IMP-BAL-005
+    kind: citation
 created: 2026-07-31
 ---
 

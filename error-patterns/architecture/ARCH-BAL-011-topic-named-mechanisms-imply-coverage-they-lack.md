@@ -4,9 +4,12 @@ title: 以主題命名的機制群造成該主題已被涵蓋的假象，查證�
 category: architecture
 severity: 高
 related:
- - ARCH-BAL-003
- - ARCH-BAL-010
- - DOC-BAL-001
+  - id: ARCH-BAL-003
+    kind: citation
+  - id: ARCH-BAL-010
+    kind: citation
+  - id: DOC-BAL-001
+    kind: citation
 created: 2026-07-31
 ---
 

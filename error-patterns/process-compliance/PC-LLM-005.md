@@ -3,7 +3,10 @@ id: PC-LLM-005
 title: "等待迴圈以代理訊號判斷資源佔用，孤兒行程使條件恆真，迴圈與「真的有人佔用」不可區分"
 severity: medium
 category: process-compliance
-related: [PC-GPD-009, IMP-LLM-001]
+related:
+  - PC-GPD-009
+  - id: IMP-LLM-001
+    kind: citation
 created: 2026-11-10
 ---
 

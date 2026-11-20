@@ -1,3 +1,9 @@
+---
+id: PC-142
+title: Phase 4 Hook 字面抓觸發詞誤判規則引用為延後話術
+severity: medium
+---
+
 # PC-142: Phase 4 Hook 字面抓觸發詞誤判規則引用為延後話術
 
 ## 分類

@@ -6,7 +6,10 @@ severity: medium
 status: active
 created: 2026-11-04
 related:
-- PC-GPD-077
+  - id: PC-GPD-077
+    kind: citation
+  - id: PC-GPD-085
+    kind: sibling
 ---
 
 # PC-GPD-082：專案專用的 skill 放在共用目錄，沒有擋住推送

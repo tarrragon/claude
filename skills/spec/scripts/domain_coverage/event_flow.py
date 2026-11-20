@@ -2,9 +2,7 @@
 
 import re
 
-import check_api_surface
-
-from .fr_extract import extract_fr_ids
+from .fr_extract import extract_fr_ids, split_fr_sections
 
 # 事件流訊號詞：與 /spec validate Layer 2 維度 5「資源競爭」共用單一常數，避免
 # Layer 1 機械檢核與 Layer 2 語意維度各自維護清單而漂移（SKILL.md 維度 5 掃描說明）。
@@ -21,11 +19,11 @@ ARRIVAL_LEVEL_TABLE_TITLE_RE = re.compile(r"^(#{1,6})\s*.*到達類別與級別.
 def extract_event_signaled_frs(spec_text, signal_words=EVENT_FLOW_SIGNAL_WORDS):
     """回傳 spec 中，FR 段落內文命中任一事件流訊號詞的 FR 編號集合（int）。
 
-    段落切分沿用 check_api_surface.split_fr_sections（H3 `### FR-XX:` 標題），
-    避免與既有 API surface 檢核各自維護一份切段邏輯。
+    段落切分用 fr_extract.split_fr_sections（與 FR 抽取同一份規則），
+    避免與 API surface 檢核各自維護一份切段邏輯。
     """
     signaled = set()
-    for fr_id, section in check_api_surface.split_fr_sections(spec_text):
+    for fr_id, section in split_fr_sections(spec_text):
         lowered = section.lower()
         if any(word.lower() in lowered for word in signal_words):
             signaled.add(int(fr_id.split("-")[1]))
@@ -59,6 +57,11 @@ def extract_arrival_level_table(channel_section_text):
     if channel_section_text is None:
         return None
     return _extract_section_by_title(channel_section_text, ARRIVAL_LEVEL_TABLE_TITLE_RE)
+
+
+def has_channel_section(map_texts):
+    """任一份 map 含「通道與協調圖」節即為 True；全無代表找不到節（與節內缺標定是不同成因）。"""
+    return any(extract_channel_section(text) is not None for text in map_texts)
 
 
 def check_event_flow_labeling(spec_text, domain_map_text, signal_words=EVENT_FLOW_SIGNAL_WORDS):

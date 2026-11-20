@@ -1,3 +1,9 @@
+---
+id: PC-065
+title: PM 並行派發多代理人時 prompt 模板遺漏 Ticket ID 格式
+severity: low
+---
+
 # PC-065: PM 並行派發多代理人時 prompt 模板遺漏 Ticket ID 格式
 
 ---

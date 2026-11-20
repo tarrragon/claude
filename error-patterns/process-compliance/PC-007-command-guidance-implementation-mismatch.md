@@ -1,3 +1,9 @@
+---
+id: PC-007
+title: 'PC-004: Command 引導與腳本實作行為不符'
+severity: medium
+---
+
 # PC-004: Command 引導與腳本實作行為不符
 
 **分類**: process-compliance
