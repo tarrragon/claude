@@ -2,6 +2,13 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.11.0（2026-11-21）— 合併閘門改跑受影響的測試子集，另加 main 定期全套件：
+- 子集選擇：hooks、scripts、skill:<名稱> 三類 pytest 套件，只跑 `select_test_files` 選出的測試檔（依改動檔路徑比對，再加兩層匯入遞移）。下列情況該套件退回全套件：選擇拋例外、依賴缺席、逾時、回傳 None、選中 0 檔，或該套件的定期全套件暫停中、暫停狀態讀不到。定期全套件停用（`MERGE_GATE_PERIODIC=0`）時，閘門完全不跑子集。`worktree-merge.log` 每個套件多一行 `[合併前測試] 測試子集：…`。
+- main 定期全套件：main 累計一定筆數的合併後，在 main head 的快照跑全部套件，狀態寫在 `.claude/logs/merge-gate-periodic.json`。紅燈時以前綴對半定位到一筆合併，並暫停該套件的新合併；修正或 revert 合入後重跑，綠燈才解除。執行中的殘留以 pid 存活與逾時判定。
+- 匯入掃描：三處匯入掃描收斂為 `scan_sources`，同一次閘門只掃一次；名稱唯一的單檔模組也會加選。
+- 這版行為變更的時點是 2026-11-20，當時沒有升版號。發版推送發佈庫時補升為 1.11.0。
+- 測試：新增 `tests/test_merge_gate_import_scan.py`、`test_merge_gate_periodic.py`、`test_merge_gate_subset_gate.py`、`test_merge_gate_test_subset.py`。
+
 **Version**: 1.10.0（2026-11-18）— 合併閘門加選匯入改動套件的其他 skill：
 - 改動落在某 skill 的頂層套件（skill 根或 `scripts/` 下帶 `__init__.py` 的目錄，如 `ticket_system`）時，掃描合併快照內其他帶 `tests/` 的 skill，有 .py 以行首（含縮排）`from`／`import` 匯入該套件者加選其套件。原本只掃 hooks／scripts，3.3.0 一次 `ticket_system/lib/version.py` 改動讓 version-release 的交叉核對測試紅燈，閘門沒跑到。
 - 閘門輸出新增一行 `[合併前測試] 跨 skill 匯入加選套件：skill:<名稱>（匯入 <套件名>）`。只比對套件不比對單檔模組；改動不在套件內時選擇結果不變。

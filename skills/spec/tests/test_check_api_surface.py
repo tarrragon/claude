@@ -9,6 +9,45 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import check_api_surface  # noqa: E402
 
 
+# --- has_functional_requirements 宣告（#107）---
+
+def _run_main(tmp_path, capsys, text):
+    spec = tmp_path / "SPEC-900.md"
+    spec.write_text(text, encoding="utf-8")
+    code = check_api_surface.main([str(spec)])
+    return code, capsys.readouterr().out
+
+
+def test_declared_false_without_fr_exits_zero_and_states_not_run(tmp_path, capsys):
+    code, out = _run_main(tmp_path, capsys, "---\nhas_functional_requirements: false\n---\n# 無 FR\n")
+    assert code == 0
+    assert "未執行" in out
+    assert "通過" not in out
+
+
+def test_undeclared_without_fr_still_fails(tmp_path, capsys):
+    code, _ = _run_main(tmp_path, capsys, "---\nid: SPEC-900\n---\n# 無 FR\n")
+    assert code == 1
+
+
+def test_declared_false_with_fr_heading_still_fails(tmp_path, capsys):
+    text = "---\nhas_functional_requirements: false\n---\n### FR-01: A\nbody\n"
+    code, out = _run_main(tmp_path, capsys, text)
+    assert code == 1
+    assert "矛盾" in out
+
+
+def test_declared_non_boolean_fails(tmp_path, capsys):
+    code, _ = _run_main(tmp_path, capsys, "---\nhas_functional_requirements: no\n---\n# x\n")
+    assert code == 1
+
+
+def test_declared_twice_fails(tmp_path, capsys):
+    text = "---\nhas_functional_requirements: false\nhas_functional_requirements: false\n---\n# x\n"
+    code, _ = _run_main(tmp_path, capsys, text)
+    assert code == 1
+
+
 # --- 單元案例：split_fr_sections ---
 
 def test_split_fr_sections_splits_by_header():

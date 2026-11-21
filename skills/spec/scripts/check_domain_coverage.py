@@ -15,7 +15,7 @@ domain map 定位鏈：--domain-map 明示（唯一來源，不聯集）-> spec 
 事件流訊號詞（清單見 EVENT_FLOW_SIGNAL_WORDS，與 /spec validate Layer 2 維度 5「資源
 競爭」共用同一份訊號詞，見 SKILL.md 維度 5 掃描說明），該 FR 須能在 domain map 的
 「通道與協調圖」節（以標題文字定位，不依編號——章節編號在各專案可能已被既有內容
-佔用）之「到達類別與級別實例」子表中找到對應的 FR 引用，缺者列為提醒，非阻擋。
+佔用）之「到達類別與級別實例」子表中找到對應的 FR 引用，缺者列為提醒，有缺口時 exit 1。
 
 實作依職責拆在 domain_coverage/ 套件（fr_extract／attribution／event_flow／map_locate）；
 本檔保留 CLI 入口、報告輸出，並 re-export 原有名稱，既有 import 路徑不變。
@@ -161,7 +161,7 @@ def _report_domain_coverage(spec_text, domain_map_paths, spec_path=None, layer_m
 
 
 def _report_event_flow_labeling(spec_text, domain_map_paths, layer_mode=False):
-    """列印事件流標定檢核結果，回傳 exit code。性質為啟發式提醒，非阻擋。"""
+    """列印事件流標定檢核結果，回傳 exit code。性質為啟發式提醒，有缺口時 exit 1。"""
     domain_map_path = ", ".join(str(p) for p in domain_map_paths)
     map_texts = [t for _, t in _read_maps(domain_map_paths)]
     missing = check_event_flow_labeling_union(spec_text, map_texts)
@@ -170,13 +170,13 @@ def _report_event_flow_labeling(spec_text, domain_map_paths, layer_mode=False):
         return 0
     if not has_channel_section(map_texts):
         print(f"事件流標定檢核無法判定：{domain_map_path} 內找不到「通道與協調圖」節（以標題文字定位，"
-              f"標題須含「通道與協調圖」），{len(missing)} 個命中訊號詞的 FR 因此無從比對標定（提醒，非阻擋）：")
+              f"標題須含「通道與協調圖」），{len(missing)} 個命中訊號詞的 FR 因此無從比對標定（啟發式提醒，exit 1）：")
         for fr in missing:
             print(f"  FR-{fr:02d}")
         print("請先新增「通道與協調圖」節與其「到達類別與級別實例」子表；節已存在而讀不到時，檢查標題文字。")
         return 1
 
-    print(f"事件流標定檢核發現 {len(missing)} 個 FR 命中事件流訊號詞但未見通道標定（提醒，非阻擋）：")
+    print(f"事件流標定檢核發現 {len(missing)} 個 FR 命中事件流訊號詞但未見通道標定（啟發式提醒，exit 1）：")
     for fr in missing:
         print(f"  FR-{fr:02d}")
     label = "系統層" if layer_mode else "domain map"
@@ -194,7 +194,7 @@ def main(argv=None):
     parser.add_argument(
         "--check-event-flow-labeling",
         action="store_true",
-        help="額外執行事件流標定檢核（可選，啟發式提醒，非阻擋）",
+        help="額外執行事件流標定檢核（可選，啟發式提醒；有缺口時 exit 1）",
     )
     args = parser.parse_args(argv)
 

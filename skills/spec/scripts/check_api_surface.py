@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from domain_coverage.fr_extract import (  # noqa: E402  FR 切段規則的唯一一份，本檔不另持
-    EXPECTED_HEADING_HINT, fr_like_lines, split_fr_sections,
+    EXPECTED_HEADING_HINT, fr_like_lines, read_fr_declaration, split_fr_sections,
 )
 
 PATH_RE = re.compile(r"/v1/[A-Za-z0-9_/{}=&,:.\-]*")
@@ -85,6 +85,20 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     spec_text = Path(args.spec_path).read_text(encoding="utf-8")
+    try:
+        declared = read_fr_declaration(spec_text)
+    except ValueError as exc:
+        print(f"API surface 檢核失敗：{exc}")
+        return 1
+    if declared is False:
+        loose = fr_like_lines(spec_text)
+        if split_fr_sections(spec_text) or loose:
+            print("API surface 檢核失敗：宣告 has_functional_requirements: false，但內容存在 FR 標題行（宣告與內容矛盾）：")
+            for no, line, _ in loose:
+                print(f"  第 {no} 行：{line}")
+            return 1
+        print("本 SPEC 宣告無 FR（has_functional_requirements: false），未執行 API surface 比對")
+        return 0
     if not split_fr_sections(spec_text):
         print("API surface 檢核失敗：未抽到任何 FR 段落（未執行檢核）。")
         print(EXPECTED_HEADING_HINT)

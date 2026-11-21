@@ -414,6 +414,18 @@ def clone_repo(temp_dir: Path) -> None:
         if result.returncode != 0:
             print_color(f"git clone 失敗: {result.stderr}", "red")
             sys.exit(1)
+    _disable_auto_gc(temp_dir)
+
+
+def _disable_auto_gc(temp_dir: Path) -> None:
+    """關閉暫存 clone 的 auto gc 與 maintenance。
+
+    partial clone 逐檔 lazy fetch base blob，每次新增一個 pack；累積約 50 個
+    pack 會觸發 auto gc 使 clone 損壞（tarrragon/claude#143）。暫存 clone
+    用完即棄，不需要 gc。
+    """
+    for key, value in (("gc.auto", "0"), ("maintenance.auto", "false")):
+        run_git(["config", key, value], cwd=str(temp_dir))
 
 
 # ============================================================================
@@ -712,15 +724,34 @@ def compute_upstream_delta(temp_dir: Path, base_sha: str) -> dict[str, str]:
     return delta
 
 
+_CLONE_CORRUPTION_MARKERS = (
+    "bad object", "corrupt", "packfile", "missing blob", "missing tree",
+    "unable to read", "invalid object", "did not match", "loose object",
+)
+
+
+def _is_clone_corruption(detail: str) -> bool:
+    """stderr 含物件庫損壞特徵（而非網路錯誤）時回 True。"""
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _CLONE_CORRUPTION_MARKERS)
+
+
 class BaseBlobReadError(RuntimeError):
     """base 版本的檔案存在但讀取失敗（與「base 無此路徑」不同）。"""
 
     def __init__(self, sha: str, rel_path: str, stderr: bytes) -> None:
         detail = stderr.decode("utf-8", errors="replace").strip()
+        if _is_clone_corruption(detail):
+            action = (
+                "判定為暫存 clone 損壞（非網路問題，單純重跑通常無效）；"
+                "處置：以 GIT_CONFIG_COUNT 等環境變數關閉 gc.auto 與 "
+                "maintenance.auto 後重跑 sync-pull（見 tarrragon/claude#143）"
+            )
+        else:
+            action = "判定為網路錯誤；處置：確認網路與上游 remote 可達後重跑 sync-pull"
         super().__init__(
             f"無法讀取 base {sha[:12]} 的 {rel_path}（{detail}）；"
-            "處置：確認網路與上游 remote 可達後重跑 sync-pull，"
-            "本次未套用任何變更"
+            f"{action}，本次未套用任何變更"
         )
 
 
@@ -2753,12 +2784,6 @@ def _sync_with_backup(
     bumping = bump_target is not _BUMP_NOT_SET
     pinned_version = bump_target if bumping else read_pinned_version(claude_dir)
     target_sha = resolve_target_ref(temp_dir, pinned_version)
-    if bumping:
-        update_pinned_version(claude_dir, pinned_version)
-        print_color(
-            f"已更新 pinned_version 為 {pinned_version or PIN_LATEST}",  # i18n-exempt
-            "green",
-        )
     head_sha = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir)).stdout.strip()
     if target_sha != head_sha:
         print_color(
@@ -2783,7 +2808,8 @@ def _sync_with_backup(
     )
     use_full_overlay = should_use_full_overlay(claude_dir, base_reachable)
 
-    # 上游腳本較新時改由上游腳本執行本輪（在任何寫入 .claude/ 之前）
+    # 上游腳本較新時改由上游腳本執行本輪（在任何寫入 .claude/ 之前，
+    # 含 --bump 的 pin：交棒後的上游腳本會把先寫入的 pin 判為未提交變更而中止）
     rerun, script_note = _decide_script_upgrade(
         temp_dir, base_sha, base_reachable, preserve, claude_dir
     )
@@ -2791,6 +2817,14 @@ def _sync_with_backup(
         sys.stderr.write(f"[sync-pull] {script_note}\n")
     if rerun:
         raise ScriptUpgradeRerun(target_sha, backup_dir)
+
+    # 確定由本腳本執行本輪後才寫入 pin（交棒時由上游腳本自行寫入）
+    if bumping:
+        update_pinned_version(claude_dir, pinned_version)
+        print_color(
+            f"已更新 pinned_version 為 {pinned_version or PIN_LATEST}",  # i18n-exempt
+            "green",
+        )
 
     # base SHA 是否可推進的判定旗標。full overlay 路徑無三方合併衝突
     # 概念（其 preserved_conflicts 是本地獨有檔轉存，非上游內容遺失），維持

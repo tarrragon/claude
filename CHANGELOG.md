@@ -1,3 +1,36 @@
+## [3.5.1] - 2026-11-21
+
+3.5.0 承諾未達成的修補，來源是 graph_project_docs_manager 的 3.5.0 影響量測回報。
+
+### 對 consumer 的影響
+
+#### 修正
+- **sync-pull 的暫存 clone 關閉 git auto gc**（tarrragon/claude#143）：暫存 clone 以 partial clone 逐檔讀取 base blob，每讀一次多一個 pack，累積約 50 個 pack 會觸發 auto gc 使 clone 損壞，要讀的 base blob 超過約 48 個的升級必定整批回滾。現在暫存 clone 一律關閉 `gc.auto` 與 `maintenance.auto`。base blob 讀取失敗的訊息也改為區分網路錯誤與 clone 損壞，損壞時不再只建議重跑。結束碼不變。
+- **sync-pull 帶 `--bump` 遇上游腳本自我升級時不再中止**（tarrragon/claude#144）：原本本地腳本先寫入 `sync-base.json` 的 pin，才判定要交棒給較新的上游腳本，交棒後的上游腳本把這筆 pin 當成 `.claude` 的未提交變更而中止。現在先判定是否交棒，確定由本地腳本執行時才寫 pin；交棒時由上游腳本自己寫。
+- **spec 事件流標定檢核的輸出不再標示「非阻擋」**（spec 1.10.2，tarrragon/claude#107）：`check_domain_coverage.py --check-event-flow-labeling` 有缺口時一直是 exit 1，但輸出與說明寫「提醒，非阻擋」。現在輸出、說明與 SKILL.md 都改寫為「有缺口時 exit 1」。結束碼不變。
+
+#### 放寬（附兩項收緊）
+- **spec 的 `check_api_surface.py` 讀 `has_functional_requirements` 宣告**（spec 1.10.1，tarrragon/claude#107）：原本的失敗訊息建議宣告 `has_functional_requirements: false`，但腳本不讀這個宣告，照做仍 exit 1。現在與 `check_domain_coverage.py` 一致：
+
+  | 輸入 | 改動前 | 改動後 |
+  |---|---|---|
+  | 宣告 false，且沒有 FR 標題 | exit 1 | exit 0，輸出明示「未執行 API surface 比對」，不印通過 |
+  | 宣告 false，但有 FR 標題 | 照常比對 | exit 1，列出矛盾的行 |
+  | 宣告值不是布林，或重複宣告 | 照常比對（不讀宣告） | exit 1 |
+  | 未宣告且沒有 FR 標題 | exit 1 | 不變 |
+
+  第 2、3 列屬收緊：原本照常比對，全部覆蓋時 exit 0，現在 exit 1。遷移：宣告 false 的 SPEC 若仍有 FR 標題，擇一修正：拿掉宣告，或把標題改成不是 FR 的寫法。宣告值須為小寫的 `true` 或 `false`，且只能宣告一次。
+
+#### 其他
+- worktree 1.11.0、spec 1.10.0 的版號補升：3.5.0 已含兩者的行為變更，但 v3.5.0 tag 內仍是舊版號，本版起一致。spec SKILL.md 另拿掉兩處專案專屬的引用。
+
+### 遷移步驟
+
+由 3.5.0 升級時，本地的 3.5.0 腳本發現上游的 `sync-claude-pull.py` 較新，會交棒給 3.5.1 的腳本，由它重新 clone 並執行整輪合併（stdout 印「上游 sync-claude-pull.py 已更新」）。所以 #143 的修正在這次升級就生效。#144 不同：3.5.0 的腳本在交棒前就寫入 pin，這次升級帶 `--bump` 仍會中止。本地版本看 `.claude/VERSION`。
+
+1. `.claude/VERSION` 是 3.5.0，而且帶 `--bump` 拉取：拉取會在交棒後中止，中止後工作區只剩 `.claude/sync-base.json` 的 pin 變更。處置：先單獨 commit `.claude/sync-base.json`，再跑一次不帶旗標的 `/sync-pull`。這一步與 sync-pull.md〈pull 後檢查清單〉第 4 步「sync-base.json 與 delta 在同一個 commit」衝突，屬本次升級的例外。升到 3.5.1 之後，下一次升級不需要這一步。
+2. 本地 `sync-claude-pull.py` 有本地修改，或列在 `.claude/sync-preserve.yaml`：腳本不交棒（stderr 印一行原因），由本地 3.5.0 腳本執行整輪，#143 的修正這次不生效。拉取中途出現「無法讀取 base」並整批回滾時，在同一行命令前加上環境變數重跑（只對這一行生效），原本帶的旗標照帶：`GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=gc.auto GIT_CONFIG_VALUE_0=0 GIT_CONFIG_KEY_1=maintenance.auto GIT_CONFIG_VALUE_1=false python3 ./.claude/scripts/sync-claude-pull.py`。兩種情況同時成立時，先依本步驟帶環境變數拉取，中止後再依第 1 步處置。
+
 ## [3.5.0] - 2026-11-21
 
 ### 對 consumer 的影響
