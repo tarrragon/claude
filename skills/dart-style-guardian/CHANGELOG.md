@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.14.0（2026-11-26）— 顏色規則從單一專案的主張改為跨專案通用的原則。起因：Book Overview APP 的 UI 改版（色票對齊擴充功能、錯誤紅與警告分開、全部直角、暗色主題），舊正文的「Flat Design 2.0／三色系統／專案不用紅色」與 `#2196F3` 色票表會把新寫法報成違規、把錯誤導向橘色。`SKILL.md`〈Core Principles〉改為〈Design Principles〉（單一來源、語意 token 優先於 primitive、顏色跟著主題、錯誤與警告分開、WCAG AA 對比），〈Color System〉改為依用途挑語意 token 的表，〈Border Radius System〉補直角設計用 `BorderRadius.zero`，〈Violation 1〉補從主題取語意 token 的寫法，〈Quick Reference Card〉的成功／錯誤／警告改指 `success`／`error`／`warning`，移除 Flat Design 外部連結。`references/color-system.md` 移除專案色票（primary／positive／negative 色階、藍色派生陰影與分隔色），改為〈兩層 token〉〈依用途挑 token〉〈規則〉〈Migration Guide〉；〈顏色歸類判準〉由 primary／positive／negative 改為 error／warning／success，判準仍是「元件本身傳達的狀態，不是業務後果」，三段範例與驗證問句同步改寫；〈Theme 與 Token 判準〉保留，附註的範例由 `positive` 改為 `warning`。掃描腳本與 hook 不變。
+
 **Version**: 1.13.1（2026-11-14）— `scripts/style_checker.py` 的 i18n 規則修正漏報：`Text('...')` 的常數排除原本只看開頭字元，大寫開頭的 UI 文字（如 `'Save'`、`'Sign In'`）全被當成常數放行。改為整串錨定，字串全由大寫字母、數字、底線組成才放行；全大寫短字（如 `'OK'`）與常數同形，刻意維持放行，網址與版本號的排除不變。`test_style_checker.py` 補大寫開頭 UI 文字必報、常數形態維持放行的對照案例。
 
 **Version**: 1.13.0（2026-11-03）— 專案校準檔 `dart-style-guardian.json` 遷至 `.claude/project-integration/`。`scripts/style_checker.py` 先讀新位置，找不到時改讀舊位置並輸出遷移提示，舊位置的專案不必同步搬檔。SKILL.md 與 `references/i18n-guidelines.md` 的路徑同步更新；`test_style_checker.py` 補兩個案例：只有舊位置時讀舊檔並提示，新舊並存時讀新檔且不提示。

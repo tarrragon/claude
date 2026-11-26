@@ -2,7 +2,7 @@
 name: dart-style-guardian
 description: "Dart／Flutter 專案樣式與文字的執法工具：掃出裸色碼、裸間距、裸字級、裸圓角與寫死文字，指出各自該改用哪個 token 或 i18n key，並以 PostEdit hook 擋下新增違規。觸發詞：裸值、硬編碼顏色、寫死文字、樣式違規、style guardian、token 沒用到、i18n 漏翻。Do NOT use for 建立 token 體系（用 foundation-design）或元件契約設計（用 component-contract-design）。"
 metadata:
-  version: 1.13.1
+  version: 1.14.0
   category: ui-design
 ---
 
@@ -44,7 +44,7 @@ uv run .claude/skills/dart-style-guardian/scripts/style_checker.py scan lib/
 
 | 約束類別 | 正文速查 | 完整規範 | 什麼時候要讀完整規範 |
 |---------|---------|---------|-------------------|
-| 顏色 | 〈Color System〉 | `references/color-system.md` | 要新增色階、或判不出某個顏色該歸 primary／positive／negative 哪一類 |
+| 顏色 | 〈Color System〉 | `references/color-system.md` | 要新增色階、判不出某個顏色該用哪個語意 token（例如錯誤還是警告），或要讓顏色跟著亮暗主題切換 |
 | 間距 | 〈Spacing System〉 | `references/spacing-system.md` | 需要的值不在〈Spacing Scale〉的八階上，要判斷是該取近似值還是該加一階 |
 | 字級 | 〈Typography System〉 | `references/typography-system.md` | 需要的值不在〈Type Scale〉離散階上，要判斷是該取近似值還是該加一階；或要加響應式字級、新字重，處理跨形態的字級縮放 |
 | 圓角 | 〈Border Radius System〉 | 無獨立 reference，正文即全部 | — |
@@ -63,15 +63,17 @@ uv run .claude/skills/dart-style-guardian/scripts/style_checker.py scan lib/
 
 ## Core Principles
 
-### Design Philosophy: Flat Design 2.0 + Monochrome System
+### Design Principles
 
-| Principle | Description | Source |
-|-----------|-------------|--------|
-| Minimalism | Clean, uncluttered layouts | Flat Design |
-| 2D Styling | Simple, flat shapes without 3D effects | Flat Design |
-| Subtle Shadows | Shadows hint at interactivity (Flat 2.0) | Material Design |
-| Monochrome | Primarily use different saturations of blue | Project Design Spec |
-| Three-Color System | Blue (primary) + Green (positive) + Orange (negative) | Project Design Spec |
+偵測與修正建議跨專案通用；每個專案的視覺方向（色票、形狀、深度表達）由該專案的設計文件決定，本 skill 不替專案選風格。專案專屬的色票與取用方式放在專案的落地層（`project-integration/`）。
+
+| Principle | Description |
+|-----------|-------------|
+| Single source of truth | 顏色、間距、字級、圓角只在 design system 定義一次，畫面引用 token |
+| Semantic over primitive | 畫面引用語意 token（surface、onSurface、error、warning…），不直接引用色階或色值 |
+| Theme-aware | 顏色從當前主題取（例如掛在 ThemeData 的 `ThemeExtension`，經 `context` 存取），亮暗主題才會一起切換；`static const` 的色值只當 primitive |
+| Error ≠ warning | 錯誤與警告用不同的 token，畫面分得出失敗與提醒 |
+| Contrast | 文字 4.5:1、非文字圖形 3:1（WCAG 2.1 AA），亮暗兩組都要達標 |
 
 ### Key Files
 
@@ -90,41 +92,25 @@ uv run .claude/skills/dart-style-guardian/scripts/style_checker.py scan lib/
 
 ## Color System
 
-### Primary Color (Blue, 90% usage)
+寫死的顏色（`Colors.*`、`Color(0x…)`）一律換成語意 color token。依**用途**挑 token，不是依色相：
 
-| Hardcoded | UIColors | Purpose | Hex |
-|-----------|----------|---------|-----|
-| `Colors.blue` | `UIColors.primary` | Primary buttons | #2196F3 |
-| `Color(0xFF2196F3)` | `UIColors.primary` | Primary buttons | #2196F3 |
-| `Colors.blue[50]` | `UIColors.primaryLightest` | Background blocks | #E3F2FD |
-| `Colors.blue[100]` | `UIColors.primaryLight` | Secondary blocks | #BBDEFB |
-| `Colors.blue[300]` | `UIColors.primaryMedium` | Interactive elements | #64B5F6 |
-| `Colors.blue[700]` | `UIColors.primaryDark` | Selected states | #1976D2 |
-| `Colors.blue[900]` | `UIColors.primaryDarkest` | Emphasis text | #0D47A1 |
+| 用途 | 語意 token（示意名稱） |
+|------|----------------------|
+| 頁面底 / 面板 / 卡片 | `UIColors.background` / `UIColors.panel` / `UIColors.surface` |
+| 主要文字 / 次要文字 / 弱文字 | `UIColors.onBackground` / `UIColors.onSurface` / `UIColors.onSurfaceMuted` |
+| 焦點、連結、進度 | `UIColors.primary` |
+| 主動作的鍵面、選中反白 | `UIColors.primaryStrong` |
+| 失敗、錯誤、刪除 | `UIColors.error` / `UIColors.errorContainer` / `UIColors.onErrorContainer` |
+| 提醒、注意、權限未授予 | `UIColors.warning` / `UIColors.warningContainer` / `UIColors.onWarningContainer` |
+| 成功、完成 | `UIColors.success` / `UIColors.successContainer` / `UIColors.onSuccessContainer` |
+| 分隔線、框線 | `UIColors.border` / `UIColors.borderStrong` |
 
-### Positive Color (Green, 5% usage)
+- 錯誤與警告不共用顏色。
+- 資料分類（狀態、等級、類型）用專案定義的分類色，不借用錯誤或警告色。
+- 專案有亮暗兩個主題時，語意 token 要從當前主題取（`ThemeExtension`），不從 `static const` 取；`static const` 的寫法在暗色主題不會切換。
+- 跟主題無關的固定色（例如相機觀景窗的深色底）可以用 primitive，但要寫註解說明。
 
-| Hardcoded | UIColors | Purpose |
-|-----------|----------|---------|
-| `Colors.green` | `UIColors.positive` | Success, confirmation |
-| `Colors.green[100]` | `UIColors.positiveLight` | Success backgrounds |
-| `Colors.green[700]` | `UIColors.positiveDark` | Success emphasis |
-
-### Negative Color (Orange, 5% usage)
-
-| Hardcoded | UIColors | Purpose |
-|-----------|----------|---------|
-| `Colors.orange` | `UIColors.negative` | Warning, error |
-| `Colors.amber` | `UIColors.negative` | Warning, caution |
-| `Colors.red` | `UIColors.negative` | **Project does NOT use red** |
-
-### Background Colors
-
-| Hardcoded | UIColors | Purpose |
-|-----------|----------|---------|
-| `Colors.white` | `UIColors.surfaceLight` | Card backgrounds |
-| `Colors.grey[50]` | `UIColors.backgroundLight` | Page backgrounds |
-| `Colors.grey[600]` | `UIColors.onSurfaceMuted` | Muted text |
+判不出該用哪個 token、或要新增色階時，讀 `references/color-system.md`。
 
 ---
 
@@ -197,6 +183,8 @@ TextStyle(fontSize: 14.sp)   // 尾綴錯誤，非本專案的縮放機制
 | `BorderRadius.circular(20)` | `BorderRadius.circular(UIBorderRadius.xl)` |
 | `BorderRadius.circular(999)` | `BorderRadius.circular(UIBorderRadius.circular)` |
 
+專案的設計若是全部直角，直接寫 `BorderRadius.zero`，不必取 token。
+
 ---
 
 ## Internationalization (i18n)
@@ -220,6 +208,8 @@ Container(color: Color(0xFF2196F3))
 
 // Fix
 Container(color: UIColors.primary)
+// 有亮暗主題時，從掛在主題上的語意 token 取（存取子名稱依專案而定）
+Container(color: Theme.of(context).extension<UIColors>()!.primary)
 ```
 
 ### Violation 2: Hardcoded Spacing
@@ -252,6 +242,7 @@ BorderRadius.circular(8)
 
 // Fix
 BorderRadius.circular(UIBorderRadius.sm)
+BorderRadius.zero // 直角設計
 ```
 
 ### Violation 5: Hardcoded Text
@@ -361,9 +352,9 @@ The style checker is integrated into PostEdit Hook:
 `references/color-system.md`、`references/spacing-system.md`、`references/typography-system.md`、`references/i18n-guidelines.md`。
 
 ### External Resources
-- [Flat Design Explained - MasterClass](https://www.masterclass.com/articles/flat-design-explained)
-- [Best Practices for Flat Design - Usersnap](https://usersnap.com/blog/flat-design/)
 - [Material Design 3 Color System](https://m3.material.io/styles/color/overview)
+- [WCAG 2.1 Contrast (Minimum)](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html)
+- [Flutter ThemeExtension](https://api.flutter.dev/flutter/material/ThemeExtension-class.html)
 
 ---
 
@@ -374,8 +365,9 @@ The style checker is integrated into PostEdit Hook:
 | Type | Hardcoded | Configuration |
 |------|-----------|---------------|
 | **Color** | `Colors.blue` | `UIColors.primary` |
-| **Success** | `Colors.green` | `UIColors.positive` |
-| **Warning** | `Colors.orange` | `UIColors.negative` |
+| **Success** | `Colors.green` | `UIColors.success` |
+| **Error** | `Colors.red` | `UIColors.error` |
+| **Warning** | `Colors.orange` | `UIColors.warning` |
 | **Spacing** | `16` | `UISpacing.md` |
 | **Font** | `14` | `UIFontSizes.bodyMedium` |
 | **Radius** | `8` | `UIBorderRadius.sm` |
