@@ -383,6 +383,17 @@ def _run_rev_parse(target_dir: str, *flags: str) -> Optional[List[str]]:
     return result.stdout.splitlines()
 
 
+def _resolve_rev_parse_paths(base_dir: str, *flags: str) -> Optional[List[str]]:
+    """`git -C base_dir rev-parse <flags>`，每行以 base_dir 為基準 resolve 成絕對路徑。
+
+    輸出行數與 flags 不符（含舊版 git 多印選項字面）視為失敗回傳 None。
+    """
+    lines = _run_rev_parse(base_dir, *flags)
+    if not lines or len(lines) != len(flags):
+        return None
+    return [os.path.normpath(os.path.join(base_dir, line)) for line in lines]
+
+
 # 目標歸屬（_classify_target 的回傳值第一欄）
 TARGET_OTHER_REPO = "other"
 TARGET_LINKED_WORKTREE = "linked"
@@ -407,10 +418,12 @@ def _classify_target(
         logger.info("目標 repo 解析: dir=%s 含 shell 展開語法，無法解析，視為主 repo", target_dir)
         return TARGET_MAIN_REPO, None
     base = target_dir if os.path.isabs(target_dir) else os.path.join(cwd, target_dir)
-    flags = ("--path-format=absolute", "--show-toplevel", "--git-common-dir")
-    target = _run_rev_parse(base, *flags)
-    main = _run_rev_parse(str(project_root), *flags)
-    if not target or len(target) < 2 or not main or len(main) < 2:
+    # 不用 --path-format=absolute：需 git 2.31，舊版把選項原樣印成第一行（rc=0）使欄位錯位。
+    # --show-toplevel 恆為絕對；--git-common-dir 可能相對，以 -C 目錄為基準 resolve。
+    flags = ("--show-toplevel", "--git-common-dir")
+    target = _resolve_rev_parse_paths(base, *flags)
+    main = _resolve_rev_parse_paths(str(project_root), *flags)
+    if not target or not main:
         logger.info("目標 repo 解析: dir=%s 解析失敗，視為主 repo（fail-closed）", target_dir)
         return TARGET_MAIN_REPO, None
     same_top = os.path.realpath(target[0]) == os.path.realpath(main[0])

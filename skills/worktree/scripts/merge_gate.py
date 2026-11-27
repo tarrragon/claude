@@ -48,9 +48,11 @@ from lib.flutter_launcher import launch_argv  # noqa: E402
 
 try:
     from .merge_cas import BatchHooks, BatchItem, CheckResult, MergeOutcome
+    from .line_join_scan import warn_on_range
 except ImportError:
     # Fallback when running with scripts/ on sys.path (test 與直接執行情境)
     from merge_cas import BatchHooks, BatchItem, CheckResult, MergeOutcome
+    from line_join_scan import warn_on_range
 
 # 批次合併：一次候選含領導者最多這麼多張；環境變數 MERGE_GATE_BATCH_MAX 覆寫，設 1 即停用批次
 BATCH_MAX_DEFAULT = 4
@@ -1397,6 +1399,7 @@ class MergeGate:
         paths = changed_paths_between(self.repo, expected_old, commit)
         if paths is None:
             return CheckResult(False, "無法計算合併改動範圍")
+        warn_on_range(self.repo, expected_old, commit)  # 接行偵測：預設只警告，不影響結果
         flutter = has_flutter_marker(self.repo, commit)
         _warn_unmapped(paths, decl, flutter)
         if not needs_gate(paths, decl, flutter):

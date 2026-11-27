@@ -29,7 +29,7 @@ SKELETON_TEMPLATE_NORMAL = """Ticket: {ticket_id}
 讀取 ticket：`ticket track full {ticket_id}`
 認領：`ticket track claim {ticket_id} --as {agent_name}`
 依 Context Bundle 執行流程。
-測試與其結果為後續步驟前置的命令一律前景執行（加 timeout、`| tail`），run_in_background 僅限真正可並行的旁路任務。
+測試與其結果為後續步驟前置的命令一律前景執行（設 Bash 工具的 timeout 參數，不加 timeout 指令前綴；輸出加 `| tail`），run_in_background 僅限真正可並行的旁路任務。
 發現 prompt 與 ticket/框架正本衝突，停手寫入 ticket NeedsContext 上報，不自行選邊。
 遇阻立即停下回報，禁繞過 Hook。
 {closing}"""

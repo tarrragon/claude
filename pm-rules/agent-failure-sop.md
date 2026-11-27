@@ -82,6 +82,26 @@ git branch | grep feat/
 | 回合耗盡 | 代理人報告截斷，部分完成 | 簡化 prompt（減少讀取範圍），重新派發 |
 | 改壞既有測試 | 舊測試 FAIL | 回退變更，在 prompt 加入「不可修改測試」約束，重新派發 |
 | 背景代理人超時 | 長時間無回應 | 用 SendMessage 催促摘要，或取消後重新派發；催促前先確認 worktree 仍在，判準見 `.claude/references/agent-dispatch-template.md`〈阻塞回報後：重派新 agent 優先於 SendMessage 恢復〉 |
+| 派發被拒：Agent type not found | Agent 工具回傳 `Agent type '<name>' not found`，代理人未啟動 | 依下節〈派發被拒：Agent type not found（強制）〉停手回報，不改派 |
+
+---
+
+## 派發被拒：Agent type not found（強制）
+
+**收到 `Agent type '<name>' not found` 時，停手：不改派 general-purpose 或其他代理人，把錯誤記入票面 NeedsContext，並回報主控或用戶。**
+
+**適用時點**：不限 session 啟動時。先前派得出去的代理人，在同一 session 中途也可能變成 not found，同樣適用本節。啟動時核對過清單完整，不代表之後一直派得到。
+
+**Why**：這個錯誤可能來自 session 層級的載入狀態，不一定是定義檔有問題。實測（2026-11，Claude Code 2.1.329～2.1.331）同一 repo、同一版本的 session，有的能派全部專案代理人，有的只看得到其中 4～6 個，重開 session 後可能恢復也可能再度殘缺。另有一次在 session 執行中途收到清單更新：沒有 /clear、/compact 或重開，原本可派的專案代理人只剩 5 個，兩小時前派得出去的代理人變成不可用。
+
+**Consequence**：改派之後派發看起來成功，但代理人定義的授權（tools 清單）、偏好與身份都不在，分工靜默失效，事後也難從產出看出來。
+
+**Action**：
+
+1. 停止本次派發，不換 `subagent_type` 重送。
+2. 在票面 NeedsContext 記錄被拒的代理人名稱與逐字錯誤訊息。
+3. 核對本 session 的可派清單是否與 `.claude/agents/*.md` 的 frontmatter `name` 一致；判讀成因見 `.claude/skills/system-misjudgment/references/agent-type-not-found.md`。
+4. 回報主控或用戶，由對方決定是否請用戶重開 session；本 session 不自行改用其他代理人。
 
 ---
 
@@ -146,7 +166,9 @@ git branch | grep feat/
 
 ---
 
-**Last Updated**: 2026-10-08
+**Last Updated**: 2026-11-25
+**Version**: 1.2.1 — 〈派發被拒：Agent type not found（強制）〉補「適用時點」：session 中途掉清單（先前派得出去、後來 not found）同樣適用，啟動核對完整不保證之後可派；Why 補中途掉清單的實測
+**Version**: 1.2.0 — 新增〈派發被拒：Agent type not found（強制）〉：收到此錯誤時停手、記 NeedsContext、核對可派清單、回報，不改派 general-purpose；〈失敗類型與處理〉補一列路由。依據：2026-11 實測，同一 repo 的 session 啟動時可派清單約一半機率殘缺
 **Version**: 1.1.0 — 「背景代理人超時」列補路由：SendMessage 催促前先確認 worktree 仍在，指向恢復前判準段落
 **Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（拆分；原檔 v3.7.0 L162-L292）
 **Source**: PC-045 + PC-050 + PC-070 教訓疊加

@@ -100,7 +100,7 @@ where:
     - src/storage/adapters/tag-storage-adapter.js
 ```
 
-預估時間：3 分鐘。1 個檔案、機械性修改。
+預估時間：3 分鐘。1 個檔案、每個 catch 區塊照同一個寫法修改，不需要判斷。
 
 ### Ticket D：ID 生成防碰撞
 

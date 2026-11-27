@@ -26,6 +26,10 @@ LEGACY_STATE_FILENAME = ".sync-state.json"
 BASE_SHA_FIELD = "last_synced_base_sha"
 PINNED_VERSION_FIELD = "pinned_version"
 TRACKED_FIELDS = (BASE_SHA_FIELD, PINNED_VERSION_FIELD)
+# pull 取得 base 當下本地 HEAD 的 commit SHA。push 以 merge-base --is-ancestor 判斷
+# 刪除 commit 是否早於取得 base。新欄位無舊位置可遷移，故不列入 TRACKED_FIELDS。
+BASE_ACQUIRED_HEAD_FIELD = "base_acquired_local_head"
+WRITABLE_FIELDS = TRACKED_FIELDS + (BASE_ACQUIRED_HEAD_FIELD,)
 
 
 def _read_json_dict(path: Path) -> dict:
@@ -88,7 +92,7 @@ def migrate_legacy_fields(claude_dir: Path) -> list[str]:
 
 def write_sync_base_field(claude_dir: Path, field: str, value: str) -> None:
     """寫入 base 或 pin；先遷移舊位置的兩欄位，再覆寫指定欄位。"""
-    if field not in TRACKED_FIELDS:
+    if field not in WRITABLE_FIELDS:
         raise ValueError(f"非 sync-base 欄位: {field}")
     migrate_legacy_fields(claude_dir)
     store_path = claude_dir / SYNC_BASE_FILENAME

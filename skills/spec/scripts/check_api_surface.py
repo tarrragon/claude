@@ -3,7 +3,7 @@
 
 背景：一次規格覆核發現某 FR 曾寫「analytics API 回 501」卻無 endpoint
 路徑定義，缺口到派發實作才暴露。本檢核作為 /spec validate Layer 1 的擴充規則，
-在規格撰寫階段機械性掃描此類缺口。
+在規格撰寫階段由腳本掃描出此類缺口。
 """
 
 import argparse

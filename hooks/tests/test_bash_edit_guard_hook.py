@@ -866,12 +866,19 @@ class TestTierPrecedence:
 
 
 class TestSharedExtractorUnavailable:
-    """共用抽取模組載入失敗時退回現行行為（fail-open），並寫入日誌。"""
+    """共用抽取解析異常時退回現行行為（fail-open），並寫入日誌；模組層取用不可為 None。"""
+
+    def test_extractor_bound_at_module_level(self):
+        """抽取函式以一般 import 綁定（原 importlib 載入失效會翻紅的鎖定）。"""
+        assert callable(getattr(hook_module, "iter_checkout_write_targets", None))
 
     def test_fallback_to_legacy(self, checkout, monkeypatch, capsys, caplog):
         import logging
 
-        monkeypatch.setattr(hook_module, "_load_boundary_guard", lambda: None)
+        def _boom(*_a, **_k):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(hook_module, "iter_checkout_write_targets", _boom)
         with caplog.at_level(logging.INFO):
             _, hso = _run_in(monkeypatch, capsys, "sed -i '' 's/a/b/' " + _TICKET_MD, checkout)
         assert "permissionDecision" not in hso

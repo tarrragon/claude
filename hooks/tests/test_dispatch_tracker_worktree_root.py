@@ -78,3 +78,28 @@ def test_git_failure_falls_back_and_reports(repos, capsys, monkeypatch):
     descs = [d["agent_description"] for d in dt.get_active_dispatches(wt)]
     assert descs == ["worktree-entry"]
     assert "降級" in capsys.readouterr().err
+
+
+def _fake_old_git(common_dir_output: str, seen: list):
+    """模擬 git 2.30：不認得的 --xxx 選項原樣印成一行（rc=0）。"""
+    def fake_run(cmd, *a, **kw):
+        seen.append(cmd)
+        lines = [common_dir_output if arg == "--git-common-dir" else arg
+                 for arg in cmd[cmd.index("rev-parse") + 1:]]
+        return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(lines) + "\n", stderr="")
+    return fake_run
+
+
+@pytest.mark.parametrize("git_output", ["../main/.git", "ABS"])
+def test_resolve_shared_root_relative_and_absolute_output(tmp_path, monkeypatch, git_output):
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".git").write_text("gitdir: x\n")
+    main = tmp_path / "main"
+    out = str(main / ".git") if git_output == "ABS" else git_output
+    seen: list = []
+    monkeypatch.setattr(dt.subprocess, "run", _fake_old_git(out, seen))
+    dt.reset_cache()
+    assert dt.resolve_shared_root(wt) == main
+    assert all("--path-format=absolute" not in c for c in seen)
+    dt.reset_cache()

@@ -155,6 +155,25 @@ SOP 詳見 `.claude/references/agent-dispatch-template.md`「tests/ 修改派發
 
 **Action**：4 步驟在 Re-center Protocol 之前先做一次；之後每次 commit 前再 `git status` 確認範圍。
 
+### 代理人可派清單比對（每次啟動都做）
+
+**每個 session 啟動後、派發任何自訂代理人之前，比對 Agent 工具的可派清單與 `.claude/agents/` 的定義；全部在清單中才算完整。** 已完整的 session 因其他理由重開，重開後同樣要比對。
+
+**Why**：同一 repo、同一版本的 session，啟動時的可派清單可能殘缺，且每次啟動彼此獨立（2026-11 實測，32 次啟動中殘缺 15 次，殘缺時只看得到 4～6 個專案代理人）。殘缺只能從清單本身看出來，定義檔與 hook 輸出都正常。
+
+**Consequence**：不比對就派發，會在派發時才收到 `Agent type ... not found`；若此時改派 general-purpose，代理人定義的授權、偏好與身份會靜默消失。
+
+**Action**：
+
+| 步驟 | 動作 |
+|------|------|
+| 1 | 由檔案推算期望清單（不寫死數字）：`for f in .claude/agents/*.md; do awk '/^---$/{n++; next} n==1 && /^name:/{sub(/^name:[ ]*/,""); print; exit}' "$f"; done \| sort`。範本檔以 frontmatter 的 `name`（如 `{language}-developer`）比對，不用檔名 |
+| 2 | 與本 session Agent 工具的可派清單逐一比對；期望清單的每個名稱都在可派清單中，判定完整 |
+| 3 | 不完整：列出缺少的名稱，請用戶重開 session（`/exit` 後重新啟動；`/clear` 不保證恢復），重開後從步驟 1 再比對。最多重開 3 次 |
+| 4 | 重開 3 次仍不完整：告知用戶，本 session 不派發自訂代理人，也不改派 general-purpose（`.claude/pm-rules/agent-failure-sop.md`〈派發被拒：Agent type not found（強制）〉），由用戶決定繼續重開或改在其他 session 執行 |
+
+**邊界：啟動時完整不保證之後可派。** 清單可能在 session 執行中途縮小，期間不需要 `/clear`、`/compact` 或重開（2026-11 實測：一個 session 中途由全數可派縮為 5 個）。中途收到 not found 時，不重做本節比對來找替代代理人，直接依 agent-failure-sop 同名節停手回報；判讀成因見 `.claude/skills/system-misjudgment/references/agent-type-not-found.md`。
+
 ---
 
 ## Re-center Protocol
@@ -181,7 +200,8 @@ SOP 詳見 `.claude/references/agent-dispatch-template.md`「tests/ 修改派發
 
 ---
 
-**Last Updated**: 2026-10-15
+**Last Updated**: 2026-11-25
+**Version**: 1.3.0 — 〈Session-start 全量清點〉下新增〈代理人可派清單比對（每次啟動都做）〉：期望清單由 `.claude/agents/*.md` 的 frontmatter `name` 推算，與可派清單逐一比對；不完整時請用戶重開，最多 3 次，仍不完整則不派自訂代理人也不改派；另寫明啟動時完整不保證之後可派。依據：2026-11 實測。
 **Version**: 1.2.0 — 〈產品程式碼與測試的寫入邊界〉companion doc 路徑由 `tickets/` 下改為版本目錄的 `companions/`，並補三明示（`tickets/` 受 ticket 檔案守衛管轄，原路徑 Write 被擋）。
 **Version**: 1.1.0 — 〈tests/ 修改派發 SOP〉加註已被 `.claude/pm-rules/parallel-dispatch.md`〈禁止在共用主工作樹切換或建立分支（強制）〉取代，改路由至〈派發位置判準（強制）〉（框架 issue 101）。
 **Version**: 1.0.0 — 初始建立：承接 `rules/core/pm-role.md` 外移的 substance（職責邊界完整判準、行為循環執行細節、Caveat 判讀、Session-start 清點、Re-center Protocol）。外移依據 `rules/README.md`「自動載入預算原則」與 `references/auto-load-stub-conventions.md` 外移 SOP。

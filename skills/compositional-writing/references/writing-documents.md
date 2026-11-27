@@ -57,7 +57,7 @@ A document gains a second responsibility in the edit that adds a section, and ea
 
 ### Supplementary notes live next to their parent command
 
-操作型文件裡的先備知識（為什麼這個參數值得用）與環境陷阱（某個平台上同一條指令會靜默失敗）跟在它們所屬的指令旁邊——表格的用途欄、或緊跟指令的那一段。判斷問句是「讀者在讀到哪個位置時會需要這段資訊」，答案指向的位置就是它該放的地方。遊離的形態是參數的理由獨立成段（讀者掃表格時跳過它）、環境陷阱跟在無關的段落後面；成因是寫的時候想到什麼補什麼，而文件的讀者掃描式閱讀、不照順序讀每一段。見 [supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)。
+操作型文件裡的先備知識（為什麼這個參數值得用）與環境陷阱（某個平台上同一條指令會靜默失敗）跟在它們所屬的指令旁邊——表格的用途欄、或緊跟指令的那一段。判斷標準是讀者讀到哪個位置時會需要這段資訊，那個位置就是它該放的地方。遊離的形態是參數的理由獨立成段（讀者掃表格時跳過它）、環境陷阱跟在無關的段落後面；成因是寫的時候想到什麼補什麼，而文件的讀者掃描式閱讀、不照順序讀每一段。見 [supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)。
 
 ### Anti-patterns
 

@@ -10,7 +10,7 @@
 - **檔案路徑**: `.claude/hooks/bash-edit-guard-hook.py`
 
 > **現行行為（以 hook 檔頭為準，本文以下段落為初版記錄）**：寫入目標改由
-> `bash-write-boundary-guard-hook.py` 的共用抽取判定，涵蓋直譯器內嵌寫入、heredoc、
+> `lib/bash_write_targets.py`（與 `bash-write-boundary-guard-hook.py` 共用）的抽取判定，涵蓋直譯器內嵌寫入、heredoc、
 > 重導向、`awk -i inplace`、`ed`／`ex`、`sed -i`、`perl -pi`。目標為 ticket md 時擋下，
 > 改用 `ticket track` 子命令或 Edit；`docs/**`、`CLAUDE.md`、`CHANGELOG.md` 只送警告；
 > 其餘路徑只對 `sed -i`／`perl -pi` 警告。下文「偵測模式」的五種樣式是初版設計，

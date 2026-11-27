@@ -49,6 +49,24 @@
 - 發生 1 次但影響大（阻擋 > 1 小時）→ 建議寫入規範
 - 純一次性問題 → 記錄在 error-pattern 即可
 
+### Step 2 補充：零派發盤點
+
+**規則**：連續兩個 minor 版本零派發的代理人，在版本回顧列出，並逐名判定 active、reserve 或退役。
+
+**Why**：名冊只增不減時，PM 要從全名冊挑人，選擇成本隨在冊人數增加；零派發的代理人佔著名額卻不被用。**Consequence**：沒有盤點規則，零派發者無限期留在名冊，且沒人知道它是還有用、還是沒被想起。**Action**：依下列步驟執行並把結果寫入〈版本檢討〉段。
+
+1. 取派發資料。兩個來源都要取：本 repo 的 `.claude/logs/agent-dispatch.jsonl`，以及 consumer 端的觀測（`tarrragon/claude` 上的 framework issue，以 `ticket` 或 `gh` 查近兩個 minor 的相關 issue）。
+2. 以 `.claude/agents/registry.yaml` 的 `agents` 為名冊，列出兩個 minor 內兩個來源都沒有派發紀錄的代理人。
+3. 對每名判定並更新 registry 的 `tier`：
+
+| 判定 | 條件 | 動作 |
+|------|------|------|
+| active | 有派發需求，只是這兩版沒遇到對應任務 | `tier: active` |
+| reserve | 專長有效但需求稀少 | `tier: reserve`，`index` 中保留，PM 預設不選 |
+| 退役 | 職責已被其他代理人涵蓋，或定義已 DEPRECATED | 自 registry `agents` 與 `index` 移除；定義檔依 `agent-definition-standard` 保留重定向 |
+
+**資料來源不可只看本 repo**：本 repo 沒有產品碼，TDD 階段與語言實作代理人在這裡不會被派，單看本 repo 紀錄會把它們全判成零派發。已為 `reserve` 的代理人重新被派發時，下次回顧改回 `active`。
+
 ### Step 3: 多視角審查檢討結論
 
 以 `/parallel-evaluation` 情境 F（結論審查）審查 Step 2 的分類與評估結果，審查三問聚焦：證據是否支撐「重複發生」的判定、是否漏列本版的經驗素材、目標文件的分類是否正確。
@@ -86,6 +104,7 @@ ticket create --version {目標版本} \
 - [ ] 本版本新增的 error-patterns 是否都有對應的防護規則？
 - [ ] 本版本重複出現的問題是否已寫入規範？
 - [ ] 代理人定義是否需要調整（觸發條件、職責邊界）？
+- [ ] 連續兩個 minor 零派發的代理人是否已列出並判定 active／reserve／退役（Step 2 補充）？
 - [ ] CLAUDE.md 是否反映最新的技術選型？
 - [ ] 測試策略是否需要根據失敗模式調整？
 
@@ -117,6 +136,8 @@ ticket create --version {目標版本} \
 
 ---
 
+**Last Updated**: 2026-11-25
+**Version**: 1.2.0 - 新增〈Step 2 補充：零派發盤點〉：連續兩個 minor 零派發的代理人在版本回顧列出並判定 active／reserve／退役，資料來源含本 repo 派發紀錄與 consumer 端觀測；檢查清單同步新增一列（350 S5）。
 **Last Updated**: 2026-11-09
 **Version**: 1.1.0 - 觸發時機改以 version-progression〈兩期〉〈版本生命週期〉為正本：條件改為版本契約必要的票（scope_blocker）全部終態、其餘未完成票去向已定，取代「所有功能 Ticket 完成」；流程新增 Step 3 parallel-evaluation 情境 F 審查檢討結論，產出寫入版本工作日誌主檔〈版本檢討〉段；改善 Ticket 改依凍結分流建在目標版本，不在本版完成（讓本版跑不起來者除外）。
 **Version**: 1.0.0 - 初版

@@ -2,7 +2,7 @@
 name: error-pattern
 description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯誤經驗和防護措施 (query), (2) 記錄新發現的錯誤模式和教訓 (add), (3) Ticket 開始前查詢歷史問題避免再犯, (4) 系統化管理錯誤學習經驗。Use when: user mentions error pattern, 錯誤模式, 教訓, 經驗記錄, 學習經驗, 防護措施, 錯誤紀錄, or needs to avoid recurring issues."
 metadata:
-  version: 1.10.0
+  version: 1.13.0
 ---
 
 # error-pattern SKILL
@@ -131,8 +131,21 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
    - 如何避免再次發生
    - 相關 Hook 或檢查機制建議
 
+5b. **標示 carrier**（不佔用後續步驟編號）：frontmatter 填 `carrier`，標示這條改進該落在哪個載體。依序問三問：
+   - 規則：換任何執行者、任何語言，這條都要守嗎 -> `rule`
+   - SKILL：由預設代理人執行這件事時，也需要這份知識嗎 -> `skill:<名稱>`；語言專屬寫法 -> `lang-pack:<skill>/<語言>`
+   - 代理人：這段知識只在派這個代理人時才該生效嗎 -> `agent:<名稱>`
+   - 三問都不成立 -> `none`（只當案例）
+
+   值域：`rule`、`skill:<名稱>`、`lang-pack:<skill>/<語言>`、`agent:<名稱>`、`none`。存量 pattern 不回填。檢查：`uv run --script .claude/skills/error-pattern/lib/carrier_audit.py` 列出 carrier 已填、但目標載體文字不含該 pattern ID 的條目（有缺口 exit 1）。
+
 6. **關聯 Ticket**
    - 輸入相關 Ticket 編號
+
+6b. **可攜性判定**（不佔用後續步驟編號，須在步驟 7 配號之前）：判準沿用 `quality-baseline` 規則 6，替換專案名稱與檔案路徑後仍有意義才可攜。
+   - **不可攜**：改寫到本專案的 `docs/`（分流依據見 `.claude/references/sync-mechanism-guide.md`〈5.3〉），不配號、不寫入 `.claude/`，步驟 7 以後全部不執行。
+   - **可攜**：繼續步驟 7；步驟 10 產生收錄請求草稿。
+   - 本專案的 `CLAUDE.md` 宣告為框架主控方時（角色判定見 `.claude/skills/framework-issue/references/escalation-flow.md`〈角色：主控方與 consumer〉），pattern 直接進 canonical，不執行步驟 10。判斷不了角色時寫 NeedsContext 上報，不自訂偵測方式。
 
 7. **原子分配並保留來源前綴 ID**（跨專案共享框架必用，走原子版入口）
    - 呼叫 allocator 的 `allocate_and_reserve_pattern_id`：在鎖保護下把「決定編號」與
@@ -190,8 +203,9 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
        兩線同期各新增列不會衝突（見 `.claude/error-patterns/README.md`〈新增錯誤模式流程〉）。
    - **接續動作**：拿到 `stub_path` 後，立即以 **Edit**（非 Write 新檔）把步驟
      2-6 蒐集的症狀/根因/解決方案/預防措施/關聯 Ticket 內容填入該檔案，取代佔位
-     內容；填妥後可依慣例將檔名改為 `<CATEGORY>-<PROJ>-NNN-<slug>.md`（純索引可
-     讀性，非必要）。**禁止**另外 Write 建立第二個新檔——編號已綁定 `stub_path`
+     內容。佔位檔名（無 slug）即最終檔名，填妥後不改名：佔位檔尚未被 git 追蹤，
+     不能用 `git mv`，Bash 的 `mv` 會被 `bash-write-boundary-guard` 擋下。
+     **禁止**另外 Write 建立第二個新檔——編號已綁定 `stub_path`
      這個實體檔案，另建新檔會留下未清理的 reserved 空殼。
    - **非 POSIX 降級**：`fcntl`（POSIX 標準庫）不可用時，鎖機制輸出 stderr 警告
      並以無鎖模式續行配號（佔位檔仍會建立，僅失去並行防護）；此環境下應改為
@@ -252,9 +266,14 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
    - 與步驟 8 無順序依賴，但須在回報完成前執行。與系統行為判讀無關的 pattern（純流程、文件、命名類）略過本步驟。
    - incident-responder 結論與實機驗證出現的誤判同樣適用，見 `system-misjudgment` skill 的〈持續更新〉。
 
+10. **產生收錄請求草稿**（僅 consumer 的可攜 pattern；步驟 8 完成、索引列已寫入後執行）
+   - 執行：`uv run --script .claude/skills/error-pattern/lib/intake_draft.py .claude/error-patterns/<目錄>/<檔名>.md`。草稿印到 stdout，格式唯一定義處是 `.claude/skills/framework-issue/references/content-intake-request.md`。
+   - 區塊 4 的替換測試保留 `<...>` 佔位，由執行者填一句理由。README 無該列或 carrier 未填時工具 exit 1 並在 stderr 報缺項，補齊後重跑。
+   - 經 framework-issue skill 把草稿開成 issue；開出後以 Edit 在該 pattern 的 frontmatter 寫入 `upstream_issue: <issue 號>`。存量 pattern 不回填。
+
 **輸出**：
-- 步驟 7 已建立分類檔案（初始檔名 `<CATEGORY>-<PROJ>-NNN.md`），步驟 7 接續動作
-  以 Edit 填入實際內容，並可選擇改名為 `<CATEGORY>-<PROJ>-NNN-<slug>.md`
+- 步驟 7 已建立分類檔案（檔名 `<CATEGORY>-<PROJ>-NNN.md`，即最終檔名），步驟 7 接續動作
+  以 Edit 填入實際內容
 - README.md 索引由步驟 8 的 `readme_index.sync` 自動同步，不需人工步驟。**與步驟
   8 的相容性**：`readme_index.scan_category_rows` 依檔名前綴掃描分類目錄下所有
   `.md` 檔，**不檢查 `status` frontmatter**——若佔位檔仍處於 reserved（內容未填）
@@ -337,6 +356,21 @@ category 的 error-pattern 一律使用來源前綴格式**：
 - 發現新模式：[編號] 錯誤名稱
 - 參考既有模式：[編號] 錯誤名稱
 ```
+
+---
+
+## 上游狀態比對（sync-pull 結束摘要）
+
+`lib/upstream_status.py`（純函式 `classify`、`format_summary_lines`）比對本地 `.claude/error-patterns/` 與 sync-pull 已 clone 的上游樹，只讀這兩棵樹，不讀網路。比對鍵是檔名中的 pattern ID。`sync-claude-pull.py` 於刪除 clone 目錄前呼叫一次，結果在結束摘要印到 stderr，不影響結束碼。
+
+| 狀態 | 判準 | 摘要 |
+|------|------|------|
+| 已收錄 | 上游有同 ID 且內容相同 | 不列 |
+| 同號不同內容 | 上游有同 ID 但內容不同 | 另列一類，逐則列 ID |
+| 已回報 | 本地獨有，frontmatter 有 `upstream_issue` | 只列總數與 issue 號 |
+| 待回報 | 本地獨有且無 `upstream_issue` | 逐則列出，附 `intake_draft.py` 指令 |
+
+框架主控方不執行 sync-pull 取得框架，不經過本比對。
 
 ---
 

@@ -22,7 +22,7 @@ Review 完整性是七軸交集、缺軸不缺深度。單軸越做越深會 sys
 
 ## 套用方式
 
-規劃 multi-round review 時、按七軸列出 Round 1 到 Round N 各動了哪幾軸，然後走兩步：**找出未動的軸，再問它靠什麼補得到。**「靠什麼補上」那一欄填「下一輪」的，未動就是 Round N+1 的價值來源；填時間或另一個執行者的，處置是建票綁觸發條件而不是加輪——第五輪在七軸上補不了那兩格，產出只能來自把 frame 軸再細分，正是下方反模式的第一列。推導見 [缺口的處置看它需要哪一種資源](gap-remedy-depends-on-the-resource-it-needs.md)。
+規劃 multi-round review 時、按七軸列出 Round 1 到 Round N 各動了哪幾軸，然後走兩步：**找出未動的軸，再確認每一軸靠什麼補上。**「靠什麼補上」那一欄填「下一輪」的，未動就是 Round N+1 的價值來源；填時間或另一個執行者的，處置是建票綁觸發條件而不是加輪——第五輪在七軸上補不了那兩格，產出只能來自把 frame 軸再細分，正是下方反模式的第一列。推導見 [缺口的處置看它需要哪一種資源](gap-remedy-depends-on-the-resource-it-needs.md)。
 
 停止判定因此要寫成兩句話，分開記哪幾軸判定為已覆蓋、哪幾軸判定為取不到，否則「停在資源用完」與「停在證據齊備」在文字上同形。
 
@@ -55,5 +55,5 @@ Surface 軸的 report card 這一格標「不適用」（審查對象是 skill�
 ## 反模式
 
 - 「再來一輪」沒指定軸切換、把多輪當成單軸加深
-- 把 instance 當主要變量（換一個 reviewer agent 跑同 frame）、忽略 frame / surface 才是主要 catch 維度
+- 把 instance 當主要變數（換一個 reviewer agent 跑同 frame）、忽略 frame / surface 才是主要 catch 維度
 - 把七軸當 checklist 填空、不檢查每軸是否真的有 substantive 切換

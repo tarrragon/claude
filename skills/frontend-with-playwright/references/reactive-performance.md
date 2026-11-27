@@ -1,6 +1,6 @@
 # Reactive Performance
 
-前端 reactive 效能的盤點與優化：MutationObserver 三維度（root / options / debounce）、polling → observer、iteration / regex / reflow / lazy load 四個成本面。
+前端 reactive 效能的盤點與改善：MutationObserver 三維度（root / options / debounce）、polling → observer、iteration / regex / reflow / lazy load 四個成本面。
 
 適用：使用者反映卡頓、CPU 100%、scroll lag、resize jank、首次互動延遲。
 不適用：純後端效能、純伺服器渲染（SSR 的成本另一套）。
@@ -154,9 +154,9 @@ console.timeEnd('filter');
 // 觀察：> 16ms → 影響 60fps、要優化
 ```
 
-### 大資料量的常用優化
+### 大資料量的常用改善
 
-| 問題           | 優化                           |
+| 問題           | 改善                           |
 | -------------- | ------------------------------ |
 | 每筆都跑 regex | regex 編譯一次、test 重用      |
 | 每筆 query DOM | DOM query 一次、緩存結果       |
@@ -205,7 +205,7 @@ sizes.forEach(({ el, w, h }) => {
 
 ### 量 reflow 成本
 
-Chrome DevTools Performance panel → 找 "Layout" 紫色塊。> 16ms 要優化。
+Chrome DevTools Performance panel → 找 "Layout" 紫色塊。> 16ms 要改善。
 
 ---
 
@@ -325,7 +325,7 @@ new MutationObserver((mutations, obs) => {
 - [ ] options 是不是只開必要的（`childList` 預設、`subtree` 要有理由、`attributes` 不是預設）？
 - [ ] 重 callback 有沒有 debounce / throttle？
 - [ ] setInterval / setTimeout polling 能不能換成 MutationObserver？
-- [ ] iteration / regex 在大資料量下測過嗎？> 16ms 要優化
+- [ ] iteration / regex 在大資料量下測過嗎？> 16ms 要改善
 - [ ] 改 layout 屬性有沒有 batch read-write、避免 layout thrashing？
 - [ ] Lazy chunk 是 critical path 還是真的 lazy？
 

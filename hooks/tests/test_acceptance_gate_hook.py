@@ -1423,3 +1423,20 @@ def test_coordination_ticket_with_all_paired_passes(project_dir, logger):
     _write_todo_ticket(project_dir, _TODO_T, True, sol)
     result = _check_todo_gate(project_dir, logger, _TODO_T)
     assert not (result.message and "用戶待辦" in result.message)
+
+
+def test_spawn_block_message_offers_both_landing_routes(project_dir, logger):
+    """修復建議含 --parent（本版）與 --version + --source-ticket（後續版本）兩種寫法。"""
+    ticket_id = "0.18.0-W30-088"
+    _write_force_ticket(project_dir, ticket_id, ticket_type="ANA", body=_SPAWN_BODY)
+
+    result = _check_via_orchestrator(
+        project_dir, ticket_id, logger, f"ticket track complete {ticket_id}"
+    )
+
+    message = result.message or ""
+    assert f"ticket create --parent {ticket_id}" in message
+    assert "--version <目標版本> --source-ticket" in message
+    source_lines = [ln for ln in message.splitlines() if "--source-ticket" in ln]
+    assert source_lines
+    assert all("--version" in ln for ln in source_lines)

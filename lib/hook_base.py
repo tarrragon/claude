@@ -286,7 +286,7 @@ def _main_repo_root_of_linked_worktree() -> Optional[Path]:
     if _linked_worktree_root() is not None:
         try:
             proc = subprocess.run(
-                ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                ["git", "rev-parse", "--git-common-dir"],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -295,7 +295,8 @@ def _main_repo_root_of_linked_worktree() -> Optional[Path]:
             )
             out = proc.stdout.strip()
             if proc.returncode == 0 and out:
-                result_root = Path(out).parent
+                # 不用 --path-format=absolute（需 git 2.31）；相對輸出以行程 cwd 為基準
+                result_root = Path(os.path.normpath(os.path.join(cwd, out))).parent
             else:
                 _report_shared_root_failure("git-common-dir 查詢失敗 rc={}".format(proc.returncode))
         except (FileNotFoundError, subprocess.TimeoutExpired) as exc:

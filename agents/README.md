@@ -4,6 +4,20 @@
 
 ---
 
+## 索引與 tier（選人依據）
+
+PM 選代理人依 `registry.yaml` 頂層 `index:`，不依名稱。`index` 每筆為（language, domain）對應一組代理人；每名代理人在 `agents` 下另有 `language`、`domain`、`tier` 三個欄位，兩處同步維護。
+
+| 欄位 | 取值 |
+|------|------|
+| language | any、dart、python、go、javascript |
+| domain | design、test、implementation、refactor、analysis、review、architecture、data、environment、docs、process |
+| tier | active（預設候選）、reserve（專長有效但需求稀少，需要時才派） |
+
+**Why**：名冊只依名稱查找時，選擇成本隨在冊人數增加。**Consequence**：PM 在 domain 內挑人時會略過不熟的名字，名冊越長越偏向少數幾名。**Action**：先在 `index` 找（language, domain）；`language: any` 的列適用所有語言；同格有多名時，`tier: active` 優先。零派發者的去留依 `.claude/pm-rules/version-retrospective.md`〈Step 2 補充：零派發盤點〉判定並更新 tier。
+
+---
+
 ## 文件品質職責邊界（basil / thyme / mint / bay）
 
 四個代理人的「文件品質」職責在概念上容易混淆。本表以 PM 派發角度明示邊界，避免「該派 thyme 還是 basil」的決策摩擦。
@@ -99,10 +113,14 @@ parallel-evaluation 情境的常駐委員分兩類，詳見 `.claude/skills/para
 | thyme-documentation-integrator | 文件結構整合 / 衝突解決 |
 | thyme-extension-engineer | Chrome Extension 開發 |
 | thyme-python-developer | Python 開發 |
+| framework-issue-curator | Framework issue 區段策展 |
+| impeccable-manual-edit-applier | Impeccable live 手動文案編輯套用 |
 
-> DEPRECATED 代理人（john-carmack, memory-network-builder）已在各自檔案開頭標注，不列入上表。
+> DEPRECATED 代理人（john-carmack, memory-network-builder）已在各自檔案開頭標注，已自 registry 移除，不列入上表。`language-agent-template` 是範本，不登記。
 
 ---
 
+**Last Updated**: 2026-11-25
+**Version**: 1.2.0 - 新增〈索引與 tier〉章節（registry 改以（language, domain）為索引）；清單補登記 framework-issue-curator、impeccable-manual-edit-applier；DEPRECATED 兩名自 registry 移除（350 S5）
 **Last Updated**: 2026-04-28
 **Version**: 1.1.0 - 新增「basil 前綴群組命名說明」子章節：共用前綴理由、architect vs critic 角色差異表、未來命名指引四步驟（回應 saffron warning 1）

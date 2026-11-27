@@ -93,7 +93,7 @@ def test_common_dir_failure_in_worktree_degrades_with_stderr(
     real_run = subprocess.run
 
     def fake_run(cmd, *a, **kw):
-        if "--git-common-dir" in cmd and "--path-format=absolute" in cmd:
+        if "--git-common-dir" in cmd and "--git-dir" not in cmd:
             return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="boom")
         return real_run(cmd, *a, **kw)
 
@@ -110,3 +110,32 @@ def test_isolation_flag_returns_project_root(repo_and_worktree, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(wt))
     hook_base.clear_project_root_cache()
     assert get_shared_state_root() == wt
+
+
+def _fake_old_git(common_dir_output, seen):
+    """模擬 git 2.30：不認得的 --xxx 選項原樣印成一行（rc=0）。"""
+    real_run = subprocess.run
+
+    def fake_run(cmd, *a, **kw):
+        if "--git-common-dir" in cmd and "--git-dir" not in cmd:
+            seen.append(cmd)
+            lines = [common_dir_output if arg == "--git-common-dir" else arg
+                     for arg in cmd[cmd.index("rev-parse") + 1:]]
+            return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(lines) + "\n", stderr="")
+        return real_run(cmd, *a, **kw)
+
+    return fake_run
+
+
+@pytest.mark.parametrize("relative", [True, False])
+def test_common_dir_relative_and_absolute_output_not_misaligned(
+    repo_and_worktree, monkeypatch, relative
+):
+    main, wt = repo_and_worktree
+    monkeypatch.chdir(wt)
+    out = "../main/.git" if relative else str(main / ".git")
+    seen: list = []
+    monkeypatch.setattr(hook_base.subprocess, "run", _fake_old_git(out, seen))
+    hook_base.clear_project_root_cache()
+    assert get_shared_state_root() == main
+    assert seen and all("--path-format=absolute" not in c for c in seen)

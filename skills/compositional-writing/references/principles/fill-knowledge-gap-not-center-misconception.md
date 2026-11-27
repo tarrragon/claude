@@ -56,4 +56,4 @@
 - [teaching-prose-neutral-register](teaching-prose-neutral-register.md)：兩卡相鄰但軸不同。該卡是 **stance** 軸（陳述概念 vs 對讀者說話）、把「別搞混」當祈使喊話的一例、修法是刪 stance。本卡是 **知識供給** 軸：核心是「『容易誤會』標示知識缺口、要補正向模型」、修法是刪 framing + 補 / 確認機制。同一個句子、兩個維度。
 - [multi-pass-review-frame-granularity](multi-pass-review-frame-granularity.md)：本卡的命中同屬該卡 keyword bank 機制的類別；「命中是候選不是判決」「register 類靠 reader-simulation 不靠 keyword」的判定層論述以該卡為主。
 - [teach-judgment-not-procedure](teach-judgment-not-procedure.md)：「這容易誤會」是壓縮結論的一種 —— 作者已走完「讀者需要 X 知識才不會誤解」的推導、只輸出最後一步的警告、丟掉了 X。本卡的修法（補回正向模型）正是還原推導路徑。
-- [rewritten-claim-kept-as-the-subject](rewritten-claim-kept-as-the-subject.md)：補本卡沒涵蓋的成因。本卡的誤會是作者想像出來的，判讀可以問「這是不是假想的誤會」；那張卡的說法實際寫在使用者貼來的素材裡，作者會把引用它當成忠於來源，這一問判不出來，要改問「這句說法是不是文章的主題」。修法相同：直接寫正向的機制。
+- [rewritten-claim-kept-as-the-subject](rewritten-claim-kept-as-the-subject.md)：補本卡沒涵蓋的成因。本卡的誤會是作者想像出來的，作者判讀時可以檢查這是不是假想的誤會；那張卡的說法實際寫在使用者貼來的素材裡，作者會把引用它當成忠於來源，用這一項檢查找不出這種情形，要改成檢查這句說法是不是文章的主題。修法相同：直接寫正向的機制。

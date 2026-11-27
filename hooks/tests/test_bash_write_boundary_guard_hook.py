@@ -32,6 +32,8 @@ spec = importlib.util.spec_from_file_location(
 hook_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook_module)
 
+import lib.bash_write_targets as targets_module  # noqa: E402  搬移後的命令解析與路徑解析所在
+
 _REPO_ROOT = hook_dir.parent.parent  # 本 checkout 根目錄（含 .git）
 _extract_candidate_paths = hook_module._extract_candidate_paths
 _find_boundary_violation = hook_module._find_boundary_violation
@@ -425,7 +427,7 @@ def _work_units(cmd, rescan_sed=False):
     import sys as _sys
     visited = [0]
     calls = [0]
-    original = hook_module._scan_sed
+    original = targets_module._scan_sed
 
     def counting_sed(toks, j, out):
         visited[0] += len(toks) - j
@@ -437,7 +439,7 @@ def _work_units(cmd, rescan_sed=False):
         if event in ("call", "c_call"):
             calls[0] += 1
 
-    with patch.object(hook_module, "_scan_sed", counting_sed):
+    with patch.object(targets_module, "_scan_sed", counting_sed):
         _sys.setprofile(profiler)
         try:
             _extract_candidate_paths(cmd)
@@ -744,8 +746,8 @@ class TestSiblingWorktreeScope:
     def test_same_repo_predicate_contrast(self, repo_pair, tmp_path):
         main_repo, sibling = repo_pair
         other = _make_repo(tmp_path, "proj-other")
-        assert hook_module._same_repo(str(sibling), str(main_repo)) is True
-        assert hook_module._same_repo(str(other), str(main_repo)) is False
+        assert targets_module._same_repo(str(sibling), str(main_repo)) is True
+        assert targets_module._same_repo(str(other), str(main_repo)) is False
 
     def test_routine_commands_allowed(self, repo_pair, logger):
         main_repo, sibling = repo_pair
@@ -1539,18 +1541,18 @@ class TestWindowsProjectRoot:
     _WIN_ROOT = "D:\\side\\termchat"
 
     def test_resolve_candidate_does_not_raise_on_backslash_root(self, tmp_path):
-        result = hook_module._resolve_candidate(
+        result = targets_module._resolve_candidate(
             "$CLAUDE_PROJECT_DIR/lib/x.py", "", str(tmp_path), self._WIN_ROOT)
         assert result is not None
 
     def test_resolve_candidate_keeps_backslash_root_verbatim(self, tmp_path):
-        result = hook_module._resolve_candidate(
+        result = targets_module._resolve_candidate(
             "${CLAUDE_PROJECT_DIR}/lib/x.py", "", str(tmp_path), self._WIN_ROOT)
         assert result.endswith(self._WIN_ROOT + "/lib/x.py")
 
     def test_resolve_candidate_posix_root_unchanged(self, tmp_path):
         root = str(tmp_path / "proj")
-        result = hook_module._resolve_candidate(
+        result = targets_module._resolve_candidate(
             "$CLAUDE_PROJECT_DIR/lib/x.py", "", str(tmp_path), root)
         assert result == os.path.realpath(os.path.join(root, "lib/x.py"))
 
@@ -1584,7 +1586,7 @@ class TestWindowsPathSemantics:
             def __getattr__(self, name):
                 return getattr(os, name)
 
-        monkeypatch.setattr(hook_module, "os", _OsProxy())
+        monkeypatch.setattr(targets_module, "os", _OsProxy())
 
     @pytest.mark.parametrize("cwd,cmd,expected", [
         (_ROOT, "echo x > lib/a.py", "lib/a.py"),
@@ -1628,6 +1630,25 @@ class TestOpaquePythonWriteTargets:
     @pytest.mark.parametrize("name", sorted(_DENIED))
     def test_opaque_write_with_scope_clue_denied(self, name, logger):
         assert _scope(self._DENIED[name], _REPO_ROOT, logger) is not None
+
+    # 3.6.0-W1-263：Path 串接／Path 變數的 .open(寫入模式)，目標不明時與 write_text 同走線索
+    @staticmethod
+    def _path_open(call):
+        return ("for f in .claude/a .claude/b; do\npython3 - \"$f\" <<'PY'\nimport sys\n"
+                "from pathlib import Path\nw = Path(sys.argv[1])\n" + call + "\nPY\ndone")
+
+    @pytest.mark.parametrize("call", [
+        "(w / 'x.md').open('a')", "(w / 'x.md').open('w')", "(w / 'x.md').open('x')",
+        "(w / 'x.md').open('r+')", "w.open(mode='a')",
+    ])
+    def test_path_open_write_mode_opaque_denied(self, call, logger):
+        assert _scope(self._path_open(call), _REPO_ROOT, logger) is not None
+
+    @pytest.mark.parametrize("call", [
+        "(w / 'x.md').open()", "(w / 'x.md').open('r')", "w.open('rb')",
+    ])
+    def test_path_open_read_mode_allowed(self, call, logger):
+        assert _scope(self._path_open(call), _REPO_ROOT, logger) is None
 
     def test_fstring_all_constant_resolved(self, logger):
         cmd = "python3 - <<'EOF'\nd='lib'\nn='x'\nopen(f'{d}/{n}.dart','w').write('')\nEOF"

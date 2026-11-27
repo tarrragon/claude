@@ -252,4 +252,4 @@ Stream 處理時就做、不累積到 subset 後。對應自動續抓 + 在 loop
 
 - 跟 [最小必要範圍是 sanity 防線](./minimum-necessary-scope-is-sanity-defense.md)：兩者共用「邊界選對 vs 選錯」的精神 — 一個講範圍從窄到寬、本卡講合成從上游到下游；錯方向都是 silent 失敗
 - 跟 [Single Source of Truth](./single-source-of-truth.md)：兩者共用「值的住址唯一」精神 — SSOT 是「定義位置唯一」、本卡是「操作位置正確」；操作不在 source 層 = 等於建了個第二定義（subset 上的「filter 結果」）跟 stream 全集競爭
-- 跟 [2 次門檻](./two-occurrence-threshold.md)：發現合成位置錯時、不要試「同層補丁」三次以上、第 2 次失敗就退一層找根因
+- 跟 [2 次門檻](./two-occurrence-threshold.md)：發現合成位置錯時、不要試「同層修補」三次以上、第 2 次失敗就退一層找根因

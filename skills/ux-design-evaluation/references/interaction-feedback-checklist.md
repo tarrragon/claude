@@ -6,7 +6,7 @@
 | --- | --- |
 | `interaction-feedback.md`（入口） | 核心原則／三層回饋模型／按鈕級回饋（按鈕流程與六種按鈕狀態） |
 | `interaction-feedback-waiting-and-notification.md` | 時間門檻與回饋策略／畫面級回饋／Spinner vs Skeleton／結果通知的形式選擇 |
-| `interaction-feedback-component-semantics.md` | 元件語意與版面檢查（切換標籤／可點性／選中態／溢出／版面保障） |
+| `interaction-feedback-component-semantics.md` | 元件語意與版面檢查（切換標籤／可點性／選中態／截斷／版面保障） |
 | `interaction-feedback-checklist.md`（本檔） | 反模式速查／檢查清單／參考來源 |
 
 適用：提交前快速核對按鈕、等待、通知、元件語意四類是否有已知反模式；作為三份內容檔的共用附錄查表。
@@ -50,6 +50,7 @@
 - [ ] 非同步：loading + disabled + 完成恢復 + timeout？
 - [ ] 結果有通知（成功 / 失敗 / 空 / 部分成功）？
 - [ ] 同步按鈕有 leading-edge 防連點？
+- [ ] 動作前預告的數量跟動作實際處理的範圍同一個口徑（處理全部時是來源總數，只處理已載入的元素時寫明「已載入的 N 筆」，讀不到總數時不寫數字）？
 
 畫面級（見 `interaction-feedback-waiting-and-notification.md`）：
 
@@ -66,14 +67,16 @@
 - [ ] 批次操作結果有彙整、無 SnackBar 成串 / Dialog 堆疊？
 - [ ] 跨 context（extension / 多 process）的結果通知有端對端驗證？
 - [ ] 批次 / 遍歷操作的完成宣告有窮盡證據（總數對照 / 終止標記）？
+- [ ] 描述畫面所在情境（在哪個網站、哪一頁）的常駐說明已經刪掉，改由主要動作的形態表達（離線、降級這類系統狀態照形式表用 Banner）？
 
 語意與版面（見 `interaction-feedback-component-semantics.md`）：
 
 - [ ] 切換型元件的標籤是動作語意（或已依值數與結構連動依序判定拆成狀態顯示 + 動作按鈕、或改用 switch）？
 - [ ] 非互動指示與動作按鈕形態可區分、圖示無撞名？
 - [ ] Selected 態底色與文字色成對設計、對比達 WCAG AA？
-- [ ] 水平溢出清單有捲動 affordance（或已消除溢出）？
+- [ ] 每一份可捲動的清單，規格都指定了至少一種捲動 affordance（種類見 `interaction-feedback-component-semantics.md`〈4. 清單被截斷時要有捲動 affordance〉裡列出直向與水平 affordance 的那一句；水平溢出、直向剛好切在列與列的交界，都算截斷），或已消除截斷？逐一列出清單與它指定的 affordance。
 - [ ] 關鍵狀態文字有版面保障（窄幕不被壓成省略號）？
+- [ ] 打開選單、標籤寫成「名稱：現值」的鍵（排序、篩選），標籤沒有為了省空間拿掉說明動作的字（「排序：」這類，換成純圖示也算；在原地切換值的鍵先照 `interaction-feedback-component-semantics.md`〈1. 切換元件的標籤要能區分「現態」與「動作」〉決定形態）；空間不足時逐一狀態刪了在那個狀態下跟同一畫面重複的資訊，規格裡寫出了縮短前後的標籤與查過的重複資訊？
 - [ ] 版面擠壓的診斷分過層（換算錯 vs 分配錯）、沒把 sizing 套件當空間分配的保證、設計層空間競爭規格已路由至 `component-contract-design`〈空間不足策略〉欄？
 - [ ] 靠顏色區分的語意，顏色之外另有訊號或文字？
 - [ ] 無佔位 handler（dev toast / log-only）殘留（統一佔位標記 + release 前 grep 掃描）、未接線功能已隱藏或 disabled + 說明？

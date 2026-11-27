@@ -69,11 +69,11 @@ compositional-writing 的核心主張是「寫原子卡片」，但完整文章�
 
 三條判定，寫的當下逐句可判、不需要上下文：動作者格填了指令片段（參數、管線一段、子命令——「`-G 16M` 放大緩衝區」）→ 改成人或系統元件當動作者；受詞格的名詞是動詞在領域裡作用不到的對象 → 換成領域內的名詞；量詞（任何、所有、完全、全部、一個 X 都沒）的範圍沒在句內或緊接的前一子句具名 → 補範圍，「兩個 md5 完全相同」過、「徵兆完全一樣」不過。
 
-**不描述操作的句子也要填，缺口在名詞裡。** 論斷句、總結句、段標、過渡句沒有動作者，四個槽位查下來會全部通過，而同樣讀不懂：「錯的來源不只一種，而輸出都不帶訊號」——來源是什麼的來源、輸出是誰的輸出、訊號是什麼的訊號，「錯」是形容詞當名詞用。本身要求「誰的、什麼的、哪兩者之間的」的名詞（來源、輸出、結果、原因、代價、差別、位置、範圍、邊界、訊號、情形）要把所屬寫在這一句或緊接的前一句；形容詞與動詞不直接當名詞用。寫到段標、段落首句與末句、總結段時逐句問：**這個名詞是誰的、什麼的，能不能從這一句或前一句逐字指出來。** 改寫：「錯的來源不只一種，而輸出都不帶訊號」→「答案錯掉的成因不只一種，而引擎一種都不會報錯」。判定與量測見 [noun-without-its-owner-passes-the-slot-check](principles/noun-without-its-owner-passes-the-slot-check.md)。
+**不描述操作的句子也要填，缺口在名詞裡。** 論斷句、總結句、段標、過渡句沒有動作者，四個槽位查下來會全部通過，而同樣讀不懂：「錯的來源不只一種，而輸出都不帶訊號」——來源是什麼的來源、輸出是誰的輸出、訊號是什麼的訊號，「錯」是形容詞當名詞用。本身要求「誰的、什麼的、哪兩者之間的」的名詞（來源、輸出、結果、原因、代價、差別、位置、範圍、邊界、訊號、情形）要把所屬寫在這一句或緊接的前一句；形容詞與動詞不直接當名詞用。寫到段標、段落首句與末句、總結段時逐句檢查：**這個名詞是誰的、什麼的，能不能從這一句或前一句逐字指出來。** 改寫：「錯的來源不只一種，而輸出都不帶訊號」→「答案錯掉的成因不只一種，而引擎一種都不會報錯」。判定與量測見 [noun-without-its-owner-passes-the-slot-check](principles/noun-without-its-owner-passes-the-slot-check.md)。
 
 **判定者不代填槽位。** 單位要寫在句子裡，從上下文推得出來不算——判斷標準是是非題「有沒有寫在句子裡」，寫成「推不推得出來」它永遠通過，因為判定者永遠推得出來。這一節放在生成端的理由也在這裡：寫的人跟審的人是同一個模型時，審查端對這一類偵測率是零（一次實測三輪十七個 reviewer 零命中、逐句填槽位得十四處），bank 的反模式清單是給審查者掃已寫好的稿，生成器需要的是正向規格。
 
-動作者格填對之後，描述同一個工具的幾段之間的順序通常自動修正——操作者視角的順序就是讀者的問題序：讀者會看到什麼 → 這個工具做什麼 → 為什麼需要它 → 不做的具體後果 → 副作用。判斷標準與 before/after 見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md)（動作者格）與 [spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)（受詞與量詞格）。教學定位的文章另有兩條形狀層的檢查：開場是不是情境敘事而沒有逐一列出這篇討論的內容、正文有沒有「該問誰」「容易搞錯」「前面提到的」這類教室互動語句（[teaching-is-not-lecturing](principles/teaching-is-not-lecturing.md)）；先備知識與環境陷阱有沒有跟在所屬的指令旁邊，判斷問句是「讀者在讀到哪個位置時會需要這段資訊」（[supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)）。
+動作者格填對之後，描述同一個工具的幾段之間的順序通常自動修正——操作者視角的順序就是讀者的問題序：讀者會看到什麼 → 這個工具做什麼 → 為什麼需要它 → 不做的具體後果 → 副作用。判斷標準與 before/after 見 [command-fragment-as-subject-hides-the-actor](principles/command-fragment-as-subject-hides-the-actor.md)（動作者格）與 [spoken-emphasis-is-silent-in-text](principles/spoken-emphasis-is-silent-in-text.md)（受詞與量詞格）。教學定位的文章另有兩條形狀層的檢查：開場是不是情境敘事而沒有逐一列出這篇討論的內容、正文有沒有「該問誰」「容易搞錯」「前面提到的」這類教室互動語句（[teaching-is-not-lecturing](principles/teaching-is-not-lecturing.md)）；先備知識與環境陷阱有沒有跟在所屬的指令旁邊，判斷標準是讀者讀到哪個位置時會需要這段資訊（[supplementary-knowledge-follows-its-parent-concept](principles/supplementary-knowledge-follows-its-parent-concept.md)）。
 
 **這一節的判定單位是句子，所以它走到程式碼區塊就停下來。** 指令沒有主詞也沒有謂語，逐句填槽位的動作對它不產生任何判定，區塊裡的每一個字面值因此通過。示範指令另有一條檢查：四個位置（工具 / 子命令 / 選項 / 引數）裡引數最需要寫，因為它的語意常常只有文章講得出來，而且它是讀者唯一要動手改的位置。判斷標準是「讀者把這條指令用在自己的環境上要改哪幾個位置，每個位置文章有沒有說過它填什麼」，掃描入口是區塊裡的字面值而不是佔位符——`<serial>` 自帶「這裡要換」的訊號，`/sdcard/screen.png` 長得像一個完整可用的答案。**引數的有無改變行為時，兩種形態要並列在同一個程式碼區塊裡、各帶一行註解**——補一段文字說明不足以修好它，讀者選哪一種的依據是兩條指令擺在一起的樣子。五種形態與修法見 [literal-operand-hides-the-change-point](principles/literal-operand-hides-the-change-point.md)。 區塊的排法、註解的分工與參數表的判斷標準在 [demonstrating-commands](demonstrating-commands.md)。
 
@@ -780,7 +780,7 @@ build-炸-修循環。明顯划算。
 | 原文錨點                   | 學術 / 標準 / 方法論術語第一次出現是否保留原文？       | 寫成「中文術語（original term）」                         |
 | 譯名對位                   | 中文是否帶入原詞沒有的文化 / 政治 / 日常語意？         | 回原文語境重選中文，必要時在定義段列常見譯名              |
 | 完整名詞頭                 | 中文壓縮後是否仍回答「這是什麼」？                     | 補「盲點 / 偏誤 / 風險 / 模式 / 檢查 / 策略」等 head noun |
-| 全文一致                   | 同一術語是否出現多個中文譯名或多個詞尾？               | 選 canonical 譯名與 head noun 後全篇替換                  |
+| 全文一致                   | 同一個概念是否出現多個中文譯名或多個詞尾？             | 先確定每一處指的對象；指同一個對象的才選 canonical 譯名與 head noun，用 grep 找出位置後逐處替換。地區用語照 [cross-strait-terms](cross-strait-terms.md) 逐處選詞：同一個英文詞可能依它在表格或句子裡、或依它指的對象寫成不同的詞 |
 | Metadata / navigation 同步 | title、description、heading、link label 是否同樣對位？ | 跟正文第一個定義使用同一組術語                            |
 | 句內邏輯                   | 譯名是否讓句子多出原文沒有的前提？                     | 標出主詞 / 動詞 / 修飾語 / 因果，逐項檢查是否成立         |
 | 讀者追問                   | reader 看到中文會追問正確問題嗎？                      | 問「他會問 A 還是 B？」；問錯方向就重譯                   |

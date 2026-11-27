@@ -210,4 +210,4 @@ drawer.parentElement.insertBefore(scope, drawer);
 | 內心 OS：「視覺位置是 X、所以 DOM 也該在 X」 | 視覺跟 DOM 解耦才是對的設計                    |
 | 看到 `tabindex="-1"` 在不該被 tab 的元素上   | 合理使用（modal 背景 / 先 focus 後 reveal）    |
 
-**核心原則**：DOM 順序是寫進 code 的 mental model、tab 順序是使用者體驗的 mental model — 兩者該由「重排 DOM」對齊、不該由「tabindex」強制。視覺位置跟 DOM 順序解耦（用 CSS 控制）、讓兩者各自獨立優化。
+**核心原則**：DOM 順序是寫進 code 的 mental model、tab 順序是使用者體驗的 mental model — 兩者該由「重排 DOM」對齊、不該由「tabindex」強制。視覺位置跟 DOM 順序解耦（用 CSS 控制）、讓兩者各自獨立改善。

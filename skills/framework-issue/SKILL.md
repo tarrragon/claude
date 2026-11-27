@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Manages framework issues on tarrragon/claude: dedup, create, comment-as-section init/update/observe/check, fix-matrix close, folding tickets into issues. Use for: framework issue, 框架 issue, canonical issue, ticket 收束, 跨 consumer 修復追蹤, curator 派發."
 metadata:
-  version: 2.12.2
+  version: 2.13.1
 ---
 
 # Framework Issue
@@ -87,6 +87,7 @@ exit code：`0` 成功、`3` 降級（gh 未安裝／未登入／Issues 停用�
 | 要用 create／list／link／fix-status／fix-version／close | `references/fix-matrix-commands.md` | 〈create 與 list〉〈link〉〈fix-status〉〈fix-version〉〈close〉〈Graceful Degradation〉 |
 | ticket 執行中辨識到框架問題，判定本專案是主控方還是 consumer；決定接不接與怎麼關；主控方判斷框架問題排入哪一版、拖慢標記怎麼在規劃期讀取；或發現當下要判斷能否直接寫定修法；或收束時要判斷某個修法能否寫進「當前結論」區段 | `references/escalation-flow.md` | 〈角色：主控方與 consumer〉〈介入判斷：框架問題 vs 專案問題〉〈兩條路徑〉〈修復時點：版本分診〉〈修法時點分離：發現票何時能寫定修法〉〈Issue 關閉協定〉〈回報前查重 SOP〉 |
 | 要把一群 ticket 收束成 issue，或派 curator 做這件事 | `references/ticket-intake.md` | 〈前提與分工〉〈步驟一：分群〉〈步驟二：查重與落點〉〈步驟三：時序改狀態〉〈步驟四：區段範本〉〈步驟五：ticket 處置〉〈步驟六：驗證與交接〉〈派發 curator〉 |
+| consumer 要把本地新增的 error-pattern 送進框架 canonical（產生或填寫收錄請求）；或主控方收錄 consumer 內容、處理編號衝突 | `references/content-intake-request.md` | 〈用途與前提〉〈請求本文格式〉〈各區塊填寫規則〉〈收錄方處置〉〈編號衝突〉 |
 | 想看一張 issue 從 dedup 到 check 的完整走查 | `references/worked-example.md` | 〈情境〉〈查重輸出與關係判定〉〈sections.json〉〈init 與索引〉〈ticket close〉〈check 與 owner 更新〉 |
 
 ## Testing

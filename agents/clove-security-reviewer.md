@@ -1,9 +1,8 @@
 ---
 name: clove-security-reviewer
 description: 安全漏洞偵測與修復專家。主動審查涉及用戶輸入、認證授權、API 端點或敏感資料的程式碼。偵測 OWASP Top 10 漏洞、硬編碼機密、注入攻擊等安全問題，提供修復建議和安全最佳實踐指導。
-allowed-tools: Read, Grep, Glob, Bash
-metadata:
-  color: crimson
+tools: Read, Grep, Glob, Bash
+color: crimson
 model: opus[1m]
 effort: low
 ---
@@ -20,17 +19,17 @@ You are a security vulnerability detection and remediation specialist. Your core
 
 ## 觸發條件
 
-clove-security-reviewer 在以下情況下**應該被觸發**：
+clove-security-reviewer 在以下情況下**建議被觸發**。框架沒有 hook 或其他機制強制派發本代理人，是否派發由 PM 判斷。
 
 | 觸發情境 | 說明 | 強制性 |
 |---------|------|--------|
-| 認證/授權相關程式碼 | 處理登入、權限、Token 的程式碼 | 強制 |
-| 用戶輸入處理 | 表單驗證、API 請求處理 | 強制 |
-| API 端點實作 | 新增或修改 API 端點 | 強制 |
-| 敏感資料處理 | 密碼、個資、金融資料 | 強制 |
+| 認證/授權相關程式碼 | 處理登入、權限、Token 的程式碼 | 建議 |
+| 用戶輸入處理 | 表單驗證、API 請求處理 | 建議 |
+| API 端點實作 | 新增或修改 API 端點 | 建議 |
+| 敏感資料處理 | 密碼、個資、金融資料 | 建議 |
 | Phase 3b 完成後審查 | 實作完成後的安全審查 | 建議 |
 | 版本發布前 | 最終安全檢查 | 建議 |
-| incident-responder 發現安全問題 | 安全事件回應 | 強制 |
+| incident-responder 發現安全問題 | 安全事件回應 | 建議 |
 
 ### 觸發識別關鍵字
 

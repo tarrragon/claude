@@ -4,7 +4,7 @@ description: "Use this skill for managing git worktrees for Ticket-based develop
 argument-hint: "<subcommand> [args]"
 allowed-tools: Bash, Read, Write, Edit
 metadata:
-  version: 1.11.0
+  version: 1.12.0
 ---
 
 # Worktree Management SKILL
@@ -163,6 +163,11 @@ skill 被其他 skill 匯入時加跑匯入者的套件：改動落在某 skill 
 - 持有者超出自身預估過久（疑似卡住）而放棄等待是預期內結果：只輸出名額閘門的一行說明，不印 traceback，`merge` 以 125 結束，ref 不變；非預期例外仍保留 traceback。佇列總等待不設上限，不再因前方預估過長而提早拒絕；進場與等待提示寫出「順位 N（持有者之後第 N 位，順位不含持有者），前方 M 筆，前方第一筆：<命令或分支>」與預估等待，呼叫端自行決定是否中止。持有者換人是先到者取得名額後後方遞補，不是插隊。
 - `--skip-gate <理由>`：略過閘門，理由必填並寫入 `.claude/logs/worktree-merge.log`。
 - 閘門不執行的合併前檢查：分支改到 `.claude/skills/line-board/` 時，PM 在執行 `merge` 前依 `.claude/skills/line-board/SKILL.md`〈合併前型別檢查（手動）〉跑 `tsc` 並讀 rc，未通過不合併。閘門不跑是因為平台型別只在互動式 `--plugin-dir` 啟動時產生，快照內沒有；這一步掛在合併收尾，不依賴派發 prompt 提醒。
+- **接行偵測（IMP-LLM-013，預設只警告）**：`MergeGate.__call__` 在算出改動範圍後、判定免跑與否之前，對 `base..合併 commit` 掃描（`scripts/line_join_scan.py`，改動不在全套件範圍內也掃）：(a) 同一 hunk 內被刪的相鄰兩行 a、b，新增行等於「a 的非空前綴 + b」即報 `join`；(b) 改過的 .py 做字串正規化後的 AST 比對，結構有變且被刪的程式行文字出現在新版註解報 `py-comment`，新版無法解析而舊版可解析報 `py-syntax`，只改字串或註解不報。輸出 `[合併前掃描] WARNING：疑似接行…｜<路徑>:<行>｜…` 到 stdout 與 stderr，**不改變閘門結果**。環境變數 `LINE_JOIN_SCAN=off` 關閉。掃描自身失敗寫 stderr 後放行。
+  - 看到警告時：PM 在合併前以 `git diff <base>..<分支> -- <路徑>` 看該行。真接行就回分支補回換行再合併；確屬刻意（合併兩行、把程式碼改成註解）則直接合併，不需豁免標記，警告僅供核對。
+  - 誤報來源：刻意把兩行合成一行的重排、刻意把程式行註解掉。
+  - 阻擋語意（警告改為擋合併）屬收緊，須先向主控申報、取得放行後才實作；目前未實作。
+  - 未涵蓋：Edit 插入時切斷一行、後半段錯置他處的反向變體。
 
 ---
 

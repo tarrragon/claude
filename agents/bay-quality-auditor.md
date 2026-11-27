@@ -1,9 +1,8 @@
 ---
 name: bay-quality-auditor
 description: "獨立技術品質審計專家。獨立於 TDD 四階段，評估技術債務、安全性、穩定性，提供基於風險的決策建議（不考慮商業時程）。產出審計報告到 docs/audit-reports/。只分析不修改、只建議不決策。"
-allowed-tools: Read, Grep, Bash, Write, Glob, LS, mcp__dart__*, mcp__serena__*
-metadata:
-  color: "#2E7D32"
+tools: Read, Grep, Bash, Write, Glob, mcp__dart__*, mcp__serena__*
+color: "#2E7D32"
 model: opus[1m]
 effort: low
 ---

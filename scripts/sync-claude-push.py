@@ -98,6 +98,7 @@ from lib.skill_version_diff import (  # noqa: E402
 from lib.skill_case_guard import check_git_tree_skill_md_case  # noqa: E402
 from lib.sync_cli_io import print_color, run_git  # noqa: E402
 from lib.sync_base_store import (  # noqa: E402
+    BASE_ACQUIRED_HEAD_FIELD,
     BASE_SHA_FIELD,
     read_sync_base_field,
     write_sync_base_field,
@@ -1107,7 +1108,26 @@ _ORPHAN_OTHER_CONTRIBUTION = "other_contribution"
 _ORPHAN_UNTRACKED_LOCAL = "untracked_local"
 
 
-def _has_local_deletion_history(project_root: Path, repo_rel_posix: str) -> bool:
+def _is_ancestor_of(project_root: Path, commit: str, descendant: str) -> bool | None:
+    """commit 是否為 descendant 的祖先；descendant 不可解析時回 None（無法判定）。"""
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, descendant],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    return None
+
+
+def _has_local_deletion_history(
+    project_root: Path,
+    repo_rel_posix: str,
+    acquired_head: str | None = None,
+) -> bool:
     """查詢 project_root 的 git 歷史是否曾追蹤並刪除過 repo_rel_posix 路徑。
 
     Why：孤兒偵測比對「canonical 樹 vs 推送方 tracked 樹」，兩者不同不足以判定
@@ -1132,13 +1152,16 @@ def _has_local_deletion_history(project_root: Path, repo_rel_posix: str) -> bool
     參數:
         project_root: 專案根目錄（含 .git/）
         repo_rel_posix: 相對 project_root 的路徑（含 .claude/ 前綴）
+        acquired_head: pull 取得 base 當下的本地 HEAD SHA。刪除 commit 是它的祖先
+            （取得 base 之前，pull 後未 commit 時仍是 HEAD 最近一次）不算刪過。
+            None 或不可解析時維持只看最近一次 A／D 的行為。
 
     傳回:
         bool: True 表示 HEAD 歷史上該路徑最近一次的變動是刪除
     """
     result = subprocess.run(
         [
-            "git", "log", "-1", "--format=", "--name-status",
+            "git", "log", "-1", "--format=%H", "--name-status",
             "--diff-filter=AD", "HEAD", "--", repo_rel_posix,
         ],
         cwd=str(project_root),
@@ -1148,7 +1171,18 @@ def _has_local_deletion_history(project_root: Path, repo_rel_posix: str) -> bool
     if result.returncode != 0:
         # HEAD 不存在（空 repo）等情況：查不到即視為未刪過，偏向保留
         return False
-    return result.stdout.strip().startswith("D")
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    if len(lines) < 2 or not lines[1].startswith("D"):
+        return False
+    # 取得 base 之前的 D 只在「pull 把檔帶回工作樹」時才是被 pull 蓋過的舊紀錄
+    # （canonical #63）；檔仍不在工作樹，代表這次刪除仍然有效（本地先刪、之後才 pull）。
+    if (
+        acquired_head
+        and (project_root / repo_rel_posix).exists()
+        and _is_ancestor_of(project_root, lines[0], acquired_head)
+    ):
+        return False
+    return True
 
 
 def classify_orphan_candidate(
@@ -1191,7 +1225,12 @@ def classify_orphan_candidate(
     if project_root is None:
         return _ORPHAN_TRUE
     repo_rel_posix = (Path(".claude") / rel).as_posix()
-    if _has_local_deletion_history(project_root, repo_rel_posix):
+    acquired_head = (
+        read_sync_base_field(claude_dir, BASE_ACQUIRED_HEAD_FIELD)
+        if claude_dir is not None
+        else None
+    )
+    if _has_local_deletion_history(project_root, repo_rel_posix, acquired_head):
         return _ORPHAN_TRUE
     return _ORPHAN_OTHER_CONTRIBUTION
 

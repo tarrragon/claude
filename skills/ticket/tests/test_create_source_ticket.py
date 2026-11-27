@@ -152,6 +152,12 @@ def _install_common_mocks(monkeypatch, *, source_ticket_data=None, source_exists
         "ticket_system.commands.create.get_ticket_path",
         lambda v, tid: f"/tmp/tickets/{tid}.md",
     )
+    # 隔離 auto-commit（git 屬外部依賴）：避免結果隨票檔目錄是否存在或
+    # 當前 git 狀態翻轉（未隔離時目錄缺席會使 create 回 exit 75）。
+    monkeypatch.setattr(
+        "ticket_system.lib.git_utils.auto_commit_ticket_md_with_retry",
+        lambda *a, **k: {"status": "committed", "error": None, "attempts": 1},
+    )
 
     # update_parent_children（若有 --parent）
     monkeypatch.setattr(

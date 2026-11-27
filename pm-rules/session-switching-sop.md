@@ -242,6 +242,8 @@ ticket track runqueue --wave N --format=dag        # 完整依賴 DAG + 關鍵�
 
 然後依 dashboard 結果（`[LIVE]`／`[RECLAIMABLE]`／fallback 清單）決定從哪個 Ticket 繼續，worklog 與 runqueue 提示作輔助脈絡參考。
 
+**派發自訂代理人之前**：先比對 Agent 工具的可派清單與 `.claude/agents/` 的定義，每次啟動（含 `/resume` 與重開）都做；不完整時請用戶重開，最多 3 次。步驟見 `.claude/references/pm-role-details.md`〈代理人可派清單比對（每次啟動都做）〉。
+
 **Context 隔離**：一個 session 只做一件事，做完 commit → handoff（宣告方式見下方「Session 起始：宣告 Focus Topic」）。
 
 ### Session 起始：宣告 Focus Topic
@@ -377,7 +379,8 @@ find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" 
 
 ---
 
-**Last Updated**: 2026-08-24
+**Last Updated**: 2026-11-25
+**Version**: 1.9.0 — 〈新 session 開始時：重建全局視野〉補一段路由：派發自訂代理人前先比對可派清單，每次啟動都做，步驟見 `pm-role-details.md`〈代理人可派清單比對（每次啟動都做）〉
 **Version**: 1.8.0 — 修正「查詢方式」的可執行 grep：`docs/work-logs/v{version}/v{version}-main.md` 代入版本號後在本專案巢狀 worklog 目錄（`v0/v0.2/v0.2.1/`）下無法解析（實測 `No such file or directory`），改為 `find -name` 先定位檔案再 `grep`，不依賴目錄層數；散文引用段（宣告載體與格式）維持 `v{version}` 記法不變，並補一段說明兩者處置差異的理由（2026-08-24 巢狀結構實測發現）
 **Version**: 1.7.0 — 新增「Session 起始：宣告 Focus Topic」小節（宣告時機/載體/格式/查詢方式），實例化既有「Context 隔離」主張，並使其可被 `parallel-dispatch.md`「主題聚焦維度」查詢鏈步驟 1 消費；「/clear 前的強制確認」表新增一列 + 新增「收尾主題審視（建議）」小節，收尾時以 `ticket track board --group-by topic` 核對本 session 觸碰票的主題並視需要用 `topic-backfill-assign` 改派
 **Version**: 1.6.0 — /clear 前強制確認新增「peer 關閉訊號清點」規則：確認表增列「跨 session 對話 peer 是否已清點並發關閉訊號」+ 新增子章節（Why/Consequence/Action + 三列動作表）+ 禁止行為增列一條；與 `parallel-dispatch.md`「跨 session 同儕來訊時的脈絡存續判讀」節互引

@@ -2,6 +2,12 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.9.1 — `references/agent-type-not-found.md` AGT-1 實際機制欄補：清單也可能在 session 執行中途縮小（不需 /clear、/compact 或重開），「剛才還派得出去」不能排除本條
+**Last Updated**: 2026-11-25
+
+**Version**: 1.9.0 — 新增系統檔 `references/agent-type-not-found.md`（Claude Code 代理人載入），首條 AGT-1：派發收到 `Agent type ... not found`，被讀成定義檔壞了而改派；實際可能是 session 層級的載入殘缺；檢查方法為比對定義檔 `name` 與可派清單，再對照同 repo 另一個 session；來源為 2026-11 的 32 次啟動實測。SKILL.md 系統索引表同步加列
+**Last Updated**: 2026-11-25
+
 **Version**: 1.8.0 — `references/merge-gate-background-process.md` 新增 MG-6：閘門紅燈的斷言只看到空結果，被讀成被測邏輯沒有產出；實際是測試替身簽名過舊，`TypeError` 被 hook 的 observability except 吞成 INFO；檢查方法為在閘門完整輸出 grep `missing .* required positional argument` 等字樣；來源 `PC-BAL-061`。SKILL.md 系統索引表該列補「斷言實得空結果」
 **Last Updated**: 2026-11-20
 

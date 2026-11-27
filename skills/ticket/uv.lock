@@ -314,7 +314,7 @@ wheels = [
 
 [[package]]
 name = "ticket-system"
-version = "2.54.3"
+version = "2.54.4"
 source = { editable = "." }
 dependencies = [
     { name = "filelock" },

@@ -842,7 +842,10 @@ def test_block_message_uses_existing_cli_entrypoint(logger):
     assert should_block is True
     assert msg is not None
     assert "ticket track create" not in msg
-    assert "ticket create --source-ticket" in msg
+    # 兩條落地路線的入口皆為 `ticket create`：本版 --parent、後續版本 --version + --source-ticket
+    assert "ticket create --parent" in msg
+    assert "ticket create --version" in msg
+    assert "--source-ticket" in msg
     # 第二條通道的兩個步驟皆須出現，避免只提登記不提 resolve
     assert "add-spawn-request" in msg
     assert "resolve-spawn-request" in msg

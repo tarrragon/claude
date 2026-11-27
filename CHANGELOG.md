@@ -1,3 +1,98 @@
+## [3.6.0] - 2026-11-27
+
+本版主題「代理人設計」：代理人知識的歸屬（定義檔、skill、error-pattern 的 carrier）、代理人工具（tools 欄位、Bash 改檔範圍）、名冊索引，以及 consumer 的 error-pattern 回到上游的通道。
+
+### 對 consumer 的影響
+
+#### 收緊
+- **路徑的 `..` 段先收斂，再比對白名單**（error-pattern IMP-LLM-020）：`lib/path_permission.py` 的 `normalize_path` 先收斂 `.` 與 `..`，再剝除根前綴、比對白名單。影響 `main-thread-edit-restriction` 與 `bash-write-boundary-guard` 兩支 hook。
+
+  | 輸入 | 改動前 | 改動後 |
+  |---|---|---|
+  | 白名單前綴後接 `../` 跳到受限路徑（例：`.claude/hooks/../../lib/a.dart`） | 前綴比對通過，放行 | 收斂為 `lib/a.dart` 後依受限路徑判定，拒絕 |
+  | 收斂後跳出專案根（`../README.md`、`docs/../../x`） | 放行，或落在白名單外而未判定 | 一律拒絕，不進入白名單比對 |
+  | 不含 `..` 的路徑 | 依白名單判定 | 不變 |
+
+- **bash 寫入守衛認得 `Path(...).open(寫入模式)`**（tarrragon/claude#103）：`bash-write-boundary-guard` 處理 `python -c` 或 heredoc 內的 `.open()` 寫入時，原本只認接收者是 `Path(...)` 建構呼叫、且目標可常數化的寫法。
+
+  | 輸入 | 改動前 | 改動後 |
+  |---|---|---|
+  | `(Path(...) / rel).open('a')`，或 `w = Path(...)` 之後 `w.open('w')`，且目標不可常數化 | 不計入寫入目標，放行 | 視為寫入且目標不明，依既有線索判定（argv、腳本內容證據），有 `.claude` 證據即阻擋 |
+  | 寫入模式為 `a`／`w`／`x`／`r+`／`mode=` | 同上 | 同上 |
+  | 無參數的 `.open()`、模式 `r`／`rb` | 放行 | 放行（不變） |
+  | 接收者不是路徑（`f = sys.stdin; f.open('a')`）、函式參數傳入的 Path | 放行 | 放行（不變，沒有型別資訊不判定） |
+
+- **commit 內容檢查的單支例外，不再讓其他檢查的 deny 失效**：`lib/commit_content_guards.py` 逐支隔離每個 check 的例外。
+
+  | 輸入 | 改動前 | 改動後 |
+  |---|---|---|
+  | 同一批 check 中，一支拋例外、另一支判 deny | 例外往上拋：`commit-stage-guard-gate` 回 exit 1，`git-ref-transaction-content-guard` 由頂層 except 放行，deny 失效 | deny 保留（阻擋）；例外轉為 warn，附 check 名稱，寫 stderr 與日誌 |
+  | 只有例外、沒有 deny | 放行，沒有訊號 | 放行，多一則可見的 warn |
+  | `doc validate` 檢查 | 自帶 fail-open | 不變 |
+
+- **acceptance-auditor 不再套用寫死的 Dart／Flutter 命令**（`.claude/agents/acceptance-auditor.md` 1.7.0）：Step 5 的測試與分析命令改依序取自 `.claude/` 測試入口對照表、`.claude/project-integration/merge-gate.yaml`、專案 `CLAUDE.md`。三處都讀不到命令時，該項判 SKIP 並在報告寫 NeedsContext，不再猜測命令；禁止行為新增「禁止自行猜測測試或分析命令」。非 Dart 專案原本會被套上 `dart analyze`／`flutter test`，現在改為 SKIP 加 NeedsContext。
+- **規則條文新增的要求**（沒有執行機制，由 PM 自律）：
+  - 派發時收到 `Agent type ... not found` 就停手回報，不改派其他代理人；session 執行中途清單變少也適用（`agent-failure-sop.md`、`agent-dispatch-template.md`；system-misjudgment 新增系統檔 AGT-1）。
+  - session 啟動時，比對可派代理人清單與 `.claude/agents/*.md` 的 `name`；不完整時重開，最多 3 次，用盡後不派自訂代理人、也不改派（`pm-role-details.md`、`session-switching-sop.md`）。
+  - 凍結版本前，核對票面寫明「規劃期定稿」的承諾；還沒定稿的，先交用戶裁定或改為先做 ANA（`version-progression.md`）。
+  - 版本回顧時，對連續兩個 minor 零派發的代理人判定 active、reserve 或退役（`version-retrospective.md`）。
+  - 大量清理類派發的刪除片段，`new_string` 不得為空，須帶保留文字並核對 hunk 的增刪行數（`agent-dispatch-template.md`）。
+
+#### 放寬
+- **subagent 可用 Bash 改檔，限 checkout 外與非受管路徑**（`rules/core/tool-selection.md` 1.4.0、`references/tool-selection-details.md`）：
+
+  | 輸入 | 改動前 | 改動後 |
+  |---|---|---|
+  | subagent 寫 scratchpad、暫存目錄等不受守衛管的檔 | 規則要求一律用 Edit／Write | 可用 Bash，須同時遵守三項：字面替換、寫入前斷言出現次數、單檔或全部斷言後才寫入 |
+  | 受管路徑（`.claude/**`、`docs/**`、ticket md、`lib/`、`test/`、`src/`） | Edit／Write | 不變 |
+  | Edit／Write 被非專案來源拒絕（auto mode 等） | 停手回報 | 不變；另規定 PM 接到這類回報時，不自行補 `where.files` 代改，交用戶裁定 |
+
+  主線程不適用此放寬。
+- **sync-pull 的 `--clean` 不再過刪**：`--clean` 判定「本地刪過」原本只看 HEAD 最近一次的 A／D；pull 帶入檔案但還沒 commit 時，HEAD 最近一次仍是舊的 D，`sync-claude-push` 會把該檔當成本地刪除。現在 `sync-base.json` 記下 `base_acquired_local_head`（pull 取得 base 當下的本地 HEAD），刪除 commit 是它的祖先者不算本地刪過。欄位缺值或 SHA 無法解析時，維持舊行為。
+- **git 2.31 以下不再因 `rev-parse --path-format=absolute` 輸出錯位**：`workspace-wipe-guard`、`hook_base`、`dispatch_tracker`、framework-issue 的 `section_comment.py`、`track_hook_liveness` 等呼叫點，改以相對輸出自行解析成絕對路徑。最低 git 版本仍為 2.28；git 2.30.2 已實測通過，2.28 與 2.29 未實測。
+- **sync-pull 的備用解析器去除 preserve 清單項的行尾註解**：沒有 PyYAML 時，`sync-preserve.yaml` 的清單項 `- path  # 註解` 原本會把註解併入路徑，導致該路徑沒被保護；現在空白後接 `#` 才算註解，`- a#b` 仍視為路徑。
+
+#### 新增
+- **error-pattern frontmatter 新增 `carrier` 欄位**（error-pattern）：值為 `rule`／`skill:<名稱>`／`lang-pack:<skill>/<語言>`／`agent:<名稱>`／`none`。`add` 流程新增步驟 5b（三問）。新增 `lib/carrier_audit.py`，列出 carrier 已填、但目標載體不含該 pattern ID 的條目，有缺口時 exit 1。存量不回填，未填與 `none` 略過。
+- **error-pattern add 加入可攜性判定與收錄請求草稿**（error-pattern、framework-issue，tarrragon/claude#145）：`add` 新增步驟 6b（在步驟 7 配號前判定可攜性；不可攜者導向 `docs/`，不配號、不寫入 `.claude/`）與步驟 10（可攜且不是主控方時，產生收錄請求草稿）。新增 `lib/intake_draft.py`，把草稿印到 stdout，缺項時 exit 1；開 issue 後在 frontmatter 加 `upstream_issue`。framework-issue 新增 `references/content-intake-request.md`，定義收錄請求的區塊序號與標題、填寫規則、編號衝突的處置。既有步驟的編號不變。
+- **sync-pull 結束摘要列出 error-pattern 的上游狀態**（error-pattern）：新增 `lib/upstream_status.py`，`sync-claude-pull.py` 結束時輸出到 stderr，不影響結束碼。內容分三類：待回報（逐則附 `intake_draft.py` 指令）、同號不同內容（逐則）、已回報（總數與 issue 號）；已收錄的不列。
+- **agents registry 改以（語言, 領域）索引**（tarrragon/claude#71、#72、#73；`registry.yaml`、`agents/README.md`）：頂層新增 `index`；每名代理人新增 `language`、`domain`、`tier`（active／reserve）。移除 `john-carmack`、`memory-network-builder`（定義檔保留作 DEPRECATED 重定向）；登記 `framework-issue-curator`、`impeccable-manual-edit-applier`。零派發的 clove、oregano、sassafras、project-compliance-agent、coriander、basil-event-architect、fennel-go-developer 與 mint 標為 `tier: reserve`（mint 改寫成 hook 或 script 不在本版）。`agents` 的結構不變。
+- **合併閘門加入接行偵測，預設只警告**（worktree，IMP-LLM-013）：新增 `scripts/line_join_scan.py`，掃描相鄰行接合，以及 `.py` 程式行併入註解。輸出 `[合併前掃描] WARNING：疑似接行（IMP-LLM-013）<kind>｜<路徑>:<行>｜<說明>`，不改變閘門結果；環境變數 `LINE_JOIN_SCAN=off` 可關閉。偵測本身發生任何例外都放行，並寫 stderr。
+- **跨版本 `ticket migrate` 保留血緣**：新 ID 為根票形式時，保留原本的 `parent_id`，並把原父票 `children` 裡的舊號改寫為新號；同版本內改號仍清為 null。
+- **tdd skill 新增 `references/phase3/flutter-phase3b-flow.md`**：`parsley-flutter-developer` 定義中的五個流程章節（核心職責、Phase 3b 執行流程、與其他代理人協作、最佳實踐、成功指標）逐字移到此檔，定義原位置留一行路由。
+- **新增的 error-pattern**：IMP-LLM-020、PC-LLM-056、PC-LLM-057，以及收錄 consumer 回報的 DOC-BAL-004、IMP-BAL-022、IMP-GPD-028、IMP-GPD-029、IMP-V1-007、PC-SCLK-009、PC-SCLK-010、PC-V1-015、PC-V1-016、TEST-BAL-011（tarrragon/claude#145）。IMP-LLM-008、IMP-GPD-023、PC-GPD-031 補了變體或實例。索引見 `.claude/error-patterns/README.md`。
+
+#### 修正
+- **代理人 frontmatter 的無效欄位**：basil-event-architect、bay-quality-auditor、clove-security-reviewer、coriander-integration-tester、ginger-performance-tuner、thyme-extension-engineer 的 `allowed-tools` 改為 `tools`，並移除不存在的 `LS`／`MultiEdit`；oregano-data-miner 的 `tools` 移除 `LS`；basil-event-architect、bay、clove 的 `metadata.color` 移到頂層 `color`。Claude Code `--debug` 對 frontmatter key 的 WARN 由 6 則降為 0。
+- **clove-security-reviewer 的觸發情境由「強制」改為「建議」**（tarrragon/claude#71）：框架沒有任何 hook 執行該強制，條文改寫為由 PM 判斷是否派發。
+- **error-pattern add 步驟 7 移除「可改名加 slug」**：佔位檔沒有被 git 追蹤，`git mv` 用不了，Bash 的 `mv` 又會被 `bash-write-boundary-guard` 擋下；改為佔位檔名就是最終檔名。
+- **sync-pull 解 SKILL.md 版號衝突時，一併對齊衍生的版號住址**：三方皆不同、且只有版號衝突的 SKILL.md，原本只寫回 `metadata.version`；現在一併對齊該 skill 的 CHANGELOG 首條、pyproject、`__version__`、plugin.json（`sync-pull.md` 的版號列同步更新）。正文中的版號行、讀不出版號、缺權威欄位的情況，列入衝突清單交用戶，不自動改寫。
+- **version-consistency-guard 讀得到清單項形態的 todolist**：登記版本的 regex 原本不認 `- version:` 清單項，檢查因此靜默略過；現在接受清單項前綴，current version 取 `versions[]` 中 `status: active` 的條目（舊的頂層 `current_version` 保留作後備）。解析不出版本條目、或 active 超過 1 個時，輸出可見的警告；0 個 active 時只記 info，並略過依賴 current version 的檢查。
+- **acceptance-gate 的 spawn 落地修復建議依落地版本分兩條路**：阻擋訊息改為本版範圍用 `ticket create --parent <ANA>`，依〈兩期〉排入後續版本用 `ticket create --version <目標版本> --source-ticket <ANA>`。阻擋條件與結束碼不變。
+- **派發骨架的前景執行句寫明 timeout 指的是 Bash 工具的參數**：原句讓代理人在命令前加 `timeout` 指令，結果 `command not found`；現在寫「設 Bash 工具的 timeout 參數，不加 timeout 指令前綴」。
+- **bash 守衛共用的寫入目標抽取搬到 `lib/bash_write_targets.py`**（tarrragon/claude#97）：`bash-edit-guard` 與 `bash-write-boundary-guard` 改以一般 import 載入該模組，判定、輸出字面、結束碼不變。`lib/bash_write_targets.py` 缺失時（例如部分同步），兩支 hook 在 import 期以 exit 1 結束（非阻擋錯誤、可見），不吞成 exit 0。
+- **sync-push `--clean` 不再漏掉 pull 之前的本地刪除**：本地先刪檔並 commit，之後才以 sync-pull 推進 base 時，判讀原本把這次刪除當成未刪，檔案判為「可能為他方貢獻」而保留，`--clean` 不會傳播這次刪除。現在只在 pull 確實把檔帶回工作樹時，才排除取得 base 之前的刪除紀錄；檔案不在工作樹時，這次刪除照常傳播。pull 帶回檔、尚未 commit 的情境（原本要防的誤刪）仍然保留；判定失敗時同樣保留。
+
+#### 其他
+- 本版改動的 skill 版號：tdd 2.17.0、worktree 1.12.0、ticket 2.54.4、framework-issue 2.13.1、error-pattern 1.13.0、system-misjudgment 1.9.1。tdd 2.17.0 以發佈庫的 2.16.0 為底，再加上本版對 Phase 3 實作文件的新增；發佈庫與本地曾各自取號 2.15.0，合併時順延到下一個空號。
+- 自發佈庫收入的 skill 新版：component-contract-design 3.25.0、compositional-writing 1.83.0、foundation-design 6.13.0、frontend-with-playwright 0.7.0、impeccable 4.10.0、multi-round-review 2.58.0、requirement-protocol 0.9.0、saas-tech-selection 1.15.0、skill-design-guide 1.28.0、spec 1.11.0、ux-design-evaluation 1.16.0、wrap-decision 2.20.0。
+- dart-style-guardian 1.14.0：收入 tarrragon/claude 在 v3.5.1 之後直接推送的版本。顏色規則改為語意 token、跟著亮暗主題，錯誤與警告分開，並移除綁定單一專案的色票。
+- impeccable 從 3.5.1 升到 4.10.0，移除上游 4.10.0 已刪除的 54 個檔，包括 live 流程腳本。另外補上 `metadata.version` 與 CHANGELOG 的 4.10.0 條目，版號住址一致性檢查才會通過。3.5.1 對 `scripts/context-signals.mjs` 的本地修正（tarrragon/claude#111）隨該檔一併移除，4.10.0 已沒有同一條程式路徑。
+
+### 遷移步驟
+
+1. 本地改過 `.claude/agents/` 的專案：上述 7 個代理人，以及 `acceptance-auditor.md`、`parsley-flutter-developer.md`、`clove-security-reviewer.md` 的 frontmatter 與內文都有變動，三方合併可能出現衝突。保留本地分叉的，仍要把 `allowed-tools` 改為 `tools`、`metadata.color` 改為頂層 `color`。
+2. 本地改過 `agents/registry.yaml` 的專案：合併後確認每名代理人都有 `language`、`domain`、`tier`，頂層 `index` 涵蓋所有非 DEPRECATED 的代理人；本地新增的代理人自行補上三欄與 `index` 列。
+3. 非 Dart 專案：在 `.claude/project-integration/merge-gate.yaml` 或專案 `CLAUDE.md` 寫明測試與分析命令，否則 `acceptance-auditor` 的 Step 5 該項會判 SKIP 並寫 NeedsContext。
+4. error-pattern：
+   - 本地有 TEST-BAL-003（計時邏輯讀牆鐘時間、假時鐘只推進計時器）的專案：上游的 TEST-BAL-003 是另一則，牆鐘那則在上游收為 TEST-BAL-011。sync-pull 帶回 TEST-BAL-011 後，刪除本地的舊號檔，並以 grep 更新本地對舊號的引用（見 tarrragon/claude#145）。
+   - 本地已有上游新收錄的同源 pattern 的專案：其中 IMP-V1-007、PC-SCLK-009、PC-SCLK-010 在收錄時改寫了 consumer 的 ticket 編號，另有幾則補了基本資訊表，與本地檔不再逐字相同，以上游版為準。sync-pull 結束摘要的「同號不同內容」會逐則列出。
+   - 新增的 pattern 可以填 `carrier` 欄位，存量不需回填。要檢查已填者的目標載體是否含該 pattern ID：`uv --directory .claude/skills/error-pattern run python lib/carrier_audit.py`（有缺口時 exit 1）。
+5. `.claude/sync-base.json` 會新增 `base_acquired_local_head` 欄位，由 pull 自動寫入，與 delta 放在同一個 commit。
+6. 不想看到合併閘門的接行警告：設環境變數 `LINE_JOIN_SCAN=off`。
+7. 專案規則或代理人定義引用了 `tool-selection` 規則 1 的：確認沒有與新的 Bash 改檔放寬範圍（subagent、checkout 外與非受管路徑）矛盾。
+8. 自訂 hook 或腳本 import 了 `bash-write-boundary-guard-hook.py` 的 `iter_checkout_write_targets`、`_extract_candidate_paths`、`_scope_hit`：改為 `from lib.bash_write_targets import ...`。
+
 ## [3.5.1] - 2026-11-21
 
 3.5.0 承諾未達成的修補，來源是 graph_project_docs_manager 的 3.5.0 影響量測回報。

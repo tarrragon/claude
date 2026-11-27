@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.54.4（2026-11-26）— 修正：`migrate` 跨版本遷移子票時保留 `parent_id` 與父票 `children` 血緣；`track_hook_liveness` 的 `git rev-parse` 不再依賴 `--path-format=absolute`（git 2.31+），相對輸出以 `-C` 目錄為基準 resolve；dispatch skeleton 前景執行句明寫 timeout 指 Bash 工具參數。測試：`test_migrate_cross_version_lineage.py`、`test_track_hook_liveness.py` 新增，`test_create_*` 兩檔 mock 自動提交隔離 git。
+
 **Version**: 2.54.3（2026-11-20）— 文件：`references/field-semantics.md` 新增〈where.layer 的可信度〉一節，〈適用範圍〉的不涵蓋表補一列。`where.layer` 是自由文字選填欄位：CLI 不驗證值域，填入值與 `where.files` 不保證一致，`parallel-suggestion-hook` 的讀取分支讀的是不存在的扁平鍵而不會執行；hook、checker 與 PM 不得依其值判定，架構層資訊改由 `where.files` 判讀。CLI 行為不變。
 
 **Version**: 2.54.2（2026-11-18）— append-log 補寫不再落進 CLI 寫入的子節：

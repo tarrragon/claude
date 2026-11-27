@@ -13,6 +13,7 @@ ALLOWED_PATTERNS 是 .claude/ 子目錄白名單的建立端（source of truth�
 """
 
 import os
+import posixpath
 import re
 from collections import namedtuple
 from pathlib import Path
@@ -110,6 +111,10 @@ def normalize_path(file_path: str, root: "str | None" = None) -> str:
     （CLAUDE_PROJECT_DIR，缺則 cwd）。
     """
     normalized = file_path.replace("\\", "/")
+    # 先收斂 . 與 .. 路徑段，再做根前綴剝除與白名單比對；否則白名單前綴
+    # （.claude/hooks/ 等）後接 ../../ 可穿越到受限路徑
+    if normalized:
+        normalized = posixpath.normpath(normalized)
 
     project_dir = root or os.getenv("CLAUDE_PROJECT_DIR", str(Path.cwd()))
     # 根前綴剝除含磁碟機代號大小寫與目錄邊界（同字首兄弟目錄不剝除，維持絕對路徑）
@@ -121,6 +126,11 @@ def normalize_path(file_path: str, root: "str | None" = None) -> str:
         normalized = normalized[2:]
 
     return normalized
+
+
+def escapes_root(normalized_path: str) -> bool:
+    """收斂後的相對路徑是否跳出作用根（以 .. 開頭）"""
+    return normalized_path == ".." or normalized_path.startswith("../")
 
 
 # ============================================================================
@@ -148,6 +158,9 @@ def is_allowed_path(file_path: str, logger) -> bool:
         return True
 
     normalized_path = normalize_path(file_path)
+    if escapes_root(normalized_path):
+        logger.warning(f"路徑跳出專案根，不屬允許清單: {normalized_path}")
+        return False
     return _matches_any_pattern(normalized_path, ALLOWED_PATTERNS, logger, "允許")
 
 
@@ -177,6 +190,11 @@ def check_file_permission(file_path: str, logger, root: "str | None" = None) -> 
 
     normalized_path = normalize_path(file_path, root)
     logger.debug(f"檢查檔案路徑: {normalized_path}")
+
+    # 收斂後跳出專案根（.. 穿越）一律拒絕，不進入白名單比對
+    if escapes_root(normalized_path):
+        logger.warning(f"拒絕編輯跳出專案根的路徑: {normalized_path}")
+        return False, GateMessages.EDIT_BLOCKED_DEFAULT_DENY
 
     # 先檢查允許清單（白名單優先，避免需要 EXCEPTION 層覆蓋 BLOCKED）
     if is_allowed_path(normalized_path, logger):

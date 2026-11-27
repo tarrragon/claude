@@ -197,8 +197,7 @@ def _shared_state_root(project_root: Path) -> Path:
         return project_root
     try:
         proc = subprocess.run(
-            ["git", "-C", str(project_root), "rev-parse", "--path-format=absolute",
-             "--git-common-dir"],
+            ["git", "-C", str(project_root), "rev-parse", "--git-common-dir"],
             capture_output=True, text=True, timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -206,7 +205,8 @@ def _shared_state_root(project_root: Path) -> Path:
     out = proc.stdout.strip()
     if proc.returncode != 0 or not out:
         return project_root
-    return Path(out).parent
+    # 不用 --path-format=absolute（需 git 2.31）；相對輸出以 -C 目錄為基準
+    return Path(os.path.normpath(os.path.join(str(project_root), out))).parent
 
 
 def _liveness_dir(project_root: Path) -> Path:

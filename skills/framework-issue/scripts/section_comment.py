@@ -87,6 +87,7 @@ open issue，`--issue N` 只掃單一 issue（明確指定即略過範圍解析�
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -323,6 +324,14 @@ def validate_owner_for_transfer(owner: str) -> None:
 
 
 
+def _git_common_dir_abs(out: str) -> Path:
+    """git rev-parse --git-common-dir 的輸出轉絕對路徑（相對輸出以 cwd 為基準）。
+
+    不用 --path-format=absolute：需 git 2.31，舊版把選項原樣印成第一行（rc=0）。
+    """
+    return Path(os.path.normpath(os.path.join(os.getcwd(), out)))
+
+
 def _registry_path() -> Optional[Path]:
     """`pm-registry.json` 的路徑（PM SessionStart hook 寫入處），透過
     `git rev-parse --git-common-dir` 定位以支援 worktree（與
@@ -331,13 +340,13 @@ def _registry_path() -> Optional[Path]:
     """
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip()) / "pm-registry.json"
+            return _git_common_dir_abs(result.stdout.strip()) / "pm-registry.json"
     except (subprocess.TimeoutExpired, OSError):
         pass
     return None
@@ -1618,13 +1627,13 @@ def _project_owner_prefix() -> str:
     """
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip()).parent.name.replace("_", "-")
+            return _git_common_dir_abs(result.stdout.strip()).parent.name.replace("_", "-")
     except (subprocess.TimeoutExpired, OSError):
         pass
     return Path.cwd().name.replace("_", "-")

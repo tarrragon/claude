@@ -537,3 +537,52 @@ def test_execute_json_includes_nonblocking_errors(fake_project_root):
     payload = json.loads(buf.getvalue())
     assert rc == 0
     assert payload["nonblocking_errors"]["total"] == 1
+
+
+# --- _shared_state_root：不依賴 --path-format=absolute（git 2.31+）-----------
+
+
+def _fake_old_git(common_dir_output: str):
+    """模擬 git 2.30：不認得的 --xxx 選項原樣印成一行（rc=0），其餘照常輸出。"""
+    import subprocess
+
+    def fake_run(cmd, *a, **kw):
+        lines = []
+        for arg in cmd[cmd.index("rev-parse") + 1:]:
+            lines.append(common_dir_output if arg == "--git-common-dir" else arg)
+        return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(lines) + "\n", stderr="")
+
+    return fake_run
+
+
+@pytest.mark.parametrize("git_output", [".git", "/abs/main/.git"])
+def test_shared_state_root_relative_and_absolute_output(monkeypatch, tmp_path, git_output):
+    import subprocess
+
+    from ticket_system.commands import track_hook_liveness as mod
+
+    monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+    seen = []
+    fake = _fake_old_git(git_output)
+    monkeypatch.setattr(subprocess, "run", lambda cmd, *a, **kw: (seen.append(cmd), fake(cmd))[1])
+    root = mod._shared_state_root(tmp_path)
+    assert all("--path-format=absolute" not in c for c in seen)
+    expected = tmp_path if git_output == ".git" else Path("/abs/main")
+    assert root == expected
+
+
+def test_shared_state_root_real_main_and_linked_worktree(monkeypatch, tmp_path):
+    import subprocess
+
+    from ticket_system.commands import track_hook_liveness as mod
+
+    monkeypatch.delenv("HOOK_TEST_ISOLATION", raising=False)
+    main = (tmp_path / "main").resolve()
+    wt = (tmp_path / "wt").resolve()
+    main.mkdir()
+    for args in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"],
+                 ["commit", "-q", "--allow-empty", "-m", "i"],
+                 ["worktree", "add", "-q", "-b", "b", str(wt)]):
+        subprocess.run(["git", "-C", str(main), *args], check=True, capture_output=True)
+    assert mod._shared_state_root(main) == main
+    assert mod._shared_state_root(wt) == main

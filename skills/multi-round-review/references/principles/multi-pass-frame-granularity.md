@@ -21,7 +21,7 @@
 ## 反模式
 
 - 「再來一輪」沒指定 frame 切換、用同方向 reviewer 掃同類問題
-- 把「多輪 review」等於「多個 instance」、忽略 frame 才是主要變量
+- 把「多輪 review」等於「多個 instance」、忽略 frame 才是主要變數
 - 修完字面層就停、不切換到結構 frame / meta frame
 
 ## 套用情境

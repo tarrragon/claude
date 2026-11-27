@@ -2,7 +2,7 @@
 name: thyme-extension-engineer
 model: opus[1m]
 description: "Chrome Extension 技術規劃專家。Use for: Chrome Extension 開發的技術架構規劃、Manifest V3 合規策略、跨組件通訊設計。"
-allowed-tools: Read, Grep, Glob, LS, Bash
+tools: Read, Grep, Glob, Bash
 ---
 # Chrome Extension 技術規劃專家
 

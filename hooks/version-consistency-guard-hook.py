@@ -121,7 +121,7 @@ def get_registered_versions(project_root: Path, logger) -> set:
         content = todolist_path.read_text(encoding='utf-8')
         # Match version: "X.Y.Z" or version: X.Y.Z (with or without quotes)
         matches = re.findall(
-            r'^\s*version:\s*["\']?(\d+\.\d+\.\d+)["\']?\s*$',
+            r'^\s*(?:-\s+)?version:\s*["\']?(\d+\.\d+\.\d+)["\']?\s*$',
             content,
             re.MULTILINE,
         )
@@ -456,8 +456,75 @@ def print_version_mismatch_warning(current_version: str, active_version: str) ->
 # Main
 # ============================================================================
 
+ENTRY_VERSION_RE = re.compile(r'^\s*-\s+version:\s*["\']?(\d+\.\d+\.\d+)["\']?\s*$')
+ENTRY_STATUS_RE = re.compile(r'^\s+status:\s*["\']?([\w-]+)["\']?\s*(?:#.*)?$')
+
+
+def read_active_versions(project_root: Path, logger) -> List[str]:
+    """Return versions of versions[] entries whose status is active.
+
+    Line-based parse: the first status line after a "- version:" line
+    belongs to that entry.
+    """
+    todolist_path = project_root / "docs" / "todolist.yaml"
+    if not todolist_path.exists():
+        return []
+    try:
+        lines = todolist_path.read_text(encoding='utf-8').splitlines()
+    except Exception as e:
+        logger.warning(f"Failed to read todolist.yaml for active versions: {e}")
+        return []
+
+    active: List[str] = []
+    current: Optional[str] = None
+    for line in lines:
+        entry = ENTRY_VERSION_RE.match(line)
+        if entry:
+            current = entry.group(1)
+            continue
+        status = ENTRY_STATUS_RE.match(line)
+        if status and current:
+            if status.group(1) == "active":
+                active.append(current)
+            current = None
+    return active
+
+
+def print_guard_warning(title: str, lines: List[str]) -> None:
+    """Print a visible (stdout, SessionStart context) warning block."""
+    separator = "=" * 60
+    print()
+    print(separator)
+    print(f"[Version Consistency Guard] {title}")
+    print(separator)
+    for line in lines:
+        print(line)
+    print(separator)
+    print()
+
+
+def resolve_current_version(project_root: Path, logger) -> Optional[str]:
+    """Resolve current version: single active entry, else legacy key.
+
+    Warns visibly when more than one entry is active; returns None for
+    zero active without legacy key (version gap, legal) or ambiguity.
+    """
+    active = read_active_versions(project_root, logger)
+    if len(active) > 1:
+        print_guard_warning("todolist.yaml 有多個 active 版本", [
+            f"active 版本：{', '.join(active)}",
+            "current version 無法判定，舊版未完成票與版本錯位檢查已略過。",
+            "建議：docs/todolist.yaml 僅保留一個 status: active 的版本。",
+        ])
+        logger.warning(f"Multiple active versions in todolist.yaml: {active}")
+        return None
+    if active:
+        return active[0]
+    return read_current_version_from_todolist(project_root, logger)
+
+
 def read_current_version_from_todolist(project_root: Path, logger) -> Optional[str]:
-    """Read current_version from docs/todolist.yaml.
+    """Read legacy top-level current_version from docs/todolist.yaml.
 
     Args:
         project_root: Project root path
@@ -510,19 +577,25 @@ def main() -> int:
         )
     else:
         relevant_unregistered = []
+        if (project_root / "docs" / "todolist.yaml").exists():
+            print_guard_warning("todolist.yaml 解析不出任何版本條目", [
+                "docs/todolist.yaml 存在，但找不到 versions[] 的 version 條目。",
+                "版本登記檢查、舊版未完成票檢查與版本錯位檢查皆未執行。",
+                "建議：確認 todolist 結構（見 doc-flow todolist 範本）。",
+            ])
+            logger.warning("todolist.yaml exists but no version entries parsed")
 
     if relevant_unregistered:
         print_unregistered_versions_warning(relevant_unregistered)
         logger.info(f"Unregistered worklog versions: {', '.join(relevant_unregistered)}")
-    else:
+    elif registered:
         logger.debug("All worklog version directories are registered in todolist.yaml")
 
-    # Read current_version from todolist.yaml
-    current_version = read_current_version_from_todolist(project_root, logger)
+    current_version = resolve_current_version(project_root, logger)
 
     if not current_version:
-        # No version file or can't parse - silently exit
-        logger.debug("Could not read current_version from todolist.yaml")
+        # 0 active = 版本空窗（合法）；多 active 已於 resolve 內警告
+        logger.info("No current version resolved; skipping current-version checks")
         return 0
 
     logger.debug(f"Current version: {current_version}")

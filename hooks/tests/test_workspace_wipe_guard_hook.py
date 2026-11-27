@@ -20,6 +20,7 @@ clean -f / checkout 帶 ref 前綴形式）
 import io
 import json
 import logging
+import os
 import sys
 import importlib.util
 from pathlib import Path
@@ -1108,6 +1109,81 @@ class TestTargetRepoResolution:
             )
         assert code == 0
         assert any("目標 repo 解析" in r.getMessage() for r in caplog.records)
+
+
+class TestResolveRevParsePathsOldGit:
+    """3.6.0-W1-259：目標 repo 解析不依賴 --path-format=absolute（git 2.31+）。"""
+
+    @staticmethod
+    def _fake_old_git(outputs: dict, seen: list):
+        """模擬 git 2.30：不認得的 --xxx 選項原樣印成一行（rc=0）。"""
+        import subprocess
+
+        def fake_run(cmd, *a, **kw):
+            seen.append(cmd)
+            base = cmd[cmd.index("-C") + 1]
+            args = cmd[cmd.index("rev-parse") + 1:]
+            lines = [outputs[base].get(arg, arg) for arg in args]
+            return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(lines) + "\n", stderr="")
+
+        return fake_run
+
+    def test_old_git_option_literal_line_not_misaligned(self, monkeypatch, tmp_path):
+        seen: list = []
+        outputs = {
+            "/r": {"--show-toplevel": "/r", "--git-common-dir": ".git"},
+            "/w": {"--show-toplevel": "/w", "--git-common-dir": "/r/.git"},
+        }
+        monkeypatch.setattr(hook_module.subprocess, "run", self._fake_old_git(outputs, seen))
+        logger = logging.getLogger("t")
+        assert hook_module._classify_target("/r", Path("/r"), "/", logger) == ("main", None)
+        # linked worktree：舊實作在此被判為主 repo（兩邊第 0 行同為選項字面）
+        assert hook_module._classify_target("/w", Path("/r"), "/", logger) == ("linked", "/w")
+        assert all("--path-format=absolute" not in c for c in seen)
+
+    def test_relative_common_dir_resolved_against_dash_c_dir(self, tmp_path):
+        repo = _init_repo(tmp_path / "repo")
+        paths = hook_module._resolve_rev_parse_paths(
+            str(repo), "--show-toplevel", "--git-common-dir"
+        )
+        assert [os.path.realpath(p) for p in paths] == [
+            os.path.realpath(repo), os.path.realpath(repo / ".git")
+        ]
+
+    def test_wrong_line_count_is_failure(self, monkeypatch, tmp_path):
+        import subprocess
+
+        def fake_run(cmd, *a, **kw):
+            return subprocess.CompletedProcess(cmd, 0, stdout="x\ny\nz\n", stderr="")
+
+        monkeypatch.setattr(hook_module.subprocess, "run", fake_run)
+        assert hook_module._resolve_rev_parse_paths(
+            str(tmp_path), "--show-toplevel", "--git-common-dir"
+        ) is None
+
+    @pytest.mark.parametrize("failure", ["timeout", "rc"])
+    def test_resolution_failure_fails_closed_and_still_denies(
+        self, monkeypatch, capsys, two_repos, failure
+    ):
+        """E2 正向對照：判定失敗（git 逾時、rc 非 0）時落在阻擋一側，
+        且主 repo 的 git stash 仍被擋、其他 repo 在解析成功時仍放行。"""
+        import subprocess
+
+        main_repo, other = two_repos
+        # 對照：解析正常時，其他 repo 放行、主 repo 阻擋
+        assert _run_target_hook(monkeypatch, f"git -C {other} stash", main_repo, str(main_repo)) == 0
+        assert _run_target_hook(monkeypatch, f"git -C {main_repo} stash", main_repo, "/") == 2
+
+        def fake_run(cmd, *a, **kw):
+            if "rev-parse" in cmd:
+                if failure == "timeout":
+                    raise subprocess.TimeoutExpired(cmd="git", timeout=5)
+                return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="boom")
+            return real_run(cmd, *a, **kw)
+
+        real_run = subprocess.run
+        monkeypatch.setattr(hook_module.subprocess, "run", fake_run)
+        assert _run_target_hook(monkeypatch, f"git -C {other} stash", main_repo, str(main_repo)) == 2
 
 
 class TestRunRevParseTimeoutLogging:

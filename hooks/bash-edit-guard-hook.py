@@ -13,8 +13,8 @@ Bash Edit Guard Hook - PreToolUse Hook
 觸發時機: 執行 Bash 工具時
 
 檢測模式 A（以 Bash 寫入檔案，建議改用 Edit 工具）:
-  寫入目標取自 bash-write-boundary-guard-hook.py 的 iter_checkout_write_targets
-  （importlib 載入，兩支守衛判定同源），涵蓋直譯器內嵌寫入、heredoc、重導向、
+  寫入目標取自 lib/bash_write_targets.py 的 iter_checkout_write_targets
+  （一般 import，兩支守衛判定同源），涵蓋直譯器內嵌寫入、heredoc、重導向、
   awk -i inplace、ed／ex、sed -i、perl -pi 等；目標換算成 checkout 相對路徑後分級：
   - ticket md（目錄名取自 ticket 系統常數 WORK_LOGS_DIR／TICKETS_DIR）：deny，
     指引 ticket CLI 與 Edit，Edit 不可用時停手回報
@@ -22,7 +22,8 @@ Bash Edit Guard Hook - PreToolUse Hook
     不帶 permission_decision（不擴大略過權限提示的範圍）
   - 非受管路徑：只對 sed -i／perl -pi 字面送 additionalContext 警告（不帶
     permission_decision），重導向不警告
-  共用抽取載入或解析失敗時退回非受管路徑的現行行為（fail-open），寫日誌與 stderr。
+  共用抽取解析失敗時退回非受管路徑的現行行為（fail-open），寫日誌與 stderr；
+  共用模組缺失則 import 期失敗，hook 進程非 0 結束（不吞成 exit 0）。
 
 檢測模式 B（裸 cd / pushd，建議改用 git -C 或子 shell）:
   - 行首裸 cd / pushd（含多行命令第二行行首，connector 集涵蓋 \\n）
@@ -57,38 +58,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 from lib.hook_messages import ValidationMessages, format_message
 from lib.git_utils import get_action_root
+from lib.bash_write_targets import iter_checkout_write_targets
 
-_BOUNDARY_GUARD_FILE = Path(__file__).resolve().parent / "bash-write-boundary-guard-hook.py"
 _TICKET_SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / "ticket"
 _boundary_guard_cache: dict = {}
 
 # 受管路徑：ticket md 之外的其餘受管範圍（checkout 相對路徑）
 _MANAGED_TOP_DIRS = frozenset({"docs"})
 _MANAGED_ROOT_FILES = frozenset({"CLAUDE.md", "CHANGELOG.md"})
-
-
-def _load_boundary_guard():
-    """載入 bash-write-boundary-guard（檔名含連字號，以 importlib 載入）取其寫入目標抽取。
-
-    兩支守衛共用同一套命令解析，寫入形態（直譯器、heredoc、重導向、awk -i inplace、
-    ed／ex、sed -i、perl -pi 等）的判定同源。載入失敗回傳 None，呼叫端退回現行行為。
-    """
-    if "module" in _boundary_guard_cache:
-        return _boundary_guard_cache["module"]
-    import importlib.util
-
-    module = None
-    try:
-        spec = importlib.util.spec_from_file_location(
-            "bash_write_boundary_guard_shared", _BOUNDARY_GUARD_FILE)
-        if spec is not None and spec.loader is not None:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-    except Exception as e:  # 載入失敗：退回現行行為，由呼叫端記錄日誌與 stderr
-        sys.stderr.write("[bash-edit-guard] 載入 bash-write-boundary-guard 失敗: %s\n" % e)
-        module = None
-    _boundary_guard_cache["module"] = module
-    return module
 
 
 def _ticket_md_pattern():
@@ -111,16 +88,12 @@ def _ticket_md_pattern():
 def _managed_write_targets(command: str, cwd: str, logger):
     """命令的寫入目標中落在受管路徑者，回傳 (ticket md 清單, 其餘受管清單)。
 
-    共用抽取不可用時回傳 None（呼叫端退回現行行為）。
+    解析異常時回傳 None（呼叫端退回現行行為）。
     """
-    guard = _load_boundary_guard()
-    if guard is None:
-        logger.error("共用寫入目標抽取不可用，受管路徑分級停用，退回現行行為")
-        return None
     ticket_pattern = _ticket_md_pattern()
     ticket_hits, managed_hits = [], []
     try:
-        for _raw, rel, _why in guard.iter_checkout_write_targets(command, cwd):
+        for _raw, rel, _why in iter_checkout_write_targets(command, cwd):
             if not rel:
                 continue
             if ticket_pattern is not None and ticket_pattern.match(rel):

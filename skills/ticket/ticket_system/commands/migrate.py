@@ -488,6 +488,22 @@ def _save_parent_children(path: Path, parent: Dict[str, Any], children: list) ->
         return False
 
 
+def _resolve_parent_id(old_id: Optional[str], new_id: str, old_parent_id: Optional[str],
+                       chain_parent: Optional[str]) -> Optional[str]:
+    """遷移後的 parent_id：跨版本遷移成根票形式時保留原父票，其餘取 chain.parent。
+
+    跨版本遷移只換版本，父子關係未變；同版本改號成根票是刻意重排階層，維持清為 null。
+    保留後 old/new parent 相同，不觸發 _sync_parent_children；原父票 children 的舊號
+    已由交叉引用改寫為新號。
+    """
+    if chain_parent is not None or not old_parent_id or not old_id:
+        return chain_parent
+    old_c, new_c = extract_id_components(old_id), extract_id_components(new_id)
+    if old_c and new_c and old_c["version"] != new_c["version"]:
+        return old_parent_id
+    return chain_parent
+
+
 def _sync_parent_children(
     old_id: str,
     new_id: str,
@@ -641,7 +657,8 @@ def _prepare_member(ticket: Dict[str, Any], old_id: str, new_id: str,
     chain_info = calculate_chain_info(new_id)
     if chain_info:
         ticket["chain"] = chain_info
-        ticket["parent_id"] = chain_info.get("parent")
+        ticket["parent_id"] = _resolve_parent_id(
+            old_id, new_id, ticket.get("parent_id"), chain_info.get("parent"))
 
 
 def _member_path(new_id: str, fallback_version: str) -> Path:
@@ -1061,7 +1078,8 @@ def _migrate_ticket_files(
 
         # 更新 parent_id；新 ID 為根票時清為 null（chain_info 為空時不動）
         if chain_info:
-            ticket["parent_id"] = chain_info.get("parent")
+            ticket["parent_id"] = _resolve_parent_id(
+                old_id, target_id, original_parent_id, chain_info.get("parent"))
 
     # 遷移前的父票（供遷移後同步舊父/新父 children）
     old_parent_id = original_parent_id

@@ -33,6 +33,8 @@ echo banned=$(grep -c "數據\|代碼" $FILES | awk -F: '{s+=$2} END{print s}')
 
 同一 session 的第二個實例：背景取樣器以 `for f in $D/*.json(N)` 列檔，zsh 回報 `no matches found: .../*.json(N)`，迴圈在第一輪就以 exit 1 中止，取樣檔 0 行。
 
+第三個實例（上游主控，2026-11）：對外發佈前，要核對一批收錄檔的內文已不含專案識別符。命令寫成 `files=$(git show --name-only ...); for f in $files; do git show main:$f; done | grep -cE '<識別符樣式>'`。zsh 把 `$files` 當成一個參數，迴圈只跑一輪，`git show` 收到以換行相連的整串路徑，回報 `fatal: path ... does not exist`；下游的 `grep -c` 拿到空輸入，印出 `0`。這個 `0` 正好是預期的「通過」值。這次能攔下，是因為 stderr 沒有被濾掉，`fatal` 和 `0` 出現在同一份輸出裡；改用 `... | while read f; do ...; done` 逐行讀取，再加一道「檔案存在數 = 10」的正向計數後重跑，才確認是真的 0 命中。這一例說明，預期值為 0 的核對最容易被這個模式蓋過，正向計數要和零命中計數一起跑。
+
 ### 根因
 
 bash 對未加引號的 `$VAR` 依 IFS 做字詞拆分，所以 `grep pat $FILES` 會收到多個參數。zsh 預設關閉 `SH_WORD_SPLIT`，`$FILES` 永遠展開成一個參數，含空白的整串字被當成一個檔名。沿用 bash 習慣的命令在 zsh 下不會報語法錯誤，只會在執行期得到「檔案不存在」，而這個錯誤走 stderr。

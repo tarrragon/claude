@@ -14,7 +14,7 @@ CSS 跟 JS 各自負責什麼、邊界由「值能不能 build-time 定下來」
 | 訊號                                                | 該做的第一件事                              |
 | --------------------------------------------------- | ------------------------------------------- |
 | 不確定值該寫進 CSS 還是 JS                          | 問「能 build-time 定下來嗎」                |
-| 即將寫 `!important`                                 | 停 — 換 CSS layers 思路                     |
+| 即將寫 `!important`                                 | 停 — 換 CSS layers 思路；要拿掉既有的 `!important`、或它要蓋過所有規則（`[hidden]`、減少動態效果重設）時，見 `refactor-without-visual-change.md`〈`!important` 與加權：讀出要贏過哪一條，再選替代寫法〉 |
 | 即將寫 `el.style.setProperty(..., 'important')`     | 停 — 換 class toggle                        |
 | Inline `<style>` / `<script>` 超過 30 行            | 拆出獨立檔案、讓 Hugo / build pipeline 處理 |
 | CSS variable 在 3 個地方定義                        | 集中到單一定義位置、其他地方只引用          |
@@ -110,15 +110,14 @@ function setScope(visible) {
 ### 對例
 
 ```css
-@layer vendor {
-  @import url('vendor/pagefind.css');
-}
+/* @import 要寫在樣式表最前面（@charset 與 @layer 宣告之後），用 layer() 指定放進哪一層 */
+@import url('vendor/pagefind.css') layer(vendor);
 
 /* 自家規則 unlayered → 自動贏所有 layered 規則 */
 .target { color: var(--brand); }
 ```
 
-`@layer vendor` 把 vendor CSS 放進低優先級的 layer、自家 unlayered 規則自動贏。再也不用打 specificity 戰。
+`layer(vendor)` 把 vendor CSS 放進低優先級的 layer、自家 unlayered 規則自動贏（vendor 的一般宣告；vendor 帶 `!important` 的宣告在 layer 裡反而更強，處置見 `refactor-without-visual-change.md`〈`!important` 與加權：讀出要贏過哪一條，再選替代寫法〉）。再也不用打 specificity 戰。
 
 `@layer` 在 Chrome 99+ / Firefox 97+ / Safari 15.4+ 全部支援（2022+）。
 
@@ -151,6 +150,8 @@ JS 寫 variable 也寫到同個 selector：
 document.documentElement.style.setProperty('--form-height', '...');
 // 而不是 form.style.setProperty(...) 在 form 上設
 ```
+
+例外是設計好的第二個定義位置，有三種：同一個定義 token 的選擇器在 media query、偏好查詢（`prefers-color-scheme`）或根元素的主題屬性底下把一組 token 改成另一組值（手機字級、觸控命中區、暗色主題）；局部主題的 class 掛在子孫元素上、只在那個子樹改一組 token；掛在定義元素外面、取不到繼承的元素（`body` 底下的彈出層）在自己身上重新定義。這三種的值跟原定義不同、改的是一組 token，規則旁註明它對應哪一組與原因；值相同的重新宣告、只為一個元件改值的 class，照重複定義處理。局部主題的子樹有一個不報錯的失效：semantic token 寫成 `--text-body: var(--size-md)` 時，`var()` 在宣告 `--text-body` 的元素上就代換成值，只在子孫元素上覆寫 `--size-md` 不會改到 `--text-body`；改成在主題 class 上直接改 semantic token 對到哪一階，或連同引用它的每一個 semantic token 一起重新宣告。寫法與理由在 `component-contract-design` skill 的 `references/design-system-token-layer.md`〈Web 端的限制〉。
 
 ---
 
@@ -290,7 +291,6 @@ window.addEventListener('resize', () => {
 - [ ] Runtime 量測跟 hardcoded 值在同一個對齊基準上、是不是只用了一邊？
 
 ---
-
 
 **Last Updated**: 2026-04-26
 **Version**: 0.1.0

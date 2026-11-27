@@ -121,6 +121,20 @@ Ticket: 0.18.0-W17-048.3
 （環境、命令、通過/失敗數）。無 baseline 對照的既有宣稱視為未查證（PC-BAL-022）。
 ```
 
+### 大量清理派發刪除行尾片段約束句（IMP-LLM-013）
+
+**觸發條件**：派發任務要批量刪除、改寫多行中的行尾片段（例：移除行尾的引用、標記、註記）。
+
+**Why/Consequence**：Edit 的 `new_string` 為空時，會連同 `old_string` 之後的換行一併刪除，`old_string` 不帶換行也一樣；行尾片段被刪後，下一行接到上一行，Python 的程式行會被併進註解而失效，測試未覆蓋該路徑時合併閘門仍全綠（IMP-LLM-013）。
+
+**Action**：prompt 必須含以下句子；整行刪除另寫「`old_string` 寫整行」。
+
+```
+刪除行尾片段時 Edit 的 new_string 不得為空字串：old_string 取「保留文字 + 待刪片段」，
+new_string 寫保留文字。old_string 不帶換行無法避免合併。完成後以 git diff 核對每個 hunk
+的刪除行數等於新增行數，不等者逐處檢查是否接行（IMP-LLM-013）。
+```
+
 ### 測試入口
 
 > 已移至 `agent-dispatch-testing.md`〈測試入口〉。
@@ -353,6 +367,12 @@ actions above would also undo the peer's legitimate work.
 
 ---
 
+## 派發被拒時不改派（強制）
+
+**Agent 工具回傳 `Agent type '<name>' not found` 時，停手：不改派 general-purpose 或其他代理人，把錯誤記入票面 NeedsContext，並回報主控或用戶。** 不限 session 啟動時：先前派得出去的代理人，中途變成 not found 也適用。這個錯誤可能來自 session 層級的載入狀態（同一 repo 的 session 有時只載入部分專案代理人，執行中途也可能掉清單），改派會讓代理人定義的授權、偏好與身份靜默消失。處置步驟見 `.claude/pm-rules/agent-failure-sop.md`〈派發被拒：Agent type not found（強制）〉。
+
+---
+
 ## 適用範圍
 
 | 場景 | 是否強制引用骨架 |
@@ -445,7 +465,10 @@ ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 
 ---
 
-**Last Updated**: 2026-11-10
+**Last Updated**: 2026-11-25
+**Version**: 1.53.0 — 新增〈大量清理派發刪除行尾片段約束句〉：Edit 的 new_string 為空會吃掉換行，刪行尾片段須連同保留文字替換並核對 hunk 刪增行數，路由 IMP-LLM-013。
+**Version**: 1.52.1 — 〈派發被拒時不改派（強制）〉補一句：先前派得出去、中途變成 not found 也適用。
+**Version**: 1.52.0 — 新增〈派發被拒時不改派（強制）〉：Agent 工具回傳 `Agent type ... not found` 時停手回報、不改派，處置步驟路由 `agent-failure-sop.md` 同名節。
 **Version**: 1.51.0 — 〈紅燈實跑行由 CLI 條件式加入〉引述的骨架句同步 `RED_RUN_LINE` 新文字：先實跑紅燈再修改產品碼，推論出口限於環境無法執行並須寫明原因與命令。
 **Version**: 1.50.0 — 〈骨架（3 段）〉在紅燈實跑行說明後補「閘門逐檔檢查由 CLI 條件式併入收尾句」一段：合併閘門宣告中帶 `changed_files` 的套件，依 where.files 推出的命令插進收尾句的 commit 之前，權威為 `GATE_CHECK_CLAUSE`／`gate_check_commands`（CLI 行為變更的同 commit 文件同步）。
 **Version**: 1.49.0 — 骨架同步壓縮：模板去分隔空行、短版指標句改 3 行（示意區塊逐字對應 `STAGING_PHRASE_AGENT_PROMPT`）、hook 提醒壓為 2 行、worktree 骨架新增「改行為前以改動物字面 grep 所有測試目錄（範圍見 agent-dispatch-testing.md〈相關測試檔怎麼找〉），需改的測試檔不在 where.files 內即停手回報」一句，骨架不另列目錄清單（`WORKTREE_SIBLING_TEST_LINE`）；最長組合 34 行降為 22 行，參數化守衛涵蓋全部變體。

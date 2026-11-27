@@ -2559,3 +2559,35 @@ def test_search_duplicates_keeps_count_interface_for_init():
     ):
         _, skipped = section_comment.search_duplicates(["壞詞"])
     assert skipped == 1
+
+
+# --- git common dir 解析：不依賴 --path-format=absolute（git 2.31+）-----------
+# autouse fixture 會 stub _project_owner_prefix，此處取模組載入時的原函式。
+
+_REAL_PROJECT_OWNER_PREFIX = section_comment._project_owner_prefix
+
+
+def _fake_old_git(common_dir_output: str, seen: list):
+    """模擬 git 2.30：不認得的 --xxx 選項原樣印成一行（rc=0）。"""
+
+    def fake_run(cmd, *a, **kw):
+        seen.append(cmd)
+        lines = [common_dir_output if arg == "--git-common-dir" else arg
+                 for arg in cmd[cmd.index("rev-parse") + 1:]]
+        return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(lines) + "\n", stderr="")
+
+    return fake_run
+
+
+@pytest.mark.parametrize("relative", [True, False])
+def test_common_dir_callers_resolve_relative_and_absolute(tmp_path, monkeypatch, relative):
+    main = tmp_path / "my_repo"
+    main.mkdir()
+    monkeypatch.chdir(main)
+    out = ".git" if relative else str(main / ".git")
+    seen: list = []
+    monkeypatch.setattr(section_comment.subprocess, "run", _fake_old_git(out, seen))
+    assert _REAL_PROJECT_OWNER_PREFIX() == "my-repo"
+    assert section_comment._registry_path() == main.resolve() / ".git" / "pm-registry.json" or \
+        section_comment._registry_path() == main / ".git" / "pm-registry.json"
+    assert seen and all("--path-format=absolute" not in c for c in seen)

@@ -182,7 +182,7 @@ def resolve_shared_root(project_root: Path) -> Path:
 
     不依賴 cwd、不匯入 hook_base（hook_base 反向匯入本模組，會形成循環）。
     僅當 project_root/.git 是檔案（linked worktree 或 submodule 的 gitdir 指標）
-    時才查 `git -C <root> rev-parse --path-format=absolute --git-common-dir`；
+    時才查 `git -C <root> rev-parse --git-common-dir`（相對輸出以 -C 目錄為基準 resolve）；
     主倉庫（.git 為目錄）與非 repo 直接回傳原值，不起子程序。
     查詢失敗（逾時、git 不可用、rc 非 0）時回傳原值並寫 stderr 加 log。
     """
@@ -194,7 +194,7 @@ def resolve_shared_root(project_root: Path) -> Path:
     if (project_root / ".git").is_file():
         try:
             proc = subprocess.run(
-                ["git", "-C", key, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                ["git", "-C", key, "rev-parse", "--git-common-dir"],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -203,7 +203,8 @@ def resolve_shared_root(project_root: Path) -> Path:
             )
             out = proc.stdout.strip()
             if proc.returncode == 0 and out:
-                common = Path(out)
+                # 不用 --path-format=absolute（需 git 2.31）；相對輸出以 -C 目錄為基準
+                common = Path(os.path.normpath(os.path.join(key, out)))
                 # submodule 的 common dir 為 .git/modules/x，父目錄不是工作樹根，不採用
                 if common.name == ".git":
                     result = common.parent

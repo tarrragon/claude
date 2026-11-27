@@ -1,10 +1,10 @@
 ---
 name: ux-design-evaluation
-description: "UX / UI 設計的系統性評估：把「使用者被困住」類缺口從實機測試提前到設計階段。六維度各有可機械執行的表格——畫面狀態矩陣、gate fallback、輸入機制、錯誤恢復、導航、互動回饋，空白格即缺口。觸發詞：UX 設計、狀態矩陣、退出路徑、死胡同、gate、IME、錯誤訊息、retry、降級、deep link、back 行為、spinner、SnackBar、選中態、溢出。Do NOT use for 元件級契約（用 component-contract-design）。"
+description: "UX / UI 設計的系統性評估：把「使用者被困住」類缺口從實機測試提前到設計階段。六維度各有照步驟填、不需經驗判斷的表格——畫面狀態矩陣、gate fallback、輸入機制、錯誤恢復、導航、互動回饋，空白格即缺口。觸發詞：UX 設計、狀態矩陣、退出路徑、死胡同、gate、IME、錯誤訊息、retry、降級、deep link、back 行為、spinner、SnackBar、選中態、溢出。Do NOT use for 元件級契約（用 component-contract-design）。"
 license: MIT
 metadata:
   portable: true
-  version: 1.11.14
+  version: 1.16.0
   category: ux-design
 ---
 
@@ -12,9 +12,14 @@ metadata:
 
 UX / UI 設計的系統性評估方法。這個 skill 的出發點是一類反覆出現的事故：功能邏輯完整、實機測試才發現使用者被困在畫面裡出不去、按鈕按了沒有任何回饋、Face ID 失敗後沒有替代路徑。加一顆 back 按鈕是 5 分鐘的事，問題在設計階段沒有工具強制回答「每個狀態怎麼離開、每道關卡失敗怎麼辦、每個動作使用者怎麼知道系統收到了」。
 
-本 skill 把 UX 設計從「靠經驗想到」變成「靠方法查到」：每個評估維度都有可機械執行的表格或提問清單，填完表格、空白格自動暴露缺口。適用於任何前端 surface（mobile app、web、桌面），範例以 mobile 為主。
+本 skill 把 UX 設計從「靠經驗想到」變成「靠方法查到」：每個評估維度都有照步驟就填得完的表格或提問清單，填完表格、空白格自動暴露缺口。適用於任何前端 surface（mobile app、web、桌面），範例以 mobile 為主。
 
-**兩件事不在本 skill，但各有去處**——寫明去處是因為「不涵蓋」若沒有下一句，讀者會停在這裡：視覺風格（品牌色、字型階、間距階）屬 design token 體系，走 `foundation-design` skill 的 UI 維度，其執法層在 Dart 專案是 `dart-style-guardian` skill；使用者研究方法（訪談、可用性測試、問卷）本框架目前無承接者，需自行取用外部方法。**可讀性對比（WCAG）是例外，它屬本 skill 的互動回饋檢查範圍**，不要因為它看起來像視覺風格就轉出去。
+**兩件事不在本 skill，但各有去處**——寫明去處是因為「不涵蓋」若沒有下一句，讀者會停在這裡：
+
+- **視覺風格**（品牌色、字型階、間距階）屬 design token 體系。design-system 這一塊地基要產出什麼、接手既有專案時怎麼盤點萃取 token，走 `foundation-design` skill 的 UI 維度；建 token 層的人要交付什麼（哪些值取名、分層、來源格式、擋寫死值的檢查）寫在 `component-contract-design` skill 的 `references/design-system-token-layer.md`。Dart 與 Web 的執法工具各擋什麼，見本檔〈與相鄰資產的交界〉。
+- **使用者研究方法**（訪談、可用性測試、問卷）：本框架沒有收這類方法的 skill，需自行取用外部方法。
+
+**可讀性對比（WCAG）是例外，它屬本 skill 的互動回饋檢查範圍**，不要因為它看起來像視覺風格就轉出去。
 
 ---
 
@@ -52,13 +57,13 @@ UX / UI 設計的系統性評估方法。這個 skill 的出發點是一類反�
 
 | 觸發情境 / 症狀                                                                                                                                                                                                 | 讀哪份 reference                     |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| 設計多狀態畫面（連線 / 配對 / 同步）、使用者被困在畫面出不去、畫面剛開啟就顯示離線、審查導航缺口、路由存在但入口找不到                                                                                          | `references/screen-state-matrix.md`  |
+| 設計多狀態畫面（連線 / 配對 / 同步）、使用者被困在畫面出不去、畫面剛開啟就顯示離線、審查導航缺口、路由存在但入口找不到、長清單捲到中段找不到搜尋或返回、要不要 sticky 工具列或回到頂部、多選模式沒勾選任何項目也寫「完成」或批次動作列看起來可以按 | `references/screen-state-matrix.md`（多選模式直接讀 `references/screen-state-matrix-selection-prestate.md`） |
 | 設計認證 / 網路 / 權限 / 硬體條件關卡、生物辨識失敗沒退路、權限被拒後的處理、覆蓋 / 清空既有資料的操作確認、模擬器上測不到的 gate                                                                               | `references/gate-fallback.md`        |
 | 設計輸入框 / 表單 / 搜尋框 / CLI 輸入、鍵盤自動校正破壞輸入、密碼或 secret 欄位、驗證時機選擇                                                                                                                   | `references/input-mechanism.md`      |
 | 撰寫錯誤訊息、設計重試機制、使用者卡在錯誤迴圈、錯誤畫面的行動過重（重載 / 重裝）、部分功能不可用的降級呈現                                                                                                     | `references/error-recovery.md`       |
 | 選擇導航模式（stack / tab / drawer）、go vs push 的選擇、back 行為不符預期、hash SPA 的頁面辨識、deep link 設計                                                                                                 | `references/navigation-patterns.md`  |
-| 按鈕按了沒反應、重複提交、佔位 handler 假按鈕、宣告完成但資料不全、loading 該不該顯示、spinner vs skeleton、通知該用 SnackBar 還是 Dialog | `references/interaction-feedback.md`（按鈕流程與狀態）+ `references/interaction-feedback-waiting-and-notification.md`（時間門檻、spinner/skeleton、通知形式） |
-| 點到的是狀態圖示卻沒反應、切換鈕標籤被讀成現態、選中看不到字、文字被壓成省略號、水平清單溢出無捲動提示 | `references/interaction-feedback-component-semantics.md` |
+| 按鈕按了沒反應、重複提交、佔位 handler 假按鈕、宣告完成但資料不全、按鈕預告的數量跟實際處理的不同、loading 該不該顯示、spinner vs skeleton、通知該用 SnackBar 還是 Dialog、要不要放一句情境提示 | `references/interaction-feedback.md`（按鈕流程與狀態）+ `references/interaction-feedback-waiting-and-notification.md`（時間門檻、spinner/skeleton、通知形式） |
+| 點到的是狀態圖示卻沒反應、切換鈕標籤被讀成現態、選中看不到字、文字被壓成省略號、按鍵標籤縮短後被讀成篩選條件、清單被截斷卻看不出能捲 | `references/interaction-feedback-component-semantics.md`（按鍵標籤在〈5. 關鍵回饋文字要有版面保障〉的粗體段「按鍵標籤裡說明動作的字不套用『先縮短格式』」） |
 
 每份 reference 自包含：不讀 SKILL.md 與其他 reference 也能獨立套用；`interaction-feedback` 家族四檔互相具名指路，見各檔檔頭。
 
@@ -84,6 +89,9 @@ UX / UI 設計的系統性評估方法。這個 skill 的出發點是一類反�
 - [ ] 關鍵回饋文字有版面保障（窄幕驗收）？
 - [ ] 靠顏色區分的語意，顏色之外另有訊號或文字？
 - [ ] 無佔位 handler（dev toast / log-only）殘留？
+- [ ] 長頁面：退出路徑與主要工具（搜尋、排序、篩選）在捲到中段時仍一步到得了？
+- [ ] 描述畫面所在情境（在哪個網站、哪一頁）的常駐說明已經刪掉，改由主要動作的形態表達（離線、降級這類系統狀態照形式表用 Banner）？
+- [ ] 動作前預告的數量跟動作實際處理的範圍同一個口徑（處理全部時是來源總數，只處理已載入的元素時寫明「已載入的 N 筆」，讀不到總數時不寫數字）？
 
 ---
 
@@ -101,7 +109,7 @@ ux-design-evaluation/
     ├── navigation-patterns.md            # 導航模式分類、go/push/pushReplacement 語意、平台慣例差異、deep link
     ├── interaction-feedback.md           # 回饋三層模型、按鈕級回饋（按鈕流程與狀態）（入口，同組見下）
     ├── interaction-feedback-waiting-and-notification.md  # 時間門檻、畫面級回饋、spinner vs skeleton、通知形式選擇
-    ├── interaction-feedback-component-semantics.md        # 元件語意與版面：切換標籤、可點性、選中態、溢出、版面保障
+    ├── interaction-feedback-component-semantics.md        # 元件語意與版面：切換標籤、可點性、選中態、截斷、版面保障
     └── interaction-feedback-checklist.md                  # 互動回饋反模式速查、檢查清單、參考來源（三檔共用）
 ```
 
@@ -116,6 +124,7 @@ ux-design-evaluation/
 | `component-contract-design` skill | 元件級契約：元件契約欄位表、容器排列不變式 | 本 skill 只到**畫面級狀態**。同一類失效在那邊寫成契約欄位（內容政策、空間不足策略）而非審查項。**本 skill 判定的回饋時間門檻與通知形式，是它填回饋契約時的輸入**——它不重新判斷門檻，所以本 skill 的產出必須是可被引用的具體值，不能只寫「要有回饋」 |
 | `foundation-design` skill | 地基入口與路由；design token 體系是它 UI 維度的產物 | 品牌色、字型階、間距階在那裡定義。本 skill 的 `interaction-feedback-component-semantics.md` 談對比與版面保障時**消費那些階，不新增階**——需要一個不存在的色階或字級時，那是地基缺口，回去建票而不是在畫面設計裡就地決定 |
 | `dart-style-guardian` skill（Dart／Flutter 的執法工具） | 掃裸色碼、裸間距、裸字級、寫死文字 | 它只看程式碼字面。**「按鈕沒有 loading 態」「選中態對比不足」它掃不到**——那些是本 skill 的檢查項，執法工具全綠不代表本 skill 的自檢清單過了 |
+| Web 專案的執法工具（Stylelint 這類 CSS lint、專案自寫的腳本、utility class 框架的設定與 lint） | 照 `component-contract-design` skill 的 `references/design-system-token-layer.md`〈檢查：擋什麼、在哪裡擋、用什麼工具、例外怎麼寫、怎麼確認它在讀〉設定之後，合起來擋 `!important`、字級與行高的字面單位、色碼、色彩函式與色名、帶 id 的選擇器（每一類工具各擋哪幾項見那一節）；不擋間距、圓角、線寬、動畫時長這類「出現兩處以上才取名」的值，照那份 reference〈寫給實作 agent 的樣式限制〉由實作者列出新寫的這類字面值與理由、審查的人對 `git diff` 核對；不管寫死文字，寫死文字照 `component-contract-design` 的元件契約（slot 契約的文字來源）由 i18n 那一塊地基處理，沒有 lint 時在審查時查 | 它同樣只看程式碼字面：「按鈕沒有 loading 態」「選中態對比不足」這類本 skill 的檢查項它掃不到，執法工具全綠不代表本 skill 的自檢清單過了 |
 | `version-bootstrap` skill 地基波 | 編排 i18n → design-system → UX 審查 → 元件庫四塊的順序 | 本 skill 是第 3 塊。**它的輸入是前兩塊（i18n 與 design-system）已完成**——token 與文案 key 還沒有時，本 skill 產出的回饋設計會指向不存在的值 |
 
 ### 三段鏈式範例：本 skill 的產出必須是可被引用的具體值
@@ -124,13 +133,13 @@ ux-design-evaluation/
 
 【輸入】
 
-```
+```text
 SPEC 片段：一個非同步查詢操作，由按鈕觸發，實測延遲 p90 為 600ms
 ```
 
 【產出】
 
-```
+```text
 形態：決策表
 判斷依據                       | 結果
 600ms 落在 `interaction-feedback-waiting-and-notification.md`〈時間門檻與回饋策略〉哪個帶 | 400ms-1s（短暫等待）
@@ -145,7 +154,7 @@ SPEC 片段：一個非同步查詢操作，由按鈕觸發，實測延遲 p90 �
 
 【驗證】
 
-```
+```text
 檢驗問句
 Q 本 skill 產出的「反應欄等待段」是否為封閉列舉中的具體值？
   預期：是——「按鈕 loading 狀態」是 `interaction-feedback-waiting-and-notification.md`〈時間門檻與回饋策略〉表已定義的策略之一，
@@ -157,6 +166,6 @@ Q 產出是否停留在「要有回饋」這類抽象敘述？
 
 ---
 
-**Last Updated**: 2026-09-16
+**Last Updated**: 2026-11-25
 
 版本紀錄在同目錄的 `CHANGELOG.md`。

@@ -124,7 +124,7 @@ git diff --stat -- .claude/
 | 衝突檔案 | 腳本行為 | 人工後續 |
 |---------|---------|---------|
 | `VERSION` / `CHANGELOG.md`（版本檔） | 自動採 upstream，`.sync-conflicts/` 留對照副本 | 無需動作（本地版本檔必 stale，屬系統性衝突）；如對照副本顯示本地有應保留的內容，屬異常需人工檢視 |
-| `SKILL.md` 的 `metadata.version` 欄位（僅版號差異，無其他內容衝突） | 自動取本地/上游中較大版號並寫回，不留衝突標記 | 無需動作（skill 版號由 skill-sync 通道管轄，git pull 的 canonical 只是快照，兩側各自合法 bump 屬正常情境） |
+| `SKILL.md` 的 `metadata.version` 欄位（僅版號差異，無其他內容衝突） | 自動取本地/上游中較大版號並寫回，不留衝突標記，並以寫回的版號對齊該 skill 的 CHANGELOG 首條、pyproject、`__version__`、plugin.json（SKILL.md 正文版號行或讀不出版號者無法機械對齊，列入衝突清單） | 無需動作；若衝突清單出現 `skills/<名>（...）` 項，依其指出的住址手動補齊（skill 版號由 skill-sync 通道管轄，git pull 的 canonical 只是快照，兩側各自合法 bump 屬正常情境） |
 | 其他檔案（含 `SKILL.md` 內版號以外的真實內容衝突） | 衝突區塊以標記寫回工作區本檔，upstream 非重疊變更已套用；`.sync-conflicts/` 留對照副本 | 依下表三選項逐檔決策，處理完成前工作區該檔含 `<<<<<<<` 標記 |
 | 轉 `.sync-conflicts/` 的本地檔（拉取輸出「轉 .sync-conflicts」清單；全量 overlay 把 git 追蹤、上游沒有的本地檔移到此處，不是衝突） | 本地檔從原位移走，轉存於 `.sync-conflicts/` | 逐檔決定：專案自建要保留 → 放回原位；確認不要 → 留待步驟 5 清理 |
 

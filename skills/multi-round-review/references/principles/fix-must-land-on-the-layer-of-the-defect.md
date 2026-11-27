@@ -8,9 +8,9 @@
 
 **歧義出在句子的成分層時，修法也要落在成分層。** 在段落層補一句警告修不掉它——已經按錯誤的方式讀了那個句子的讀者，會用同一套主語指派去讀那句警告。兩者不在同一層，警告到不了歧義所在的位置。
 
-判別問句與理解探針共用一條：**把主詞、受詞與指涉對象補回去之後，這一句還讀不懂嗎。** 補回去就懂，是成分問題，修法是改句子、不加內容；仍然讀不懂，才是脈絡問題，那時候補內容才有作用。
+判別用的檢查與理解探針共用一項：**把主詞、受詞與指涉對象補回去之後，確認這一句是否讀得懂。** 補回去就懂，是成分問題，修法是改句子、不加內容；仍然讀不懂，才是脈絡問題，那時候補內容才有作用。
 
-同一條問句在修法之後要再問一次——這是它從診斷變成驗收的用法，答案應該從「仍然讀不懂」翻轉成「補回去就懂」。
+同一項檢查在修法之後要再做一次——這是它從診斷變成驗收的用法，檢查的結果應該從「仍然讀不懂」翻轉成「補回去就懂」。
 
 ## 為什麼選中的常常是無效的那一個
 
@@ -50,7 +50,7 @@
 
 - [fix-the-class-not-the-cited-instances](fix-the-class-not-the-cited-instances.md)：那張卡管修法的**範圍**（同一類還有哪幾處沒被點名），本卡管修法的**層**（這一處動到的是不是缺陷所在的那一層）。兩個檢查互不替代——一次掃遍全批而每一處都修在錯的層上，掃描報告會顯示全部處理完畢。
 - [one-fix-writes-two-forms-of-the-same-thing](one-fix-writes-two-forms-of-the-same-thing.md)：那裡的檢查是回頭比對本批之內的其他修法，本卡的檢查是回頭比對同一節的既有陳述。兩者同屬「修法產生的新文字要另外驗」這一族，而找比對對象的方向相反（那裡橫向找同批、這裡縱向找同節）。
-- [comprehension-sampled-not-judged](comprehension-sampled-not-judged.md)：本卡的判別問句取自它的分歧點修法段，而本卡把那條問句從診斷推到驗收。
+- [comprehension-sampled-not-judged](comprehension-sampled-not-judged.md)：本卡判別成分層與脈絡層用的檢查取自它的分歧點修法段，而本卡把那項檢查從診斷推到驗收。
 - [split-defects-land-between-the-files](split-defects-land-between-the-files.md)：同一批量測的另一項產出。那裡的單變項對照（只改一個手段才拿得到因果）與本卡是同一件事在兩個階段的形態——那裡管改法怎麼設計才歸得了因，這裡管改法有沒有落在該落的層。
 - [fix-never-landed-and-the-round-signed-off-for-it](fix-never-landed-and-the-round-signed-off-for-it.md)：本卡的前一步。判層對不對之前要先確認那次修法動到了東西，順序顛倒會在一個空的 diff 上討論它修在哪一層。
 - [thresholds-registered-before-dispatch](thresholds-registered-before-dispatch.md)：本卡的出口。層對了而命中仍不動時，代表手段本身對這個位置無效，該換的是手段不是層；換手段的條件要在派發前就寫下來。

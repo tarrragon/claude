@@ -2,6 +2,14 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.13.0 — 新增 `lib/upstream_status.py`：比對本地與 sync-pull 已 clone 的上游 error-patterns 樹，分已收錄／同號不同內容／已回報／待回報四類；`sync-claude-pull.py` 結束摘要印出待回報（逐則附 `intake_draft.py` 指令）、同號不同內容（逐則）、已回報（總數與 issue 號），已收錄不列。新增〈上游狀態比對〉一節。
+
+**Version**: 1.12.0 — `add` 新增步驟 6b 可攜性判定（步驟 7 配號前；不可攜者導向 `docs/`，不配號、不寫 `.claude/`）與步驟 10 收錄請求草稿（可攜且非主控方）；新增 `lib/intake_draft.py`，依收錄請求格式組草稿印到 stdout，缺項 exit 1。開 issue 後於 frontmatter 加 `upstream_issue`。既有步驟編號不變。
+
+**Version**: 1.11.1 — `add` 步驟 7 接續動作與〈輸出〉移除「填妥後可改名加 slug」：佔位檔尚未被 git 追蹤，不能用 `git mv`，Bash 的 `mv` 會被 `bash-write-boundary-guard` 擋下，照做的執行者都撞到守衛。改為佔位檔名（無 slug）即最終檔名。
+
+**Version**: 1.11.0 — frontmatter 新增 `carrier` 欄位（`rule`／`skill:<名稱>`／`lang-pack:<skill>/<語言>`／`agent:<名稱>`／`none`），`add` 新增步驟 5b 附三問；新增 `lib/carrier_audit.py` 列出 carrier 已填但目標載體不含該 pattern ID 的條目（有缺口 exit 1）。存量 pattern 不回填。
+
 **Version**: 1.10.0 — 新增〈frontmatter `related` 的 kind 標記〉：條目可寫成 `- id: <ID>` 加 `kind: sibling|citation`，舊格式純 ID 視為 `unknown`。附判別準則表與一個判斷問題：對方的讀者沒看到本則時，會不會漏掉同一問題的另一半。index 一致性 hook 依 kind 判定雙向性：`sibling` 未回指即報、不看日期；`citation` 不報；`unknown` 沿用 7 天窗口。新增或修改條目時一律寫 `kind`，舊條目不強制改寫。
 
 **Version**: 1.9.1 — `add` 步驟 8 新增〈既有列的刷新路徑〉：佔位符已寫進索引時，補齊內文後以 `readme_index.py sync --write --refresh` 補值，並把來源版本正規化為 `v` 前綴。原本說「該列無法由工具更正」，已改寫。〈多線並行〉補兩點 allocator 現行判定：終態集合為 completed／closed／abandoned／cancelled，沒有 status 的票保守計入；票面引用號碼大於「目錄最大號 + 50」時不計入，並在 stderr 警告。

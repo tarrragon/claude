@@ -30,7 +30,7 @@
 | 框架背景 job（DB-backed：Sidekiq / Celery / River 類） | day one 的寄信、報表、清理工作             | 吞吐上限低於專用 broker、但 MVP 階段遠遠夠用       |
 | Durable queue（RabbitMQ / SQS 類）                     | 不可丟工作、量級上來、多消費者             | 多一個有狀態元件；SQS 類託管可消掉維運面           |
 | Stream（Kafka / Redis Streams 類）                     | 事件要重放、多下游各自消費、事件是資料資產 | 認知負擔與維運成本高、MVP 階段幾乎不該出現         |
-| Pub/sub + 長連線                                       | 即時推送（線上通知、聊天）                 | fire-and-forget — 不在線就丟、可靠通知要另外補存底 |
+| Pub/sub + 長連線                                       | 即時推送（線上通知、聊天）                 | fire-and-forget — 不在線上就丟、可靠通知要另外補存底 |
 
 **SaaS day one 預設**：框架原生背景 job（用既有 DB 當 backing store、零新元件）+ 對「不可丟」工作套 outbox 思路（工作記錄與業務資料同 transaction 寫入、worker 輪詢處理）。專用 broker 的進入條件寫成 tripwire：job 表的輪詢開始壓 DB、或吞吐 / 延遲要求超出 DB-backed 上限。
 

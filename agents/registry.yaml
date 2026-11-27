@@ -2,7 +2,8 @@
 # Schema Version: 1.0.0
 # 用途：Agent 能力宣告的機器可讀 Source of Truth
 # 更新原則：每次新增或修改 agent 時同步更新
-# 最後更新：2026-10-05（移除 model 欄位：model 值以代理人 frontmatter 為準，權威說明見 .claude/references/agent-model-selection.md）
+# 最後更新：2026-11-25（新增頂層 index 與各代理人 language／domain／tier 欄位；移除 DEPRECATED 的 john-carmack、memory-network-builder；登記 framework-issue-curator、impeccable-manual-edit-applier）
+# 前次：2026-10-05（移除 model 欄位：model 值以代理人 frontmatter 為準，權威說明見 .claude/references/agent-model-selection.md）
 
 schema_version: "1.0"
 
@@ -11,6 +12,9 @@ agents:
 
   lavender-interface-designer:
     name: lavender-interface-designer
+    language: any
+    domain: design
+    tier: active
     description: TDD Phase 1 功能設計專家。根據 Ticket 需求設計功能規格、API 介面定義、驗收標準。為後續測試和實作奠定基礎。
     color: purple
     version: "1.0"
@@ -53,6 +57,9 @@ agents:
 
   sage-test-architect:
     name: sage-test-architect
+    language: any
+    domain: test
+    tier: active
     description: TDD Phase 2 測試設計專家。根據 Phase 1 功能規格設計完整測試案例和測試策略。禁止程式碼實作。
     color: red
     version: "1.0"
@@ -100,6 +107,9 @@ agents:
 
   pepper-test-implementer:
     name: pepper-test-implementer
+    language: any
+    domain: implementation
+    tier: active
     description: TDD Phase 3a 實作策略規劃專家。根據測試設計規劃語言無關的實作策略、虛擬碼、流程圖。為多語言實作代理人指導實作方向。
     color: orange
     version: "1.0"
@@ -142,6 +152,9 @@ agents:
 
   parsley-flutter-developer:
     name: parsley-flutter-developer
+    language: dart
+    domain: implementation
+    tier: active
     description: TDD Phase 3b Flutter 實作代理人。將 Phase 3a 語言無關策略轉換為高品質 Dart/Flutter 程式碼。執行測試驅動開發，確保 100% 測試通過。
     color: green
     version: "1.0"
@@ -202,6 +215,9 @@ agents:
 
   cinnamon-refactor-owl:
     name: cinnamon-refactor-owl
+    language: any
+    domain: refactor
+    tier: active
     description: TDD Phase 4b 重構代理人。在 Phase 3b 程式碼完成後執行程式碼品質優化、技術債務修復、重構執行。確保程式碼品質高標準。
     color: yellow
     version: "1.0"
@@ -257,6 +273,9 @@ agents:
 
   saffron-system-analyst:
     name: saffron-system-analyst
+    language: any
+    domain: analysis
+    tier: active
     description: SA 前置審查專家。在 TDD 開始前審查新功能的系統一致性、架構合理性、重複實作檢查。
     color: saffron
     version: "1.0"
@@ -288,6 +307,9 @@ agents:
 
   star-anise-system-designer:
     name: star-anise-system-designer
+    language: any
+    domain: design
+    tier: active
     description: 系統設計專家。負責系統架構設計、介面設計。
     color: star-anise
     version: "1.0"
@@ -317,6 +339,9 @@ agents:
 
   thyme-python-developer:
     name: thyme-python-developer
+    language: python
+    domain: implementation
+    tier: active
     description: Python 開發專家。負責 Python 程式碼品質、Hook 優化、Skill 實作。
     color: green
     version: "1.0"
@@ -350,6 +375,9 @@ agents:
 
   fennel-go-developer:
     name: fennel-go-developer
+    language: go
+    domain: implementation
+    tier: reserve
     description: Go 後端開發專家。負責 Go 程式碼開發。
     color: green
     version: "1.0"
@@ -382,6 +410,9 @@ agents:
 
   acceptance-auditor:
     name: acceptance-auditor
+    language: any
+    domain: review
+    tier: active
     description: 驗收審核員。審查 Ticket 建立品質、驗收條件完整性。
     color: blue
     version: "1.0"
@@ -409,6 +440,9 @@ agents:
 
   clove-security-reviewer:
     name: clove-security-reviewer
+    language: any
+    domain: review
+    tier: reserve
     description: 安全審查員。審查程式碼安全性。
     color: red
     version: "1.0"
@@ -436,6 +470,9 @@ agents:
 
   coriander-integration-tester:
     name: coriander-integration-tester
+    language: any
+    domain: test
+    tier: reserve
     description: 整合測試代理人。設計和執行系統整合測試。
     color: orange
     version: "1.0"
@@ -464,6 +501,9 @@ agents:
 
   ginger-performance-tuner:
     name: ginger-performance-tuner
+    language: any
+    domain: analysis
+    tier: active
     description: 效能優化專家。分析系統效能。
     color: orange
     version: "1.0"
@@ -493,6 +533,9 @@ agents:
 
   sassafras-data-administrator:
     name: sassafras-data-administrator
+    language: any
+    domain: data
+    tier: reserve
     description: 資料管理員。負責資料模型設計。
     color: brown
     version: "1.0"
@@ -520,6 +563,9 @@ agents:
 
   sumac-system-engineer:
     name: sumac-system-engineer
+    language: any
+    domain: environment
+    tier: active
     description: 系統工程師。負責環境配置、工具設置。
     color: brown
     version: "1.0"
@@ -551,6 +597,9 @@ agents:
 
   oregano-data-miner:
     name: oregano-data-miner
+    language: any
+    domain: analysis
+    tier: reserve
     description: 資料研究員。負責外部資源研究。
     color: green
     version: "1.0"
@@ -579,6 +628,9 @@ agents:
 
   incident-responder:
     name: incident-responder
+    language: any
+    domain: analysis
+    tier: active
     description: 事件回應者。當系統發生錯誤時進行根因分析。
     color: red
     version: "1.0"
@@ -608,6 +660,9 @@ agents:
 
   linux:
     name: linux
+    language: any
+    domain: review
+    tier: active
     description: 品味守護者和常駐審查委員。以獨特的視角進行程式碼品質審查。
     color: black
     version: "1.0"
@@ -636,6 +691,9 @@ agents:
 
   mint-format-specialist:
     name: mint-format-specialist
+    language: any
+    domain: docs
+    tier: reserve
     description: 格式專家。負責文件格式規範。
     color: green
     version: "1.0"
@@ -667,6 +725,9 @@ agents:
 
   basil-hook-architect:
     name: basil-hook-architect
+    language: python
+    domain: architecture
+    tier: active
     description: Hook 系統架構師。負責 Hook 系統設計。
     color: green
     version: "1.0"
@@ -699,6 +760,9 @@ agents:
 
   basil-event-architect:
     name: basil-event-architect
+    language: any
+    domain: architecture
+    tier: reserve
     description: 事件系統架構師。負責事件驅動系統設計。
     color: green
     version: "1.0"
@@ -726,6 +790,9 @@ agents:
 
   basil-writing-critic:
     name: basil-writing-critic
+    language: any
+    domain: review
+    tier: active
     description: 文字品質常駐審查委員（compositional-writing + document-writing-style 執行者）。審查書面文字的三明示結構（Why/Consequence/Action）、資訊優先序（原則先於示例）、禁用字、字元集污染、正面陳述。parallel-evaluation 情境 C / D / F / G 強制加入，與 linux 並列常駐。產出審查報告，不修改文件。
     color: green
     version: "2.0"
@@ -757,6 +824,9 @@ agents:
 
   bay-quality-auditor:
     name: bay-quality-auditor
+    language: any
+    domain: review
+    tier: active
     description: 品質審計員。全面評估程式碼品質。
     color: blue
     version: "1.0"
@@ -785,6 +855,9 @@ agents:
 
   project-compliance-agent:
     name: project-compliance-agent
+    language: any
+    domain: review
+    tier: reserve
     description: 專案合規檢查員。檢查流程是否符合規範。
     color: blue
     version: "1.0"
@@ -810,64 +883,11 @@ agents:
     file_patterns: []
 
 
-  memory-network-builder:
-    name: memory-network-builder
-    description: 記憶網路建構者。建立跨對話知識連結。
-    color: purple
-    version: "1.0"
-
-    accepts:
-      - artifact_type: "ticket"
-
-    produces:
-      - artifact_type: "knowledge-base"
-
-    requires:
-      - capability: "knowledge-management"
-
-    preconditions:
-      - condition: "ticket-exists"
-
-    conflict_avoidance:
-      - type: "cannot_work_with"
-        agents: ["memory-network-builder"]
-
-    tdd_phases: []
-
-    file_patterns:
-      - ".claude/projects/**/*memory*.md"
-
-
-  john-carmack:
-    name: john-carmack
-    description: 技術願景領導者。提供長期技術規劃。
-    color: purple
-    version: "1.0"
-
-    accepts:
-      - artifact_type: "ticket"
-
-    produces:
-      - artifact_type: "vision-document"
-
-    requires:
-      - capability: "strategic-vision"
-
-    preconditions:
-      - condition: "strategic-decision-required"
-
-    conflict_avoidance:
-      - type: "cannot_work_with"
-        agents: ["john-carmack"]
-
-    tdd_phases: []
-
-    file_patterns:
-      - "docs/work-logs/**/*vision*.md"
-
-
   rosemary-project-manager:
     name: rosemary-project-manager
+    language: any
+    domain: process
+    tier: active
     description: 專案經理。主線程決策、任務派發、進度管理。
     color: green
     version: "1.0"
@@ -895,6 +915,9 @@ agents:
 
   thyme-documentation-integrator:
     name: thyme-documentation-integrator
+    language: any
+    domain: docs
+    tier: active
     description: 文件整合者。負責文件結構管理。
     color: green
     version: "1.0"
@@ -923,6 +946,9 @@ agents:
 
   thyme-extension-engineer:
     name: thyme-extension-engineer
+    language: javascript
+    domain: implementation
+    tier: active
     description: 擴展工程師。負責工具擴展和模組開發。
     color: green
     version: "1.0"
@@ -947,4 +973,117 @@ agents:
 
     file_patterns:
       - ".claude/**/*extension*.py"
+
+
+  framework-issue-curator:
+    name: framework-issue-curator
+    language: any
+    domain: docs
+    tier: active
+    description: Framework issue 區段策展代理人。收束主題群的本地 ticket 為 issue 區段，維護自己擁有的區段並觀測他人 issue。
+    color: cyan
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "framework-issue-section"
+
+    requires:
+      - capability: "framework-issue-cli"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["framework-issue-curator"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  impeccable-manual-edit-applier:
+    name: impeccable-manual-edit-applier
+    language: any
+    domain: implementation
+    tier: active
+    description: 套用 Impeccable live 手動文案編輯批次到來源檔，回傳標準 Apply 結果。
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "source-edit"
+
+    requires:
+      - capability: "file-edit"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["impeccable-manual-edit-applier"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+# ===== 索引：（language, domain）→ 代理人 =====
+# PM 依本索引選人，不依名稱。tier: reserve 者不列為預設候選，需要時才派。
+# 與 agents 下各代理人的 language／domain／tier 欄位同步維護。
+index:
+  - language: any
+    domain: design
+    agents: [lavender-interface-designer, star-anise-system-designer]
+  - language: any
+    domain: test
+    agents: [sage-test-architect, coriander-integration-tester]
+  - language: any
+    domain: implementation
+    agents: [pepper-test-implementer, impeccable-manual-edit-applier]
+  - language: dart
+    domain: implementation
+    agents: [parsley-flutter-developer]
+  - language: python
+    domain: implementation
+    agents: [thyme-python-developer]
+  - language: go
+    domain: implementation
+    agents: [fennel-go-developer]
+  - language: javascript
+    domain: implementation
+    agents: [thyme-extension-engineer]
+  - language: any
+    domain: refactor
+    agents: [cinnamon-refactor-owl]
+  - language: any
+    domain: analysis
+    agents: [saffron-system-analyst, incident-responder, ginger-performance-tuner, oregano-data-miner]
+  - language: any
+    domain: review
+    agents: [acceptance-auditor, linux, basil-writing-critic, bay-quality-auditor, clove-security-reviewer, project-compliance-agent]
+  - language: python
+    domain: architecture
+    agents: [basil-hook-architect]
+  - language: any
+    domain: architecture
+    agents: [basil-event-architect]
+  - language: any
+    domain: data
+    agents: [sassafras-data-administrator]
+  - language: any
+    domain: environment
+    agents: [sumac-system-engineer]
+  - language: any
+    domain: docs
+    agents: [thyme-documentation-integrator, mint-format-specialist, framework-issue-curator]
+  - language: any
+    domain: process
+    agents: [rosemary-project-manager]
 

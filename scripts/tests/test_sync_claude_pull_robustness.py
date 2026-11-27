@@ -222,3 +222,25 @@ def test_backup_claude_dir_excludes_new_tool_artifacts_keeps_local_state(tmp_pat
         assert not (dest / "skills" / "x" / name).exists(), name
     assert (dest / "settings.local.json").exists()
     assert (dest / ".sync-state.json").exists()
+
+
+# --- 3.6.0-W1-240: 備用解析器清單項行尾註解 ---
+
+_COMMENT_FIXTURE = (
+    "preserve:\n"
+    "  - path/one  # 註解\n"
+    "  - a#b\n"
+    "  - plain\n"
+)
+
+
+def test_load_preserve_list_fallback_strips_item_trailing_comment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """E1 對照：有 PyYAML 與 yaml=None 解析同一 fixture，結果須相同。"""
+    (tmp_path / "sync-preserve.yaml").write_text(_COMMENT_FIXTURE, encoding="utf-8")
+    expected = {"path/one", "a#b", "plain"}
+    if sync_mod.yaml is not None:
+        assert sync_mod.load_preserve_list(tmp_path) == expected
+    monkeypatch.setattr(sync_mod, "yaml", None)
+    assert sync_mod.load_preserve_list(tmp_path) == expected

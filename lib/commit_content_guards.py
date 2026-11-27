@@ -675,6 +675,19 @@ _PER_FILE_CHECKS: List[Callable[[StagedFile, "object"], List[Finding]]] = [
 ]
 
 
+def _isolated(check: Callable, logger, *args, **kwargs) -> List[Finding]:
+    """只包 check 呼叫本身；例外轉成 warn finding（不升 deny），stderr 與日誌皆含 check 名稱。"""
+    name = getattr(check, "__name__", repr(check))
+    try:
+        return check(*args, **kwargs)
+    except Exception as exc:  # noqa: BLE001 — 單支例外不得使其他 check 的 deny 失效
+        summary = f"{type(exc).__name__}: {exc}"
+        msg = f"[commit-content-guards] check {name} 執行例外，已隔離未判定：{summary}"
+        sys.stderr.write(msg + "\n")
+        logger.warning("%s", msg, exc_info=True)
+        return [Finding("warn", name, msg)]
+
+
 def _run_all_checks(
     staged_files: List[StagedFile],
     project_root: Path,
@@ -703,14 +716,17 @@ def _run_all_checks(
     for sf in staged_files:
         for check in _PER_FILE_CHECKS:
             if check is _check_uc_reference:
-                findings.extend(check(sf, logger, project_root=root_str))
+                findings.extend(_isolated(check, logger, sf, logger, project_root=root_str))
             else:
-                findings.extend(check(sf, logger))
+                findings.extend(_isolated(check, logger, sf, logger))
         findings.extend(
-            _check_branch_verify(sf, logger, is_merge_commit=is_merge_commit, ctx=branch_ctx)
+            _isolated(
+                _check_branch_verify, logger, sf, logger,
+                is_merge_commit=is_merge_commit, ctx=branch_ctx,
+            )
         )
         if not wrap_checked:
-            wrap_findings = _check_wrap_skill_yaml(sf, logger, project_root)
+            wrap_findings = _isolated(_check_wrap_skill_yaml, logger, sf, logger, project_root)
             if wrap_findings:
                 findings.extend(wrap_findings)
                 wrap_checked = True

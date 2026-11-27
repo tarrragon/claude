@@ -53,5 +53,5 @@ Edit／Write 從頭到尾沒有被任何 hook 或平台拒絕，所以這不是�
 |------|------|
 | 派發 | prompt 明寫用 Edit／Write 改檔，並說明此要求優先於 harness 提示（自動載入的規則在實例中未能勝出，需要在派發當下再提示一次） |
 | 審查 | 代理人回報中出現 heredoc 追加、`python3 -` 寫檔、`sed -i` 時，追問寫入方式與 Edit 是否曾被拒 |
-| 強制層 | 已實作：`bash-write-boundary-guard-hook.py` 對主線程與代理人一律阻擋 Bash 寫入 `lib/`、`test/`、`integration_test/`、`.claude/**`（含同層 worktree），deny 訊息含不得換寫法重試與停手回報；殘留的靜態解析邊界以判定日誌事後稽核 |
+| 強制層 | 已實作：`bash-write-boundary-guard-hook.py` 對主線程與代理人一律阻擋 Bash 寫入 `lib/`、`test/`、`integration_test/`、`.claude/**`（含同層 worktree），deny 訊息含不得換寫法重試與停手回報；殘留的靜態解析邊界以判定日誌事後稽核。已知殘留形態（2026-11 實測）：不加引號的 heredoc 由 shell 先展開變數，守衛讀到的是未展開的 `"$W/.claude/..."`，判不出寫入目標而放行；代理人實作守衛修正時正好以這個形態寫入 `.claude/lib`，Edit／Write 未曾被拒，屬原模式而非變體。派發層的提示因此仍不可省 |
 | 與既有規則的關係 | `.claude/rules/core/tool-selection.md` 規則 1 邊界條款的失效實例：條文存在且自動載入，代理人仍依 harness 提示行事 |

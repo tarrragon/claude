@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.12.0（2026-11-26）— 合併閘門加接行偵測（預設只警告，不阻擋）：新增 `scripts/line_join_scan.py`，`MergeGate.__call__` 掃描相鄰行接合與 .py 程式行併入註解（IMP-LLM-013）；`LINE_JOIN_SCAN=off` 關閉；掃描遇任何例外都放行並寫 stderr，不使閘門中止。測試：`tests/test_line_join_scan.py`。
+
 **Version**: 1.11.0（2026-11-21）— 合併閘門改跑受影響的測試子集，另加 main 定期全套件：
 - 子集選擇：hooks、scripts、skill:<名稱> 三類 pytest 套件，只跑 `select_test_files` 選出的測試檔（依改動檔路徑比對，再加兩層匯入遞移）。下列情況該套件退回全套件：選擇拋例外、依賴缺席、逾時、回傳 None、選中 0 檔，或該套件的定期全套件暫停中、暫停狀態讀不到。定期全套件停用（`MERGE_GATE_PERIODIC=0`）時，閘門完全不跑子集。`worktree-merge.log` 每個套件多一行 `[合併前測試] 測試子集：…`。
 - main 定期全套件：main 累計一定筆數的合併後，在 main head 的快照跑全部套件，狀態寫在 `.claude/logs/merge-gate-periodic.json`。紅燈時以前綴對半定位到一筆合併，並暫停該套件的新合併；修正或 revert 合入後重跑，綠燈才解除。執行中的殘留以 pid 存活與逾時判定。

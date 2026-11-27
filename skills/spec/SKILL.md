@@ -3,7 +3,7 @@ name: spec
 description: "需求完善度品質閘門。Use for: (1) Phase 1 開始時初始化功能規格骨架 (/spec init), (2) 驗證功能規格的需求完善度 (/spec validate), (3) 判斷需求是否足夠清晰可進入實作。Use when: Phase 1 功能設計代理人在進行功能設計時，作為內部工具使用。不是流程入口——/tdd 管流程編排，/spec 管產出物品質。"
 metadata:
   portable: true
-  version: 1.10.2
+  version: 1.11.0
 
 ---
 
@@ -35,7 +35,7 @@ doc skill 的外接資料夾規格〈讀法映射〉讀取。
 |------|------------------------------|-------------------------------|
 | 章節結構 | Purpose / Scenarios / Acceptance（Lite）或 6 區段（Full） | 概述 + 可攜性邊界原則 + A 區（邏輯契約）/ B 區（實作綁定） |
 
-**Why**：/spec validate 的 Layer 1 結構檢查針對 Purpose/Scenarios/Acceptance（或 Full 6 區段）比對區段標題，data-contract 文件遵循 `data-layer-contract-methodology.md` 的可攜性兩區（A/B）結構，兩套 schema 不相容。**Consequence**：對 data-contract 文件執行 `/spec validate` 會在 Layer 1 誤報「結構失敗」（找不到 Purpose/Scenarios/Acceptance 區段標題），該結果不反映文件真實品質，若被當真會誤導撰寫者修改成不必要的結構。**Action**：data-contract 文件的機械驗證改由 `doc validate` 子命令承接（`../doc/SKILL.md`， 落地前為人工依 `data-layer-contract-methodology.md` 檢查），禁止對其執行 `/spec validate`；已誤執行者，Layer 1「結構失敗」判定應忽略。<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 -->
+**Why**：/spec validate 的 Layer 1 結構檢查針對 Purpose/Scenarios/Acceptance（或 Full 6 區段）比對區段標題，data-contract 文件遵循 `data-layer-contract-methodology.md` 的可攜性兩區（A/B）結構，兩套 schema 不相容。**Consequence**：對 data-contract 文件執行 `/spec validate` 會在 Layer 1 誤報「結構失敗」（找不到 Purpose/Scenarios/Acceptance 區段標題），該結果不反映文件真實品質，若被當真會誤導撰寫者修改成不必要的結構。**Action**：data-contract 文件的區段結構驗證改由 `doc validate` 子命令承接（`../doc/SKILL.md`， 落地前為人工依 `data-layer-contract-methodology.md` 檢查），禁止對其執行 `/spec validate`；已誤執行者，Layer 1「結構失敗」判定應忽略。<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 -->
 
 ---
 
@@ -137,7 +137,7 @@ doc skill 的外接資料夾規格〈讀法映射〉讀取。
 
 ## `/spec validate` - 驗證需求完善度
 
-兩層驗證：結構檢查（機械性）+ AI 語義推演（深度分析）。
+兩層驗證：結構檢查（腳本照固定規則比對，不需要語意判斷）+ AI 語義推演（深度分析）。
 
 ### 輸入
 
@@ -165,7 +165,7 @@ doc skill 的外接資料夾規格〈讀法映射〉讀取。
 
 **結構檢查失敗**：輸出缺失清單，不進入 Layer 2。
 
-**API surface 完整性檢查**（動機：SPEC-014 FR-04 曾寫「analytics API 回 501」卻無 endpoint 路徑定義，缺口到派發實作才暴露）：以 `scripts/check_api_surface.py` 機械掃描每個 FR 段落，比對「描述 API 行為的訊號」與「同段落內是否已有對應主題的 `/v1/...` 路徑定義」。命令：
+**API surface 完整性檢查**（動機：SPEC-014 FR-04 曾寫「analytics API 回 501」卻無 endpoint 路徑定義，缺口到派發實作才暴露）：以 `scripts/check_api_surface.py` 自動掃描每個 FR 段落，比對「描述 API 行為的訊號」與「同段落內是否已有對應主題的 `/v1/...` 路徑定義」。命令：
 
 ```bash
 python3 .claude/skills/spec/scripts/check_api_surface.py {spec-file-path}  # portability-allow: consumer 共通安裝位置
@@ -187,7 +187,7 @@ source_specs 格式無法解析、且未被選入判定的 map 會列出其檔�
 
 domain map 定位鏈（省略 `--domain-map` 時）：spec 同目錄 `domain-map.md`（為聯集成員之一，不短路）與列舉 `docs/spec/*/domain-map.md` 中 frontmatter `source_specs` 含本 SPEC id 者（並聯集 `docs/system-layer.md`；逐檔解析歸屬與事件流標定後於集合層合併，標題堆疊不跨檔；整份無任何 SPEC 歸屬（無 SPEC 標題、無同行 SPEC id）的檔案，其 FR 依該檔 frontmatter `source_specs`：單值計給該 SPEC（stderr 印檔名與原因），多值又無明示歸屬時 exit 1（指名檔案與各 SPEC id），整段缺席、為 `[]` 或格式無法解析時計給受檢 SPEC，單檔與多檔同一規則；取不到 spec 識別且帶 `--domain-map` 時 exit 1，不走相容比對（未帶旗標的相容比對不變）；`docs/system-layer.md` 不適用此規則（定位鏈無條件附加，非因與受檢 SPEC 有關而選入），其無歸屬的 FR 不計入；檔案內有部分歸屬時有歸屬者依歸屬，所有未歸屬的 FR 皆不計入（含 SPEC 章節結束後、非 SPEC 標題下者）；`--domain-map` 明示為唯一來源不聯集，故 SPEC 不必與 domain map 同目錄）-> `docs/domain-map.md`。輸出（定位 domain map 之後才會出現，無 FR 的判定已先於定位結束，見上）：無任何 domain map（提示先走 Step 2.5 產出）、有 domain map 但無一列入本 SPEC（提示補 `source_specs`）、spec id 無法辨識（提示修正 id，不要求補 `source_specs`）、`source_specs` 格式無法解析（列出檔名，接受行內清單或逐行 `- SPEC-NNN` 的區塊清單）、未覆蓋 FR 清單（`FR-NN`；尾行指示補法：把 FR 歸屬到本 SPEC，即 FR 所在的章節標題含本 SPEC id，或在同一行、該 FR 之前寫出本 SPEC id，檔內已有任何 SPEC 歸屬時，只列 FR 而不帶 SPEC id 不會使檢核轉為通過；歸屬判定：標題含多個 SPEC id 取第一個，同一行取該 FR 之前最近的一個，巢狀標題取最近一個含 id 的祖先；判定集合內有整份無歸屬而走預設計給的檔時，尾行另指名該檔：直接列出 FR 即可，若於該檔寫入任一 SPEC id，檔內其餘 FR 須一併歸屬（該檔即轉為部分歸屬，其餘未歸屬的 FR 不再計入）；層級路徑同一補法，對象為系統層，不印部分歸屬提示；非層級路徑中系統層也可能被列為部分歸屬的檔（有歸屬者依歸屬、其餘未歸屬 FR 不計入），系統層整份無歸屬則無任何說明；某份部分歸屬的檔內有未覆蓋的 FR 落在其未歸屬集合時，stderr 另印 WARNING 列該檔名與 FR，不改 exit code，整份無歸屬的檔不列）、或「檢核通過」。此段 exit code 0 = 全部覆蓋、1 = 缺 map 或有未覆蓋 FR；其餘輸出（宣告無 FR 略過、宣告與內容矛盾、非布林宣告、未宣告且未抽到標題）依上段四種結果與 exit code 判讀。FR token 展開支援逗號續列（`FR-01,02,03`）與範圍（`FR-13~17`）。
 
-**事件流標定檢核**（可選，動機：Layer 2 維度 5「資源競爭」需要規格逐條標定事件流的到達類別與級別，靠 AI 語意判讀成本高，本檢核先以機械掃描做第一輪篩選）：以同一支 `check_domain_coverage.py` 加 `--check-event-flow-labeling` 執行，掃描 spec 每個 `### FR-XX:` 段落是否命中事件流訊號詞（`事件`、`通知`、`提示`、`背景`、`排程`、`佇列`、`推送`、`webhook`、`isolate`——與上方 Layer 2 維度 5 掃描說明共用同一份清單，程式碼側集中於 `check_domain_coverage.py` 的 `EVENT_FLOW_SIGNAL_WORDS` 常數，避免兩處各自維護而漂移）。命中的 FR 須在 domain map「通道與協調圖」節（**以標題文字定位，不依編號**——章節編號在既有專案可能已被其他內容佔用）之「到達類別與級別實例」子表找到對應 FR 引用，缺者列為提醒。命令：
+**事件流標定檢核**（可選，動機：Layer 2 維度 5「資源競爭」需要規格逐條標定事件流的到達類別與級別，靠 AI 語意判讀成本高，本檢核先由腳本比對訊號詞做第一輪篩選）：以同一支 `check_domain_coverage.py` 加 `--check-event-flow-labeling` 執行，掃描 spec 每個 `### FR-XX:` 段落是否命中事件流訊號詞（`事件`、`通知`、`提示`、`背景`、`排程`、`佇列`、`推送`、`webhook`、`isolate`——與上方 Layer 2 維度 5 掃描說明共用同一份清單，程式碼側集中於 `check_domain_coverage.py` 的 `EVENT_FLOW_SIGNAL_WORDS` 常數，避免兩處各自維護而漂移）。命中的 FR 須在 domain map「通道與協調圖」節（**以標題文字定位，不依編號**——章節編號在既有專案可能已被其他內容佔用）之「到達類別與級別實例」子表找到對應 FR 引用，缺者列為提醒。命令：
 
 ```bash
 python3 .claude/skills/spec/scripts/check_domain_coverage.py {spec-file-path} [--domain-map {path}] --check-event-flow-labeling  # portability-allow: consumer 共通安裝位置
@@ -336,7 +336,7 @@ Phase 1 中 lavender 如何使用 /spec 的完整流程，詳見該代理人定�
 - references/spec-template-lite.md - Lite 模板（3 區段）
 - references/spec-template-full.md - Full 模板（6 區段）
 - `data-layer-contract-methodology` - data-contract 文件的 A/B 兩區結構定義（`/spec validate` 不適用對象）
-- `../doc/SKILL.md` - data-contract 文件機械驗證的承接者（`doc validate`）<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 -->
+- `../doc/SKILL.md` - data-contract 文件區段結構驗證的承接者（`doc validate`）<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 -->
 - `事件流負載仲裁方法論` - 維度 5「資源競爭」的判斷標準來源（〈到達類別〉〈級別〉〈讓步與卸載順序〉三節）<!-- portability-allow: 條件式引用，目標方法論未必與本 skill 一同安裝 -->
 
 ---

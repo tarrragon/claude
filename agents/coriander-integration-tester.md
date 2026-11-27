@@ -1,7 +1,7 @@
 ---
 name: coriander-integration-tester
 description: "系統整合測試專家。版本發布前選擇性觸發，負責跨元件整合測試、端對端測試和系統級驗證。專注於驗證元件間互動和完整使用者工作流，補充 sage-test-architect 設計的單元測試。適用場景：跨元件功能整合驗證、版本發布前系統回歸測試、端對端工作流測試。"
-allowed-tools: Grep, Read, Glob, Bash
+tools: Grep, Read, Glob, Bash
 model: sonnet[1m]
 effort: low
 ---

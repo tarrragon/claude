@@ -54,7 +54,7 @@
 
 **長度不是這條原則的觸發條件**：600 行的參數表只有一種職責，80 行的 README 可以有四種。長度只決定一種職責之內要不要分節或分層；拆不拆、沿哪條軸拆看職責。集中登記型文件（變更紀錄、索引、術語表）被許多主題修改是它的設計目的，依職責拆它不降低衝突，改用每項一個片段檔。
 
-**加段落之前先問一次**：這一節的修改理由，在不在這份文件既有的修改理由裡（從修改紀錄讀，不從標題猜）。不在的話先找承接它的文件，找不到才開新檔、原檔留一句連結。累積式的規則檔（專案規範、agent 指令、skill 檔）最需要這一問。判定與實測見 [change-history-counts-a-documents-responsibilities](principles/change-history-counts-a-documents-responsibilities.md) 與 [section-scope-is-bounded-by-the-category-too](principles/section-scope-is-bounded-by-the-category-too.md)。
+**加段落之前先檢查一次**：這一節的修改理由是否在這份文件既有的修改理由裡（從修改紀錄讀，不從標題猜）。不在的話先找承接它的文件，找不到才開新檔、原檔留一句連結。累積式的規則檔（專案規範、agent 指令、skill 檔）最需要這一項檢查。判定與實測見 [change-history-counts-a-documents-responsibilities](principles/change-history-counts-a-documents-responsibilities.md) 與 [section-scope-is-bounded-by-the-category-too](principles/section-scope-is-bounded-by-the-category-too.md)。
 
 **錯**：一篇個體案例分析內嵌了完整的跨個體比較（多維比較表 + 逐維差距拆解）。兩個責任互相擠壓——案例深度被比較表佔空間、比較內容被鎖在單一個體的敘事裡、加入第三個比較對象時不知道改哪篇。
 

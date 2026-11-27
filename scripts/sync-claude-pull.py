@@ -27,6 +27,7 @@ Safety net:
 import argparse
 import copy
 import filecmp
+import importlib.util
 import json
 import os
 import re
@@ -67,7 +68,12 @@ from lib.sync_conflict_residue import (  # noqa: E402
     scan_conflict_marker_residue,
 )
 from lib.skill_version_diff import (  # noqa: E402
+    LOC_CHANGELOG,
+    LOC_DUNDER,
+    LOC_PLUGIN,
+    LOC_PYPROJECT,
     SKILL_DRIFT_PREVIEW_LIMIT,
+    check_skill_versions,
     extract_frontmatter_metadata_version,
     extract_skill_versions,
     format_skill_version_diff,
@@ -77,6 +83,7 @@ from lib.skill_version_diff import (  # noqa: E402
 from lib.executable_bits import restore_shebang_exec_bits  # noqa: E402
 # base 與 pin 存在入版控的 sync-base.json，與 push/status 共用同一讀寫入口
 from lib.sync_base_store import (  # noqa: E402
+    BASE_ACQUIRED_HEAD_FIELD,
     BASE_SHA_FIELD,
     PINNED_VERSION_FIELD,
     read_sync_base_field,
@@ -119,6 +126,7 @@ HOOK_IMPORT_TEST_RELPATH = "scripts/test-hook-imports.sh"
 HOOK_IMPORT_TEST_TIMEOUT_SECONDS = 300
 # post-sync 檢查中「未驗證」的項目名稱；pull 收尾時於 stderr 末段摘要
 _UNVERIFIED_CHECKS: list[str] = []
+_UPSTREAM_STATUS_LINES: list[str] = []
 # test-hook-imports.sh 在有 hook 無法判定（依賴環境不可用）時印出的摘要行開頭
 HOOK_IMPORT_INCOMPLETE_MARKER = "Hook import check incomplete:"
 
@@ -271,7 +279,8 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
                 f"（preserve: 後每行 '- path'），或安裝 PyYAML 後重跑。"
             )
         if in_preserve and stripped.startswith("- "):
-            paths.add(stripped[2:].strip())
+            # 去除行尾註解（'#' 前須有空白才算註解），與鍵行規則一致
+            paths.add(re.split(r"\s#", stripped[2:], maxsplit=1)[0].strip())
         elif stripped and not stripped.startswith("#"):
             # 只有非空、非註解的行才關閉 preserve 區塊
             in_preserve = False
@@ -462,6 +471,15 @@ def write_base_sha(claude_dir: Path, base_sha: str) -> None:
         base_sha: 本次同步上游 HEAD 的 commit SHA
     """
     write_sync_base_field(claude_dir, BASE_SHA_FIELD, base_sha)
+    # 記下取得 base 當下的本地 HEAD，供 push --clean 判斷刪除 commit 是否早於 base。
+    # 取不到（非 git 專案、空 repo）時，只在已有舊值時寫空字串清掉，讀端視同缺值。
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=str(claude_dir.parent),
+        capture_output=True, text=True,
+    )
+    acquired = head.stdout.strip() if head.returncode == 0 else ""
+    if acquired or read_sync_base_field(claude_dir, BASE_ACQUIRED_HEAD_FIELD):
+        write_sync_base_field(claude_dir, BASE_ACQUIRED_HEAD_FIELD, acquired)
 
 
 # 衝突輪的待確認 base（tarrragon/claude#88）。衝突輪不推進 base，改把本輪上游
@@ -2094,6 +2112,87 @@ def _apply_renumbered_pc(
     return 1
 
 
+_CHANGELOG_VERSION_RE = re.compile(
+    r"^(\*\*Version\*\*:[ \t]*v?)(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)", re.MULTILINE
+)
+
+
+def _rewrite_version_address(
+    path: Path, location: str, found: str, authority: str
+) -> bytes | None:
+    """回傳改寫後內容；該住址無法以單點取代對齊時回 None。"""
+    text = path.read_text(encoding="utf-8")
+    old = re.escape(found)
+    if location == LOC_CHANGELOG:
+        new, n = _CHANGELOG_VERSION_RE.subn(
+            lambda m: m.group(1) + authority, text, count=1
+        )
+    elif location == LOC_PYPROJECT:
+        new, n = re.subn(
+            rf'^(version\s*=\s*["\']){old}(["\'])', rf"\g<1>{authority}\g<2>",
+            text, count=1, flags=re.MULTILINE,
+        )
+    elif location == LOC_PLUGIN:
+        new, n = re.subn(
+            rf'("version"\s*:\s*"){old}(")', rf"\g<1>{authority}\g<2>", text, count=1
+        )
+    elif location.startswith(LOC_DUNDER):
+        new, n = re.subn(
+            rf'^(__version__\s*=\s*["\']){old}(["\'])', rf"\g<1>{authority}\g<2>",
+            text, count=1, flags=re.MULTILINE,
+        )
+    else:
+        return None
+    return new.encode("utf-8") if n else None
+
+
+def _address_path(skill_dir: Path, location: str) -> Path | None:
+    if location == LOC_CHANGELOG:
+        return skill_dir / "CHANGELOG.md"
+    if location == LOC_PYPROJECT:
+        return skill_dir / "pyproject.toml"
+    if location == LOC_PLUGIN:
+        return skill_dir / ".claude-plugin" / "plugin.json"
+    if location.startswith(LOC_DUNDER) and "（" in location:
+        return skill_dir / location.split("（", 1)[1].rstrip("）")
+    return None
+
+
+def _align_skill_version_addresses(
+    claude_dir: Path, skills: set[str], rollback_log: list[tuple[Path, Path | None]]
+) -> list[str]:
+    """以合併後 SKILL.md 的 metadata.version 為準，對齊 skills 的衍生版號住址。
+
+    偵測複用 check_skill_versions。能單點取代者改寫（經 _atomic_write，可回滾）；
+    不能機械對齊（SKILL.md 正文版號行、讀不出版號、缺權威欄位）者回傳待處理清單，
+    由呼叫端列為衝突交用戶。
+    """
+    if not skills:
+        return []
+    skills_dir = claude_dir / "skills"
+    check = check_skill_versions(skills_dir)
+    unresolved: list[str] = []
+    for skill in sorted(check.missing_authority):
+        if skill in skills:
+            unresolved.append(f"skills/{skill}（缺 metadata.version）")
+    for s in check.skipped:
+        if s.skill in skills:
+            unresolved.append(f"skills/{s.skill}（{s.location}：{s.reason}）")
+    for m in check.mismatches:
+        if m.skill not in skills:
+            continue
+        path = _address_path(skills_dir / m.skill, m.location)
+        new = (
+            _rewrite_version_address(path, m.location, m.found, m.expected)
+            if path is not None and m.expected is not None else None
+        )
+        if new is None:
+            unresolved.append(f"skills/{m.skill}（{m.location} = {m.found}，應為 {m.expected}）")
+            continue
+        _atomic_write(path, new, rollback_log)
+    return unresolved
+
+
 def apply_upstream_delta(
     project_root: Path,
     temp_dir: Path,
@@ -2154,6 +2253,8 @@ def apply_upstream_delta(
     preserve_skipped: list[tuple[str, str]] = []
     # 回滾記錄：(目標路徑, 備份路徑 or None 表原本不存在)
     rollback_log: list[tuple[Path, Path | None]] = []
+    # SKILL.md 版號衝突被自動解決的 skill 目錄名（收尾對齊衍生住址用）
+    version_resolved_skills: set[str] = set()
     # PC 撞號偵測索引（瑕疵 D）：合併前一次性掃描本地 error-patterns。
     local_pc_index = build_local_pc_index(claude_dir)
 
@@ -2269,6 +2370,15 @@ def apply_upstream_delta(
                 local_deleted=local_deleted,
             )
 
+            if (
+                not conflict and merged is not None and local_exists
+                and base_content is not None and upstream_path is not None
+                and local_file.name == _SKILL_MD_FILENAME
+                and len({base_content, local_file.read_bytes(), upstream_path.read_bytes()}) == 3
+            ):
+                # 三方皆不同且無衝突 = 版號專屬解衝突生效：該 skill 的衍生住址待對齊
+                version_resolved_skills.add(local_file.parent.name)
+
             if conflict:
                 merged_bytes = merged if merged is not None else b""
                 # M3：衝突檔寫 .sync-conflicts/（含衝突標記的合併結果，供人工對照）
@@ -2351,6 +2461,12 @@ def apply_upstream_delta(
             # 原子套用：staging → os.replace
             _atomic_write(local_file, merged, rollback_log)
             applied += 1
+
+        for unresolved in _align_skill_version_addresses(
+            claude_dir, version_resolved_skills, rollback_log
+        ):
+            conflicts.append(unresolved)
+            print_color(f"   版號住址無法機械對齊: {unresolved}", "red")
 
     except Exception as exc:  # noqa: BLE001
         print_color(f"   套用 delta 失敗，回滾中: {exc}", "red")
@@ -3226,6 +3342,7 @@ def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None
     """
     _update_project_templates(temp_dir, project_root)
     cleanup_legacy_github_dir(project_root / ".claude", temp_dir)
+    collect_upstream_status_summary(temp_dir, project_root)
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     # 清理超期 backup_dir
@@ -4385,6 +4502,34 @@ def main() -> None:
         sys.exit(marker_rc)
 
     report_unverified_summary()
+    report_upstream_status_summary()
+
+
+def collect_upstream_status_summary(temp_dir: Path, project_root: Path) -> None:
+    """clone 目錄刪除前，比對本地與上游 error-patterns，結果暫存供結尾摘要印出。
+
+    判定邏輯在 error-pattern skill 的 upstream_status.py；只讀本地與已 clone 的
+    上游樹，不新增網路讀取。skill 檔缺失或比對失敗時寫 stderr 並略過（摘要不影響 exit code）。
+    """
+    _UPSTREAM_STATUS_LINES.clear()
+    lib_path = project_root / ".claude/skills/error-pattern/lib/upstream_status.py"
+    try:
+        spec = importlib.util.spec_from_file_location("upstream_status", lib_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        status = module.classify(
+            project_root / ".claude/error-patterns",
+            temp_dir / ".claude/error-patterns",
+        )
+        _UPSTREAM_STATUS_LINES.extend(module.format_summary_lines(status))
+    except Exception as exc:  # 摘要為輔助資訊，失敗不阻擋同步，但必須可見
+        sys.stderr.write(f"[sync-pull] error-pattern 上游狀態比對略過：{exc}\n")  # i18n-exempt
+
+
+def report_upstream_status_summary() -> None:
+    """於 stderr 末段印出待回報 error-pattern 摘要（無項目則不印）。"""
+    for line in _UPSTREAM_STATUS_LINES:
+        sys.stderr.write(f"[sync-pull] {line}\n")  # i18n-exempt
 
 
 def report_unverified_summary() -> None:

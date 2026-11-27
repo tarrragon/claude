@@ -2,7 +2,7 @@
 name: system-misjudgment
 description: "以系統為索引的 AI 誤判檢查庫：記錄除錯、實機驗證時對系統行為的常見錯誤判讀、實際機制與可執行檢查方法。Use when: 除錯、實機驗證、觀測不到事件或 log、懷疑系統行為、否定結果（零事件、沒有 log、分支還在）要當證據前、誤判後要記錄。"
 metadata:
-  version: 1.8.0
+  version: 1.9.1
 ---
 
 # system-misjudgment：依「正在面對的系統」查已知誤判與檢查方法
@@ -32,6 +32,7 @@ error-patterns 依類別分目錄，查不到同一系統上的陷阱。本 skil
 | 子行程執行脈絡（cwd／環境變數）與 runtime 探針 | `references/subprocess-cwd-env-probe.md` | 探針判定符合但落點不同、hook 寫入位置與報告不符、探針產物被偵測器命中 |
 | zsh shell（macOS 預設 shell） | `references/zsh-shell.md` | 驗證命令無錯誤但判斷不成立、`$var:` 值被截斷、`echo` 顯示的反斜線變 tab、手動餵 hook 沒有輸出 |
 | 共用 bin 目錄的 CLI 入口（uv tool／pipx／brew） | `references/shared-bin-symlink-entry.md` | 已安裝卻執行失敗、重裝無效、`uv tool list` 正常、入口 symlink 被寫穿 |
+| Claude Code 代理人載入（Agent 工具可派清單） | `references/agent-type-not-found.md` | `Agent type ... not found`、可派清單只有部分專案代理人、定義檔存在卻派不到 |
 
 ## 通則
 

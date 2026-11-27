@@ -5,7 +5,7 @@ import re
 from .fr_extract import extract_fr_ids, split_fr_sections
 
 # 事件流訊號詞：與 /spec validate Layer 2 維度 5「資源競爭」共用單一常數，避免
-# Layer 1 機械檢核與 Layer 2 語意維度各自維護清單而漂移（SKILL.md 維度 5 掃描說明）。
+# Layer 1 腳本檢核與 Layer 2 語意維度各自維護清單而漂移（SKILL.md 維度 5 掃描說明）。
 EVENT_FLOW_SIGNAL_WORDS = (
     "事件", "通知", "提示", "背景", "排程", "佇列", "推送", "webhook", "isolate",
 )

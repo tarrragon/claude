@@ -2,7 +2,7 @@
 
 > **角色**：本卡是 `requirement-protocol` 的支撐型原則（principle）、被 SKILL.md「相關抽象層原則」段與 reference `decision-dialogue.md`（步驟 4「批次邊界」維度）引用、是「決定 ship 順序時不要把『重要程度』誤當『ship 順序』」的判斷依據。
 >
-> **何時讀**：當你準備規劃 release / PR 順序、或寫到「等所有東西都做完一起 ship」「下次再優化」時。讀本卡用三軸（可見性 / 風險 / 驗證）切分什麼先 ship、什麼下輪。
+> **何時讀**：當你準備規劃 release / PR 順序、或寫到「等所有東西都做完一起 ship」「下次再改善」時。讀本卡用三軸（可見性 / 風險 / 驗證）切分什麼先 ship、什麼下輪。
 
 ---
 
@@ -107,7 +107,7 @@
 | PR diff > 800 行、含多個 feature             | 拆批、各自走 review                                                                 |
 | 「等 X 做完一起 ship」                       | 用三軸檢查 X 是否該獨立 ship                                                        |
 | Feature flag 名稱長期堆積、沒清掉            | 「下輪清掉」沒 trigger、補 L3-L5 對策（詳見 [`external-trigger-for-high-roi-work.md`](./external-trigger-for-high-roi-work.md)） |
-| 「這次先這樣、下次再優化」每次都不發生       | 下輪沒 trigger、把它寫進系統                                                        |
+| 「這次先這樣、下次再改善」每次都不發生       | 下輪沒 trigger、把它寫進系統                                                        |
 | 第一批 ship 後 production 出問題、回退範圍大 | 第一批塞太多、檢查為什麼沒分更細                                                    |
 | 使用者抱怨「等很久才有 X」                   | 可能 X 早就可分批 ship、檢查阻塞點                                                  |
 | 推薦「等 B/C 都做完再 ship」                 | 違反三軸、應該先 ship 高可見低風險的部分                                            |

@@ -2,6 +2,10 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.13.1（2026-11-26）— 修正：`scripts/section_comment.py` 的 `git rev-parse` 不再依賴 `--path-format=absolute`（git 2.31+），相對輸出以 `-C` 目錄為基準 resolve，補相對、絕對與舊版輸出測試（`tests/test_section_comment.py`）；`references/content-intake-request.md` 分流判準引用改指 sync-mechanism-guide 5.3 節。
+
+**Version**: 2.13.0（2026-11-25）— 新增 `references/content-intake-request.md`，定義 consumer 內容收錄請求格式：固定區塊序號與標題（請求資訊、pattern 全文、索引列、registry 列、可攜性判定、原樣收錄聲明），內容放 fenced block 供程式直接填寫；可攜性判定的 `carrier` 列暫填「待支援」；含收錄方處置與編號衝突處置（收錄方改配下一個空號，issue 留言寫舊號與新號）。`SKILL.md` 按需讀取表新增一列。只改文件，不改 CLI 與 hook。
+
 **Version**: 2.12.2（2026-11-19）— 測試輔助：`tests/conftest.py` 新增逐測試還原 cwd 與環境變數的 fixture（載入框架 lib 的 `process_state_restore`）；`scripts/feedback.py` 與 `scripts/rebuild_owned.py` 補上可執行位（100644 改 100755，內容不變）。skill 指令內容不變。
 
 **Version**: 2.12.1 — 命令總表 `rebuild-owned` 列補寫登記檔位置（主 repo 的 `.claude/state/framework-issue-owned.json`，worktree 內執行也寫到主 repo），並寫明 SessionStart 檢查只查登記檔內的 issue 編號、不送專案名，`rebuild-owned` 是唯一會把專案目錄名送到 GitHub 的命令。框架 README〈導入後會多出什麼〉的對外連線列同步改寫。只改文件。

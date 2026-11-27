@@ -133,6 +133,8 @@ Phase 3a 完成後，必須評估 Phase 3b 是否需要拆分。
 ## Phase 3b：實作執行
 
 > **語言無關的 3b 通用骨架**：本節定義所有語言 Phase 3b 實作代理人（parsley / fennel / thyme 等）共用的執行流程。各語言代理人定義只保留語言特定部分（常數/訊息結構、日誌工具、測試指令、硬編碼驗證），通用流程一律路由至本節。
+>
+> **Flutter 特定流程**：Dart MCP／Serena 執行步驟、i18n 與常數規範、成功指標見 `.claude/skills/tdd/references/phase3/flutter-phase3b-flow.md`。
 
 ### 接收 Phase 3a 策略（進入 3b 的交接條件）
 
